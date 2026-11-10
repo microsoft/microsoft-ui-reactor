@@ -637,6 +637,86 @@ internal class PerfTrace_ReentrantMountEffectsNameLiveRoot(Harness h) : SelfTest
     }
 }
 
+/// <summary>
+/// A root mounted over another, on each host, then asking for a render from its own state:
+/// the pass names the new root — its rerender is bound to its own diagnostics, not to the
+/// retired root's.
+/// </summary>
+internal class PerfTrace_RemountedRootNamesItself(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        var hostRoot = new PerfTraceRemountedRoot();
+        var hostRun = await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                host = H.CreateHost();
+                host.Mount(new PerfTraceReplacementRoot());
+                await Harness.Render();
+                host.Mount(hostRoot);
+                await Harness.Render();
+                hostRoot.Bump!();
+                await Harness.Render();
+            },
+            () => host?.Dispose());
+
+        Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
+        var controlRoot = new PerfTraceRemountedRoot();
+        var controlRun = hostRun is null ? null : await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                control.Mount(new PerfTraceReplacementRoot());
+                H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                await Harness.WaitFor(() => H.FindText("perf replacement root") is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                control.Mount(controlRoot);
+                await Harness.WaitFor(() => controlRoot.Bump is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                controlRoot.Bump!();
+                await Harness.WaitFor(() => controlRoot.Renders >= 2, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+            },
+            () => control?.Dispose());
+
+        if (hostRun is null || controlRun is null)
+        {
+            H.Skip("PerfTrace_RemountedRoot_HostNamesNewRoot", PerfTraceScenario.SkipReason);
+            H.Skip("PerfTrace_RemountedRoot_ControlNamesNewRoot", PerfTraceScenario.SkipReason);
+            return;
+        }
+        Check("PerfTrace_RemountedRoot_HostNamesNewRoot", "host", hostRun.Value.Events);
+        Check("PerfTrace_RemountedRoot_ControlNamesNewRoot", "control", controlRun.Value.Events);
+    }
+
+    private void Check(string name, string label, List<CapturedEtwEvent> events)
+    {
+        var root = events.FirstOrDefault(e => e.Name == "ComponentRender" && e.Opcode == 1
+            && e.Fields.TryGetValue("name", out var n) && (string)n == nameof(PerfTraceRemountedRoot));
+        var requested = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1 && (ulong)e.Fields["requesterId"] != 0)
+            .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}").ToList();
+        Console.WriteLine($"# perf remounted root {label}: root={root?.Fields["componentId"]} requesters={string.Join(",", requested)}");
+        H.Check(name, root is not null && (ulong)root.Fields["componentId"] != 0
+            && requested.SequenceEqual([$"{root.Fields["componentId"]}/{nameof(PerfTraceRemountedRoot)}"]));
+    }
+}
+
+/// <summary>A root mounted over another that asks for one render from its own state.</summary>
+internal sealed class PerfTraceRemountedRoot : Component
+{
+    public Action? Bump;
+    public int Renders;
+
+    public override Element Render()
+    {
+        Renders++;
+        var (n, setN) = UseState(0);
+        Bump = () => setN(n + 1);
+        return TextBlock($"perf remounted root {n}");
+    }
+}
+
 internal sealed class PerfTraceReplacementRoot : Component
 {
     public override Element Render() => TextBlock("perf replacement root");
