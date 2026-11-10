@@ -44,9 +44,8 @@ public sealed class BuiltLibrariesProjectionTests
         using var pe = new PEReader(stream);
         var md = pe.GetMetadataReader();
         var result = new Dictionary<string, global::System.Version>(StringComparer.Ordinal);
-        foreach (var handle in md.AssemblyReferences)
+        foreach (var reference in md.AssemblyReferences.Select(md.GetAssemblyReference))
         {
-            var reference = md.GetAssemblyReference(handle);
             result[md.GetString(reference.Name)] = reference.Version;
         }
         return result;

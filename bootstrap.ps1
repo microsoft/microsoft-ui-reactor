@@ -204,7 +204,9 @@ function Test-DotnetSdk11 {
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return $false }
     foreach ($line in (& dotnet --list-sdks)) {
         Write-Dbg "  dotnet SDK: $line"
-        if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 11) { return $true }
+        # global.json pins 11.0.100 with rollForward latestFeature: only a stable 11.0.x
+        # SDK satisfies it (not an 11 preview, and not 12+, which is a major roll).
+        if ($line -match '^11\.0\.\d+ \[') { return $true }
     }
     return $false
 }
