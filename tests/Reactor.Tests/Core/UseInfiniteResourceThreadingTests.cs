@@ -42,6 +42,12 @@ public class UseInfiniteResourceThreadingTests : IDisposable
         public void Post(Action action) => action();
     }
 
+    private sealed class QueuedDispatcher : IHookDispatcher
+    {
+        public TaskCompletionSource<Action> Posted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void Post(Action action) => Posted.SetResult(action);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Resource-level: concurrent ItemAt across pages coalesces fetches
     // ════════════════════════════════════════════════════════════════
@@ -215,33 +221,56 @@ public class UseInfiniteResourceThreadingTests : IDisposable
     //  Hook-level: unmount during in-flight fetch cancels cleanly
     // ════════════════════════════════════════════════════════════════
 
-    [Fact]
-    public async Task Unmount_During_InFlight_Fetch_Cancels_And_No_Unobserved()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Page_Completion_Is_Cached_Only_Before_Unmount(bool completeBeforeUnmount)
     {
         using var cache = new QueryCache();
-        var dispatcher = new InlineDispatcher();
+        var dispatcher = new QueuedDispatcher();
         var gate = new TaskCompletionSource<Page<int, string>>(TaskCreationOptions.RunContinuationsAsynchronously);
-
+        var deps = new object[] { "unmount-test" };
+        int depsHash = unchecked(17 * 31 + deps[0].GetHashCode());
+        string pageKey = $"unmount-test/{depsHash}/size:10/page:0";
+        CancellationToken fetchToken = default;
         var ctx = new RenderContext();
         ctx.BeginRender(() => { });
         Func<string?, CancellationToken, Task<Page<int, string>>> fetcher = (_, ct) =>
-            gate.Task.ContinueWith(t => { ct.ThrowIfCancellationRequested(); return t.Result; }, ct);
-        var resource = ctx.UseInfiniteResource(fetcher, cache, new object[] { "unmount-test" },
-            new InfiniteResourceOptions(PageSize: 10, CacheKeyPrefix: "unmount-test"), dispatcher);
-        ctx.FlushEffects();
+        {
+            fetchToken = ct;
+            // Complete even after cancellation so the hook must reject late results itself.
+            return gate.Task;
+        };
 
-        Assert.IsType<LoadState.Loading>(resource.LoadState);
+        try
+        {
+            var resource = ctx.UseInfiniteResource(fetcher, cache, deps,
+                new InfiniteResourceOptions(PageSize: 10, CacheKeyPrefix: "unmount-test"), dispatcher);
+            ctx.FlushEffects();
+            Assert.IsType<LoadState.Loading>(resource.LoadState);
+            Assert.True(fetchToken.CanBeCanceled);
 
-        // Unmount cancels the hook-owned CTS.
-        ctx.RunCleanups();
+            if (!completeBeforeUnmount)
+            {
+                ctx.RunCleanups();
+                Assert.True(fetchToken.IsCancellationRequested);
+            }
 
-        // Background completion observes cancellation — must be silent.
-        await Task.Run(() => gate.SetResult(new Page<int, string>(new[] { 1, 2 }, null)), TestContext.Current.CancellationToken);
-        await Task.Delay(50, TestContext.Current.CancellationToken);
+            await Task.Run(() => gate.SetResult(new Page<int, string>(new[] { 1, 2 }, null)), TestContext.Current.CancellationToken);
+            var apply = await dispatcher.Posted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            apply();
 
-        // Cache was never written.
-        Assert.False(cache.TryGet<Page<int, string>>("unmount-test/page:0", out _));
-        AssertNoUnobserved();
+            // The before-unmount case proves this lookup addresses a real cached page.
+            Assert.Equal(completeBeforeUnmount, cache.TryGet<Page<int, string>>(pageKey, out var entry));
+            if (completeBeforeUnmount)
+            {
+                Assert.Equal(new[] { 1, 2 }, entry.Value.Items);
+                ctx.RunCleanups();
+                Assert.True(cache.TryGet<Page<int, string>>(pageKey, out _));
+            }
+            AssertNoUnobserved();
+        }
+        finally { ctx.RunCleanups(); }
     }
 
     // ════════════════════════════════════════════════════════════════

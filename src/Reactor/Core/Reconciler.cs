@@ -5700,6 +5700,9 @@ public sealed partial class Reconciler : IDisposable
                 {
                     WinUI.Control c => c.BorderBrush,
                     WinUI.Border b => b.BorderBrush,
+                    WinUI.Grid g => g.BorderBrush,
+                    WinUI.StackPanel s => s.BorderBrush,
+                    WinUI.RelativePanel r => r.BorderBrush,
                     _ => null,
                 };
             }
@@ -5851,6 +5854,9 @@ public sealed partial class Reconciler : IDisposable
             {
                 if (fe is WinUI.Control c) c.BorderBrush = bb;
                 else if (fe is WinUI.Border b) b.BorderBrush = bb;
+                else if (fe is WinUI.Grid g) g.BorderBrush = bb;
+                else if (fe is WinUI.StackPanel s) s.BorderBrush = bb;
+                else if (fe is WinUI.RelativePanel r) r.BorderBrush = bb;
             }
         }
     }
@@ -6482,16 +6488,22 @@ public sealed partial class Reconciler : IDisposable
             else if (fe is WinUI.RelativePanel crRelative) crRelative.ClearValue(WinUI.RelativePanel.CornerRadiusProperty);
         }
 
-        // BorderBrush / BorderThickness (on Control and Border)
+        // BorderBrush / BorderThickness (Control, Border, and concrete panels)
         if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.BorderBrush = m.BorderBrush;
             else if (fe is WinUI.Border bbBdr) bbBdr.BorderBrush = m.BorderBrush;
+            else if (fe is WinUI.Grid bbGrid) bbGrid.BorderBrush = m.BorderBrush;
+            else if (fe is WinUI.StackPanel bbStack) bbStack.BorderBrush = m.BorderBrush;
+            else if (fe is WinUI.RelativePanel bbRelative) bbRelative.BorderBrush = m.BorderBrush;
         }
         else if (m.BorderBrush is null && oldM?.BorderBrush is not null)
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.ClearValue(WinUI.Control.BorderBrushProperty);
             else if (fe is WinUI.Border bbBdr) bbBdr.ClearValue(WinUI.Border.BorderBrushProperty);
+            else if (fe is WinUI.Grid bbGrid) bbGrid.ClearValue(WinUI.Grid.BorderBrushProperty);
+            else if (fe is WinUI.StackPanel bbStack) bbStack.ClearValue(WinUI.StackPanel.BorderBrushProperty);
+            else if (fe is WinUI.RelativePanel bbRelative) bbRelative.ClearValue(WinUI.RelativePanel.BorderBrushProperty);
         }
         // Apply physical border thickness, then overlay logical (BiDi-aware) inline border
         var resolvedBorder = m.BorderThickness;
@@ -6500,7 +6512,15 @@ public sealed partial class Reconciler : IDisposable
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
             // Same base rule as Margin/Padding: the previous render's physical thickness, not
             // the live control value, which already carries the last render's inline overlay.
-            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? (fe is WinUI.Control bc ? bc.BorderThickness : fe is WinUI.Border bb ? bb.BorderThickness : new Thickness());
+            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? (fe switch
+            {
+                WinUI.Control c => c.BorderThickness,
+                WinUI.Border b => b.BorderThickness,
+                WinUI.Grid g => g.BorderThickness,
+                WinUI.StackPanel s => s.BorderThickness,
+                WinUI.RelativePanel r => r.BorderThickness,
+                _ => new Thickness(),
+            });
             var inlineStartThickness = m.BorderInlineStart.Value;
             if (isRtl)
                 resolvedBorder = new Thickness(baseBorder.Left, baseBorder.Top, inlineStartThickness.Left, baseBorder.Bottom);
@@ -6514,11 +6534,17 @@ public sealed partial class Reconciler : IDisposable
         {
             if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = resolvedBorder.Value;
             else if (fe is WinUI.Border btBdr) btBdr.BorderThickness = resolvedBorder.Value;
+            else if (fe is WinUI.Grid btGrid) btGrid.BorderThickness = resolvedBorder.Value;
+            else if (fe is WinUI.StackPanel btStack) btStack.BorderThickness = resolvedBorder.Value;
+            else if (fe is WinUI.RelativePanel btRelative) btRelative.BorderThickness = resolvedBorder.Value;
         }
         else if (!resolvedBorder.HasValue && (oldM?.BorderThickness.HasValue == true || oldM?.BorderInlineStart.HasValue == true))
         {
             if (fe is WinUI.Control btCtrl) btCtrl.ClearValue(WinUI.Control.BorderThicknessProperty);
             else if (fe is WinUI.Border btBdr) btBdr.ClearValue(WinUI.Border.BorderThicknessProperty);
+            else if (fe is WinUI.Grid btGrid) btGrid.ClearValue(WinUI.Grid.BorderThicknessProperty);
+            else if (fe is WinUI.StackPanel btStack) btStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
+            else if (fe is WinUI.RelativePanel btRelative) btRelative.ClearValue(WinUI.RelativePanel.BorderThicknessProperty);
         }
 
         // Background (Panel, Control, or Border)
@@ -7644,6 +7670,7 @@ public sealed partial class Reconciler : IDisposable
         WinUI.Border => "Border",
         WinUI.StackPanel => "StackPanel",
         WinUI.Grid => "Grid",
+        WinUI.RelativePanel => "RelativePanel",
         WinUI.Button => "Button",
         WinUI.TextBox => "TextBox",
         TextBlock => "TextBlock",
@@ -7659,7 +7686,8 @@ public sealed partial class Reconciler : IDisposable
             return "Background";
         if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock))
             return "Foreground";
-        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border))
+        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
+            || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
             return "BorderBrush";
         return null;
     }
