@@ -1,0 +1,140 @@
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using static Microsoft.UI.Reactor.Factories;
+using AP = Microsoft.UI.Xaml.Automation.AutomationProperties;
+using WinUI = Microsoft.UI.Xaml.Controls;
+
+namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
+
+/// <summary>Exercises panel borders across updates, interaction states, and theme changes (#1039).</summary>
+internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        using var host = H.CreateHost();
+        var physical = new Thickness(2, 3, 4, 5);
+        const string themeKey = "Issue1039PanelBorderBrush";
+        var themeBrush = new SolidColorBrush(Microsoft.UI.Colors.Red);
+        var darkBrush = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+        var hoverBrush = new SolidColorBrush(Microsoft.UI.Colors.Green);
+        var resources = new ResourceDictionary();
+        resources.ThemeDictionaries["Light"] = new ResourceDictionary { [themeKey] = themeBrush };
+        resources.ThemeDictionaries["Dark"] = new ResourceDictionary { [themeKey] = darkBrush };
+        Application.Current.Resources.MergedDictionaries.Add(resources);
+        try
+        {
+            Action<int>? setPhase = null;
+            host.Mount(ctx =>
+            {
+                var (phase, setter) = ctx.UseState(0);
+                setPhase = setter;
+                Element Configure(Element panel, string id)
+                {
+                    panel = panel.AutomationId(id);
+                    return phase switch
+                    {
+                        0 => panel.BorderThickness(physical).BorderBrush("#FF3366CC")
+                            .InteractionStates(states => states.PointerOver(borderBrush: hoverBrush)),
+                        1 => panel.BorderThickness(physical).BorderBrush("#FFCC6633")
+                            .BorderInlineStart(new Thickness(9)),
+                        3 => panel.BorderInlineStart(new Thickness(9)),
+                        5 => panel.BorderBrush(new ThemeRef(themeKey)).RequestedTheme(ElementTheme.Light),
+                        _ => panel,
+                    };
+                }
+                return VStack(
+                    Configure(Grid([GridSize.Star()], [GridSize.Auto], TextBlock("grid")), "panel-border-grid"),
+                    Configure(VStack(TextBlock("stack")), "panel-border-stack"),
+                    Configure(RelativePanel(TextBlock("relative")), "panel-border-relative"));
+            });
+
+            await Harness.Render();
+            var panels = new[]
+            {
+                H.FindControl<Grid>(p => AP.GetAutomationId(p) == "panel-border-grid"),
+                (Panel?)H.FindControl<StackPanel>(p => AP.GetAutomationId(p) == "panel-border-stack"),
+                H.FindControl<RelativePanel>(p => AP.GetAutomationId(p) == "panel-border-relative"),
+            };
+            H.Check("PanelBorder_Present", panels.All(p => p is not null));
+            if (panels.Any(p => p is null)) return;
+            var thicknessProperties = new[]
+            {
+                WinUI.Grid.BorderThicknessProperty, StackPanel.BorderThicknessProperty, WinUI.RelativePanel.BorderThicknessProperty,
+            };
+            var brushProperties = new[]
+            {
+                WinUI.Grid.BorderBrushProperty, StackPanel.BorderBrushProperty, WinUI.RelativePanel.BorderBrushProperty,
+            };
+            string[] phases = ["Mount", "UpdateRtl", "Unset", "InlineNativeBase", "UnsetInline", "Theme", "UnsetTheme"];
+
+            for (int phase = 0; phase <= 6; phase++)
+            {
+                if (phase != 0)
+                {
+                    foreach (var panel in panels)
+                        panel!.FlowDirection = phase == 1 ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+                    // Seed an asymmetric native value with no physical modifier in the old
+                    // or new bag. The inline-only write must preserve the other three edges.
+                    if (phase == 3)
+                        for (int i = 0; i < panels.Length; i++)
+                            panels[i]!.SetValue(thicknessProperties[i], physical);
+                    setPhase!(phase);
+                    await Harness.Render();
+                }
+
+                for (int i = 0; i < panels.Length; i++)
+                {
+                    var panel = panels[i]!;
+                    var thickness = (Thickness)panel.GetValue(thicknessProperties[i]);
+                    var brush = panel.GetValue(brushProperties[i]) as SolidColorBrush;
+                    bool cleared = panel.ReadLocalValue(thicknessProperties[i]) == DependencyProperty.UnsetValue
+                        && panel.ReadLocalValue(brushProperties[i]) == DependencyProperty.UnsetValue;
+                    bool correct = phase switch
+                    {
+                        0 => thickness == physical && brush?.Color == global::Windows.UI.Color.FromArgb(255, 51, 102, 204),
+                        1 => thickness == new Thickness(2, 3, 9, 5)
+                            && brush?.Color == global::Windows.UI.Color.FromArgb(255, 204, 102, 51),
+                        2 or 4 => cleared,
+                        3 => thickness == new Thickness(9, 3, 4, 5),
+                        5 => brush?.Color == themeBrush.Color && panel.Style is not null,
+                        _ => brush is null && panel.Style is null,
+                    };
+                    H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}", correct);
+
+                    if (phase == 0)
+                    {
+                        Reconciler.SimulatePointerOverForTests(panel, isOver: true);
+                        H.Check($"PanelBorder_{panel.GetType().Name}_HoverBrush",
+                            ReferenceEquals(panel.GetValue(brushProperties[i]), hoverBrush));
+                        Reconciler.SimulatePointerOverForTests(panel, isOver: false);
+                        H.Check($"PanelBorder_{panel.GetType().Name}_NormalBrushRestored",
+                            ReferenceEquals(panel.GetValue(brushProperties[i]), brush));
+                    }
+                }
+
+                if (phase == 5)
+                {
+                    // Change only the native theme: the existing ThemeResource style must
+                    // resolve a different brush without another Reactor render/update.
+                    foreach (var panel in panels)
+                        panel!.RequestedTheme = ElementTheme.Dark;
+                    for (int i = 0; i < panels.Length; i++)
+                    {
+                        var panel = panels[i]!;
+                        var property = brushProperties[i];
+                        H.Check($"PanelBorder_{panel.GetType().Name}_ThemeChanged",
+                            await Harness.WaitFor(() => panel.ActualTheme == ElementTheme.Dark
+                                && (panel.GetValue(property) as SolidColorBrush)?.Color == darkBrush.Color));
+                    }
+                }
+            }
+        }
+        finally
+        {
+            Application.Current.Resources.MergedDictionaries.Remove(resources);
+        }
+    }
+}
