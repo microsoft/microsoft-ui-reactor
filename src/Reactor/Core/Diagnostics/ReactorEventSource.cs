@@ -31,7 +31,7 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <c>WriteEvent</c> overloads are additionally guarded inside this class
 /// for defense in depth.
 ///
-/// A private ETW session (what a non-elevated <c>winapp perf</c> attaches with)
+/// As of .NET 10, a private ETW session (what a non-elevated <c>winapp perf</c> attaches with)
 /// never enables an EventSource, so this provider writes nothing there. Reactor's
 /// render-pass and component spans are also written through the raw
 /// <c>Microsoft-UI-Reactor-Perf</c> provider (<see cref="ReactorPerfTrace"/>),

@@ -400,6 +400,8 @@ public sealed class RenderContext
                     changed = !EqualityComparer<TState>.Default.Equals(prev, next);
                     if (changed) h.Value = next;
                 }
+                if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
@@ -407,7 +409,10 @@ public sealed class RenderContext
                 if (MarshalIfOffUIThread("UseReducer", () => Dispatch(action))) return;
                 var prev = h.Value;
                 var next = reducer(prev, action);
-                if (!EqualityComparer<TState>.Default.Equals(prev, next))
+                bool changed = !EqualityComparer<TState>.Default.Equals(prev, next);
+                if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
+                if (changed)
                 {
                     h.Value = next;
                     _requestRerender?.Invoke();

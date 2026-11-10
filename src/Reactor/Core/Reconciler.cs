@@ -468,7 +468,8 @@ public sealed partial class Reconciler : IDisposable
             // outside any host pass. Stopped in EntryFrame.Dispose, after the whole entry.
             if (Diagnostics.ReactorPerfTrace.PassEnabled)
             {
-                Diagnostics.ReactorPerfTrace.ReconcileStart(perfEntry, element?.GetType().Name ?? "null");
+                Diagnostics.ReactorPerfTrace.ReconcileStart(perfEntry,
+                    element is null ? "null" : Diagnostics.ComponentNames.For(element.GetType()));
                 perfSpan = true;
             }
         }

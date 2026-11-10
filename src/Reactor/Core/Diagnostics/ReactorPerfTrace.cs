@@ -409,12 +409,21 @@ internal static unsafe partial class ReactorPerfTrace
 
     // ── TraceLogging metadata ───────────────────────────────────────────
 
-    /// <summary>A pinned metadata blob.</summary>
-    internal readonly struct Blob(byte* pointer, uint size)
+    /// <summary>
+    /// A metadata blob in a pinned array. The blob holds the array itself, not just its
+    /// address: a pinned (POH) array is never moved but is still collected once unreachable,
+    /// and ETW reads it by pointer on every write. The static fields that hold the blobs
+    /// root the arrays for the process lifetime.
+    /// </summary>
+    internal readonly struct Blob
     {
-        public byte* Pointer { get; } = pointer;
-        public uint Size { get; } = size;
-        public ReadOnlySpan<byte> Span => new(Pointer, (int)Size);
+        private readonly byte[] _pinned;
+
+        internal Blob(byte[] pinned) => _pinned = pinned;
+
+        public byte* Pointer => (byte*)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(_pinned));
+        public uint Size => (uint)_pinned.Length;
+        public ReadOnlySpan<byte> Span => _pinned;
     }
 
     /// <summary>TraceLogging field in-types used by this provider (TraceLoggingProvider.h <c>TlgIn_t</c>).</summary>
@@ -486,11 +495,14 @@ internal static unsafe partial class ReactorPerfTrace
             ushort size = checked((ushort)bytes.Count);
             bytes[0] = (byte)size;
             bytes[1] = (byte)(size >> 8);
-            // Pinned for the process lifetime: ETW reads it by pointer on every write.
             var array = GC.AllocateUninitializedArray<byte>(size, pinned: true);
             bytes.CopyTo(array);
-            return new Blob((byte*)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(array)), size);
+            PinnedForTests?.Invoke(array);
+            return new Blob(array);
         }
+
+        /// <summary>Observes each metadata array as it is allocated, so a test can watch its lifetime.</summary>
+        internal static Action<byte[]>? PinnedForTests { get; set; }
     }
 
     // ── ETW interop ─────────────────────────────────────────────────────

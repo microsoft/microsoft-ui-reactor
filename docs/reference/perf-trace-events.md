@@ -13,9 +13,9 @@ Reactor's general diagnostics provider, the `Microsoft-UI-Reactor` `EventSource`
 (see [Perf Instrumentation](../guide/perf-instrumentation.md)), is not recorded by a
 **private** ETW session — the kind a non-elevated tool such as `winapp perf` attaches to a
 running app with (`EVENT_TRACE_PRIVATE_LOGGER_MODE` plus a PID scope filter). ETW does call
-the EventSource's enable callback, but .NET only turns an EventSource on for sessions it finds
-through `EnumerateTraceGuidsEx`, which does not list private loggers, so the EventSource stays
-off and writes nothing.
+the EventSource's enable callback, but as of .NET 10 the runtime only turns an EventSource on
+for sessions it finds through `EnumerateTraceGuidsEx`, which does not list private loggers, so
+the EventSource stays off and writes nothing.
 
 `Microsoft-UI-Reactor-Perf` is registered directly with `EventRegister`, so the enable
 callback is all it needs. Its events are TraceLogging: each carries its own metadata, so any
@@ -89,7 +89,9 @@ in-types: `UInt64` (10), `UInt32` (8), `String` = nul-terminated UTF-16 (1), `Bo
 - **`Reconcile`** — an outermost reconciler entry. Inside a `RenderPass` it is the pass's
   reconcile. Outside any pass it is a row an `ItemsRepeater` / `ListView` realizes or reuses
   during layout. `entry` is `reconcile` or `mount` (which reconciler entry point it was);
-  `element` is the element type at the entry (`StackElement`, `ComponentElement`, …).
+  `element` is the element type at the entry (`StackElement`, `ComponentElement`,
+  `LazyVStackElement<Int32>` — generic types use the same C# form as `name`), or `null` when
+  the entry reconciles to no element.
 - **`Effects`** — a host root's effects flush (`UseEffect` callbacks). `componentId` is the
   root's. Child components' effects run inside their own `ComponentRender` span.
 - **`ChildReconcile`** — one container's child-list reconcile (keyed or positional), including
@@ -100,11 +102,13 @@ in-types: `UInt64` (10), `UInt32` (8), `String` = nul-terminated UTF-16 (1), `Bo
 
 ### Instant events
 
-- **`StateChange`** — a `UseState` / `UseReducer` setter ran. `componentId` is the component
+- **`StateChange`** — a `UseState` setter, `UseReducer` updater or `UseReducer` dispatch ran.
+  `componentId` is the component
   that owns the hook (the "updater"), assigned on first use if the component has not rendered
   under tracing yet; `hook` is `UseState` or `UseReducer`; `changed` is false when the new
   value equalled the old one (no re-render is requested). May be written from a worker thread
-  (`threadSafe: true` hooks); the thread id is in the ETW header.
+  (`threadSafe: true` hooks); the thread id is in the ETW header. A call from a worker thread
+  to a hook that is not thread-safe is marshalled to the UI thread first and reported there.
 - **`KeyedListDiagnostic`** — a keyed list or a panel's `.WithKey` siblings had an invalid key.
   `kind` is `duplicateKey` or `nullKey`. `bailedOut` is true when the keyed diff gave up and
   the list is re-realized in full this render (costly); false when it was only reported.
@@ -129,7 +133,7 @@ RenderPass (hostId)
 A row realized during layout, outside any pass:
 
 ```
-Reconcile (entry=mount, element=ComponentElement)
+Reconcile (entry=mount, element=ComponentElement<String>)
   ComponentRender (Row, reason=mount)
 ```
 

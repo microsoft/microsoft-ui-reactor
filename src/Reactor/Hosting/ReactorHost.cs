@@ -46,22 +46,13 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     // Process-unique id on this host's Microsoft-UI-Reactor-Perf RenderPass spans.
     private readonly ulong _perfHostId = Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.NextHostId();
 
-    // The root's perf ComponentRender span: its Render(), the reconcile and the commit into
-    // this host (the root's effects get their own Effects span). Callers check the keyword.
+    // The root's perf spans; see RootRenderDiagnostics. Callers of BeginRootPerfSpan check the keyword.
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentSpan BeginRootPerfSpan(bool hotReloadRender)
-    {
-        var diagnostics = _renderingRootDiagnostics ?? _rootDiagnostics;
-        return Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentSpan.Begin(
-            (ulong)diagnostics.EnsureId(_rootComponent?.Context ?? _funcContext),
-            _rootComponent is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_rootComponent, element: null),
-            diagnostics.PeekReason(hotReloadRender, _reconciler.ForceFullRenderPending));
-    }
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginPerfSpan(
+            _rootComponent, _funcContext, hotReloadRender, _reconciler.ForceFullRenderPending);
 
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan BeginRootEffectsPerfSpan(Component? effectsRoot)
-        => Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.PassEnabled
-            ? Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan.Begin(
-                (_renderingRootDiagnostics ?? _rootDiagnostics).EnsureId(effectsRoot?.Context ?? _funcContext))
-            : default;
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginEffectsPerfSpan(effectsRoot?.Context ?? _funcContext);
 
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;

@@ -174,7 +174,7 @@ shipped versions.
 
 ## Recording without elevation
 
-A managed `EventSource` is never turned on by a **private** ETW
+As of .NET 10, a managed `EventSource` is never turned on by a **private** ETW
 session — the kind a non-elevated tool attaches to a running app with
 (`winapp perf` does this by default). .NET enables an EventSource only
 for sessions it finds by enumerating the system's trace sessions, and
@@ -190,7 +190,7 @@ WPA and any TDH-based decoder read them without a manifest, and they
 nest with `Microsoft-Windows-XAML` on the UI thread's timeline. The
 same no-consumer rule applies: each emit site is one enabled check.
 The event ids, fields and nesting rules are in
-[the perf trace events reference](../reference/perf-trace-events.md).
+[the perf trace events reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/perf-trace-events.md).
 
 ## Spec 031 — the companion spec
 

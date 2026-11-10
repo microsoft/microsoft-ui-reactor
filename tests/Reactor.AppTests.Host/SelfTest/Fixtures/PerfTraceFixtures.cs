@@ -32,6 +32,9 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
         "PerfTrace_KeyedEditCounts",
         "PerfTrace_RowsRealizedOutsidePass",
         "PerfTrace_KeyedListDiagnostic",
+        "PerfTrace_PropsAndContextReasons",
+        "PerfTrace_ThrowingRenderClosesItsSpan",
+        "PerfTrace_ReplacedCount",
     ];
 
     public override async Task RunAsync()
@@ -50,7 +53,10 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
         var spans = Pair(events, out bool balanced);
         Console.WriteLine($"# perf trace: {spans.Count} spans; " + string.Join(", ",
             spans.GroupBy(s => s.Name).Select(g => $"{g.Key}={g.Count()}")));
-        H.Check("PerfTrace_SpansBalanced", balanced);
+        // A Stop's componentId is its Start's.
+        H.Check("PerfTrace_SpansBalanced", balanced && spans
+            .Where(s => s.Name is "ComponentRender" or "Effects")
+            .All(s => Equals(s.Start.Fields["componentId"], s.Stop.Fields["componentId"])));
 
         var passes = spans.Where(s => s.Name == "RenderPass").ToList();
         // Mount, the counter's own update and the shuffle each ran a pass (Harness.Render may
@@ -103,15 +109,40 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
         // mount span inside its own outermost Reconcile span.
         var rows = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceRow)).ToList();
         var outside = rows.Where(r => r.Ancestors().All(a => a.Name != "RenderPass")).ToList();
-        Console.WriteLine($"# perf trace: rows={rows.Count} realized outside a pass={outside.Count}");
+        var rowEntries = outside.Select(r => r.Ancestors().LastOrDefault(a => a.Name == "Reconcile"))
+            .Select(e => e is null ? "none" : $"{e.Start.Fields["entry"]}/{e.Start.Fields["element"]}").Distinct().ToList();
+        Console.WriteLine($"# perf trace: rows={rows.Count} realized outside a pass={outside.Count} entries={string.Join(",", rowEntries)}");
         H.Check("PerfTrace_RowsRealizedOutsidePass",
-            outside.Count > 0 && outside.All(r => (string)r.Start.Fields["reason"] == "mount"
-                && r.Ancestors().Any(a => a.Name == "Reconcile")));
+            outside.Count > 0 && outside.All(r => (string)r.Start.Fields["reason"] == "mount")
+            && rowEntries.SequenceEqual(["mount/ComponentElement<String>"]));
 
         // Duplicate sibling keys are reported (not a bailout: the panel still reconciles).
         H.Check("PerfTrace_KeyedListDiagnostic",
             events.Any(e => e.Name == "KeyedListDiagnostic" && (string)e.Fields["kind"] == "duplicateKey"
                 && !(bool)e.Fields["bailedOut"]));
+
+        // The EventSource is off here, so these reasons come from the perf spans' own
+        // classification (the context one from the FuncElement refinement it also enables).
+        string[] Reasons(string name) => components.Where(c => (string)c.Start.Fields["name"] == name)
+            .Select(c => (string)c.Start.Fields["reason"]).ToArray();
+        var propsReasons = Reasons(nameof(PerfTracePropsChild));
+        var funcReasons = Reasons(nameof(FuncElement));
+        Console.WriteLine($"# perf trace: props child={string.Join(",", propsReasons)} func={string.Join(",", funcReasons)}"
+            + $" eventSourceOn={ComponentRenderTrace.IsEnabled}");
+        H.Check("PerfTrace_PropsAndContextReasons",
+            !ComponentRenderTrace.IsEnabled && propsReasons.Contains("props") && funcReasons.Contains("context"));
+
+        // The child that throws inside an error boundary still closes its span (Pair drops a
+        // span whose Stop never came, and SpansBalanced checks it closed under the same id).
+        var thrower = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceThrower)).ToList();
+        Console.WriteLine("# perf trace: thrower renders " + string.Join(",", thrower.Select(c => c.Start.Fields["reason"])));
+        H.Check("PerfTrace_ThrowingRenderClosesItsSpan",
+            thrower.Any(c => (string)c.Start.Fields["reason"] == "props") && balanced);
+
+        // TextBlock -> Button in the same slot replaces that control in place.
+        H.Check("PerfTrace_ReplacedCount",
+            spans.Any(s => s.Name == "ChildReconcile" && Equals(s.Start.Fields["oldCount"], 1u)
+                && Equals(s.Start.Fields["newCount"], 1u) && Equals(s.Stop.Fields["replaced"], 1u)));
     }
 
     /// <summary>A span reconstructed from a Start/Stop pair on one thread.</summary>
@@ -223,12 +254,20 @@ internal static class PerfTraceScenario
                 host.Mount(ctx =>
                 {
                     var (keys, setKeys) = ctx.UseState(new[] { "a", "b", "c" });
+                    bool shuffled = keys[0] == "c";
                     return VStack(
                         Button("perf-shuffle", () => setKeys(["c", "a", "d"])),
                         Component<PerfTraceCounter>(),
                         VStack(keys.Select(k => (Element)TextBlock("key " + k).WithKey(k)).ToArray()),
                         VStack(TextBlock("dup 1").WithKey("dup"), TextBlock("dup 2").WithKey("dup")),
-                        LazyVStack(Rows, static r => r, static (r, _) => Component<PerfTraceRow, string>(r)).Height(120));
+                        LazyVStack(Rows, static r => r, static (r, _) => Component<PerfTraceRow, string>(r)).Height(120),
+                        // The shuffle also changes a child's props, a consumed context, a slot's
+                        // control type, and makes a child throw inside an error boundary.
+                        Component<PerfTracePropsChild, string>(keys[0]),
+                        RenderEachTime(c => TextBlock("theme " + c.UseContext(PerfTracePropsChild.Theme))),
+                        VStack(shuffled ? Button("perf-swapped") : TextBlock("perf swap me")),
+                        ErrorBoundary(Component<PerfTraceThrower, bool>(shuffled), TextBlock("perf caught")))
+                        .Provide(PerfTracePropsChild.Theme, keys[0]);
                 });
                 await Harness.Render();
                 await Harness.Render();
@@ -374,4 +413,17 @@ internal sealed class PerfTraceCounter : Component
 internal sealed class PerfTraceRow : Component<string>
 {
     public override Element Render() => TextBlock(Props).Height(24);
+}
+
+internal sealed class PerfTracePropsChild : Component<string>
+{
+    public static readonly Context<string> Theme = new("");
+
+    public override Element Render() => TextBlock("props " + Props);
+}
+
+internal sealed class PerfTraceThrower : Component<bool>
+{
+    public override Element Render()
+        => Props ? throw new InvalidOperationException("PerfTrace selftest: deliberate render failure") : TextBlock("perf thrower");
 }

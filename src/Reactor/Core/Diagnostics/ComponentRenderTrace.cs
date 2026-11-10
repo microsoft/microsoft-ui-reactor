@@ -345,6 +345,22 @@ internal sealed class RootRenderDiagnostics
         => ComponentRenderTrace.ClassifyRoot(!_rendered, hotReloadRender || _hotReloadRetry, forcePending);
 
     /// <summary>
+    /// Starts the root's perf <c>ComponentRender</c> span: its Render(), the reconcile and the
+    /// commit into the host (the root's effects get their own <c>Effects</c> span). The caller
+    /// checks <see cref="ReactorPerfTrace.ComponentEnabled"/>. <paramref name="root"/> is the
+    /// class root, or null for a render-function root whose hooks live in <paramref name="funcContext"/>.
+    /// </summary>
+    public ReactorPerfTrace.ComponentSpan BeginPerfSpan(Component? root, RenderContext? funcContext, bool hotReloadRender, bool forcePending)
+        => ReactorPerfTrace.ComponentSpan.Begin(
+            (ulong)EnsureId(root?.Context ?? funcContext),
+            root is null ? nameof(FuncElement) : ComponentNames.For(root, element: null),
+            PeekReason(hotReloadRender, forcePending));
+
+    /// <summary>The root's perf <c>Effects</c> span, or an inactive one while the <c>Pass</c> keyword is off.</summary>
+    public ReactorPerfTrace.EffectsSpan BeginEffectsPerfSpan(RenderContext? context)
+        => ReactorPerfTrace.PassEnabled ? ReactorPerfTrace.EffectsSpan.Begin(EnsureId(context)) : default;
+
+    /// <summary>
     /// Keeps the root's id pointing at the control now standing in for its content (the
     /// reconciled root, or the error panel when Render() or the pass threw). Never the
     /// reverse direction: that control is often also a child component's wrapper, whose

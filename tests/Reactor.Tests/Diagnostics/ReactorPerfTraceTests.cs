@@ -203,7 +203,7 @@ public sealed class ReactorPerfTraceTests
 
         // Unique values so concurrent emitters (none expected: the collection is serial)
         // can never satisfy an assertion.
-        ulong hostId = 0xFEED_0000_0000_0000UL | (ulong)Random.Shared.Next();
+        ulong hostId = 0xFEED_0000_0000_0000UL | (uint)Random.Shared.Next();
         ulong componentId = hostId + 1;
         string name = "PerfTraceProbe" + hostId.ToString("x");
 
@@ -309,6 +309,149 @@ public sealed class ReactorPerfTraceTests
     }
 
     [Fact]
+    public void StateSetters_EveryHookForm_ReportsItsOwner()
+    {
+        ReactorPerfTrace.EnsureRegistered();
+        var ctx = new RenderContext();
+        ctx.BeginRender(() => { });
+        var (_, setLocked) = ctx.UseState(0, threadSafe: true);
+        var (_, update) = ctx.UseReducer(0);
+        var (_, updateLocked) = ctx.UseReducer(0, threadSafe: true);
+        var (_, dispatch) = ctx.UseReducer<int, int>(static (s, a) => s + a, 0);
+        var (_, dispatchLocked) = ctx.UseReducer<int, int>(static (s, a) => s + a, 0, threadSafe: true);
+
+        // Nobody listening: no hook form writes, or even assigns the component an id.
+        long untracedBefore = ReactorPerfTrace.WriteCountForTests;
+        setLocked(0);
+        updateLocked(static v => v);
+        dispatchLocked(0);
+        update(static v => v);
+        dispatch(0);
+        Assert.Equal(untracedBefore, ReactorPerfTrace.WriteCountForTests);
+        Assert.Equal(0, ctx.DiagnosticId);
+        var events = Capture(level: 5, keywords: ReactorPerfTrace.Keywords.State, () =>
+        {
+            // Thread-safe hooks write from the caller's thread, here a dedicated one.
+            var worker = new Thread(() =>
+            {
+                setLocked(1);
+                updateLocked(static v => v);
+                dispatchLocked(1);
+            });
+            worker.Start();
+            worker.Join();
+            update(static v => v + 1);
+            dispatch(0);
+        }, out long written);
+
+        long id = ctx.DiagnosticId;
+        Assert.NotEqual(0, id);
+        var mine = events.Where(e => e.Id == 11).ToList();
+        Assert.All(mine, e => Assert.Equal((ulong)id, e.Fields["componentId"]));
+        Assert.Equal(
+            new (string, bool)[] { ("UseState", true), ("UseReducer", false), ("UseReducer", true), ("UseReducer", true), ("UseReducer", false) },
+            mine.Select(e => ((string)e.Fields["hook"], (bool)e.Fields["changed"])));
+        // The thread-safe writes are reported on the worker thread that made them.
+        Assert.All(mine.Take(3), e => Assert.NotEqual(mine[3].ThreadId, e.ThreadId));
+        Assert.Equal(5, written);
+    }
+
+    [Fact]
+    public void Metadata_IsRootedForTheProcessLifetime()
+    {
+        // The blobs are read by pointer on every write; a pinned array is never moved but is
+        // still collected once unreachable. A blob must keep its own array alive.
+        var (blob, array) = BuildWatchedBlob();
+        byte[] expected = blob.Span.ToArray();
+
+        for (int i = 0; i < 3; i++)
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+
+        Assert.True(array.IsAlive, "the metadata array was collected while its blob was still in use");
+        unsafe
+        {
+            Assert.Equal(expected, new ReadOnlySpan<byte>(blob.Pointer, (int)blob.Size).ToArray());
+        }
+        GC.KeepAlive(blob);
+    }
+
+    // Not inlined, so no stray reference to the array outlives this frame (a Debug build keeps
+    // every temporary of the calling method alive, which would hide the bug).
+    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (ReactorPerfTrace.Blob Blob, WeakReference Array) BuildWatchedBlob()
+    {
+        WeakReference? array = null;
+        ReactorPerfTrace.Metadata.PinnedForTests = a => array = new WeakReference(a);
+        try
+        {
+            var blob = ReactorPerfTrace.Metadata.BuildEvent("RootProbe", ("value", ReactorPerfTrace.InTypes.UInt64));
+            return (blob, array!);
+        }
+        finally
+        {
+            ReactorPerfTrace.Metadata.PinnedForTests = null;
+        }
+    }
+
+    [EventSource(Name = "Microsoft-UI-Reactor-Tests-PrivateSessionProbe")]
+    private sealed class PrivateSessionProbe : EventSource
+    {
+        public PrivateSessionProbe() : base(EventSourceSettings.EtwSelfDescribingEventFormat) { }
+
+        [Event(1, Level = EventLevel.Informational)]
+        public void Ping(int value) => WriteEvent(1, value);
+    }
+
+    [Fact]
+    public void PrivateSession_RecordsThisProvider_ButNeverEnablesAnEventSource()
+    {
+        // The premise of the provider, and proof the capture really is private: a system
+        // session would enable the probe too. If a future .NET runtime enables EventSources
+        // for private sessions this fails; then the docs' "as of .NET 10" notes need updating.
+        ReactorPerfTrace.EnsureRegistered();
+        using var probe = new PrivateSessionProbe();
+        Guid probeId = EventSource.GetGuid(typeof(PrivateSessionProbe));
+        string etl = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(),
+            "reactor-perf-" + Guid.NewGuid().ToString("N") + ".etl");
+        try
+        {
+            EtwPrivateCapture capture;
+            try
+            {
+                capture = EtwPrivateCapture.Start(etl);
+            }
+            catch (global::System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 5)
+            {
+                Assert.Skip("This account may not start an ETW session (not elevated and not in Performance Log Users).");
+                throw;
+            }
+            bool probeEnabled;
+            using (capture)
+            {
+                capture.Enable(probeId, 5, ulong.MaxValue);
+                capture.Enable(ReactorPerfTrace.ProviderId, 5, ulong.MaxValue);
+                Assert.True(ReactorPerfTrace.IsEnabled(5, ReactorPerfTrace.Keywords.Pass), "the private session's enable never reached the provider");
+                probeEnabled = probe.IsEnabled();
+                probe.Ping(1);
+                ReactorPerfTrace.ReconcileStart("reconcile", "Probe");
+                ReactorPerfTrace.ReconcileStop();
+                capture.Stop();
+            }
+
+            Assert.False(probeEnabled);
+            Assert.Empty(EtwPrivateCapture.Read(etl, probeId));
+            Assert.Equal(2, EtwPrivateCapture.Read(etl, ReactorPerfTrace.ProviderId).Count(e => e.Name == "Reconcile"));
+        }
+        finally
+        {
+            try { global::System.IO.File.Delete(etl); } catch (global::System.IO.IOException) { }
+        }
+    }
+
+    [Fact]
     public void KeyedListDiagnostics_ReportBailoutsAndSiblingDuplicates_OnlyWhileTraced()
     {
         ReactorPerfTrace.EnsureRegistered();
@@ -329,11 +472,15 @@ public sealed class ReactorPerfTraceTests
             var stats = Microsoft.UI.Reactor.Core.Internal.KeyedListDiff.Apply(state, new[] { "a", "b", "a" }, static (k, _) => k);
             Assert.True(stats.Bailout);
             Microsoft.UI.Reactor.Core.Internal.KeyedListDiff.ReportDuplicateSiblingKeys(children, reconciler: null, new object());
+            // A null key is substituted, not a bailout.
+            var nullKeyed = new Microsoft.UI.Reactor.Core.Internal.ReactorListState();
+            nullKeyed.Reset(new (int, string)[] { (0, "a") });
+            Assert.False(Microsoft.UI.Reactor.Core.Internal.KeyedListDiff.Apply(nullKeyed, new[] { "a", "b" }, static (k, _) => k == "b" ? null! : k).Bailout);
         }, out long written);
 
         var mine = events.Where(e => e.Id == 12).Select(e => ((string)e.Fields["kind"], (bool)e.Fields["bailedOut"])).ToList();
-        Assert.Equal(new[] { ("duplicateKey", true), ("duplicateKey", false) }, mine);
-        Assert.Equal(2, written);
+        Assert.Equal(new[] { ("duplicateKey", true), ("duplicateKey", false), ("nullKey", false) }, mine);
+        Assert.Equal(3, written);
     }
 
     /// <summary>
