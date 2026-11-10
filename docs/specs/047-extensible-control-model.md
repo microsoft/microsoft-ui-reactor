@@ -2,6 +2,11 @@
 
 ## Status
 
+**API naming update:** the Element-valued `Expander.HeaderTemplate` discussed below
+is now `Expander.HeaderContent`. It mounts a child into native `Expander.Header`;
+the historical name did not represent a `DataTemplate`. See the
+[migration notes](../guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
 **Phase 0 complete — Phase 1 greenlit.** The seven Phase 0 deliverables in §14 have all shipped (see [`docs/specs/tasks/047-extensible-control-model-implementation.md`](tasks/047-extensible-control-model-implementation.md) for the per-deliverable status). The audits ([`047/audits/`](047/audits/)) reshaped the design space materially: §8 collapsed from a §8 vs §8.1 debate into a small concrete plan, §9 has a clean structural cut, and §13's data-driven open questions have ratified decision criteria in [`047/decision-criteria.md`](047/decision-criteria.md). Baseline numbers are committed under [`047/baseline-results/`](047/baseline-results/); §11.6 and §12 now anchor their targets to measured M1–M13 values from LAPTOP-4MEP83VI (workstation x64 + ARM64-native captures deferred to Phase 1's first promotion PR per [`047/baseline-results/machines.md`](047/baseline-results/machines.md)). The §8.2 setter-suppression carve-out landed ahead of Phase 1 ([`047/factoring-recommendation.md`](047/factoring-recommendation.md)); spec 047 stays unified — no split executed.
 
 This spec documents the design for removing the asymmetry between *built-in Reactor controls* and *externally-authored controls registered via `Reconciler.RegisterType`*. The conversation started concretely (could a Win2D `CanvasControl` wrapper live downstream in the pix project without Reactor changes?), and ended in a broader question: what would it take for every mechanism Reactor uses to implement its own controls to be available to third-party authors — and could that protocol be smaller, more data-driven, and lower-overhead than what we have today?

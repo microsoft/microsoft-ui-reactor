@@ -311,7 +311,7 @@ EllipseElement.Fill(Brush brush) → EllipseElement
 EllipseElement.Set(Action<Ellipse> configure) → EllipseElement
 ExpanderElement.ContentTransitions(TransitionCollection transitions) → ExpanderElement
 ExpanderElement.Direction(ExpandDirection dir) → ExpanderElement
-ExpanderElement.HeaderTemplate(Element header) → ExpanderElement
+ExpanderElement.HeaderContent(Element header) → ExpanderElement
 ExpanderElement.IsExpandedChanged(Action<bool> handler) → ExpanderElement
 ExpanderElement.Set(Action<Expander> configure) → ExpanderElement
 FlexElement.FlexPadding(double horizontal, double vertical) → FlexElement
@@ -2496,7 +2496,7 @@ ToString() → string
 new(string Header, Element Content, Optional<bool> IsExpanded = default, Action<bool> OnIsExpandedChanged = null)
 Action<bool> OnIsExpandedChanged { get; init; }
 Element Content { get; init; }
-Element HeaderTemplate { get; init; }
+Element HeaderContent { get; init; }
 ExpandDirection ExpandDirection { get; init; }
 Optional<bool> IsExpanded { get; init; }
 TransitionCollection ContentTransitions { get; init; }

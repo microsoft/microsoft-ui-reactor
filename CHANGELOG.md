@@ -41,6 +41,13 @@ Conventions for contributors:
 
 ### Changed
 
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
 - `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
   now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
   may need to use the corresponding fluent modifiers instead. The same writes on

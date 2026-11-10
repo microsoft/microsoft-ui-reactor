@@ -4791,15 +4791,15 @@ public partial record BorderElement(Element? Child) : Element
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>
-// Spec 058 §15 (P5.23) — ExpandDirection auto. Content + HeaderTemplate are both Element-typed so
+// Spec 058 §15 (P5.23) — ExpandDirection auto. Content + HeaderContent are both Element-typed so
 // auto content-slot detection is ambiguous → overwrite d.Children with SingleContent(Content) in
-// Customize. HeaderTemplate (ImperativeBridged, Element header wins), gated string Header, IsExpanded
+// Customize. HeaderContent (ImperativeBridged, Element header wins), gated string Header, IsExpanded
 // (counter-echo HandCodedControlled over Expanding + Collapsed event) are bespoke. ContentTransitions
 // (TransitionCollection) is Excluded (legacy gap — escape-hatched via setter). Replaces ExpanderDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Expander), Exclude = new[] { "ContentTransitions" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Header")]
-[global::Microsoft.UI.Reactor.Wrappers.WrapManual("HeaderTemplate")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("HeaderContent")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsExpanded")]
 public partial record ExpanderElement(
     string Header,
@@ -4809,8 +4809,9 @@ public partial record ExpanderElement(
 ) : Element
 {
     public ExpandDirection ExpandDirection { get; init; } = ExpandDirection.Down;
-    /// <summary>Custom Element header (overrides the string <see cref="Header"/>).</summary>
-    public Element? HeaderTemplate { get; init; }
+    /// <summary>Custom Element content assigned to the native Expander's Header,
+    /// overriding the string <see cref="Header"/>. This is a mounted child, not a DataTemplate.</summary>
+    public Element? HeaderContent { get; init; }
     /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
     public Microsoft.UI.Xaml.Media.Animation.TransitionCollection? ContentTransitions { get; init; }
     internal Action<WinUI.Expander>[] Setters { get; init; } = [];
@@ -4845,22 +4846,22 @@ public partial record ExpanderElement(
             .ImperativeBridged(
                 mount: static (ctx, c, e) =>
                 {
-                    if (e.HeaderTemplate is null) return;
-                    var mounted = ctx.MountChild(e.HeaderTemplate);
+                    if (e.HeaderContent is null) return;
+                    var mounted = ctx.MountChild(e.HeaderContent);
                     if (mounted is not null) c.Header = mounted;
                 },
                 update: static (ctx, c, oldEl, newEl) =>
                 {
-                    if (oldEl.HeaderTemplate is null && newEl.HeaderTemplate is null) return;
+                    if (oldEl.HeaderContent is null && newEl.HeaderContent is null) return;
                     var existing = c.Header as global::Microsoft.UI.Xaml.UIElement;
                     var next = ctx.Reconciler.ReconcileV1Child(
-                        oldEl.HeaderTemplate, newEl.HeaderTemplate, existing, ctx.RequestRerender);
+                        oldEl.HeaderContent, newEl.HeaderContent, existing, ctx.RequestRerender);
                     if (!ReferenceEquals(existing, next))
                         c.Header = next;
                 },
                 unmount: static (ctx, c) =>
                 {
-                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderTemplate: not null }) return;
+                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderContent: not null }) return;
                     if (c.Header is global::Microsoft.UI.Xaml.UIElement child)
                         ctx.Reconciler.UnmountChild(child);
                     c.Header = null;
@@ -4868,7 +4869,7 @@ public partial record ExpanderElement(
             .OneWayConditional(
                 get:         static e => e.Header ?? string.Empty,
                 set:         static (c, v) => c.Header = v,
-                shouldWrite: static e => e.HeaderTemplate is null)
+                shouldWrite: static e => e.HeaderContent is null)
             .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ExpanderEventPayload, bool,
                 global::Windows.Foundation.TypedEventHandler<WinUI.Expander, WinUI.ExpanderExpandingEventArgs>>(
                 get:         static e => e.IsExpanded,

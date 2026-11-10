@@ -192,7 +192,7 @@ namespace Microsoft.UI.Reactor.Wrappers
     /// and external wrappers. Use <see cref="ControlProperty"/> when the control property name differs from the
     /// element-facing slot name.</para>
     /// <para><b>Not for</b> a slot that shares a control property with a sibling value prop needing precedence
-    /// gating (e.g. <c>Expander.HeaderTemplate</c> vs. the string <c>Header</c>) — keep those in <c>Customize</c>,
+    /// gating (e.g. <c>Expander.HeaderContent</c> vs. the string <c>Header</c>) — keep those in <c>Customize</c>,
     /// where write order is explicit.</para></summary>
     [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Struct, AllowMultiple = true)]
     public sealed class WrapElementSlotAttribute : global::System.Attribute
