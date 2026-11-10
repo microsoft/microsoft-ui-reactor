@@ -84,7 +84,8 @@ internal static partial class MarkdownSelectionFixtures
         Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, options);
 
     // MarkdownSelectionHost builds its document from its Loaded handler, and WinUI raises Loaded
-    // asynchronously after the layout pass that inserts the element (IsLoaded can flip first).
+    // asynchronously after the layout pass that inserts the element (IsLoaded alone is not a
+    // reliable signal: on removal it turns false before the Unloaded handler runs).
     // One render after mounting a new scope can therefore still observe an empty document; wait
     // until every scope has loaded and registered content. Callers' checks assert the exact text.
     private static async Task WaitForLoadedScopes(Harness h)
@@ -376,7 +377,7 @@ internal static partial class MarkdownSelectionFixtures
             H.Check("MdSelection_NativeUnloadRefreshCannotResurrectText", retained.Document.Text == "");
             H.SetContent(retained);
             await Harness.Render();
-            // IsLoaded flips before the Loaded event that rebuilds the document is raised.
+            // The document is rebuilt by the Loaded handler, so wait for content, not just IsLoaded.
             bool reloaded = await Harness.WaitFor(() => retained.IsLoaded && retained.Document.Text.Length > 0);
             H.Check("MdSelection_NativeReloadRestoresDocument",
                 reloaded && retained.Document.Text == "native reload",
