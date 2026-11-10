@@ -51,6 +51,19 @@ Conventions for contributors:
 
 ### Changed
 
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
+- `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
+  now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
+  may need to use the corresponding fluent modifiers instead. The same writes on
+  `RelativePanel` now report `REACTOR_MOD_002` (Info), since it is not pooled
+  (issue #1039).
+
 - The generated API index now includes Reactor Advanced factories, modifiers, hooks,
   enums and public types alongside the core Reactor surface, keeping `mur --api` and
   both shipped agent-reference copies complete (PR #1475).
@@ -64,6 +77,11 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
+  `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids
+  and stack panels release their border values before reuse. The Regedit example
+  uses the supported fluent modifiers (issue #1039).
 
 - Unkeyed Markdown selection scopes clear their selection and caret when a
   wholesale content replacement retains no surface text or prefix/suffix text,
