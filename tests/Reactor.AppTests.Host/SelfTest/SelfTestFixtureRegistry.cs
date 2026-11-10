@@ -424,6 +424,7 @@ internal static class SelfTestFixtureRegistry
         "PerfTrace_PrivateSessionRecordsRenderSpans",
         "PerfTrace_UnrequestedKeywordsWriteNothing",
         "PerfTrace_HostControlSpansAndGating",
+        "PerfTrace_PropagatedRootAdvancesToUpdate",
         // ReactorEventSource.ComponentRendered reasons + componentId resolution
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler",
         "ComponentRendered_HostControlRootAndThrowingRoot",
@@ -2708,6 +2709,7 @@ internal static class SelfTestFixtureRegistry
         "PerfTrace_PrivateSessionRecordsRenderSpans" => new PerfTrace_PrivateSessionRecordsRenderSpans(harness),
         "PerfTrace_UnrequestedKeywordsWriteNothing" => new PerfTrace_UnrequestedKeywordsWriteNothing(harness),
         "PerfTrace_HostControlSpansAndGating" => new PerfTrace_HostControlSpansAndGating(harness),
+        "PerfTrace_PropagatedRootAdvancesToUpdate" => new PerfTrace_PropagatedRootAdvancesToUpdate(harness),
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler" => new ComponentRendered_ReasonsAndIdsFollowTheReconciler(harness),
         "ComponentRendered_HostControlRootAndThrowingRoot" => new ComponentRendered_HostControlRootAndThrowingRoot(harness),
         "ComponentRendered_ErrorBoundaryCaughtRendersAreReported" => new ComponentRendered_ErrorBoundaryCaughtRendersAreReported(harness),

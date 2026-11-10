@@ -1149,8 +1149,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     return;
                 }
                 // A propagation the app requested (RenderError.Propagate()) leaves without a
-                // fallback; the root's Render() still ran, so report it on the way out.
-                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                // fallback; the root's Render() still ran, so report it on the way out (also marks
+                // the root rendered for the perf span's next reason).
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled || rootPerfSpan.IsActive)
                 {
                     TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
                     throw;
@@ -1182,7 +1183,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
                     return;
                 }
                 // See the component branch: report an app-requested propagation on the way out.
-                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled || rootPerfSpan.IsActive)
                 {
                     TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
                     throw;

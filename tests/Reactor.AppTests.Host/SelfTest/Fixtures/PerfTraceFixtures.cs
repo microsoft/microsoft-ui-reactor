@@ -314,6 +314,37 @@ internal static class PerfTraceScenario
             () => control?.Dispose());
     }
 
+    /// <summary>
+    /// A root whose first Render() is left by an app-requested propagation, then re-renders
+    /// from its own state — with only this provider listening (the EventSource is off).
+    /// </summary>
+    public static Task<(List<CapturedEtwEvent> Events, long Written)?> RunPropagatedRootAsync(Harness h)
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        NestedWindowScope? scope = null;
+        var previousCallback = ReactorApplication.OnUnhandledException;
+        return CaptureAsync(h, level: 4, ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                ReactorApplication.OnUnhandledException = _ => false;
+                scope = new NestedWindowScope("PerfTrace propagated root");
+                host = h.CreateHost();
+                var root = new RenderedNestedPropagatingRoot(scope.Window, scope.Hosts) { PropagateOnce = true };
+                try { host.Mount(root); }
+                catch (InvalidOperationException) { }
+                await Harness.Render();
+                root.Bump?.Invoke();
+                await Harness.Render();
+                await Harness.WaitFor(() => h.FindTextContaining("propagated root recovered") is not null, maxPasses: 32, perPassMs: 10);
+            },
+            () =>
+            {
+                ReactorApplication.OnUnhandledException = previousCallback;
+                host?.Dispose();
+                scope?.Dispose();
+            });
+    }
+
     private static async Task<(List<CapturedEtwEvent> Events, long Written)?> CaptureAsync(
         Harness h, byte level, ulong keywords, Func<Task> drive, Action dispose)
     {
@@ -397,6 +428,36 @@ internal class PerfTrace_HostControlSpansAndGating(Harness h) : SelfTestFixtureB
             H.Check($"PerfTrace_HostControl_OnlyRequestedWrites_{label}",
                 recorded.Count > 0 && written == recorded.Count && recorded.All(e => (e.Keyword & keywords) != 0));
         }
+    }
+}
+
+/// <summary>
+/// A root whose first render is left by an app-requested propagation still counts as
+/// rendered: its next render reports <c>state</c>, not a second <c>mount</c> — with only the
+/// perf provider listening, so the EventSource's bookkeeping can't mask it.
+/// </summary>
+internal class PerfTrace_PropagatedRootAdvancesToUpdate(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var run = await PerfTraceScenario.RunPropagatedRootAsync(H);
+        if (run is null)
+        {
+            H.Skip("PerfTrace_PropagatedRoot_NextRenderIsUpdate", PerfTraceScenario.SkipReason);
+            return;
+        }
+        // Each root must report mount then state. (ReactorHost only: a standalone
+        // ReactorHostControl renders off its Mount call, so a propagation escapes to the
+        // dispatcher; its catch filter is the same line as ReactorHost's.)
+        var perRoot = run.Value.Events
+            .Where(e => e.Name == "ComponentRender" && e.Opcode == 1
+                && e.Fields.TryGetValue("name", out var n) && (string)n == nameof(RenderedNestedPropagatingRoot))
+            .GroupBy(e => e.Fields["componentId"])
+            .Select(g => string.Join(",", g.Select(e => (string)e.Fields["reason"])))
+            .ToList();
+        Console.WriteLine($"# perf propagated root: {string.Join(" | ", perRoot)} eventSourceOn={ComponentRenderTrace.IsEnabled}");
+        H.Check("PerfTrace_PropagatedRoot_NextRenderIsUpdate",
+            !ComponentRenderTrace.IsEnabled && perRoot.Count == 1 && perRoot[0] == "mount,state");
     }
 }
 

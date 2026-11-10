@@ -1514,8 +1514,17 @@ internal sealed class RenderedThrowingCleanupRoot : Component
 // fails and whose handler asks to propagate.
 internal sealed class RenderedNestedPropagatingRoot(Window window, List<ReactorHost> created) : Component
 {
+    // When set, only the first render propagates; later ones render normally.
+    public bool PropagateOnce { get; init; }
+    public Action? Bump { get; private set; }
+    private bool _propagated;
+
     public override Element Render()
     {
+        var (n, setN) = UseState(0);
+        Bump = () => setN(n + 1);
+        if (PropagateOnce && _propagated) return TextBlock($"propagated root recovered {n}");
+        _propagated = true;
         var nested = new ReactorHost(window) { RenderErrorHandler = e => { e.Propagate(); return null; } };
         created.Add(nested);
         nested.Mount(_ => throw new InvalidOperationException("ComponentRendered selftest: nested render propagated"));

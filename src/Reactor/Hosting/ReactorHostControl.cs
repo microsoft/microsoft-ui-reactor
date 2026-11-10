@@ -1068,7 +1068,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 }
                 // A propagation the app requested (RenderError.Propagate()) leaves without a
                 // fallback; the root's Render() still ran, so report it on the way out.
-                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled || rootPerfSpan.IsActive)
                 {
                     TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
                     throw;
@@ -1100,7 +1100,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                     return;
                 }
                 // See the component branch: report an app-requested propagation on the way out.
-                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled || rootPerfSpan.IsActive)
                 {
                     TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
                     throw;
