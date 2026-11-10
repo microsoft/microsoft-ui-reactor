@@ -28,6 +28,11 @@ Conventions for contributors:
 
 ### Added
 
+- Element-valued content overloads for `HyperlinkButton`, `RepeatButton`,
+  `ToggleButton` / `ThreeStateToggleButton`, `DropDownButton`, `SplitButton`,
+  `ToggleSplitButton`, `CheckBox` / `ThreeStateCheckBox`, and `RadioButton`
+  (issue #1482).
+
 - Opt-in message-wide Markdown text selection in Reactor Advanced:
   `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
   and composable `Visibility` gates coordinate separately rendered Markdown leaves,
@@ -40,6 +45,15 @@ Conventions for contributors:
   avatar loaded over HTTPS (issue #1460).
 
 ### Changed
+
+- `Button` and the button family share content reconciliation that preserves
+  descendant state and cleans up replaced content. Declared `ContentElement`
+  takes precedence over fallback text, including for the caption-derived
+  accessible name; icon-only content should supply `.AutomationName(...)`
+  (issue #1482).
+- `CheckBox(value, callback, null)` and `ThreeStateCheckBox(value, callback, null)`
+  are now ambiguous between string and Element content overloads. Use `label: null`
+  or cast to `(string?)null` to select the existing text overload (issue #1482).
 
 - `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
   now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`

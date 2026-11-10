@@ -87,4 +87,33 @@ public class ButtonContentTests
         threeCheck.OnCheckedStateChanged!(false);
         Assert.False(lastChecked);
     }
+
+    [Theory]
+    [MemberData(nameof(ContentFactories))]
+    public void ScannerFlagsUnnamedIconContentAndAcceptsExplicitNames(
+        Func<Element, Element> create, Func<Element, Element?> _)
+    {
+        var unnamed = create(Icon("Save")).AutomationId("action");
+        var diagnostic = Assert.Single(AccessibilityScanner.Scan(unnamed),
+            finding => finding.Id == "A11Y_001" && finding.AutomationId == "action");
+        Assert.Equal(unnamed.GetType().Name, diagnostic.ElementType);
+
+        var named = unnamed.AutomationName("Save");
+        Assert.DoesNotContain(AccessibilityScanner.Scan(named), finding => finding.Id == "A11Y_001");
+        Assert.DoesNotContain(AccessibilityScanner.Scan(create(TextBlock("Save"))), finding => finding.Id == "A11Y_001");
+    }
+
+    [Theory]
+    [MemberData(nameof(ContentFactories))]
+    public void ScannerVisitsContentSubtree(
+        Func<Element, Element> create, Func<Element, Element?> _)
+    {
+        var image = Image("ms-appx:///Assets/example.png").AutomationId("unlabeled-image");
+        var button = create(HStack(image, TextBlock("Save"))).AutomationName("Save");
+        Assert.Contains(AccessibilityScanner.Scan(button),
+            finding => finding.Id == "A11Y_002" && finding.AutomationId == "unlabeled-image");
+
+        var labeled = create(HStack(image.AutomationName("Preview"), TextBlock("Save"))).AutomationName("Save");
+        Assert.DoesNotContain(AccessibilityScanner.Scan(labeled), finding => finding.Id == "A11Y_002");
+    }
 }

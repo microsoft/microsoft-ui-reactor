@@ -73,10 +73,14 @@ internal static class ButtonContentFixture
 
     internal sealed class Execution(Harness h) : SelfTestFixtureBase(h)
     {
+        private static void Noop() { }
+
         public override async Task RunAsync()
         {
             foreach (var scenario in Scenarios)
             {
+                await CheckSetterContent(scenario);
+                await CheckAccessibleCaption(scenario);
                 var counters = new Counters();
                 var host = H.CreateHost();
                 host.Mount(_ => Component<Matrix, MatrixProps>(new(scenario, counters)));
@@ -130,6 +134,89 @@ internal static class ButtonContentFixture
                     && counters.Cleanups == 3);
             }
         }
+
+        private async Task CheckSetterContent(Scenario scenario)
+        {
+            var reconciler = new Reconciler();
+            var icon = new WinUI.SymbolIcon(WinUI.Symbol.Save);
+            var current = WithNativeContent(scenario.Create(null, Noop), icon);
+            var control = (WinUI.ContentControl)reconciler.Mount(current, Noop)!;
+            H.SetContent(control);
+            try
+            {
+                await Harness.Render();
+                H.Check($"{scenario.Name}_SetterContentMounted", ReferenceEquals(control.Content, icon)
+                    && icon.ActualWidth > 0 && icon.ActualHeight > 0);
+
+                var next = WithNativeContent(scenario.Create(null, Noop), icon).IsEnabled(false);
+                var updated = reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                await Harness.Render();
+                H.Check($"{scenario.Name}_SetterContentSurvivesUpdate", ReferenceEquals(updated, control)
+                    && ReferenceEquals(control.Content, icon) && !control.IsEnabled
+                    && icon.ActualWidth > 0 && icon.ActualHeight > 0);
+
+                var replacement = new WinUI.SymbolIcon(WinUI.Symbol.Help);
+                next = WithNativeContent(scenario.Create(null, Noop), replacement);
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                await Harness.Render();
+                H.Check($"{scenario.Name}_SetterContentCanBeReplaced", ReferenceEquals(control.Content, replacement)
+                    && replacement.ActualWidth > 0 && replacement.Symbol == WinUI.Symbol.Help);
+
+                next = scenario.Create(null, Noop).IsEnabled(false);
+                reconciler.Reconcile(current, next, control, Noop);
+                await Harness.Render();
+                H.Check($"{scenario.Name}_UndeclaredContentIsNotReconciled", ReferenceEquals(control.Content, replacement)
+                    && !control.IsEnabled && replacement.ActualWidth > 0);
+            }
+            finally
+            {
+                reconciler.UnmountChild(control);
+                H.SetContent(null);
+            }
+        }
+
+        private async Task CheckAccessibleCaption(Scenario scenario)
+        {
+            var reconciler = new Reconciler();
+            var current = scenario.Create(TextBlock("visible caption"), Noop);
+            var control = (WinUI.ContentControl)reconciler.Mount(current, Noop)!;
+            H.SetContent(control);
+            try
+            {
+                await Harness.Render();
+                H.Check($"{scenario.Name}_NameUsesVisibleContent", AutomationProperties.GetName(control) == "visible caption");
+                var next = scenario.Create(Icon(FontIcon("\uE8A5")), Noop);
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                await Harness.Render();
+                H.Check($"{scenario.Name}_HiddenFallbackDoesNotNameIcon", string.IsNullOrEmpty(AutomationProperties.GetName(control)));
+                next = scenario.Create(Icon(FontIcon("\uE8A5")), Noop).AutomationName("explicit action");
+                reconciler.Reconcile(current, next, control, Noop);
+                await Harness.Render();
+                H.Check($"{scenario.Name}_ExplicitNameWins", AutomationProperties.GetName(control) == "explicit action");
+            }
+            finally
+            {
+                reconciler.UnmountChild(control);
+                H.SetContent(null);
+            }
+        }
+
+        private static Element WithNativeContent(Element element, UIElement content) => element switch
+        {
+            ButtonElement e => e.Set(c => c.Content = content),
+            HyperlinkButtonElement e => e.Set(c => c.Content = content),
+            RepeatButtonElement e => e.Set(c => c.Content = content),
+            ToggleButtonElement e => e.Set(c => c.Content = content),
+            DropDownButtonElement e => e.Set(c => c.Content = content),
+            SplitButtonElement e => e.Set(c => c.Content = content),
+            ToggleSplitButtonElement e => e.Set(c => c.Content = content),
+            CheckBoxElement e => e.Set(c => c.Content = content),
+            RadioButtonElement e => e.Set(c => c.Content = content),
+            _ => throw new InvalidOperationException($"Unexpected button scenario: {element.GetType().Name}"),
+        };
 
         private WinUI.ContentControl? FindTarget() => H.FindControl<WinUI.ContentControl>(
             c => AutomationProperties.GetAutomationId(c) == "BC_Target");

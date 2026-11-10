@@ -136,15 +136,6 @@ control still owns focus, invocation, and checked-state visuals.
 | `RadioButton` | Pass content first; checked state and group name are unchanged. |
 | `CheckBox`, `ThreeStateCheckBox` | Pass content as the third argument, after the checked value and callback. |
 
-<!-- ref:ToggleButton -->
-<!-- ref:RepeatButton -->
-<!-- ref:HyperlinkButton -->
-<!-- ref:DropDownButton -->
-<!-- ref:SplitButton -->
-<!-- ref:ToggleSplitButton -->
-<!-- ref:CheckBox -->
-<!-- ref:RadioButton -->
-
 ```csharp
 class ButtonContentExample : Component
 {
@@ -167,6 +158,11 @@ The text overloads remain available. On a direct element record,
 to `null` restores that text. Updating the content preserves compatible
 child controls and their component state. Replacing or removing the subtree
 runs its cleanup.
+
+Content assigned through `.Set(c => c.Content = nativeElement)` remains available
+when no Reactor `ContentElement` is declared. For composed content, set an explicit
+`.AutomationName(...)` when it has no directly readable text caption; hidden fallback
+text is not used as the accessible name.
 
 ## Collections
 

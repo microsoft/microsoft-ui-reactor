@@ -24,24 +24,35 @@ internal static class ContentControlContent
             GetCurrentChild = static control => control.Content as UIElement,
         };
 
-        return descriptor.OneWayBridged<(bool HasChild, string? Text)>(
-            get: element => getChild(element) is null ? (false, getText(element)) : (true, null),
-            set: static (control, value, reconciler, _) =>
+        return descriptor.ImperativeBridged(
+            mount: (_, control, element) =>
             {
-                // A declared child can render no UI (Empty or a component returning
-                // null). Clear a previous string before reconciling that child.
-                if (value.HasChild)
+                control.Content = getChild(element) is null ? getText(element) : null;
+            },
+            update: (ctx, control, oldElement, newElement) =>
+            {
+                var oldChild = getChild(oldElement);
+                var newChild = getChild(newElement);
+                if (newChild is not null)
                 {
-                    if (control.Content is not UIElement)
+                    // A declared child may render no UI. Clear the old string
+                    // before reconciliation, while preserving an existing subtree.
+                    if (oldChild is null && control.Content is not UIElement)
                         control.Content = null;
                     return;
                 }
-                // Properties update before child reconciliation. Tear down an
-                // owned child before replacing Content, while it is reachable.
-                if (control.Content is UIElement previous)
-                    reconciler.UnmountChild(previous);
-                control.Content = value.Text;
-            },
-            shouldWrite: static _ => true);
+                if (oldChild is not null)
+                {
+                    // Tear down only a declared child, before text replaces the
+                    // slot and setters run. Null-to-null owns no native subtree.
+                    if (control.Content is UIElement previous)
+                        ctx.Reconciler.UnmountChild(previous);
+                    control.Content = getText(newElement);
+                }
+                else if (!string.Equals(getText(oldElement), getText(newElement), StringComparison.Ordinal))
+                {
+                    control.Content = getText(newElement);
+                }
+            });
     }
 }

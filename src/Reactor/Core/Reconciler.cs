@@ -5184,7 +5184,7 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// The name <see cref="ApplyDefaultAutomationName"/> / <see cref="UpdateDefaultAutomationName"/>
-    /// write for <paramref name="caption"/> (null when they write nothing). Shared with
+    /// derive from <paramref name="caption"/> (null when it provides no name). Shared with
     /// <c>ReactorDiagnostics.GetAppliedProperties</c> so the reported default cannot drift
     /// from the one applied.
     /// </summary>
@@ -5204,15 +5204,16 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Update-time pair
     /// for <see cref="ApplyDefaultAutomationName"/>; overwrites the
     /// automation Name only when it matches the previous caption (i.e. the
-    /// author hasn't intervened). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// author hasn't intervened). Clears that default when the new content has no
+    /// caption. Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
-        if (DefaultAutomationNameFromCaption(newCaption) is not { } trimmed) return;
+        var trimmed = DefaultAutomationNameFromCaption(newCaption);
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         if (!MayReplaceDefaultAutomationName(current, oldCaption)) return;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed ?? string.Empty);
     }
 
     /// <summary>
@@ -5244,19 +5245,22 @@ public sealed partial class Reconciler : IDisposable
     internal static string? ResolveCaptionForElement(Element element) => element switch
     {
         TextBlockElement te => te.Content,
-        ButtonElement be => be.Label ?? ExtractElementCaption(be.ContentElement),
-        HyperlinkButtonElement hle => hle.Content,
-        RepeatButtonElement rbe => rbe.Label,
-        ToggleButtonElement tbe => tbe.Label,
-        DropDownButtonElement dde => dde.Label,
-        SplitButtonElement sbe => sbe.Label,
-        ToggleSplitButtonElement tsbe => tsbe.Label,
-        CheckBoxElement cbe => cbe.Label,
-        RadioButtonElement rbe => rbe.Label,
+        ButtonElement be => ContentCaption(be.ContentElement, be.Label),
+        HyperlinkButtonElement hle => ContentCaption(hle.ContentElement, hle.Content),
+        RepeatButtonElement rbe => ContentCaption(rbe.ContentElement, rbe.Label),
+        ToggleButtonElement tbe => ContentCaption(tbe.ContentElement, tbe.Label),
+        DropDownButtonElement dde => ContentCaption(dde.ContentElement, dde.Label),
+        SplitButtonElement sbe => ContentCaption(sbe.ContentElement, sbe.Label),
+        ToggleSplitButtonElement tsbe => ContentCaption(tsbe.ContentElement, tsbe.Label),
+        CheckBoxElement cbe => ContentCaption(cbe.ContentElement, cbe.Label),
+        RadioButtonElement rbe => ContentCaption(rbe.ContentElement, rbe.Label),
         ToggleSwitchElement tse => tse.Header as string ?? tse.OnContent ?? tse.OffContent,
         TextBoxElement tfe => tfe.Header as string ?? tfe.PlaceholderText,
         _ => null,
     };
+
+    private static string? ContentCaption(Element? content, string? fallback)
+        => content is null ? fallback : ExtractElementCaption(content);
 
     internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? implicitT, ThemeTransitions? themeT)
     {
