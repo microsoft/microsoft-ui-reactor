@@ -3781,9 +3781,11 @@ public partial record AutoSuggestBoxElement(
     // A programmatic Text write raises TextChanged with Reason=ProgrammaticChange, about
     // 150 ms later and debounced (several writes can merge into one event). Every
     // TextChanged, whatever its reason, consumes the pending arm, so the write's own echo
-    // spends it even though that echo never reaches the callback. (On the counter, the
-    // reason filter returned before the token was taken, so it stayed reserved and
-    // swallowed the user's next keystroke after every state write.)
+    // spends it even though that echo never reaches the callback. No armOnMount: the
+    // Mount write's echo is a ProgrammaticChange too, so the reason filter drops it
+    // without an arm. (On the counter, the reason filter returned before the token
+    // was taken, so it stayed reserved and swallowed the user's next keystroke after
+    // every state write.)
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>
         __TextChangedTrampoline = (s, args) =>
         {
@@ -4550,12 +4552,12 @@ public partial record RichEditBoxElement(
     // SetText raises TextChanged asynchronously, so the arm is consumed by the next
     // TextChanged after the write; it only drops that event when its readback equals
     // the written text, so a write whose echo never comes (or is merged) can't
-    // swallow a real edit. The set lambda arms too, because the engine writes bare
-    // at Mount and that write echoes after the trampoline is wired. On Update the
-    // engine arms the same predicate before calling set, and clears it when set
-    // skipped the write. (The counter took one token from the engine's Update
-    // wrapper and a second one here for a single TextChanged, so the user's next
-    // edit after every state write was dropped.)
+    // swallow a real edit. The engine arms before calling set, on Update and, with
+    // armOnMount, on Mount too, since the Mount write echoes after the trampoline
+    // is wired. It clears the arm when set skipped the write. (The counter took
+    // one token from the engine's Update wrapper and a second one from set for a
+    // single TextChanged, so the user's next edit after every state write was
+    // dropped.)
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __TextChangedTrampoline = (s, _) =>
     {
         var r = (WinUI.RichEditBox)s!;
@@ -4573,11 +4575,7 @@ public partial record RichEditBoxElement(
             set:         static (c, v) =>
             {
                 if (!string.IsNullOrEmpty(v))
-                {
-                    global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ArmExpectedEcho(
-                        c, rb => DocumentTextComparer.Instance.Equals(rb as string, v));
                     c.Document.SetText(global::Microsoft.UI.Text.TextSetOptions.None, v);
-                }
             },
             readBack:    static c =>
             {
@@ -4590,7 +4588,8 @@ public partial record RichEditBoxElement(
             slotIsNull:  static p => p.TextChangedTrampoline is null,
             setSlot:     static (p, h) => p.TextChangedTrampoline = h,
             comparer:    DocumentTextComparer.Instance,
-            valueDiffEcho: true);
+            valueDiffEcho: true,
+            armOnMount:  true);
 
     // The document stores every line break as \r, so "a\nb" reads back as "a\rb".
     // Compare with line breaks normalized (and trailing ones trimmed, like readBack),

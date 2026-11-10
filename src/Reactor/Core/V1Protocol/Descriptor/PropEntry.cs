@@ -674,10 +674,13 @@ internal sealed class DescriptorControlledPayload<TElement, TControl, TValue, TA
 /// the control's event signature directly — no
 /// <c>EventHandler&lt;TArgs&gt;</c> bridge closure).</para>
 ///
-/// <para><b>Mount / Update writes:</b> identical to
-/// <see cref="ControlledPropEntry{TElement,TControl,TValue,TArgs}"/> — bare
-/// at Mount, <see cref="ReactorBinding.WriteSuppressed(UIElement,Action)"/>
-/// at Update on element-change OR control-drift.</para>
+/// <para><b>Mount / Update writes:</b> both write only on control drift
+/// (readback differs from the element value). Mount writes bare. Update wraps
+/// the write in <see cref="ReactorBinding.WriteSuppressed(UIElement,Action)"/>,
+/// or, with <c>valueDiffEcho</c>, arms the spec 047 §8 value-diff echo and
+/// writes bare. With <c>armOnMount</c> the Mount write is armed the same way,
+/// for a control whose change event is raised after the write returns (so the
+/// Mount write's echo reaches the trampoline wired right after it).</para>
 ///
 /// <para><b>Subscription gate:</b> if the element's callback selector
 /// returns null, no subscription happens. On non-null, the entry calls
@@ -702,6 +705,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
     private readonly Action<TPayload, TDelegate> _setSlot;
     private readonly IEqualityComparer<TValue> _comparer;
     private readonly bool _valueDiffEcho;
+    private readonly bool _armOnMount;
 
     public HandCodedControlledPropEntry(
         Func<TElement, Optional<TValue>> get,
@@ -713,8 +717,12 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         Func<TPayload, bool> slotIsNull,
         Action<TPayload, TDelegate> setSlot,
         IEqualityComparer<TValue>? comparer = null,
-        bool valueDiffEcho = false)
+        bool valueDiffEcho = false,
+        bool armOnMount = false)
     {
+        if (armOnMount && !valueDiffEcho)
+            throw new ArgumentException(
+                "armOnMount arms the value-diff echo, so it requires valueDiffEcho.", nameof(armOnMount));
         _get = get;
         _set = set;
         _readBack = readBack;
@@ -725,20 +733,30 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         _setSlot = setSlot;
         _comparer = comparer ?? EqualityComparer<TValue>.Default;
         _valueDiffEcho = valueDiffEcho;
+        _armOnMount = armOnMount;
     }
 
     public override void Mount(TControl ctrl, TElement el)
     {
         // §8 value-diff: clear any stale arm left on a pooled control so it
-        // can't suppress this lifecycle's first real event. Mount writes are
-        // bare (subscription not yet wired), so no arming here.
+        // can't suppress this lifecycle's first real event.
         if (_valueDiffEcho)
             ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
 
         var vOpt = _get(el);
         if (!vOpt.HasValue) return;
         var v = vOpt.Value;
-        if (!_comparer.Equals(_readBack(ctrl), v))
+        if (_comparer.Equals(_readBack(ctrl), v))
+            return;
+
+        // The trampoline is wired after the Mount writes (DescriptorHandler
+        // phase 2). A synchronous echo fires before that and reaches nothing,
+        // so the write stays bare. A deferred echo (armOnMount, e.g.
+        // RichEditBox's Document.SetText) lands after the wiring, so it is
+        // armed like an Update write.
+        if (_armOnMount)
+            WriteArmed(ctrl, el, v);
+        else
             _set(ctrl, v);
     }
 
@@ -755,33 +773,38 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
             return;
 
         // §8 value-diff (opt-in via valueDiffEcho): arm the per-control expected
-        // echo instead of bumping the causal counter, then write bare. The
-        // hand-written trampoline drops the single synthesized echo whose
-        // readback matches via ShouldSuppressEcho. Arm only when a callback is
-        // present (otherwise nothing is subscribed to echo). The control's event
-        // fires synchronously inside _set, so a trampoline that is not yet wired
-        // (null→non-null callback transition) simply produces no echo — no strand.
+        // echo instead of bumping the causal counter, then write bare. Update
+        // wires the trampoline before this loop (spec 050), so the echo reaches
+        // it whether the control raises it inside _set or later.
         if (_valueDiffEcho)
-        {
-            if (_getCallback(newEl) is not null)
-            {
-                var expected = nv;
-                var cmp = _comparer;
-                ChangeEchoSuppressor.ArmExpectedEcho(
-                    ctrl, rb => cmp.Equals(rb is TValue tv ? tv : default!, expected));
-            }
-            _set(ctrl, nv);
-            // If a guarded/coerced setter (e.g. `if (v >= 0) ...`, bounds checks)
-            // dropped the write, the synchronous echo never fired to consume the
-            // arm. Clear it so it can't strand and swallow a later real event
-            // whose readback happens to equal the never-applied value.
-            if (!_comparer.Equals(_readBack(ctrl), nv))
-                ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
-        }
+            WriteArmed(ctrl, newEl, nv);
         else
-        {
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
+    }
+
+    // §8 value-diff write. The hand-written trampoline consumes the arm on the
+    // next change event (ShouldSuppressEcho) and drops that event only when its
+    // readback matches, so the event may come inside _set (synchronous controls)
+    // or after it returns (deferred ones: RichEditBox, AutoSuggestBox). A user
+    // edit that lands first has a different readback, so it consumes the arm and
+    // still reaches the callback. Arm only when a callback is present: with none,
+    // the trampoline is not wired for this element and nothing would consume it.
+    private void WriteArmed(TControl ctrl, TElement el, TValue v)
+    {
+        if (_getCallback(el) is not null)
+        {
+            var expected = v;
+            var cmp = _comparer;
+            ChangeEchoSuppressor.ArmExpectedEcho(
+                ctrl, rb => cmp.Equals(rb is TValue tv ? tv : default!, expected));
         }
+        _set(ctrl, v);
+        // If a guarded/coerced setter (e.g. `if (v >= 0) ...`, bounds checks,
+        // RichEditBox skipping "") dropped the write, no echo will come to
+        // consume the arm. Clear it so it can't strand and swallow a later real
+        // event whose readback happens to equal the never-applied value.
+        if (!_comparer.Equals(_readBack(ctrl), v))
+            ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
     }
 
     public override void EnsureSubscribed(

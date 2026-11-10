@@ -651,9 +651,10 @@ the user's first edit after every state write, because the entry's
 reserved a token for the one event, and a skipped empty write reserved one with
 no event at all. The arm stays set until the next `TextChanged`, which drops it
 only when the document text matches, so a missing or merged echo cannot swallow
-a real edit. The descriptor also arms at Mount, since that write's echo arrives
-after the trampoline is wired, and compares with line breaks normalized because
-the document reads `\n` back as `\r`.
+a real edit. The descriptor passes `armOnMount: true`, so the entry arms the
+Mount write too, since that write's echo arrives after the trampoline is wired.
+It compares with line breaks normalized because the document reads `\n` back
+as `\r`.
 
 `AutoSuggestBox.Text` moved over for the same symptom. Its trampoline returned on
 a non-`UserInput` reason before taking the counter token, so the write's own
