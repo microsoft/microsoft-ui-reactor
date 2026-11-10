@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <!-- C# 15: exhaustive switches over Reactor's `closed` hierarchies (AsyncValueTests). -->
+    <LangVersion>15</LangVersion>
     <Platforms>x64;ARM64</Platforms>
     <AssemblyName>Reactor.Tests</AssemblyName>
     <RootNamespace>Microsoft.UI.Reactor.Tests</RootNamespace>
