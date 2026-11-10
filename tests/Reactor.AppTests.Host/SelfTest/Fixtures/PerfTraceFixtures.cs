@@ -452,12 +452,16 @@ internal static class PerfTraceScenario
             {
                 host = h.CreateHost();
                 bool replaced = false;
-                host.Mount(_ =>
+                host.Mount(ctx =>
                 {
+                    var (_, setTicks) = ctx.UseState(0);
                     if (!replaced)
                     {
                         replaced = true;
                         host.Mount(new PerfTraceReplacementRoot());
+                        // The outgoing root asks for a render after it was replaced: the pass
+                        // it lands in must not name the replacement, which never asked.
+                        setTicks(1);
                     }
                     return TextBlock("perf outgoing root");
                 });
@@ -612,6 +616,7 @@ internal class PerfTrace_ReentrantMountEffectsNameLiveRoot(Harness h) : SelfTest
         if (run is null)
         {
             H.Skip("PerfTrace_ReentrantMount_EffectsNameLiveRoot", PerfTraceScenario.SkipReason);
+            H.Skip("PerfTrace_ReentrantMount_RetiredRootRequestNamesNobody", PerfTraceScenario.SkipReason);
             return;
         }
         var events = run.Value.Events;
@@ -622,6 +627,13 @@ internal class PerfTrace_ReentrantMountEffectsNameLiveRoot(Harness h) : SelfTest
         Console.WriteLine($"# perf reentrant: outgoing={string.Join(",", outgoing)} live={string.Join(",", live)} effects={string.Join(",", effects)}");
         H.Check("PerfTrace_ReentrantMount_EffectsNameLiveRoot",
             outgoing.Count == 1 && live.Count == 1 && effects.Count > 0 && effects.All(id => Equals(id, live[0])));
+
+        var passes = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+            .Select(e => ((ulong)e.Fields["requesterId"], (string)e.Fields["requesterName"], (uint)e.Fields["requestCount"])).ToList();
+        Console.WriteLine("# perf reentrant: passes " + string.Join(" ", passes));
+        H.Check("PerfTrace_ReentrantMount_RetiredRootRequestNamesNobody",
+            live.Count == 1 && passes.Count >= 2 && passes.Skip(1).Any(p => p.Item3 >= 1)
+            && passes.All(p => p.Item1 != (ulong)live[0] && p.Item2 != nameof(PerfTraceReplacementRoot)));
     }
 }
 

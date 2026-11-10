@@ -177,7 +177,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private Action? _rerenderAction;
     // The root component's own rerender (its hooks' requests): claims the request for the root
     // on the perf RenderPass, then RequestRender. Children reach the host through
-    // _rerenderAction after their own wrappers have claimed.
+    // _rerenderAction after their own wrappers have claimed. Bound to the root diagnostics it
+    // was built with and dropped when the root is retired, so a retired root's late requests
+    // claim for the retired root (and name nobody), never for its replacement.
     private Action? _rootRerenderAction;
     private Microsoft.UI.Dispatching.DispatcherQueueHandler? _renderLoopHandler;
 
@@ -187,8 +189,17 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     // Test-only (InternalsVisibleTo Reactor.AppTests.Host).
     internal Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests PerfRequestsForTests => _perfRequests;
 
-    private void RequestRenderFromRoot()
-        => _rootDiagnostics.RequestFromRoot(_rerenderAction ??= () => RequestRender());
+    // One closure per root, not per render.
+    private Action RootRerenderAction()
+    {
+        if (_rootRerenderAction is null)
+        {
+            var diagnostics = _rootDiagnostics;
+            var request = _rerenderAction ??= () => RequestRender();
+            _rootRerenderAction = () => diagnostics.RequestFromRoot(request);
+        }
+        return _rootRerenderAction;
+    }
 
     /// <summary>
     /// Live render performance snapshot, updated every ~1 second.
@@ -746,6 +757,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // progress (it called Mount), and it reports as the old root.
         _rootDiagnostics.Forget();
         _rootDiagnostics = new();
+        _rootRerenderAction = null;
         // The old root's content stays on screen until the replacement renders; if that
         // render produces nothing, the old tree must still be released (see Render).
         _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
@@ -1141,7 +1153,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             // root and then throw, and the failure belongs to the component that threw.
             if (_rootComponent is { } renderingRoot)
             {
-                renderingRoot.Context.BeginRender(_rootRerenderAction ??= RequestRenderFromRoot, this);
+                renderingRoot.Context.BeginRender(RootRerenderAction(), this);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
@@ -1177,7 +1189,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
             {
-                _funcContext.BeginRender(_rootRerenderAction ??= RequestRenderFromRoot, this);
+                _funcContext.BeginRender(RootRerenderAction(), this);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
