@@ -1180,6 +1180,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Expander and Canvas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migration-expanderheadertemplate-renamed-to-headercontent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration: Expander.HeaderTemplate renamed to HeaderContent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3514,6 +3531,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Expander and Canvas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migration-expanderheadertemplate-renamed-to-headercontent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration: Expander.HeaderTemplate renamed to HeaderContent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4013,9 +4047,40 @@ when off-screen, which is fast for ≤100 items and visibly slow above
 <p><code>Expander(header, content)</code> handles the expand/collapse state
 internally. Pass <code>isExpanded: true</code> to start expanded, or use
 <code>onExpandedChanged</code> to track the state yourself.</p>
+<p>Use <code>.HeaderContent(element)</code> for a composed header. Its <code>Element?</code> record property
+is also named <code>HeaderContent</code>; a non-null value overrides the string <code>Header</code>.
+Reactor mounts this child into the native control's <code>Header</code> property and reconciles
+its subtree normally. Setting <code>HeaderContent</code> back to <code>null</code> restores the string
+header. The native <code>HeaderTemplate</code> is a separate <code>DataTemplate</code> property.</p>
 <p><code>Canvas</code> positions children using the <code>.Set()</code> modifier to call
 <code>Canvas.SetLeft</code> and <code>Canvas.SetTop</code>. Use it for overlays, diagrams, or
 any layout that doesn't follow a stack or grid pattern.</p>
+<h3 id="migration-expanderheadertemplate-renamed-to-headercontent">Migration: <code>Expander.HeaderTemplate</code> renamed to <code>HeaderContent</code><a class="headerlink" href="#migration-expanderheadertemplate-renamed-to-headercontent" title="Permanent link">&para;</a></h3>
+<p><strong>Breaking change:</strong> the old Element-valued <code>HeaderTemplate</code> property and fluent
+method have been removed. Rename both call styles:</p>
+<table>
+<thead>
+<tr>
+<th>Previous API</th>
+<th>Replacement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.HeaderTemplate(headerElement)</code></td>
+<td><code>.HeaderContent(headerElement)</code></td>
+</tr>
+<tr>
+<td><code>with { HeaderTemplate = headerElement }</code></td>
+<td><code>with { HeaderContent = headerElement }</code></td>
+</tr>
+</tbody>
+</table>
+<p>Update direct property reads to <code>.HeaderContent</code> as well. The value remains an
+<code>Element?</code>, with the same string-fallback and child-lifecycle behavior; no template
+conversion is needed. This is a source and binary breaking change: recompile
+consumers that referenced the old API. Native <code>.Set(c =&gt; c.HeaderTemplate = template)</code>
+calls still refer to WinUI's <code>DataTemplate</code> property and should retain their name.</p>
 <h2 id="responsive-layout">Responsive Layout<a class="headerlink" href="#responsive-layout" title="Permanent link">&para;</a></h2>
 <p>Switch between layouts based on window width. Use a state toggle or
 <a href="../hooks/"><code>UseBreakpoint</code></a> to swap between HStack and VStack:</p>
