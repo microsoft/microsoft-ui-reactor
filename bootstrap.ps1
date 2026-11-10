@@ -219,8 +219,9 @@ function Test-DotnetRuntime10 {
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return $false }
     $core = $false; $desktop = $false
     foreach ($line in (& dotnet --list-runtimes)) {
-        if ($line -match '^Microsoft\.NETCore\.App 10\.') { $core = $true }
-        if ($line -match '^Microsoft\.WindowsDesktop\.App 10\.') { $desktop = $true }
+        # Stable 10.0.x only: release-built apps don't roll forward onto prerelease runtimes.
+        if ($line -match '^Microsoft\.NETCore\.App 10\.0\.\d+ \[') { $core = $true }
+        if ($line -match '^Microsoft\.WindowsDesktop\.App 10\.0\.\d+ \[') { $desktop = $true }
     }
     return ($core -and $desktop)
 }
