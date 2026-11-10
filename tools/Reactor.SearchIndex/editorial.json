@@ -233,7 +233,8 @@
     }
   },
   "markdown": {
-    "keywords": ["md", "rich text render", "commonmark", "formatted text"],
+    "keywords": ["md", "rich text render", "commonmark", "formatted text", "cross-block selection", "message selection"],
+    "usings": ["Microsoft.UI.Reactor.Markdown", "Microsoft.UI.Reactor.Advanced.Factories"],
     "relatedControls": ["RichTextBlock"],
     "nugetPackage": "Microsoft.UI.Reactor.Advanced"
   },

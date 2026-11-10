@@ -104,6 +104,10 @@ public class AdvancedInternalSurfaceTests
 
         // ── Framework-level operations ────────────────────────────────────────
         "type: Microsoft.UI.Reactor.Core.Diagnostics.ReactorEventSource",
+        // Markdown's missing-Scope warning uses the framework's Release-visible ETW
+        // helper and DEBUG mirror; there is no public warning-emission API.
+        "type: Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog",
+        "type: Microsoft.UI.Reactor.Core.Diagnostics.LogCategory",
         "member: Microsoft.UI.Reactor.Controls.ReflectionTypeMetadataProvider::BuildInitOnlySetter",
         "member: Microsoft.UI.Reactor.Controls.Validation.ValidationContext::ClearInternal",
         "member: Microsoft.UI.Reactor.Core.Component::get_Context",

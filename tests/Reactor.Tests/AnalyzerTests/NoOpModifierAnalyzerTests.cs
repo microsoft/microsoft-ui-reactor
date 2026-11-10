@@ -451,7 +451,7 @@ namespace TestApp
                 .WithArguments(
                     "BorderThickness",
                     "PathElement",
-                    "Control or Border",
+                    "Control, Border, Grid, StackPanel, or RelativePanel",
                     ". Path is a Shape, which is painted with 'StrokeThickness' — did you mean '.StrokeThickness(...)'?"));
 
         await test.RunAsync(TestContext.Current.CancellationToken);

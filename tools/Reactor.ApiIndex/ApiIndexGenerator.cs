@@ -1,5 +1,5 @@
 // Reactor.ApiIndex — builds the text of skills/reactor.api.txt by reflecting over
-// the built Reactor.dll. The output is a flat, alphabetized signatures index meant
+// the built Reactor.dll and optional Reactor.Advanced.dll. The output is a flat, alphabetized signatures index meant
 // to be loaded by AI agents in lieu of grepping src/Reactor/**/*.cs to verify a
 // factory, modifier, hook, or public-type member signature. One line per symbol;
 // no prose.
@@ -11,6 +11,7 @@
 //   ## Theme                 (Microsoft.UI.Reactor.Core.Theme tokens → resource keys)
 //   ## Enums                 (public enums under Microsoft.UI.Reactor.*)
 //   ## Public types          (ctors/properties/methods/events on every public type)
+//   ## Advanced ...          (factories, modifiers, hooks, enums, public types)
 //
 // All reflection lives here, in tooling — never in the shipping Reactor library
 // (which treats trimming/AOT warnings as errors).
@@ -25,33 +26,44 @@ namespace Microsoft.UI.Reactor.ApiIndex;
 public static class ApiIndexGenerator
 {
     // Every entry point below reflects over the whole public surface of the built
-    // Reactor.dll (GetExportedTypes / GetMembers / GetType-by-name) to emit reactor.api.txt.
+    // Reactor.dll and Reactor.Advanced.dll (GetExportedTypes / GetMembers / GetType-by-name)
+    // to emit reactor.api.txt.
     // The tool's entire purpose is to enumerate exactly what the trimmer would remove, so it is
     // inherently trim-unsafe: under trimming the metadata it reads gets pruned. It is a
     // build-time-only generator (never shipped); a native NativeAOT publish is possible only via
-    // the opt-in ReactorApiAot proof that roots the whole Reactor assembly — see
+    // the opt-in ReactorApiAot proof that roots both whole assemblies — see
     // Reactor.ApiIndex.csproj / README.md. The requirement is surfaced honestly via
     // [RequiresUnreferencedCode] rather than silenced, so the IL2*/IL3* analyzer still guards
     // against *new*, unintended reflection. (No [RequiresDynamicCode]: this is metadata
     // discovery + reflection-invoke only — no runtime codegen — as the successful rooted AOT
     // publish confirms.)
     const string ReflectionJustification =
-        "Reflects over the entire public surface of the built Reactor.dll to emit reactor.api.txt; " +
+        "Reflects over the entire public surface of the built Reactor.dll and Reactor.Advanced.dll to emit reactor.api.txt; " +
         "enumerates exactly what the trimmer would remove. Build-time-only generator — not AOT-published except via the opt-in ReactorApiAot proof.";
 
     // Single source of truth for the index text. Program.cs (the apphost) and the
     // ApiIndexGeneratorTests (in-process, ARM64-safe) both call this.
     [RequiresUnreferencedCode(ReflectionJustification)]
-    public static string Generate(Assembly asm)
+    public static string Generate(Assembly asm) => GenerateIndex(asm, advanced: null);
+
+    /// <summary>Generate the core index plus the optional Advanced public surface.</summary>
+    [RequiresUnreferencedCode(ReflectionJustification)]
+    public static string Generate(Assembly core, Assembly advanced) => GenerateIndex(core, advanced);
+
+    [RequiresUnreferencedCode(ReflectionJustification)]
+    static string GenerateIndex(Assembly asm, Assembly? advanced)
     {
         var sb = new StringBuilder();
 
         sb.AppendLine("# Reactor API — signatures index (generated)");
-        sb.AppendLine("# Source of truth: " + asm.GetName().Name + ".dll public surface.");
+        sb.AppendLine("# Source of truth: " + asm.GetName().Name + ".dll" +
+            (advanced is null ? " public surface." : " and " + advanced.GetName().Name + ".dll public surfaces."));
         sb.AppendLine("# Regenerate: `mur --regen-api`  (or build tools/Reactor.SignaturesGen — its");
         sb.AppendLine("#             AfterBuild target rewrites this file).");
         sb.AppendLine("# Format: one symbol per line. No prose. Alphabetized within each section.");
         sb.AppendLine("# Sections: Factories, Modifiers, Reference builders, Hooks, Theme, Enums, Public types.");
+        if (advanced is not null)
+            sb.AppendLine("# Advanced sections: Factories, Modifiers, Hooks, Enums, Public types.");
         sb.AppendLine("# Public types covers ctors/properties/methods/events on every public type,");
         sb.AppendLine("# including public *static* classes — so process-wide entry points such as");
         sb.AppendLine("# ControlRegistry.Register and ReactorApp.Run are listed there, alongside");
@@ -69,19 +81,30 @@ public static class ApiIndexGenerator
         EmitEnums(asm, sb);
         EmitPublicTypes(asm, sb);
 
+        if (advanced is not null)
+        {
+            sb.AppendLine("# Optional package: Microsoft.UI.Reactor.Advanced");
+            sb.AppendLine("# Advanced factories: using static Microsoft.UI.Reactor.Advanced.Factories;");
+            sb.AppendLine();
+            EmitFactories(advanced, sb, "Advanced factories");
+            EmitModifiers(advanced, sb, "Advanced modifiers");
+            EmitHooks(advanced, sb, "Advanced hooks");
+            EmitEnums(advanced, sb, "Advanced enums");
+            EmitPublicTypes(advanced, sb, "Advanced public types");
+        }
         return sb.ToString();
     }
 
     // -----------------------------------------------------------------------
 
     [RequiresUnreferencedCode(ReflectionJustification)]
-    static void EmitFactories(Assembly asm, StringBuilder sb)
+    static void EmitFactories(Assembly asm, StringBuilder sb, string heading = "Factories")
     {
-        var factories = asm.GetType("Microsoft.UI.Reactor.Factories");
+        var factories = asm.GetType(CoreFactoriesTypeFullName) ?? asm.GetType(AdvancedFactoriesTypeFullName);
         if (factories is null) return;
 
-        sb.AppendLine("## Factories");
-        sb.AppendLine("# All in `Microsoft.UI.Reactor.Factories` — `using static Microsoft.UI.Reactor.Factories;`");
+        sb.AppendLine("## " + heading);
+        sb.AppendLine($"# All in `{factories.FullName}` — `using static {factories.FullName};`");
         sb.AppendLine();
 
         var methods = factories
@@ -97,9 +120,9 @@ public static class ApiIndexGenerator
     }
 
     [RequiresUnreferencedCode(ReflectionJustification)]
-    static void EmitModifiers(Assembly asm, StringBuilder sb)
+    static void EmitModifiers(Assembly asm, StringBuilder sb, string heading = "Modifiers")
     {
-        sb.AppendLine("## Modifiers (extension methods on Element)");
+        sb.AppendLine($"## {heading} (extension methods on Element)");
         sb.AppendLine("# Fluent — preserves concrete element type. Type-specific sugar (e.g. .Bold()");
         sb.AppendLine("# on TextBlockElement) MUST come before generic .Margin/.Padding/etc.");
         sb.AppendLine();
@@ -149,9 +172,9 @@ public static class ApiIndexGenerator
     }
 
     [RequiresUnreferencedCode(ReflectionJustification)]
-    static void EmitHooks(Assembly asm, StringBuilder sb)
+    static void EmitHooks(Assembly asm, StringBuilder sb, string heading = "Hooks")
     {
-        sb.AppendLine("## Hooks (RenderContext / Component)");
+        sb.AppendLine($"## {heading} (RenderContext / Component)");
         sb.AppendLine("# Call from Render() / function-component body. Same order every render —");
         sb.AppendLine("# never inside if/for. Use the result conditionally, not the call.");
         sb.AppendLine();
@@ -226,9 +249,9 @@ public static class ApiIndexGenerator
     }
 
     [RequiresUnreferencedCode(ReflectionJustification)]
-    static void EmitEnums(Assembly asm, StringBuilder sb)
+    static void EmitEnums(Assembly asm, StringBuilder sb, string heading = "Enums")
     {
-        sb.AppendLine("## Enums (public, under Microsoft.UI.Reactor.*)");
+        sb.AppendLine($"## {heading} (public, under Microsoft.UI.Reactor.*)");
         sb.AppendLine();
 
         var enums = asm.GetExportedTypes()
@@ -253,9 +276,9 @@ public static class ApiIndexGenerator
     // -----------------------------------------------------------------------
 
     [RequiresUnreferencedCode(ReflectionJustification)]
-    static void EmitPublicTypes(Assembly asm, StringBuilder sb)
+    static void EmitPublicTypes(Assembly asm, StringBuilder sb, string heading = "Public types")
     {
-        sb.AppendLine("## Public types (ctors / properties / methods / events)");
+        sb.AppendLine($"## {heading} (ctors / properties / methods / events)");
         sb.AppendLine("# Every public type not already covered above. Members alphabetized within");
         sb.AppendLine("# each type: constructors, then properties, then methods, then events.");
         sb.AppendLine();
@@ -351,9 +374,12 @@ public static class ApiIndexGenerator
         }
     }
 
+    const string CoreFactoriesTypeFullName = "Microsoft.UI.Reactor.Factories";
+    const string AdvancedFactoriesTypeFullName = "Microsoft.UI.Reactor.Advanced.Factories";
+
     static bool IsIndexablePublicType(Type t)
     {
-        if (t.FullName == "Microsoft.UI.Reactor.Factories") return false;
+        if (t.FullName is CoreFactoriesTypeFullName or AdvancedFactoriesTypeFullName) return false;
         if (t.IsEnum) return false;
         if (typeof(Delegate).IsAssignableFrom(t)) return false;
         if (t.Name.Contains('<') || t.Name.Contains('>')) return false; // compiler-generated
@@ -524,7 +550,12 @@ public static class ApiIndexGenerator
         }
 
         if (v is bool b) return b ? "true" : "false";
-        if (v is string s) return "\"" + s + "\"";
+        if (v is string s) return "\"" + string.Concat(s.Select(c => c switch
+        {
+            '"' => "\\\"",
+            '\'' => "'",
+            _ => EscapeChar(c),
+        })) + "\"";
         // A char default has to carry its quotes and escapes, or the signature is not
         // pasteable C# (`placeholder = _` instead of `placeholder = '_'`).
         if (v is char c) return "'" + EscapeChar(c) + "'";
