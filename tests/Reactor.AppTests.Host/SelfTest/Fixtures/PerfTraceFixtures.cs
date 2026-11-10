@@ -349,6 +349,31 @@ internal static class PerfTraceScenario
             });
     }
 
+    /// <summary>A function root that mounts a class-component replacement from its first render.</summary>
+    public static Task<(List<CapturedEtwEvent> Events, long Written)?> RunReentrantMountAsync(Harness h)
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        return CaptureAsync(h, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                host = h.CreateHost();
+                bool replaced = false;
+                host.Mount(_ =>
+                {
+                    if (!replaced)
+                    {
+                        replaced = true;
+                        host.Mount(new PerfTraceReplacementRoot());
+                    }
+                    return TextBlock("perf outgoing root");
+                });
+                await Harness.Render();
+                await Harness.WaitFor(() => h.FindText("perf replacement root") is not null, maxPasses: 32, perPassMs: 10);
+                await Harness.Render();
+            },
+            () => host?.Dispose());
+    }
+
     private static async Task<(List<CapturedEtwEvent> Events, long Written)?> CaptureAsync(
         Harness h, byte level, ulong keywords, Func<Task> drive, Action dispose)
     {
@@ -463,6 +488,37 @@ internal class PerfTrace_PropagatedRootAdvancesToUpdate(Harness h) : SelfTestFix
         H.Check("PerfTrace_PropagatedRoot_NextRenderIsUpdate",
             !ComponentRenderTrace.IsEnabled && perRoot.Count == 1 && perRoot[0] == "mount,state");
     }
+}
+
+/// <summary>
+/// A root that mounts a replacement during its own render: the effects the host flushes at the
+/// end of that pass are the live (replacement) root's, so the <c>Effects</c> span must name the
+/// replacement, never the outgoing root.
+/// </summary>
+internal class PerfTrace_ReentrantMountEffectsNameLiveRoot(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var run = await PerfTraceScenario.RunReentrantMountAsync(H);
+        if (run is null)
+        {
+            H.Skip("PerfTrace_ReentrantMount_EffectsNameLiveRoot", PerfTraceScenario.SkipReason);
+            return;
+        }
+        var events = run.Value.Events;
+        var starts = events.Where(e => e.Name == "ComponentRender" && e.Opcode == 1).ToList();
+        var outgoing = starts.Where(e => (string)e.Fields["name"] == nameof(FuncElement)).Select(e => e.Fields["componentId"]).Distinct().ToList();
+        var live = starts.Where(e => (string)e.Fields["name"] == nameof(PerfTraceReplacementRoot)).Select(e => e.Fields["componentId"]).Distinct().ToList();
+        var effects = events.Where(e => e.Name == "Effects" && e.Opcode == 1).Select(e => e.Fields["componentId"]).ToList();
+        Console.WriteLine($"# perf reentrant: outgoing={string.Join(",", outgoing)} live={string.Join(",", live)} effects={string.Join(",", effects)}");
+        H.Check("PerfTrace_ReentrantMount_EffectsNameLiveRoot",
+            outgoing.Count == 1 && live.Count == 1 && effects.Count > 0 && effects.All(id => Equals(id, live[0])));
+    }
+}
+
+internal sealed class PerfTraceReplacementRoot : Component
+{
+    public override Element Render() => TextBlock("perf replacement root");
 }
 
 internal sealed class PerfTraceControlRoot : Component

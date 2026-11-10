@@ -60,7 +60,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _rootComponent, _funcContext, hotReloadRender, _reconciler.ForceFullRenderPending);
 
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan BeginRootEffectsPerfSpan(Component? effectsRoot)
-        => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginEffectsPerfSpan(effectsRoot?.Context ?? RootDiagnosticContext);
+        // The live root's: the effects flushed are the live root's (_rootComponent or _funcContext),
+        // which a reentrant Mount() during the pass may already have replaced.
+        => _rootDiagnostics.BeginEffectsPerfSpan(effectsRoot?.Context ?? _funcContext);
 
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
