@@ -28,6 +28,15 @@ Conventions for contributors:
 
 ### Added
 
+- Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
+  `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
+  A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
+  (`0902a96c-4e92-5b91-4d2b-5a8058055c78`), writes a `RenderPass` span per host render pass,
+  an inclusive `ComponentRender` span per component render (mount, update, the host root, and
+  rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
+  spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
+  setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
+  check. Schema: `docs/reference/perf-trace-events.md` (issue #ISSUE).
 - `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
