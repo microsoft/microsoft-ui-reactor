@@ -3163,6 +3163,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#recording-without-elevation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recording without elevation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#spec-031-the-companion-spec" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3429,6 +3440,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#recording-without-elevation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recording without elevation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#spec-031-the-companion-spec" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3591,6 +3613,11 @@ requires an ETW-based tool.</p>
 <td>EventPipe (<code>dotnet-trace</code>) + ETW (PerfView / xperf)</td>
 </tr>
 <tr>
+<td><code>Microsoft-UI-Reactor-Perf</code></td>
+<td>Raw ETW, TraceLogging (render-pass and component spans)</td>
+<td>ETW, including non-elevated private sessions (<code>winapp perf</code>)</td>
+</tr>
+<tr>
 <td><code>Microsoft-Windows-XAML</code></td>
 <td>Native ETW (WinUI runtime)</td>
 <td>ETW only — requires PerfView or xperf</td>
@@ -3732,6 +3759,24 @@ instead — those are the only consumers that see the native
 <a href="https://github.com/microsoft/reactor">ReactorEventSource.cs file header</a>
 carries the exact xperf invocation; the GUIDs are stable across
 shipped versions.</p>
+<h2 id="recording-without-elevation">Recording without elevation<a class="headerlink" href="#recording-without-elevation" title="Permanent link">&para;</a></h2>
+<p>As of .NET 10, a managed <code>EventSource</code> is never turned on by a <strong>private</strong> ETW
+session — the kind a non-elevated tool attaches to a running app with
+(<code>winapp perf</code> does this by default). .NET enables an EventSource only
+for sessions it finds by enumerating the system's trace sessions, and
+private loggers are not in that list, so <code>Microsoft-UI-Reactor</code> stays
+silent there. For that case Reactor also writes its render timing
+through a second, raw ETW provider, <code>Microsoft-UI-Reactor-Perf</code>
+(GUID <code>0902a96c-4e92-5b91-4d2b-5a8058055c78</code>): a <code>RenderPass</code> span per
+host render pass, a <code>ComponentRender</code> span per component render
+(mount, update, and rows a virtualized list realizes during layout),
+<code>Reconcile</code>, <code>Effects</code> and <code>ChildReconcile</code> spans, and <code>StateChange</code>
+naming the component whose setter ran. Its events are TraceLogging, so
+WPA and any TDH-based decoder read them without a manifest, and they
+nest with <code>Microsoft-Windows-XAML</code> on the UI thread's timeline. The
+same no-consumer rule applies: each emit site is one enabled check.
+The event ids, fields and nesting rules are in
+<a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/perf-trace-events.md">the perf trace events reference</a>.</p>
 <h2 id="spec-031-the-companion-spec">Spec 031 — the companion spec<a class="headerlink" href="#spec-031-the-companion-spec" title="Permanent link">&para;</a></h2>
 <p>Spec 031 — frame-aligned sampling — builds on this provider rather
 than reshape it. It adds a per-frame heartbeat event so a consumer
