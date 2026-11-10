@@ -420,7 +420,7 @@ public sealed class ReactorPerfTraceTests
         ReactorPerfTrace.EnsureRegistered();
         using var probe = new PrivateSessionProbe();
         Guid probeId = EventSource.GetGuid(typeof(PrivateSessionProbe));
-        string etl = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(),
+        string etl = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(),
             "reactor-perf-" + Guid.NewGuid().ToString("N") + ".etl");
         try
         {
@@ -504,7 +504,7 @@ public sealed class ReactorPerfTraceTests
     /// <param name="written">Events the provider handed ETW while <paramref name="emit"/> ran.</param>
     private static List<CapturedEtwEvent> Capture(byte level, ulong keywords, Action emit, out long written)
     {
-        string etl = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(),
+        string etl = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(),
             "reactor-perf-" + Guid.NewGuid().ToString("N") + ".etl");
         try
         {

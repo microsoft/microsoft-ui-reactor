@@ -114,7 +114,9 @@ internal static unsafe partial class ReactorPerfTrace
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool IsEnabled(byte level, ulong keyword)
-        => level < s_levelPlus1 && KeywordOn(keyword);
+        // Acquire: pairs with the callback's Volatile.Write, so the masks read next are the ones
+        // published with this level (weakly ordered CPUs such as ARM64 could otherwise see stale masks).
+        => level < Volatile.Read(ref s_levelPlus1) && KeywordOn(keyword);
 
     private static bool KeywordOn(ulong keyword)
     {

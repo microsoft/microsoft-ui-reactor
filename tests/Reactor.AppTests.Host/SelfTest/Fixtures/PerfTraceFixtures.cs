@@ -317,7 +317,7 @@ internal static class PerfTraceScenario
     private static async Task<(List<CapturedEtwEvent> Events, long Written)?> CaptureAsync(
         Harness h, byte level, ulong keywords, Func<Task> drive, Action dispose)
     {
-        string etl = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(),
+        string etl = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(),
             "reactor-perf-selftest-" + Guid.NewGuid().ToString("N") + ".etl");
         EtwPrivateCapture capture;
         try
