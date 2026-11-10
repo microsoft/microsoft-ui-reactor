@@ -16,24 +16,219 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>Issue #942: decorators must not replace their target's event identity.</summary>
 internal static class FlyoutTargetCallbacksFixtures
 {
+    internal sealed class NestedLifecycleAcrossUpdates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int warnings = 0;
+            using var subscription = Microsoft.UI.Reactor.Diagnostics.ReactorTrace.Subscribe(
+                e =>
+                {
+                    if (e.EventName == "Warning" && e.Payload.Count > 1 && Equals(e.Payload[1], "Flyout.NestedTarget"))
+                        Interlocked.Increment(ref warnings);
+                }, global::System.Diagnostics.Tracing.EventLevel.Warning,
+                Microsoft.UI.Reactor.Core.Diagnostics.ReactorEventSource.Keywords.Errors);
+            for (int outerKind = 0; outerKind < 3; outerKind++)
+            for (int innerKind = 0; innerKind < 3; innerKind++)
+            {
+                var name = $"FlyoutOwnership_{outerKind}_{innerKind}";
+                var cleanups = new int[4]; // Inner content/pass-through, outer content/pass-through.
+                var onCleanup = Enumerable.Range(0, 4).Select(index => (Action)(() => cleanups[index]++)).ToArray();
+                var opened = new List<int>();
+                var closed = new List<int>();
+                int innerOpened = 0;
+                using var reconciler = new Reconciler();
+                Element Build(int innerVersion, int outerVersion)
+                {
+                    Element Wrap(Element target, int kind, bool inner)
+                    {
+                        string text = inner ? $"inner-{innerVersion}" : $"outer-{outerVersion}";
+                        int cleanupIndex = inner ? 0 : 2;
+                        return kind switch
+                        {
+                            0 => Flyout(target, Component<LifecycleContent, (string, Action)>(
+                                (text, onCleanup[cleanupIndex]))) with
+                            {
+                                OverlayInputPassThroughElement = Component<CleanupProbe, Action>(
+                                    onCleanup[cleanupIndex + 1]),
+                                AreOpenCloseAnimationsEnabled = false,
+                                OnOpened = inner
+                                    ? (innerVersion == 0 ? null : () => innerOpened++)
+                                    : () => opened.Add(outerVersion),
+                                OnClosed = inner ? null : () => closed.Add(outerVersion),
+                            },
+                            1 => MenuFlyout(target, MenuItem(text)),
+                            _ => CommandBarFlyout(target, primaryCommands: [AppBarButton(text)]),
+                        };
+                    }
+                    return Wrap(Wrap(Button(name).Size(150, 60), innerKind, inner: true), outerKind, inner: false);
+                }
+
+                int warningsBefore = warnings;
+                var current = Build(0, 0);
+                var button = (Button)reconciler.Mount(current, static () => { })!;
+                H.SetContent(button);
+                await Harness.Render();
+                var originalFlyout = button.Flyout;
+                try
+                {
+                    H.Check(name + "_NestedWarning", warnings == warningsBefore + 1);
+                    H.Check(name + "_InnerCleanupOnReplacement", cleanups[0] == (innerKind == 0 ? 1 : 0)
+                        && cleanups[1] == (innerKind == 0 ? 1 : 0));
+                    if (outerKind == 0 && innerKind == 0)
+                    {
+                        var oldInner = (FlyoutElement)Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(current)!;
+                        var nextInner = (FlyoutElement)Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(Build(1, 0))!;
+                        new Microsoft.UI.Reactor.Core.V1Protocol.Handlers.FlyoutHandler().Update(
+                            new UpdateContext(reconciler, static () => { }), oldInner, nextInner, button);
+                        // Observe the inner update before an outer update can repair its content.
+                        H.Check(name + "_InnerUpdateLeavesOuterContent", ReferenceEquals(originalFlyout, button.Flyout)
+                            && FlyoutText(button.Flyout) == "outer-0");
+                        Reconciler.SetDecoratorElementTag(button, current);
+                    }
+                    for (int phase = 0; phase < 3; phase++)
+                    {
+                        if (phase > 0)
+                        {
+                            var next = Build(1, phase == 1 ? 0 : 1);
+                            reconciler.Update(current, next, button, static () => { });
+                            current = next;
+                            await Harness.Render();
+                        }
+                        var flyout = button.Flyout;
+                        H.Check(name + $"_Phase{phase}_SameOuterInstance", ReferenceEquals(originalFlyout, flyout));
+                        H.Check(name + $"_Phase{phase}_OuterContent", FlyoutText(flyout) == $"outer-{(phase < 2 ? 0 : 1)}");
+                        H.Check(name + $"_Phase{phase}_NoEarlyOuterCleanup", cleanups[2] == 0 && cleanups[3] == 0);
+                        if (flyout is null) continue;
+                        flyout.AreOpenCloseAnimationsEnabled = false;
+                        flyout.ShowAt(button);
+                        H.Check(name + $"_Phase{phase}_Opened", await Harness.WaitFor(() => flyout.IsOpen));
+                        await Harness.Render(50);
+                        if (outerKind == 0)
+                            H.Check(name + $"_Phase{phase}_OpenedOnce", opened.SequenceEqual(
+                                Enumerable.Range(0, phase + 1).Select(p => p < 2 ? 0 : 1)), $"opened: {string.Join(",", opened)}");
+                        flyout.Hide();
+                        await Harness.WaitFor(() => !flyout.IsOpen);
+                        await Harness.Render(50);
+                        if (outerKind == 0)
+                            H.Check(name + $"_Phase{phase}_ClosedOnce", closed.SequenceEqual(
+                                Enumerable.Range(0, phase + 1).Select(p => p < 2 ? 0 : 1)), $"closed: {string.Join(",", closed)}");
+                        H.Check(name + $"_Phase{phase}_InnerNeverOpened", innerOpened == 0);
+                    }
+
+                    // A clone takes the skip path even for callback-free Menu/CommandBarFlyout.
+                    var clone = current with { };
+                    int skipped = reconciler.DebugElementsSkipped;
+                    reconciler.Update(current, clone, button, static () => { });
+                    H.Check(name + "_ShallowSkipReached", reconciler.DebugElementsSkipped > skipped);
+                    current = clone;
+                    // Re-keying changes the published tag, not the retained virtual tree.
+                    reconciler.RefreshItemIdentityOnSkip(button, current.WithKey("recycled-row"));
+                    if (outerKind == 0)
+                    {
+                        int opensBefore = opened.Count, closesBefore = closed.Count;
+                        button.Flyout!.ShowAt(button);
+                        await Harness.Render(50);
+                        button.Flyout.Hide();
+                        await Harness.Render(50);
+                        H.Check(name + "_RekeyKeepsCallbacks", opened.Count == opensBefore + 1 && opened[^1] == 1
+                            && closed.Count == closesBefore + 1 && closed[^1] == 1);
+                    }
+                    var final = Build(2, 2);
+                    reconciler.Update(current, final, button, static () => { });
+                    current = final;
+                    H.Check(name + "_UpdateAfterSkipAndRekey", ReferenceEquals(originalFlyout, button.Flyout)
+                        && FlyoutText(button.Flyout) == "outer-2");
+
+                    if (current is FlyoutElement outerFlyout)
+                    {
+                        var withoutCallbacks = outerFlyout with { OnOpened = null, OnClosed = null };
+                        reconciler.Update(current, withoutCallbacks, button, static () => { });
+                        var withCallbacks = withoutCallbacks with
+                        {
+                            OnOpened = () => opened.Add(3),
+                            OnClosed = () => closed.Add(3),
+                        };
+                        reconciler.Update(withoutCallbacks, withCallbacks, button, static () => { });
+                        current = withCallbacks;
+                        int opensBefore = opened.Count, closesBefore = closed.Count;
+                        button.Flyout!.ShowAt(button);
+                        await Harness.Render(50);
+                        button.Flyout.Hide();
+                        await Harness.Render(50);
+                        H.Check(name + "_CallbacksReenabledOnce", opened.Count == opensBefore + 1 && opened[^1] == 3
+                            && closed.Count == closesBefore + 1 && closed[^1] == 3);
+                    }
+
+                    // A stale inner teardown must leave the outer native object untouched.
+                    var innerElement = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorTarget(current)!;
+                    var ctx = new UnmountContext(reconciler);
+                    if (innerKind == 0)
+                        new Microsoft.UI.Reactor.Core.V1Protocol.Handlers.FlyoutHandler().Unmount(ctx, (FlyoutElement)innerElement, button);
+                    else if (innerKind == 1)
+                        new Microsoft.UI.Reactor.Core.V1Protocol.Handlers.MenuFlyoutHandler().Unmount(ctx, (MenuFlyoutElement)innerElement, button);
+                    else
+                        new Microsoft.UI.Reactor.Core.V1Protocol.Handlers.CommandBarFlyoutHandler().Unmount(ctx, (CommandBarFlyoutElement)innerElement, button);
+                    H.Check(name + "_InnerUnmountLeavesOuter", ReferenceEquals(originalFlyout, button.Flyout)
+                        && FlyoutText(button.Flyout) == "outer-2");
+
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                    H.Check(name + "_CleanupsExactlyOnce", cleanups[0] == (innerKind == 0 ? 1 : 0)
+                        && cleanups[1] == (innerKind == 0 ? 1 : 0)
+                        && cleanups[2] == (outerKind == 0 ? 1 : 0) && cleanups[3] == (outerKind == 0 ? 1 : 0),
+                        $"cleanups: {string.Join(",", cleanups)}");
+                    H.Check(name + "_Detached", button.Flyout is null);
+                    H.Check(name + "_WarningNotRepeatedOnUpdate", warnings == warningsBefore + 1);
+                }
+                finally
+                {
+                    button.Flyout?.Hide();
+                    H.SetContent(null);
+                }
+            }
+        }
+    }
+
+    private static string? FlyoutText(WinPrim.FlyoutBase? flyout) => flyout switch
+    {
+        Flyout { Content: Border { Child: TextBlock text } } => text.Text,
+        MenuFlyout menu when menu.Items.Count > 0 => (menu.Items[0] as MenuFlyoutItem)?.Text,
+        CommandBarFlyout commands when commands.PrimaryCommands.Count > 0 => (commands.PrimaryCommands[0] as AppBarButton)?.Label,
+        _ => null,
+    };
+
+    private sealed class LifecycleContent : Component<(string Text, Action Cleanup)>
+    {
+        public override Element Render()
+        {
+            UseEffect(() => Props.Cleanup, []);
+            return TextBlock(Props.Text);
+        }
+    }
+
     internal sealed class AnimateCurveAcrossNestedFlyouts(Harness h, bool vector) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
-            var cases = new (string Name, Curve Target, Curve? Decorator, Curve? Scope)[]
+            var cases = new (string Name, Curve Target, Curve? Middle, Curve? Decorator, Curve? Scope)[]
             {
-                ("Target", Curve.Linear(600), null, null),
-                ("Decorator", Curve.Spring(), Curve.Linear(600), null),
-                ("Scope", Curve.Spring(), Curve.Spring(), Curve.Linear(600)),
+                ("Target", Curve.Linear(600), null, null, null),
+                ("Middle", Curve.Spring(), Curve.Linear(600), null, null),
+                ("Decorator", Curve.Spring(), Curve.Spring(), Curve.Linear(600), null),
+                ("Scope", Curve.Spring(), Curve.Spring(), Curve.Spring(), Curve.Linear(600)),
             };
             foreach (var scenario in cases)
             {
                 var name = $"FlyoutAnimate_{(vector ? "Vector3" : "Scalar")}_{scenario.Name}";
                 var property = vector ? "Scale" : "Opacity";
                 using var reconciler = new Reconciler();
-                var decorated = Flyout(Flyout(Flyout(
+                var middle = Flyout(Flyout(
                     Button("curve target").Size(120, 60).Animate(scenario.Target),
-                    TextBlock("inner")), TextBlock("middle")), TextBlock("outer"));
+                    TextBlock("inner")), TextBlock("middle"));
+                if (scenario.Middle is { } middleCurve)
+                    middle = middle.Animate(middleCurve);
+                var decorated = Flyout(middle, TextBlock("outer"));
                 if (scenario.Decorator is { } decoratorCurve)
                     decorated = decorated.Animate(decoratorCurve);
                 var button = (Button)reconciler.Mount(decorated, static () => { })!;
@@ -72,7 +267,7 @@ internal static class FlyoutTargetCallbacksFixtures
         }
     }
 
-    internal sealed class ConnectedNavigation(Harness h) : SelfTestFixtureBase(h)
+    internal sealed class ConnectedNavigation(Harness h, bool intermediate = false) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -83,7 +278,7 @@ internal static class FlyoutTargetCallbacksFixtures
             host.Mount(_ => (NavigationHost(nav, route => Border(VStack(8,
                 TextBlock(route),
                 ConnectedFlyoutTarget(route == "list" ? "connected source" : "connected destination",
-                    key, route == "list" ? 100 : 180)))) with
+                    key, route == "list" ? 100 : 180, intermediate)))) with
             {
                 Transition = NavigationTransition.None,
             }).AutomationId("flyout-connected-host"));
@@ -106,14 +301,14 @@ internal static class FlyoutTargetCallbacksFixtures
         }
     }
 
-    internal sealed class ConnectedSnapshotAcrossUnmount(Harness h, bool pooled) : SelfTestFixtureBase(h)
+    internal sealed class ConnectedSnapshotAcrossUnmount(Harness h, bool pooled, bool intermediate = false) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var name = pooled ? "FlyoutConnectedPool" : "FlyoutConnectedUnmount";
             var key = pooled ? "flyout-connected-pool" : "flyout-connected-unmount";
             using var reconciler = new Reconciler();
-            var panel = (StackPanel)reconciler.Mount(VStack(ConnectedFlyoutTarget("snapshot source", key, 100)), static () => { })!;
+            var panel = (StackPanel)reconciler.Mount(VStack(ConnectedFlyoutTarget("snapshot source", key, 100, intermediate)), static () => { })!;
             H.SetContent(panel);
             await Harness.Render();
             var source = (Button)panel.Children[0];
@@ -122,7 +317,7 @@ internal static class FlyoutTargetCallbacksFixtures
                 reconciler.FlushConnectedAnimations();
                 H.Check(name + "_NoSourceNoStart", reconciler.ConnectedAnimationStartCount == 0);
                 // Mount queues the destination. Lay it out before preparing the source snapshot.
-                var destination = (Button)reconciler.Mount(ConnectedFlyoutTarget("snapshot destination", key, 180), static () => { })!;
+                var destination = (Button)reconciler.Mount(ConnectedFlyoutTarget("snapshot destination", key, 180, intermediate), static () => { })!;
                 panel.Children.Add(destination);
                 await Harness.Render();
                 H.Check(name + "_BothMeasured", source.ActualWidth > 0 && source.ActualHeight > 0
@@ -152,11 +347,16 @@ internal static class FlyoutTargetCallbacksFixtures
         }
     }
 
-    private static FlyoutElement ConnectedFlyoutTarget(string label, string key, double width) =>
-        Flyout(Flyout(Flyout(Button(label).Size(width, 60).ConnectedAnimation(key),
-            TextBlock("inner")), TextBlock("middle")), TextBlock("outer"));
+    private static FlyoutElement ConnectedFlyoutTarget(string label, string key, double width, bool intermediate)
+    {
+        var target = Button(label).Size(width, 60);
+        if (!intermediate) target = target.ConnectedAnimation(key);
+        var middle = Flyout(Flyout(target, TextBlock("inner")), TextBlock("middle"));
+        if (intermediate) middle = middle.ConnectedAnimation(key);
+        return Flyout(middle, TextBlock("outer"));
+    }
 
-    internal sealed class TargetExitTransition(Harness h, bool replace, int depth = 1) : SelfTestFixtureBase(h)
+    internal sealed class TargetExitTransition(Harness h, bool replace, int depth = 1, bool intermediate = false) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -164,10 +364,15 @@ internal static class FlyoutTargetCallbacksFixtures
             int contentCleanups = 0;
             var targetRef = new ElementRef();
             using var reconciler = new Reconciler();
-            Element decorated = Button("exit target").Ref(targetRef)
-                .Transition(Animation.Transition.Exit(Animation.Transition.Fade), Animation.Curve.Ease(600));
+            Element decorated = Button("exit target").Ref(targetRef);
+            if (!intermediate)
+                decorated = decorated.Transition(Animation.Transition.Exit(Animation.Transition.Fade), Animation.Curve.Ease(600));
             for (var layer = 1; layer < depth; layer++)
+            {
                 decorated = Flyout(decorated, TextBlock($"inner {layer}"));
+                if (intermediate && layer == depth - 1)
+                    decorated = decorated.Transition(Animation.Transition.Exit(Animation.Transition.Fade), Animation.Curve.Ease(600));
+            }
             var initial = VStack(Flyout(decorated,
                 Component<CleanupProbe, Action>(() => contentCleanups++)));
             var panel = (StackPanel)reconciler.Mount(initial, static () => { })!;
@@ -308,6 +513,73 @@ internal static class FlyoutTargetCallbacksFixtures
     }
 
     private sealed record RegisteredButtonElement(int Version, Action OnClick) : Element;
+
+    internal sealed class MiddleStateCleanup(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (bool pooled in new[] { false, true })
+            {
+                var name = pooled ? "FlyoutMiddleCleanup_Pool" : "FlyoutMiddleCleanup_Ordinary";
+                int trackersBefore = Reconciler.InteractionTrackerCountForTests;
+                var targetRef = new ElementRef();
+                var middleRef = new ElementRef();
+                var outerRef = new ElementRef();
+                Element middle = Flyout(Button(name).Ref(targetRef), TextBlock("inner")).Ref(middleRef);
+                // Keep the pool-reuse case free of compositor taint.
+                if (!pooled)
+                    middle = middle.InteractionStates(states => states.PointerOver(opacity: 0.8f))
+                        .Keyframes("middle", 1, keyframes => keyframes.Duration(1000).Loop()
+                            .At(0f, translation: Vector3.Zero)
+                            .At(1f, translation: new Vector3(8, 0, 0)));
+                using var reconciler = new Reconciler();
+                var panel = (StackPanel)reconciler.Mount(
+                    VStack(Flyout(middle, TextBlock("outer")).Ref(outerRef)), static () => { })!;
+                H.SetContent(panel);
+                await Harness.Render();
+                var button = (Button)panel.Children[0];
+                var visual = !pooled ? ElementCompositionPreview.GetElementVisual(button) : null;
+                int middleClears = 0;
+                middleRef.CurrentChanged += current => { if (current is null) middleClears++; };
+                try
+                {
+                    H.Check(name + "_RefsSet", ReferenceEquals(targetRef.Current, button)
+                        && ReferenceEquals(middleRef.Current, button) && ReferenceEquals(outerRef.Current, button));
+                    if (!pooled)
+                    {
+                        H.Check(name + "_InteractionRegistered", Reconciler.InteractionTrackerCountForTests == trackersBefore + 1);
+                        H.Check(name + "_KeyframesStarted", visual!.TryGetAnimationController("Translation") is not null);
+                    }
+
+                    if (pooled) reconciler.UnmountAndPool(button);
+                    else reconciler.UnmountChild(button);
+                    panel.Children.Remove(button);
+
+                    H.Check(name + "_MiddleRefCleared", middleRef.Current is null && middleClears == 1);
+                    H.Check(name + "_EndpointRefsCleared", targetRef.Current is null && outerRef.Current is null);
+                    if (!pooled)
+                    {
+                        H.Check(name + "_InteractionCleared", Reconciler.InteractionTrackerCountForTests == trackersBefore);
+                        H.Check(name + "_KeyframesStopped", visual!.TryGetAnimationController("Translation") is null);
+                    }
+                    else
+                    {
+                        var reused = reconciler.Mount(Button("plain reuse"), static () => { })!;
+                        panel.Children.Add(reused);
+                        H.Check(name + "_SameControlReused", ReferenceEquals(button, reused));
+                        H.Check(name + "_OldRefStaysCleared", middleRef.Current is null && middleClears == 1);
+                    }
+                }
+                finally
+                {
+                    Reconciler.ClearInteractionStates(button);
+                    visual?.StopAnimation("Translation");
+                    reconciler.UnmountChild(panel);
+                    H.SetContent(null);
+                }
+            }
+        }
+    }
 
     internal sealed class TargetTeardownAcrossPaths(Harness h) : SelfTestFixtureBase(h)
     {

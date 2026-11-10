@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
+using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 
 namespace Microsoft.UI.Reactor.Core;
 
@@ -788,8 +789,13 @@ public sealed partial class Reconciler : IDisposable
         {
             if (!string.Equals(realized.Key, key, StringComparison.Ordinal))
             {
+                var previous = realized;
                 realized = realized with { Key = key };
-                if (state.DecoratorElement is not null) state.DecoratorElement = realized;
+                if (state.DecoratorElement is not null)
+                {
+                    V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, previous, realized, tagOnly: true);
+                    state.DecoratorElement = realized;
+                }
                 else state.Element = realized;
             }
             if (publish) PublishItemIdentity(control, realized, key);
@@ -800,7 +806,7 @@ public sealed partial class Reconciler : IDisposable
         // A legacy ModifiedElement mounts (and tags) its inner element, so that element is
         // re-tagged with the item key.
         var target = string.Equals(kind.Key, key, StringComparison.Ordinal) ? kind : kind with { Key = key };
-        RefreshElementTagOnSkip(control, target);
+        RefreshElementTagOnSkip(control, state?.DecoratorElement ?? state?.Element, target, tagOnly: true);
         if (publish) PublishItemIdentity(control, target, key);
     }
 
@@ -1749,7 +1755,11 @@ public sealed partial class Reconciler : IDisposable
         if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
         {
             state.Element = element;
-            if (element is null) state.DecoratorElement = null;
+            if (element is null)
+            {
+                if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(control);
+                state.DecoratorElement = null;
+            }
             return;
         }
         if (element is null) return; // nothing to store
@@ -1763,10 +1773,10 @@ public sealed partial class Reconciler : IDisposable
 
     internal void RefreshSkippedChildState(FrameworkElement control, Element oldElement, Element newElement)
     {
-        if (newElement.HasCallbacks)
-            RefreshElementTagOnSkip(control, newElement);
+        if (newElement.HasCallbacks || IsFlyoutDecorator(newElement))
+            RefreshElementTagOnSkip(control, oldElement, newElement);
         else if (CallSiteChangedOnSkip(oldElement, newElement))
-            RefreshElementTagOnSkip(control, newElement);
+            RefreshElementTagOnSkip(control, oldElement, newElement);
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
             && Diagnostics.ReactorSourcePublisher.IsEnabled
             && CallSiteChangedOnSkip(oldElement, newElement))
@@ -1908,16 +1918,23 @@ public sealed partial class Reconciler : IDisposable
         global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
         && Diagnostics.ReactorSourcePublisher.SkipsCallSiteOnlyTags;
 
+    /// <summary>Identifies the three built-in target-wrapping flyout element shapes.</summary>
+    internal static bool IsFlyoutDecorator(Element element) =>
+        element is FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement;
+
     /// <summary>
     /// Refreshes a skipped element's current identity. Target-wrapping decorators keep
     /// their own slot so refreshing one cannot replace its target's event identity.
     /// Other elements retain the usual tag-allocation and teardown-ownership rules.
     /// </summary>
-    internal void RefreshElementTagOnSkip(FrameworkElement control, Element newEl)
+    internal void RefreshElementTagOnSkip(FrameworkElement control, Element? oldEl, Element newEl, bool tagOnly = false)
     {
-        if (newEl is FlyoutElement or MenuFlyoutElement or CommandBarFlyoutElement
+        if (IsFlyoutDecorator(newEl)
             && _v1Handlers.TryGet(newEl.GetType(), out var entry) && entry.PreservesTargetTag)
+        {
+            V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, oldEl, newEl, tagOnly);
             SetDecoratorElementTag(control, newEl);
+        }
         else
             SetElementTagIfNeeded(control, newEl,
                 SkipsCallSiteOnlyTags && _v1Handlers.TryGet(newEl.GetType(), out var teardownEntry)
@@ -2029,6 +2046,19 @@ public sealed partial class Reconciler : IDisposable
         return state.DecoratorElement ?? state.Element;
     }
 
+    /// <summary>Returns the first non-null value in the mounted decorator chain, outermost first.</summary>
+    internal static T? FindMountedElementValue<T>(UIElement control, Func<Element, T?> select) where T : class
+    {
+        var current = GetMountedElement(control);
+        for (var depth = 0; current is not null; depth++)
+        {
+            if (select(current) is { } value) return value;
+            if (depth == ReactorSourceMap.MaxDecoratorDepth) break;
+            current = ReactorSourceMap.DecoratorTarget(current);
+        }
+        return null;
+    }
+
     // ────────────────────────────────────────────────────────────────────
     // Spec 042 Phase 1 — keyed-list reconciliation state accessors.
     // Stored on the same attached ReactorState as Element/Events so we do
@@ -2086,6 +2116,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
         {
+            if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
             state.Element = null;
             state.DecoratorElement = null;
         }
@@ -2165,6 +2196,7 @@ public sealed partial class Reconciler : IDisposable
         ClearPublishedSource(fe);
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
+        if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
         TeardownReferenceEdges(fe);
         // A detached component wrapper must stop answering for its ComponentRendered id
         // (both directions), like the unmount path does before pooling.
@@ -2544,6 +2576,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs)
             {
+                if (rs.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
                 TeardownReferenceEdges(fe);
                 rs.Modifiers?.ClearCurrentHandlers();
                 // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
@@ -4204,24 +4237,14 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
-        if (control is FrameworkElement caFe
-            && (GetMountedElement(caFe)?.ConnectedAnimationKey
-                ?? GetElementTag(caFe)?.ConnectedAnimationKey) is { } connectedKey)
+        if (FindMountedElementValue(control, static element => element.ConnectedAnimationKey) is { } connectedKey)
         {
             PrepareConnectedAnimationSource(connectedKey, control);
         }
 
-        // Decorators and targets share a control, but each can own refs and animations.
+        // Each element in the decorator chain can own refs and animations.
         if (control is FrameworkElement cleanupFe)
-        {
-            var mountedElement = GetMountedElement(cleanupFe);
-            var targetElement = GetElementTag(cleanupFe);
-            CleanupElementStateForUnmount(cleanupFe, mountedElement);
-            // Reference edges belong to the control, even when it has no element tag.
-            TeardownReferenceEdges(cleanupFe);
-            if (targetElement is not null && !ReferenceEquals(targetElement, mountedElement))
-                CleanupElementStateForUnmount(cleanupFe, targetElement);
-        }
+            CleanupElementChainForUnmount(cleanupFe);
 
         // Issue #1262 — a control that carried an attached verdict takes it with it.
         // Nothing else does this: DetachReactorState runs only on a full detach, so a
@@ -4327,6 +4350,20 @@ public sealed partial class Reconciler : IDisposable
         }
 
         ForEachReactorChildControl(control, UnmountRecursive);
+    }
+
+    private static void CleanupElementChainForUnmount(FrameworkElement control)
+    {
+        var current = GetMountedElement(control);
+        CleanupElementStateForUnmount(control, current);
+        // Reference edges belong to the control, even when it has no element tag.
+        TeardownReferenceEdges(control);
+        for (var depth = 0; current is not null && depth < ReactorSourceMap.MaxDecoratorDepth; depth++)
+        {
+            current = ReactorSourceMap.DecoratorTarget(current);
+            if (current is null) break;
+            CleanupElementStateForUnmount(control, current);
+        }
     }
 
     private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
@@ -4655,9 +4692,7 @@ public sealed partial class Reconciler : IDisposable
     internal void RemoveChildWithExitTransition(IChildCollection children, int index)
     {
         var control = children.Get(index);
-        var transition = control is FrameworkElement fe
-            ? GetMountedElement(fe)?.ElementTransition ?? GetElementTag(fe)?.ElementTransition
-            : null;
+        var transition = FindMountedElementValue(control, static element => element.ElementTransition);
 
         if (transition?.GetExitTransition() is not null)
         {
@@ -4758,9 +4793,7 @@ public sealed partial class Reconciler : IDisposable
     internal bool ReplaceChildWithExitTransition(IChildCollection children, int index, UIElement newControl)
     {
         var oldControl = children.Get(index);
-        var transition = oldControl is FrameworkElement fe
-            ? GetMountedElement(fe)?.ElementTransition ?? GetElementTag(fe)?.ElementTransition
-            : null;
+        var transition = FindMountedElementValue(oldControl, static element => element.ElementTransition);
 
         if (transition?.GetExitTransition() is not null)
         {
@@ -4828,23 +4861,14 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
-        if (control is FrameworkElement caFe
-            && (GetMountedElement(caFe)?.ConnectedAnimationKey
-                ?? GetElementTag(caFe)?.ConnectedAnimationKey) is { } connectedKey)
+        if (FindMountedElementValue(control, static element => element.ConnectedAnimationKey) is { } connectedKey)
         {
             PrepareConnectedAnimationSource(connectedKey, control);
         }
 
-        // Mirrors UnmountRecursive: release state owned by both element identities.
+        // Mirrors UnmountRecursive: release state throughout the decorator chain.
         if (control is FrameworkElement cleanupFe)
-        {
-            var mountedElement = GetMountedElement(cleanupFe);
-            var targetElement = GetElementTag(cleanupFe);
-            CleanupElementStateForUnmount(cleanupFe, mountedElement);
-            TeardownReferenceEdges(cleanupFe);
-            if (targetElement is not null && !ReferenceEquals(targetElement, mountedElement))
-                CleanupElementStateForUnmount(cleanupFe, targetElement);
-        }
+            CleanupElementChainForUnmount(cleanupFe);
 
         WithdrawAttachedValidation(control);
 
@@ -8020,6 +8044,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearFlyoutOnControl(FrameworkElement fe)
     {
+        V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
         switch (ResolveFlyoutSlot(fe.GetType()))
         {
             case FlyoutSlot.SplitButton: ((WinUI.SplitButton)fe).Flyout = null; break;

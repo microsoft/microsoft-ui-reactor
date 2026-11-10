@@ -108,14 +108,12 @@ public sealed partial class Reconciler
             && !ShouldDeclineSkip(control))
         {
             DebugElementsSkipped++;
-            // Refresh Tag so the event trampoline dispatches into the new element's
-            // closure on next click/value-change. Gated on HasCallbacks so we skip
-            // the DependencyProperty write entirely for leaves with no handlers
-            // (TextBlock, Image, Border, etc.) — which is most of them.
-            if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
-                RefreshElementTagOnSkip(tagFeSE, newEl);
+            // Refresh live callbacks and native flyout ownership. Inert display
+            // leaves (TextBlock, Image, Border, etc.) still avoid the DP write.
+            if ((newEl.HasCallbacks || IsFlyoutDecorator(newEl)) && control is FrameworkElement tagFeSE)
+                RefreshElementTagOnSkip(tagFeSE, oldEl, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
-                RefreshElementTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
+                RefreshElementTagOnSkip(srcFeSE, oldEl, newEl);   // spec 010 — keep the reported line live
             if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);

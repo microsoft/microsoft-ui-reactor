@@ -203,12 +203,12 @@ public static partial class ReactorSourceMap
     }
 
     /// <summary>
-    /// Depth ceiling for <see cref="UnwrapDecorators"/>. Real decorator nesting is a
+    /// Depth ceiling for decorator traversal. Real decorator nesting is a
     /// handful deep at most (a flyout wrapping a menu flyout wrapping its target), so
     /// this is far above any legitimate chain while still bounding a malformed
     /// third-party resolver that manufactures a new element on every call.
     /// </summary>
-    private const int MaxDecoratorDepth = 64;
+    internal const int MaxDecoratorDepth = 64;
 
     /// <summary>
     /// The decorator chain from <paramref name="element"/> (outermost) to its innermost target,

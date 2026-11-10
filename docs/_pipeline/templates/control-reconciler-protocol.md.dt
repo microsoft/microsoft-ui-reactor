@@ -364,12 +364,18 @@ its own event trampolines. For these decorators,
 `Reconciler.GetElementTag(control)` reads the target's tag.
 Decorator lifecycle callbacks resolve the current decorator separately.
 Exit transitions, connected-animation keys, and `.Animate()` curves use the
-outermost decorator's configuration, falling back to the target's when absent.
+first non-null configuration from the outermost decorator inward, ending at
+the target.
 A non-null ambient animation curve still takes precedence over `.Animate()`.
-These lookups do not scan intermediate decorators in a nested chain.
-Unmount clears refs and animation state for both identities and runs the
+Unmount clears refs and animation state throughout the decorator chain and runs the
 decorator's teardown before the target's own handler. Pool return clears both
 identities. Other decorators retain their existing tag behavior.
+
+When these decorators share a target, only the outermost native flyout is
+attached. Replacing an inner flyout releases its Reactor content and input
+pass-through subtrees. Inner updates still reconcile their target, but leave
+the outer flyout's content and lifecycle callbacks untouched. Such nesting
+emits a `Flyout.NestedTarget` diagnostic warning.
 
 ## Descriptors — declarative handlers
 

@@ -133,8 +133,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
             // (for example, a shell retained beneath a transfer overlay).
             // Its live descendants participate; cached pages are not attached.
             if (current is UIElement element
-                && (Core.Reconciler.GetMountedElement(element)?.ConnectedAnimationKey
-                    ?? Core.Reconciler.GetElementTag(element)?.ConnectedAnimationKey) is not null)
+                && Core.Reconciler.FindMountedElementValue(element, static el => el.ConnectedAnimationKey) is not null)
                 result.Add(element);
             for (var i = VisualTreeHelper.GetChildrenCount(current) - 1; i >= 0; i--)
                 pending.Push(VisualTreeHelper.GetChild(current, i));
@@ -150,8 +149,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
         UIElement? match = null;
         foreach (var element in elements)
         {
-            var elementKey = Core.Reconciler.GetMountedElement(element)?.ConnectedAnimationKey
-                ?? Core.Reconciler.GetElementTag(element)?.ConnectedAnimationKey;
+            var elementKey = Core.Reconciler.FindMountedElementValue(element, static el => el.ConnectedAnimationKey);
             if (!string.Equals(elementKey, key, StringComparison.Ordinal))
                 continue;
             if (match is not null)
