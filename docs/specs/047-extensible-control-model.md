@@ -654,7 +654,10 @@ only when the document text matches, so a missing or merged echo cannot swallow
 a real edit. The descriptor passes `armOnMount: true`, so the entry arms the
 Mount write too, since that write's echo arrives after the trampoline is wired.
 It compares with line breaks normalized because the document reads `\n` back
-as `\r`.
+as `\r`. Trailing breaks still count: the comparer also decides whether the
+entry writes at all, so the readback drops only the document's implicit final
+paragraph mark (`GetText` returns `"a\n"` as `"a\r\r"`) and keeps `"text\n"`
+distinct from `"text"`.
 
 `AutoSuggestBox.Text` moved over for the same symptom. Its trampoline returned on
 a non-`UserInput` reason before taking the counter token, so the write's own

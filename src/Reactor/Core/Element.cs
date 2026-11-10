@@ -4546,7 +4546,7 @@ public partial record RichEditBoxElement(
 
     // Text round-trips through the RichEditBox document (not a Text DP): the set
     // writes Document.SetText (skipped for an empty value), readBack/trampoline read
-    // Document.GetText trimming trailing \r.
+    // it back through ReadDocumentText.
     //
     // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
     // SetText raises TextChanged asynchronously, so the arm is consumed by the next
@@ -4562,8 +4562,7 @@ public partial record RichEditBoxElement(
     {
         var r = (WinUI.RichEditBox)s!;
         if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(r, out var state)) return;
-        r.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var raw);
-        var text = raw?.TrimEnd('\r') ?? "";
+        var text = ReadDocumentText(r);
         if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, text)) return;
         (state.Element as RichEditBoxElement)?.OnTextChanged?.Invoke(text);
     };
@@ -4577,11 +4576,7 @@ public partial record RichEditBoxElement(
                 if (!string.IsNullOrEmpty(v))
                     c.Document.SetText(global::Microsoft.UI.Text.TextSetOptions.None, v);
             },
-            readBack:    static c =>
-            {
-                c.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-                return text?.TrimEnd('\r') ?? "";
-            },
+            readBack:    static c => ReadDocumentText(c),
             subscribe:   static (c, h) => c.TextChanged += h,
             callback:    static e => e.OnTextChanged,
             trampoline:  __TextChangedTrampoline,
@@ -4591,9 +4586,21 @@ public partial record RichEditBoxElement(
             valueDiffEcho: true,
             armOnMount:  true);
 
+    // GetText(None) returns every line break as \r and always ends with one more \r,
+    // the document's implicit final paragraph mark: "" reads back as "\r", "a" as
+    // "a\r", "a\n" as "a\r\r". Drop only that mark, so a trailing line break the
+    // text really has (written by state or typed by the user) survives the round
+    // trip, and "text" and "text\n" stay different values.
+    private static string ReadDocumentText(WinUI.RichEditBox box)
+    {
+        box.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var raw);
+        if (string.IsNullOrEmpty(raw)) return "";
+        return raw[^1] == '\r' ? raw[..^1] : raw;
+    }
+
     // The document stores every line break as \r, so "a\nb" reads back as "a\rb".
-    // Compare with line breaks normalized (and trailing ones trimmed, like readBack),
-    // so a multi-line write matches its own echo and isn't rewritten on every render.
+    // Compare with \r\n and \n normalized to \r, so a multi-line write matches its
+    // own echo and isn't rewritten on every render. Trailing breaks still count.
     private sealed class DocumentTextComparer : global::System.Collections.Generic.IEqualityComparer<string>
     {
         internal static readonly DocumentTextComparer Instance = new();
@@ -4606,8 +4613,7 @@ public partial record RichEditBoxElement(
 
         private static string Normalize(string? s) =>
             (s ?? "").Replace("\r\n", "\r", global::System.StringComparison.Ordinal)
-                .Replace('\n', '\r')
-                .TrimEnd('\r');
+                .Replace('\n', '\r');
     }
 }
 

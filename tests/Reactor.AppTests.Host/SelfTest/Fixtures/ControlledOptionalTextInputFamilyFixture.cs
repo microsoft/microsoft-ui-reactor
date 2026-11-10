@@ -37,8 +37,77 @@ internal static class ControlledOptionalTextInputFamilyFixture
                 // recognise its own echo.
                 await ControlledOptionalSelfTestHelpers.RunUserEditAfterStateWriteAsync(
                     H, fixture, scenario, "EditAfterMultilineWrite", "rich-line-one\nrich-line-two");
+                await RunRichEditTrailingLineBreakAsync(fixture);
             }
         }
+
+        // A trailing line break is part of the value. The document always ends
+        // with an implicit paragraph mark (GetText(None) returns "" as "\r" and
+        // "a\n" as "a\r\r"); only that mark is dropped on readback, so "\n" is
+        // not equal to "" and "text\n" is not equal to "text", and both writes
+        // must reach the document.
+        private async Task RunRichEditTrailingLineBreakAsync(string fixture)
+        {
+            var prefix = $"{fixture}_RichEditBox_TrailingLineBreak";
+
+            // Mount "\n" on an empty document.
+            using (var host = H.CreateHost())
+            {
+                host.Mount(_ => RichEditBox("\n", _ => { }));
+                await Harness.Render();
+                var box = H.FindControl<WinUI.RichEditBox>(_ => true);
+                H.Check($"{prefix}_MountControlFound", box is not null);
+                if (box is null) return;
+                var raw = GetRawRichEditText(box);
+                H.Check($"{prefix}_MountNewlineOnlyWritten", raw == "\r\r", $"document=[{Escape(raw)}]");
+            }
+
+            // A state change from "text" to "text\n" (an "insert line break" button).
+            var callbacks = new List<string>();
+            var writeLabel = $"{prefix}_Write";
+            using (var host = H.CreateHost())
+            {
+                host.Mount(ctx =>
+                {
+                    var (value, setValue) = ctx.UseState("rich-text");
+                    return VStack(
+                        Button(writeLabel, () => setValue("rich-text\n")),
+                        RichEditBox(value, v =>
+                        {
+                            callbacks.Add(v);
+                            setValue(v);
+                        }));
+                });
+                await Harness.Render();
+                var box = H.FindControl<WinUI.RichEditBox>(_ => true);
+                H.Check($"{prefix}_UpdateControlFound", box is not null);
+                if (box is null) return;
+                await Harness.WaitFor(() => !ArmPending(box), maxPasses: 25, perPassMs: 20);
+                callbacks.Clear();
+
+                H.ClickButton(writeLabel);
+                await Harness.Render();
+                await Harness.WaitFor(() => !ArmPending(box), maxPasses: 25, perPassMs: 20);
+                await Harness.Render();
+
+                var raw = GetRawRichEditText(box);
+                H.Check($"{prefix}_UpdateLineBreakWritten", raw == "rich-text\r\r", $"document=[{Escape(raw)}]");
+                H.Check($"{prefix}_UpdateEchoSuppressed", callbacks.Count == 0,
+                    $"callbacks=[{string.Join(", ", callbacks.Select(Escape))}]");
+            }
+        }
+
+        private static bool ArmPending(WinUI.RichEditBox box) =>
+            Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(box, out var state)
+            && state.PendingEchoMatch is not null;
+
+        private static string GetRawRichEditText(WinUI.RichEditBox box)
+        {
+            box.Document.GetText(TextGetOptions.None, out var text);
+            return text ?? "";
+        }
+
+        private static string Escape(string s) => s.Replace("\r", "\\r").Replace("\n", "\\n");
     }
 
     internal static ControlledOptionalSelfTestHelpers.Scenario<WinUI.TextBox, string> TextBoxScenario() =>
@@ -90,10 +159,13 @@ internal static class ControlledOptionalTextInputFamilyFixture
             "auto-two",
             "auto-user");
 
+    // Same readback as the RichEditBox descriptor: drop only the document's
+    // implicit final paragraph mark.
     private static string GetRichEditText(WinUI.RichEditBox box)
     {
         box.Document.GetText(TextGetOptions.None, out var text);
-        return text?.TrimEnd('\r') ?? "";
+        if (string.IsNullOrEmpty(text)) return "";
+        return text[^1] == '\r' ? text[..^1] : text;
     }
 
     private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
