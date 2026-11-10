@@ -331,7 +331,11 @@ internal static class PerfTraceScenario
                 host = h.CreateHost();
                 var root = new RenderedNestedPropagatingRoot(scope.Window, scope.Hosts) { PropagateOnce = true };
                 try { host.Mount(root); }
-                catch (InvalidOperationException) { }
+                catch (InvalidOperationException ex)
+                {
+                    // Expected: the app asked the nested failure to propagate out of Mount.
+                    Console.WriteLine("# perf propagated root: escaped " + ex.Message);
+                }
                 await Harness.Render();
                 root.Bump?.Invoke();
                 await Harness.Render();
