@@ -200,9 +200,16 @@ internal static partial class MarkdownSelectionFixtures
             host.Mount(_ => MarkdownTextSelection.Scope(options, VStack(
                 Md("outer", new MarkdownOptions { TextSelection = options }),
                 MarkdownTextSelection.Scope(innerOptions, Md("inner", new MarkdownOptions { TextSelection = innerOptions })))));
-            await Harness.Render();
-            var scopes = H.FindAllControls<MarkdownSelectionHost>(_ => true);
-            foreach (var scope in scopes) scope.Refresh();
+            // Wait like the steps above: one render pass is not enough for both nested scopes
+            // to load and register their documents on a slow (e.g. NativeAOT CI) run.
+            List<MarkdownSelectionHost> scopes = [];
+            await Harness.WaitFor(() =>
+            {
+                scopes = H.FindAllControls<MarkdownSelectionHost>(_ => true).ToList();
+                foreach (var scope in scopes) scope.Refresh();
+                return scopes.Count(scope => scope.IsLoaded && scope.Document.Text == "outer") == 1
+                    && scopes.Count(scope => scope.IsLoaded && scope.Document.Text == "inner") == 1;
+            });
             var outer = scopes.Single(scope => scope.Document.Text == "outer");
             var inner = scopes.Single(scope => scope.Document.Text == "inner");
             var innerText = MarkdownSelectionHost.Descendants(inner).OfType<RichTextBlock>().Single();
