@@ -9,7 +9,6 @@ internal static class SelfTestFixtureRegistry
 {
     public static readonly string[] AllFixtures =
     [
-        "TitleBarLeftHeader",
         "JumpList_NativeInterop",
         "Packaged_JumpList",
         "SourceMapReadPath_Enabled",
@@ -1661,6 +1660,7 @@ internal static class SelfTestFixtureRegistry
         "TitleBar_ImplicitExtends",
         // Spec 059 — TitleBar drag-region APIs (AutoRefreshDragRegions + IsDragRegion).
         "TitleBar_DragRegions",
+        "TitleBar_LeftHeaderSlot",
         "TitleBar_ExplicitFalseOverrides",
         "TitleBar_OwnedChild",
         "TitleBar_DisposeNoClose",
@@ -2331,7 +2331,6 @@ internal static class SelfTestFixtureRegistry
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
-        "TitleBarLeftHeader" => new TitleBarLeftHeaderFixture.Execution(harness),
         "JumpList_NativeInterop" => new JumpListNativeInteropFixture(harness),
         "Packaged_JumpList" => new PackagedJumpListFixture(harness),
         "HarnessGuard_ClickButtonFailsLoudly" => new HarnessGuardFixtures.ClickButtonFailsLoudly(harness),
@@ -3960,6 +3959,7 @@ internal static class SelfTestFixtureRegistry
         "TitleBar_ImplicitExtends" => new Phase7WindowingFixtures.TitleBarImplicitExtends(harness),
         // Spec 059 — TitleBar drag-region APIs (AutoRefreshDragRegions + IsDragRegion).
         "TitleBar_DragRegions" => new Phase7WindowingFixtures.TitleBarDragRegions(harness),
+        "TitleBar_LeftHeaderSlot" => new TitleBarLeftHeaderFixture.Execution(harness),
         "TitleBar_ExplicitFalseOverrides" => new Phase7WindowingFixtures.TitleBarExplicitFalseOverrides(harness),
         "TitleBar_OwnedChild" => new Phase7WindowingFixtures.TitleBarOwnedChildClosesClean(harness),
         "TitleBar_DisposeNoClose" => new Phase7WindowingFixtures.TitleBarDisposeWithoutClose(harness),

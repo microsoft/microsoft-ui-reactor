@@ -307,8 +307,8 @@ visual clickable or `.IsDragRegion(true)` to force it draggable, and set
         Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
             .AutomationName("Settings").IsDragRegion(false)),
 })
-    .LeftHeader(Button("Back", () => { }).AutomationName("Go back"))
-    .RightHeader(Button("Profile", () => { }).AutomationName("Open profile"))
+    .LeftHeader(Button("Help", OnHelp).AutomationName("Open help"))
+    .RightHeader(Button("Profile", OnProfile).AutomationName("Open profile"))
     .AutoRefreshDragRegions();
 ```
 

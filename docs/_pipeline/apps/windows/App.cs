@@ -407,6 +407,8 @@ class TitleBarWindow : Component
 class TitleBarContentWindow : Component
 {
     private static void OnSettings() { }
+    private static void OnHelp() { }
+    private static void OnProfile() { }
 
     public override Element Render() =>
         // <snippet:title-bar-content>
@@ -419,8 +421,8 @@ class TitleBarContentWindow : Component
                 Button(Icon(FontIcon("\uE713", fontSize: 16)), OnSettings)
                     .AutomationName("Settings").IsDragRegion(false)),
         })
-            .LeftHeader(Button("Back", () => { }).AutomationName("Go back"))
-            .RightHeader(Button("Profile", () => { }).AutomationName("Open profile"))
+            .LeftHeader(Button("Help", OnHelp).AutomationName("Open help"))
+            .RightHeader(Button("Profile", OnProfile).AutomationName("Open profile"))
             .AutoRefreshDragRegions();
         // </snippet:title-bar-content>
 }
