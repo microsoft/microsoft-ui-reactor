@@ -221,6 +221,69 @@ hyperlinks, code spans become monospace `TextBlock`. No WebView, no HTML
 round-trip — the output composes with every other modifier on this page
 (`.Padding`, `.Width`, `.TextWrapping`).
 
+### Selecting across an assembled message
+
+Selection across separate paragraphs, headings, list items, code blocks and
+table cells is opt-in. The default Markdown tree and behavior are unchanged.
+All helpers below ship in Advanced under `Microsoft.UI.Reactor.Markdown`.
+Use **one scope around the complete message**, even when the app renders it
+with several `Markdown(...)` calls:
+
+```csharp snippet="text-and-media/markdown-selection"
+```
+
+Keep timeline rows, toolbars, and surrounding `ItemsView` chrome **outside**
+the text surfaces. Registration stops at the message scope; nested scopes are
+independent. `TextSelection` is only a parser opt-in: surfaces belong to the
+nearest scope, regardless of options identity, and only the scope's options
+supply `OnCopyResult`. Omitting the scope leaves no selection controller and
+emits a diagnostic warning. Key the scope by message identity with
+`.WithKey(message.Id)` when a virtualized row can switch to another message.
+As a fallback for unkeyed reuse, a text-changing update resets the selection
+and caret to the start when no nonblank surface text survives and no reused
+surface retains nonblank prefix/suffix text. Shared text can belong to a different
+message too, so this heuristic does not replace an explicit identity key.
+The parser emits semantic text and explicit separators, rather
+than guessing meaning from `Grid`/`StackPanel` shapes. `Surface(text, content,
+separatorAfter: "\n")` supplies exact **visible plain text**, never Markdown
+or HTML source. List markers have no separator before their content; table
+cells use tabs and rows use newlines. No final separator is copied.
+Surface wrappers own outer margins, sizing, alignment and Grid/Canvas/Flex
+placement; these are lifted off the inner element and applied exactly once.
+Inner padding and presentation styling remain on the content. Apps can normalize
+a returned block's `Margin` without leaving a second margin on an invisible child.
+
+For custom `CodeBlock` or `HtmlBlock` callbacks, explicitly wrap the visible
+body with `Surface` and leave toolbar siblings outside it. Paragraph and
+heading presentation callbacks still receive the default `RichTextBlockElement`,
+so existing typography/type checks work. The parser annotates the returned
+presentation element afterwards. If replacing the text itself, explicitly
+return a `Surface` with the replacement's visible text.
+For app-owned disclosures, render the summary once as a surface, and wrap
+the native Expander's body in `Visibility(expanded, body)`. This helper gates
+selection only: it does not change native visibility or own expansion state.
+Nested gates compose; collapsed descendants leave the selection document and
+return on expansion.
+
+The scope supports mouse drag (touch/pen remain available for native panning),
+Shift+arrow/PageUp/PageDown, Ctrl+A and
+Ctrl+C; keyboard navigation includes fully clipped blocks. Modern `ScrollView`
+(including the internal one in `ItemsView`) and legacy `ScrollViewer` provide
+clipping, bring-into-view and drag autoscroll. Offsets are UTF-16; horizontal
+caret movement follows grapheme boundaries. Streaming updates preserve
+selection endpoints against surviving surface identities where possible.
+The scope exposes UIA TextPattern with range-scoped embedded-control children.
+
+`OnCopyResult` is an optional `Action<string, bool>` **notification**, not a
+copy delegate. Reactor calls it after its single clipboard-write attempt.
+Recognized clipboard-access failures report `false`; unexpected exceptions
+propagate. Never call an app helper that writes the clipboard again from this
+callback. The app owns localized feedback and shows success only after `true`.
+
+`UnifiedRichText` alone is insufficient for cross-block selection because
+lists/code/tables are embedded controls. When `TextSelection` is supplied,
+semantic surfaces take precedence over `UnifiedRichText`.
+
 `MarkdownOptions.LinkBuilder` overrides rendering for links whose absolute URI
 passes the Markdown URI policy (`http`, `https`, or `mailto`). It receives a
 `MarkdownLink` with three properties:

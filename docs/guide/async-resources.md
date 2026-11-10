@@ -167,6 +167,9 @@ Pull-to-refresh is `commits.Refresh()`: it cancels in-flight fetches,
 clears the page table, and refetches page 0. Retry after error is
 `commits.Retry()` — only the failed page is re-requested.
 
+Hooks sharing a `CacheKeyPrefix` can reuse cached pages when their dependencies
+and initial `PageSize` match. Different page sizes use separate cache entries.
+
 ## Migrating from a DataPageCache-Style Cache
 
 If you've rolled a block-cache over `IDataSource<T>` — the pre-Phase-3

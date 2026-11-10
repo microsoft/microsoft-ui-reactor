@@ -316,6 +316,7 @@ public sealed class ElementPool : IDisposable
         // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
         // CornerRadius → Control | Border | Grid | StackPanel, BorderBrush/BorderThickness →
         // Control | Border, Background → Panel | Control | Border, IsEnabled → Control.
+        // Both content-alignment properties also belong to Control (#1013).
         // The Padding and CornerRadius gates also admit RelativePanel, which gets no clear
         // here because RelativePanel is not in PoolableTypes — it is never returned to the
         // pool, so there is no local value for a later renter to inherit. Canvas is the
@@ -348,6 +349,8 @@ public sealed class ElementPool : IDisposable
             resetControl.ClearValue(Control.BorderBrushProperty);
             resetControl.ClearValue(Control.BackgroundProperty);
             resetControl.ClearValue(Control.IsEnabledProperty);
+            resetControl.ClearValue(Control.HorizontalContentAlignmentProperty);
+            resetControl.ClearValue(Control.VerticalContentAlignmentProperty);
         }
         else if (fe is WinUI.Border resetBorder)
         {
