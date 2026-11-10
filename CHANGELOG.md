@@ -36,7 +36,7 @@ Conventions for contributors:
   rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
   spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
   setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
-  check. Schema: `docs/reference/perf-trace-events.md` (issue #ISSUE).
+  check. Schema: `docs/reference/perf-trace-events.md` (issue #1484).
 - `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
