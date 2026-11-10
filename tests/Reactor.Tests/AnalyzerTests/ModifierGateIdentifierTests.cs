@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// <remarks>
 /// <para>
 /// The gate groups are named by concatenating their receiver list, which makes <b>set inclusion
-/// equivalent to string prefixing</b>: <c>ControlBorder</c> ⊏ <c>ControlBorderGridStack</c> ⊏
+/// equivalent to string prefixing</b>: <c>ControlBorderGridStack</c> ⊏
 /// <c>ControlBorderGridStackRelative</c> ⊏ <c>…RelativeText</c>. A superset gate cannot help but
 /// have a superset name, so the collision set grows with every gate added and a fix applied to one
 /// pair falls behind on the next.
@@ -29,6 +29,8 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// </remarks>
 public class ModifierGateIdentifierTests
 {
+    private const string FormerControlBorder = "ControlBorder";
+
     /// <summary>
     /// Positive control for the reader itself: a broken reader and a table with no gates read the
     /// same on screen, so pin the syntax reader to the typed table in both directions before
@@ -195,9 +197,12 @@ public class ModifierGateIdentifierTests
     [Fact]
     public void Substring_Matching_Accepts_A_Wider_Gate_Where_Boundary_Matching_Does_Not()
     {
-        var identifiers = ModifierGateSource.GateSlots
-            .Select(slot => slot.Identifier)
-            .Distinct(StringComparer.Ordinal)
+        // Keep the removed group as a test-only needle: asking for it must not
+        // match PanelControlBorder, even though that name contains the needle.
+        var groups = ModifierGateSource.DeclaredGroups.ToDictionary(
+            group => group.Key, group => group.Value, StringComparer.Ordinal);
+        groups.Add(FormerControlBorder, new[] { "Control", "Border" });
+        var identifiers = groups.Keys
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
@@ -224,9 +229,9 @@ public class ModifierGateIdentifierTests
                 {
                     // Properties carrying the WIDE gate in this slot. A check asking "does this
                     // property have the NARROW gate?" must answer no for every one of them.
-                    var exposed = PropertiesCarrying(slot, ModifierGateSource.DeclaredGroups[wide])
+                    var exposed = PropertiesCarrying(slot, groups[wide])
                         .Except(
-                            PropertiesCarrying(slot, ModifierGateSource.DeclaredGroups[narrow]),
+                            PropertiesCarrying(slot, groups[narrow]),
                             StringComparer.Ordinal)
                         .ToList();
 
@@ -291,6 +296,7 @@ public class ModifierGateIdentifierTests
     {
         var identifiers = ModifierGateSource.GateSlots
             .Select(slot => slot.Identifier)
+            .Append(FormerControlBorder)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
