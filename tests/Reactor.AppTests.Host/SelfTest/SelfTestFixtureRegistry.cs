@@ -420,6 +420,12 @@ internal static class SelfTestFixtureRegistry
         "InlineUI_IncrementalUpdate_RunMutatedInPlace",
         // Reconcile ETW span depth bookkeeping
         "ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses",
+        // Microsoft-UI-Reactor-Perf spans recorded by a non-elevated private ETW session
+        "PerfTrace_PrivateSessionRecordsRenderSpans",
+        "PerfTrace_UnrequestedKeywordsWriteNothing",
+        "PerfTrace_HostControlSpansAndGating",
+        "PerfTrace_PropagatedRootAdvancesToUpdate",
+        "PerfTrace_ReentrantMountEffectsNameLiveRoot",
         // ReactorEventSource.ComponentRendered reasons + componentId resolution
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler",
         "ComponentRendered_HostControlRootAndThrowingRoot",
@@ -452,6 +458,7 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_HostControlRootSwaps",
         "ComponentRendered_ListenerDisposedInCallback",
         "ComponentRendered_ReentrantMountDefersRetirement",
+        "ComponentRendered_ReentrantFunctionRootKeepsItsId",
         // RenderError names the component (not ComponentElement`1) on mount/update/root
         "RenderErrorNames_ComponentTypeOnEveryPath",
         "RenderErrorNames_ErrorBoundaryCatchIsReported",
@@ -2704,6 +2711,11 @@ internal static class SelfTestFixtureRegistry
         "InlineUI_IncrementalUpdate_PreservesChildIdentity" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_PreservesChildIdentity(harness),
         "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
         "ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses" => new ReconcileTraceDepth_TopLevelSpansSurviveNestedPasses(harness),
+        "PerfTrace_PrivateSessionRecordsRenderSpans" => new PerfTrace_PrivateSessionRecordsRenderSpans(harness),
+        "PerfTrace_UnrequestedKeywordsWriteNothing" => new PerfTrace_UnrequestedKeywordsWriteNothing(harness),
+        "PerfTrace_HostControlSpansAndGating" => new PerfTrace_HostControlSpansAndGating(harness),
+        "PerfTrace_PropagatedRootAdvancesToUpdate" => new PerfTrace_PropagatedRootAdvancesToUpdate(harness),
+        "PerfTrace_ReentrantMountEffectsNameLiveRoot" => new PerfTrace_ReentrantMountEffectsNameLiveRoot(harness),
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler" => new ComponentRendered_ReasonsAndIdsFollowTheReconciler(harness),
         "ComponentRendered_HostControlRootAndThrowingRoot" => new ComponentRendered_HostControlRootAndThrowingRoot(harness),
         "ComponentRendered_ErrorBoundaryCaughtRendersAreReported" => new ComponentRendered_ErrorBoundaryCaughtRendersAreReported(harness),
@@ -2734,6 +2746,7 @@ internal static class SelfTestFixtureRegistry
         "ComponentRendered_HostControlRootSwaps" => new ComponentRendered_HostControlRootSwaps(harness),
         "ComponentRendered_ListenerDisposedInCallback" => new ComponentRendered_ListenerDisposedInCallback(harness),
         "ComponentRendered_ReentrantMountDefersRetirement" => new ComponentRendered_ReentrantMountDefersRetirement(harness),
+        "ComponentRendered_ReentrantFunctionRootKeepsItsId" => new ComponentRendered_ReentrantFunctionRootKeepsItsId(harness),
         "RenderErrorNames_ComponentTypeOnEveryPath" => new RenderErrorNames_ComponentTypeOnEveryPath(harness),
         "RenderErrorNames_ErrorBoundaryCatchIsReported" => new RenderErrorNames_ErrorBoundaryCatchIsReported(harness),
         "RenderErrorNames_RenderErrorHandlerOutcomesReportOnce" => new RenderErrorNames_RenderErrorHandlerOutcomesReportOnce(harness),

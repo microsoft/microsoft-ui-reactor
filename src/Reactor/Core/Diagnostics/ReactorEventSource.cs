@@ -30,6 +30,12 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// the disabled path avoids allocation and Stopwatch overhead. The
 /// <c>WriteEvent</c> overloads are additionally guarded inside this class
 /// for defense in depth.
+///
+/// As of .NET 10, a private ETW session (what a non-elevated <c>winapp perf</c> attaches with)
+/// never enables an EventSource, so this provider writes nothing there. Reactor's
+/// render-pass and component spans are also written through the raw
+/// <c>Microsoft-UI-Reactor-Perf</c> provider (<see cref="ReactorPerfTrace"/>),
+/// which such a session does record.
 /// </summary>
 [EventSource(Name = "Microsoft-UI-Reactor")]
 internal sealed class ReactorEventSource : EventSource

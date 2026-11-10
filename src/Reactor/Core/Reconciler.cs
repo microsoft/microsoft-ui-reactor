@@ -456,13 +456,25 @@ public sealed partial class Reconciler : IDisposable
     // recursive mounts and nested passes just count.
     private int _entryDepth;
 
-    private EntryFrame EnterFrame()
+    private EntryFrame EnterFrame(string perfEntry, Element? element)
     {
         var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        bool perfSpan = false;
         if (_entryDepth == 0)
+        {
             _passId++;
+            // The perf Reconcile span covers each outermost entry: a host pass's reconcile, and
+            // a row an ItemsRepeater / ListView realizes or updates during layout, which runs
+            // outside any host pass. Stopped in EntryFrame.Dispose, after the whole entry.
+            if (Diagnostics.ReactorPerfTrace.PassEnabled)
+            {
+                Diagnostics.ReactorPerfTrace.ReconcileStart(perfEntry,
+                    element is null ? "null" : Diagnostics.ComponentNames.For(element.GetType()));
+                perfSpan = true;
+            }
+        }
         _entryDepth++;
-        return new EntryFrame(this, scope);
+        return new EntryFrame(this, scope, perfSpan);
     }
 
     // Identifies the outermost Reconcile/Mount pass in flight (advanced on entry at depth
@@ -472,12 +484,14 @@ public sealed partial class Reconciler : IDisposable
     // so the host's ActualTheme still shows the previous theme at that point.
     private long _passId;
 
-    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
+    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope, bool perfSpan) : IDisposable
     {
         public void Dispose()
         {
             scope.Dispose();
             owner._entryDepth--;
+            if (perfSpan)
+                Diagnostics.ReactorPerfTrace.ReconcileStop();
         }
     }
 
@@ -1406,6 +1420,9 @@ public sealed partial class Reconciler : IDisposable
     public Reconciler(ILogger? logger = null)
     {
         _logger = logger;
+        // Registered before the first render, so a perf session already running (or started
+        // later, e.g. by `winapp perf`) enables the provider. Once per process.
+        Diagnostics.ReactorPerfTrace.EnsureRegistered();
         // Spec 048 §3.4 — no more bootstrap. Built-in handlers register
         // themselves lazily on first factory call (per-control Reg<>/
         // RegDecorator<> cctor latch in `Dsl.cs`), or callers register
@@ -3229,7 +3246,7 @@ public sealed partial class Reconciler : IDisposable
     {
         // A top-level pass is an outermost Reactor frame for render-error propagation
         // (issue #1291); see EnterFrame. Nested passes and mounts just count.
-        using var entryFrame = EnterFrame();
+        using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Reconcile, newElement);
         // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
         // update, or unmount are announced only once the whole pass has finished.
         using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
@@ -3394,6 +3411,20 @@ public sealed partial class Reconciler : IDisposable
     internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
 
     /// <summary>
+    /// Starts the <c>Microsoft-UI-Reactor-Perf</c> ComponentRender span for a component node
+    /// when its keyword is on (an inactive span otherwise). Disposed at the end of the mount or
+    /// update, so the span covers Render(), the effects flush and the subtree's reconcile — the
+    /// component's inclusive cost, including the WinUI controls its subtree creates.
+    /// </summary>
+    private static Diagnostics.ReactorPerfTrace.ComponentSpan BeginPerfComponentSpan(
+        ComponentNode node, Element element, string reason)
+    {
+        if (!Diagnostics.ReactorPerfTrace.ComponentEnabled) return default;
+        return Diagnostics.ReactorPerfTrace.ComponentSpan.Begin(
+            (ulong)node.EnsureDiagnosticId(), Diagnostics.ComponentNames.For(node.Component, element), reason);
+    }
+
+    /// <summary>
     /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
     /// the id → wrapper registry current. Only called when the event is enabled. A null
     /// <paramref name="wrapper"/> reports the render without touching the registry
@@ -3403,8 +3434,7 @@ public sealed partial class Reconciler : IDisposable
     private static void EmitComponentRendered(
         ComponentNode node, UIElement? wrapper, Element element, string reason, long startTimestamp)
     {
-        long id = node.DiagnosticId;
-        if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
+        long id = node.EnsureDiagnosticId();
         // Rechecks the live gate: the decision to trace was made before Render() ran, and a
         // listener can dispose itself from an earlier event's callback (for instance a
         // hot-reload hook-order retry's aborted attempt). Nothing is mapped while it is off.
@@ -3682,11 +3712,12 @@ public sealed partial class Reconciler : IDisposable
                     : Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
             else if (newEl is FuncElement
-                && (traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
+                && ((traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
+                    || Diagnostics.ReactorPerfTrace.ComponentEnabled)
                 && HasConsumedContextChanged(node))
             {
                 // No gate can skip a function component, so this only refines the
-                // ComponentRendered reason (and is only computed while it is traced).
+                // reported reason (and is only computed while a render event is traced).
                 memoReason = Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
 
@@ -3716,6 +3747,12 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // ── Render the component ──
+        // Perf span: Render(), effects and the subtree reconcile below (closes on every exit).
+        using var perfSpan = Diagnostics.ReactorPerfTrace.ComponentEnabled
+            ? BeginPerfComponentSpan(node, newEl, Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason))
+            : default;
+
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
@@ -4027,20 +4064,7 @@ public sealed partial class Reconciler : IDisposable
     private void ReconcileChildren(
         Element[] oldChildren, Element[] newChildren,
         WinUI.Panel panel, Action requestRerender)
-    {
-        var childCollection = new PanelChildCollection(panel);
-        // Skip the try/finally and event emit when the Reconcile keyword is off.
-        if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Informational,
-                Diagnostics.ReactorEventSource.Keywords.Reconcile))
-        {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel);
-            return;
-        }
-        Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel); }
-        finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
-    }
+        => ReconcileChildrenTraced(oldChildren, newChildren, new PanelChildCollection(panel), requestRerender, panel);
 
     // Spec 047 §14 — keyed-reconcile entrypoint for the V1 descriptor Panel<>
     // strategy. The descriptor resolves the live collection as a
@@ -4052,18 +4076,38 @@ public sealed partial class Reconciler : IDisposable
         Element[] oldChildren, Element[] newChildren,
         UIElementCollection collection, Action requestRerender,
         UIElement? parentControl = null)
+        => ReconcileChildrenTraced(oldChildren, newChildren, new PanelChildCollection(collection), requestRerender, parentControl);
+
+    private void ReconcileChildrenTraced(
+        Element[] oldChildren, Element[] newChildren,
+        PanelChildCollection childCollection, Action requestRerender, UIElement? parentControl)
     {
-        var childCollection = new PanelChildCollection(collection);
-        if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Informational,
-                Diagnostics.ReactorEventSource.Keywords.Reconcile))
+        // Skip the try/finally and event emits when neither provider wants the span.
+        bool traceSource = Diagnostics.ReactorEventSource.Log.IsEnabled(
+            global::System.Diagnostics.Tracing.EventLevel.Informational,
+            Diagnostics.ReactorEventSource.Keywords.Reconcile);
+        bool tracePerf = Diagnostics.ReactorPerfTrace.ChildrenEnabled;
+        if (!traceSource && !tracePerf)
         {
             ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
             return;
         }
-        Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
+        if (traceSource)
+            Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
+        if (tracePerf)
+            Diagnostics.ReactorPerfTrace.ChildReconcileStart((uint)oldChildren.Length, (uint)newChildren.Length);
         try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
-        finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
+        finally
+        {
+            if (traceSource)
+                Diagnostics.ReactorEventSource.Log.ChildReconcileStop();
+            // The counts are this container's own collection edits; a nested container's edits
+            // are reported by its own (nested) span.
+            if (tracePerf)
+                Diagnostics.ReactorPerfTrace.ChildReconcileStop(
+                    childCollection.InsertCount, childCollection.RemoveCount,
+                    childCollection.MoveCount, childCollection.ReplaceCount);
+        }
     }
 
     /// <summary>
@@ -8027,10 +8071,16 @@ public sealed partial class Reconciler : IDisposable
         private volatile bool _selfTriggered;
         public bool SelfTriggered { get => _selfTriggered; set => _selfTriggered = value; }
         /// <summary>
-        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c>;
-        /// 0 until the node first renders while that event is enabled.
+        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c> and the
+        /// <c>Microsoft-UI-Reactor-Perf</c> events; 0 until first assigned
+        /// (<see cref="EnsureDiagnosticId"/>). Lives on the node's <see cref="RenderContext"/>,
+        /// so a state change the component makes reports the same id.
         /// </summary>
-        public long DiagnosticId { get; set; }
+        public long DiagnosticId => (Component?.Context ?? Context)?.DiagnosticId ?? 0;
+
+        /// <summary><see cref="DiagnosticId"/>, assigning it on first use.</summary>
+        public long EnsureDiagnosticId()
+            => (Component?.Context ?? Context)?.EnsureDiagnosticId() ?? 0;
     }
 
     /// <summary>
