@@ -6586,12 +6586,23 @@ ToString() → string
 ## Advanced factories
 # All in `Microsoft.UI.Reactor.Advanced.Factories` — `using static Microsoft.UI.Reactor.Advanced.Factories;`
 
+AreaSeries(IEnumerable xValues, IEnumerable yValues, string title = null, ChartAxis xAxis = null, ChartAxis yAxis = null) → ChartAreaSeries
 AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
+BarSeries(IEnumerable xValues, IEnumerable yValues, string title = null, ChartAxis xAxis = null, ChartAxis yAxis = null) → ChartBarSeries
+BoundColumn(object header, string path, double? width = null) → TableBoundColumn
+CategoryAxis(string label = null) → ChartCategoryAxis
+Chart(ChartSeries[] series) → ChartElement
 Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
 DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement<DataGridElement<T>>
 DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement<DataGridElement<T>>
+DateTimeAxis(string label = null, DateTimeOffset? minimum = null, DateTimeOffset? maximum = null) → ChartDateTimeAxis
+LineSeries(IEnumerable xValues, IEnumerable yValues, string title = null, ChartAxis xAxis = null, ChartAxis yAxis = null) → ChartLineSeries
+LinearAxis(string label = null, double? minimum = null, double? maximum = null) → ChartLinearAxis
 Markdown(string markdown) → Element
 Markdown(string markdown, MarkdownOptions options) → Element
+TableView(IEnumerable itemsSource, TableColumn[] columns) → TableViewElement
+TemplateColumn<T>(object header, Func<T, Element> cell, double? width = null) → TableTemplateColumn
+TextColumn<T>(object header, Func<T, string> text, Action<T, string> onEdit = null, double? width = null) → TableTextColumn
 Win2DAnimatedCanvas(Action<CanvasAnimatedUpdateEventArgs, object> onUpdate, Action<CanvasDrawingSession, CanvasAnimatedDrawEventArgs, object> onDraw, object drawState = null, bool isPaused = false) → Win2DAnimatedCanvasElement
 Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, Func<CanvasControl, Task> onCreateResources, object redrawKey = null) → Win2DCanvasElement
 Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, object redrawKey = null) → Win2DCanvasElement
@@ -6601,6 +6612,8 @@ Win2DVirtualCanvas(Action<CanvasDrawingSession, Rect> onRegionDraw, Size content
 # Fluent — preserves concrete element type. Type-specific sugar (e.g. .Bold()
 # on TextBlockElement) MUST come before generic .Margin/.Padding/etc.
 
+ChartElement.Legend(string title = null, bool show = true) → ChartElement
+ChartElement.Set(Action<Chart> setter) → ChartElement
 DataGridElement<T>.SelectionChanged<T>(Action<IReadOnlySet<RowKey>> handler) → DataGridElement<T>
 DockManager.ActiveContentChanged(Action<DockActiveContentChangedEventArgs> handler) → DockManager
 DockManager.ContentDocked(Action<DockContentDockedEventArgs> handler) → DockManager
@@ -6622,6 +6635,18 @@ DockManager.ToolWindowClosed(Action<DockToolWindowClosedEventArgs> handler) → 
 DockManager.ToolWindowClosing(Action<DockToolWindowClosingEventArgs> handler) → DockManager
 DockManager.ToolWindowHidden(Action<DockToolWindowHiddenEventArgs> handler) → DockManager
 DockManager.ToolWindowHiding(Action<DockToolWindowHidingEventArgs> handler) → DockManager
+TableViewElement.CellEditEnding(Action<TableViewCellEditEndingEventArgs> handler) → TableViewElement
+TableViewElement.Density(TableViewDensity density) → TableViewElement
+TableViewElement.FilterRows<T>(Func<T, bool> predicate) → TableViewElement
+TableViewElement.GridLines(TableViewGridLinesVisibility visibility) → TableViewElement
+TableViewElement.GroupRows<T>(Func<T, object> keySelector) → TableViewElement
+TableViewElement.KeyRows<T>(Func<T, object> key) → TableViewElement
+TableViewElement.ReadOnly(bool isReadOnly = true) → TableViewElement
+TableViewElement.SelectedIndex(int index) → TableViewElement
+TableViewElement.SelectionChanged(Action<int, object> handler) → TableViewElement
+TableViewElement.SelectionMode(TableViewSelectionMode mode) → TableViewElement
+TableViewElement.Set(Action<TableView> setter) → TableViewElement
+TableViewElement.Sorted(Action<TableViewSortedEventArgs> handler) → TableViewElement
 Win2DAnimatedCanvasElement.ClearColor(Color color) → Win2DAnimatedCanvasElement
 Win2DAnimatedCanvasElement.Paused(bool paused = true) → Win2DAnimatedCanvasElement
 Win2DAnimatedCanvasElement.Set(Action<CanvasAnimatedControl> setter) → Win2DAnimatedCanvasElement
@@ -6760,6 +6785,30 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### record ChartAreaSeries
+Brush Fill { get; init; }
+Equals(ChartAreaSeries other) → bool
+Equals(ChartSeries other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartAxis
+Brush AxisLineBrush { get; init; }
+Brush GridLineMajorBrush { get; init; }
+Brush GridLineMinorBrush { get; init; }
+Brush TickBrush { get; init; }
+Brush TickLabelBrush { get; init; }
+GridLines? GridLines { get; init; }
+bool? IsVisible { get; init; }
+bool? ShowTickLabels { get; init; }
+bool? ShowTickMarks { get; init; }
+string Label { get; init; }
+Equals(ChartAxis other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
 ### record ChartAxisDescriptor
 new(ChartAxisType AxisType, string Label, double Min, double Max, string Units = null)
 ChartAxisType AxisType { get; init; }
@@ -6769,6 +6818,68 @@ string Label { get; init; }
 string Units { get; init; }
 Deconstruct(ref ChartAxisType AxisType, ref string Label, ref double Min, ref double Max, ref string Units) → void
 Equals(ChartAxisDescriptor other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartBarSeries
+BarOrientation? Orientation { get; init; }
+Brush Fill { get; init; }
+Equals(ChartBarSeries other) → bool
+Equals(ChartSeries other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartCategoryAxis
+new()
+CategorySortKey? SortKey { get; init; }
+SortOrder? SortOrder { get; init; }
+Equals(ChartAxis other) → bool
+Equals(ChartCategoryAxis other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartDataLabel
+new(string Text, Brush Brush = null)
+Brush Brush { get; init; }
+string Text { get; init; }
+Deconstruct(ref string Text, ref Brush Brush) → void
+Equals(ChartDataLabel other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartDataMarker
+new(MarkerShape Shape, Brush Brush = null)
+Brush Brush { get; init; }
+MarkerShape Shape { get; init; }
+Deconstruct(ref MarkerShape Shape, ref Brush Brush) → void
+Equals(ChartDataMarker other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartDateTimeAxis
+new()
+DateTimeIntervalType? IntervalType { get; init; }
+DateTimeOffset? Maximum { get; init; }
+DateTimeOffset? Minimum { get; init; }
+string LabelFormat { get; init; }
+Equals(ChartAxis other) → bool
+Equals(ChartDateTimeAxis other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartElement
+Action<Chart>[] Setters { get; init; }
+IReadOnlyList<ChartSeries> Series { get; init; }
+bool? ShowLegend { get; init; }
+string LegendTitle { get; init; }
+Equals(ChartElement other) → bool
+Equals(Element other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -6816,6 +6927,41 @@ YTickLabelView(Func<double, Element> render, Func<double, string> name = null, b
 ### class ChartHandle<T>
 Canvas Canvas { get; }
 
+### class ChartHandler
+new()
+Mount(MountContext ctx, ChartElement el) → Chart
+Unmount(UnmountContext ctx, Chart chart) → void
+Update(UpdateContext ctx, ChartElement oldEl, ChartElement newEl, Chart chart) → void
+
+### record ChartLineSeries
+Equals(ChartLineSeries other) → bool
+Equals(ChartSeries other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartLinearAxis
+new()
+double? Maximum { get; init; }
+double? Minimum { get; init; }
+double? Spacing { get; init; }
+Equals(ChartAxis other) → bool
+Equals(ChartLinearAxis other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class ChartModifiers
+ChartAreaSeries.Fill(Brush brush) → ChartAreaSeries
+ChartBarSeries.Fill(Brush brush) → ChartBarSeries
+ChartBarSeries.Horizontal() → ChartBarSeries
+ChartBarSeries.Vertical() → ChartBarSeries
+ChartSeries.DataLabels(bool show = true) → ChartSeries
+ChartSeries.Markers(MarkerShape shape = MarkerShape.Circle) → ChartSeries
+ChartSeries.Stroke(Brush brush, double? thickness = null) → ChartSeries
+ChartSeries.Visible(bool isVisible = true) → ChartSeries
+TAxis.GridLines<TAxis>(GridLines gridLines) → TAxis
+
 ### class ChartPalette
 IReadOnlyList<D3Color> Colors { get; }
 int Count { get; }
@@ -6846,6 +6992,28 @@ double End { get; init; }
 double Start { get; init; }
 Deconstruct(ref double Start, ref double End) → void
 Equals(ChartRange other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartSeries
+Brush DataLabelBrush { get; init; }
+Brush DataMarkerBrush { get; init; }
+Brush Stroke { get; init; }
+ChartAxis XAxis { get; init; }
+ChartAxis YAxis { get; init; }
+IEnumerable XValues { get; init; }
+IEnumerable YValues { get; init; }
+IReadOnlyDictionary<int, ChartDataLabel> DataLabels { get; init; }
+IReadOnlyDictionary<int, ChartDataMarker> DataMarkers { get; init; }
+MarkerShape? MarkerShape { get; init; }
+StrokeDashStyle? StrokeDashStyle { get; init; }
+bool IsVisible { get; init; }
+bool? ShowDataLabels { get; init; }
+bool? ShowDataMarkers { get; init; }
+double? StrokeThickness { get; init; }
+string Title { get; init; }
+Equals(ChartSeries other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -8324,6 +8492,89 @@ SetSize(Func<T, int, double> size) → SymbolGenerator<T>
 SetSize(double size) → SymbolGenerator<T>
 SetType(Func<T, int, ISymbolType> type) → SymbolGenerator<T>
 SetType(ISymbolType type) → SymbolGenerator<T>
+
+### record TableBoundColumn
+string Path { get; init; }
+Equals(TableBoundColumn other) → bool
+Equals(TableColumn other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record TableColumn
+Comparison<object> SortComparer { get; init; }
+Func<object, Element> EditingCell { get; init; }
+GridLength? Width { get; init; }
+TableViewFrozenEdge? FrozenEdge { get; init; }
+TableViewSortCycle? SortCycle { get; init; }
+bool IsVisible { get; init; }
+bool? CanResize { get; init; }
+bool? CanSort { get; init; }
+bool? IsReadOnly { get; init; }
+double? MaxWidth { get; init; }
+double? MinWidth { get; init; }
+object Header { get; init; }
+object HeaderToolTip { get; init; }
+string SortMemberPath { get; init; }
+Equals(TableColumn other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record TableTemplateColumn
+Func<object, Element> Cell { get; init; }
+Equals(TableColumn other) → bool
+Equals(TableTemplateColumn other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record TableTextColumn
+Action<object, string> OnEdit { get; init; }
+Func<object, string> Text { get; init; }
+Equals(TableColumn other) → bool
+Equals(TableTextColumn other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record TableViewElement
+Action<TableView>[] Setters { get; init; }
+Action<TableViewBeginningEditEventArgs> OnBeginningEdit { get; init; }
+Action<TableViewCellEditEndingEventArgs> OnCellEditEnding { get; init; }
+Action<TableViewSortedEventArgs> OnSorted { get; init; }
+Action<TableViewSortingEventArgs> OnSorting { get; init; }
+Action<int, object> OnSelectionChanged { get; init; }
+Brush AlternatingRowBackground { get; init; }
+Brush RowBackground { get; init; }
+Element EmptyContent { get; init; }
+Func<TableViewGroupInfo, Element> GroupHeader { get; init; }
+Func<object, bool> Filter { get; init; }
+Func<object, object> GroupBy { get; init; }
+Func<object, object> RowKey { get; init; }
+IEnumerable ItemsSource { get; init; }
+IReadOnlyList<TableColumn> Columns { get; init; }
+TableViewDensity? Density { get; init; }
+TableViewGridLinesVisibility? GridLinesVisibility { get; init; }
+TableViewHeadersVisibility? HeadersVisibility { get; init; }
+TableViewSelectionMode? SelectionMode { get; init; }
+bool? CanUserResizeColumns { get; init; }
+bool? CanUserSortColumns { get; init; }
+bool? IsReadOnly { get; init; }
+int? SelectedIndex { get; init; }
+Equals(Element other) → bool
+Equals(TableViewElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class TableViewModifiers
+TableColumn.Editing<T>(Func<T, Element> editor) → TableColumn
+TableColumn.Frozen(TableViewFrozenEdge edge = TableViewFrozenEdge.Leading) → TableColumn
+TableColumn.ReadOnly(bool isReadOnly = true) → TableColumn
+TableColumn.SortBy(string path) → TableColumn
+TableColumn.SortBy<T>(Comparison<T> comparison) → TableColumn
+TableColumn.Star(double weight = 1) → TableColumn
 
 ### class ThresholdScale
 new()
