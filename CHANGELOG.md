@@ -41,6 +41,12 @@ Conventions for contributors:
 
 ### Changed
 
+- `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
+  now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
+  may need to use the corresponding fluent modifiers instead. The same writes on
+  `RelativePanel` now report `REACTOR_MOD_002` (Info), since it is not pooled
+  (issue #1039).
+
 - The generated API index now includes Reactor Advanced factories, modifiers, hooks,
   enums and public types alongside the core Reactor surface, keeping `mur --api` and
   both shipped agent-reference copies complete (PR #1475).
@@ -65,6 +71,11 @@ Conventions for contributors:
   from changing the outer flyout or duplicating its callbacks. For these
   decorators, the provisional `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §4.5; #942).
+
+- `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
+  `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids
+  and stack panels release their border values before reuse. The Regedit example
+  uses the supported fluent modifiers (issue #1039).
 
 - Unkeyed Markdown selection scopes clear their selection and caret when a
   wholesale content replacement retains no surface text or prefix/suffix text,

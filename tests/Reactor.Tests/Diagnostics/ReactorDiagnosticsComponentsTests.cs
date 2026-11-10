@@ -718,6 +718,21 @@ public class ReactorDiagnosticsComponentsTests
         Assert.DoesNotContain(onBorder, p => p.Modifier == "IsEnabled");
     }
 
+    [Theory]
+    [InlineData(typeof(WinUI.Grid), "Grid")]
+    [InlineData(typeof(WinUI.StackPanel), "StackPanel")]
+    [InlineData(typeof(WinUI.RelativePanel), "RelativePanel")]
+    public void AppliedModifierMap_ResolvesPanelBorderOwners(Type controlType, string owner)
+    {
+        var thickness = new Thickness(2);
+        var inline = new Thickness(9);
+        var applied = AppliedModifierMap.Describe(
+            new ElementModifiers { BorderThickness = thickness, BorderInlineStart = inline }, controlType);
+
+        Assert.Contains(new AppliedModifier("BorderThickness", owner + ".BorderThickness", thickness), applied);
+        Assert.Contains(new AppliedModifier("BorderInlineStart", owner + ".BorderThickness", inline), applied);
+    }
+
     [Fact]
     public void AppliedProperty_ValuesAreText()
     {

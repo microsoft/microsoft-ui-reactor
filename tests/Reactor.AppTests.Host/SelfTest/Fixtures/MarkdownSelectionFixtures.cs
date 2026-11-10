@@ -82,6 +82,21 @@ internal static partial class MarkdownSelectionFixtures
     }
     private static Element Md(string text, MarkdownOptions options) =>
         Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, options);
+
+    // MarkdownSelectionHost builds its document from its Loaded handler, and WinUI raises Loaded
+    // asynchronously after the layout pass that inserts the element (IsLoaded alone is not a
+    // reliable signal: on removal it turns false before the Unloaded handler runs).
+    // One render after mounting a new scope can therefore still observe an empty document; wait
+    // until every scope has loaded and registered content. Callers' checks assert the exact text.
+    private static async Task WaitForLoadedScopes(Harness h)
+    {
+        bool loaded = await Harness.WaitFor(() =>
+            h.FindAllControls<MarkdownSelectionHost>(_ => true) is { Count: > 0 } scopes
+            && scopes.TrueForAll(scope => scope.IsLoaded && scope.Document.Entries.Count > 0));
+        if (!loaded)
+            throw new InvalidOperationException("A Markdown selection scope never loaded its document.");
+    }
+
     internal class SemanticMessage(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -103,6 +118,7 @@ internal static partial class MarkdownSelectionFixtures
                 TextBlock("outside after"));
             host.Mount(_ => Body(false, true));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             var selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             selection.Refresh();
             H.Check("MdSelection_SingleMessageHost", H.FindAllControls<MarkdownSelectionHost>(_ => true).Count == 1);
@@ -191,6 +207,7 @@ internal static partial class MarkdownSelectionFixtures
             H.Check("MdSelection_OldUiaRangeIsEmpty", oldRange.GetText(-1) == "");
             host.Mount(_ => Message("fresh message"));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             var fresh = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             fresh.Refresh();
             H.Check("MdSelection_RemountHasNoOldSelection",
@@ -201,6 +218,7 @@ internal static partial class MarkdownSelectionFixtures
                 Md("outer", new MarkdownOptions { TextSelection = options }),
                 MarkdownTextSelection.Scope(innerOptions, Md("inner", new MarkdownOptions { TextSelection = innerOptions })))));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             var scopes = H.FindAllControls<MarkdownSelectionHost>(_ => true);
             foreach (var scope in scopes) scope.Refresh();
             var outer = scopes.Single(scope => scope.Document.Text == "outer");
@@ -236,6 +254,7 @@ internal static partial class MarkdownSelectionFixtures
                 Md("owned", new MarkdownOptions { TextSelection = options }),
                 RichEditBox("editor"), Slider(5), ToggleSwitch(false), RichTextBlock("native custom"))));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             var keyScope = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             H.Check("MdSelection_UnregisteredControlsKeepKeys",
                 !keyScope.CanHandleKey(H.FindControl<RichEditBox>(_ => true)!, false)
@@ -249,6 +268,7 @@ internal static partial class MarkdownSelectionFixtures
                 Border(Component<MembershipToggle, MembershipProps>(new(options, setter => toggle = setter)))
                     .AutomationId("MembershipAncestor"))));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             var membershipHost = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             toggle(true);
             await Harness.Render();
@@ -270,6 +290,7 @@ internal static partial class MarkdownSelectionFixtures
             var equalOptions = new EqualOptionsProbe();
             host.Mount(_ => Component<EqualOptionsParent, EqualOptionsProbe>(equalOptions));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             int parentRenders = equalOptions.ParentRenders;
             int childRenders = equalOptions.ChildRenders;
             equalOptions.Update(1);
@@ -285,6 +306,7 @@ internal static partial class MarkdownSelectionFixtures
 
             host.Mount(_ => Component<Microsoft.UI.Reactor.AppTests.Host.Fixtures.MarkdownSelectionInputFixture>());
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             outer = H.FindAllControls<MarkdownSelectionHost>(_ => true)
                 .Single(scope => scope.Document.Text.Contains("native link", StringComparison.Ordinal));
             outer.Refresh();
@@ -355,8 +377,11 @@ internal static partial class MarkdownSelectionFixtures
             H.Check("MdSelection_NativeUnloadRefreshCannotResurrectText", retained.Document.Text == "");
             H.SetContent(retained);
             await Harness.Render();
+            // The document is rebuilt by the Loaded handler, so wait for content, not just IsLoaded.
+            bool reloaded = await Harness.WaitFor(() => retained.IsLoaded && retained.Document.Text.Length > 0);
             H.Check("MdSelection_NativeReloadRestoresDocument",
-                retained.IsLoaded && retained.Document.Text == "native reload");
+                reloaded && retained.Document.Text == "native reload",
+                $"loaded={retained.IsLoaded}; text={retained.Document.Text}");
             host.Dispose();
         }
     }
@@ -372,6 +397,7 @@ internal static partial class MarkdownSelectionFixtures
                     new MarkdownOptions { TextSelection = options, LinkBuilder = link => Button(link.Text) }),
                 Button("toolbar"))));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             var selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             var peer = (MarkdownSelectionAutomationPeer)FrameworkElementAutomationPeer.CreatePeerForElement(selection);
             var document = peer.DocumentRange;
@@ -400,6 +426,7 @@ internal static partial class MarkdownSelectionFixtures
                 Md("neighbor prose", new MarkdownOptions { TextSelection = options })));
             host.Mount(_ => VStack(Disclosure(false), Expander("outside scope", TextBlock("outside"))));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             peer = (MarkdownSelectionAutomationPeer)FrameworkElementAutomationPeer.CreatePeerForElement(selection);
             document = peer.DocumentRange;
@@ -444,6 +471,7 @@ internal static partial class MarkdownSelectionFixtures
                 Md("one two three four five six seven eight nine ten", new MarkdownOptions { TextSelection = options }))
                 .Width(130));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             peer = (MarkdownSelectionAutomationPeer)FrameworkElementAutomationPeer.CreatePeerForElement(selection);
             var wrapped = MarkdownSelectionHost.Descendants(selection).OfType<RichTextBlock>().Single();
@@ -485,6 +513,7 @@ internal static partial class MarkdownSelectionFixtures
             host.Mount(_ => MarkdownTextSelection.Scope(options,
                 Md("**abc** \u05d0\u05d1\u05d2 _xyz_", new MarkdownOptions { TextSelection = options })));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             var nativeText = MarkdownSelectionHost.Descendants(selection).OfType<RichTextBlock>().Single();
             nativeText.FlowDirection = Microsoft.UI.Xaml.FlowDirection.RightToLeft;
@@ -528,12 +557,23 @@ internal static partial class MarkdownSelectionFixtures
                     ? MarkdownTextSelection.Scope(options, Md(longMessage,
                         new MarkdownOptions { TextSelection = options }))
                     : TextBlock("timeline sibling excluded"))).Height(180).Width(400));
-            await Harness.Render();
-            var items = H.FindControl<ItemsView>(_ => true)!;
-            var modern = MarkdownSelectionHost.Descendants(items).OfType<ScrollView>().First();
-            var selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            // ItemsView realizes its template ScrollView and its rows lazily, so one render
+            // pass is not guaranteed to have produced either.
+            ItemsView? items = null;
+            ScrollView? modern = null;
+            MarkdownSelectionHost? selection = null;
+            bool realized = await Harness.WaitFor(() =>
+            {
+                items = H.FindControl<ItemsView>(_ => true);
+                modern = items is null ? null : MarkdownSelectionHost.Descendants(items).OfType<ScrollView>().FirstOrDefault();
+                selection = H.FindControl<MarkdownSelectionHost>(scope => scope.IsLoaded);
+                return modern is { ActualHeight: > 0 } && selection is { ActualHeight: > 0 };
+            });
+            H.Check("MdSelection_ItemsViewHasRealScrollView", realized,
+                $"items={items is not null}; scrollView={modern?.ActualHeight}; selection={selection?.ActualHeight}");
+            if (modern is null || selection is null)
+                throw new InvalidOperationException("ItemsView never realized its ScrollView and selection scope.");
             selection.Refresh();
-            H.Check("MdSelection_ItemsViewHasRealScrollView", modern.ActualHeight > 0);
             H.Check("MdSelection_ItemsViewViewportClipsMessage",
                 selection.Viewport().Height > 0 && selection.Viewport().Height < selection.ActualHeight);
             H.Check("MdSelection_FullyClippedTailStillRegistered",
@@ -553,13 +593,19 @@ internal static partial class MarkdownSelectionFixtures
             _ = visiblePeer.DocumentRange.GetText(-1);
             H.Check("MdSelection_UiaReadPreservesGeometryCache", cached > 0 && selection.CachedCharacterCount >= cached);
             selection.Select(0, 0);
+            double offsetBeforeNavigation = modern.VerticalOffset;
             for (int i = 0; i < 40; i++) selection.MoveVertical(1, false, true);
             H.Check("MdSelection_DownReachesClippedTail",
                 selection.Document.Caret >= selection.Document.Entries[^1].Start);
-            await Harness.Render();
-            H.Check("MdSelection_BringIntoViewUsesInternalScrollView", modern.VerticalOffset > 0);
+            // StartBringIntoView reaches ScrollView through InteractionTracker asynchronously.
+            bool scrolled = await Harness.WaitFor(() => modern.VerticalOffset > 0, perPassMs: 16);
+            H.Check("MdSelection_BringIntoViewUsesInternalScrollView",
+                Math.Abs(offsetBeforeNavigation) < 0.5 && scrolled,
+                $"before={offsetBeforeNavigation}; after={modern.VerticalOffset}");
             modern.ScrollTo(0, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
-            await Harness.Render();
+            bool reset = await Harness.WaitFor(() => Math.Abs(modern.VerticalOffset) < 0.5, perPassMs: 16);
+            if (!reset)
+                throw new InvalidOperationException($"ScrollView did not return to the top (offset={modern.VerticalOffset}).");
             selection.Refresh();
             selection.Select(0, 0);
             for (int i = 0; i < 10; i++) selection.MoveVertical(1, true, true);
@@ -591,6 +637,7 @@ internal static partial class MarkdownSelectionFixtures
                 "| Fixture selection table | State |\n| --- | --- |\n| FIXTURE SELECTION table cell. | visible |",
                 new MarkdownOptions { TextSelection = options })).Width(400));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             selection.Refresh();
             var cell = selection.Document.Entries.Single(e => e.Text == "FIXTURE SELECTION table cell.");
@@ -638,23 +685,29 @@ internal static partial class MarkdownSelectionFixtures
             host.Mount(_ => ScrollViewer(MarkdownTextSelection.Scope(options,
                 Md(tallText, new MarkdownOptions { TextSelection = options })).Width(220)).Height(150));
             await Harness.Render();
+            await WaitForLoadedScopes(H);
             selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             selection.Refresh();
             var scroller = H.FindControl<ScrollViewer>(_ => true)!;
             var stationaryRoot = selection.RootPoint(new Point(30, 100));
             var oldLocal = selection.LocalPoint(stationaryRoot);
             scroller.ChangeView(null, 100, null, true);
-            await Harness.Render();
+            bool legacyScrolled = await Harness.WaitFor(() => scroller.VerticalOffset > 0, perPassMs: 16);
             var newLocal = selection.LocalPoint(stationaryRoot);
             H.Check("MdSelection_StationaryRootPointerTracksScroll",
-                scroller.VerticalOffset > 0 && Math.Abs(newLocal.Y - oldLocal.Y - scroller.VerticalOffset) < 1);
+                legacyScrolled && Math.Abs(newLocal.Y - oldLocal.Y - scroller.VerticalOffset) < 1,
+                $"offset={scroller.VerticalOffset}; oldY={oldLocal.Y}; newY={newLocal.Y}");
+            var tallSelection = selection;
+            bool TailVisible() => MarkdownSelectionHost.Intersect(
+                tallSelection.CharacterBounds(tallText.Length - 1), tallSelection.Viewport()).Height > 0;
+            bool tailVisibleBefore = TailVisible();
             var selectionPeer = (MarkdownSelectionAutomationPeer)FrameworkElementAutomationPeer.CreatePeerForElement(selection);
             selectionPeer.Range(tallText.Length - 7, tallText.Length).ScrollIntoView(false);
-            await Harness.Render();
+            bool tailVisible = await Harness.WaitFor(TailVisible, perPassMs: 16);
             selection.Refresh();
             H.Check("MdSelection_UiaScrollTargetsRangeInsideTallSurface",
-                selection.Document.Entries.Count == 1 &&
-                MarkdownSelectionHost.Intersect(selection.CharacterBounds(tallText.Length - 1), selection.Viewport()).Height > 0);
+                selection.Document.Entries.Count == 1 && !tailVisibleBefore && tailVisible && TailVisible(),
+                $"visibleBefore={tailVisibleBefore}; visibleAfter={tailVisible}; offset={scroller.VerticalOffset}");
 
             Element ReusedRow(string message, bool keyScope = true) => ItemsView(new[] { message }, _ => "same-row-slot", (value, _) =>
             {
