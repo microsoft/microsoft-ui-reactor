@@ -380,11 +380,11 @@ internal sealed class RootRenderDiagnostics
     /// otherwise drops requests a session noted before it stopped
     /// (<see cref="RenderPassRequests.DiscardStale"/>). Both hosts call it, so they cannot drift.
     /// </summary>
-    public void BeginPass(bool perfPass, ulong hostId, RenderPassRequests requests, object hostRequester,
+    public void BeginPass(bool perfPass, ulong hostId, RenderPassRequests requests,
         Component? root, RenderContext? funcContext, Delegate? renderFunc)
     {
         if (perfPass)
-            WritePassStart(hostId, requests, hostRequester, root, funcContext, renderFunc);
+            WritePassStart(hostId, requests, root, funcContext, renderFunc);
         else
             requests.DiscardStale();
     }
@@ -392,11 +392,12 @@ internal sealed class RootRenderDiagnostics
     /// <summary>
     /// Writes a host's <c>RenderPass</c> Start, naming the component whose request scheduled the
     /// pass (see <see cref="RenderPassRequests"/>). The caller checks
-    /// <see cref="ReactorPerfTrace.PassEnabled"/>. <paramref name="hostRequester"/> is the object
-    /// the host's root rerender action claims with; <paramref name="root"/>,
+    /// <see cref="ReactorPerfTrace.PassEnabled"/>. Called on the host's live root diagnostics:
+    /// the root's own requests claim with this instance (<see cref="RequestFromRoot"/>), so a
+    /// request from a root that has since been replaced names nobody. <paramref name="root"/>,
     /// <paramref name="funcContext"/> and <paramref name="renderFunc"/> are the live root.
     /// </summary>
-    public void WritePassStart(ulong hostId, RenderPassRequests requests, object hostRequester,
+    public void WritePassStart(ulong hostId, RenderPassRequests requests,
         Component? root, RenderContext? funcContext, Delegate? renderFunc)
     {
         object? requester = requests.Take(out uint count);
@@ -407,13 +408,19 @@ internal sealed class RootRenderDiagnostics
             requesterId = (ulong)node.EnsureDiagnosticId();
             requesterName = Reconciler.PerfComponentName(node, node.Element);
         }
-        else if (ReferenceEquals(requester, hostRequester) && (root is not null || funcContext is not null))
+        else if (ReferenceEquals(requester, this) && (root is not null || funcContext is not null))
         {
             requesterId = (ulong)EnsureId(root?.Context ?? funcContext);
             requesterName = PerfName(root, renderFunc);
         }
         ReactorPerfTrace.RenderPassStart(hostId, requesterId, requesterName, count);
     }
+
+    /// <summary>
+    /// Runs a re-render request the root component's own hooks made (<paramref name="request"/>
+    /// goes on to the host), attributed to this root on the next <c>RenderPass</c> Start.
+    /// </summary>
+    public void RequestFromRoot(Action request) => RenderPassRequests.InvokeAs(this, request);
 
     /// <summary>The root's perf <c>Effects</c> span, or an inactive one while the <c>Pass</c> keyword is off.</summary>
     public ReactorPerfTrace.EffectsSpan BeginEffectsPerfSpan(RenderContext? context)

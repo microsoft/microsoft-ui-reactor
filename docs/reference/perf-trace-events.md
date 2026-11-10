@@ -81,7 +81,8 @@ fields of the same event.
     pass: the **first** request since the previous pass started (later ones only coalesced
     into it). It is the component that asked — the one whose hook (`UseState`, `UseReducer`,
     a store or resource subscription, …) requested the render — not the ancestors the request
-    passed through, and it is the host's root component when the root's own hooks asked. `0`
+    passed through, and it is the host's root component when the root's own hooks asked (a
+    root replaced by a new `Mount` before the pass ran reports `0`, not its replacement). `0`
     when no component did: the first mount, a host-level re-render (theme, high contrast,
     resources, hot reload, app code calling the host), or a request made before the session
     started listening. The same id appears on that component's `ComponentRender` spans in the
@@ -106,8 +107,11 @@ fields of the same event.
     `<factory> in Type.Method` for a lambda or local function, with the method it is written
     in (`RenderEachTime in MainPage.Render`, `Memo in MainPage.Render`, and
     `render in App.Main` for a host's render-function root). The name is resolved on the
-    component's first traced render and kept for its lifetime, like its id. Under Native AOT
-    without the method's metadata it falls back to the bare factory name (`RenderEachTime`,
+    component's first traced render and kept for its lifetime, like its id, because reading a
+    delegate's method costs ~150 ns and allocates: a component whose render function is
+    swapped at the same position (`RenderEachTime(cond ? RowA : RowB)`, which Reactor updates
+    in place) keeps its first function's name, where DevTools shows the current one. Under
+    Native AOT without the method's metadata it falls back to the bare factory name (`RenderEachTime`,
     `Memo`, `render`). The EventSource keeps reporting `FuncElement` / `MemoElement`.
   - `reason` — why it rendered: `mount`, `state` (a state change in its subtree), `props`,
     `context`, `parent` (no memo gate could skip it), `hotReload`, `forced`.
@@ -120,7 +124,8 @@ fields of the same event.
     §6.2.1); `name` and the line usually disambiguate two files of the same name. These come
     from Reactor's source map, so they are filled only when the app was **built with source
     mapping** (`ReactorSourceMap`, on by default in Debug builds) **and** it was **on at run
-    time** when the element was created (`REACTOR_SOURCEMAP=1`, a `--devtools` launch, or
+    time** when the element was created (`REACTOR_SOURCEMAP=1`, `REACTOR_DIAGNOSTICS=1` in a
+    build with the `Reactor.DevtoolsSupport` switch, a `--devtools` launch, or
     `ReactorSourceMap.Enabled = true`). Otherwise `callSiteFile` is empty and both numbers are
     `0`. Turning source mapping on has its own cost (each stamped element carries its call
     site), so a profiler should not turn it on for a timing run it compares against one

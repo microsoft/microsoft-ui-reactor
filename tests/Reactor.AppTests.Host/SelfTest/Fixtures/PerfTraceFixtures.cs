@@ -37,6 +37,7 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
         "PerfTrace_ReplacedCount",
         "PerfTrace_FunctionComponentsNamed",
         "PerfTrace_PassRequesters",
+        "PerfTrace_EffectRequestNamesTheNextPass",
         "PerfTrace_ReconcileEditTotals",
     ];
 
@@ -164,6 +165,16 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
         string Requester(Span? pass) => pass is null ? "none"
             : $"{pass.Start.Fields["requesterId"]}/{pass.Start.Fields["requesterName"]}/{pass.Start.Fields["requestCount"]}";
         Console.WriteLine($"# perf trace: requesters first={Requester(firstPass)} counter={Requester(counterPass)} shuffle={Requester(shufflePass)}");
+        // A request made during a pass (an effect's setState) belongs to the next pass.
+        var effectRenders = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceEffectSetter)).ToList();
+        var effectUpdate = effectRenders.FirstOrDefault(c => (string)c.Start.Fields["reason"] == "state");
+        var effectPass = effectUpdate?.Ancestors().FirstOrDefault(a => a.Name == "RenderPass");
+        var effectMountPass = effectRenders.FirstOrDefault()?.Ancestors().FirstOrDefault(a => a.Name == "RenderPass");
+        Console.WriteLine($"# perf trace: effect setter renders={string.Join(",", effectRenders.Select(c => c.Start.Fields["reason"]))} pass={Requester(effectPass)}");
+        H.Check("PerfTrace_EffectRequestNamesTheNextPass",
+            effectUpdate is not null && effectPass is not null && !ReferenceEquals(effectPass, effectMountPass)
+            && Equals(effectPass.Start.Fields["requesterId"], effectUpdate.Start.Fields["componentId"])
+            && (string)effectPass.Start.Fields["requesterName"] == nameof(PerfTraceEffectSetter));
         H.Check("PerfTrace_PassRequesters",
             firstPass is not null && Equals(firstPass.Start.Fields["requesterId"], 0UL) && (string)firstPass.Start.Fields["requesterName"] == ""
             && counterPass is not null && Equals(counterPass.Start.Fields["requesterId"], counterId)
@@ -348,6 +359,7 @@ internal static class PerfTraceScenario
                         // The shuffle also changes a child's props, a consumed context, a slot's
                         // control type, and makes a child throw inside an error boundary.
                         Component<PerfTracePropsChild, string>(keys[0]),
+                        Component<PerfTraceEffectSetter>(),
                         RenderEachTime(c => TextBlock("theme " + c.UseContext(PerfTracePropsChild.Theme))),
                         RenderEachTime(PerfTraceFunctions.Badge),
                         Memo(_ => TextBlock("perf memo"), keys.Length),
@@ -383,6 +395,14 @@ internal static class PerfTraceScenario
                 await control.WaitForIdleAsync();
                 root.Bump?.Invoke();
                 await Harness.WaitFor(() => root.Renders >= 2, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                // Off the UI thread: the root's thread-safe setter, then a child's.
+                await Task.Run(() => root.WorkerBump!());
+                await Harness.WaitFor(() => root.Renders >= 3, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                int childRenders = PerfTraceWorkerChild.Renders;
+                await Task.Run(() => PerfTraceWorkerChild.WorkerBump!());
+                await Harness.WaitFor(() => PerfTraceWorkerChild.Renders > childRenders, maxPasses: 32, perPassMs: 10);
                 await control.WaitForIdleAsync();
             },
             () => control?.Dispose());
@@ -519,17 +539,24 @@ internal class PerfTrace_HostControlSpansAndGating(Harness h) : SelfTestFixtureB
         Console.WriteLine($"# perf host control: root renders=" + string.Join(",", rootStarts.Select(e => e.Fields["reason"]))
             + $" passes={passStarts.Count} effects={effects.Count}");
         H.Check("PerfTrace_HostControl_RootSpans",
-            rootStarts.Select(e => (string)e.Fields["reason"]).SequenceEqual(["mount", "state"])
+            rootStarts.Count == 4 && (string)rootStarts[0].Fields["reason"] == "mount"
+            && rootStarts.Skip(1).All(e => (string)e.Fields["reason"] == "state")
             && rootStarts.Select(e => e.Fields["componentId"]).Distinct().Count() == 1
-            && passStarts.Count >= 2
+            && passStarts.Count >= 4
             && effects.Any(e => Equals(e.Fields["componentId"], rootStarts[0].Fields["componentId"])));
 
-        // The root's own setState (Bump) names the root on the pass it scheduled.
+        // Requesters, in order: the root's setState on the UI thread, the root's thread-safe
+        // setState from a worker (claimed and noted there), then a child's thread-safe setState
+        // from a worker (queued to the UI thread, where its wrapper claims).
+        var child = events.FirstOrDefault(e => e.Name == "ComponentRender" && e.Opcode == 1 && Name(e) == nameof(PerfTraceWorkerChild));
         var requested = passStarts.Where(e => (ulong)e.Fields["requesterId"] != 0)
-            .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}").Distinct().ToList();
+            .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}").ToList();
         Console.WriteLine("# perf host control: requesters " + string.Join(",", requested));
         H.Check("PerfTrace_HostControl_RootRequester",
-            rootStarts.Count > 0 && requested.SequenceEqual([$"{rootStarts[0].Fields["componentId"]}/{nameof(PerfTraceControlRoot)}"]));
+            rootStarts.Count > 0 && child is not null && requested.SequenceEqual([
+                $"{rootStarts[0].Fields["componentId"]}/{nameof(PerfTraceControlRoot)}",
+                $"{rootStarts[0].Fields["componentId"]}/{nameof(PerfTraceControlRoot)}",
+                $"{child.Fields["componentId"]}/{nameof(PerfTraceWorkerChild)}"]));
 
         foreach (var (label, level, keywords) in PerfTraceScenario.GateRounds)
         {
@@ -610,7 +637,7 @@ internal sealed class PerfTraceReplacementRoot : Component
 /// </summary>
 internal class PerfTrace_CallSitesFromTheSourceMap(Harness h) : SelfTestFixtureBase(h)
 {
-    private static readonly string[] Checks = ["PerfTrace_CallSite_FileAndLine", "PerfTrace_CallSite_NoDirectory"];
+    private static readonly string[] Checks = ["PerfTrace_CallSite_FileAndLine", "PerfTrace_CallSite_HostControlRoot", "PerfTrace_CallSite_NoDirectory"];
 
     public override async Task RunAsync()
     {
@@ -625,16 +652,28 @@ internal class PerfTrace_CallSitesFromTheSourceMap(Harness h) : SelfTestFixtureB
                 return;
             }
 
-            int line = 0;
+            int line = 0, controlLine = 0;
             Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+            Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
             var run = await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Component,
                 async () =>
                 {
                     host = H.CreateHost();
                     host.Mount(_ => VStack(Component<PerfTraceCounter>(), RenderEachTime(PerfTraceFunctions.Badge))); line = Here();
                     await Harness.Render();
+
+                    // The other host: its root reports where ReactorHostControl.Mount was called.
+                    control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                    control.Mount(new PerfTraceReplacementRoot()); controlLine = Here();
+                    H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                    await Harness.WaitFor(() => H.FindText("perf replacement root") is not null, maxPasses: 32, perPassMs: 10);
+                    await control.WaitForIdleAsync();
                 },
-                () => host?.Dispose());
+                () =>
+                {
+                    control?.Dispose();
+                    host?.Dispose();
+                });
             if (run is null)
             {
                 foreach (var check in Checks) H.Skip(check, PerfTraceScenario.SkipReason);
@@ -656,6 +695,12 @@ internal class PerfTrace_CallSitesFromTheSourceMap(Harness h) : SelfTestFixtureB
                     && (uint)e.Fields["callSiteLine"] == (uint)line && (uint)e.Fields["callSiteColumn"] > 0)
                 // Three calls on one line: the columns tell them apart.
                 && sites.Select(e => e!.Fields["callSiteColumn"]).Distinct().Count() == 3);
+            var controlRoot = Named(n => n == nameof(PerfTraceReplacementRoot));
+            Console.WriteLine($"# perf call sites: control root (expected line {controlLine}) "
+                + (controlRoot is null ? "missing" : $"@ {controlRoot.Fields["callSiteFile"]}:{controlRoot.Fields["callSiteLine"]}"));
+            H.Check("PerfTrace_CallSite_HostControlRoot",
+                controlRoot is not null && (string)controlRoot.Fields["callSiteFile"] == "PerfTraceFixtures.cs"
+                && (uint)controlRoot.Fields["callSiteLine"] == (uint)controlLine);
             H.Check("PerfTrace_CallSite_NoDirectory",
                 starts.Count > 0 && starts.All(e => ((string)e.Fields["callSiteFile"]).IndexOfAny(['/', '\\', ':']) < 0));
         }
@@ -773,14 +818,33 @@ internal static class PerfTraceFunctions
 internal sealed class PerfTraceControlRoot : Component
 {
     public Action? Bump;
+    public Action? WorkerBump;
     public int Renders;
 
     public override Element Render()
     {
         Renders++;
         var (n, setN) = UseState(0);
+        var (w, setW) = UseState(0, threadSafe: true);
         Bump = () => setN(n + 1);
-        return VStack(TextBlock($"control {n}"), Component<PerfTraceRow, string>("control row"));
+        // A thread-safe setter requests from its caller's thread: the claim and the note happen there.
+        WorkerBump = () => setW(w + 1);
+        return VStack(TextBlock($"control {n} {w}"), Component<PerfTraceRow, string>("control row"), Component<PerfTraceWorkerChild>());
+    }
+}
+
+/// <summary>A child whose thread-safe setter is called off the UI thread (its request is queued to the UI thread).</summary>
+internal sealed class PerfTraceWorkerChild : Component
+{
+    public static Action? WorkerBump;
+    public static int Renders;
+
+    public override Element Render()
+    {
+        Renders++;
+        var (n, setN) = UseState(0, threadSafe: true);
+        WorkerBump = () => setN(n + 1);
+        return TextBlock($"worker child {n}");
     }
 }
 
@@ -790,6 +854,20 @@ internal sealed class PerfTraceCounter : Component
     {
         var (n, setN) = UseState(0);
         return VStack(TextBlock($"perf count {n}"), Button("perf-inc", () => setN(n + 1)));
+    }
+}
+
+/// <summary>Sets its own state once from a mount effect, i.e. during a pass.</summary>
+internal sealed class PerfTraceEffectSetter : Component
+{
+    public override Element Render()
+    {
+        var (loaded, setLoaded) = UseState(false);
+        UseEffect(() =>
+        {
+            if (!loaded) setLoaded(true);
+        }, loaded);
+        return TextBlock(loaded ? "perf effect loaded" : "perf effect loading");
     }
 }
 

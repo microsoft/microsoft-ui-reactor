@@ -236,6 +236,7 @@ The existing `RenderError` strips `ex.Message`; the existing `McpCallStart` hash
 | `Exception.Message` | No | Type name only (`ex.GetType().Name`). Message can carry paths, env, partial form values. |
 | `Exception.StackTrace` | No | Captured by the profiler at session-config time if needed; not by us. |
 | File paths | No (or hashed) | Replace with a short fingerprint or kind label (`"settings.json"` → `"settings"`). |
+| Source file name of developer-authored code (directories stripped) | Yes | Like a type name: the compile-time name of an app's own `.cs` file, never its directories (which can carry a user name). Used by the `Microsoft-UI-Reactor-Perf` call-site fields, filled only when source mapping is on (issue #1489). |
 | `Window.Title` | No (or hashed) | Window titles often contain document names. Emit a SHA-1 fingerprint or the window/component type instead. |
 | Navigation route values | Pattern only | Emit the route template (`/users/{id}`), not the instantiated path. |
 | Intl resource keys | Yes | Keys are static developer-authored identifiers, not user data. |

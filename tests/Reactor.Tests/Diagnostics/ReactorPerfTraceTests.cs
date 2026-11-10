@@ -365,7 +365,6 @@ public sealed class ReactorPerfTraceTests
     {
         ReactorPerfTrace.EnsureRegistered();
         ulong hostId = 0xFACE_0000_0000_0000UL | (uint)Random.Shared.Next();
-        var host = new object();
         var rootContext = new RenderContext();
         Func<RenderContext, Element> rootRender = NamedRender;
         var child = new Reconciler.ComponentNode { Context = new RenderContext(), Element = Memo(_ => TextBlock("c")) };
@@ -376,23 +375,27 @@ public sealed class ReactorPerfTraceTests
             var requests = new RenderPassRequests();
 
             RenderPassRequests.InvokeAs(child, requests.Note);
-            RenderPassRequests.InvokeAs(host, requests.Note);
-            root.WritePassStart(hostId, requests, host, root: null, rootContext, rootRender);
+            root.RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
-            RenderPassRequests.InvokeAs(host, requests.Note);
-            root.WritePassStart(hostId, requests, host, root: null, rootContext, rootRender);
+            root.RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
             requests.Note();
-            root.WritePassStart(hostId, requests, host, root: null, rootContext, rootRender);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
             // A root claim with no live root (disposed between the request and the pass).
-            RenderPassRequests.InvokeAs(host, requests.Note);
-            root.WritePassStart(hostId, requests, host, root: null, funcContext: null, renderFunc: null);
+            root.RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, funcContext: null, renderFunc: null);
+
+            // A request from a root that was replaced (remounted) before the pass names nobody.
+            new RootRenderDiagnostics().RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
             // An untraced pass drops what was noted; a traced one writes.
             RenderPassRequests.InvokeAs(child, requests.Note);
-            root.BeginPass(perfPass: false, hostId, requests, host, root: null, rootContext, rootRender);
-            root.BeginPass(perfPass: true, hostId, requests, host, root: null, rootContext, rootRender);
+            root.BeginPass(perfPass: false, hostId, requests, root: null, rootContext, rootRender);
+            root.BeginPass(perfPass: true, hostId, requests, root: null, rootContext, rootRender);
         });
 
         var starts = events.Where(e => e.Id == 1 && Equals(e.Fields["hostId"], hostId))
@@ -405,11 +408,45 @@ public sealed class ReactorPerfTraceTests
                 ((ulong)rootContext.DiagnosticId, "ReactorPerfTraceTests.NamedRender", 1u),
                 (0UL, "", 1u),
                 (0UL, "", 1u),
+                (0UL, "", 1u),
                 (0UL, "", 0u),
             },
             starts);
+        // The ids compared above were assigned by the code under test, not left at 0.
         Assert.NotEqual(0, child.DiagnosticId);
+        Assert.NotEqual(0, rootContext.DiagnosticId);
         Assert.StartsWith("Memo in ", child.PerfName);
+    }
+
+    [Fact]
+    public void Note_ConsumesTheClaim_SoAPassItRunsSynchronouslyIsNotCreditedToIt()
+    {
+        object outer = new(), inner = new();
+        var first = new RenderPassRequests();
+        var nested = new RenderPassRequests();
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            // A host's first render runs inside the request that scheduled it; a child's request
+            // made during that pass (here: after Note, still inside the outer request) is its own.
+            RenderPassRequests.InvokeAs(outer, () =>
+            {
+                first.Note();
+                Assert.Null(RenderPassRequests.CurrentForTests);
+                nested.Note();
+                RenderPassRequests.InvokeAs(inner, nested.Note);
+            });
+            Assert.Same(outer, first.Take(out uint firstCount));
+            Assert.Equal(1u, firstCount);
+            Assert.Same(inner, nested.Take(out uint nestedCount));
+            Assert.Equal(2u, nestedCount);
+            Assert.Null(RenderPassRequests.CurrentForTests);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
     }
 
     [Fact]

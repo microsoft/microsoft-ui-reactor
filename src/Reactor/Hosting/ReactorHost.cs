@@ -188,7 +188,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     internal Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests PerfRequestsForTests => _perfRequests;
 
     private void RequestRenderFromRoot()
-        => Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests.InvokeAs(this, _rerenderAction ??= () => RequestRender());
+        => _rootDiagnostics.RequestFromRoot(_rerenderAction ??= () => RequestRender());
 
     /// <summary>
     /// Live render performance snapshot, updated every ~1 second.
@@ -955,7 +955,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             // The pass span: root render, reconcile, commit and root effects.
             bool perfPass = Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.PassEnabled;
-            _rootDiagnostics.BeginPass(perfPass, _perfHostId, _perfRequests, this,
+            _rootDiagnostics.BeginPass(perfPass, _perfHostId, _perfRequests,
                 _rootComponent, _funcContext, _rootComponent is null ? _rootRenderFunc : null);
             try
             {

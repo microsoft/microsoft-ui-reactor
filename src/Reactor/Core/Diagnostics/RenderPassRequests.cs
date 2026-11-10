@@ -11,8 +11,12 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// then the host's <c>RequestRender</c>, all synchronously on one thread. The first wrapper to
 /// <see cref="Claim"/> the thread is the component that asked; the ancestors it passes through
 /// find the claim taken. The host root's own hooks claim through the host's root rerender
-/// action. A request nobody claimed (the first mount, a theme or resource change, hot reload,
-/// app code calling the host directly) counts, but names no component.</para>
+/// action, with the root's <see cref="RootRenderDiagnostics"/> (replaced when the root is), so
+/// a request from a root that was remounted before the pass names nobody rather than its
+/// replacement. A claim is consumed by the one request it was made for (<see cref="Note"/>),
+/// so a pass that request runs synchronously does not inherit it. A request nobody claimed
+/// (the first mount, a theme or resource change, hot reload, app code calling the host
+/// directly) counts, but names no component.</para>
 ///
 /// <para><b>Which requester a pass reports.</b> The first since the previous pass started: it
 /// is what scheduled the pass; later ones only coalesced into it. <see cref="Take"/> runs when
@@ -24,7 +28,8 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 internal sealed class RenderPassRequests
 {
     // The requester whose request is running on this thread: a Reconciler.ComponentNode, or a
-    // host (standing for its root component). Set only while the Pass keyword is on.
+    // RootRenderDiagnostics (standing for a host's root component). Set only while the Pass
+    // keyword is on, and cleared once a request is noted.
     [ThreadStatic] private static object? t_requester;
 
     // Written from any thread (a thread-safe hook requests from its caller's thread).
@@ -76,7 +81,12 @@ internal sealed class RenderPassRequests
     {
         Interlocked.Increment(ref _count);
         if (t_requester is { } requester)
+        {
+            // Consumed by the one request it was claimed for: a pass that request runs
+            // synchronously (a host's first render) must not credit its own requests to it.
+            t_requester = null;
             Interlocked.CompareExchange(ref _first, requester, null);
+        }
     }
 
     /// <summary>Whether anything was noted since the last <see cref="Take"/> (a plain read).</summary>
