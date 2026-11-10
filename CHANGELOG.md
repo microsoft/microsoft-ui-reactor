@@ -45,11 +45,14 @@ Conventions for contributors:
 
 ### Changed
 
-- `AsyncValue<T>` and `LoadState` are now C# 15 `closed` records instead of abstract
-  records with a `private protected` constructor. Consumers compiling with C# 15 can
-  `switch` over their cases exhaustively without a `_` arm, and a missing case is
-  warning CS8509; C# 14 / .NET 10 SDK consumers are unaffected. Reactor still targets
-  `net10.0`, but building Reactor from source now requires the .NET 11 SDK (spec 020 §5).
+- **`AsyncValue<T>` and `LoadState` are now C# 15 `closed` records (breaking for
+  subclasses).** They were abstract records whose `private protected` constructor was meant
+  to keep the case set closed, but a subclass in another assembly could still chain to the
+  compiler-generated `protected` copy constructor (`: base(other)`); such subclasses now fail
+  with CS9382. The built-in cases and pattern matching are unchanged. Consumers compiling
+  with C# 15 can `switch` over the cases exhaustively without a `_` arm, and a missing case
+  is warning CS8509. Reactor still targets `net10.0` and stays consumable from the .NET 10
+  SDK; building Reactor from source now requires the .NET 11 SDK (spec 020 §5).
 
 - **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
   `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
