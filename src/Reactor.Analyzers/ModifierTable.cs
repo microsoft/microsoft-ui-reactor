@@ -272,9 +272,9 @@ internal static class ModifierTable
     // Type groups, named once so the intent is legible at each use site. Each name is its receiver
     // list concatenated, which is deliberate — and it makes set inclusion equivalent to string
     // inclusion. A gate that is a superset of another therefore *necessarily* has a name that
-    // contains the narrower one: ControlBorder is a prefix of ControlBorderGridStack, which is a
-    // prefix of ControlBorderGridStackRelative, which is a prefix of the ...Text form (8 such strict
-    // prefix pairs today), and PanelControlBorder contains ControlBorder without starting with it.
+    // contains the narrower one: ControlBorderGridStack is a prefix of
+    // ControlBorderGridStackRelative, which is a prefix of the ...Text form. The former
+    // ControlBorder group is now a test-only probe for non-prefix substring collisions.
     //
     // So: compare what a gate CONTAINS, not what it is CALLED. Read ModifierInfo.ControlGate /
     // ModifierInfo.PoolResetGate and compare the type sets — that is what every check in
@@ -291,7 +291,6 @@ internal static class ModifierTable
     // and ModifierGateIdentifierTests pins it to this table. Issue #1062.
     private static readonly string[] ControlBorderGridStackRelativeText = { "Control", "Border", "Grid", "StackPanel", "RelativePanel", "TextBlock" };
     private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
-    private static readonly string[] ControlBorder = { "Control", "Border" };
     private static readonly string[] PanelControlBorder = { "Panel", "Control", "Border" };
     private static readonly string[] ControlOrTextBlock = { "Control", "TextBlock" };
     private static readonly string[] RichTextBlockOnly = { "RichTextBlockElement" };
@@ -442,6 +441,9 @@ internal static class ModifierTable
             // The content-alignment pair IS Control-gated in ApplyModifiers, but WinUI
             // declares those DPs only on Control — if the .Set lambda compiles the receiver
             // already qualifies, so no predicate is needed.
+            // CleanElement clears both since #1013. They deliberately stay MOD_002 per
+            // #1195: clearing on pool return does not lose .Set writes; the next mount
+            // re-applies setters.
             { "HorizontalContentAlignment", new ModifierInfo("HorizontalContentAlignment") },
             { "VerticalContentAlignment",   new ModifierInfo("VerticalContentAlignment") },
 

@@ -28,6 +28,13 @@ Conventions for contributors:
 
 ### Added
 
+- Opt-in message-wide Markdown text selection in Reactor Advanced:
+  `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
+  and composable `Visibility` gates coordinate separately rendered Markdown leaves,
+  lists, code and tables. Includes grapheme-aware caret movement, modern ScrollView /
+  ItemsView scrolling, UIA TextPattern ranges and feedback-only `OnCopyResult` after
+  Reactor's single clipboard write (openclaw/openclaw-windows-node#1844).
+
 - `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
@@ -36,8 +43,13 @@ Conventions for contributors:
 
 - `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
   now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
-  may need to use the corresponding fluent modifiers instead. `RelativePanel`
-  remains `REACTOR_MOD_002` because it is not pooled (issue #1039).
+  may need to use the corresponding fluent modifiers instead. The same writes on
+  `RelativePanel` now report `REACTOR_MOD_002` (Info), since it is not pooled
+  (issue #1039).
+
+- The generated API index now includes Reactor Advanced factories, modifiers, hooks,
+  enums and public types alongside the core Reactor surface, keeping `mur --api` and
+  both shipped agent-reference copies complete (PR #1475).
 
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
@@ -54,6 +66,19 @@ Conventions for contributors:
   and stack panels release their border values before reuse. The Regedit example
   uses the supported fluent modifiers (issue #1039).
 
+- Unkeyed Markdown selection scopes clear their selection and caret when a
+  wholesale content replacement retains no surface text or prefix/suffix text,
+  rather than carrying selection into an unrelated message; streaming edits keep
+  their existing remapping behavior (PR #1475).
+
+- Pooled controls release `HorizontalContentAlignment` and `VerticalContentAlignment`
+  on return, preventing content alignment from leaking into the next element that
+  reuses the control ([issue #1013](https://github.com/microsoft/microsoft-ui-reactor/issues/1013)).
+
+- `UseInfiniteResource` and `UseDataSource` isolate cached pages by the hook's initial
+  page size. Hooks with different sizes no longer reuse incompatible pages, while
+  hooks with matching sizes and query dependencies can still share them
+  (spec 020 §7.2–7.3; #1452, case 3).
 - `UseDataSource` retains its initial normalized page size across rerenders and
   query restarts, keeping requests and cursor offsets aligned with resource row
   positions. To use a different size, remount the calling component by changing

@@ -17,8 +17,80 @@ public sealed class ApiIndexGeneratorTests
 {
     static Assembly ReactorAssembly => typeof(Microsoft.UI.Reactor.Factories).Assembly;
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only api-index generator: reflects over the Reactor assembly's public surface (Assembly.GetTypes / member reflection) by design. This host is never trimmed. Behaviour-neutral.")]
-    static string Generate() => ApiIndexGenerator.Generate(ReactorAssembly);
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only api-index generator: reflects over the Reactor and Reactor.Advanced assemblies' public surfaces (Assembly.GetTypes / member reflection) by design. This host is never trimmed. Behaviour-neutral.")]
+    static string Generate() => ApiIndexGenerator.Generate(ReactorAssembly,
+        typeof(Microsoft.UI.Reactor.Markdown.MarkdownTextSelection).Assembly);
+
+    [Fact]
+    public void AdvancedSelectionApi_IsIndexedWithActualSignatures()
+    {
+        var output = Generate();
+        var selection = TypeBlock(output, "MarkdownTextSelection");
+        Assert.Contains("Scope(", selection);
+        Assert.Contains("Surface(", selection);
+        Assert.Contains("Visibility(", selection);
+        Assert.Contains("string separatorAfter = \"\\n\"", selection);
+        Assert.Contains("OnCopyResult", TypeBlock(output, "MarkdownTextSelectionOptions"));
+        Assert.Contains("TextSelection", TypeBlock(output, "MarkdownOptions"));
+        Assert.DoesNotContain("TryCopyText", TypeBlock(output, "MarkdownTextSelectionOptions"));
+    }
+
+    [Fact]
+    public void AdvancedSections_SurfaceFactoriesModifiersHooksAndEnums()
+    {
+        var output = Generate();
+        Assert.Contains("# Source of truth: Reactor.dll and Reactor.Advanced.dll public surfaces.", output);
+
+        var factories = SectionLines(output, "## Advanced factories", "## Advanced modifiers").ToList();
+        Assert.Contains("# All in `Microsoft.UI.Reactor.Advanced.Factories` — `using static Microsoft.UI.Reactor.Advanced.Factories;`", factories);
+        Assert.Contains("Markdown(string markdown) → Element", factories);
+        Assert.Contains("Markdown(string markdown, MarkdownOptions options) → Element", factories);
+        Assert.Contains("Win2DAnimatedCanvasElement.TargetFps(double fps) → Win2DAnimatedCanvasElement",
+            SectionLines(output, "## Advanced modifiers", "## Advanced hooks"));
+        Assert.Contains("RenderContext.UseDockHost() → DockHostModel",
+            SectionLines(output, "## Advanced hooks", "## Advanced enums"));
+
+        var enums = SectionLines(output, "## Advanced enums", "## Advanced public types").ToList();
+        Assert.Contains("MarkdownAlign { Default, Left, Center, Right }", enums);
+        var flags = Assert.Single(enums, line => line.StartsWith("MarkdownParserFlags { ", StringComparison.Ordinal));
+        Assert.Contains("Tables", flags);
+        Assert.Contains("DialectGitHub", flags);
+    }
+
+    [Fact]
+    public void AdvancedSections_DoNotDuplicateOwnedSignaturesOrCoreOnlySections()
+    {
+        var output = Generate();
+        var ownedLines = SectionLines(output, "## Advanced factories", "## Advanced public types")
+            .Where(line => line.Length > 0 && !line.StartsWith("#", StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.NotEmpty(ownedLines);
+
+        var publicTypeLines = SectionLines(output, "## Advanced public types", null).ToList();
+        Assert.DoesNotContain("### static class Factories", publicTypeLines);
+        Assert.DoesNotContain(publicTypeLines, ownedLines.Contains);
+
+        var headings = output.Split('\n')
+            .Where(line => line.StartsWith("## ", StringComparison.Ordinal))
+            .ToList();
+        Assert.Distinct(headings);
+        Assert.DoesNotContain("## Advanced reference builders", output);
+        Assert.DoesNotContain("## Advanced theme", output);
+    }
+
+    [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only untrimmed generator comparison.")]
+    public void AdvancedSurface_PreservesTheCoreIndexSections()
+    {
+        var core = ApiIndexGenerator.Generate(ReactorAssembly);
+        var combined = Generate();
+        var coreStart = core.IndexOf("## Factories", StringComparison.Ordinal);
+        var combinedStart = combined.IndexOf("## Factories", StringComparison.Ordinal);
+        var advancedStart = combined.IndexOf("# Optional package: Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal);
+        Assert.True(coreStart >= 0);
+        Assert.True(combinedStart >= 0 && advancedStart > combinedStart);
+        Assert.Equal(core[coreStart..], combined[combinedStart..advancedStart]);
+    }
 
     static string RepoRoot()
     {
@@ -173,7 +245,7 @@ public sealed class ApiIndexGeneratorTests
 
         Assert.NotEmpty(modifierAndHookLines);
 
-        var publicTypeLines = SectionLines(output, "## Public types", null)
+        var publicTypeLines = SectionLines(output, "## Public types", "# Optional package:")
             .Where(l => l.Length > 0 && !l.StartsWith("#", StringComparison.Ordinal))
             .ToList();
 

@@ -19,6 +19,19 @@ public class DataSourceResourceTests
         public void Post(Action action) => action();
     }
 
+    private sealed class CountingSource(IDataSource<Row> source) : IDataSource<Row>
+    {
+        public int CallCount;
+        public DataSourceCapabilities Capabilities => source.Capabilities;
+        public RowKey GetRowKey(Row item) => source.GetRowKey(item);
+
+        public Task<DataPage<Row>> GetPageAsync(DataRequest request, CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return source.GetPageAsync(request, cancellationToken);
+        }
+    }
+
     // Minimal in-memory IDataSource<int> for test purposes.
     private sealed class InMemorySource : IDataSource<int>
     {
@@ -117,6 +130,59 @@ public class DataSourceResourceTests
         Assert.Equal(rows.Length, resource.Items.Count);
         for (int i = 0; i < rows.Length; i++)
             Assert.Equal(rows[i], resource.Items[i]);
+    }
+
+    [Theory]
+    [InlineData(10, 20)]
+    [InlineData(20, 10)]
+    [InlineData(10, 10)]
+    public void UseDataSource_Shared_Cache_Requires_Matching_PageSizes(int firstPageSize, int secondPageSize)
+    {
+        using var cache = new QueryCache();
+        var rows = Enumerable.Range(0, 101).Select(id => new Row(id)).ToArray();
+        var source = new CountingSource(new ListDataSource<Row>(rows, row => row.Id));
+        var a = new RenderContext();
+        var b = new RenderContext();
+        var returningA = new RenderContext();
+
+        InfiniteResource<Row> Render(RenderContext ctx, int pageSize)
+        {
+            ctx.BeginRender(() => { });
+            var resource = ctx.UseDataSource(source, new DataRequest { PageSize = pageSize }, cache,
+                new InfiniteResourceOptions(PageSize: pageSize, CacheKeyPrefix: "shared"), new InlineDispatcher());
+            ctx.FlushEffects();
+            return resource;
+        }
+
+        try
+        {
+            var first = Render(a, firstPageSize);
+            first.EnsureRange(0, rows.Length - 1);
+            int firstPageCount = (rows.Length + firstPageSize - 1) / firstPageSize;
+            Assert.Equal(firstPageCount, source.CallCount);
+
+            // A later size change must keep A's resource and its original cache identity.
+            Assert.Same(first, Render(a, secondPageSize));
+            Assert.Equal(firstPageCount, source.CallCount);
+
+            var second = Render(b, secondPageSize);
+            Assert.Equal(secondPageSize, second.Items.TakeWhile(row => row is not null).Count());
+            second.EnsureRange(0, rows.Length - 1);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.Equal(rows[i], second.Items[i]);
+
+            int expectedCalls = firstPageCount + (firstPageSize == secondPageSize
+                ? 0 : (rows.Length + secondPageSize - 1) / secondPageSize);
+            Assert.Equal(expectedCalls, source.CallCount);
+
+            // B must leave A's pages reusable, including the partial final page.
+            var again = Render(returningA, firstPageSize);
+            again.EnsureRange(0, rows.Length - 1);
+            for (int i = 0; i < rows.Length; i++)
+                Assert.Equal(rows[i], again.Items[i]);
+            Assert.Equal(expectedCalls, source.CallCount);
+        }
+        finally { a.RunCleanups(); b.RunCleanups(); returningA.RunCleanups(); }
     }
 
     [Fact]

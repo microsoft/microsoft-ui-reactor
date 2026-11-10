@@ -36,7 +36,7 @@ internal sealed class ValueList : Component<ValueListProps>
             TextBlock(Strings.ColumnData).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2)
         ).Padding(8, 0, 8, 0)
          .BorderThickness(0, 0, 0, 1)
-         .BorderBrush((Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"]);
+         .BorderBrush(Theme.DividerStroke);
 
         var list = LazyVStack<RegistryValueEntry>(
             values,

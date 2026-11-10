@@ -147,6 +147,7 @@ namespace Microsoft.UI.Reactor
         public static T CornerRadius<T>(this T el, double radius) => el;
         public static T CornerRadius<T>(this T el, Microsoft.UI.Xaml.CornerRadius radius) => el;
         public static T BorderThickness<T>(this T el, double thickness) => el;
+        public static T BorderBrush<T>(this T el, Microsoft.UI.Xaml.Media.Brush brush) => el;
         public static T Background<T>(this T el, Microsoft.UI.Xaml.Media.Brush brush) => el;
         public static T HorizontalContentAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment a) => el;
     }
@@ -871,6 +872,35 @@ class C
 {
     ButtonElement M(ButtonElement b) => b.CornerRadius(6).BorderThickness(2);
 }";
+        await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Theory]
+    [InlineData("GridElement", "REACTOR_POOL_001")]
+    [InlineData("StackElement", "REACTOR_POOL_001")]
+    [InlineData("RelativePanelElement", "REACTOR_MOD_002")]
+    public async Task CodeFix_Rewrites_Panel_Border_Properties(string elementType, string diagnosticId)
+    {
+        var before = Stubs + $$"""
+
+class C
+{
+    {{elementType}} M({{elementType}} p, Microsoft.UI.Xaml.Media.Brush brush)
+        => {|{{diagnosticId}}:{|{{diagnosticId}}:p.Set(x => { x.BorderThickness = new Thickness(1); x.BorderBrush = brush; })|}|};
+}
+""";
+        var after = Stubs + $$"""
+
+class C
+{
+    {{elementType}} M({{elementType}} p, Microsoft.UI.Xaml.Media.Brush brush)
+        => p.BorderThickness(1).BorderBrush(brush);
+}
+""";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
             TestCode = before,
