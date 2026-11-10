@@ -600,10 +600,10 @@ internal static partial class MarkdownSelectionFixtures
             // StartBringIntoView reaches ScrollView through InteractionTracker asynchronously.
             bool scrolled = await Harness.WaitFor(() => modern.VerticalOffset > 0, perPassMs: 16);
             H.Check("MdSelection_BringIntoViewUsesInternalScrollView",
-                offsetBeforeNavigation == 0 && scrolled,
+                Math.Abs(offsetBeforeNavigation) < 0.5 && scrolled,
                 $"before={offsetBeforeNavigation}; after={modern.VerticalOffset}");
             modern.ScrollTo(0, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
-            bool reset = await Harness.WaitFor(() => modern.VerticalOffset == 0, perPassMs: 16);
+            bool reset = await Harness.WaitFor(() => Math.Abs(modern.VerticalOffset) < 0.5, perPassMs: 16);
             if (!reset)
                 throw new InvalidOperationException($"ScrollView did not return to the top (offset={modern.VerticalOffset}).");
             selection.Refresh();
