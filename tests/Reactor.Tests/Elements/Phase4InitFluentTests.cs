@@ -975,8 +975,9 @@ public class Phase4InitFluentTests
     public void Expander_HeaderContent_Sets()
     {
         var header = TextBlock("Custom header");
-        var el = Expander("string header", TextBlock("body")).HeaderContent(header);
-        Assert.Same(header, el.HeaderContent);
+        var el = Expander("string header", TextBlock("body"));
+        Assert.Null(el.HeaderContent);
+        Assert.Same(header, el.HeaderContent(header).HeaderContent);
     }
 
     [Fact]

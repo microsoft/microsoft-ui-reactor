@@ -179,6 +179,10 @@ Reactor mounts this child into the native control's `Header` property and reconc
 its subtree normally. Setting `HeaderContent` back to `null` restores the string
 header. The native `HeaderTemplate` is a separate `DataTemplate` property.
 
+`Canvas` positions children using the `.Set()` modifier to call
+`Canvas.SetLeft` and `Canvas.SetTop`. Use it for overlays, diagrams, or
+any layout that doesn't follow a stack or grid pattern.
+
 ### Migration: `Expander.HeaderTemplate` renamed to `HeaderContent`
 
 **Breaking change:** the old Element-valued `HeaderTemplate` property and fluent
@@ -194,10 +198,6 @@ Update direct property reads to `.HeaderContent` as well. The value remains an
 conversion is needed. This is a source and binary breaking change: recompile
 consumers that referenced the old API. Native `.Set(c => c.HeaderTemplate = template)`
 calls still refer to WinUI's `DataTemplate` property and should retain their name.
-
-`Canvas` positions children using the `.Set()` modifier to call
-`Canvas.SetLeft` and `Canvas.SetTop`. Use it for overlays, diagrams, or
-any layout that doesn't follow a stack or grid pattern.
 
 ## Responsive Layout
 
