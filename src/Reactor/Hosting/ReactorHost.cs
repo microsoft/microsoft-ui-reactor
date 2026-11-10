@@ -57,7 +57,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     // The root's perf spans; see RootRenderDiagnostics. Callers of BeginRootPerfSpan check the keyword.
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentSpan BeginRootPerfSpan(bool hotReloadRender)
         => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginPerfSpan(
-            _rootComponent, _funcContext, hotReloadRender, _reconciler.ForceFullRenderPending);
+            _rootComponent, _funcContext, _rootComponent is null ? _rootRenderFunc : null, DiagnosticMountSite,
+            hotReloadRender, _reconciler.ForceFullRenderPending);
 
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan BeginRootEffectsPerfSpan(Component? effectsRoot)
         // The live root's: the effects flushed are the live root's (_rootComponent or _funcContext),
@@ -174,7 +175,20 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     // RequestRender (which can't bind to an Action method group directly);
     // _renderLoopHandler is the DispatcherQueueHandler passed to TryEnqueue.
     private Action? _rerenderAction;
+    // The root component's own rerender (its hooks' requests): claims the request for the root
+    // on the perf RenderPass, then RequestRender. Children reach the host through
+    // _rerenderAction after their own wrappers have claimed.
+    private Action? _rootRerenderAction;
     private Microsoft.UI.Dispatching.DispatcherQueueHandler? _renderLoopHandler;
+
+    // Who scheduled the next pass, for the perf RenderPass Start.
+    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests _perfRequests = new();
+
+    // Test-only (InternalsVisibleTo Reactor.AppTests.Host).
+    internal Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests PerfRequestsForTests => _perfRequests;
+
+    private void RequestRenderFromRoot()
+        => Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests.InvokeAs(this, _rerenderAction ??= () => RequestRender());
 
     /// <summary>
     /// Live render performance snapshot, updated every ~1 second.
@@ -867,6 +881,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     {
         if (_disposed) return;
 
+        _perfRequests.Note();
+
         if (force)
             _reconciler.ForceFullRenderPending = true;
 
@@ -939,8 +955,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             // The pass span: root render, reconcile, commit and root effects.
             bool perfPass = Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.PassEnabled;
-            if (perfPass)
-                Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.RenderPassStart(_perfHostId);
+            _rootDiagnostics.BeginPass(perfPass, _perfHostId, _perfRequests, this,
+                _rootComponent, _funcContext, _rootComponent is null ? _rootRenderFunc : null);
             try
             {
                 Render();
@@ -1125,7 +1141,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             // root and then throw, and the failure belongs to the component that threw.
             if (_rootComponent is { } renderingRoot)
             {
-                renderingRoot.Context.BeginRender(rerender, this);
+                renderingRoot.Context.BeginRender(_rootRerenderAction ??= RequestRenderFromRoot, this);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
@@ -1161,7 +1177,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
             {
-                _funcContext.BeginRender(rerender, this);
+                _funcContext.BeginRender(_rootRerenderAction ??= RequestRenderFromRoot, this);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
