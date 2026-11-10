@@ -497,12 +497,8 @@ internal static unsafe partial class ReactorPerfTrace
             bytes[1] = (byte)(size >> 8);
             var array = GC.AllocateUninitializedArray<byte>(size, pinned: true);
             bytes.CopyTo(array);
-            PinnedForTests?.Invoke(array);
             return new Blob(array);
         }
-
-        /// <summary>Observes each metadata array as it is allocated, so a test can watch its lifetime.</summary>
-        internal static Action<byte[]>? PinnedForTests { get; set; }
     }
 
     // ── ETW interop ─────────────────────────────────────────────────────

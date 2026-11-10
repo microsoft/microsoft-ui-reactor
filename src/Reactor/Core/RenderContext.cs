@@ -957,7 +957,10 @@ public sealed class RenderContext
         void Setter(T newValue)
         {
             if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
-            if (!EqualityComparer<T>.Default.Equals(h.Value, newValue))
+            bool changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
+            if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UsePersisted", changed);
+            if (changed)
             {
                 h.Value = newValue;
                 _requestRerender?.Invoke();

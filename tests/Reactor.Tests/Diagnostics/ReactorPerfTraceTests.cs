@@ -319,6 +319,7 @@ public sealed class ReactorPerfTraceTests
         var (_, updateLocked) = ctx.UseReducer(0, threadSafe: true);
         var (_, dispatch) = ctx.UseReducer<int, int>(static (s, a) => s + a, 0);
         var (_, dispatchLocked) = ctx.UseReducer<int, int>(static (s, a) => s + a, 0, threadSafe: true);
+        var (_, setPersisted) = ctx.UsePersisted("perf-trace-test-" + Guid.NewGuid().ToString("N"), 0, PersistedScope.Application);
 
         // Nobody listening: no hook form writes, or even assigns the component an id.
         long untracedBefore = ReactorPerfTrace.WriteCountForTests;
@@ -327,6 +328,7 @@ public sealed class ReactorPerfTraceTests
         dispatchLocked(0);
         update(static v => v);
         dispatch(0);
+        setPersisted(0);
         Assert.Equal(untracedBefore, ReactorPerfTrace.WriteCountForTests);
         Assert.Equal(0, ctx.DiagnosticId);
         var events = Capture(level: 5, keywords: ReactorPerfTrace.Keywords.State, () =>
@@ -342,6 +344,7 @@ public sealed class ReactorPerfTraceTests
             worker.Join();
             update(static v => v + 1);
             dispatch(0);
+            setPersisted(3);
         }, out long written);
 
         long id = ctx.DiagnosticId;
@@ -349,51 +352,47 @@ public sealed class ReactorPerfTraceTests
         var mine = events.Where(e => e.Id == 11).ToList();
         Assert.All(mine, e => Assert.Equal((ulong)id, e.Fields["componentId"]));
         Assert.Equal(
-            new (string, bool)[] { ("UseState", true), ("UseReducer", false), ("UseReducer", true), ("UseReducer", true), ("UseReducer", false) },
+            new (string, bool)[] { ("UseState", true), ("UseReducer", false), ("UseReducer", true), ("UseReducer", true), ("UseReducer", false), ("UsePersisted", true) },
             mine.Select(e => ((string)e.Fields["hook"], (bool)e.Fields["changed"])));
         // The thread-safe writes are reported on the worker thread that made them.
         Assert.All(mine.Take(3), e => Assert.NotEqual(mine[3].ThreadId, e.ThreadId));
-        Assert.Equal(5, written);
+        Assert.Equal(6, written);
     }
 
     [Fact]
     public void Metadata_IsRootedForTheProcessLifetime()
     {
         // The blobs are read by pointer on every write; a pinned array is never moved but is
-        // still collected once unreachable. A blob must keep its own array alive.
-        var (blob, array) = BuildWatchedBlob();
-        byte[] expected = blob.Span.ToArray();
+        // still collected once unreachable. Each blob must therefore hold its array (the static
+        // fields that hold the blobs then root it), not just its address.
+        Assert.True(global::System.Runtime.CompilerServices.RuntimeHelpers.IsReferenceOrContainsReferences<ReactorPerfTrace.Blob>(),
+            "Blob must hold a managed reference to its pinned array");
 
+        var live = new[]
+        {
+            ReactorPerfTrace.Metadata.Provider, ReactorPerfTrace.Metadata.RenderPassStart, ReactorPerfTrace.Metadata.ComponentRenderStart,
+            ReactorPerfTrace.Metadata.ReconcileStart, ReactorPerfTrace.Metadata.ChildReconcileStop, ReactorPerfTrace.Metadata.StateChange,
+        };
+        var expected = live.Select(b => b.Span.ToArray()).ToArray();
         for (int i = 0; i < 3; i++)
         {
             GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
             GC.WaitForPendingFinalizers();
         }
+        // Let the pinned heap reuse anything that was freed.
+        var filler = Enumerable.Range(0, 4096).Select(_ =>
+        {
+            var a = GC.AllocateArray<byte>(64, pinned: true);
+            a.AsSpan().Fill(0xCD);
+            return a;
+        }).ToList();
 
-        Assert.True(array.IsAlive, "the metadata array was collected while its blob was still in use");
         unsafe
         {
-            Assert.Equal(expected, new ReadOnlySpan<byte>(blob.Pointer, (int)blob.Size).ToArray());
+            for (int i = 0; i < live.Length; i++)
+                Assert.Equal(expected[i], new ReadOnlySpan<byte>(live[i].Pointer, (int)live[i].Size).ToArray());
         }
-        GC.KeepAlive(blob);
-    }
-
-    // Not inlined, so no stray reference to the array outlives this frame (a Debug build keeps
-    // every temporary of the calling method alive, which would hide the bug).
-    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static (ReactorPerfTrace.Blob Blob, WeakReference Array) BuildWatchedBlob()
-    {
-        WeakReference? array = null;
-        ReactorPerfTrace.Metadata.PinnedForTests = a => array = new WeakReference(a);
-        try
-        {
-            var blob = ReactorPerfTrace.Metadata.BuildEvent("RootProbe", ("value", ReactorPerfTrace.InTypes.UInt64));
-            return (blob, array!);
-        }
-        finally
-        {
-            ReactorPerfTrace.Metadata.PinnedForTests = null;
-        }
+        GC.KeepAlive(filler);
     }
 
     [EventSource(Name = "Microsoft-UI-Reactor-Tests-PrivateSessionProbe")]

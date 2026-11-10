@@ -102,10 +102,11 @@ in-types: `UInt64` (10), `UInt32` (8), `String` = nul-terminated UTF-16 (1), `Bo
 
 ### Instant events
 
-- **`StateChange`** — a `UseState` setter, `UseReducer` updater or `UseReducer` dispatch ran.
+- **`StateChange`** — a `UseState` setter, `UseReducer` updater or dispatch, or `UsePersisted`
+  setter ran.
   `componentId` is the component
   that owns the hook (the "updater"), assigned on first use if the component has not rendered
-  under tracing yet; `hook` is `UseState` or `UseReducer`; `changed` is false when the new
+  under tracing yet; `hook` is `UseState`, `UseReducer` or `UsePersisted`; `changed` is false when the new
   value equalled the old one (no re-render is requested). May be written from a worker thread
   (`threadSafe: true` hooks); the thread id is in the ETW header. A call from a worker thread
   to a hook that is not thread-safe is marshalled to the UI thread first and reported there.

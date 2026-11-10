@@ -201,20 +201,17 @@ internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestF
 /// The emit sites' enable checks: a session that asks for some keywords must cost the app
 /// only those. Each round records a full render scenario under a keyword subset and compares
 /// what the provider handed ETW with what the session recorded — a write the session did not
-/// ask for is dropped by ETW, so it shows up only as a surplus here. Run with the pass
-/// keywords alone and with everything else, so every gated emit site is off in one round.
+/// ask for is dropped by ETW, so it shows up only as a surplus here. The rounds
+/// (<see cref="PerfTraceScenario.GateRounds"/>) turn each keyword on alone, so an emit site
+/// checking the wrong keyword or level is caught, not just one with no check at all.
 /// </summary>
 internal class PerfTrace_UnrequestedKeywordsWriteNothing(Harness h) : SelfTestFixtureBase(h)
 {
     public override async Task RunAsync()
     {
-        foreach (var (label, keywords) in new[]
-                 {
-                     ("Pass", ReactorPerfTrace.Keywords.Pass),
-                     ("NotPass", ReactorPerfTrace.Keywords.Component | ReactorPerfTrace.Keywords.Children | ReactorPerfTrace.Keywords.State),
-                 })
+        foreach (var (label, level, keywords) in PerfTraceScenario.GateRounds)
         {
-            var run = await PerfTraceScenario.RunAsync(H, level: 5, keywords);
+            var run = await PerfTraceScenario.RunAsync(H, level, keywords);
             if (run is null)
             {
                 H.Skip($"PerfTrace_OnlyRequestedWrites_{label}", PerfTraceScenario.SkipReason);
@@ -236,6 +233,22 @@ internal class PerfTrace_UnrequestedKeywordsWriteNothing(Harness h) : SelfTestFi
 /// </summary>
 internal static class PerfTraceScenario
 {
+    /// <summary>
+    /// The keyword subsets the gating fixtures record under: each keyword alone (so an emit
+    /// site checking the wrong keyword writes in a round that did not ask for it), every
+    /// keyword but Pass, and everything at level 4 (so a Verbose site checking an
+    /// Informational gate shows up too).
+    /// </summary>
+    public static readonly (string Label, byte Level, ulong Keywords)[] GateRounds =
+    [
+        ("Pass", 5, ReactorPerfTrace.Keywords.Pass),
+        ("Component", 5, ReactorPerfTrace.Keywords.Component),
+        ("Children", 5, ReactorPerfTrace.Keywords.Children),
+        ("State", 5, ReactorPerfTrace.Keywords.State),
+        ("NotPass", 5, ReactorPerfTrace.Keywords.Component | ReactorPerfTrace.Keywords.Children | ReactorPerfTrace.Keywords.State),
+        ("AllLevel4", 4, 0xF),
+    ];
+
     public const string SkipReason = "this account may not start an ETW session (not elevated, not in Performance Log Users)";
 
     private static readonly string[] Rows = Enumerable.Range(0, 200).Select(i => "row" + i).ToArray();
@@ -355,7 +368,7 @@ internal class PerfTrace_HostControlSpansAndGating(Harness h) : SelfTestFixtureB
         var run = await PerfTraceScenario.RunHostControlAsync(H, level: 5, keywords: 0xF);
         if (run is null)
         {
-            foreach (var check in new[] { "PerfTrace_HostControl_RootSpans", "PerfTrace_HostControl_OnlyRequestedWrites_Pass", "PerfTrace_HostControl_OnlyRequestedWrites_NotPass" })
+            foreach (var check in PerfTraceScenario.GateRounds.Select(r => "PerfTrace_HostControl_OnlyRequestedWrites_" + r.Label).Prepend("PerfTrace_HostControl_RootSpans"))
                 H.Skip(check, PerfTraceScenario.SkipReason);
             return;
         }
@@ -372,13 +385,9 @@ internal class PerfTrace_HostControlSpansAndGating(Harness h) : SelfTestFixtureB
             && passStarts.Count >= 2
             && effects.Any(e => Equals(e.Fields["componentId"], rootStarts[0].Fields["componentId"])));
 
-        foreach (var (label, keywords) in new[]
-                 {
-                     ("Pass", ReactorPerfTrace.Keywords.Pass),
-                     ("NotPass", ReactorPerfTrace.Keywords.Component | ReactorPerfTrace.Keywords.Children | ReactorPerfTrace.Keywords.State),
-                 })
+        foreach (var (label, level, keywords) in PerfTraceScenario.GateRounds)
         {
-            var gated = await PerfTraceScenario.RunHostControlAsync(H, level: 5, keywords);
+            var gated = await PerfTraceScenario.RunHostControlAsync(H, level, keywords);
             var (recorded, written) = gated!.Value;
             Console.WriteLine($"# perf host control gate {label}: written={written} recorded={recorded.Count}");
             H.Check($"PerfTrace_HostControl_OnlyRequestedWrites_{label}",
