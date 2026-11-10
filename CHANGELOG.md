@@ -46,7 +46,9 @@ Conventions for contributors:
 
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so
-  flyout callbacks and teardown still use the current decorator. For these
+  flyout callbacks and teardown still use the current decorator. Exit transitions,
+  connected-animation keys and `.Animate()` curves also fall back to the target
+  when the decorator has no corresponding configuration. For these
   decorators, the provisional `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §4.5; #942).
 

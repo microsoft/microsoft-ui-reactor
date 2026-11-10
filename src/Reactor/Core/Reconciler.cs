@@ -4204,10 +4204,11 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
-        if (control is FrameworkElement caFe && GetMountedElement(caFe) is Element caEl
-            && caEl.ConnectedAnimationKey is not null)
+        if (control is FrameworkElement caFe
+            && (GetMountedElement(caFe)?.ConnectedAnimationKey
+                ?? GetElementTag(caFe)?.ConnectedAnimationKey) is { } connectedKey)
         {
-            PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
+            PrepareConnectedAnimationSource(connectedKey, control);
         }
 
         // Decorators and targets share a control, but each can own refs and animations.
@@ -4654,8 +4655,9 @@ public sealed partial class Reconciler : IDisposable
     internal void RemoveChildWithExitTransition(IChildCollection children, int index)
     {
         var control = children.Get(index);
-        var transition = (control is FrameworkElement fe && GetMountedElement(fe) is Element el)
-            ? el.ElementTransition : null;
+        var transition = control is FrameworkElement fe
+            ? GetMountedElement(fe)?.ElementTransition ?? GetElementTag(fe)?.ElementTransition
+            : null;
 
         if (transition?.GetExitTransition() is not null)
         {
@@ -4756,8 +4758,9 @@ public sealed partial class Reconciler : IDisposable
     internal bool ReplaceChildWithExitTransition(IChildCollection children, int index, UIElement newControl)
     {
         var oldControl = children.Get(index);
-        var transition = (oldControl is FrameworkElement fe && GetMountedElement(fe) is Element el)
-            ? el.ElementTransition : null;
+        var transition = oldControl is FrameworkElement fe
+            ? GetMountedElement(fe)?.ElementTransition ?? GetElementTag(fe)?.ElementTransition
+            : null;
 
         if (transition?.GetExitTransition() is not null)
         {
@@ -4825,10 +4828,11 @@ public sealed partial class Reconciler : IDisposable
         if (control is FrameworkElement snapshotFe) ClearRefreshSnapshots(snapshotFe);
 
         // Capture connected animation snapshot while element is still in the visual tree
-        if (control is FrameworkElement caFe && GetMountedElement(caFe) is Element caEl
-            && caEl.ConnectedAnimationKey is not null)
+        if (control is FrameworkElement caFe
+            && (GetMountedElement(caFe)?.ConnectedAnimationKey
+                ?? GetElementTag(caFe)?.ConnectedAnimationKey) is { } connectedKey)
         {
-            PrepareConnectedAnimationSource(caEl.ConnectedAnimationKey, control);
+            PrepareConnectedAnimationSource(connectedKey, control);
         }
 
         // Mirrors UnmountRecursive: release state owned by both element identities.

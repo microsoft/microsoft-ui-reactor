@@ -1,7 +1,9 @@
 using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Input;
+using Microsoft.UI.Reactor.Navigation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -14,7 +16,239 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>Issue #942: decorators must not replace their target's event identity.</summary>
 internal static class FlyoutTargetCallbacksFixtures
 {
-    internal sealed class RegisterTypeCallbacksAcrossUpdates(Harness h) : SelfTestFixtureBase(h)
+    internal sealed class AnimateCurveAcrossNestedFlyouts(Harness h, bool vector) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var cases = new (string Name, Curve Target, Curve? Decorator, Curve? Scope)[]
+            {
+                ("Target", Curve.Linear(600), null, null),
+                ("Decorator", Curve.Spring(), Curve.Linear(600), null),
+                ("Scope", Curve.Spring(), Curve.Spring(), Curve.Linear(600)),
+            };
+            foreach (var scenario in cases)
+            {
+                var name = $"FlyoutAnimate_{(vector ? "Vector3" : "Scalar")}_{scenario.Name}";
+                var property = vector ? "Scale" : "Opacity";
+                using var reconciler = new Reconciler();
+                var decorated = Flyout(Flyout(Flyout(
+                    Button("curve target").Size(120, 60).Animate(scenario.Target),
+                    TextBlock("inner")), TextBlock("middle")), TextBlock("outer"));
+                if (scenario.Decorator is { } decoratorCurve)
+                    decorated = decorated.Animate(decoratorCurve);
+                var button = (Button)reconciler.Mount(decorated, static () => { })!;
+                H.SetContent(button);
+                await Harness.Render();
+                var visual = ElementCompositionPreview.GetElementVisual(button);
+                try
+                {
+                    // Isolate the helper: implicit animations could otherwise hide a missing curve fallback.
+                    bool hadImplicitAnimations = visual.ImplicitAnimations is not null;
+                    visual.ImplicitAnimations = null;
+                    H.Check(name + "_Isolated", hadImplicitAnimations
+                        && visual.TryGetAnimationController(property) is null);
+                    Action change = () =>
+                    {
+                        if (vector) AnimationHelper.SetOrAnimateVector3(button, property, new Vector3(1.2f));
+                        else AnimationHelper.SetOrAnimate(button, property, 0.4f);
+                    };
+                    // The selected Linear curve has a keyframe controller; lower-priority Springs do not.
+                    H.Check(name + "_SelectedCurve", () =>
+                    {
+                        if (scenario.Scope is { } scopeCurve)
+                            AnimationScope.WithAnimation(scopeCurve, change);
+                        else
+                            change();
+                        return visual.TryGetAnimationController(property) is not null;
+                    });
+                }
+                finally
+                {
+                    visual.StopAnimation(property);
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+            }
+        }
+    }
+
+    internal sealed class ConnectedNavigation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
+            using var host = H.CreateHost();
+            var nav = new NavigationHandle<string>(new NavigationStack<string>("list"));
+            const string key = "flyout-connected-navigation";
+            host.Mount(_ => (NavigationHost(nav, route => Border(VStack(8,
+                TextBlock(route),
+                ConnectedFlyoutTarget(route == "list" ? "connected source" : "connected destination",
+                    key, route == "list" ? 100 : 180)))) with
+            {
+                Transition = NavigationTransition.None,
+            }).AutomationId("flyout-connected-host"));
+            await Harness.Render();
+            var source = H.FindButton("connected source");
+            var pages = H.FindControl<Grid>(grid =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(grid) == "flyout-connected-host")!;
+            H.Check("FlyoutConnectedNav_SourceMeasured", source is { ActualWidth: > 0, ActualHeight: > 0 });
+            H.Check("FlyoutConnectedNav_SourceCollected", source is not null
+                && ConnectedNavigationOperation.Collect(host.Reconciler, pages).Contains(source));
+            int baseline = host.Reconciler.ConnectedAnimationStartCount;
+
+            nav.Navigate("detail", new() { ConnectedAnimationKey = key, Transition = NavigationTransition.Fade() });
+            H.Check("FlyoutConnectedNav_AnimationStarted", await Harness.WaitFor(() =>
+                host.Reconciler.ConnectedAnimationStartCount == baseline + 1));
+            H.Check("FlyoutConnectedNav_DestinationMeasured",
+                H.FindButton("connected destination") is { ActualWidth: > 0, ActualHeight: > 0 });
+            H.Check("FlyoutConnectedNav_Settled", await Harness.WaitFor(() => pages.Children.Count == 1, 100));
+            H.Check("FlyoutConnectedNav_NoDuplicateStarts", host.Reconciler.ConnectedAnimationStartCount == baseline + 1);
+        }
+    }
+
+    internal sealed class ConnectedSnapshotAcrossUnmount(Harness h, bool pooled) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var name = pooled ? "FlyoutConnectedPool" : "FlyoutConnectedUnmount";
+            var key = pooled ? "flyout-connected-pool" : "flyout-connected-unmount";
+            using var reconciler = new Reconciler();
+            var panel = (StackPanel)reconciler.Mount(VStack(ConnectedFlyoutTarget("snapshot source", key, 100)), static () => { })!;
+            H.SetContent(panel);
+            await Harness.Render();
+            var source = (Button)panel.Children[0];
+            try
+            {
+                reconciler.FlushConnectedAnimations();
+                H.Check(name + "_NoSourceNoStart", reconciler.ConnectedAnimationStartCount == 0);
+                // Mount queues the destination. Lay it out before preparing the source snapshot.
+                var destination = (Button)reconciler.Mount(ConnectedFlyoutTarget("snapshot destination", key, 180), static () => { })!;
+                panel.Children.Add(destination);
+                await Harness.Render();
+                H.Check(name + "_BothMeasured", source.ActualWidth > 0 && source.ActualHeight > 0
+                    && destination.ActualWidth > 0 && destination.ActualHeight > 0);
+
+                if (pooled) reconciler.UnmountAndPool(source);
+                else reconciler.UnmountChild(source);
+                panel.Children.Remove(source);
+
+                var animation = Microsoft.UI.Xaml.Media.Animation.ConnectedAnimationService.GetForCurrentView().GetAnimation(key);
+                H.Check(name + "_SnapshotPrepared", animation is not null);
+                bool completed = false;
+                if (animation is not null) animation.Completed += (_, _) => completed = true;
+                reconciler.FlushConnectedAnimations();
+                bool started = reconciler.ConnectedAnimationStartCount == 1;
+                H.Check(name + "_AnimationStarted", started);
+                if (started)
+                    H.Check(name + "_AnimationCompleted", await Harness.WaitFor(() => completed, 100));
+            }
+            finally
+            {
+                await Harness.Render();
+                // Dispose the remaining destination without preparing an unused source snapshot.
+                ConnectedNavigationOperation.UnmountPage(reconciler, panel);
+                H.SetContent(null);
+            }
+        }
+    }
+
+    private static FlyoutElement ConnectedFlyoutTarget(string label, string key, double width) =>
+        Flyout(Flyout(Flyout(Button(label).Size(width, 60).ConnectedAnimation(key),
+            TextBlock("inner")), TextBlock("middle")), TextBlock("outer"));
+
+    internal sealed class TargetExitTransition(Harness h, bool replace, int depth = 1) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var name = replace ? "FlyoutExit_Replacement" : "FlyoutExit_Removal";
+            int contentCleanups = 0;
+            var targetRef = new ElementRef();
+            using var reconciler = new Reconciler();
+            Element decorated = Button("exit target").Ref(targetRef)
+                .Transition(Animation.Transition.Exit(Animation.Transition.Fade), Animation.Curve.Ease(600));
+            for (var layer = 1; layer < depth; layer++)
+                decorated = Flyout(decorated, TextBlock($"inner {layer}"));
+            var initial = VStack(Flyout(decorated,
+                Component<CleanupProbe, Action>(() => contentCleanups++)));
+            var panel = (StackPanel)reconciler.Mount(initial, static () => { })!;
+            H.SetContent(panel);
+            await Harness.Render();
+            var target = (Button)panel.Children[0];
+            try
+            {
+                H.Check(name + "_Mounted", ReferenceEquals(targetRef.Current, target) && contentCleanups == 0);
+                var next = replace ? VStack(TextBlock("replacement")) : VStack();
+                reconciler.Update(initial, next, panel, static () => { });
+
+                H.Check(name + "_ExitInFlight", reconciler.IsExiting(target) && panel.Children.Contains(target));
+                H.Check(name + "_CleanupDeferred", ReferenceEquals(targetRef.Current, target) && contentCleanups == 0);
+                H.Check(name + "_FadeStarted", reconciler.IsExiting(target)
+                    && ElementCompositionPreview.GetElementVisual(target).TryGetAnimationController("Opacity") is not null);
+                if (replace)
+                    H.Check(name + "_ReplacementVisible", panel.Children.Count == 2
+                        && panel.Children[0] is TextBlock { Text: "replacement" }
+                        && ReferenceEquals(panel.Children[1], target));
+
+                var completed = await Harness.WaitFor(() => !reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
+                H.Check(name + "_ExitCompleted", completed && !panel.Children.Contains(target)
+                    && panel.Children.Count == (replace ? 1 : 0));
+                H.Check(name + "_CleanupOnce", targetRef.Current is null && contentCleanups == 1);
+            }
+            finally
+            {
+                H.SetContent(null);
+                reconciler.UnmountChild(panel);
+            }
+        }
+    }
+
+    internal sealed class DeepButtonCallbacksAcrossUpdates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var host = H.CreateHost();
+            var calls = new List<int>();
+            Action? advance = null;
+            ButtonElement? currentTarget = null;
+            FlyoutElement? currentFlyout = null;
+            host.Mount(ctx =>
+            {
+                var (version, setVersion) = ctx.UseState(0);
+                advance = () => setVersion(version + 1);
+                // The label stays the same, so each new callback takes the Button's shallow-skip path.
+                currentTarget = Button("deep target", () => calls.Add(version));
+                currentFlyout = Flyout(
+                    Flyout(Flyout(currentTarget, TextBlock("inner")), TextBlock("middle")),
+                    TextBlock("outer"));
+                return currentFlyout;
+            });
+            await Harness.Render();
+            var first = H.FindButton("deep target");
+            H.Check("FlyoutDeep_Mounted", first is not null);
+            if (first is null) return;
+
+            for (var version = 0; version < 3; version++)
+            {
+                if (version > 0)
+                {
+                    advance!();
+                    await Harness.Render();
+                }
+                var button = H.FindButton("deep target");
+                var name = $"FlyoutDeep_Phase{version}";
+                H.Check(name + "_SameControl", ReferenceEquals(first, button));
+                H.Check(name + "_CurrentTarget", ReferenceEquals(Reconciler.GetElementTag(first), currentTarget));
+                H.Check(name + "_CurrentDecorator", ReferenceEquals(Reconciler.GetMountedElement(first), currentFlyout));
+                H.ClickButton("deep target");
+                H.Check(name + "_CurrentClosure", calls.SequenceEqual(Enumerable.Range(0, version + 1)),
+                    $"calls: {string.Join(", ", calls)}");
+                first.Flyout?.Hide();
+                await Harness.Render();
+            }
+        }
+    }
+
+    internal sealed class RegisterTypeCallbacksAcrossUpdates(Harness h, int depth = 1) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -42,7 +276,10 @@ internal static class FlyoutTargetCallbacksFixtures
                 advance = () => setVersion(1);
                 currentTarget = new RegisteredButtonElement(version, () => calls.Add(version))
                     .WithKey("registered-target");
-                currentFlyout = Flyout(currentTarget, TextBlock("registered target body"));
+                Element decorated = currentTarget;
+                for (var layer = 1; layer < depth; layer++)
+                    decorated = Flyout(decorated, TextBlock($"registered inner {layer}"));
+                currentFlyout = Flyout(decorated, TextBlock("registered target body"));
                 return currentFlyout;
             });
             await Harness.Render();
