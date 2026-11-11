@@ -297,8 +297,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     /// earlier class's winapp click) has activated a different window, so whether the call took
     /// depended on run order and timing, and every retry repeated the same refused call. A zero
     /// mouse input (no movement, no button) makes this process the last input source, which the
-    /// lock honours. There is deliberately no <c>AttachThreadInput</c> bridge: attached to a hung
-    /// foreground thread, activation calls can block past the deadline. The zero input
+    /// lock honours. There is deliberately no <c>AttachThreadInput</c> bridge, and the restore is
+    /// <c>ShowWindowAsync</c>: neither may block on a hung host or foreground thread past the deadline. The zero input
     /// is best-effort: if it is refused, the foreground predicate still decides, and the timeout
     /// reports the refusal alongside the foreground diagnostics.
     /// </summary>
@@ -312,7 +312,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         do
         {
             if (HostOwnsForeground()) return;
-            if (IsIconic(host)) ShowWindow(host, SwRestore);
+            if (IsIconic(host)) ShowWindowAsync(host, SwRestore);
             creditSent = SendInput(1, [new Input { Type = 0 }], Marshal.SizeOf<Input>());
             creditError = creditSent == 1 ? 0 : Marshal.GetLastWin32Error();
             requested = SetForegroundWindow(host);
@@ -379,7 +379,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool IsWindowVisible(nint window);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool ShowWindow(nint window, int command);
+    private static partial bool ShowWindowAsync(nint window, int command);
     [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
     private static unsafe partial int GetClassName(nint window, char* buffer, int capacity);
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
