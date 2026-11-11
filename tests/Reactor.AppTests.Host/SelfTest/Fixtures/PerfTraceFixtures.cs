@@ -925,10 +925,9 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
 
             // The same on a ReactorHostControl (its request bookkeeping is a separate call site):
             // the root's untraced request queues the pass, its traced one coalesces into it.
-            var control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
             var controlRoot = new PerfTraceControlRoot();
             List<string> controlStarts;
-            try
+            using (var control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl())
             {
                 control.Mount(controlRoot);
                 H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
@@ -946,10 +945,6 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
                 controlStarts = EtwPrivateCapture.Read(fourth, ReactorPerfTrace.ProviderId).Where(e => e.ProcessId == Environment.ProcessId)
                     .Where(e => e.Name == "RenderPass" && e.Opcode == 1)
                     .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}/{e.Fields["requestCount"]}").ToList();
-            }
-            finally
-            {
-                control.Dispose();
             }
             Console.WriteLine($"# perf requests: control pending before session passes={string.Join(",", controlStarts)} renders={controlRoot.Renders}");
             H.Check("PerfTrace_Requests_ControlPendingBeforeSessionNamesNobody",
