@@ -1818,14 +1818,20 @@ public sealed partial class Reconciler
     /// resolved eagerly is equal on both sides and stays as it is, as the styling guide documents).
     /// The mounted inner element is not kept, so re-run the factory — pure by contract,
     /// so its output describes what is mounted — and reconcile that output against itself.
-    /// Old and new are the same instances all the way down, so every branch skips by reference
-    /// except the dirty-ancestor path, which descends to the component. Nothing is compared
-    /// against a different key's output, and nothing off the path is touched.
+    /// The walk normally compares the reconstructed output against itself; flyout handlers
+    /// recover their installed configuration from the native flyout's ownership record.
+    /// Nothing is compared against a different key's output.
     /// </summary>
     private UIElement? UpdateKeyedMemoTowardDirtyDescendant(KeyedMemoElement memo, UIElement control, Action requestRerender)
     {
         var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
-        return inner is EmptyElement ? null : Update(inner, inner, control, requestRerender);
+        bool previous = ReconstructingKeyedMemo;
+        ReconstructingKeyedMemo = true;
+        try
+        {
+            return inner is EmptyElement ? null : Update(inner, inner, control, requestRerender);
+        }
+        finally { ReconstructingKeyedMemo = previous; }
     }
 
     private static string Truncate(string s, int maxLen) =>

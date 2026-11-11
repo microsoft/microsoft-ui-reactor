@@ -434,22 +434,47 @@ internal static class OverlayLifecycle
         internal Element Element = element;
         // Item re-keying can publish a copy without replacing the retained virtual element.
         internal Element Tag = element;
+        // A reconstructed inner decorator must not claim an outer flyout during its update.
+        internal int UpdateDepth;
         internal bool Matches(Element? candidate) => ReferenceEquals(Element, candidate) || ReferenceEquals(Tag, candidate);
+        internal bool MatchesReconstructed(Element previous, Element next) =>
+            UpdateDepth == 0 && ReferenceEquals(previous, next) && Element.GetType() == next.GetType();
     }
 
     private static FlyoutOwnership? FlyoutOwner(WinPrim.FlyoutBase? flyout) =>
         s_flyoutOwnerProperty is { } property ? flyout?.GetValue(property) as FlyoutOwnership : null;
 
-    /// <summary>Updates the installed flyout's owner or published tag only when the old identity matches.</summary>
-    internal static void RefreshFlyoutOwner(FrameworkElement target, Element? oldElement, Element newElement, bool tagOnly = false)
+    /// <summary>Refreshes the installed flyout's retained or reconstructed owner identity.</summary>
+    internal static void RefreshFlyoutOwner(FrameworkElement target, Element? oldElement, Element newElement,
+        bool tagOnly = false, bool reconstructingMemo = false)
     {
-        if (oldElement is null || ReferenceEquals(oldElement, newElement)) return;
+        if (oldElement is null || (ReferenceEquals(oldElement, newElement) && !reconstructingMemo)) return;
         var owner = FlyoutOwner(Reconciler.GetFlyoutOnControl(target));
-        if (owner is not null && owner.Matches(oldElement))
+        if (owner is not null && (owner.Matches(oldElement)
+            || (reconstructingMemo && owner.MatchesReconstructed(oldElement, newElement))))
         {
             owner.Tag = newElement;
             if (!tagOnly) owner.Element = newElement;
         }
+    }
+
+    private readonly struct FlyoutUpdateScope : IDisposable
+    {
+        private readonly FlyoutOwnership? _owner;
+        internal FlyoutUpdateScope(FlyoutOwnership owner) { _owner = owner; owner.UpdateDepth++; }
+        public void Dispose() { if (_owner is not null) _owner.UpdateDepth--; }
+    }
+
+    private static FlyoutUpdateScope BeginFlyoutUpdate<T>(Reconciler reconciler, UIElement target, ref T previous, T next)
+        where T : Element
+    {
+        var owner = target is FrameworkElement fe ? FlyoutOwner(Reconciler.GetFlyoutOnControl(fe)) : null;
+        if (owner is null) return default;
+        // Memo retains no output tree. The installed flyout already holds its actual old
+        // configuration; use it only outside another owner's target reconciliation.
+        if (reconciler.ReconstructingKeyedMemo && owner.MatchesReconstructed(previous, next))
+            previous = (T)owner.Element;
+        return owner.Matches(previous) ? new FlyoutUpdateScope(owner) : default;
     }
 
     /// <summary>Clears the installed flyout's owner when its target releases its identity.</summary>
@@ -552,6 +577,7 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateFlyoutElement(Reconciler reconciler, FlyoutElement o, FlyoutElement n, UIElement targetControl, Action requestRerender)
     {
+        using var ownership = BeginFlyoutUpdate(reconciler, targetControl, ref o, n);
         UIElement? updated = targetControl;
         if (reconciler.CanUpdate(o.Target, n.Target))
         {
@@ -722,6 +748,7 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateMenuFlyout(Reconciler reconciler, MenuFlyoutElement o, MenuFlyoutElement n, UIElement targetControl, Action requestRerender)
     {
+        using var ownership = BeginFlyoutUpdate(reconciler, targetControl, ref o, n);
         UIElement? updated = targetControl;
         if (reconciler.CanUpdate(o.Target, n.Target))
         {
@@ -841,6 +868,7 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateCommandBarFlyout(Reconciler reconciler, CommandBarFlyoutElement o, CommandBarFlyoutElement n, UIElement targetControl, Action requestRerender)
     {
+        using var ownership = BeginFlyoutUpdate(reconciler, targetControl, ref o, n);
         // Reconcile the target in place and reuse the installed flyout when
         // possible — re-installing a brand-new flyout on every update would
         // close an already-open flyout and discard its transient state.

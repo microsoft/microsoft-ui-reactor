@@ -378,6 +378,13 @@ pass-through subtrees. Inner updates still reconcile their target, but leave
 the outer flyout's content and lifecycle callbacks untouched. Such nesting
 emits a `Flyout.NestedTarget` diagnostic warning.
 
+Keyed FlipView pages keep both the source view for positional matching and the
+key-stamped instance used for updates. Memo resource and dirty-descendant
+refreshes reuse the installed flyout's owner without retaining a Memo output
+tree. A scoped update depth prevents reconstructed inner decorators from
+claiming the outer flyout, including on skipped branches; both temporary
+contexts are restored if an update throws.
+
 ## Descriptors — declarative handlers
 
 `IElementHandler` is the imperative shape; `ControlDescriptor` is the

@@ -69,7 +69,9 @@ Conventions for contributors:
   and animation state on intermediate decorators. Nested decorators attach only
   the outermost native flyout, including through transparent Memo or RegisterType
   targets. They clean up displaced content and keep inner updates
-  from changing the outer flyout or duplicating its callbacks. For these
+  from changing the outer flyout or duplicating its callbacks. Ownership also
+  survives keyed FlipView updates and Memo resource or dirty-descendant refreshes,
+  including skipped branches and retries after a throwing target update. For these
   decorators, the provisional `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §4.5; #942).
 

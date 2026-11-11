@@ -2,11 +2,13 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Reactor.Navigation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Media;
 using System.Numerics;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 using static Microsoft.UI.Reactor.Factories;
@@ -316,6 +318,430 @@ internal static class FlyoutTargetCallbacksFixtures
     }
 
     private sealed record ForwardedTargetElement(Element Target) : Element;
+
+    internal sealed class KeyedFlipViewOwnerIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // An explicitly keyed view is the control: FlipView need not copy it to stamp the item key.
+            foreach (bool explicitViewKey in new[] { true, false })
+            for (int kind = 0; kind < 3; kind++)
+            {
+                var name = $"FlyoutFlipOwner_{(explicitViewKey ? "Explicit" : "Stamped")}_{kind}";
+                int cleanups = 0, passThroughCleanups = 0;
+                var opened = new List<int>();
+                var closed = new List<int>();
+                Action cleanup = () => cleanups++;
+                Action passThroughCleanup = () => passThroughCleanups++;
+                Action? advance = null;
+                Action? remove = null;
+                Element? rawView = null;
+                var previousHost = ReactorApp.ActiveHostInternal;
+                var target = new Border();
+                H.SetContent(target);
+                try
+                {
+                    using var host = new ReactorHost(H.Window) { ContentTarget = target };
+                    host.Mount(ctx =>
+                    {
+                        var (version, setVersion) = ctx.UseState(0);
+                        advance = () => setVersion(version + 1);
+                        remove = () => setVersion(-1);
+                        return FlipView(version < 0 ? Array.Empty<int>() : new[] { version }, _ => "page", (value, _) =>
+                        {
+                            Element view = kind switch
+                            {
+                                0 => Flyout(Button("page target"), Component<LifecycleContent, (string, Action)>(($"body-{value}", cleanup))) with
+                                {
+                                    OverlayInputPassThroughElement = Component<CleanupProbe, Action>(passThroughCleanup),
+                                    OnOpened = () => opened.Add(value),
+                                    OnClosed = () => closed.Add(value),
+                                },
+                                1 => MenuFlyout(Button("page target"), MenuItem($"body-{value}")),
+                                _ => CommandBarFlyout(Button("page target"), primaryCommands: [AppBarButton($"body-{value}")]),
+                            };
+                            rawView = explicitViewKey ? view.WithKey("page") : view;
+                            return rawView;
+                        });
+                    });
+                    await host.WaitForIdleAsync();
+                    await Harness.Render();
+                    var flip = (FlipView)target.Child;
+                    var button = (Button)flip.Items[0];
+                    var flyout = Reconciler.GetFlyoutOnControl(button)!;
+                    H.Check(name + "_StampedIdentity", Reconciler.GetMountedElement(button)?.Key == "page"
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), rawView) == explicitViewKey);
+
+                    for (int phase = 0; phase < 2; phase++)
+                    {
+                        if (phase > 0)
+                        {
+                            advance!();
+                            await host.WaitForIdleAsync();
+                            await Harness.Render();
+                        }
+                        H.Check(name + $"_Phase{phase}_SameControlAndFlyout", ReferenceEquals(flip.Items[0], button)
+                            && ReferenceEquals(Reconciler.GetFlyoutOnControl(button), flyout));
+                        H.Check(name + $"_Phase{phase}_Content", FlyoutText(flyout) == $"body-{phase}",
+                            $"content={FlyoutText(flyout)}");
+                        H.Check(name + $"_Phase{phase}_CurrentTag", Reconciler.GetMountedElement(button)?.Key == "page"
+                            && ReferenceEquals(Reconciler.GetMountedElement(button), rawView) == explicitViewKey);
+                        flyout.AreOpenCloseAnimationsEnabled = false;
+                        flyout.ShowAt(button);
+                        H.Check(name + $"_Phase{phase}_Opens", await Harness.WaitFor(() => flyout.IsOpen));
+                        await Harness.Render(50);
+                        flyout.Hide();
+                        await Harness.Render(50);
+                        if (kind == 0)
+                            H.Check(name + $"_Phase{phase}_LatestCallbacks", opened.SequenceEqual(Enumerable.Range(0, phase + 1))
+                                && closed.SequenceEqual(Enumerable.Range(0, phase + 1)),
+                                $"opened={string.Join(',', opened)} closed={string.Join(',', closed)}");
+                    }
+                    H.Check(name + "_NoEarlyCleanup", cleanups == 0 && passThroughCleanups == 0);
+                    // Remove the page through FlipView's item reconciliation, keeping the parent mounted.
+                    remove!();
+                    await host.WaitForIdleAsync();
+                    H.Check(name + "_PageRemoved", flip.Items.Count == 0);
+                    H.Check(name + "_Detached", Reconciler.GetFlyoutOnControl(button) is null);
+                    if (kind == 0)
+                        H.Check(name + "_CleanupOnce", cleanups == 1 && passThroughCleanups == 1,
+                            $"content={cleanups} passThrough={passThroughCleanups}");
+                }
+                finally
+                {
+                    ReactorApp.ActiveHostInternal = previousHost;
+                    H.SetContent(null);
+                }
+            }
+        }
+    }
+
+    internal sealed class MemoResourceRefreshOwnerIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string resourceKey = "FlyoutMemoOwnerBrush";
+            var resources = new ResourceDictionary();
+            Application.Current.Resources.MergedDictionaries.Add(resources);
+            var previousHost = ReactorApp.ActiveHostInternal;
+            try
+            {
+                for (int kind = 0; kind < 3; kind++)
+                foreach (bool nested in new[] { false, true })
+                {
+                    resources[resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                    ThemeRef.InvalidateResolutionCache();
+                    var name = $"FlyoutMemoOwner_{kind}_{(nested ? "Nested" : "Direct")}";
+                    int factoryCalls = 0, outerVersion = 0, innerCleanups = 0, passThroughCleanups = 0, outerCleanups = 0;
+                    var opened = new List<int>();
+                    var closed = new List<int>();
+                    var invoked = new List<int>();
+                    int innerOpened = 0, innerInvoked = 0;
+                    Action innerCleanup = () => innerCleanups++;
+                    Action passThroughCleanup = () => passThroughCleanups++;
+                    Action outerCleanup = () => outerCleanups++;
+                    Element? factoryOutput = null;
+                    var target = new Border();
+                    H.SetContent(target);
+                    using var host = new ReactorHost(H.Window) { ContentTarget = target };
+                    using var isolation = ThemeResourceListeners.IsolateForTest(host);
+                    Element Wrap(Element child, int generation, bool inner)
+                    {
+                        string text = inner ? "inner" : "outer";
+                        Action invoke = () => { if (inner && nested) innerInvoked++; else invoked.Add(generation); };
+                        return kind switch
+                        {
+                            0 => Flyout(child,
+                                Component<ResourceLifecycleContent, (string, string, Action)>((text, resourceKey, inner ? innerCleanup : outerCleanup))) with
+                            {
+                                OverlayInputPassThroughElement = inner ? Component<CleanupProbe, Action>(passThroughCleanup) : null,
+                                OnOpened = () => { if (inner && nested) innerOpened++; else opened.Add(generation); },
+                                OnClosed = () => { if (!inner || !nested) closed.Add(generation); },
+                            },
+                            // Resolve inside the setter so the Memo factory does not read mutable resources.
+                            1 => MenuFlyout(child, MenuItem(text, invoke)).Set(menu =>
+                                menu.Items[0].Foreground = ThemeRef.Resolve(resourceKey, isDark: false)!),
+                            _ => CommandBarFlyout(child, primaryCommands: [AppBarButton(text, invoke)]).Set(commands =>
+                                ((AppBarButton)commands.PrimaryCommands[0]).Foreground = ThemeRef.Resolve(resourceKey, isDark: false)!),
+                        };
+                    }
+                    host.Mount(_ =>
+                    {
+                        int outerGeneration = ++outerVersion;
+                        var memo = Memo("stable", () =>
+                        {
+                            int generation = ++factoryCalls;
+                            // Business output stays pure for this Memo key; only the Theme.Ref resource changes.
+                            factoryOutput = Wrap(Button("resource target"), generation, inner: true);
+                            return factoryOutput;
+                        });
+                        return nested ? Wrap(memo, outerGeneration, inner: false) : memo;
+                    });
+                    await host.WaitForIdleAsync();
+                    await Harness.Render();
+                    var button = (Button)target.Child;
+                    var flyout = Reconciler.GetFlyoutOnControl(button)!;
+                    var initialOutput = factoryOutput;
+                    int initialCalls = factoryCalls;
+                    for (int phase = 0; phase < 2; phase++)
+                    {
+                        if (phase > 0)
+                        {
+                            resources[resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                            Theme.NotifyResourcesChanged();
+                            await host.WaitForIdleAsync();
+                            await Harness.Render();
+                            H.Check(name + "_Reconstructed", factoryCalls > initialCalls && !ReferenceEquals(initialOutput, factoryOutput));
+                        }
+                        H.Check(name + $"_Phase{phase}_SameControlAndFlyout", ReferenceEquals(target.Child, button)
+                            && ReferenceEquals(Reconciler.GetFlyoutOnControl(button), flyout));
+                        H.Check(name + $"_Phase{phase}_OwnerContent", FlyoutText(flyout) == (nested ? "outer" : "inner"));
+                        var brush = flyout switch
+                        {
+                            Flyout { Content: Border { Child: TextBlock text } } => text.Foreground,
+                            MenuFlyout menu => menu.Items[0].Foreground,
+                            CommandBarFlyout commands => ((AppBarButton)commands.PrimaryCommands[0]).Foreground,
+                            _ => null,
+                        };
+                        var color = (brush as SolidColorBrush)?.Color;
+                        H.Check(name + $"_Phase{phase}_ResourceColor", color == (phase == 0 ? Microsoft.UI.Colors.Red : Microsoft.UI.Colors.Blue),
+                            $"color={color}");
+                        flyout.AreOpenCloseAnimationsEnabled = false;
+                        flyout.ShowAt(button);
+                        H.Check(name + $"_Phase{phase}_Opens", await Harness.WaitFor(() => flyout.IsOpen));
+                        await Harness.Render(50);
+                        if (kind != 0)
+                        {
+                            var command = flyout is MenuFlyout menu ? (UIElement)menu.Items[0]
+                                : (UIElement)((CommandBarFlyout)flyout).PrimaryCommands[0];
+                            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(command);
+                            var invoke = peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                                as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
+                            H.Check(name + $"_Phase{phase}_CommandInvokable", invoke is not null);
+                            invoke?.Invoke();
+                            await Harness.Render(50);
+                        }
+                        flyout.Hide();
+                        await Harness.Render(50);
+                        int currentGeneration = nested ? outerVersion : factoryCalls;
+                        if (kind == 0)
+                            H.Check(name + $"_Phase{phase}_LatestCallbacks", opened.Count == phase + 1 && closed.Count == phase + 1
+                                && opened[^1] == currentGeneration && closed[^1] == currentGeneration && innerOpened == 0,
+                                $"opened={string.Join(',', opened)} closed={string.Join(',', closed)} current={currentGeneration} innerOpened={innerOpened}");
+                        else
+                            H.Check(name + $"_Phase{phase}_LatestCommand", invoked.Count == phase + 1
+                                && invoked[^1] == currentGeneration && innerInvoked == 0,
+                                $"invoked={string.Join(',', invoked)} current={currentGeneration} innerInvoked={innerInvoked}");
+                        H.Check(name + $"_Phase{phase}_DisplacedCleanup", innerCleanups == (kind == 0 && nested ? 1 : 0)
+                            && passThroughCleanups == (kind == 0 && nested ? 1 : 0) && outerCleanups == 0,
+                            $"inner={innerCleanups} passThrough={passThroughCleanups} outer={outerCleanups}");
+                    }
+                    host.Mount(_ => TextBlock("removed"));
+                    await host.WaitForIdleAsync();
+                    H.Check(name + "_Detached", Reconciler.GetFlyoutOnControl(button) is null);
+                    H.Check(name + "_CleanupOnce", innerCleanups == (kind == 0 ? 1 : 0) && passThroughCleanups == (kind == 0 ? 1 : 0)
+                        && outerCleanups == (kind == 0 && nested ? 1 : 0),
+                        $"inner={innerCleanups} passThrough={passThroughCleanups} outer={outerCleanups}");
+                }
+            }
+            finally
+            {
+                ReactorApp.ActiveHostInternal = previousHost;
+                H.SetContent(null);
+                Application.Current.Resources.MergedDictionaries.Remove(resources);
+                ThemeRef.InvalidateResolutionCache();
+            }
+        }
+    }
+
+    internal sealed class MemoDirtyDescendantOwnerIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var previousHost = ReactorApp.ActiveHostInternal;
+            try
+            {
+                foreach (bool wrapped in new[] { false, true })
+                {
+                    var name = $"FlyoutMemoDirty_{(wrapped ? "OuterOnPanel" : "Direct")}";
+                    var probe = new MemoDirtyProbe();
+                    int factoryCalls = 0, cleanups = 0;
+                    var opened = new List<int>();
+                    Action cleanup = () => cleanups++;
+                    var target = new Border();
+                    H.SetContent(target);
+                    using var host = new ReactorHost(H.Window) { ContentTarget = target };
+                    host.Mount(_ =>
+                    {
+                        var memo = Memo("stable", () =>
+                        {
+                            int generation = ++factoryCalls;
+                            return VStack(Component<MemoDirtyCounter, MemoDirtyProbe>(probe),
+                                Flyout(Button("skip target"), Component<LifecycleContent, (string, Action)>(("unchanged", cleanup))) with
+                                {
+                                    OnOpened = () => opened.Add(generation),
+                                    AreOpenCloseAnimationsEnabled = false,
+                                });
+                        });
+                        // This outer flyout shares the panel, not the sibling Button's ownership.
+                        return wrapped ? Flyout(memo, TextBlock("panel flyout")) : memo;
+                    });
+                    await host.WaitForIdleAsync();
+                    await Harness.Render();
+                    var button = H.FindButton("skip target")!;
+                    var flyout = (Flyout)Reconciler.GetFlyoutOnControl(button)!;
+                    for (int phase = 0; phase < 3; phase++)
+                    {
+                        if (phase > 0)
+                        {
+                            probe.Advance!();
+                            await host.WaitForIdleAsync();
+                            await Harness.Render();
+                            H.Check(name + $"_Phase{phase}_DirtyCounterRendered", H.FindText($"counter:{phase}") is not null);
+                            H.Check(name + $"_Phase{phase}_SkippedSibling", host.Reconciler.DebugElementsSkipped > 0);
+                        }
+                        H.Check(name + $"_Phase{phase}_FactoryCalls", factoryCalls == phase + 1);
+                        H.Check(name + $"_Phase{phase}_SameFlyout", ReferenceEquals(Reconciler.GetFlyoutOnControl(button), flyout));
+                        flyout.ShowAt(button);
+                        H.Check(name + $"_Phase{phase}_Opens", await Harness.WaitFor(() => flyout.IsOpen));
+                        await Harness.Render(50);
+                        flyout.Hide();
+                        await Harness.Render(50);
+                        H.Check(name + $"_Phase{phase}_LatestCallback", opened.SequenceEqual(Enumerable.Range(1, phase + 1)),
+                            $"opened={string.Join(',', opened)}");
+                        H.Check(name + $"_Phase{phase}_NoEarlyCleanup", cleanups == 0);
+                    }
+                    host.Mount(_ => TextBlock("removed"));
+                    await host.WaitForIdleAsync();
+                    H.Check(name + "_CleanupOnce", cleanups == 1 && Reconciler.GetFlyoutOnControl(button) is null);
+                }
+            }
+            finally
+            {
+                ReactorApp.ActiveHostInternal = previousHost;
+                H.SetContent(null);
+            }
+        }
+    }
+
+    private sealed class MemoDirtyProbe { internal Action? Advance; }
+
+    private sealed class MemoDirtyCounter : Component<MemoDirtyProbe>
+    {
+        public override Element Render()
+        {
+            var (value, setValue) = UseState(0);
+            Props.Advance = () => setValue(value + 1);
+            return TextBlock($"counter:{value}");
+        }
+    }
+
+    internal sealed class MemoOwnerRestoresAfterThrow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string resourceKey = "FlyoutMemoThrowBrush";
+            const string expectedError = "expected flyout target update failure";
+            var resources = new ResourceDictionary { [resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Red) };
+            Application.Current.Resources.MergedDictionaries.Add(resources);
+            ThemeRef.InvalidateResolutionCache();
+            try
+            {
+                using var reconciler = new Reconciler();
+                bool throwOnUpdate = false;
+                bool beforeRealization = false, insideRealization = true, afterRealization = false;
+                int factoryCalls = 0, cleanups = 0;
+                var opened = new List<int>();
+                Action cleanup = () => cleanups++;
+                reconciler.RegisterType<ForwardedTargetElement, FrameworkElement>(
+                    mount: static (r, el, render) => (FrameworkElement)r.Mount(el.Target, render)!,
+                    update: (r, oldEl, newEl, control, render) =>
+                    {
+                        if (throwOnUpdate)
+                        {
+                            beforeRealization = r.ReconstructingKeyedMemo;
+                            try
+                            {
+                                using var realization = r.EnterRealization(null, control);
+                                insideRealization = r.ReconstructingKeyedMemo;
+                                throw new InvalidOperationException(expectedError);
+                            }
+                            finally { afterRealization = r.ReconstructingKeyedMemo; }
+                        }
+                        return r.Update(oldEl.Target, newEl.Target, control, render) as FrameworkElement;
+                    });
+                FlyoutElement? output = null;
+                var memo = Memo("stable", () =>
+                {
+                    int generation = ++factoryCalls;
+                    output = Flyout(new ForwardedTargetElement(Button("throw target")),
+                        Component<ResourceLifecycleContent, (string, string, Action)>(("owned", resourceKey, cleanup))) with
+                    {
+                        OnOpened = () => opened.Add(generation),
+                        AreOpenCloseAnimationsEnabled = false,
+                    };
+                    return output;
+                });
+                var button = (Button)reconciler.Reconcile(null, memo, null, static () => { })!;
+                var original = output!;
+                var flyout = (Flyout)Reconciler.GetFlyoutOnControl(button)!;
+                H.SetContent(button);
+                await Harness.Render();
+                resources[resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                ThemeRef.InvalidateResolutionCache();
+                throwOnUpdate = true;
+                bool caught = false;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(memo, memo, button, static () => { }); }
+                catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                finally { reconciler.EndRootPass(); }
+                throwOnUpdate = false;
+                H.Check("FlyoutMemoThrow_TargetThrew", caught && factoryCalls == 2);
+                H.Check("FlyoutMemoThrow_RealizationContextRestored", beforeRealization && !insideRealization && afterRealization);
+
+                // Outside reconstruction, a self-update of another decorator must still be rejected.
+                var foreign = Flyout(original.Target, TextBlock("foreign"));
+                new Microsoft.UI.Reactor.Core.V1Protocol.Handlers.FlyoutHandler().Update(
+                    new UpdateContext(reconciler, static () => { }), foreign, foreign, button);
+                H.Check("FlyoutMemoThrow_ForeignOwnerRejected", FlyoutText(flyout) == "owned"
+                    && ReferenceEquals(Reconciler.GetMountedElement(button), original));
+                H.Check("FlyoutMemoThrow_NoEarlyCleanup", cleanups == 0);
+
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(memo, memo, button, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                var text = (flyout.Content as Border)?.Child as TextBlock;
+                H.Check("FlyoutMemoThrow_RetryReusesFlyout", factoryCalls == 3
+                    && ReferenceEquals(Reconciler.GetFlyoutOnControl(button), flyout));
+                H.Check("FlyoutMemoThrow_RetryRefreshesResource", (text?.Foreground as SolidColorBrush)?.Color == Microsoft.UI.Colors.Blue);
+                flyout.ShowAt(button);
+                H.Check("FlyoutMemoThrow_RetryOpens", await Harness.WaitFor(() => flyout.IsOpen));
+                await Harness.Render(50);
+                flyout.Hide();
+                await Harness.Render(50);
+                H.Check("FlyoutMemoThrow_RetryUsesCurrentCallback", opened.SequenceEqual(new[] { 3 }));
+                reconciler.UnmountChild(button);
+                H.Check("FlyoutMemoThrow_CleanupOnce", cleanups == 1 && Reconciler.GetFlyoutOnControl(button) is null);
+            }
+            finally
+            {
+                H.SetContent(null);
+                Application.Current.Resources.MergedDictionaries.Remove(resources);
+                ThemeRef.InvalidateResolutionCache();
+            }
+        }
+    }
+
+    private sealed class ResourceLifecycleContent : Component<(string Text, string ResourceKey, Action Cleanup)>
+    {
+        public override Element Render()
+        {
+            UseEffect(() => Props.Cleanup, []);
+            return TextBlock(Props.Text).Foreground(Theme.Ref(Props.ResourceKey));
+        }
+    }
 
     private static string? FlyoutText(WinPrim.FlyoutBase? flyout) => flyout switch
     {

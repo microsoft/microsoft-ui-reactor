@@ -1192,6 +1192,8 @@ public sealed partial class Reconciler : IDisposable
     private int _resourceRefreshPending;
     private bool _resourceRefreshArmed;
     private bool _resourceRefreshActive;
+    // Scoped to walking a keyed Memo's reconstructed output, never an independently realized row.
+    internal bool ReconstructingKeyedMemo { get; private set; }
 
     /// <summary>Requests a resource-refresh pass (see above). Thread-safe.</summary>
     internal void RequestResourceRefresh() => Interlocked.Exchange(ref _resourceRefreshPending, 1);
@@ -1667,12 +1669,11 @@ public sealed partial class Reconciler : IDisposable
         public HashSet<string>? ManagedResourceKeys;
 
         /// <summary>
-        /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last
-        /// updated to and whether it realized a control. Updates diff against it (as a templated
-        /// ListView diffs against the element tagged on its container) and map logical items to
-        /// <c>Items</c> entries through it: an item whose view is Empty has no entry.
+        /// For a templated <c>FlipView</c>: per logical item, the source view for positional
+        /// matching, the keyed view actually mounted or updated, and whether it realized a
+        /// control. An item whose view is Empty has no <c>Items</c> entry.
         /// </summary>
-        public List<(Element Element, bool HasControl)>? MountedItemElements;
+        public List<(Element Element, Element MountedElement, bool HasControl)>? MountedItemElements;
 
         /// <summary>
         /// <c>componentId</c> (<c>ReactorEventSource.ComponentRendered</c>) of the component
@@ -1932,7 +1933,7 @@ public sealed partial class Reconciler : IDisposable
         if (IsFlyoutDecorator(newEl)
             && _v1Handlers.TryGet(newEl.GetType(), out var entry) && entry.PreservesTargetTag)
         {
-            V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, oldEl, newEl, tagOnly);
+            V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, oldEl, newEl, tagOnly, ReconstructingKeyedMemo);
             SetDecoratorElementTag(control, newEl);
         }
         else
@@ -3102,6 +3103,7 @@ public sealed partial class Reconciler : IDisposable
         private readonly int _previousProviderChangeDepth;
         private readonly int _previousThemeChangeDepth;
         private readonly Element? _previousReconcilingElement;
+        private readonly bool _previousMemoReconstruction;
         private readonly StaggerScope? _previousStagger;
         private readonly string? _previousDiagOwner;
         private readonly string? _previousDiagRootOwner;
@@ -3116,6 +3118,7 @@ public sealed partial class Reconciler : IDisposable
             _previousProviderChangeDepth = owner._providerChangeDepth;
             _previousThemeChangeDepth = owner._themeChangeDepth;
             _previousReconcilingElement = owner._reconcilingElement;
+            _previousMemoReconstruction = owner.ReconstructingKeyedMemo;
             _previousStagger = _staggerScope;
             _previousDiagOwner = owner._diagOwner;
             _previousDiagRootOwner = owner.DiagnosticRootOwner;
@@ -3126,6 +3129,7 @@ public sealed partial class Reconciler : IDisposable
             owner._providerChangeDepth = 0;
             owner._themeChangeDepth = 0;
             owner._reconcilingElement = null;
+            owner.ReconstructingKeyedMemo = false;
             owner._ambientRequestedTheme = ambientTheme;
             // A row built re-entrantly is not part of the component being rendered: report
             // its owner as unknown, as for any row realized during layout.
@@ -3149,6 +3153,7 @@ public sealed partial class Reconciler : IDisposable
             owner._providerChangeDepth = _previousProviderChangeDepth;
             owner._themeChangeDepth = _previousThemeChangeDepth;
             owner._reconcilingElement = _previousReconcilingElement;
+            owner.ReconstructingKeyedMemo = _previousMemoReconstruction;
             owner._diagOwner = _previousDiagOwner;
             owner.DiagnosticRootOwner = _previousDiagRootOwner;
             _staggerScope = _previousStagger;
