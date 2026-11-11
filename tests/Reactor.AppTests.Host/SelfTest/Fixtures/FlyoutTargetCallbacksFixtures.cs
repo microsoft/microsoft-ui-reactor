@@ -738,6 +738,220 @@ internal static class FlyoutTargetCallbacksFixtures
         }
     }
 
+    internal sealed class ContentUpdateRetriesAfterThrow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (bool usePublishedAlias in new[] { false, true })
+            {
+                var name = $"FlyoutContentRetry_{(usePublishedAlias ? "Alias" : "Source")}";
+                const string expectedError = "expected flyout content update failure";
+                int updates = 0, cleanups = 0;
+                var opened = new List<int>();
+                using var reconciler = new Reconciler();
+                reconciler.RegisterType<RetryContentElement, TextBlock>(
+                    mount: static (_, el, _) => new TextBlock { Text = el.Text },
+                    update: (_, _, el, text, _) =>
+                    {
+                        if (++updates == 1) throw new InvalidOperationException(expectedError);
+                        text.Text = el.Text;
+                        return null;
+                    },
+                    unmount: (_, _) => cleanups++);
+                var source = Flyout(Button(name), new RetryContentElement("old")) with
+                {
+                    OnOpened = () => opened.Add(0),
+                    AreOpenCloseAnimationsEnabled = false,
+                };
+                var button = (Button)reconciler.Reconcile(null, source, null, static () => { })!;
+                var flyout = (Flyout)button.Flyout!;
+                reconciler.RefreshItemIdentityOnSkip(button, source.WithKey("row"));
+                var published = (FlyoutElement)Reconciler.GetMountedElement(button)!;
+                var previous = usePublishedAlias ? published : source;
+                var next = source with { Key = previous.Key, FlyoutContent = new RetryContentElement("new"), OnOpened = () => opened.Add(1) };
+                H.SetContent(button);
+                try
+                {
+                    await Harness.Render();
+                    H.Check(name + "_RekeyedAlias", published.Key == "row" && !ReferenceEquals(published, source));
+                    bool caught = false;
+                    try { reconciler.Reconcile(previous, next, button, static () => { }); }
+                    catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                    H.Check(name + "_FailedBeforeContentMutation", caught && updates == 1 && (flyout.Content as TextBlock)?.Text == "old");
+                    H.Check(name + "_PublishedOwnerRestored", ReferenceEquals(button.Flyout, flyout)
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), published) && cleanups == 0);
+                    flyout.ShowAt(button);
+                    await Harness.Render(50);
+                    flyout.Hide();
+                    await Harness.Render(50);
+                    H.Check(name + "_PreviousCallbackRestored", opened.SequenceEqual(new[] { 0 }));
+                    var retried = reconciler.Reconcile(previous, next, button, static () => { });
+                    H.Check(name + "_SameArgumentsRetryUpdatesContent", updates == 2 && ReferenceEquals(retried, button)
+                        && ReferenceEquals(button.Flyout, flyout) && (flyout.Content as TextBlock)?.Text == "new"
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), next));
+                    flyout.ShowAt(button);
+                    await Harness.Render(50);
+                    flyout.Hide();
+                    await Harness.Render(50);
+                    H.Check(name + "_CurrentCallbackAfterRetry", opened.SequenceEqual(new[] { 0, 1 }));
+                }
+                finally
+                {
+                    flyout.Hide();
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+                H.Check(name + "_CleanupOnce", cleanups == 1 && Reconciler.GetFlyoutOnControl(button) is null);
+            }
+        }
+    }
+
+    private sealed record RetryContentElement(string Text) : Element;
+
+    internal sealed class SetterRetriesAfterThrow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            for (int kind = 0; kind < 3; kind++)
+            {
+                var name = $"FlyoutSetterRetry_{kind}";
+                const string expectedError = "expected flyout setter failure";
+                int setterCalls = 0, cleanups = 0;
+                var callbacks = new List<int>();
+                var targetRef = new ElementRef();
+                using var reconciler = new Reconciler();
+                Action cleanup = () => cleanups++;
+                Element Build(int version)
+                {
+                    void Configure(WinPrim.FlyoutBase _)
+                    {
+                        if (version == 1 && ++setterCalls == 1) throw new InvalidOperationException(expectedError);
+                    }
+                    var target = Button(name).Ref(targetRef);
+                    return kind switch
+                    {
+                        0 => (Flyout(target, Component<LifecycleContent, (string, Action)>(($"body-{version}", cleanup))) with
+                        {
+                            OnOpened = () => callbacks.Add(version),
+                            AreOpenCloseAnimationsEnabled = false,
+                        }).Set(Configure),
+                        1 => MenuFlyout(target, MenuItem($"body-{version}", () => callbacks.Add(version))).Set(Configure),
+                        _ => CommandBarFlyout(target, primaryCommands: [AppBarButton($"body-{version}", () => callbacks.Add(version))]).Set(Configure),
+                    };
+                }
+                var previous = Build(0);
+                var next = Build(1);
+                var button = (Button)reconciler.Reconcile(null, previous, null, static () => { })!;
+                var flyout = button.Flyout!;
+                H.SetContent(button);
+                try
+                {
+                    await Harness.Render();
+                    bool caught = false;
+                    try { reconciler.Reconcile(previous, next, button, static () => { }); }
+                    catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                    H.Check(name + "_SetterThrewOnce", caught && setterCalls == 1);
+                    H.Check(name + "_PreviousOwnerRestored", ReferenceEquals(button.Flyout, flyout)
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), previous) && cleanups == 0);
+                    var retried = reconciler.Reconcile(previous, next, button, static () => { });
+                    H.Check(name + "_SameArgumentsRetryRunsSetter", setterCalls == 2 && ReferenceEquals(retried, button)
+                        && ReferenceEquals(button.Flyout, flyout) && ReferenceEquals(Reconciler.GetMountedElement(button), next));
+                    H.Check(name + "_CurrentContentOrCommand", FlyoutText(flyout) == "body-1");
+                    flyout.AreOpenCloseAnimationsEnabled = false;
+                    flyout.ShowAt(button);
+                    H.Check(name + "_Opens", await Harness.WaitFor(() => flyout.IsOpen));
+                    await Harness.Render(50);
+                    if (kind != 0)
+                    {
+                        var command = flyout is MenuFlyout menu ? (UIElement)menu.Items[0]
+                            : (UIElement)((CommandBarFlyout)flyout).PrimaryCommands[0];
+                        var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(command);
+                        var invoke = peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                            as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
+                        H.Check(name + "_CommandInvokable", invoke is not null);
+                        invoke?.Invoke();
+                        await Harness.Render(50);
+                    }
+                    flyout.Hide();
+                    await Harness.Render(50);
+                    H.Check(name + "_LatestCallback", callbacks.SequenceEqual(new[] { 1 }));
+                }
+                finally
+                {
+                    flyout.Hide();
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+                H.Check(name + "_CleanupOnce", cleanups == (kind == 0 ? 1 : 0)
+                    && targetRef.Current is null && Reconciler.GetFlyoutOnControl(button) is null);
+            }
+        }
+    }
+
+    internal sealed class TargetReplacementFailureKeepsNewOwner(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string name = "FlyoutReplacementFailure";
+            const string expectedError = "expected replacement flyout setter failure";
+            int oldCleanups = 0, newCleanups = 0, setterCalls = 0;
+            var opened = new List<int>();
+            var oldRef = new ElementRef();
+            var newRef = new ElementRef();
+            using var reconciler = new Reconciler();
+            Action newCleanup = () => newCleanups++;
+            var previous = Flyout(Button(name).Ref(oldRef), Component<LifecycleContent, (string, Action)>(("old", () => oldCleanups++))) with
+            {
+                OnOpened = () => opened.Add(0),
+                AreOpenCloseAnimationsEnabled = false,
+            };
+            var next = (Flyout(Border(TextBlock("replacement")).Ref(newRef),
+                Component<LifecycleContent, (string, Action)>(("new", newCleanup))) with
+            {
+                OnOpened = () => opened.Add(1),
+                AreOpenCloseAnimationsEnabled = false,
+            }).Set(_ => { if (++setterCalls == 1) throw new InvalidOperationException(expectedError); });
+            var oldButton = (Button)reconciler.Reconcile(null, previous, null, static () => { })!;
+            var oldFlyout = (Flyout)oldButton.Flyout!;
+            H.SetContent(oldButton);
+            try
+            {
+                await Harness.Render();
+                bool caught = false;
+                try { reconciler.Reconcile(previous, next, oldButton, static () => { }); }
+                catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                var replacement = newRef.Current as FrameworkElement;
+                H.Check(name + "_NewTargetMountedBeforeFailure", caught && setterCalls == 1 && replacement is Border);
+                if (replacement is null) return;
+                var flyout = Reconciler.GetFlyoutOnControl(replacement)!;
+                H.Check(name + "_OldOwnerReleased", oldRef.Current is null && oldCleanups == 1
+                    && Reconciler.GetFlyoutOnControl(oldButton) is null && oldFlyout.Content is null);
+                H.Check(name + "_NewOwnerKept", flyout is not null && !ReferenceEquals(flyout, oldFlyout)
+                    && ReferenceEquals(Reconciler.GetMountedElement(replacement), next) && newCleanups == 0);
+                H.SetContent(replacement);
+                var recovered = next with { FlyoutContent = Component<LifecycleContent, (string, Action)>(("recovered", newCleanup)) };
+                var updated = reconciler.Reconcile(next, recovered, replacement, static () => { });
+                H.Check(name + "_NewOwnerUpdatesAfterFailure", setterCalls == 2 && ReferenceEquals(updated, replacement)
+                    && ReferenceEquals(Reconciler.GetFlyoutOnControl(replacement), flyout)
+                    && ReferenceEquals(Reconciler.GetMountedElement(replacement), recovered) && FlyoutText(flyout) == "recovered");
+                await Harness.Render();
+                flyout?.ShowAt(replacement);
+                await Harness.Render(50);
+                flyout?.Hide();
+                await Harness.Render(50);
+                H.Check(name + "_NewOwnerCallback", opened.SequenceEqual(new[] { 1 }));
+            }
+            finally
+            {
+                if (newRef.Current is FrameworkElement replacement) reconciler.UnmountChild(replacement);
+                else reconciler.UnmountChild(oldButton);
+                H.SetContent(null);
+            }
+            H.Check(name + "_EachContentCleanedOnce", oldCleanups == 1 && newCleanups == 1
+                && oldRef.Current is null && newRef.Current is null);
+        }
+    }
+
     internal sealed class ForwardedUpdateThrowsAfterInner(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

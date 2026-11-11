@@ -1930,7 +1930,8 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal void RefreshElementTagOnSkip(FrameworkElement control, Element? oldEl, Element newEl, bool tagOnly = false)
     {
-        if (IsFlyoutDecorator(newEl)
+        bool isFlyoutDecorator = IsFlyoutDecorator(newEl);
+        if (isFlyoutDecorator
             && _v1Handlers.TryGet(newEl.GetType(), out var entry) && entry.PreservesTargetTag)
         {
             // The published instance is already live. Aliases and inactive inner
@@ -1940,7 +1941,8 @@ public sealed partial class Reconciler : IDisposable
             var tag = V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, oldEl, newEl, tagOnly, ReconstructingKeyedMemo);
             SetDecoratorElementTag(control, tag);
         }
-        else
+        else if (!isFlyoutDecorator || tagOnly || newEl.HasCallbacks
+            || (oldEl is not null && CallSiteChangedOnSkip(oldEl, newEl)))
             SetElementTagIfNeeded(control, newEl,
                 SkipsCallSiteOnlyTags && _v1Handlers.TryGet(newEl.GetType(), out var teardownEntry)
                 && teardownEntry is IV1TeardownOwner owner && owner.OwnsTeardown(control));
