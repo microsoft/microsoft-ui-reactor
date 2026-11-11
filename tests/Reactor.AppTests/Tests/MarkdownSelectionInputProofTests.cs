@@ -28,12 +28,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         SessionInteractivityGuard.EnsureInputInjectable(nameof(Selection_RoutedInputAndExternalEvents));
         GetWindowThreadProcessId((nint)TestSession.HostHwnd, out uint windowPid);
         Assert.AreEqual((uint)TestSession.HostPid, windowPid, "Only foreground the owned host window");
-        SetForegroundWindow((nint)TestSession.HostHwnd);
-        Wait(() =>
-        {
-            GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
-            return pid == (uint)TestSession.HostPid;
-        }, "owned host foreground");
+        AcquireForeground();
         var window = AutomationElement.FromHandle((nint)TestSession.HostHwnd);
         AutomationElement Find(string id) => window.FindFirst(TreeScope.Descendants,
             new PropertyCondition(AutomationElement.AutomationIdProperty, id))
@@ -288,6 +283,66 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         Assert.AreEqual((uint)TestSession.HostPid, pid, "Abort input: owned host is not foreground");
     }
 
+    private static bool HostOwnsForeground()
+    {
+        GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+        return pid == (uint)TestSession.HostPid;
+    }
+
+    /// <summary>
+    /// Brings the owned host to the foreground. Unlike every other E2E test, this one does not reach
+    /// the host through a winapp click (whose real pointer press activates the window); it asks for
+    /// the foreground itself, from the long-lived test process. Windows' foreground lock refuses a
+    /// bare <c>SetForegroundWindow</c> from that process after another process's input (such as an
+    /// earlier class's winapp click) has activated a different window, so whether the call took
+    /// depended on run order and timing, and every retry repeated the same refused call. A zero
+    /// mouse input (no movement, no button) makes this process the last input source, which the
+    /// lock honours. There is deliberately no <c>AttachThreadInput</c> bridge, and the restore is
+    /// <c>ShowWindowAsync</c>: neither may block on a hung host or foreground thread past the deadline. The zero input
+    /// is best-effort: if it is refused, the foreground predicate still decides, and the timeout
+    /// reports the refusal alongside the foreground diagnostics.
+    /// </summary>
+    private static void AcquireForeground()
+    {
+        var host = (nint)TestSession.HostHwnd;
+        bool requested = false;
+        uint creditSent = 0;
+        int creditError = 0;
+        var until = DateTime.UtcNow.AddSeconds(WaitSeconds);
+        do
+        {
+            if (HostOwnsForeground()) return;
+            if (IsIconic(host)) ShowWindowAsync(host, SwRestore);
+            creditSent = SendInput(1, [new Input { Type = 0 }], Marshal.SizeOf<Input>());
+            creditError = creditSent == 1 ? 0 : Marshal.GetLastWin32Error();
+            requested = SetForegroundWindow(host);
+            Thread.Sleep(PollIntervalMs);
+        } while (DateTime.UtcNow < until);
+        if (HostOwnsForeground()) return;
+        SessionInteractivityGuard.RecheckAfterFailure("Owned host foreground");
+        Assert.Fail($"Timed out: owned host foreground; zeroInputSent={creditSent} (error {creditError}); " +
+            DescribeForeground(host, requested));
+    }
+
+    private static unsafe string DescribeForeground(nint host, bool lastRequestResult)
+    {
+        var foreground = GetForegroundWindow();
+        GetWindowThreadProcessId(foreground, out uint pid);
+        string process;
+        try { using var p = global::System.Diagnostics.Process.GetProcessById((int)pid); process = p.ProcessName; }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { process = "<exited>"; }
+        char* buffer = stackalloc char[256];
+        string className = foreground == 0 ? "" : new string(buffer, 0, Math.Max(0, GetClassName(foreground, buffer, 256)));
+        string title = foreground == 0 ? "" : new string(buffer, 0, Math.Max(0, GetWindowText(foreground, buffer, 256)));
+        var lastInput = new LastInputInfo { Size = (uint)sizeof(LastInputInfo) };
+        string idle = GetLastInputInfo(ref lastInput) ? $"{unchecked((uint)Environment.TickCount - lastInput.Time)}ms" : "?";
+        string lockTimeout = SystemParametersInfo(SpiGetForegroundLockTimeout, 0, out uint timeout, 0) ? $"{timeout}ms" : "?";
+        return $"foreground hwnd=0x{foreground:X} pid={pid} process={process} class='{className}' title='{title}'; " +
+            $"host hwnd=0x{host:X} pid={TestSession.HostPid} iconic={IsIconic(host)} visible={IsWindowVisible(host)}; " +
+            $"lastSetForegroundWindow={lastRequestResult}; inputIdle={idle}; foregroundLockTimeout={lockTimeout}; " +
+            SessionInteractivityGuard.Diagnose();
+    }
+
     private void Key(ushort key, bool up)
     {
         GuardForeground();
@@ -315,6 +370,24 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private struct KeyboardInput { public ushort Key, Scan; public uint Flags, Time; public nuint Extra; }
     [StructLayout(LayoutKind.Sequential)]
     private struct ScreenPoint { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo { public uint Size, Time; }
+    private const int SwRestore = 9;
+    private const uint SpiGetForegroundLockTimeout = 0x2000;
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsIconic(nint window);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsWindowVisible(nint window);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ShowWindowAsync(nint window, int command);
+    [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
+    private static unsafe partial int GetClassName(nint window, char* buffer, int capacity);
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
+    private static unsafe partial int GetWindowText(nint window, char* buffer, int capacity);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetLastInputInfo(ref LastInputInfo info);
+    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SystemParametersInfo(uint action, uint param, out uint value, uint winIni);
     [LibraryImport("user32.dll")] private static partial nint GetForegroundWindow();
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetForegroundWindow(nint window);
