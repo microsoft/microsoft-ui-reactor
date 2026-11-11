@@ -57,7 +57,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     // The root's perf spans; see RootRenderDiagnostics. Callers of BeginRootPerfSpan check the keyword.
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentSpan BeginRootPerfSpan(bool hotReloadRender)
         => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginPerfSpan(
-            _rootComponent, _funcContext, hotReloadRender, _reconciler.ForceFullRenderPending);
+            _rootComponent, _funcContext, _rootComponent is null ? _rootRenderFunc : null, DiagnosticMountSite,
+            hotReloadRender, _reconciler.ForceFullRenderPending);
 
     private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan BeginRootEffectsPerfSpan(Component? effectsRoot)
         // The live root's: the effects flushed are the live root's (_rootComponent or _funcContext),
@@ -174,7 +175,31 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     // RequestRender (which can't bind to an Action method group directly);
     // _renderLoopHandler is the DispatcherQueueHandler passed to TryEnqueue.
     private Action? _rerenderAction;
+    // The root component's own rerender (its hooks' requests): claims the request for the root
+    // on the perf RenderPass, then RequestRender. Children reach the host through
+    // _rerenderAction after their own wrappers have claimed. Bound to the root diagnostics it
+    // was built with and dropped when the root is retired, so a retired root's late requests
+    // claim for the retired root (and name nobody), never for its replacement.
+    private Action? _rootRerenderAction;
     private Microsoft.UI.Dispatching.DispatcherQueueHandler? _renderLoopHandler;
+
+    // Who scheduled the next pass, for the perf RenderPass Start.
+    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests _perfRequests;
+
+    // Test-only (InternalsVisibleTo Reactor.AppTests.Host).
+    internal Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests PerfRequestsForTests => _perfRequests;
+
+    // One closure per root, not per render.
+    private Action RootRerenderAction()
+    {
+        if (_rootRerenderAction is null)
+        {
+            var diagnostics = _rootDiagnostics;
+            var request = _rerenderAction ??= () => RequestRender();
+            _rootRerenderAction = () => diagnostics.RequestFromRoot(request);
+        }
+        return _rootRerenderAction;
+    }
 
     /// <summary>
     /// Live render performance snapshot, updated every ~1 second.
@@ -333,6 +358,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _perfRequests = new(() => _needsRerender);
         // Diagnostics mode needs call sites stamped from the very first render, so it
         // implies source mapping (REACTOR_SOURCEMAP=1 alone remains the narrower opt-in).
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
@@ -732,6 +758,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // progress (it called Mount), and it reports as the old root.
         _rootDiagnostics.Forget();
         _rootDiagnostics = new();
+        _rootRerenderAction = null;
         // The old root's content stays on screen until the replacement renders; if that
         // render produces nothing, the old tree must still be released (see Render).
         _releaseReplacedTreeOnNullRender = _currentTree is not null || _currentControl is not null;
@@ -867,6 +894,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     {
         if (_disposed) return;
 
+        // Before the flag is set below: Note reads it to see whether a pass was already pending.
+        _perfRequests.Note();
+
         if (force)
             _reconciler.ForceFullRenderPending = true;
 
@@ -939,8 +969,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             // The pass span: root render, reconcile, commit and root effects.
             bool perfPass = Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.PassEnabled;
-            if (perfPass)
-                Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.RenderPassStart(_perfHostId);
+            _rootDiagnostics.BeginPass(perfPass, _perfHostId, _perfRequests,
+                _rootComponent, _funcContext, _rootComponent is null ? _rootRenderFunc : null);
             try
             {
                 Render();
@@ -1125,7 +1155,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             // root and then throw, and the failure belongs to the component that threw.
             if (_rootComponent is { } renderingRoot)
             {
-                renderingRoot.Context.BeginRender(rerender, this);
+                renderingRoot.Context.BeginRender(RootRerenderAction(), this);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))
@@ -1161,7 +1191,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
             {
-                _funcContext.BeginRender(rerender, this);
+                _funcContext.BeginRender(RootRerenderAction(), this);
                 try
                 {
                     using (ValidationRenderScope.Begin(null))

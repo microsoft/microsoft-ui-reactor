@@ -18,17 +18,18 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <para><b>Wire format.</b> Each event carries its TraceLogging metadata in-band, so any
 /// TDH-based decoder (WPA, TraceEvent, <c>TdhGetEventInformation</c>) reads names and field
 /// types without a manifest. Event ids, opcodes and fields are a stable contract documented
-/// in <c>docs/reference/perf-trace-events.md</c>; never renumber or retype a field — add a
-/// new event instead.</para>
+/// in <c>docs/reference/perf-trace-events.md</c>; never renumber, reorder or retype a field.
+/// A new field is appended after the existing ones (the event version stays 0, which
+/// decoders check), or the data goes in a new event.</para>
 ///
 /// <para><b>Cost.</b> The provider registers once per process (first
 /// <see cref="EnsureRegistered"/>). With no session listening, every emit site is one
 /// <see cref="IsEnabled"/> check: a static field read and compare. Payloads are only computed
 /// and written after that check, and writing allocates nothing.</para>
 ///
-/// <para><b>PII.</b> Only framework tokens, developer-authored type names, counts and
-/// process-local ids — never props, state values, keys, text or paths
-/// (spec 044 §6.2.1).</para>
+/// <para><b>PII.</b> Only framework tokens, developer-authored type and method names,
+/// source file names (never their directories), counts and process-local ids — never props,
+/// state values, keys, text or paths (spec 044 §6.2.1).</para>
 /// </remarks>
 internal static unsafe partial class ReactorPerfTrace
 {
@@ -244,9 +245,9 @@ internal static unsafe partial class ReactorPerfTrace
         }
 
         /// <summary>Writes the Start. Callers check <see cref="ComponentEnabled"/> first.</summary>
-        internal static ComponentSpan Begin(ulong componentId, string name, string reason)
+        internal static ComponentSpan Begin(ulong componentId, string name, string reason, SourceLocation? callSite)
         {
-            ComponentRenderStart(componentId, name, reason);
+            ComponentRenderStart(componentId, name, reason, callSite);
             return new ComponentSpan(componentId);
         }
 
@@ -289,25 +290,67 @@ internal static unsafe partial class ReactorPerfTrace
     // by the caller: a Stop is written whenever its Start was, even if the session went away
     // in between (ETW drops it), so a consumer never sees a Start without its Stop.
 
-    internal static void RenderPassStart(ulong hostId)
-        => WriteU64(EventIds.RenderPassStart, Levels.Informational, Opcodes.Start, Keywords.Pass, Metadata.RenderPassStart, hostId);
+    /// <param name="hostId">The host's process-unique id.</param>
+    /// <param name="requesterId">componentId of the component whose request scheduled this pass; 0 when none did.</param>
+    /// <param name="requesterName">That component's name; empty when <paramref name="requesterId"/> is 0.</param>
+    /// <param name="requestCount">Render requests coalesced into this pass while the Pass keyword was on.</param>
+    internal static void RenderPassStart(ulong hostId, ulong requesterId, string requesterName, uint requestCount)
+    {
+        fixed (char* pRequester = requesterName)
+        {
+            EventData* data = stackalloc EventData[6];
+            SetMetadata(data, Metadata.RenderPassStart);
+            data[2] = EventData.Of(&hostId, sizeof(ulong));
+            data[3] = EventData.Of(&requesterId, sizeof(ulong));
+            data[4] = EventData.Of(pRequester, (requesterName.Length + 1) * sizeof(char));
+            data[5] = EventData.Of(&requestCount, sizeof(uint));
+            Write(EventIds.RenderPassStart, Levels.Informational, Opcodes.Start, Keywords.Pass, data, 6);
+        }
+    }
 
     internal static void RenderPassStop(ulong hostId)
         => WriteU64(EventIds.RenderPassStop, Levels.Informational, Opcodes.Stop, Keywords.Pass, Metadata.RenderPassStop, hostId);
 
-    internal static void ComponentRenderStart(ulong componentId, string name, string reason)
+    /// <param name="componentId">The component's process-unique id.</param>
+    /// <param name="name">The component's name (<c>Reconciler.PerfComponentName</c>).</param>
+    /// <param name="reason">Why it rendered (<see cref="ComponentRenderTrace.Reasons"/>).</param>
+    /// <param name="callSite">
+    /// Where the component's element was created (the source map's stamp), or null. Only the
+    /// file name is written: a compile-time path can carry a user name (spec 044 §6.2.1).
+    /// </param>
+    internal static void ComponentRenderStart(ulong componentId, string name, string reason, SourceLocation? callSite)
     {
+        string path = "";
+        uint line = 0, column = 0;
+        if (callSite is { } site)
+        {
+            path = site.FilePath ?? "";
+            line = (uint)Math.Max(0, site.LineNumber);
+            column = (uint)Math.Max(0, site.ColumnNumber);
+        }
+        int fileStart = FileNameStart(path);
         fixed (char* pName = name)
         fixed (char* pReason = reason)
+        fixed (char* pPath = path)
         {
-            EventData* data = stackalloc EventData[5];
+            EventData* data = stackalloc EventData[8];
             SetMetadata(data, Metadata.ComponentRenderStart);
             data[2] = EventData.Of(&componentId, sizeof(ulong));
             data[3] = EventData.Of(pName, (name.Length + 1) * sizeof(char));
             data[4] = EventData.Of(pReason, (reason.Length + 1) * sizeof(char));
-            Write(EventIds.ComponentRenderStart, Levels.Informational, Opcodes.Start, Keywords.Component, data, 5);
+            // The file name is the path's tail, so it shares the path's nul terminator.
+            data[5] = EventData.Of(pPath + fileStart, (path.Length - fileStart + 1) * sizeof(char));
+            data[6] = EventData.Of(&line, sizeof(uint));
+            data[7] = EventData.Of(&column, sizeof(uint));
+            Write(EventIds.ComponentRenderStart, Levels.Informational, Opcodes.Start, Keywords.Component, data, 8);
         }
     }
+
+    /// <summary>
+    /// Index where <paramref name="path"/>'s file name starts. Both separators count: a
+    /// deterministic-build path uses '/' even on Windows.
+    /// </summary>
+    internal static int FileNameStart(string path) => path.AsSpan().LastIndexOfAny('/', '\\') + 1;
 
     internal static void ComponentRenderStop(ulong componentId)
         => WriteU64(EventIds.ComponentRenderStop, Levels.Informational, Opcodes.Stop, Keywords.Component, Metadata.ComponentRenderStop, componentId);
@@ -325,11 +368,19 @@ internal static unsafe partial class ReactorPerfTrace
         }
     }
 
-    internal static void ReconcileStop()
+    /// <summary>
+    /// Ends a Reconcile span with the panel child edits made during it: the sum of the counts
+    /// the nested <c>ChildReconcile</c> spans report, kept even while that keyword is off.
+    /// </summary>
+    internal static void ReconcileStop(uint inserted, uint removed, uint moved, uint replaced)
     {
-        EventData* data = stackalloc EventData[2];
+        EventData* data = stackalloc EventData[6];
         SetMetadata(data, Metadata.ReconcileStop);
-        Write(EventIds.ReconcileStop, Levels.Informational, Opcodes.Stop, Keywords.Pass, data, 2);
+        data[2] = EventData.Of(&inserted, sizeof(uint));
+        data[3] = EventData.Of(&removed, sizeof(uint));
+        data[4] = EventData.Of(&moved, sizeof(uint));
+        data[5] = EventData.Of(&replaced, sizeof(uint));
+        Write(EventIds.ReconcileStop, Levels.Informational, Opcodes.Stop, Keywords.Pass, data, 6);
     }
 
     internal static void EffectsStart(ulong componentId)
@@ -457,14 +508,18 @@ internal static unsafe partial class ReactorPerfTrace
     {
         public static readonly Blob Provider = BuildProvider(ProviderName);
 
-        public static readonly Blob RenderPassStart = BuildEvent("RenderPass", ("hostId", InTypes.UInt64));
+        // Fields after the first group were appended in schema revision 2 (see the contract doc).
+        public static readonly Blob RenderPassStart = BuildEvent("RenderPass", ("hostId", InTypes.UInt64),
+            ("requesterId", InTypes.UInt64), ("requesterName", InTypes.UnicodeString), ("requestCount", InTypes.UInt32));
         public static readonly Blob RenderPassStop = BuildEvent("RenderPass", ("hostId", InTypes.UInt64));
         public static readonly Blob ComponentRenderStart = BuildEvent("ComponentRender",
-            ("componentId", InTypes.UInt64), ("name", InTypes.UnicodeString), ("reason", InTypes.UnicodeString));
+            ("componentId", InTypes.UInt64), ("name", InTypes.UnicodeString), ("reason", InTypes.UnicodeString),
+            ("callSiteFile", InTypes.UnicodeString), ("callSiteLine", InTypes.UInt32), ("callSiteColumn", InTypes.UInt32));
         public static readonly Blob ComponentRenderStop = BuildEvent("ComponentRender", ("componentId", InTypes.UInt64));
         public static readonly Blob ReconcileStart = BuildEvent("Reconcile",
             ("entry", InTypes.UnicodeString), ("element", InTypes.UnicodeString));
-        public static readonly Blob ReconcileStop = BuildEvent("Reconcile");
+        public static readonly Blob ReconcileStop = BuildEvent("Reconcile",
+            ("inserted", InTypes.UInt32), ("removed", InTypes.UInt32), ("moved", InTypes.UInt32), ("replaced", InTypes.UInt32));
         public static readonly Blob EffectsStart = BuildEvent("Effects", ("componentId", InTypes.UInt64));
         public static readonly Blob EffectsStop = BuildEvent("Effects", ("componentId", InTypes.UInt64));
         public static readonly Blob ChildReconcileStart = BuildEvent("ChildReconcile",
