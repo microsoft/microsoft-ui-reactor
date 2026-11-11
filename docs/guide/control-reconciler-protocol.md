@@ -673,9 +673,13 @@ Inner updates, including custom decorators, keep an enclosing flyout's published
 tag while it is updating, so a forwarding target that throws afterward does not
 hide the outer flyout from teardown.
 Skipping the retained source after re-keying also preserves its published tag.
-An existing flyout's failed content or setter update restores the previous owner
-and published tag while that update still owns the same native slot. This permits
-retrying the old/new pair; native content and setter changes are not rolled back.
+An existing flyout's failed content, setter, or modifier update restores the
+previous owner and published tag while that update still owns the same native
+slot. This permits retrying the old/new pair; native changes are not rolled back.
+Only retries after such a failure use the actual native menu-item count at each
+submenu level, avoiding duplicate additions or out-of-range removals. Normal
+updates keep model-based counts and the existing behavior of setter-added items;
+recovery reconciles the collection to the declared items.
 
 Keyed FlipView pages keep both the source view for positional matching and the
 key-stamped instance used for updates. Memo resource and dirty-descendant

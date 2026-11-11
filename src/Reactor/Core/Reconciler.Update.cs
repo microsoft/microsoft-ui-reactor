@@ -198,6 +198,8 @@ public sealed partial class Reconciler
 
         UIElement? result;
         bool registeredType = false;
+        // Keep the snapshot for post-dispatch failures; each branch ends the handler's update depth.
+        V1Protocol.OverlayLifecycle.FlyoutUpdateScope flyoutUpdate = default;
         try
         {
         // Publish the effective theme for the subtree now that we're committed to the
@@ -219,7 +221,11 @@ public sealed partial class Reconciler
         // `control`, set `result` to null so callers preserve identity.
         if (_v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
         {
-            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
+            var handlerOldEl = oldEl;
+            if (v1Entry.PreservesTargetTag && IsFlyoutDecorator(newEl))
+                flyoutUpdate = V1Protocol.OverlayLifecycle.FlyoutUpdateScope.Begin(this, control, ref handlerOldEl, newEl);
+            using var handlerUpdate = flyoutUpdate;
+            var v1Result = v1Entry.Update(handlerOldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
         }
         // Registered types checked first
@@ -230,7 +236,11 @@ public sealed partial class Reconciler
         }
         else if (TryResolveFromControlRegistry(newEl.GetType(), out v1Entry))
         {
-            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
+            var handlerOldEl = oldEl;
+            if (v1Entry.PreservesTargetTag && IsFlyoutDecorator(newEl))
+                flyoutUpdate = V1Protocol.OverlayLifecycle.FlyoutUpdateScope.Begin(this, control, ref handlerOldEl, newEl);
+            using var handlerUpdate = flyoutUpdate;
+            var v1Result = v1Entry.Update(handlerOldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
         }
         else
@@ -396,6 +406,11 @@ public sealed partial class Reconciler
         if (newEl.StaggerConfig is not null)
             ApplyStaggerDelays(target, newEl.StaggerConfig);
 
+        }
+        catch
+        {
+            flyoutUpdate.Rollback(control, newEl);
+            throw;
         }
         finally
         {

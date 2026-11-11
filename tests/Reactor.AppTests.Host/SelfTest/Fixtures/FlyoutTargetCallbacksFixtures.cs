@@ -888,6 +888,356 @@ internal static class FlyoutTargetCallbacksFixtures
         }
     }
 
+    internal sealed class MenuItemCountRetriesAfterSetterThrow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            static bool Matches(IList<Microsoft.UI.Xaml.Controls.MenuFlyoutItemBase> native,
+                Microsoft.UI.Reactor.Core.MenuFlyoutItemBase[] model)
+            {
+                if (native.Count != model.Length) return false;
+                for (int i = 0; i < model.Length; i++)
+                {
+                    if (model[i] is MenuFlyoutItemData leaf && native[i] is MenuFlyoutItem item
+                        && item.Text == leaf.Text && ReferenceEquals(item.Tag, leaf)) continue;
+                    if (model[i] is MenuFlyoutSubItemData sub && native[i] is MenuFlyoutSubItem subItem
+                        && subItem.Text == sub.Text && Matches(subItem.Items, sub.Items)) continue;
+                    return false;
+                }
+                return true;
+            }
+            foreach (var (shapeName, shape) in new[] { ("TopShrink", 0), ("TopGrow", 1), ("SubShrink", 2), ("SubGrow", 3) })
+            {
+                var name = $"MenuSetterCountRetry_{shapeName}";
+                const string expectedError = "expected menu setter failure after item patch";
+                int setterCalls = 0;
+                var callbacks = new List<int>();
+                var targetRef = new ElementRef();
+                using var reconciler = new Reconciler();
+                MenuFlyoutElement Build(int version)
+                {
+                    var primary = MenuItem($"root-{version}", () => callbacks.Add(version));
+                    Microsoft.UI.Reactor.Core.MenuFlyoutItemBase[] items;
+                    if (shape == 0)
+                        items = version == 0 ? [primary, MenuItem("removed")] : [primary];
+                    else if (shape == 1)
+                        // On retry the native submenu is at index 1, beyond the old model's length.
+                        items = version == 0 ? [primary] : [primary, MenuSubItem($"added-{version}", MenuItem($"child-0-{version}"))];
+                    else
+                    {
+                        int count = (shape == 2) == (version == 0) ? 2 : 1;
+                        var children = Enumerable.Range(0, count).Select(index => MenuItem($"child-{index}-{version}")).ToArray();
+                        items = [primary, MenuSubItem($"sub-{version}", children)];
+                    }
+                    return MenuFlyout(Button(name).Ref(targetRef), items).Set(_ =>
+                    {
+                        if (version > 0 && ++setterCalls == 1) throw new InvalidOperationException(expectedError);
+                    });
+                }
+                var previous = Build(0);
+                var failed = Build(1);
+                var button = (Button)reconciler.Reconcile(null, previous, null, static () => { })!;
+                var flyout = (MenuFlyout)button.Flyout!;
+                H.SetContent(button);
+                try
+                {
+                    await Harness.Render();
+                    H.Check(name + "_InitialShape", Matches(flyout.Items, previous.Items));
+                    bool caught = false;
+                    try { reconciler.Reconcile(previous, failed, button, static () => { }); }
+                    catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                    H.Check(name + "_NativePatchedBeforeSetterFailure", caught && setterCalls == 1 && Matches(flyout.Items, failed.Items));
+                    H.Check(name + "_PreviousOwnerRestored", ReferenceEquals(button.Flyout, flyout)
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), previous));
+                    var rebuilt = Build(2);
+                    UIElement? retried = null;
+                    Exception? retryError = null;
+                    try { retried = reconciler.Reconcile(previous, rebuilt, button, static () => { }); }
+                    catch (Exception ex) { retryError = ex; }
+                    H.Check(name + "_RebuiltRetrySucceeded", retryError is null && setterCalls == 2
+                        && ReferenceEquals(retried, button) && ReferenceEquals(button.Flyout, flyout)
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), rebuilt),
+                        $"error={retryError?.GetType().Name}: {retryError?.Message}; setters={setterCalls}");
+                    H.Check(name + "_ExactRecursiveShapeAndLatestLeafTags", Matches(flyout.Items, rebuilt.Items));
+                    flyout.AreOpenCloseAnimationsEnabled = false;
+                    flyout.ShowAt(button);
+                    H.Check(name + "_Opens", await Harness.WaitFor(() => flyout.IsOpen));
+                    await Harness.Render();
+                    var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(flyout.Items[0]);
+                    var invoke = peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                        as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
+                    H.Check(name + "_PrimaryInvokable", invoke is not null);
+                    invoke?.Invoke();
+                    H.Check(name + "_LatestPrimaryCallback", await Harness.WaitFor(() => callbacks.SequenceEqual(new[] { 2 })));
+                }
+                finally
+                {
+                    flyout.Hide();
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+                H.Check(name + "_TargetRefCleared", targetRef.Current is null && Reconciler.GetFlyoutOnControl(button) is null);
+            }
+        }
+    }
+
+    internal sealed class MenuManualTailsSurviveNormalUpdates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string name = "MenuManualTails";
+            const string expectedError = "expected menu setter failure before retry";
+            var rootTail = new MenuFlyoutItem { Text = "manual root tail" };
+            var subTail = new MenuFlyoutItem { Text = "manual submenu tail" };
+            var targetRef = new ElementRef();
+            var beforeSetter = new Dictionary<int, (bool Root, bool Sub)>();
+            MenuFlyoutSubItem? originalSubmenu = null;
+            using var reconciler = new Reconciler();
+            MenuFlyoutElement Build(int version) => MenuFlyout(Button(name).Ref(targetRef),
+                MenuItem($"root-{version}"), MenuSubItem($"sub-{version}", MenuItem($"child-{version}"))).Set(menu =>
+            {
+                var submenu = (MenuFlyoutSubItem)menu.Items[1];
+                originalSubmenu ??= submenu;
+                // Observe before re-adding: checking only afterward would hide unwanted removal.
+                beforeSetter.Add(version, (menu.Items.Count == 3 && ReferenceEquals(menu.Items[2], rootTail),
+                    submenu.Items.Count == 2 && ReferenceEquals(submenu.Items[1], subTail)));
+                if (version == 2) throw new InvalidOperationException(expectedError);
+                if (!menu.Items.Contains(rootTail)) menu.Items.Add(rootTail);
+                if (!submenu.Items.Contains(subTail)) submenu.Items.Add(subTail);
+            });
+            var initial = Build(0);
+            var button = (Button)reconciler.Reconcile(null, initial, null, static () => { })!;
+            var flyout = (MenuFlyout)button.Flyout!;
+            H.SetContent(button);
+            try
+            {
+                await Harness.Render();
+                H.Check(name + "_InitialManualTails", flyout.Items.Count == 3 && ReferenceEquals(flyout.Items[2], rootTail)
+                    && originalSubmenu is { Items.Count: 2 } && ReferenceEquals(originalSubmenu.Items[1], subTail));
+                var normal = Build(1);
+                var updated = reconciler.Reconcile(initial, normal, button, static () => { });
+                H.Check(name + "_NormalUpdatePreservesTailsBeforeSetter", beforeSetter[1] == (true, true)
+                    && ReferenceEquals(updated, button) && ReferenceEquals(button.Flyout, flyout)
+                    && ReferenceEquals(flyout.Items[1], originalSubmenu));
+                var failed = Build(2);
+                bool caught = false;
+                try { reconciler.Reconcile(normal, failed, button, static () => { }); }
+                catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                H.Check(name + "_SetterFailureRestoresOwner", caught && beforeSetter[2] == (true, true)
+                    && ReferenceEquals(Reconciler.GetMountedElement(button), normal));
+                var retried = Build(3);
+                updated = reconciler.Reconcile(normal, retried, button, static () => { });
+                // Recovery may remove manual tails; the successful setter can add them again.
+                H.Check(name + "_RetryRestoresManualTails", ReferenceEquals(updated, button) && ReferenceEquals(button.Flyout, flyout)
+                    && ReferenceEquals(Reconciler.GetMountedElement(button), retried)
+                    && flyout.Items.Count == 3 && ReferenceEquals(flyout.Items[2], rootTail)
+                    && flyout.Items[1] is MenuFlyoutSubItem { Items.Count: 2 } retrySubmenu && ReferenceEquals(retrySubmenu.Items[1], subTail));
+                var afterRetry = Build(4);
+                reconciler.Reconcile(retried, afterRetry, button, static () => { });
+                H.Check(name + "_NormalAfterRetryPreservesTailsBeforeSetter", beforeSetter[4] == (true, true)
+                    && beforeSetter.Count == 5 && ReferenceEquals(button.Flyout, flyout)
+                    && ReferenceEquals(flyout.Items[1], originalSubmenu)
+                    && ReferenceEquals(Reconciler.GetMountedElement(button), afterRetry));
+            }
+            finally
+            {
+                reconciler.UnmountChild(button);
+                H.SetContent(null);
+            }
+            H.Check(name + "_TargetRefCleared", targetRef.Current is null && Reconciler.GetFlyoutOnControl(button) is null);
+        }
+    }
+
+    internal sealed class ModifierUpdateRetriesAfterThrow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            for (int kind = 0; kind < 3; kind++)
+            {
+                var name = $"FlyoutModifierRetry_{kind}";
+                const string expectedError = "expected flyout modifier failure";
+                int cleanups = 0;
+                var setters = new List<int>();
+                var modifiers = new List<int>();
+                var callbacks = new List<int>();
+                var targetRef = new ElementRef();
+                using var reconciler = new Reconciler();
+                Action cleanup = () => cleanups++;
+                Element Build(int version)
+                {
+                    void Configure(WinPrim.FlyoutBase _) => setters.Add(version);
+                    var target = Button(name).Ref(targetRef);
+                    Element element = kind switch
+                    {
+                        0 => (Flyout(target, Component<LifecycleContent, (string, Action)>(($"body-{version}", cleanup))) with
+                        {
+                            OnOpened = () => callbacks.Add(version),
+                            AreOpenCloseAnimationsEnabled = false,
+                        }).Set(Configure),
+                        1 => MenuFlyout(target, MenuItem($"body-{version}", () => callbacks.Add(version))).Set(Configure),
+                        _ => CommandBarFlyout(target, primaryCommands: [AppBarButton($"body-{version}", () => callbacks.Add(version))]).Set(Configure),
+                    };
+                    return version == 0 ? element : element.OnMount(_ =>
+                    {
+                        modifiers.Add(version);
+                        if (modifiers.Count == 1) throw new InvalidOperationException(expectedError);
+                    });
+                }
+                var previous = Build(0);
+                var failed = Build(1);
+                var button = (Button)reconciler.Reconcile(null, previous, null, static () => { })!;
+                var flyout = button.Flyout!;
+                H.SetContent(button);
+                try
+                {
+                    await Harness.Render();
+                    H.Check(name + "_InitialModifierAbsent", previous.Modifiers is null);
+                    bool caught = false;
+                    try { reconciler.Reconcile(previous, failed, button, static () => { }); }
+                    catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                    // ApplyModifiers runs after the handler has updated content and applied setters.
+                    H.Check(name + "_FailedInModifierAfterHandler", caught && modifiers.SequenceEqual(new[] { 1 })
+                        && setters.SequenceEqual(new[] { 0, 1 }) && FlyoutText(flyout) == "body-1");
+                    H.Check(name + "_PreviousOwnerRestored", ReferenceEquals(button.Flyout, flyout)
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), previous) && cleanups == 0);
+                    // A real rerender rebuilds the record; version 2 must replace version 1's output.
+                    var rebuilt = Build(2);
+                    var retried = reconciler.Reconcile(previous, rebuilt, button, static () => { });
+                    H.Check(name + "_RebuiltRetryAppliesLatestOutput", !ReferenceEquals(failed, rebuilt)
+                        && ReferenceEquals(retried, button) && ReferenceEquals(button.Flyout, flyout)
+                        && ReferenceEquals(Reconciler.GetMountedElement(button), rebuilt)
+                        && setters.SequenceEqual(new[] { 0, 1, 2 }) && modifiers.SequenceEqual(new[] { 1, 2 })
+                        && FlyoutText(flyout) == "body-2");
+                    flyout.AreOpenCloseAnimationsEnabled = false;
+                    flyout.ShowAt(button);
+                    H.Check(name + "_Opens", await Harness.WaitFor(() => flyout.IsOpen));
+                    await Harness.Render();
+                    if (kind != 0)
+                    {
+                        var command = flyout is MenuFlyout menu ? (UIElement)menu.Items[0]
+                            : (UIElement)((CommandBarFlyout)flyout).PrimaryCommands[0];
+                        var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(command);
+                        var invoke = peer?.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                            as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
+                        H.Check(name + "_CommandInvokable", invoke is not null);
+                        invoke?.Invoke();
+                    }
+                    H.Check(name + "_LatestCallback", await Harness.WaitFor(() => callbacks.SequenceEqual(new[] { 2 })));
+                }
+                finally
+                {
+                    flyout.Hide();
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+                H.Check(name + "_CleanupOnce", cleanups == (kind == 0 ? 1 : 0)
+                    && targetRef.Current is null && Reconciler.GetFlyoutOnControl(button) is null);
+            }
+        }
+    }
+
+    internal sealed class ModifierMemoRefreshRestoresHandlerDepth(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string name = "FlyoutModifierMemoDepth";
+            const string resourceKey = "FlyoutModifierMemoDepthBrush";
+            const string expectedError = "expected failure after modifier Memo refresh";
+            var resources = new ResourceDictionary { [resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Red) };
+            Application.Current.Resources.MergedDictionaries.Add(resources);
+            ThemeRef.InvalidateResolutionCache();
+            using var reconciler = new Reconciler();
+            Button? button = null;
+            int factoryCalls = 0, modifierCalls = 0, cleanups = 0;
+            bool handlerUpdating = false, modifierUpdating = true, blueApplied = false;
+            var opened = new List<int>();
+            var closed = new List<int>();
+            Action cleanup = () => cleanups++;
+            try
+            {
+                var memo = Memo("stable", () =>
+                {
+                    int generation = ++factoryCalls;
+                    // Business output is fixed; resource resolution and callback generation are observed separately.
+                    return (Flyout(Button(name), Component<ResourceLifecycleContent, (string, string, Action)>(("owned", resourceKey, cleanup))) with
+                    {
+                        OnOpened = () => opened.Add(generation),
+                        OnClosed = () => closed.Add(generation),
+                        AreOpenCloseAnimationsEnabled = false,
+                    }).Set(_ =>
+                    {
+                        if (button is not null) handlerUpdating |= OverlayLifecycle.IsFlyoutOwnerUpdating(button);
+                    });
+                });
+                button = (Button)reconciler.Reconcile(null, memo, null, static () => { })!;
+                var flyout = (Flyout)button.Flyout!;
+                // Memo can key-stamp a copy, so update the actual mounted record.
+                var previous = (FlyoutElement)Reconciler.GetMountedElement(button)!;
+                H.SetContent(button);
+                await Harness.Render();
+                H.Check(name + "_InitialResourceRed", flyout.Content is Border { Child: TextBlock { Foreground: SolidColorBrush red } }
+                    && red.Color == Microsoft.UI.Colors.Red);
+                Element? refreshedOwner = null;
+                var next = previous.OnMount(control =>
+                {
+                    modifierCalls++;
+                    modifierUpdating = OverlayLifecycle.IsFlyoutOwnerUpdating(control);
+                    resources[resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                    ThemeRef.InvalidateResolutionCache();
+                    // Re-enter the already-active resource pass while the outer modifier is running.
+                    reconciler.Reconcile(memo, memo, control, static () => { });
+                    refreshedOwner = Reconciler.GetMountedElement(control);
+                    blueApplied = flyout.Content is Border { Child: TextBlock { Foreground: SolidColorBrush blue } }
+                        && blue.Color == Microsoft.UI.Colors.Blue;
+                    if (modifierCalls == 1) throw new InvalidOperationException(expectedError);
+                });
+                bool caught = false;
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(previous, next, button, static () => { }); }
+                catch (InvalidOperationException ex) when (ex.Message == expectedError) { caught = true; }
+                finally { reconciler.EndRootPass(); }
+                H.Check(name + "_ModifierThrewAfterRefresh", caught && modifierCalls == 1 && factoryCalls == 2);
+                H.Check(name + "_HandlerDepthReleasedBeforeModifier", handlerUpdating && !modifierUpdating);
+                H.Check(name + "_ReentrantMemoAppliedBlue", blueApplied && ReferenceEquals(button.Flyout, flyout)
+                    && refreshedOwner is FlyoutElement && !ReferenceEquals(refreshedOwner, next)
+                    && ReferenceEquals(Reconciler.GetMountedElement(button), refreshedOwner));
+                flyout.ShowAt(button);
+                H.Check(name + "_ReentrantOwnerCallback", await Harness.WaitFor(() => opened.SequenceEqual(new[] { 2 })));
+                flyout.Hide();
+                H.Check(name + "_ReentrantOwnerClosed", await Harness.WaitFor(() => closed.SequenceEqual(new[] { 2 }) && !flyout.IsOpen));
+
+                resources[resourceKey] = new SolidColorBrush(Microsoft.UI.Colors.Green);
+                ThemeRef.InvalidateResolutionCache();
+                reconciler.RequestResourceRefresh();
+                reconciler.BeginRootPass();
+                try { reconciler.Reconcile(memo, memo, button, static () => { }); }
+                finally { reconciler.EndRootPass(); }
+                // A double Dispose leaves negative depth: the next reconstructed owner cannot match.
+                H.Check(name + "_RefreshAfterThrowAppliedGreen", factoryCalls == 3 && ReferenceEquals(button.Flyout, flyout)
+                    && !ReferenceEquals(Reconciler.GetMountedElement(button), refreshedOwner)
+                    && flyout.Content is Border { Child: TextBlock { Foreground: SolidColorBrush green } }
+                    && green.Color == Microsoft.UI.Colors.Green);
+                flyout.ShowAt(button);
+                H.Check(name + "_LatestOwnerCallback", await Harness.WaitFor(() => opened.SequenceEqual(new[] { 2, 3 })),
+                    $"opened=[{string.Join(",", opened)}], isOpen={flyout.IsOpen}, factories={factoryCalls}");
+                flyout.Hide();
+            }
+            finally
+            {
+                if (button is not null)
+                {
+                    button.Flyout?.Hide();
+                    reconciler.UnmountChild(button);
+                }
+                H.SetContent(null);
+                Application.Current.Resources.MergedDictionaries.Remove(resources);
+                ThemeRef.InvalidateResolutionCache();
+            }
+            H.Check(name + "_ContentCleanedOnce", cleanups == 1 && button is not null && button.Flyout is null);
+        }
+    }
+
     internal sealed class TargetReplacementFailureKeepsNewOwner(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

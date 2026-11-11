@@ -73,9 +73,11 @@ Conventions for contributors:
   from changing the outer flyout or duplicating its callbacks. Ownership also
   survives keyed FlipView updates and Memo resource or dirty-descendant refreshes,
   including skipped branches, failed forwarded updates through custom decorators
-  and subsequent retries. Failed content or setter updates also restore the prior
-  owner for retry when the failed update still owns the same native slot. For these
-  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  and subsequent retries. Failed content, setter, or modifier updates also restore
+  the prior owner for retry when the failed update still owns the same native slot.
+  Only menu-item retries after a failed update reconcile the actual collection
+  size, including submenus; normal updates keep their model-based count behavior.
+  For these decorators, the provisional `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §4.5; #942).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,

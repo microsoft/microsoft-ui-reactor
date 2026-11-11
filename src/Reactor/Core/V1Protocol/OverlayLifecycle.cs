@@ -436,6 +436,7 @@ internal static class OverlayLifecycle
         internal Element Tag = element;
         // A reconstructed inner decorator must not claim an outer flyout during its update.
         internal int UpdateDepth;
+        internal bool NeedsMenuItemReconciliation;
         internal bool Matches(Element? candidate) => ReferenceEquals(Element, candidate) || ReferenceEquals(Tag, candidate);
         internal bool MatchesReconstructed(Element previous, Element next) =>
             UpdateDepth == 0 && ReferenceEquals(previous, next) && Element.GetType() == next.GetType();
@@ -466,7 +467,8 @@ internal static class OverlayLifecycle
         return owner.Tag;
     }
 
-    private readonly struct FlyoutUpdateScope : IDisposable
+    /// <summary>Preserves flyout ownership through handler and modifier updates.</summary>
+    internal readonly struct FlyoutUpdateScope : IDisposable
     {
         private readonly FlyoutOwnership? _owner;
         private readonly Reconciler.ReactorState? _state;
@@ -474,7 +476,7 @@ internal static class OverlayLifecycle
         private readonly Element _previousTag;
         private readonly Element? _previousDecorator;
 
-        internal FlyoutUpdateScope(FlyoutOwnership owner, Reconciler.ReactorState? state)
+        private FlyoutUpdateScope(FlyoutOwnership owner, Reconciler.ReactorState? state)
         {
             _owner = owner;
             _state = state;
@@ -497,23 +499,25 @@ internal static class OverlayLifecycle
             _owner.Element = _previousElement;
             _owner.Tag = _previousTag;
             state.DecoratorElement = _previousDecorator;
+            if (next is MenuFlyoutElement) _owner.NeedsMenuItemReconciliation = true;
+        }
+
+        /// <summary>Starts a matching owner's update, recovering Memo's previous element when needed.</summary>
+        internal static FlyoutUpdateScope Begin<T>(Reconciler reconciler, UIElement target, ref T previous, T next)
+            where T : Element
+        {
+            if (target is not FrameworkElement fe || Reconciler.GetFlyoutOnControl(fe) is not { } flyout
+                || FlyoutOwner(flyout) is not { } owner) return default;
+            // Memo retains no output tree. The installed flyout already holds its actual old
+            // configuration; use it only outside another owner's target reconciliation.
+            if (reconciler.ReconstructingKeyedMemo && owner.MatchesReconstructed(previous, next))
+                previous = (T)owner.Element;
+            if (!owner.Matches(previous)) return default;
+            Reconciler.TryGetReactorState(fe, out var state);
+            return new FlyoutUpdateScope(owner, state);
         }
 
         public void Dispose() { if (_owner is not null) _owner.UpdateDepth--; }
-    }
-
-    private static FlyoutUpdateScope BeginFlyoutUpdate<T>(Reconciler reconciler, UIElement target, ref T previous, T next)
-        where T : Element
-    {
-        if (target is not FrameworkElement fe || Reconciler.GetFlyoutOnControl(fe) is not { } flyout
-            || FlyoutOwner(flyout) is not { } owner) return default;
-        // Memo retains no output tree. The installed flyout already holds its actual old
-        // configuration; use it only outside another owner's target reconciliation.
-        if (reconciler.ReconstructingKeyedMemo && owner.MatchesReconstructed(previous, next))
-            previous = (T)owner.Element;
-        if (!owner.Matches(previous)) return default;
-        Reconciler.TryGetReactorState(fe, out var state);
-        return new FlyoutUpdateScope(owner, state);
     }
 
     /// <summary>Clears the installed flyout's owner when its target releases its identity.</summary>
@@ -616,75 +620,66 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateFlyoutElement(Reconciler reconciler, FlyoutElement o, FlyoutElement n, UIElement targetControl, Action requestRerender)
     {
-        using var ownership = BeginFlyoutUpdate(reconciler, targetControl, ref o, n);
-        try
+        UIElement? updated = targetControl;
+        if (reconciler.CanUpdate(o.Target, n.Target))
         {
-            UIElement? updated = targetControl;
-            if (reconciler.CanUpdate(o.Target, n.Target))
-            {
-                var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
-                if (replacement is not null) updated = replacement;
-            }
-            else
-            {
-                reconciler.UnmountChild(targetControl);
-                updated = reconciler.Mount(n.Target, requestRerender);
-            }
+            var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
+            if (replacement is not null) updated = replacement;
+        }
+        else
+        {
+            reconciler.UnmountChild(targetControl);
+            updated = reconciler.Mount(n.Target, requestRerender);
+        }
 
-            if (updated is FrameworkElement targetFe)
-            {
-                if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var existingFlyout))
-                    return updated == targetControl ? null : updated;
-                Reconciler.SetDecoratorElementTag(targetFe, n);
+        if (updated is FrameworkElement targetFe)
+        {
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var existingFlyout))
+                return updated == targetControl ? null : updated;
+            Reconciler.SetDecoratorElementTag(targetFe, n);
 
-                if (existingFlyout is WinUI.Flyout flyout)
+            if (existingFlyout is WinUI.Flyout flyout)
+            {
+                if (flyout.Content is UIElement existingContent && reconciler.CanUpdate(o.FlyoutContent, n.FlyoutContent))
                 {
-                    if (flyout.Content is UIElement existingContent && reconciler.CanUpdate(o.FlyoutContent, n.FlyoutContent))
-                    {
-                        var contentRepl = reconciler.UpdateHostedChild(o.FlyoutContent, n.FlyoutContent, existingContent, requestRerender);
-                        if (contentRepl is not null) flyout.Content = contentRepl;
-                    }
-                    else
-                    {
-                        if (flyout.Content is UIElement stale) reconciler.UnmountChild(stale);
-                        flyout.Content = reconciler.Mount(n.FlyoutContent, requestRerender);
-                    }
-                    FlyoutPlacement.Apply(flyout, n.Placement);
-                    if (flyout.ShowMode != n.ShowMode) flyout.ShowMode = n.ShowMode;
-                    if (flyout.AreOpenCloseAnimationsEnabled != n.AreOpenCloseAnimationsEnabled)
-                        flyout.AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled;
-                    Reconciler.ApplySetters(n.Setters, flyout);
+                    var contentRepl = reconciler.UpdateHostedChild(o.FlyoutContent, n.FlyoutContent, existingContent, requestRerender);
+                    if (contentRepl is not null) flyout.Content = contentRepl;
                 }
                 else
                 {
-                    // No existing flyout or type mismatch — create fresh.
-                    var flyoutContent = reconciler.Mount(n.FlyoutContent, requestRerender);
-                    var newFlyout = new WinUI.Flyout
-                    {
-                        Content = flyoutContent,
-                        ShowMode = n.ShowMode,
-                        AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled,
-                    };
-                    FlyoutPlacement.Apply(newFlyout, n.Placement);
-                    WireFlyoutCallbacks(targetFe, newFlyout);
-                    InstallFlyout(reconciler, targetFe, n, newFlyout);
-                    Reconciler.ApplySetters(n.Setters, newFlyout);
+                    if (flyout.Content is UIElement stale) reconciler.UnmountChild(stale);
+                    flyout.Content = reconciler.Mount(n.FlyoutContent, requestRerender);
                 }
-                // Open through the installed flyout itself (ShowAt), never ShowAttachedFlyout:
-                // a Button/SplitButton target holds its flyout in the control's own Flyout
-                // slot, and ShowAttachedFlyout on such a target throws ArgumentException
-                // ("ShowAttached was called on an element without an attached FlyoutBase"),
-                // which tore the whole tree down into a render-error screen.
-                if (n.IsOpen && !o.IsOpen && Reconciler.GetFlyoutOnControl(targetFe) is { } installed)
-                    ShowFlyoutWhenReady(targetFe, installed, IsFlyoutStillRequestingOpen);
+                FlyoutPlacement.Apply(flyout, n.Placement);
+                if (flyout.ShowMode != n.ShowMode) flyout.ShowMode = n.ShowMode;
+                if (flyout.AreOpenCloseAnimationsEnabled != n.AreOpenCloseAnimationsEnabled)
+                    flyout.AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled;
+                Reconciler.ApplySetters(n.Setters, flyout);
             }
-            return updated == targetControl ? null : updated;
+            else
+            {
+                // No existing flyout or type mismatch — create fresh.
+                var flyoutContent = reconciler.Mount(n.FlyoutContent, requestRerender);
+                var newFlyout = new WinUI.Flyout
+                {
+                    Content = flyoutContent,
+                    ShowMode = n.ShowMode,
+                    AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled,
+                };
+                FlyoutPlacement.Apply(newFlyout, n.Placement);
+                WireFlyoutCallbacks(targetFe, newFlyout);
+                InstallFlyout(reconciler, targetFe, n, newFlyout);
+                Reconciler.ApplySetters(n.Setters, newFlyout);
+            }
+            // Open through the installed flyout itself (ShowAt), never ShowAttachedFlyout:
+            // a Button/SplitButton target holds its flyout in the control's own Flyout
+            // slot, and ShowAttachedFlyout on such a target throws ArgumentException
+            // ("ShowAttached was called on an element without an attached FlyoutBase"),
+            // which tore the whole tree down into a render-error screen.
+            if (n.IsOpen && !o.IsOpen && Reconciler.GetFlyoutOnControl(targetFe) is { } installed)
+                ShowFlyoutWhenReady(targetFe, installed, IsFlyoutStillRequestingOpen);
         }
-        catch
-        {
-            ownership.Rollback(targetControl, n);
-            throw;
-        }
+        return updated == targetControl ? null : updated;
     }
 
     // ── MenuBar ─────────────────────────────────────────────────────────
@@ -795,47 +790,44 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateMenuFlyout(Reconciler reconciler, MenuFlyoutElement o, MenuFlyoutElement n, UIElement targetControl, Action requestRerender)
     {
-        using var ownership = BeginFlyoutUpdate(reconciler, targetControl, ref o, n);
-        try
+        UIElement? updated = targetControl;
+        if (reconciler.CanUpdate(o.Target, n.Target))
         {
-            UIElement? updated = targetControl;
-            if (reconciler.CanUpdate(o.Target, n.Target))
+            var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
+            if (replacement is not null) updated = replacement;
+        }
+        else
+        {
+            reconciler.UnmountChild(targetControl);
+            updated = reconciler.Mount(n.Target, requestRerender);
+        }
+
+        if (updated is FrameworkElement targetFe)
+        {
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var existingFlyout))
+                return updated == targetControl ? null : updated;
+            Reconciler.SetDecoratorElementTag(targetFe, n);
+            if (existingFlyout is WinUI.MenuFlyout mf)
             {
-                var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
-                if (replacement is not null) updated = replacement;
+                var owner = FlyoutOwner(mf);
+                MenuCommandFactory.UpdateMenuFlyoutItems(mf.Items, o.Items, n.Items, reconciler,
+                    recoveringFailedUpdate: owner?.NeedsMenuItemReconciliation == true);
+                // A later setter or modifier failure marks this owner for recovery again.
+                if (owner is not null && owner.Matches(n)
+                    && ReferenceEquals(Reconciler.GetFlyoutOnControl(targetFe), mf))
+                    owner.NeedsMenuItemReconciliation = false;
+                Reconciler.ApplySetters(n.Setters, mf);
             }
             else
             {
-                reconciler.UnmountChild(targetControl);
-                updated = reconciler.Mount(n.Target, requestRerender);
+                // Flyout type changed or was missing — create fresh.
+                var menuFlyout = new WinUI.MenuFlyout();
+                foreach (var item in n.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
+                InstallFlyout(reconciler, targetFe, n, menuFlyout);
+                Reconciler.ApplySetters(n.Setters, menuFlyout);
             }
-
-            if (updated is FrameworkElement targetFe)
-            {
-                if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var existingFlyout))
-                    return updated == targetControl ? null : updated;
-                Reconciler.SetDecoratorElementTag(targetFe, n);
-                if (existingFlyout is WinUI.MenuFlyout mf)
-                {
-                    MenuCommandFactory.UpdateMenuFlyoutItems(mf.Items, o.Items, n.Items, reconciler);
-                    Reconciler.ApplySetters(n.Setters, mf);
-                }
-                else
-                {
-                    // Flyout type changed or was missing — create fresh.
-                    var menuFlyout = new WinUI.MenuFlyout();
-                    foreach (var item in n.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
-                    InstallFlyout(reconciler, targetFe, n, menuFlyout);
-                    Reconciler.ApplySetters(n.Setters, menuFlyout);
-                }
-            }
-            return updated == targetControl ? null : updated;
         }
-        catch
-        {
-            ownership.Rollback(targetControl, n);
-            throw;
-        }
+        return updated == targetControl ? null : updated;
     }
 
     // ── Popup ───────────────────────────────────────────────────────────
@@ -923,72 +915,63 @@ internal static class OverlayLifecycle
 
     public static UIElement? UpdateCommandBarFlyout(Reconciler reconciler, CommandBarFlyoutElement o, CommandBarFlyoutElement n, UIElement targetControl, Action requestRerender)
     {
-        using var ownership = BeginFlyoutUpdate(reconciler, targetControl, ref o, n);
-        try
+        // Reconcile the target in place and reuse the installed flyout when
+        // possible — re-installing a brand-new flyout on every update would
+        // close an already-open flyout and discard its transient state.
+        UIElement? updated = targetControl;
+        if (reconciler.CanUpdate(o.Target, n.Target))
         {
-            // Reconcile the target in place and reuse the installed flyout when
-            // possible — re-installing a brand-new flyout on every update would
-            // close an already-open flyout and discard its transient state.
-            UIElement? updated = targetControl;
-            if (reconciler.CanUpdate(o.Target, n.Target))
+            var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
+            if (replacement is not null) updated = replacement;
+        }
+        else
+        {
+            reconciler.UnmountChild(targetControl);
+            updated = reconciler.Mount(n.Target, requestRerender);
+        }
+
+        if (updated is FrameworkElement targetFe)
+        {
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var installed))
+                return updated == targetControl ? null : updated;
+            Reconciler.SetDecoratorElementTag(targetFe, n);
+            // Must read from the same slot mount wrote to — an attached-only lookup
+            // returns null for a Button target and this would create a duplicate
+            // flyout the user can never see while the live one keeps stale commands.
+            var existing = installed as WinUI.CommandBarFlyout;
+            var commandsChanged =
+                !ReferenceEquals(o.PrimaryCommands, n.PrimaryCommands) ||
+                !ReferenceEquals(o.SecondaryCommands, n.SecondaryCommands);
+
+            if (existing is null)
             {
-                var replacement = reconciler.Update(o.Target, n.Target, targetControl, requestRerender);
-                if (replacement is not null) updated = replacement;
+                var flyout = new WinUI.CommandBarFlyout();
+                FlyoutPlacement.Apply(flyout, n.Placement);
+                if (n.PrimaryCommands is not null)
+                    foreach (var cmd in n.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
+                if (n.SecondaryCommands is not null)
+                    foreach (var cmd in n.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
+                InstallFlyout(reconciler, targetFe, n, flyout);
+                Reconciler.ApplySetters(n.Setters, flyout);
+                existing = flyout;
             }
             else
             {
-                reconciler.UnmountChild(targetControl);
-                updated = reconciler.Mount(n.Target, requestRerender);
-            }
-
-            if (updated is FrameworkElement targetFe)
-            {
-                if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var installed))
-                    return updated == targetControl ? null : updated;
-                Reconciler.SetDecoratorElementTag(targetFe, n);
-                // Must read from the same slot mount wrote to — an attached-only lookup
-                // returns null for a Button target and this would create a duplicate
-                // flyout the user can never see while the live one keeps stale commands.
-                var existing = installed as WinUI.CommandBarFlyout;
-                var commandsChanged =
-                    !ReferenceEquals(o.PrimaryCommands, n.PrimaryCommands) ||
-                    !ReferenceEquals(o.SecondaryCommands, n.SecondaryCommands);
-
-                if (existing is null)
+                FlyoutPlacement.Apply(existing, n.Placement);
+                if (commandsChanged)
                 {
-                    var flyout = new WinUI.CommandBarFlyout();
-                    FlyoutPlacement.Apply(flyout, n.Placement);
+                    existing.PrimaryCommands.Clear();
+                    existing.SecondaryCommands.Clear();
                     if (n.PrimaryCommands is not null)
-                        foreach (var cmd in n.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
+                        foreach (var cmd in n.PrimaryCommands) existing.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                     if (n.SecondaryCommands is not null)
-                        foreach (var cmd in n.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
-                    InstallFlyout(reconciler, targetFe, n, flyout);
-                    Reconciler.ApplySetters(n.Setters, flyout);
-                    existing = flyout;
+                        foreach (var cmd in n.SecondaryCommands) existing.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                 }
-                else
-                {
-                    FlyoutPlacement.Apply(existing, n.Placement);
-                    if (commandsChanged)
-                    {
-                        existing.PrimaryCommands.Clear();
-                        existing.SecondaryCommands.Clear();
-                        if (n.PrimaryCommands is not null)
-                            foreach (var cmd in n.PrimaryCommands) existing.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
-                        if (n.SecondaryCommands is not null)
-                            foreach (var cmd in n.SecondaryCommands) existing.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
-                    }
-                    Reconciler.ApplySetters(n.Setters, existing);
-                }
-                if (n.IsOpen && !o.IsOpen) ShowFlyoutWhenReady(targetFe, existing, IsStillRequestingOpen);
+                Reconciler.ApplySetters(n.Setters, existing);
             }
-            return updated == targetControl ? null : updated;
+            if (n.IsOpen && !o.IsOpen) ShowFlyoutWhenReady(targetFe, existing, IsStillRequestingOpen);
         }
-        catch
-        {
-            ownership.Rollback(targetControl, n);
-            throw;
-        }
+        return updated == targetControl ? null : updated;
     }
 
     /// <summary>
