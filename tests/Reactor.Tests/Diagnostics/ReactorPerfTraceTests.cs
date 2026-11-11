@@ -261,7 +261,7 @@ public sealed class ReactorPerfTraceTests
         {
             // Nobody listening: a request records nothing, claimed or not.
             Assert.True(RenderPassRequests.Claim(inner));
-            requests.Note();
+            requests.Note(passPending: false);
             RenderPassRequests.Release();
             Assert.False(requests.HasPending);
 
@@ -270,14 +270,14 @@ public sealed class ReactorPerfTraceTests
             // A request climbing through its ancestors: the first claim on the thread holds.
             Assert.True(RenderPassRequests.Claim(inner));
             Assert.False(RenderPassRequests.Claim(outer));
-            requests.Note();
+            requests.Note(passPending: false);
             RenderPassRequests.Release();
             Assert.Null(RenderPassRequests.CurrentForTests);
 
             // An unclaimed request counts but names nobody; a later claimed one does not displace the first.
-            requests.Note();
+            requests.Note(passPending: false);
             Assert.True(RenderPassRequests.Claim(later));
-            requests.Note();
+            requests.Note(passPending: false);
             RenderPassRequests.Release();
             Assert.True(requests.HasPending);
 
@@ -288,14 +288,14 @@ public sealed class ReactorPerfTraceTests
             Assert.Equal(0u, count);
 
             // Requests that name nobody still leave something to take.
-            requests.Note();
+            requests.Note(passPending: false);
             Assert.True(requests.HasPending);
             Assert.Null(requests.Take(out count));
             Assert.Equal(1u, count);
 
             // An untraced pass discards what a session noted before it stopped.
             Assert.True(RenderPassRequests.Claim(inner));
-            requests.Note();
+            requests.Note(passPending: false);
             RenderPassRequests.Release();
             requests.DiscardStale();
             Assert.False(requests.HasPending);
@@ -374,26 +374,26 @@ public sealed class ReactorPerfTraceTests
             var root = new RootRenderDiagnostics();
             var requests = new RenderPassRequests();
 
-            RenderPassRequests.InvokeAs(child, requests.Note);
-            root.RequestFromRoot(requests.Note);
+            RenderPassRequests.InvokeAs(child, () => requests.Note(passPending: false));
+            root.RequestFromRoot(() => requests.Note(passPending: false));
             root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
-            root.RequestFromRoot(requests.Note);
+            root.RequestFromRoot(() => requests.Note(passPending: false));
             root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
-            requests.Note();
+            requests.Note(passPending: false);
             root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
             // A root claim with no live root (disposed between the request and the pass).
-            root.RequestFromRoot(requests.Note);
+            root.RequestFromRoot(() => requests.Note(passPending: false));
             root.WritePassStart(hostId, requests, root: null, funcContext: null, renderFunc: null);
 
             // A request from a root that was replaced (remounted) before the pass names nobody.
-            new RootRenderDiagnostics().RequestFromRoot(requests.Note);
+            new RootRenderDiagnostics().RequestFromRoot(() => requests.Note(passPending: false));
             root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
 
             // An untraced pass drops what was noted; a traced one writes.
-            RenderPassRequests.InvokeAs(child, requests.Note);
+            RenderPassRequests.InvokeAs(child, () => requests.Note(passPending: false));
             root.BeginPass(perfPass: false, hostId, requests, root: null, rootContext, rootRender);
             root.BeginPass(perfPass: true, hostId, requests, root: null, rootContext, rootRender);
         });
@@ -432,9 +432,9 @@ public sealed class ReactorPerfTraceTests
             // outer one's.
             RenderPassRequests.InvokeAs(outer, () =>
             {
-                first.Note();
+                first.Note(passPending: false);
                 Assert.Null(RenderPassRequests.CurrentForTests);
-                nested.Note();
+                nested.Note(passPending: false);
             });
             Assert.Same(outer, first.Take(out uint firstCount));
             Assert.Equal(1u, firstCount);
@@ -443,8 +443,8 @@ public sealed class ReactorPerfTraceTests
 
             RenderPassRequests.InvokeAs(outer, () =>
             {
-                first.Note();
-                RenderPassRequests.InvokeAs(inner, nested.Note);
+                first.Note(passPending: false);
+                RenderPassRequests.InvokeAs(inner, () => nested.Note(passPending: false));
             });
             Assert.Same(outer, first.Take(out firstCount));
             Assert.Same(inner, nested.Take(out nestedCount));
@@ -459,7 +459,7 @@ public sealed class ReactorPerfTraceTests
     }
 
     [Fact]
-    public void RenderPassRequests_AnUnclaimedFirstRequest_NamesNobody_EvenIfAClaimedOneCoalesces()
+    public void RenderPassRequests_APassScheduledUnclaimedOrBeforeTheSession_NamesNobody_EvenIfAClaimedOneCoalesces()
     {
         object later = new();
         var requests = new RenderPassRequests();
@@ -467,14 +467,26 @@ public sealed class ReactorPerfTraceTests
         {
             ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
             // A host-level request scheduled the pass; a component's request only joined it.
-            requests.Note();
-            RenderPassRequests.InvokeAs(later, requests.Note);
+            requests.Note(passPending: false);
+            RenderPassRequests.InvokeAs(later, () => requests.Note(passPending: false));
             Assert.Null(requests.Take(out uint count));
             Assert.Equal(2u, count);
 
             // The next pass starts clean: its first request is the component's.
-            RenderPassRequests.InvokeAs(later, requests.Note);
-            requests.Note();
+            RenderPassRequests.InvokeAs(later, () => requests.Note(passPending: false));
+            requests.Note(passPending: false);
+            Assert.Same(later, requests.Take(out count));
+            Assert.Equal(2u, count);
+
+            // A pass already pending when the first traced request arrives was scheduled before
+            // the session listened: the request only joined it.
+            RenderPassRequests.InvokeAs(later, () => requests.Note(passPending: true));
+            Assert.Null(requests.Take(out count));
+            Assert.Equal(1u, count);
+
+            // Once something traced was noted for the pending pass, it keeps the credit.
+            RenderPassRequests.InvokeAs(later, () => requests.Note(passPending: false));
+            requests.Note(passPending: true);
             Assert.Same(later, requests.Take(out count));
             Assert.Equal(2u, count);
         }
@@ -503,7 +515,7 @@ public sealed class ReactorPerfTraceTests
         try
         {
             ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
-            RenderPassRequests.InvokeAs(requester, requests.Note);
+            RenderPassRequests.InvokeAs(requester, () => requests.Note(passPending: false));
         }
         finally
         {

@@ -85,9 +85,10 @@ fields of the same event.
     root replaced by a new `Mount` before the pass ran reports `0`, not its replacement). `0`
     when no component did: the first mount, a host-level re-render (theme, high contrast,
     resources, hot reload, app code calling the host), or a request made before the session
-    started listening. That holds when the first request was such a host-level one even if a
+    started listening. That holds when the first request was one of those even if a
     component's request coalesced into the pass afterwards: the pass reports what scheduled
-    it, and `requestCount` shows that more joined. The same id appears on that component's
+    it, and `requestCount` (which counts only requests made while listening) shows that more
+    joined. The same id appears on that component's
     `ComponentRender` spans in the pass (`reason=state`) and on its `StateChange` events.
   - `requesterName` — that component's `name` (as on `ComponentRender`); empty when
     `requesterId` is `0`.

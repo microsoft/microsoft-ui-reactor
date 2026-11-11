@@ -831,13 +831,14 @@ internal class PerfTrace_CallSitesFromTheSourceMap(Harness h) : SelfTestFixtureB
 /// The request bookkeeping behind <c>RenderPass</c>'s requester costs nothing untraced and never
 /// reports stale data: with no session a request records nothing; a request a session noted
 /// right before it stopped is dropped by the untraced pass it scheduled, so a later traced pass
-/// that no component asked for names nobody; and the Reconcile edit tally is closed between
-/// entries (an open one would make every child reconcile pay for it).
+/// that no component asked for names nobody; a pass queued before a session started names
+/// nobody even when a component's request coalesces into it afterwards; and the Reconcile edit
+/// tally is closed between entries (an open one would make every child reconcile pay for it).
 /// </summary>
 internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFixtureBase(h)
 {
     private static readonly string[] Checks =
-        ["PerfTrace_Requests_UntracedRecordNothing", "PerfTrace_Requests_StaleDiscarded", "PerfTrace_TallyClosedAfterEntry"];
+        ["PerfTrace_Requests_UntracedRecordNothing", "PerfTrace_Requests_StaleDiscarded", "PerfTrace_TallyClosedAfterEntry", "PerfTrace_Requests_PendingBeforeSessionNamesNobody", "PerfTrace_Requests_ControlPendingBeforeSessionNamesNobody"];
 
     public override async Task RunAsync()
     {
@@ -853,7 +854,7 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
         };
         string Etl() => global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(),
             "reactor-perf-selftest-" + Guid.NewGuid().ToString("N") + ".etl");
-        string first = Etl(), second = Etl();
+        string first = Etl(), second = Etl(), third = Etl(), fourth = Etl();
         try
         {
             host.Mount(_ => VStack(Component<PerfTraceCounter>()));
@@ -904,12 +905,61 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
                 notedBeforeStop && droppedByUntracedPass && starts.Count > 0 && starts.All(s => s == "0//1"));
             H.Check("PerfTrace_TallyClosedAfterEntry",
                 events.Any(e => e.Name == "Reconcile") && !host.Reconciler.PerfTallyOpenForTests);
+
+            // A pass queued before a session starts (here by the host itself), then a component's
+            // request that coalesces into it once the session listens: the pass names nobody.
+            host.RequestRender();
+            using (var pending = EtwPrivateCapture.Start(third))
+            {
+                pending.Enable(ReactorPerfTrace.ProviderId, 4, ReactorPerfTrace.Keywords.Pass);
+                H.ClickButton("perf-inc");
+                await Harness.Render();
+                pending.Stop();
+            }
+            var pendingStarts = EtwPrivateCapture.Read(third, ReactorPerfTrace.ProviderId).Where(e => e.ProcessId == Environment.ProcessId)
+                .Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+                .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}/{e.Fields["requestCount"]}").ToList();
+            Console.WriteLine($"# perf requests: pending before session passes={string.Join(",", pendingStarts)}");
+            H.Check("PerfTrace_Requests_PendingBeforeSessionNamesNobody",
+                pendingStarts.Count > 0 && pendingStarts[0] == "0//1");
+
+            // The same on a ReactorHostControl (its request bookkeeping is a separate call site):
+            // the root's untraced request queues the pass, its traced one coalesces into it.
+            var control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+            var controlRoot = new PerfTraceControlRoot();
+            List<string> controlStarts;
+            try
+            {
+                control.Mount(controlRoot);
+                H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                await Harness.WaitFor(() => controlRoot.Bump is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                controlRoot.Bump!();
+                using (var pending = EtwPrivateCapture.Start(fourth))
+                {
+                    pending.Enable(ReactorPerfTrace.ProviderId, 4, ReactorPerfTrace.Keywords.Pass);
+                    controlRoot.WorkerBump!();
+                    await Harness.WaitFor(() => controlRoot.Renders >= 2, maxPasses: 32, perPassMs: 10);
+                    await control.WaitForIdleAsync();
+                    pending.Stop();
+                }
+                controlStarts = EtwPrivateCapture.Read(fourth, ReactorPerfTrace.ProviderId).Where(e => e.ProcessId == Environment.ProcessId)
+                    .Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+                    .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}/{e.Fields["requestCount"]}").ToList();
+            }
+            finally
+            {
+                control.Dispose();
+            }
+            Console.WriteLine($"# perf requests: control pending before session passes={string.Join(",", controlStarts)} renders={controlRoot.Renders}");
+            H.Check("PerfTrace_Requests_ControlPendingBeforeSessionNamesNobody",
+                controlRoot.Renders == 2 && controlStarts.Count > 0 && controlStarts[0] == "0//1");
         }
         finally
         {
             Microsoft.UI.Reactor.Hosting.ReactorHost.RequestRenderAfterRenderingCheckForTest = null;
             H.SetContent(null);
-            foreach (var etl in new[] { first, second })
+            foreach (var etl in new[] { first, second, third, fourth })
             {
                 try { global::System.IO.File.Delete(etl); }
                 catch (global::System.IO.IOException ex)

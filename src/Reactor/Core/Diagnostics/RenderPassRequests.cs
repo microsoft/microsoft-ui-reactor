@@ -20,7 +20,9 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 ///
 /// <para><b>Which requester a pass reports.</b> The first since the previous pass started: it
 /// is what scheduled the pass; later ones only coalesced into it. If that first request was
-/// unclaimed, the pass names nobody, even when a component's request coalesced into it later.
+/// unclaimed, or was made before the session started listening (the host already had the
+/// pass pending when the first traced request arrived), the pass names nobody, even when a
+/// component's request coalesced into it later.
 /// <see cref="Take"/> runs when a pass starts, so a request made during a pass belongs to the
 /// next one. Noting (any thread) and taking (the UI thread) share one lock, so a request's
 /// count and requester always land in the same pass.</para>
@@ -82,13 +84,19 @@ internal sealed class RenderPassRequests
     /// Records a render request while the Pass keyword is on; with no session listening it is
     /// one enable check. Every host's <c>RequestRender</c> calls it first.
     /// </summary>
+    /// <param name="passPending">
+    /// Whether the host already had a pass pending when this request arrived (its
+    /// needs-rerender flag, read before the request sets it). If nothing was noted for that pass,
+    /// a request made before the session started listening scheduled it, so the pass names
+    /// nobody rather than this request, which only coalesced into it.
+    /// </param>
     [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    internal void Note()
+    internal void Note(bool passPending)
     {
-        if (ReactorPerfTrace.PassEnabled) NoteCore();
+        if (ReactorPerfTrace.PassEnabled) NoteCore(passPending);
     }
 
-    private void NoteCore()
+    private void NoteCore(bool passPending)
     {
         // Consumed by the one request it was claimed for: a pass that request runs
         // synchronously (a host's first render) must not credit its own requests to it.
@@ -97,6 +105,7 @@ internal sealed class RenderPassRequests
         {
             _count++;
             BetweenCountAndRequesterForTests?.Invoke();
+            if (passPending) _first ??= Unclaimed;
             _first ??= requester;
         }
     }

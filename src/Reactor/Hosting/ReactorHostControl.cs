@@ -821,7 +821,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     {
         if (_disposed) return;
 
-        _perfRequests.Note();
+        // Before the flag is set below: whether a pass was already pending.
+        _perfRequests.Note(passPending: _needsRerender);
 
         if (AnimationScope.HasScope)
             _pendingAnimationCurve = AnimationScope.Current;
