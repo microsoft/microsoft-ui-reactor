@@ -146,6 +146,8 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
         else
@@ -157,6 +159,8 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (Diagnostics.ReactorPerfTrace.StateEnabled)
+                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
     }

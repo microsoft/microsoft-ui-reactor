@@ -944,7 +944,7 @@ internal sealed class ImperativePropEntry<TElement, TControl> : PropEntry<TEleme
 ///
 /// <para>Canonical use is a secondary Element slot whose write target
 /// overlaps with a sibling property — e.g.
-/// <c>Expander.HeaderTemplate</c> reconciles into the same
+/// <c>Expander.HeaderContent</c> reconciles into the same
 /// <c>Header</c> property the string <c>Header</c> writes to. See
 /// <c>ControlDescriptor.ImperativeBridged</c>
 /// for the composition recipe.</para></summary>

@@ -32,6 +32,19 @@ Conventions for contributors:
   `ToggleButton` / `ThreeStateToggleButton`, `DropDownButton`, `SplitButton`,
   `ToggleSplitButton`, `CheckBox` / `ThreeStateCheckBox`, and `RadioButton`
   (issue #1482).
+- Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
+  `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
+  A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
+  (`0902a96c-4e92-5b91-4d2b-5a8058055c78`), writes a `RenderPass` span per host render pass,
+  an inclusive `ComponentRender` span per component render (mount, update, the host root, and
+  rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
+  spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
+  setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
+  check. Schema: `docs/reference/perf-trace-events.md` (issue #1484).
+
+- `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
+  before the title bar's title, using the same child lifecycle as `RightHeader`
+  (issue #1478).
 
 - Opt-in message-wide Markdown text selection in Reactor Advanced:
   `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
@@ -54,6 +67,12 @@ Conventions for contributors:
 - `CheckBox(value, callback, null)` and `ThreeStateCheckBox(value, callback, null)`
   are now ambiguous between string and Element content overloads. Use `label: null`
   or cast to `(string?)null` to select the existing text overload (issue #1482).
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
 
 - `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
   now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`

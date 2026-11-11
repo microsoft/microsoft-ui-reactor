@@ -2206,11 +2206,11 @@ internal static class ReconcilerBigCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  25o. Expander update paths: string header -> HeaderTemplate, content
+    //  25o. Expander update paths: string header -> HeaderContent, content
     //       replacement, ContentTransitions assignment, and callbacks wired
     //       during UpdateExpander.
     // ════════════════════════════════════════════════════════════════════
-    internal class ExpanderTemplateTransitionEvents(Harness h) : SelfTestFixtureBase(h)
+    internal class ExpanderHeaderContentTransitionEvents(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -2225,7 +2225,7 @@ internal static class ReconcilerBigCoverageFixtures
                     ? Expander("plain-header", TextBlock("plain-content"), isExpanded: false)
                     : Expander("fallback-header", TextBlock("templated-content"), isExpanded: true,
                             onIsExpandedChanged: v => { expandHits++; lastExpanded = v; })
-                        .HeaderTemplate(TextBlock("templated-header"))
+                        .HeaderContent(TextBlock("templated-header"))
                         .ContentTransitions(new Microsoft.UI.Xaml.Media.Animation.TransitionCollection())
                         .Direction(ExpandDirection.Up);
 
@@ -2240,7 +2240,7 @@ internal static class ReconcilerBigCoverageFixtures
 
             var expander = H.FindControl<Expander>(e => e.Name == "updateExpander");
             H.Check("ExpanderUpdate_Mounted", expander is not null);
-            H.Check("ExpanderUpdate_HeaderTemplate",
+            H.Check("ExpanderUpdate_HeaderContent",
                 expander?.Header is TextBlock header && header.Text == "templated-header");
             H.Check("ExpanderUpdate_ContentReplaced",
                 expander?.Content is TextBlock content && content.Text == "templated-content");

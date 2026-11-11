@@ -636,6 +636,15 @@ internal static class KeyedListDiff
         KeyedListAttribution attribution,
         bool bailedOut = true)
     {
+        // Every occurrence (not deduplicated): a perf capture wants to see each re-realize. The
+        // owning component is the enclosing ComponentRender span.
+        if (Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ChildrenEnabled)
+        {
+            Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.KeyedListDiagnostic(
+                kind == Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey ? "nullKey" : "duplicateKey",
+                bailedOut);
+        }
+
         bool isFirst = Microsoft.UI.Reactor.Core.Diagnostics.ReactorDiagnostics
             .IsFirstOccurrence(controlInstance, kind, sampleKeys, diagnosticContext);
 
@@ -862,6 +871,9 @@ internal static class KeyedListDiff
             }
         }
         if (dupes is null) return;
+        // Not a bailout: the panel's keyed reconcile still runs, pairing the duplicates wrongly.
+        if (Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ChildrenEnabled)
+            Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.KeyedListDiagnostic("duplicateKey", bailedOut: false);
         var sample = SortedSample(dupes);
 
         var attribution = new KeyedListAttribution(reconciler?.DiagnosticComponent, KeyedListAttribution.CallSiteOf(firstDuplicate));
