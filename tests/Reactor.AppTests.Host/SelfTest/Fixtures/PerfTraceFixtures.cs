@@ -375,6 +375,9 @@ internal static class PerfTraceScenario
                 h.ClickButton("perf-shuffle");
                 await Harness.Render();
                 await Harness.Render();
+                // A reconcile after the shuffle: its edit totals must not carry the shuffle's.
+                h.ClickButton("perf-inc");
+                await Harness.Render();
             },
             () => host?.Dispose());
     }
