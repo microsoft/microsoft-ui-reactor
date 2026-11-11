@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Reactor.Navigation;
@@ -417,6 +418,165 @@ internal static class FlyoutTargetCallbacksFixtures
                     H.SetContent(null);
                 }
             }
+        }
+    }
+
+    internal sealed class KeyedFlipViewPartialUpdateRetry(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var failure = new InvalidOperationException("second page setter");
+            var opened = new List<string>();
+            int failures = 0;
+            Element Build(int version) => FlipView(new[] { "A", "B" }, id => id, (id, _) =>
+                (Flyout(Button(id), Border(TextBlock($"{id}-{version}"))) with
+                {
+                    OnOpened = () => opened.Add($"{id}-{version}"),
+                    AreOpenCloseAnimationsEnabled = false,
+                }).Set(_ =>
+                {
+                    if (id == "B" && version == 1) { failures++; throw failure; }
+                }));
+
+            var initial = Build(0);
+            var flip = (FlipView)reconciler.Mount(initial, static () => { })!;
+            var first = (Button)flip.Items[0];
+            var second = (Button)flip.Items[1];
+            var firstFlyout = (Flyout)first.Flyout;
+            var secondFlyout = (Flyout)second.Flyout;
+            var oldSecond = Reconciler.GetMountedElement(second);
+            H.SetContent(flip);
+            try
+            {
+                await Harness.Render();
+                Exception? error = null;
+                try { reconciler.Reconcile(initial, Build(1), flip, static () => { }); }
+                catch (InvalidOperationException ex) { error = ex; }
+                H.Check("SecondPageThrew", ReferenceEquals(error, failure) && failures == 1);
+                H.Check("FirstPageAlreadyUpdated", FlyoutText(firstFlyout) == "A-1");
+                var state = Reconciler.GetOrCreateReactorState(flip);
+                H.Check("FirstPageRecordMatchesMountedView",
+                    ReferenceEquals(state.MountedItemElements![0].MountedElement, Reconciler.GetMountedElement(first)));
+                H.Check("SecondPageKeepsPreviousOwner", ReferenceEquals(state.MountedItemElements[1].MountedElement, oldSecond)
+                    && ReferenceEquals(Reconciler.GetMountedElement(second), oldSecond));
+
+                // Retry against the last completed parent render with freshly built, key-stamped pages.
+                reconciler.Reconcile(initial, Build(2), flip, static () => { });
+                H.Check("NativePagesAndFlyoutsReused", flip.Items.Count == 2 && ReferenceEquals(flip.Items[0], first)
+                    && ReferenceEquals(flip.Items[1], second) && ReferenceEquals(first.Flyout, firstFlyout)
+                    && ReferenceEquals(second.Flyout, secondFlyout));
+                H.Check("FirstPageRetryContent", FlyoutText(firstFlyout) == "A-2", $"content={FlyoutText(firstFlyout)}");
+                H.Check("SecondPageRetryContent", FlyoutText(secondFlyout) == "B-2", $"content={FlyoutText(secondFlyout)}");
+                foreach (var flyout in new[] { firstFlyout, secondFlyout })
+                {
+                    flyout.ShowAt(flip);
+                    await Harness.WaitFor(() => flyout.IsOpen);
+                    await Harness.Render(50);
+                    flyout.Hide();
+                    await Harness.WaitFor(() => !flyout.IsOpen);
+                }
+                H.Check("LatestCallbackForEachPage", opened.SequenceEqual(new[] { "A-2", "B-2" }), string.Join(", ", opened));
+            }
+            finally
+            {
+                reconciler.UnmountChild(flip);
+                H.SetContent(null);
+            }
+            VerifyPartialMounts(reconciler);
+            VerifyRetainedPageAfterFailedRemoval(reconciler);
+        }
+
+        private void VerifyRetainedPageAfterFailedRemoval(Reconciler reconciler)
+        {
+            var failure = new InvalidOperationException("removing page A");
+            var cleanups = new List<string>();
+            Element Page(string[] ids, string content) => FlipView(ids, id => id, (id, _) =>
+                Flyout(Button(id), TextBlock(content).OnUnmount(_ =>
+                {
+                    cleanups.Add(content);
+                    if (content == "original") throw failure;
+                })));
+            var initial = Page(["A"], "original");
+            var empty = Page([], "");
+            var flip = (FlipView)reconciler.Mount(initial, static () => { })!;
+            var oldButton = (Button)flip.Items[0];
+            try
+            {
+                Exception? caught = null;
+                try { reconciler.Reconcile(initial, empty, flip, static () => { }); }
+                catch (InvalidOperationException ex) { caught = ex; }
+                H.Check("RemovalFailedAfterContentCleanup", ReferenceEquals(caught, failure)
+                    && oldButton.Flyout is null && cleanups.SequenceEqual(["original"]));
+
+                var keep = Page(["A"], "retained");
+                reconciler.Reconcile(initial, keep, flip, static () => { });
+                var live = (Button)flip.Items[0];
+                H.Check("RetainedPageMountsNewContent", live.Flyout is Flyout { Content: TextBlock { Text: "retained" } });
+                reconciler.Reconcile(keep, empty, flip, static () => { });
+                H.Check("RetainedPageFullyUnmounts", flip.Items.Count == 0 && live.Flyout is null
+                    && cleanups.SequenceEqual(["original", "retained"]), string.Join(", ", cleanups));
+            }
+            finally { reconciler.UnmountChild(flip); }
+        }
+
+        private void VerifyPartialMounts(Reconciler reconciler)
+        {
+            var failure = new InvalidOperationException("page creation");
+            bool failRemovingFirst = false;
+            int secondUnmounts = 0;
+            Element Build(string[] ids, int version) => FlipView(ids, id => id, (id, _) =>
+            {
+                if (id == "gap") return Empty();
+                if (id == "B" && version == 1) throw failure;
+                if (id == "A" && version == 3) return XamlHost(() => throw failure);
+                return Flyout(Button(id), Border(TextBlock($"{id}-{version}"))).OnUnmount(_ =>
+                {
+                    if (id == "B") secondUnmounts++;
+                    if (id == "A" && failRemovingFirst) throw failure;
+                });
+            });
+            void ExpectFailure(Element previous, Element next, FlipView flip, string name)
+            {
+                Exception? error = null;
+                try { reconciler.Reconcile(previous, next, flip, static () => { }); }
+                catch (InvalidOperationException ex) { error = ex; }
+                H.Check(name, ReferenceEquals(error, failure));
+            }
+
+            string[] ids = ["gap", "A", "B"];
+            var initial = Build(["gap"], 0);
+            var flip = (FlipView)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                ExpectFailure(initial, Build(ids, 1), flip, "LaterAppendThrew");
+                var first = (Button)flip.Items[0];
+                var firstFlyout = first.Flyout;
+                var retried = Build(ids, 2);
+                reconciler.Reconcile(initial, retried, flip, static () => { });
+                H.Check("CompletedAppendReused", flip.Items.Count == 2 && ReferenceEquals(flip.Items[0], first)
+                    && ReferenceEquals(first.Flyout, firstFlyout) && FlyoutText(firstFlyout) == "A-2");
+
+                var second = (Button)flip.Items[1];
+                var secondFlyout = second.Flyout;
+                ExpectFailure(retried, Build(ids, 3), flip, "ReplacementMountThrew");
+                H.Check("OnlySecondPageRemains", flip.Items.Count == 1 && ReferenceEquals(flip.Items[0], second));
+                var restored = Build(ids, 4);
+                reconciler.Reconcile(retried, restored, flip, static () => { });
+                H.Check("RetryInsertsBeforeSecondPage", flip.Items.Count == 2 && ReferenceEquals(flip.Items[1], second)
+                    && ReferenceEquals(second.Flyout, secondFlyout) && FlyoutText(secondFlyout) == "B-4");
+
+                var shrunk = Build(["gap"], 5);
+                int before = secondUnmounts;
+                failRemovingFirst = true;
+                ExpectFailure(restored, shrunk, flip, "EarlierPageUnmountThrewAfterTailRemoved");
+                failRemovingFirst = false;
+                H.Check("RemovedTailForgotten", flip.Items.Count == 1
+                    && Reconciler.GetOrCreateReactorState(flip).MountedItemElements is { Count: 2 });
+                reconciler.Reconcile(restored, shrunk, flip, static () => { });
+                H.Check("ShrinkRetryUnmountedTailOnce", flip.Items.Count == 0 && secondUnmounts == before + 1);
+            }
+            finally { reconciler.UnmountChild(flip); }
         }
     }
 
@@ -1471,19 +1631,19 @@ internal static class FlyoutTargetCallbacksFixtures
                     H.Check(name + "_ActualTarget", ReferenceEquals(Reconciler.GetElementTag(button), actualTarget)
                         && ReferenceEquals(targetRef.Current, button)
                         && (!custom || ReferenceEquals(customRef.Current, button)));
-                    H.Check(name + "_TargetConnectedKey", Reconciler.FindMountedElementValue(button, static el => el.ConnectedAnimationKey) == name + "_target");
+                    H.Check(name + "_TargetConnectedKey", reconciler.FindMountedElementValue(button, static el => el.ConnectedAnimationKey) == name + "_target");
                     H.Check(name + "_TargetExitTransition", ReferenceEquals(
-                        Reconciler.FindMountedElementValue(button, static el => el.ElementTransition), target.ElementTransition));
+                        reconciler.FindMountedElementValue(button, static el => el.ElementTransition), target.ElementTransition));
                     H.Check(name + "_TargetCurve", ReferenceEquals(
-                        Reconciler.FindMountedElementValue(button, static el => el.AnimationConfig)?.Curve, targetCurve));
+                        reconciler.FindMountedElementValue(button, static el => el.AnimationConfig)?.Curve, targetCurve));
                     H.Check(name + "_InteractionRegistered", Reconciler.InteractionTrackerCountForTests == trackersBefore + 1);
                     H.Check(name + "_KeyframesStarted", visual.TryGetAnimationController("Translation") is not null);
                     var configuredOuter = outer.ConnectedAnimation(name + "_outer")
                         .Transition(Animation.Transition.Exit(Animation.Transition.Fade), Curve.Ease(200)).Animate(Curve.Spring());
                     reconciler.Update(outer, configuredOuter, button, static () => { });
-                    H.Check(name + "_OuterConfigurationWins", Reconciler.FindMountedElementValue(button, static el => el.ConnectedAnimationKey) == name + "_outer"
-                        && ReferenceEquals(Reconciler.FindMountedElementValue(button, static el => el.ElementTransition), configuredOuter.ElementTransition)
-                        && ReferenceEquals(Reconciler.FindMountedElementValue(button, static el => el.AnimationConfig), configuredOuter.AnimationConfig));
+                    H.Check(name + "_OuterConfigurationWins", reconciler.FindMountedElementValue(button, static el => el.ConnectedAnimationKey) == name + "_outer"
+                        && ReferenceEquals(reconciler.FindMountedElementValue(button, static el => el.ElementTransition), configuredOuter.ElementTransition)
+                        && ReferenceEquals(reconciler.FindMountedElementValue(button, static el => el.AnimationConfig), configuredOuter.AnimationConfig));
                     if (pooled) reconciler.UnmountAndPool(button);
                     else reconciler.UnmountChild(button);
                     H.Check(name + "_TargetRefClearedOnce", targetRef.Current is null && refClears == 1);
@@ -1566,8 +1726,8 @@ internal static class FlyoutTargetCallbacksFixtures
                         && visual.TryGetAnimationController(property) is null);
                     Action change = () =>
                     {
-                        if (vector) AnimationHelper.SetOrAnimateVector3(button, property, new Vector3(1.2f));
-                        else AnimationHelper.SetOrAnimate(button, property, 0.4f);
+                        if (vector) AnimationHelper.SetOrAnimateVector3(reconciler, button, property, new Vector3(1.2f));
+                        else AnimationHelper.SetOrAnimate(reconciler, button, property, 0.4f);
                     };
                     // The selected Linear curve has a keyframe controller; lower-priority Springs do not.
                     H.Check(name + "_SelectedCurve", () =>
@@ -1620,6 +1780,86 @@ internal static class FlyoutTargetCallbacksFixtures
                 H.FindButton("connected destination") is { ActualWidth: > 0, ActualHeight: > 0 });
             H.Check("FlyoutConnectedNav_Settled", await Harness.WaitFor(() => pages.Children.Count == 1, 100));
             H.Check("FlyoutConnectedNav_NoDuplicateStarts", host.Reconciler.ConnectedAnimationStartCount == baseline + 1);
+        }
+    }
+
+    internal sealed class NavigationAcrossHostBoundary(Harness h, bool childOverrides, bool useContentTarget = false) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            if (useContentTarget)
+            {
+                var previous = ReactorApp.ActiveHostInternal;
+                try
+                {
+                    var border = new Border();
+                    using var child = new ReactorHost(H.Window) { ContentTarget = border };
+                    await VerifyNavigation(border, child.Reconciler, el => child.Mount(_ => el), () => border.Child as Button);
+                }
+                finally { ReactorApp.ActiveHostInternal = previous; }
+                return;
+            }
+
+            using var island = new ReactorHostControl();
+            await VerifyNavigation(island, island.Reconciler, el => island.Mount(_ => el), () => island.Content as Button);
+        }
+
+        private async Task VerifyNavigation(FrameworkElement island, Reconciler child, Action<Element> mount, Func<Button?> sourceButton)
+        {
+            using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
+            using var parent = new ReactorHostControl();
+            const string label = "island source";
+            var key = childOverrides ? "unused-island-key" : "mounted-island-key";
+            (childOverrides ? child : parent.Reconciler).RegisterType<FlyoutElement, Button>(
+                mount: static (_, _, _) => new Button { Content = label, Width = 100, Height = 60 },
+                update: static (_, _, _, _, _) => null);
+            mount(childOverrides
+                ? Flyout(Button("not mounted").ConnectedAnimation(key), TextBlock("unused")) with { OnOpened = () => { } }
+                : ConnectedFlyoutTarget(label, key, 100, intermediate: true));
+            XamlInterop.Register(parent.Reconciler);
+            var nav = new NavigationHandle<string>(new NavigationStack<string>("list"));
+            parent.Mount(_ => (NavigationHost(nav, route => route == "list"
+                ? VStack(Flyout(Button("parent target"), TextBlock("parent content")), XamlHost(() => island))
+                : Button("island destination").Size(180, 60).ConnectedAnimation(key)) with
+            { Transition = NavigationTransition.None, CacheMode = useContentTarget ? NavigationCacheMode.Enabled : NavigationCacheMode.Disabled }).AutomationId("island-navigation"));
+            H.SetContent(parent);
+            try
+            {
+                await Harness.WaitFor(() => sourceButton() is { ActualWidth: > 0, ActualHeight: > 0 });
+                var source = sourceButton()!;
+                var pages = H.FindControl<Grid>(g =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(g) == "island-navigation")!;
+                bool hasKey = !childOverrides;
+                H.Check("IslandSourceMeasured", source.ActualWidth > 0 && source.ActualHeight > 0);
+                H.Check("ChildSeesOwnRegistration", ConnectedNavigationOperation.Collect(child, source).Contains(source) == hasKey);
+                H.Check("ParentCollectHonorsChildRegistration", ConnectedNavigationOperation.Collect(parent.Reconciler, pages).Contains(source) == hasKey);
+
+                if (island is Border border)
+                {
+                    // An external writer can replace Child without transferring the host's claim.
+                    var foreign = parent.Reconciler.Mount(ConnectedFlyoutTarget("external", key, 100, intermediate: true), static () => { })!;
+                    border.Child = foreign;
+                    H.Check("ExternalChildUsesParentRegistration", ConnectedNavigationOperation.Collect(parent.Reconciler, pages).Contains(foreign) == childOverrides);
+                    ConnectedNavigationOperation.UnmountPage(parent.Reconciler, foreign);
+                    border.Child = source;
+                }
+
+                int before = parent.Reconciler.ConnectedAnimationStartCount;
+                nav.Navigate("detail", new() { ConnectedAnimationKey = key, Transition = NavigationTransition.Fade() });
+                H.Check("NavigationSettled", await Harness.WaitFor(() => pages.Children.Count == 1 &&
+                    H.FindButton("island destination") is { ActualWidth: > 0 }, 100));
+                int starts = parent.Reconciler.ConnectedAnimationStartCount - before;
+                H.Check($"NavigationStarts_Expected{(hasKey ? 1 : 0)}_Actual{starts}", starts == (hasKey ? 1 : 0));
+                if (useContentTarget)
+                {
+                    before = parent.Reconciler.ConnectedAnimationStartCount;
+                    nav.GoBack();
+                    H.Check("ReturnNavigationSettled", await Harness.WaitFor(() => pages.Children.Count == 1
+                        && H.FindControl<Button>(b => ReferenceEquals(b, source)) is not null, 100));
+                    H.Check("DestinationUsesChildRegistration", parent.Reconciler.ConnectedAnimationStartCount - before == (hasKey ? 1 : 0));
+                }
+            }
+            finally { H.SetContent(null); }
         }
     }
 
@@ -1990,9 +2230,9 @@ internal static class FlyoutTargetCallbacksFixtures
 
     private sealed record TeardownButtonElement(string Label) : Element;
 
-    private sealed class TeardownButtonHandler(Action onUnmount) : IElementHandler<TeardownButtonElement, Button>
+    private sealed class TeardownButtonHandler(Action onUnmount, Button? existing = null) : IElementHandler<TeardownButtonElement, Button>
     {
-        public Button Mount(MountContext ctx, TeardownButtonElement element) => new() { Content = element.Label };
+        public Button Mount(MountContext ctx, TeardownButtonElement element) => existing ?? new Button { Content = element.Label };
         public void Update(UpdateContext ctx, TeardownButtonElement oldElement, TeardownButtonElement newElement, Button control)
             => control.Content = newElement.Label;
         public void Unmount(UnmountContext ctx, Button control) => onUnmount();
@@ -2056,6 +2296,271 @@ internal static class FlyoutTargetCallbacksFixtures
             host.Mount(_ => TextBlock("finished"));
             await Harness.Render();
             H.Check("FlyoutTarget_PlainUnmountDoesNotRepeatCleanup", contentCleanups == 1 && passThroughCleanups == 1);
+        }
+    }
+
+    internal sealed class ReleaseAfterThrowingContent(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (bool isolated in new[] { false, true })
+            {
+                var name = isolated ? "FlyoutRelease_Isolated" : "FlyoutRelease_Ordinary";
+                using var reconciler = new Reconciler();
+                int unmounts = 0, contentCleanups = 0, passThroughCleanups = 0;
+                var failure = new InvalidOperationException("content unmount");
+                Button? target = null;
+                var content = VStack(Component<CleanupProbe, Action>(() => contentCleanups++)).OnUnmount(_ =>
+                {
+                    unmounts++;
+                    reconciler.UnmountChild(target!);
+                    H.Check(name + "_ReentryLeavesReleaseToOwner",
+                        target!.Flyout is Flyout && contentCleanups == 0 && passThroughCleanups == 0);
+                    throw failure;
+                });
+                var element = Flyout(Button(name), content) with
+                {
+                    OverlayInputPassThroughElement = Component<CleanupProbe, Action>(() => passThroughCleanups++),
+                };
+                target = (Button)reconciler.Mount(element, static () => { })!;
+                var flyout = (Flyout)target.Flyout;
+                H.SetContent(target);
+                try
+                {
+                    await Harness.Render();
+                    H.Check(name + "_Mounted", flyout.Content is UIElement && flyout.OverlayInputPassThroughElement is UIElement);
+                    if (isolated)
+                    {
+                        var errors = new List<Exception>();
+                        using (reconciler.IsolateUnmountCleanupFailures(errors.Add))
+                            reconciler.UnmountChild(target);
+                        H.Check(name + "_ReportedOnce", errors.Count == 1 && ReferenceEquals(errors[0], failure));
+                    }
+                    else
+                    {
+                        Exception? caught = null;
+                        try { reconciler.UnmountChild(target); }
+                        catch (InvalidOperationException ex) { caught = ex; }
+                        H.Check(name + "_OriginalException", ReferenceEquals(caught, failure));
+                    }
+                    H.Check(name + "_BothSubtreesCleaned", contentCleanups == 1 && passThroughCleanups == 1);
+                    H.Check(name + "_FlyoutReleased", target.Flyout is null && flyout.Content is null
+                        && flyout.OverlayInputPassThroughElement is null);
+                    reconciler.UnmountChild(target);
+                    H.Check(name + "_CleanupOnce", unmounts == 1 && contentCleanups == 1 && passThroughCleanups == 1);
+                }
+                finally { H.SetContent(null); }
+            }
+
+            foreach (bool registered in new[] { false, true })
+            foreach (bool pooled in new[] { false, true })
+            foreach (bool isolated in new[] { false, true })
+                VerifyTargetAfterFailure(registered, pooled, isolated);
+
+            foreach (bool registered in new[] { false, true })
+                await VerifyHostRecovery(registered);
+        }
+
+        private async Task VerifyHostRecovery(bool registered)
+        {
+            var name = $"FlyoutRelease_HostRetry_{(registered ? "RegisterType" : "V1")}";
+            using var host = H.CreateHost();
+            var failure = new InvalidOperationException("content cleanup");
+            var targetRef = new ElementRef();
+            var button = new Button { Content = name };
+            var target = new TeardownButtonElement(name).Ref(targetRef);
+            int targetUnmounts = 0;
+            int childUnmounts = 0;
+            if (registered)
+                host.Reconciler.RegisterType<TeardownButtonElement, Button>(
+                    mount: (r, _, rerender) =>
+                    {
+                        button.Content = r.Mount(TextBlock("child").OnUnmount(_ => childUnmounts++), rerender);
+                        return button;
+                    },
+                    update: static (_, _, _, _, _) => null,
+                    unmount: (r, b) => { targetUnmounts++; r.UnmountChild(b); });
+            else
+                host.Reconciler.RegisterHandler<TeardownButtonElement, Button>(new TeardownButtonHandler(() =>
+                {
+                    if (++targetUnmounts == 1)
+                    {
+                        host.Reconciler.UnmountChild(button);
+                        host.Reconciler.ReturnControl(button);
+                    }
+                }, button));
+
+            var errors = new List<Exception>();
+            host.RenderErrorHandler = error =>
+            {
+                errors.Add(error.Exception);
+                H.Check(name + "_FirstUnmountCompleted", targetUnmounts == 1);
+                return TextBlock(name + "_Fallback");
+            };
+            bool remove = false;
+            host.Mount(_ => remove ? Empty() : Flyout(target,
+                TextBlock("body").OnUnmount(_ => throw failure)));
+            await host.WaitForIdleAsync();
+            H.Check(name + "_Mounted", ReferenceEquals(targetRef.Current, button) && button.Flyout is Flyout);
+
+            remove = true;
+            host.RequestRender();
+            await host.WaitForIdleAsync();
+            H.Check(name + "_FallbackInstalled", H.FindText(name + "_Fallback") is not null);
+            H.Check(name + "_OriginalError", errors.Count == 1 && ReferenceEquals(errors[0], failure));
+            H.Check(name + "_UnmountOnceAfterFallback", targetUnmounts == 1, $"unmounts: {targetUnmounts}");
+            if (registered) H.Check(name + "_DelegatedChildUnmounted", childUnmounts == 1);
+
+            // A later pool-return attempt on that same failed mount must also be a no-op.
+            host.Reconciler.UnmountAndPool(button);
+            H.Check(name + "_UnmountOnceAfterPoolRetry", targetUnmounts == 1, $"unmounts: {targetUnmounts}");
+            H.Check(name + "_FailedTargetNotPooled", host.Reconciler.Pool.TryRent(typeof(Button)) is null);
+
+            // A custom mount may explicitly return the same native Button for a new lifetime.
+            var fresh = host.Reconciler.Mount(target, static () => { });
+            H.Check(name + "_RemountedSameButton", ReferenceEquals(fresh, button));
+            host.Reconciler.UnmountAndPool(button);
+            H.Check(name + "_FreshMountUnmountedAndPooled", targetUnmounts == 2
+                && ReferenceEquals(host.Reconciler.Pool.TryRent(typeof(Button)), button));
+        }
+
+        private void VerifyTargetAfterFailure(bool registered, bool pooled, bool isolated)
+        {
+            var name = $"FlyoutRelease_{(registered ? "RegisterType" : "V1")}_{(pooled ? "Pool" : "Ordinary")}_{(isolated ? "Isolated" : "Direct")}";
+            using var reconciler = new Reconciler();
+            int targetUnmounts = 0;
+            var contentFailure = new InvalidOperationException("content cleanup");
+            var targetFailure = new InvalidOperationException("target cleanup");
+            Button? button = null;
+            void UnmountTarget()
+            {
+                targetUnmounts++;
+                H.Check(name + "_DecoratorReleasedFirst", button!.Flyout is null);
+                if (!pooled) throw targetFailure;
+            }
+            if (registered)
+                reconciler.RegisterType<TeardownButtonElement, Button>(
+                    mount: static (_, el, _) => new Button { Content = el.Label },
+                    update: static (_, _, _, _, _) => null,
+                    unmount: (_, _) => UnmountTarget());
+            else
+                reconciler.RegisterHandler<TeardownButtonElement, Button>(new TeardownButtonHandler(UnmountTarget));
+
+            var target = new TeardownButtonElement(name).Ref(new ElementRef());
+            var element = Flyout(target, TextBlock("body").OnUnmount(_ =>
+            {
+                if (isolated) reconciler.UnmountChild(button!);
+                throw contentFailure;
+            }));
+            button = (Button)reconciler.Mount(element, static () => { })!;
+            Exception? caught = null;
+            var errors = new List<Exception>();
+            try
+            {
+                using var scope = isolated ? reconciler.IsolateUnmountCleanupFailures(errors.Add) : (Reconciler.IsolatedUnmountScope?)null;
+                if (pooled) reconciler.UnmountAndPool(button);
+                else reconciler.UnmountChild(button);
+            }
+            catch (InvalidOperationException ex) { caught = ex; }
+            H.Check(name + "_TargetUnmountedOnce", targetUnmounts == 1, $"unmounts: {targetUnmounts}");
+            if (isolated)
+                H.Check(name + "_ReportedInOrder", caught is null && errors.SequenceEqual(
+                    pooled ? new[] { contentFailure } : new[] { contentFailure, targetFailure }));
+            else
+                H.Check(name + "_FirstFailure", ReferenceEquals(caught, contentFailure));
+            if (pooled)
+                H.Check(name + "_FailedTargetNotPooled", reconciler.Pool.TryRent(typeof(Button)) is null);
+        }
+    }
+
+    private sealed record ReleaseReferenceElement(ElementRef Source) : Element;
+
+    internal sealed class ReleaseBoundary(Harness h, bool throwingSetter) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await VerifyRelease(contentProvidesRef: false);
+            if (throwingSetter) await VerifyRelease(contentProvidesRef: true);
+        }
+
+        private async Task VerifyRelease(bool contentProvidesRef)
+        {
+            using var reconciler = new Reconciler();
+            var reference = new ElementRef();
+            Element outside = Button("reference source").Ref(reference);
+            var failure = new InvalidOperationException("content cleanup");
+            int passCleanups = 0, callbacks = 0, contentUnmounts = 0;
+            int childCleanups = 0;
+            FrameworkElement? boundReference = null;
+            bool armed = false;
+            Flyout? flyout = null;
+            Element content;
+            if (throwingSetter)
+            {
+                var descriptor = new ControlDescriptor<ReleaseReferenceElement, TextBlock>()
+                    .Reference(el => el.Source, (_, value) =>
+                    {
+                        if (value is not null) boundReference = value;
+                        if (value is null && armed) { callbacks++; throw failure; }
+                    });
+                reconciler.RegisterHandler(new DescriptorHandler<ReleaseReferenceElement, TextBlock>(descriptor));
+                var observer = new ReleaseReferenceElement(reference);
+                if (contentProvidesRef)
+                {
+                    outside = observer;
+                    content = VStack(Component<CleanupProbe, Action>(() => childCleanups++)).Ref(reference);
+                }
+                else content = observer;
+                content = content.OnUnmount(_ => contentUnmounts++);
+            }
+            else
+            {
+                content = TextBlock("content").OnUnmount(_ =>
+                {
+                    callbacks++;
+                    flyout!.OverlayInputPassThroughElement = null;
+                });
+            }
+            var outsideControl = reconciler.Mount(outside, static () => { })!;
+            var target = (Button)reconciler.Mount(Flyout(Button("target"), content) with
+            {
+                OverlayInputPassThroughElement = Component<CleanupProbe, Action>(() =>
+                {
+                    passCleanups++;
+                    if (throwingSetter && armed) throw new InvalidOperationException("later pass-through cleanup");
+                }),
+            }, static () => { })!;
+            flyout = (Flyout)target.Flyout;
+            var originalContent = (UIElement)flyout.Content;
+            var originalPass = (UIElement)flyout.OverlayInputPassThroughElement;
+            H.SetContent(target);
+            try
+            {
+                await Harness.Render();
+                H.Check("ReleaseMounted", originalContent is not null && originalPass is not null &&
+                    (!throwingSetter || ReferenceEquals(boundReference, contentProvidesRef ? originalContent : outsideControl)));
+                armed = true;
+                Exception? caught = null;
+                try { reconciler.UnmountChild(target); }
+                catch (InvalidOperationException ex) { caught = ex; }
+                finally { armed = false; }
+                H.Check("ContentCallbackOnce", callbacks == 1);
+                H.Check("OriginalExceptionPreserved", ReferenceEquals(caught, throwingSetter ? failure : null));
+                if (throwingSetter) H.Check(contentProvidesRef ? "ProducerContentOnUnmountOnce" : "ContentUnmountContinuedAfterSetter", contentUnmounts == 1);
+                if (contentProvidesRef) H.Check("ProducerChildEffectCleanupOnce", childCleanups == 1);
+                H.Check("TargetDetached", target.Flyout is null);
+                H.Check("ContentCleared", flyout.Content is null);
+                H.Check("PassThroughCleared", flyout.OverlayInputPassThroughElement is null);
+                H.Check("OriginalPassThroughUnmounted", passCleanups == 1);
+            }
+            finally
+            {
+                if (flyout.Content is UIElement remainingContent) reconciler.UnmountChild(remainingContent);
+                else if (contentProvidesRef && contentUnmounts == 0) reconciler.UnmountChild(originalContent);
+                if (passCleanups == 0 && originalPass is not null) reconciler.UnmountChild(originalPass);
+                reconciler.UnmountChild(outsideControl);
+                H.SetContent(null);
+            }
         }
     }
 

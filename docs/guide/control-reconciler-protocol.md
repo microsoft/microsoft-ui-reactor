@@ -658,6 +658,10 @@ Exit transitions, connected-animation keys, and `.Animate()` curves use the
 first non-null configuration from the outermost decorator inward, ending at
 the actual target. If Memo or a forwarding handler hides the target from the
 source chain, lookup resumes at its tag and follows any exposed decorator targets.
+A `RegisterType` override that creates its own control does not inherit or clean
+up configuration from a declared `Target` it never mounted.
+Connected navigation resolves keys inside a nested `ReactorHostControl` or a
+`ReactorHost.ContentTarget` using the registrations of the host that mounted the content.
 A non-null ambient animation curve still takes precedence over `.Animate()`.
 Unmount clears refs and animation state throughout the decorator chain and runs the
 decorator's teardown before the target's own handler. Pool return clears both
@@ -666,7 +670,11 @@ identities. Other decorators retain their existing tag behavior.
 When these decorators share a target, only the outermost native flyout is
 attached, including when a Memo or forwarding RegisterType returns the target
 control. Replacing an inner flyout releases its Reactor content and input
-pass-through subtrees. Inner updates still reconcile their target, but leave
+pass-through subtrees even if a content unmount callback throws. When the
+decorated control itself is unmounted, the flyout detaches and the target's
+teardown runs before the first failure is propagated. Retrying that unmount during
+host recovery does not run the target's teardown again or return it to the pool.
+Inner updates still reconcile their target, but leave
 the outer flyout's content and lifecycle callbacks untouched. Such nesting
 emits a `Flyout.NestedTarget` diagnostic warning.
 Inner updates, including custom decorators, keep an enclosing flyout's published
@@ -682,7 +690,9 @@ updates keep model-based counts and the existing behavior of setter-added items;
 recovery reconciles the collection to the declared items.
 
 Keyed FlipView pages keep both the source view for positional matching and the
-key-stamped instance used for updates. Memo resource and dirty-descendant
+key-stamped instance used for updates. Each completed page updates its own record,
+so a retry after a later page throws uses the view actually mounted at each position.
+Memo resource and dirty-descendant
 refreshes reuse the installed flyout's owner without retaining a Memo output
 tree. A scoped update depth prevents reconstructed inner decorators from
 claiming the outer flyout, including on skipped branches; both temporary

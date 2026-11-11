@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
+using Microsoft.UI.Reactor.Navigation;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 using ReactorTransition = Microsoft.UI.Reactor.Animation.Transition;
@@ -781,7 +782,8 @@ internal static class RegisterTypeElementTagFixtures
                     registeredUpdates++;
                     return r.UpdateChild(oldEl.Target, newEl.Target, control, render);
                 });
-            var target = Button(name, () => clicks++);
+            var targetRef = new ElementRef();
+            var target = Button(name, () => clicks++).Ref(targetRef).ConnectedAnimation(name);
             var wrapper = new FlyoutElement(target, new TextBlockElement("unused"));
             Element previous = childSkip ? VStack(0, wrapper) : wrapper;
             Element next = childSkip ? VStack(12, wrapper) : wrapper;
@@ -810,12 +812,15 @@ internal static class RegisterTypeElementTagFixtures
                 H.Check(name + "_TargetTagPreserved", ReferenceEquals(Reconciler.GetElementTag(button), target));
                 H.ClickButton(name);
                 H.Check(name + "_ClickAfterSkip", clicks == 2);
+                H.Check(name + "_TargetRefMounted", ReferenceEquals(targetRef.Current, button));
+                H.Check(name + "_TargetSelectedForNavigation", ConnectedNavigationOperation.Collect(reconciler, root).Contains(button));
             }
             finally
             {
-                reconciler.UnmountChild(root);
+                ConnectedNavigationOperation.UnmountPage(reconciler, root);
                 H.SetContent(null);
             }
+            H.Check(name + "_TargetRefCleared", targetRef.Current is null);
         }
     }
 
@@ -835,7 +840,9 @@ internal static class RegisterTypeElementTagFixtures
                     return created;
                 },
                 update: static (_, _, _, _, _) => null);
-            var initial = new FlyoutElement(new TextBlockElement("unused"), new TextBlockElement("unused"))
+            var unusedRef = new ElementRef();
+            var unusedTarget = new TextBlockElement("unused").Ref(unusedRef).ConnectedAnimation(name);
+            var initial = new FlyoutElement(unusedTarget, new TextBlockElement("unused"))
                 { OnOpened = () => firstClicks++ };
             var button = (WinXC.Button)reconciler.Mount(initial, static () => { })!;
             H.SetContent(button);
@@ -862,12 +869,18 @@ internal static class RegisterTypeElementTagFixtures
                 reconciler.RefreshItemIdentityOnSkip(button, keyed);
                 H.Check(name + "_ItemKeyRefreshed", ReferenceEquals(Reconciler.GetElementTag(button), keyed)
                     && Reconciler.GetElementTag(button)?.Key == "row");
+                H.Check(name + "_DeclaredTargetNeverMounted", unusedRef.Current is null);
+                H.Check(name + "_UnusedKeyIgnored", !ConnectedNavigationOperation.Collect(reconciler, button).Contains(button));
+                // Seed the ref independently: walking the unused target on teardown would clear it.
+                unusedRef.SetCurrent(button);
             }
             finally
             {
-                reconciler.UnmountChild(button);
+                ConnectedNavigationOperation.UnmountPage(reconciler, button);
                 H.SetContent(null);
             }
+            H.Check(name + "_UnusedRefUntouched", ReferenceEquals(unusedRef.Current, button));
+            unusedRef.SetCurrent(null);
         }
     }
 

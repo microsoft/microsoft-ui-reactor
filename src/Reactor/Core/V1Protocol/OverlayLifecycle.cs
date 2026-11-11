@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.ExceptionServices;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml;
@@ -432,6 +433,8 @@ internal static class OverlayLifecycle
     private sealed class FlyoutOwnership(Element element)
     {
         internal Element Element = element;
+        // A retained flyout can outlive its slot when a target modifier replaces it.
+        internal WeakReference<FrameworkElement>? CallbackTarget;
         // Item re-keying can publish a copy without replacing the retained virtual element.
         internal Element Tag = element;
         // A reconstructed inner decorator must not claim an outer flyout during its update.
@@ -520,11 +523,11 @@ internal static class OverlayLifecycle
         public void Dispose() { if (_owner is not null) _owner.UpdateDepth--; }
     }
 
-    /// <summary>Clears the installed flyout's owner when its target releases its identity.</summary>
-    internal static void ForgetFlyoutOwner(FrameworkElement target)
+    /// <summary>Clears ownership on the displaced flyout, or on the installed flyout during target cleanup.</summary>
+    internal static void ForgetFlyoutOwner(FrameworkElement target, WinPrim.FlyoutBase? displaced = null)
     {
-        if (s_flyoutOwnerProperty is { } property && Reconciler.GetFlyoutOnControl(target) is { } flyout)
-            flyout.ClearValue(property);
+        if (s_flyoutOwnerProperty is { } property)
+            (displaced ?? Reconciler.GetFlyoutOnControl(target))?.ClearValue(property);
     }
 
     // A null old element means this layer just mounted its target. Otherwise,
@@ -557,7 +560,14 @@ internal static class OverlayLifecycle
     {
         if (FlyoutOwner(Reconciler.GetFlyoutOnControl(target)) is { } owner)
             ReleaseFlyout(reconciler, target, owner.Element);
-        flyout.SetValue(FlyoutOwnerProperty, new FlyoutOwnership(element));
+        var ownerRecord = new FlyoutOwnership(element);
+        if (flyout is WinUI.Flyout contentFlyout)
+        {
+            ownerRecord.CallbackTarget = new(target);
+            contentFlyout.Opened += static (sender, _) => LiveFlyoutElement(sender)?.OnOpened?.Invoke();
+            contentFlyout.Closed += static (sender, _) => LiveFlyoutElement(sender)?.OnClosed?.Invoke();
+        }
+        flyout.SetValue(FlyoutOwnerProperty, ownerRecord);
         reconciler.SetFlyoutOnControl(target, flyout);
     }
 
@@ -567,27 +577,47 @@ internal static class OverlayLifecycle
         var flyout = Reconciler.GetFlyoutOnControl(target);
         if (element is null || flyout is null || FlyoutOwner(flyout) is not { } owner || !owner.Matches(element)) return;
         flyout.ClearValue(FlyoutOwnerProperty);
-        if (flyout is WinUI.Flyout contentFlyout)
+        try
         {
-            if (contentFlyout.Content is UIElement content) reconciler.UnmountChild(content);
-            contentFlyout.Content = null;
-            if (contentFlyout.OverlayInputPassThroughElement is UIElement passThrough) reconciler.UnmountChild(passThrough);
-            contentFlyout.OverlayInputPassThroughElement = null;
+            if (flyout is WinUI.Flyout contentFlyout)
+            {
+                // Clearing the owner prevents reentry, so this call must finish both subtrees.
+                // An enclosing teardown already collects errors. Otherwise propagate the first after release.
+                ExceptionDispatchInfo? firstFailure = null;
+                using Reconciler.IsolatedUnmountScope? scope = reconciler.IsolatesUnmountCleanupFailures
+                    ? null : reconciler.IsolateUnmountCleanupFailures(ex => firstFailure ??= ExceptionDispatchInfo.Capture(ex));
+                // Content cleanup can change the pass-through property before its subtree is unmounted.
+                var content = contentFlyout.Content as UIElement;
+                var passThrough = contentFlyout.OverlayInputPassThroughElement as UIElement;
+                UnmountSubtree(content);
+                contentFlyout.Content = null;
+                if (!ReferenceEquals(passThrough, content)) UnmountSubtree(passThrough);
+                contentFlyout.OverlayInputPassThroughElement = null;
+                firstFailure?.Throw();
+
+                void UnmountSubtree(UIElement? subtree)
+                {
+                    if (subtree is null) return;
+                    try { reconciler.UnmountChild(subtree); }
+                    catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+                    {
+                        reconciler.ReportIsolatedUnmountFailure(ex);
+                    }
+                }
+            }
         }
-        if (ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout))
-            Reconciler.ClearFlyoutOnControl(target);
+        finally
+        {
+            if (ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout))
+                Reconciler.ClearFlyoutOnControl(target);
+        }
     }
 
-    private static FlyoutElement? LiveFlyoutElement(FrameworkElement target, WinUI.Flyout flyout) =>
-        FlyoutOwner(flyout)?.Tag is FlyoutElement owner
+    private static FlyoutElement? LiveFlyoutElement(object? sender) =>
+        sender is WinUI.Flyout flyout && FlyoutOwner(flyout) is { Tag: FlyoutElement owner, CallbackTarget: { } callbackTarget }
+        && callbackTarget.TryGetTarget(out var target)
         && ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout)
         && ReferenceEquals(Reconciler.GetMountedElement(target), owner) ? owner : null;
-
-    private static void WireFlyoutCallbacks(FrameworkElement target, WinUI.Flyout flyout)
-    {
-        flyout.Opened += (_, _) => LiveFlyoutElement(target, flyout)?.OnOpened?.Invoke();
-        flyout.Closed += (_, _) => LiveFlyoutElement(target, flyout)?.OnClosed?.Invoke();
-    }
 
     public static UIElement? MountFlyout(Reconciler reconciler, FlyoutElement flyEl, Action requestRerender)
     {
@@ -607,7 +637,6 @@ internal static class OverlayLifecycle
                 && reconciler.Mount(flyEl.OverlayInputPassThroughElement, requestRerender) is DependencyObject pt)
                 flyout.OverlayInputPassThroughElement = pt;
             Reconciler.SetDecoratorElementTag(targetFe, flyEl);
-            WireFlyoutCallbacks(targetFe, flyout);
             // SetFlyoutOnControl wires .Flyout on Button/SplitButton targets so
             // clicking opens the flyout natively; non-button targets fall back
             // to SetAttachedFlyout metadata (opened only by an explicit show).
@@ -667,7 +696,6 @@ internal static class OverlayLifecycle
                     AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled,
                 };
                 FlyoutPlacement.Apply(newFlyout, n.Placement);
-                WireFlyoutCallbacks(targetFe, newFlyout);
                 InstallFlyout(reconciler, targetFe, n, newFlyout);
                 Reconciler.ApplySetters(n.Setters, newFlyout);
             }

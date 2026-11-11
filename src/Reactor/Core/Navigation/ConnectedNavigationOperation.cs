@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -62,10 +63,8 @@ internal sealed class ConnectedNavigationOperation : IDisposable
         TransitionEngine.ClearHitTestSuppression(outgoing);
         TransitionEngine.ClearHitTestSuppression(incoming);
         ElementCompositionPreview.GetElementVisual(incoming).Opacity = 0;
-        var sources = Collect(reconciler, outgoing);
-        var targets = Collect(reconciler, incoming);
-        var source = FindUnique(sources, key, out _);
-        _target = FindUnique(targets, key, out var ambiguousTarget);
+        var sources = Collect(reconciler, outgoing, key, out var source, out _);
+        var targets = Collect(reconciler, incoming, key, out _target, out var ambiguousTarget);
 
         // Suppress ALL keyed children of these pages, not only the selected hero.
         // Otherwise finalizing a list would prepare unpicked rows and leave ghosts.
@@ -119,47 +118,50 @@ internal sealed class ConnectedNavigationOperation : IDisposable
     }
 
     internal static List<UIElement> Collect(Core.Reconciler reconciler, UIElement root)
+        => Collect(reconciler, root, null, out _, out _);
+
+    private static List<UIElement> Collect(Core.Reconciler reconciler, UIElement root,
+        string? key, out UIElement? match, out bool ambiguous)
     {
+        match = null;
+        ambiguous = false;
         var result = new List<UIElement>();
-        var pending = new Stack<DependencyObject>();
+        var pending = new Stack<(DependencyObject Control, Core.Reconciler Owner)>();
         var visited = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
-        Action<UIElement> pushChild = child => pending.Push(child);
-        pending.Push(root);
+        DependencyObject current = root;
+        var owner = reconciler;
+        // Resolve the container itself with its parent. Only its installed content crosses hosts.
+        Action<DependencyObject> pushChild = child => pending.Push((child, current switch
+        {
+            Hosting.ReactorHostControl host => host.Reconciler,
+            Border border => Hosting.ReactorHost.GetContentTargetReconciler(border, child) ?? owner,
+            _ => owner,
+        }));
+        pending.Push((root, reconciler));
         while (pending.Count > 0)
         {
-            var current = pending.Pop();
+            (current, owner) = pending.Pop();
             if (!visited.Add(current)) continue;
             // The selected page can contain an active nested NavigationHost
             // (for example, a shell retained beneath a transfer overlay).
             // Its live descendants participate; cached pages are not attached.
             if (current is UIElement element
-                && Core.Reconciler.FindMountedElementValue(element, static el => el.ConnectedAnimationKey) is not null)
-                result.Add(element);
-            for (var i = VisualTreeHelper.GetChildrenCount(current) - 1; i >= 0; i--)
-                pending.Push(VisualTreeHelper.GetChild(current, i));
-            if (current is UIElement mounted)
-                reconciler.VisitMountedChildControls(mounted, pushChild);
-        }
-        return result;
-    }
-
-    private static UIElement? FindUnique(List<UIElement> elements, string key, out bool ambiguous)
-    {
-        ambiguous = false;
-        UIElement? match = null;
-        foreach (var element in elements)
-        {
-            var elementKey = Core.Reconciler.FindMountedElementValue(element, static el => el.ConnectedAnimationKey);
-            if (!string.Equals(elementKey, key, StringComparison.Ordinal))
-                continue;
-            if (match is not null)
+                && owner.FindMountedElementValue(element, static el => el.ConnectedAnimationKey) is { } elementKey)
             {
-                ambiguous = true;
-                return null;
+                result.Add(element);
+                if (string.Equals(elementKey, key, StringComparison.Ordinal))
+                {
+                    if (match is null) match = element;
+                    else ambiguous = true;
+                }
             }
-            match = element;
+            for (var i = VisualTreeHelper.GetChildrenCount(current) - 1; i >= 0; i--)
+                pushChild(VisualTreeHelper.GetChild(current, i));
+            if (current is UIElement mounted)
+                owner.VisitMountedChildControls(mounted, pushChild);
         }
-        return match;
+        if (ambiguous) match = null;
+        return result;
     }
 
     private void Claim(UIElement element)
@@ -176,9 +178,8 @@ internal sealed class ConnectedNavigationOperation : IDisposable
         {
             // Re-resolve while waiting: Loaded/effects can create or replace the
             // selected card after the page's initial mount, even inside a template.
-            var candidates = Collect(_reconciler, _incoming);
+            var candidates = Collect(_reconciler, _incoming, _key, out _target, out var ambiguous);
             foreach (var candidate in candidates) Claim(candidate);
-            _target = FindUnique(candidates, _key, out var ambiguous);
             if (ambiguous)
             {
                 Finish(fallback: true);
