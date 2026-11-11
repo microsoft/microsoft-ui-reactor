@@ -3928,10 +3928,11 @@ clone this repo:</p>
 <p><code>winapp</code> is the Windows App SDK CLI. <code>winapp new</code> installs the template pack on
 demand (and offers to update a stale one), so there is no separate install step
 and no version to pin.</p>
-<p>That gives you four starting points — <code>reactor</code> (blank), <code>reactor-mvu</code>
-(Model-View-Update via <code>UseReducer</code>), <code>reactor-navview</code> (<code>NavigationView</code> shell)
-and <code>reactor-tabview</code> (<code>TabView</code> shell). <code>winapp new --list</code> prints them all, and
-omitting <code>-t</code> picks one interactively.</p>
+<p>That gives you five starting points — <code>reactor</code> (blank), <code>reactor-mvu</code>
+(Model-View-Update via <code>UseReducer</code>), <code>reactor-navview</code> (<code>NavigationView</code> shell),
+<code>reactor-tabview</code> (<code>TabView</code> shell), and <code>reactor-singlefile</code>, a single <code>.cs</code> file
+with no project (see <a href="#one-file-no-project">One file, no project</a>).
+<code>winapp new --list</code> prints them all, and omitting <code>-t</code> picks one interactively.</p>
 <p>Prefer plain .NET tooling? Install the pack yourself, then scaffold with
 <code>dotnet new</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">dotnet</span> <span class="n">new</span> <span class="n">install</span> <span class="n">Microsoft</span><span class="p">.</span><span class="n">WindowsAppSDK</span><span class="p">.</span><span class="n">WinUI</span><span class="p">.</span><span class="n">CSharp</span><span class="p">.</span><span class="n">Templates</span><span class="p">::&lt;</span><span class="n">version</span><span class="p">&gt;</span>
@@ -3939,11 +3940,16 @@ omitting <code>-t</code> picks one interactively.</p>
 </code></pre></div>
 <p>The pack is prerelease-only today, and <code>dotnet new install</code> resolves stable
 versions unless you pin one explicitly — which is the step <code>winapp new</code> removes.</p>
-<p>Scaffolded apps are <strong>packaged</strong> (single-project MSIX), so <code>dotnet run</code>
+<p>Scaffolded apps are <strong>packaged</strong> (single-project MSIX) by default, so <code>dotnet run</code>
 registers a loose-layout package and launches the app with full package
 identity — the same thing F5 does in Visual Studio. That requires <strong>Developer
-Mode</strong> (Settings → System → For developers). See <a href="../packaging/">Packaging</a> for
-the unpackaged alternative.</p>
+Mode</strong> (Settings → System → For developers). For a plain unpackaged <code>.exe</code>
+instead, add <code>--packaging Unpackaged</code> to any of the four project templates:
+<code>dotnet new reactor -n MyApp --packaging Unpackaged</code> (<code>winapp new</code> has no
+equivalent switch). See <a href="../packaging/">Packaging</a> for how the two shapes differ.</p>
+<p>If <code>dotnet new</code> rejects <code>--packaging</code> or can't find <code>reactor-singlefile</code>, the
+installed pack predates them; <code>winapp new --list --template-version latest</code>
+updates it.</p>
 <h2 id="one-file-no-project">One file, no project<a class="headerlink" href="#one-file-no-project" title="Permanent link">&para;</a></h2>
 <p>A Reactor app does not need a <code>.csproj</code>. .NET 10 runs a single <code>.cs</code> file
 directly, and file-level <code>#:</code> directives supply the configuration a project file
@@ -4015,6 +4021,12 @@ the <a href="../#minimal-project-setup">minimal <code>.csproj</code></a>. The re
 </tr>
 </tbody>
 </table>
+<p>You don't have to type the header: <code>dotnet new reactor-singlefile -n Counter</code>
+scaffolds <code>Counter/Counter.cs</code> with the same five directives and a starter
+component, and <code>dotnet run Counter.cs</code> from that folder launches it. The
+template's pins differ from the block above — it targets a newer Windows SDK
+(<code>windows10.0.26100.0</code>) and lets the <code>Microsoft.Windows.SDK.BuildTools.WinApp</code>
+version float (<code>@*</code>) — and both headers work.</p>
 <h3 id="running-it-unpackaged">Running it unpackaged<a class="headerlink" href="#running-it-unpackaged" title="Permanent link">&para;</a></h3>
 <p><code>WindowsPackageType</code> decides whether the app runs packaged, and <code>dotnet run</code> and
 <code>winapp run</code> both obey it. Declare the app unpackaged to run it as a plain <code>.exe</code>:</p>
@@ -4241,7 +4253,8 @@ the pack is prerelease-only today, so the explicit version pin is required.</p>
 <a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="n">dotnet</span> <span class="n">run</span>
 </code></pre></div>
 <p>The template wires up the <code>Microsoft.UI.Reactor</code> package reference, the
-WinUI 3 target framework, MSIX packaging, and a working <code>App.cs</code> that mounts a
+WinUI 3 target framework, MSIX packaging (unless you pass
+<code>--packaging Unpackaged</code>), and a working <code>App.cs</code> that mounts a
 single Reactor component. No <code>App.xaml</code>, no <code>MainWindow.xaml.cs</code> — just one C#
 file. Swap <code>reactor</code> for <code>reactor-mvu</code>, <code>reactor-navview</code> or <code>reactor-tabview</code>
 to start from a richer shell.</p>
