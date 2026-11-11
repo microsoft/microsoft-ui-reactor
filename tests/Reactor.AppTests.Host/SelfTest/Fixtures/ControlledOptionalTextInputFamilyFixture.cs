@@ -31,6 +31,14 @@ internal static class ControlledOptionalTextInputFamilyFixture
             // reserve an echo either.
             await ControlledOptionalSelfTestHelpers.RunUserEditAfterStateWriteAsync(
                 H, fixture, scenario, "EditAfterEmptyWrite", "");
+            await ControlledOptionalSelfTestHelpers.RunUserEditBeforeEchoAsync(
+                H, fixture, scenario, "EditBeforeEcho", scenario.SecondValue);
+            // AutoSuggestBox raises TextChanged about 150 ms after a change and
+            // merges the writes made in between; 100 ms apart leaves room for
+            // the render that applies the second write.
+            await ControlledOptionalSelfTestHelpers.RunTwoQuickStateWritesAsync(
+                H, fixture, scenario, "TwoQuickWrites", scenario.SecondValue, "second-write",
+                mergeWithinMs: scenario.Name is "AutoSuggestBox" ? 100 : null);
             if (scenario.Name is "RichEditBox")
             {
                 // The document reads "\n" back as "\r": the write must still
