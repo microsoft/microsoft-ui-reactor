@@ -403,9 +403,9 @@ internal static class PerfTraceScenario
                 await Task.Run(() => root.WorkerBump!());
                 await Harness.WaitFor(() => root.Renders >= 3, maxPasses: 32, perPassMs: 10);
                 await control.WaitForIdleAsync();
-                int childRenders = PerfTraceWorkerChild.Renders;
-                await Task.Run(() => PerfTraceWorkerChild.WorkerBump!());
-                await Harness.WaitFor(() => PerfTraceWorkerChild.Renders > childRenders, maxPasses: 32, perPassMs: 10);
+                int childRenders = root.Worker.Renders;
+                await Task.Run(() => root.Worker.WorkerBump!());
+                await Harness.WaitFor(() => root.Worker.Renders > childRenders, maxPasses: 32, perPassMs: 10);
                 await control.WaitForIdleAsync();
             },
             () => control?.Dispose());
@@ -822,7 +822,7 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
 
     public override async Task RunAsync()
     {
-        var host = H.CreateHost();
+        using var host = H.CreateHost();
         // 0: untraced requests (must record nothing); 1: traced requests (must record); 2: ignored.
         int phase = 0;
         bool pendingUntraced = false, pendingTraced = false;
@@ -889,7 +889,6 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
         finally
         {
             Microsoft.UI.Reactor.Hosting.ReactorHost.RequestRenderAfterRenderingCheckForTest = null;
-            host.Dispose();
             H.SetContent(null);
             foreach (var etl in new[] { first, second })
             {
@@ -924,21 +923,27 @@ internal sealed class PerfTraceControlRoot : Component
         Bump = () => setN(n + 1);
         // A thread-safe setter requests from its caller's thread: the claim and the note happen there.
         WorkerBump = () => setW(w + 1);
-        return VStack(TextBlock($"control {n} {w}"), Component<PerfTraceRow, string>("control row"), Component<PerfTraceWorkerChild>());
+        return VStack(TextBlock($"control {n} {w}"), Component<PerfTraceRow, string>("control row"), Component<PerfTraceWorkerChild, PerfTraceWorkerProbe>(Worker));
     }
+
+    /// <summary>What the scenario reads from, and calls on, the worker child the reconciler creates.</summary>
+    public readonly PerfTraceWorkerProbe Worker = new();
+}
+
+internal sealed class PerfTraceWorkerProbe
+{
+    public Action? WorkerBump;
+    public int Renders;
 }
 
 /// <summary>A child whose thread-safe setter is called off the UI thread (its request is queued to the UI thread).</summary>
-internal sealed class PerfTraceWorkerChild : Component
+internal sealed class PerfTraceWorkerChild : Component<PerfTraceWorkerProbe>
 {
-    public static Action? WorkerBump;
-    public static int Renders;
-
     public override Element Render()
     {
-        Renders++;
+        Props.Renders++;
         var (n, setN) = UseState(0, threadSafe: true);
-        WorkerBump = () => setN(n + 1);
+        Props.WorkerBump = () => setN(n + 1);
         return TextBlock($"worker child {n}");
     }
 }

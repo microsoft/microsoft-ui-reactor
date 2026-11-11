@@ -19,11 +19,15 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// directly) counts, but names no component.</para>
 ///
 /// <para><b>Which requester a pass reports.</b> The first since the previous pass started: it
-/// is what scheduled the pass; later ones only coalesced into it. <see cref="Take"/> runs when
-/// a pass starts, so a request made during a pass belongs to the next one.</para>
+/// is what scheduled the pass; later ones only coalesced into it. If that first request was
+/// unclaimed, the pass names nobody, even when a component's request coalesced into it later.
+/// <see cref="Take"/> runs when a pass starts, so a request made during a pass belongs to the
+/// next one. Noting (any thread) and taking (the UI thread) share one lock, so a request's
+/// count and requester always land in the same pass.</para>
 ///
 /// <para><b>Cost.</b> Everything here runs only while the <c>Pass</c> keyword is on; with no
-/// session listening the hosts and wrappers make one enable check and nothing else.</para>
+/// session listening the hosts and wrappers make one enable check and nothing else, and an
+/// untraced pass makes two plain reads.</para>
 /// </remarks>
 internal sealed class RenderPassRequests
 {
@@ -32,9 +36,16 @@ internal sealed class RenderPassRequests
     // keyword is on, and cleared once a request is noted.
     [ThreadStatic] private static object? t_requester;
 
-    // Written from any thread (a thread-safe hook requests from its caller's thread).
+    // _first's value when the first request since the last Take was unclaimed: it holds the
+    // slot, so a later claimed request cannot take credit for a pass it did not schedule.
+    private static readonly object Unclaimed = new();
+
+    private readonly Lock _gate = new();
     private object? _first;
     private int _count;
+
+    // Test-only: runs inside the lock, between counting a request and recording its requester.
+    internal Action? BetweenCountAndRequesterForTests { get; set; }
 
     /// <summary>
     /// Marks <paramref name="requester"/> as the one whose request runs on this thread, unless
@@ -79,24 +90,42 @@ internal sealed class RenderPassRequests
 
     private void NoteCore()
     {
-        Interlocked.Increment(ref _count);
-        if (t_requester is { } requester)
+        // Consumed by the one request it was claimed for: a pass that request runs
+        // synchronously (a host's first render) must not credit its own requests to it.
+        object requester = ConsumeClaim() ?? Unclaimed;
+        lock (_gate)
         {
-            // Consumed by the one request it was claimed for: a pass that request runs
-            // synchronously (a host's first render) must not credit its own requests to it.
-            t_requester = null;
-            Interlocked.CompareExchange(ref _first, requester, null);
+            _count++;
+            BetweenCountAndRequesterForTests?.Invoke();
+            _first ??= requester;
         }
     }
 
-    /// <summary>Whether anything was noted since the last <see cref="Take"/> (a plain read).</summary>
+    private static object? ConsumeClaim()
+    {
+        object? requester = t_requester;
+        t_requester = null;
+        return requester;
+    }
+
+    /// <summary>Whether anything was noted since the last <see cref="Take"/> (plain reads, no lock).</summary>
     internal bool HasPending => _first is not null || _count != 0;
 
-    /// <summary>The first requester noted since the last call, and how many requests were; clears both.</summary>
+    /// <summary>
+    /// The requester of the first request noted since the last call (null when that request
+    /// was unclaimed, or there was none), and how many requests were; clears both.
+    /// </summary>
     internal object? Take(out uint count)
     {
-        count = (uint)Interlocked.Exchange(ref _count, 0);
-        return Interlocked.Exchange(ref _first, null);
+        object? first;
+        lock (_gate)
+        {
+            count = (uint)_count;
+            _count = 0;
+            first = _first;
+            _first = null;
+        }
+        return ReferenceEquals(first, Unclaimed) ? null : first;
     }
 
     /// <summary>

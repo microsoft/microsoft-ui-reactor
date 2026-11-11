@@ -427,19 +427,28 @@ public sealed class ReactorPerfTraceTests
         try
         {
             ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
-            // A host's first render runs inside the request that scheduled it; a child's request
-            // made during that pass (here: after Note, still inside the outer request) is its own.
+            // A host's first render runs inside the request that scheduled it; a request made
+            // during that pass (here: after Note, still inside the outer request) is not the
+            // outer one's.
             RenderPassRequests.InvokeAs(outer, () =>
             {
                 first.Note();
                 Assert.Null(RenderPassRequests.CurrentForTests);
                 nested.Note();
-                RenderPassRequests.InvokeAs(inner, nested.Note);
             });
             Assert.Same(outer, first.Take(out uint firstCount));
             Assert.Equal(1u, firstCount);
-            Assert.Same(inner, nested.Take(out uint nestedCount));
-            Assert.Equal(2u, nestedCount);
+            Assert.Null(nested.Take(out uint nestedCount));
+            Assert.Equal(1u, nestedCount);
+
+            RenderPassRequests.InvokeAs(outer, () =>
+            {
+                first.Note();
+                RenderPassRequests.InvokeAs(inner, nested.Note);
+            });
+            Assert.Same(outer, first.Take(out firstCount));
+            Assert.Same(inner, nested.Take(out nestedCount));
+            Assert.Equal(1u, nestedCount);
             Assert.Null(RenderPassRequests.CurrentForTests);
         }
         finally
@@ -447,6 +456,68 @@ public sealed class ReactorPerfTraceTests
             ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
             RenderPassRequests.Release();
         }
+    }
+
+    [Fact]
+    public void RenderPassRequests_AnUnclaimedFirstRequest_NamesNobody_EvenIfAClaimedOneCoalesces()
+    {
+        object later = new();
+        var requests = new RenderPassRequests();
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            // A host-level request scheduled the pass; a component's request only joined it.
+            requests.Note();
+            RenderPassRequests.InvokeAs(later, requests.Note);
+            Assert.Null(requests.Take(out uint count));
+            Assert.Equal(2u, count);
+
+            // The next pass starts clean: its first request is the component's.
+            RenderPassRequests.InvokeAs(later, requests.Note);
+            requests.Note();
+            Assert.Same(later, requests.Take(out count));
+            Assert.Equal(2u, count);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public async Task RenderPassRequests_ATakeRacingANote_NeverSplitsTheRequest()
+    {
+        // A worker-thread request is counted, then its requester recorded; a pass starting on the
+        // UI thread in between must wait, or it takes the count without the requester (and the
+        // next pass reports the requester with no count).
+        object requester = new();
+        var requests = new RenderPassRequests();
+        Task<(object? First, uint Count)>? take = null;
+        bool tookInsideNote = false;
+        requests.BetweenCountAndRequesterForTests = () =>
+        {
+            take = Task.Run(() => (requests.Take(out uint c), c));
+            tookInsideNote = SpinWait.SpinUntil(() => take.IsCompleted, 200);
+        };
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            RenderPassRequests.InvokeAs(requester, requests.Note);
+        }
+        finally
+        {
+            requests.BetweenCountAndRequesterForTests = null;
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+
+        Assert.NotNull(take);
+        var (first, count) = await take;
+        Assert.False(tookInsideNote);
+        Assert.Same(requester, first);
+        Assert.Equal(1u, count);
+        Assert.False(requests.HasPending);
     }
 
     [Fact]
