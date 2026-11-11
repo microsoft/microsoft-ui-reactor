@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml;
-using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 
@@ -460,36 +459,30 @@ internal static class OverlayLifecycle
             flyout.ClearValue(property);
     }
 
-    // Reuse this layer's instance, or retire a descendant's; leave an enclosing owner's instance alone.
+    // A null old element means this layer just mounted its target. Otherwise,
+    // only its previous owner may update the installed flyout.
     private static bool PrepareFlyout(Reconciler reconciler, FrameworkElement target,
         Element? oldElement, Element newElement, out WinPrim.FlyoutBase? existing)
     {
         existing = Reconciler.GetFlyoutOnControl(target);
         var ownership = FlyoutOwner(existing);
         if (ownership is null) { existing = null; return true; }
-        var owner = ownership.Element;
         if (ownership.Matches(oldElement))
         {
             ownership.Element = ownership.Tag = newElement;
             return true;
         }
 
-        // Only an outer decorator may replace a flyout owned by its target chain.
-        var inner = ReactorSourceMap.DecoratorTarget(newElement);
-        for (var depth = 0; inner is not null && depth < ReactorSourceMap.MaxDecoratorDepth; depth++)
-        {
-            if (ownership.Matches(inner))
-            {
-                ReleaseFlyout(reconciler, target, owner);
-                if (DiagnosticLog.IsWarningEnabled)
-                    DiagnosticLog.Warning(LogCategory.Reactor, "Flyout.NestedTarget",
-                        "Nested flyout decorators share a target; only the outermost flyout is attached.");
-                existing = null;
-                return true;
-            }
-            inner = ReactorSourceMap.DecoratorTarget(inner);
-        }
-        return false;
+        if (oldElement is not null) return false;
+
+        // A freshly mounted target's flyout came from a descendant, including
+        // transparent Memo/RegisterType targets whose source chain cannot be walked.
+        ReleaseFlyout(reconciler, target, ownership.Element);
+        if (DiagnosticLog.IsWarningEnabled)
+            DiagnosticLog.Warning(LogCategory.Reactor, "Flyout.NestedTarget",
+                "Nested flyout decorators share a target; only the outermost flyout is attached.");
+        existing = null;
+        return true;
     }
 
     private static void InstallFlyout(Reconciler reconciler, FrameworkElement target, Element element, WinPrim.FlyoutBase flyout)
@@ -573,7 +566,7 @@ internal static class OverlayLifecycle
 
         if (updated is FrameworkElement targetFe)
         {
-            if (!PrepareFlyout(reconciler, targetFe, o, n, out var existingFlyout))
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var existingFlyout))
                 return updated == targetControl ? null : updated;
             Reconciler.SetDecoratorElementTag(targetFe, n);
 
@@ -743,7 +736,7 @@ internal static class OverlayLifecycle
 
         if (updated is FrameworkElement targetFe)
         {
-            if (!PrepareFlyout(reconciler, targetFe, o, n, out var existingFlyout))
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var existingFlyout))
                 return updated == targetControl ? null : updated;
             Reconciler.SetDecoratorElementTag(targetFe, n);
             if (existingFlyout is WinUI.MenuFlyout mf)
@@ -865,7 +858,7 @@ internal static class OverlayLifecycle
 
         if (updated is FrameworkElement targetFe)
         {
-            if (!PrepareFlyout(reconciler, targetFe, o, n, out var installed))
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, n, out var installed))
                 return updated == targetControl ? null : updated;
             Reconciler.SetDecoratorElementTag(targetFe, n);
             // Must read from the same slot mount wrote to — an attached-only lookup

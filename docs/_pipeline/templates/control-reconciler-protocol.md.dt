@@ -372,7 +372,8 @@ decorator's teardown before the target's own handler. Pool return clears both
 identities. Other decorators retain their existing tag behavior.
 
 When these decorators share a target, only the outermost native flyout is
-attached. Replacing an inner flyout releases its Reactor content and input
+attached, including when a Memo or forwarding RegisterType returns the target
+control. Replacing an inner flyout releases its Reactor content and input
 pass-through subtrees. Inner updates still reconcile their target, but leave
 the outer flyout's content and lifecycle callbacks untouched. Such nesting
 emits a `Flyout.NestedTarget` diagnostic warning.

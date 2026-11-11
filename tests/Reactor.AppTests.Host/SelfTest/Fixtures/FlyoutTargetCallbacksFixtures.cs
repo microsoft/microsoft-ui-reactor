@@ -21,13 +21,27 @@ internal static class FlyoutTargetCallbacksFixtures
         public override async Task RunAsync()
         {
             int warnings = 0;
+            bool sawWarningControl = false;
             using var subscription = Microsoft.UI.Reactor.Diagnostics.ReactorTrace.Subscribe(
                 e =>
                 {
-                    if (e.EventName == "Warning" && e.Payload.Count > 1 && Equals(e.Payload[1], "Flyout.NestedTarget"))
-                        Interlocked.Increment(ref warnings);
+                    if (e.EventName == "Warning" && e.Payload.Count > 1)
+                    {
+                        if (Equals(e.Payload[1], "Flyout.WarningPositiveControl")) sawWarningControl = true;
+                        if (Equals(e.Payload[1], "Flyout.NestedTarget")) Interlocked.Increment(ref warnings);
+                    }
                 }, global::System.Diagnostics.Tracing.EventLevel.Warning,
                 Microsoft.UI.Reactor.Core.Diagnostics.ReactorEventSource.Keywords.Errors);
+            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Reactor,
+                "Flyout.WarningPositiveControl", "Flyout warning delivery positive control.");
+            void CheckWarning(string name, bool condition)
+            {
+                if (!sawWarningControl && !global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+                    H.Skip(name, "NativeAOT EventSource delivery is disabled: a direct Warning positive control emitted no event. Ownership checks still run; warning delivery runs in JIT lanes.");
+                else
+                    H.Check(name, sawWarningControl && condition, $"positiveControl={sawWarningControl}; warnings={warnings}");
+            }
             for (int outerKind = 0; outerKind < 3; outerKind++)
             for (int innerKind = 0; innerKind < 3; innerKind++)
             {
@@ -72,7 +86,7 @@ internal static class FlyoutTargetCallbacksFixtures
                 var originalFlyout = button.Flyout;
                 try
                 {
-                    H.Check(name + "_NestedWarning", warnings == warningsBefore + 1);
+                    CheckWarning(name + "_NestedWarning", warnings == warningsBefore + 1);
                     H.Check(name + "_InnerCleanupOnReplacement", cleanups[0] == (innerKind == 0 ? 1 : 0)
                         && cleanups[1] == (innerKind == 0 ? 1 : 0));
                     if (outerKind == 0 && innerKind == 0)
@@ -179,7 +193,7 @@ internal static class FlyoutTargetCallbacksFixtures
                         && cleanups[2] == (outerKind == 0 ? 1 : 0) && cleanups[3] == (outerKind == 0 ? 1 : 0),
                         $"cleanups: {string.Join(",", cleanups)}");
                     H.Check(name + "_Detached", button.Flyout is null);
-                    H.Check(name + "_WarningNotRepeatedOnUpdate", warnings == warningsBefore + 1);
+                    CheckWarning(name + "_WarningNotRepeatedOnUpdate", warnings == warningsBefore + 1);
                 }
                 finally
                 {
@@ -189,6 +203,119 @@ internal static class FlyoutTargetCallbacksFixtures
             }
         }
     }
+
+    internal sealed class TransparentTargetLifecycle(Harness h, bool registered) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            for (int outerKind = 0; outerKind < 3; outerKind++)
+            {
+                var name = $"FlyoutTransparent_{(registered ? "RegisterType" : "Memo")}_{outerKind}";
+                int factoryCalls = 0, innerCleanups = 0, passThroughCleanups = 0, outerCleanups = 0, innerOpened = 0;
+                var opened = new List<int>();
+                var closed = new List<int>();
+                Action innerCleanup = () => innerCleanups++;
+                Action passThroughCleanup = () => passThroughCleanups++;
+                Action outerCleanup = () => outerCleanups++;
+                using var reconciler = new Reconciler();
+                if (registered)
+                    reconciler.RegisterType<ForwardedTargetElement, FrameworkElement>(
+                        mount: static (r, element, render) => (FrameworkElement)r.Mount(element.Target, render)!,
+                        update: static (r, oldEl, newEl, control, render) =>
+                        {
+                            if (r.CanUpdate(oldEl.Target, newEl.Target))
+                                return r.Update(oldEl.Target, newEl.Target, control, render) as FrameworkElement;
+                            r.UnmountChild(control);
+                            return (FrameworkElement)r.Mount(newEl.Target, render)!;
+                        });
+
+                Element Build(int targetVersion, int contentVersion)
+                {
+                    Element Inner()
+                    {
+                        factoryCalls++;
+                        Element target = targetVersion == 0 ? Button(name) : Border(TextBlock("replacement"));
+                        return Flyout(target, Component<CleanupProbe, Action>(innerCleanup)) with
+                        {
+                            OverlayInputPassThroughElement = Component<CleanupProbe, Action>(passThroughCleanup),
+                            OnOpened = () => innerOpened++,
+                            AreOpenCloseAnimationsEnabled = false,
+                        };
+                    }
+                    Element wrapped = registered
+                        ? new ForwardedTargetElement(Inner().WithKey($"target-{targetVersion}"))
+                        : Memo(targetVersion, Inner);
+                    return outerKind switch
+                    {
+                        0 => Flyout(wrapped, Component<LifecycleContent, (string, Action)>(($"outer-{contentVersion}", outerCleanup))) with
+                        {
+                            OnOpened = () => opened.Add(contentVersion),
+                            OnClosed = () => closed.Add(contentVersion),
+                            AreOpenCloseAnimationsEnabled = false,
+                        },
+                        1 => MenuFlyout(wrapped, MenuItem($"outer-{contentVersion}")),
+                        _ => CommandBarFlyout(wrapped, primaryCommands: [AppBarButton($"outer-{contentVersion}")]),
+                    };
+                }
+
+                var current = Build(0, 0);
+                var control = (FrameworkElement)reconciler.Mount(current, static () => { })!;
+                var firstControl = control;
+                var firstFlyout = Reconciler.GetFlyoutOnControl(control);
+                H.SetContent(control);
+                try
+                {
+                    for (int phase = 0; phase < 3; phase++)
+                    {
+                        if (phase > 0)
+                        {
+                            var next = Build(phase == 2 ? 1 : 0, phase);
+                            var replacement = reconciler.Update(current, next, control, static () => { });
+                            H.Check(name + $"_Phase{phase}_Replacement", (replacement is not null) == (phase == 2));
+                            if (replacement is FrameworkElement updated) control = updated;
+                            current = next;
+                            H.SetContent(control);
+                        }
+                        await Harness.Render();
+                        var flyout = Reconciler.GetFlyoutOnControl(control);
+                        H.Check(name + $"_Phase{phase}_OuterContent", FlyoutText(flyout) == $"outer-{phase}");
+                        H.Check(name + $"_Phase{phase}_CurrentDecorator", ReferenceEquals(Reconciler.GetMountedElement(control), current));
+                        H.Check(name + $"_Phase{phase}_ControlIdentity", ReferenceEquals(firstControl, control) == (phase < 2));
+                        H.Check(name + $"_Phase{phase}_FlyoutIdentity", ReferenceEquals(firstFlyout, flyout) == (phase < 2));
+                        H.Check(name + $"_Phase{phase}_DisplacedCleanup", innerCleanups == (phase < 2 ? 1 : 2)
+                            && passThroughCleanups == (phase < 2 ? 1 : 2));
+                        H.Check(name + $"_Phase{phase}_OuterCleanup", outerCleanups == (outerKind == 0 && phase == 2 ? 1 : 0));
+                        if (!registered)
+                            H.Check(name + $"_Phase{phase}_FactoryCalls", factoryCalls == (phase < 2 ? 1 : 2));
+                        if (flyout is not null)
+                        {
+                            flyout.AreOpenCloseAnimationsEnabled = false;
+                            flyout.ShowAt(control);
+                            H.Check(name + $"_Phase{phase}_Opened", await Harness.WaitFor(() => flyout.IsOpen));
+                            await Harness.Render(50);
+                            flyout.Hide();
+                            await Harness.Render(50);
+                        }
+                        if (outerKind == 0)
+                            H.Check(name + $"_Phase{phase}_CurrentCallbacks", opened.SequenceEqual(Enumerable.Range(0, phase + 1))
+                                && closed.SequenceEqual(Enumerable.Range(0, phase + 1)) && innerOpened == 0);
+                    }
+                    H.Check(name + "_OldTargetDetached", Reconciler.GetFlyoutOnControl(firstControl) is null);
+                    reconciler.UnmountChild(control);
+                    H.Check(name + "_FinalCleanup", innerCleanups == 2 && passThroughCleanups == 2
+                        && outerCleanups == (outerKind == 0 ? 2 : 0));
+                    H.Check(name + "_FinalDetached", Reconciler.GetFlyoutOnControl(control) is null);
+                }
+                finally
+                {
+                    Reconciler.GetFlyoutOnControl(control)?.Hide();
+                    H.SetContent(null);
+                }
+            }
+        }
+    }
+
+    private sealed record ForwardedTargetElement(Element Target) : Element;
 
     private static string? FlyoutText(WinPrim.FlyoutBase? flyout) => flyout switch
     {

@@ -2191,6 +2191,8 @@ internal static class SelfTestFixtureRegistry
         "FlyoutTarget_MiddleConnectedPoolReturn",
         "FlyoutTarget_MiddleStateCleanup",
         "FlyoutTarget_NestedLifecycleAcrossUpdates",
+        "FlyoutTarget_MemoLifecycleAcrossUpdates",
+        "FlyoutTarget_ForwardedLifecycleAcrossUpdates",
         "FlyoutTarget_AnimateScalarCurve",
         "FlyoutTarget_AnimateVector3Curve",
         "CustomDecorator_NestedUnmount",
@@ -4467,6 +4469,8 @@ internal static class SelfTestFixtureRegistry
         "FlyoutTarget_MiddleConnectedPoolReturn" => new FlyoutTargetCallbacksFixtures.ConnectedSnapshotAcrossUnmount(harness, pooled: true, intermediate: true),
         "FlyoutTarget_MiddleStateCleanup" => new FlyoutTargetCallbacksFixtures.MiddleStateCleanup(harness),
         "FlyoutTarget_NestedLifecycleAcrossUpdates" => new FlyoutTargetCallbacksFixtures.NestedLifecycleAcrossUpdates(harness),
+        "FlyoutTarget_MemoLifecycleAcrossUpdates" => new FlyoutTargetCallbacksFixtures.TransparentTargetLifecycle(harness, registered: false),
+        "FlyoutTarget_ForwardedLifecycleAcrossUpdates" => new FlyoutTargetCallbacksFixtures.TransparentTargetLifecycle(harness, registered: true),
         "FlyoutTarget_AnimateScalarCurve" => new FlyoutTargetCallbacksFixtures.AnimateCurveAcrossNestedFlyouts(harness, vector: false),
         "FlyoutTarget_AnimateVector3Curve" => new FlyoutTargetCallbacksFixtures.AnimateCurveAcrossNestedFlyouts(harness, vector: true),
 
