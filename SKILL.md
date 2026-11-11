@@ -221,7 +221,9 @@ with whatever Microsoft.UI.Reactor version you depend on.
 (entry point + initial component), next to `<Name>.csproj`. The template
 also emits packaging scaffolding you normally don't touch: `app.manifest`,
 `Assets/`, `Properties/launchSettings.json` + `Properties/PublishProfiles/`,
-and — for a packaged app — `Package.appxmanifest`. There is no
+`.vscode/`, and — for a packaged app — `Package.appxmanifest`. It also writes
+an `AGENTS.md` with WinApp CLI workflow notes (`winapp ui …`,
+`winapp find-ui --source reactor`), which complements this guide. There is no
 `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. `App.cs` has
 its own `using` directives at the top — the canonical set (System + Reactor +
 Reactor.Core + Reactor.Layout + Xaml + Xaml.Controls + static
