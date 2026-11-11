@@ -47,6 +47,10 @@ public sealed record SingleContent<TElement, TControl>(
     /// for structural child reconciliation; if null the engine falls back to
     /// remounting the child every Update.</summary>
     public Func<TControl, UIElement?>? GetCurrentChild { get; init; }
+
+    // The button content bridge tears down a removed Element before fallback
+    // text and user setters run. The later dispatch must leave that slot alone.
+    internal bool ChildRemovalHandledByHandler { get; init; }
 }
 
 /// <summary>Panel host (StackPanel, Grid, Canvas). Engine mounts each

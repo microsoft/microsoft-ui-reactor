@@ -59,6 +59,10 @@ Conventions for contributors:
 
 ### Changed
 
+- Public `SingleContent` strategies leave native setter-supplied content intact
+  when no Element child is declared (on mount or on both sides of an update).
+  Declare `Empty()` to clear the slot explicitly; this also applies to
+  third-party control handlers (issue #1482).
 - `Button` and the button family share content reconciliation that preserves
   descendant state and cleans up replaced content. Declared `ContentElement`
   takes precedence over fallback text, including for the caption-derived

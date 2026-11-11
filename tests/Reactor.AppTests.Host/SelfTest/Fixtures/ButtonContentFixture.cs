@@ -77,9 +77,11 @@ internal static class ButtonContentFixture
 
         public override async Task RunAsync()
         {
+            await CheckUncaptionedControls();
             foreach (var scenario in Scenarios)
             {
                 await CheckSetterContent(scenario);
+                await CheckElementToSetterContent(scenario);
                 await CheckAccessibleCaption(scenario);
                 var counters = new Counters();
                 var host = H.CreateHost();
@@ -132,6 +134,39 @@ internal static class ButtonContentFixture
                 await Next();
                 H.Check($"{scenario.Name}_Removed", FindTarget() is null && FindDraft() is null
                     && counters.Cleanups == 3);
+            }
+        }
+
+        private async Task CheckUncaptionedControls()
+        {
+            Element[] elements = [VStack(TextBlock("child")), Grid([], [], TextBlock("child")), Border(TextBlock("child")), TextBox("draft", _ => { })];
+            foreach (var element in elements)
+            {
+                var reconciler = new Reconciler();
+                var control = (FrameworkElement)reconciler.Mount(element, Noop)!;
+                H.SetContent(control);
+                try
+                {
+                    await Harness.Render();
+                    var writes = 0;
+                    var token = control.RegisterPropertyChangedCallback(AutomationProperties.NameProperty, (_, _) => writes++);
+                    try
+                    {
+                        reconciler.Reconcile(element, element.IsEnabled(false), control, Noop);
+                        await Harness.Render();
+                        H.Check($"{element.GetType().Name}_NoDefaultNameWrites", writes == 0
+                            && control.ReadLocalValue(AutomationProperties.NameProperty) == DependencyProperty.UnsetValue);
+                    }
+                    finally
+                    {
+                        control.UnregisterPropertyChangedCallback(AutomationProperties.NameProperty, token);
+                    }
+                }
+                finally
+                {
+                    reconciler.UnmountChild(control);
+                    H.SetContent(null);
+                }
             }
         }
 
@@ -192,6 +227,19 @@ internal static class ButtonContentFixture
                 current = next;
                 await Harness.Render();
                 H.Check($"{scenario.Name}_HiddenFallbackDoesNotNameIcon", string.IsNullOrEmpty(AutomationProperties.GetName(control)));
+                H.Check($"{scenario.Name}_DefaultNameIsCleared", control.ReadLocalValue(AutomationProperties.NameProperty) == DependencyProperty.UnsetValue);
+                next = scenario.Create(TextBlock("new caption"), Noop);
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                H.Check($"{scenario.Name}_CaptionAfterIconGetsDefaultName", AutomationProperties.GetName(control) == "new caption");
+                next = scenario.Create(TextBlock("Save"), Noop).AutomationName("Save");
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                next = scenario.Create(Icon(FontIcon("\uE8A5")), Noop).AutomationName("Save");
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                await Harness.Render();
+                H.Check($"{scenario.Name}_ExplicitNameMatchingOldCaptionSurvives", AutomationProperties.GetName(control) == "Save");
                 next = scenario.Create(Icon(FontIcon("\uE8A5")), Noop).AutomationName("explicit action");
                 reconciler.Reconcile(current, next, control, Noop);
                 await Harness.Render();
@@ -202,6 +250,38 @@ internal static class ButtonContentFixture
                 reconciler.UnmountChild(control);
                 H.SetContent(null);
             }
+        }
+
+        private async Task CheckElementToSetterContent(Scenario scenario)
+        {
+            var reconciler = new Reconciler();
+            var counters = new Counters();
+            var current = scenario.Create(Component<ContentProbe, ProbeProps>(new("old", counters)), Noop);
+            var control = (WinUI.ContentControl)reconciler.Mount(current, Noop)!;
+            H.SetContent(control);
+            try
+            {
+                await Harness.Render();
+                H.Check($"{scenario.Name}_BeforeSetterTransition", counters.Mounts == 1 && counters.Cleanups == 0);
+                var icon = new WinUI.SymbolIcon(WinUI.Symbol.Save);
+                var next = WithNativeContent(scenario.Create(null, Noop), icon);
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                await Harness.Render();
+                H.Check($"{scenario.Name}_ElementToSetterContent", ReferenceEquals(control.Content, icon)
+                    && icon.ActualWidth > 0 && icon.ActualHeight > 0 && counters.Cleanups == 1);
+                next = WithNativeContent(scenario.Create(null, Noop), icon).IsEnabled(false);
+                reconciler.Reconcile(current, next, control, Noop);
+                await Harness.Render();
+                H.Check($"{scenario.Name}_SetterTransitionSurvivesRerender", ReferenceEquals(control.Content, icon)
+                    && !control.IsEnabled && counters.Cleanups == 1);
+            }
+            finally
+            {
+                reconciler.UnmountChild(control);
+                H.SetContent(null);
+            }
+            H.Check($"{scenario.Name}_SetterTransitionCleanupOnce", counters.Cleanups == 1);
         }
 
         private static Element WithNativeContent(Element element, UIElement content) => element switch

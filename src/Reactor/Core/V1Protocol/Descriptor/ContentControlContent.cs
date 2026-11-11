@@ -22,6 +22,7 @@ internal static class ContentControlContent
             })
         {
             GetCurrentChild = static control => control.Content as UIElement,
+            ChildRemovalHandledByHandler = true,
         };
 
         return descriptor.ImperativeBridged(

@@ -116,4 +116,27 @@ public class ButtonContentTests
         var labeled = create(HStack(image.AutomationName("Preview"), TextBlock("Save"))).AutomationName("Save");
         Assert.DoesNotContain(AccessibilityScanner.Scan(labeled), finding => finding.Id == "A11Y_002");
     }
+
+    [Fact]
+    public void PlainCheckBoxAndRadioButtonAreNotIconOnlyButtons()
+    {
+        Element[] controls = [CheckBox(), ThreeStateCheckBox(), RadioButton("")];
+        foreach (var control in controls)
+        {
+            var findings = AccessibilityScanner.Scan(control);
+            Assert.DoesNotContain(findings, f => f.Id == "A11Y_001");
+            var labeled = VStack(TextBlock("Accept").AutomationId("label"), control.LabeledBy("label"));
+            Assert.DoesNotContain(AccessibilityScanner.Scan(labeled), f => f.Id is "A11Y_001" or "A11Y_003" or "A11Y_008");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ContentFactories))]
+    public void IconContentAcceptsExternalLabel(
+        Func<Element, Element> create, Func<Element, Element?> _)
+    {
+        var control = create(Icon("Save")).LabeledBy("label");
+        var tree = VStack(TextBlock("Save").AutomationId("label"), control);
+        Assert.DoesNotContain(AccessibilityScanner.Scan(tree), f => f.Id is "A11Y_001" or "A11Y_003" or "A11Y_008");
+    }
 }

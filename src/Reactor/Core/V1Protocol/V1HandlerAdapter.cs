@@ -342,6 +342,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                 var oldChild = single.GetChild(oldEl);
                 var newChild = single.GetChild(newEl);
                 if (oldChild is null && newChild is null) return;
+                if (newChild is null && single.ChildRemovalHandledByHandler) return;
                 if (single.GetCurrentChild is { } getCur)
                 {
                     var existing = getCur(control);

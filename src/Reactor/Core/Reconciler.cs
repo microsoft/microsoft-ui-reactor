@@ -5254,10 +5254,20 @@ public sealed partial class Reconciler : IDisposable
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
+        if (DefaultAutomationNameFromCaption(oldCaption) is null)
+        {
+            // Captionless controls pay no WinRT calls. A newly introduced
+            // caption may still seed a default through the mount-time helper.
+            ApplyDefaultAutomationName(fe, newCaption);
+            return;
+        }
         var trimmed = DefaultAutomationNameFromCaption(newCaption);
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         if (!MayReplaceDefaultAutomationName(current, oldCaption)) return;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed ?? string.Empty);
+        if (trimmed is null)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
+        else
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
     }
 
     /// <summary>

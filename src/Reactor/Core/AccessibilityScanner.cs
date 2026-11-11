@@ -272,6 +272,10 @@ public static partial class AccessibilityScanner
             or ToggleButtonElement or DropDownButtonElement or SplitButtonElement
             or ToggleSplitButtonElement or CheckBoxElement or RadioButtonElement)) return;
 
+        // Plain selection controls may use an external form label. Only their
+        // explicitly composed content belongs to this icon-button check.
+        if (el is CheckBoxElement { ContentElement: null } or RadioButtonElement { ContentElement: null }) return;
+
         // Only flag buttons that have a non-text content element (icon) and
         // either no label or a label that looks like an emoji/symbol
         var caption = Reconciler.ResolveCaptionForElement(el);
@@ -279,7 +283,7 @@ public static partial class AccessibilityScanner
         if (!isIconOnly) return;
 
         // Check if AutomationName is set
-        if (HasAutomationName(el)) return;
+        if (HasAutomationName(el) || HasLabeledBy(el)) return;
 
         findings.Add(new A11yDiagnostic
         {

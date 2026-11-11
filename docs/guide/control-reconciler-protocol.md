@@ -408,6 +408,10 @@ public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TCo
 /// engine mounts <paramref name="GetChild"/>'s result and assigns it via
 /// <paramref name="SetChild"/>.
 ///
+/// <para>A null child on mount, or null on both sides of an update, leaves
+/// native content supplied through setters alone. Declare an Empty element
+/// to intentionally clear content without rendering a child.</para>
+///
 /// <para><b>Structural reconcile:</b> set <see cref="GetCurrentChild"/> so
 /// the engine can read the existing slot value during <c>Update</c> and
 /// route through <c>Reconciler.ReconcileV1Child</c> — that preserves
@@ -424,6 +428,10 @@ public sealed record SingleContent<TElement, TControl>(
     /// for structural child reconciliation; if null the engine falls back to
     /// remounting the child every Update.</summary>
     public Func<TControl, UIElement?>? GetCurrentChild { get; init; }
+
+    // The button content bridge tears down a removed Element before fallback
+    // text and user setters run. The later dispatch must leave that slot alone.
+    internal bool ChildRemovalHandledByHandler { get; init; }
 }
 
 /// <summary>Panel host (StackPanel, Grid, Canvas). Engine mounts each
