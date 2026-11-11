@@ -1008,7 +1008,8 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > an earlier winapp click) has activated a different window, the long-lived test process's call is
 > silently refused. Every retry then repeats the same refused call. `MarkdownSelectionInputProofTests.AcquireForeground`
 > first injects a zero mouse input (no movement, no button) so the test process owns the last
-> input, then falls back to an `AttachThreadInput` bridge. On timeout it reports what held the foreground.
+> input, then retries `SetForegroundWindow` each poll. It avoids an `AttachThreadInput` bridge,
+> which can block on a hung foreground thread. On timeout it reports what held the foreground.
 
 > **Our own Host launch is one of those windows.** The guarantee covers the *body* of a run,
 > not its startup. `HostLaunch.LaunchAndBind` starts the Host and brings its window up directly,

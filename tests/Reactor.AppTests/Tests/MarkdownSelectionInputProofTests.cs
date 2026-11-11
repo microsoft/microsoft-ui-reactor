@@ -297,7 +297,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     /// earlier class's winapp click) has activated a different window, so whether the call took
     /// depended on run order and timing, and every retry repeated the same refused call. A zero
     /// mouse input (no movement, no button) makes this process the last input source, which the
-    /// lock honours; an <c>AttachThreadInput</c> bridge covers the remaining cases. The zero input
+    /// lock honours. There is deliberately no <c>AttachThreadInput</c> bridge: attached to a hung
+    /// foreground thread, activation calls can block past the deadline. The zero input
     /// is best-effort: if it is refused, the foreground predicate still decides, and the timeout
     /// reports the refusal alongside the foreground diagnostics.
     /// </summary>
@@ -315,23 +316,6 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             creditSent = SendInput(1, [new Input { Type = 0 }], Marshal.SizeOf<Input>());
             creditError = creditSent == 1 ? 0 : Marshal.GetLastWin32Error();
             requested = SetForegroundWindow(host);
-            if (!HostOwnsForeground())
-            {
-                var foreground = GetForegroundWindow();
-                uint foregroundThread = foreground == 0 ? 0 : GetWindowThreadProcessId(foreground, out _);
-                uint thisThread = GetCurrentThreadId();
-                bool attached = foregroundThread != 0 && foregroundThread != thisThread
-                    && AttachThreadInput(thisThread, foregroundThread, true);
-                try
-                {
-                    BringWindowToTop(host);
-                    requested = SetForegroundWindow(host);
-                }
-                finally
-                {
-                    if (attached) AttachThreadInput(thisThread, foregroundThread, false);
-                }
-            }
             Thread.Sleep(PollIntervalMs);
         } while (DateTime.UtcNow < until);
         if (HostOwnsForeground()) return;
@@ -396,11 +380,6 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private static partial bool IsWindowVisible(nint window);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool ShowWindow(nint window, int command);
-    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool BringWindowToTop(nint window);
-    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool AttachThreadInput(uint attach, uint attachTo, [MarshalAs(UnmanagedType.Bool)] bool doAttach);
-    [LibraryImport("kernel32.dll")] private static partial uint GetCurrentThreadId();
     [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
     private static unsafe partial int GetClassName(nint window, char* buffer, int capacity);
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
