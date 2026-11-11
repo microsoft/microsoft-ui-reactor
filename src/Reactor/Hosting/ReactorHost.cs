@@ -783,8 +783,10 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         retireFailure?.Throw();
     }
 
-    // The host that last published into a shared ContentTarget, including an Empty() root.
-    // Used by root diagnostics and connected navigation. Not written on an ordinary
+    // Diagnostics ownership of a shared ContentTarget: the host that last rendered into it
+    // (wrote its content, or published an Empty() root while targeting it) — so ownership and
+    // the published rendered root always change together. Only consulted when the container is
+    // empty, where content identity cannot say whose it is. Not written on an ordinary
     // re-render that changes nothing. The owner is held weakly and released on Dispose, so the
     // table never keeps a host (or its window and reconciler) alive.
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, WeakReference<ReactorHost>> s_contentTargetOwner = new();
@@ -816,16 +818,6 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         => ReferenceEquals(_claimedContentTarget, target)
             && s_contentTargetOwner.TryGetValue(target, out var owner)
             && owner.TryGetTarget(out var host) && ReferenceEquals(host, this);
-
-    // A claim can outlive an external replacement of Border.Child. Switch registrations
-    // only when descending into this host's displayed root or its dev-overlay wrapper.
-    internal static Reconciler? GetContentTargetReconciler(WinUI.Border target, DependencyObject child)
-    {
-        if (!s_contentTargetOwner.TryGetValue(target, out var owner) || !owner.TryGetTarget(out var host) || host._disposed)
-            return null;
-        return (ReferenceEquals(child, host._currentControl) || ReferenceEquals(child, host._overlayWiring?.WrapperRoot))
-            && ReferenceEquals(child, target.Child) ? host._reconciler : null;
-    }
 
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host): whether any live host owns
     // the container in the diagnostics ownership table.

@@ -365,12 +365,7 @@ its own event trampolines. For these decorators,
 Decorator lifecycle callbacks resolve the current decorator separately.
 Exit transitions, connected-animation keys, and `.Animate()` curves use the
 first non-null configuration from the outermost decorator inward, ending at
-the actual target. If Memo or a forwarding handler hides the target from the
-source chain, lookup resumes at its tag and follows any exposed decorator targets.
-A `RegisterType` override that creates its own control does not inherit or clean
-up configuration from a declared `Target` it never mounted.
-Connected navigation resolves keys inside a nested `ReactorHostControl` or a
-`ReactorHost.ContentTarget` using the registrations of the host that mounted the content.
+the target.
 A non-null ambient animation curve still takes precedence over `.Animate()`.
 Unmount clears refs and animation state throughout the decorator chain and runs the
 decorator's teardown before the target's own handler. Pool return clears both
@@ -379,33 +374,9 @@ identities. Other decorators retain their existing tag behavior.
 When these decorators share a target, only the outermost native flyout is
 attached, including when a Memo or forwarding RegisterType returns the target
 control. Replacing an inner flyout releases its Reactor content and input
-pass-through subtrees even if a content unmount callback throws. When the
-decorated control itself is unmounted, the flyout detaches and the target's
-teardown runs before the first failure is propagated. Retrying that unmount during
-host recovery does not run the target's teardown again or return it to the pool.
-Inner updates still reconcile their target, but leave
+pass-through subtrees. Inner updates still reconcile their target, but leave
 the outer flyout's content and lifecycle callbacks untouched. Such nesting
 emits a `Flyout.NestedTarget` diagnostic warning.
-Inner updates, including custom decorators, keep an enclosing flyout's published
-tag while it is updating, so a forwarding target that throws afterward does not
-hide the outer flyout from teardown.
-Skipping the retained source after re-keying also preserves its published tag.
-An existing flyout's failed content, setter, or modifier update restores the
-previous owner and published tag while that update still owns the same native
-slot. This permits retrying the old/new pair; native changes are not rolled back.
-Only retries after such a failure use the actual native menu-item count at each
-submenu level, avoiding duplicate additions or out-of-range removals. Normal
-updates keep model-based counts and the existing behavior of setter-added items;
-recovery reconciles the collection to the declared items.
-
-Keyed FlipView pages keep both the source view for positional matching and the
-key-stamped instance used for updates. Each completed page updates its own record,
-so a retry after a later page throws uses the view actually mounted at each position.
-Memo resource and dirty-descendant
-refreshes reuse the installed flyout's owner without retaining a Memo output
-tree. A scoped update depth prevents reconstructed inner decorators from
-claiming the outer flyout, including on skipped branches; both temporary
-contexts are restored if an update throws.
 
 ## Descriptors — declarative handlers
 

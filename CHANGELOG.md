@@ -65,24 +65,12 @@ Conventions for contributors:
   after mount, update and pool reuse. Decorator identity is stored separately so
   flyout callbacks and teardown still use the current decorator. Exit transitions,
   connected-animation keys and `.Animate()` curves use the first configured value
-  from the outermost decorator inward through targets exposed by the active handler.
-  Connected navigation uses the child host's registrations for content it mounted in a
-  `ReactorHostControl` or `ReactorHost.ContentTarget`. Unmount also releases refs
-  and animation state on intermediate decorators and target chains exposed behind
-  transparent wrappers. Nested decorators attach only the outermost native flyout,
-  including through transparent Memo or RegisterType targets. Inner updates cannot
-  change the outer flyout or duplicate its callbacks. If content cleanup throws
-  during unmount, the flyout releases both subtrees and the target's teardown
-  runs before the error is propagated. Host recovery does not repeat that teardown
-  or pool the failed control. Keyed FlipView pages retain their updated flyout
-  ownership when a later page throws and the list is retried. Ownership also
-  survives Memo resource or dirty-descendant refreshes,
-  including skipped branches, failed forwarded updates through custom decorators
-  and subsequent retries. Failed content, setter, or modifier updates also restore
-  the prior owner for retry when the failed update still owns the same native slot.
-  Only menu-item retries after a failed update reconcile the actual collection
-  size, including submenus; normal updates keep their model-based count behavior.
-  For these decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  from the outermost decorator inward to the target. Unmount also releases refs
+  and animation state on intermediate decorators. Nested decorators attach only
+  the outermost native flyout, including through transparent Memo or RegisterType
+  targets. They clean up displaced content and keep inner updates
+  from changing the outer flyout or duplicating its callbacks. For these
+  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §14 Phase 1; #942).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,

@@ -56,6 +56,20 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         var typedOld = (TElement)oldEl;
         var typedNew = (TElement)newEl;
         var ctx = new UpdateContext(reconciler, requestRerender);
+        if (PreservesTargetTag && control is FrameworkElement target)
+        {
+            var state = Reconciler.GetOrCreateReactorState(target);
+            state.ActiveFlyoutUpdates++;
+            try
+            {
+                // Memo can reconstruct old/new from one factory call. Diff the outer flyout
+                // against the configuration actually installed on the control.
+                if (state.ActiveFlyoutUpdates == 1 && state.DecoratorElement is TElement mounted)
+                    typedOld = mounted;
+                return _handler.Update(ctx, typedOld, typedNew, control);
+            }
+            finally { state.ActiveFlyoutUpdates--; }
+        }
         var next = _handler.Update(ctx, typedOld, typedNew, control);
 
         // Re-tag whichever control is going to live in the slot — `next`
@@ -69,18 +83,10 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
 
     private void TagControl(FrameworkElement control, TElement element)
     {
-        // Built-in flyout handlers publish only after claiming the installed slot.
-        // An inactive inner decorator must not replace its enclosing owner's tag,
-        // which teardown still needs if the forwarding target later throws.
-        if (PreservesTargetTag)
-            return;
-        // This decorator owns the target identity, even when its child is a flyout.
+        if (PreservesTargetTag) return; // The flyout handler publishes only the active layer.
         var state = Reconciler.GetOrCreateReactorState(control);
         state.Element = element;
-        // An enclosing flyout still owns the native slot while its target updates.
-        // Keep that tag if an ancestor throws before the flyout can publish its next tag.
-        if (state.DecoratorElement is not null && !OverlayLifecycle.IsFlyoutOwnerUpdating(control))
-            state.DecoratorElement = null;
+        if (state.ActiveFlyoutUpdates == 0) state.DecoratorElement = null;
     }
 
     public V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler)

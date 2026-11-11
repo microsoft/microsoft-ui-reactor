@@ -118,18 +118,8 @@ internal static class MenuCommandFactory
         MenuFlyoutItemBase[] oldSource,
         MenuFlyoutItemBase[] newSource,
         Reconciler? reconciler = null)
-        => UpdateMenuFlyoutItems(target, oldSource, newSource, reconciler, recoveringFailedUpdate: false);
-
-    internal static void UpdateMenuFlyoutItems(
-        global::System.Collections.Generic.IList<WinUI.MenuFlyoutItemBase> target,
-        MenuFlyoutItemBase[] oldSource,
-        MenuFlyoutItemBase[] newSource,
-        Reconciler? reconciler,
-        bool recoveringFailedUpdate)
     {
-        // Failed updates can leave a partially patched collection. Normal updates
-        // keep the model's count so setter-added items retain their existing behavior.
-        int oldCount = recoveringFailedUpdate ? target.Count : oldSource.Length;
+        int oldCount = oldSource.Length;
         int newCount = newSource.Length;
         int shared = Math.Min(oldCount, newCount);
 
@@ -170,8 +160,8 @@ internal static class MenuCommandFactory
                     subItem.Text = sub.Text;
                     subItem.Icon = IconResolver.ResolveIcon(sub.IconElement, sub.Icon);
                     // Recursively patch sub-items
-                    var oldSub = i < oldSource.Length && oldSource[i] is MenuFlyoutSubItemData oldSubData ? oldSubData.Items : [];
-                    UpdateMenuFlyoutItems(subItem.Items, oldSub, sub.Items, reconciler, recoveringFailedUpdate);
+                    var oldSub = oldSource[i] is MenuFlyoutSubItemData oldSubData ? oldSubData.Items : [];
+                    UpdateMenuFlyoutItems(subItem.Items, oldSub, sub.Items, reconciler);
                     break;
 
                 default:

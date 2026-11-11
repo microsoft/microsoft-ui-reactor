@@ -1,9 +1,7 @@
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Diagnostics;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Input;
-using Microsoft.UI.Reactor.Navigation;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 using ReactorTransition = Microsoft.UI.Reactor.Animation.Transition;
@@ -767,122 +765,6 @@ internal static class RegisterTypeElementTagFixtures
     // ── A control that belongs to another element ───────────────────────
 
     private sealed record DelegatingElement(string Label, Action OnClick) : Element;
-
-    internal sealed class OverriddenFlyoutSkipKeepsTargetTag(Harness h, bool childSkip) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            var name = $"RegisterTypeTag_OverriddenFlyout_{(childSkip ? "Child" : "Direct")}SkipKeepsTargetTag";
-            int clicks = 0, registeredUpdates = 0;
-            using var reconciler = new Reconciler();
-            reconciler.RegisterType<FlyoutElement, WinXC.Button>(
-                mount: static (r, el, render) => (WinXC.Button)r.Mount(el.Target, render)!,
-                update: (r, oldEl, newEl, control, render) =>
-                {
-                    registeredUpdates++;
-                    return r.UpdateChild(oldEl.Target, newEl.Target, control, render);
-                });
-            var targetRef = new ElementRef();
-            var target = Button(name, () => clicks++).Ref(targetRef).ConnectedAnimation(name);
-            var wrapper = new FlyoutElement(target, new TextBlockElement("unused"));
-            Element previous = childSkip ? VStack(0, wrapper) : wrapper;
-            Element next = childSkip ? VStack(12, wrapper) : wrapper;
-            var root = reconciler.Reconcile(null, previous, null, static () => { })!;
-            var button = childSkip ? (WinXC.Button)((WinXC.StackPanel)root).Children[0] : (WinXC.Button)root;
-            H.SetContent(root);
-            try
-            {
-                await Harness.Render();
-                H.Check(name + "_CallbackFreeWrapper", !wrapper.HasCallbacks && target.HasCallbacks);
-                H.Check(name + "_InitialTargetTag", ReferenceEquals(Reconciler.GetElementTag(button), target));
-                H.ClickButton(name);
-                H.Check(name + "_InitialClick", clicks == 1);
-
-                int skipped = reconciler.DebugElementsSkipped;
-                // Fresh parent arrays and changed spacing force the positional child skip,
-                // whose callback-free flyout shape calls RefreshSkippedChildState.
-                var updated = reconciler.Reconcile(previous, next, root, static () => { });
-                await Harness.Render();
-                H.Check(name + "_ExactlyOneSkip", reconciler.DebugElementsSkipped == skipped + 1);
-                H.Check(name + "_RegisteredUpdateSkipped", registeredUpdates == 0);
-                H.Check(name + "_SameNativeButton", ReferenceEquals(updated, root)
-                    && ReferenceEquals(H.FindButton(name), button));
-                if (childSkip)
-                    H.Check(name + "_ParentUpdated", root is WinXC.StackPanel { Spacing: 12 });
-                H.Check(name + "_TargetTagPreserved", ReferenceEquals(Reconciler.GetElementTag(button), target));
-                H.ClickButton(name);
-                H.Check(name + "_ClickAfterSkip", clicks == 2);
-                H.Check(name + "_TargetRefMounted", ReferenceEquals(targetRef.Current, button));
-                H.Check(name + "_TargetSelectedForNavigation", ConnectedNavigationOperation.Collect(reconciler, root).Contains(button));
-            }
-            finally
-            {
-                ConnectedNavigationOperation.UnmountPage(reconciler, root);
-                H.SetContent(null);
-            }
-            H.Check(name + "_TargetRefCleared", targetRef.Current is null);
-        }
-    }
-
-    internal sealed class OverriddenFlyoutTagRefreshPolicy(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            const string name = "RegisterTypeTag_OverriddenFlyout_TagRefreshPolicy";
-            int firstClicks = 0, latestClicks = 0;
-            using var reconciler = new Reconciler();
-            reconciler.RegisterType<FlyoutElement, WinXC.Button>(
-                mount: static (_, _, _) =>
-                {
-                    var created = new WinXC.Button { Content = name };
-                    created.Click += static (sender, _) =>
-                        (Reconciler.GetElementTag((WinXC.Button)sender!) as FlyoutElement)?.OnOpened?.Invoke();
-                    return created;
-                },
-                update: static (_, _, _, _, _) => null);
-            var unusedRef = new ElementRef();
-            var unusedTarget = new TextBlockElement("unused").Ref(unusedRef).ConnectedAnimation(name);
-            var initial = new FlyoutElement(unusedTarget, new TextBlockElement("unused"))
-                { OnOpened = () => firstClicks++ };
-            var button = (WinXC.Button)reconciler.Mount(initial, static () => { })!;
-            H.SetContent(button);
-            try
-            {
-                await Harness.Render();
-                H.ClickButton(name);
-                H.Check(name + "_InitialCallback", firstClicks == 1 && latestClicks == 0);
-                // Distinct records test the helper's refresh policy directly, not skip eligibility.
-                var callbackOnly = initial with { OnOpened = () => latestClicks++ };
-                reconciler.RefreshElementTagOnSkip(button, initial, callbackOnly);
-                H.ClickButton(name);
-                H.Check(name + "_LatestCallback", ReferenceEquals(Reconciler.GetElementTag(button), callbackOnly)
-                    && firstClicks == 1 && latestClicks == 1);
-                var sourceA = callbackOnly with { OnOpened = null, CallSite = new SourceLocation("Override.cs", 10, 0) };
-                reconciler.Reconcile(callbackOnly, sourceA, button, static () => { });
-                H.Check(name + "_SourceStartTagged", ReferenceEquals(Reconciler.GetElementTag(button), sourceA));
-                var sourceB = sourceA with { CallSite = new SourceLocation("Override.cs", 20, 0) };
-                reconciler.RefreshElementTagOnSkip(button, sourceA, sourceB);
-                H.Check(name + "_CallSiteRefreshed", ReferenceEquals(Reconciler.GetElementTag(button), sourceB)
-                    && Reconciler.GetElementTag(button)?.CallSite == sourceB.CallSite);
-                // Callback-free with an unchanged call site: only tagOnly authorizes this refresh.
-                var keyed = sourceB.WithKey("row");
-                reconciler.RefreshItemIdentityOnSkip(button, keyed);
-                H.Check(name + "_ItemKeyRefreshed", ReferenceEquals(Reconciler.GetElementTag(button), keyed)
-                    && Reconciler.GetElementTag(button)?.Key == "row");
-                H.Check(name + "_DeclaredTargetNeverMounted", unusedRef.Current is null);
-                H.Check(name + "_UnusedKeyIgnored", !ConnectedNavigationOperation.Collect(reconciler, button).Contains(button));
-                // Seed the ref independently: walking the unused target on teardown would clear it.
-                unusedRef.SetCurrent(button);
-            }
-            finally
-            {
-                ConnectedNavigationOperation.UnmountPage(reconciler, button);
-                H.SetContent(null);
-            }
-            H.Check(name + "_UnusedRefUntouched", ReferenceEquals(unusedRef.Current, button));
-            unusedRef.SetCurrent(null);
-        }
-    }
 
     /// <summary>
     /// A registration may hand back the control the reconciler mounted for another element,

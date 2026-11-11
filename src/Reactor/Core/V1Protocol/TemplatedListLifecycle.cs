@@ -198,9 +198,10 @@ internal static class TemplatedListLifecycle
         // Pre-mount all items — FlipView typically has few items so this is fine.
         // An item whose view mounts nothing (Empty) has no entry in Items, so the record keeps,
         // per logical item, whether it did.
-        // Match pages by the source view (positional, not a keyed diff), but update against
-        // the keyed instance actually mounted so reference-based ownership remains valid.
-        var mounted = new List<(Element Element, Element MountedElement, bool HasControl)>(el.ItemCount);
+        // The record holds each page's view WITHOUT its stamped key: a FlipView matches pages by
+        // position (it has no keyed diff), so the key is carried for diagnostics only and must
+        // not decide whether a page updates in place.
+        var mounted = new List<(Element Element, bool HasControl)>(el.ItemCount);
         for (int i = 0; i < el.ItemCount; i++)
         {
             var view = el.BuildItemView(i);
@@ -208,7 +209,7 @@ internal static class TemplatedListLifecycle
             var ctrl = reconciler.Mount(keyed, requestRerender);
             reconciler.EnsureItemIdentity(ctrl, keyed);
             if (ctrl is not null) flipView.Items.Add(ctrl);
-            mounted.Add((view, keyed, ctrl is not null));
+            mounted.Add((view, ctrl is not null));
         }
         Reconciler.GetOrCreateReactorState(flipView).MountedItemElements = mounted;
 
@@ -370,37 +371,29 @@ internal static class TemplatedListLifecycle
         // FlipView items are pre-mounted directly (no ContainerContentChanging). Diff each item
         // against the element it mounted or was last updated to; a view rebuilt from o reads the
         // items' current values, so an item changed in place would compare equal to itself and
-        // stay stale. Empty has no control in Items, so walk the controls with their own index.
-        // Record each completed page before the next one can throw: the parent can retry from o
-        // even though some native pages already hold newer keyed views.
+        // stay stale (a templated ListView likewise diffs against its container's tag). An item whose view is Empty has no control in Items, so walk the
+        // controls with their own index. Without a usable record, rebuild from o and treat the
+        // first Items.Count items as the ones holding a control.
+        int oldCount = o.ItemCount;
         int newCount = n.ItemCount;
+        int shared = Math.Min(oldCount, newCount);
         var fvState = Reconciler.GetOrCreateReactorState(fv);
-        var mounted = fvState.MountedItemElements;
-        int shared = Math.Min(mounted?.Count ?? o.ItemCount, newCount);
-        if (mounted is null)
-        {
-            mounted = new(newCount);
-            for (int i = 0; i < shared; i++)
-            {
-                var view = o.BuildItemView(i);
-                mounted.Add((view, view, i < fv.Items.Count));
-            }
-            fvState.MountedItemElements = mounted;
-        }
+        var recorded = fvState.MountedItemElements is { } r && r.Count == oldCount ? r : null;
+        var nextMounted = new List<(Element Element, bool HasControl)>(newCount);
         int ci = 0;
 
         for (int i = 0; i < shared; i++)
         {
             // Unkeyed views decide in-place vs remount (positional, as before keys were stamped);
             // the control is given the keyed view. See MountFlipView.
-            var (oldItemElement, oldMountedElement, oldHasControl) = mounted[i];
+            var (oldItemElement, oldHasControl) = recorded?[i] ?? (o.BuildItemView(i), i < fv.Items.Count);
             var newView = n.BuildItemView(i);
             var newItemElement = Reconciler.WithItemKey(newView, n, i);
             if (oldHasControl && ci < fv.Items.Count && fv.Items[ci] is UIElement existingCtrl
-                && reconciler.CanUpdate(oldItemElement, newView) && reconciler.GetFailedFlyoutState(existingCtrl) is null)
+                && reconciler.CanUpdate(oldItemElement, newView))
             {
                 var priorKey = existingCtrl is FrameworkElement priorFe ? Reconciler.GetMountedElement(priorFe)?.Key : null;
-                var replacement = reconciler.UpdateHostedChild(oldMountedElement, newItemElement, existingCtrl, requestRerender);
+                var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
                     fv.Items[ci] = replacement;
                 // A different item at this position can render the same content, and the update
@@ -408,7 +401,7 @@ internal static class TemplatedListLifecycle
                 // without republishing). Refresh it whenever the key changed.
                 reconciler.EnsureItemIdentity(replacement ?? existingCtrl, newItemElement, priorKey, updated: true);
                 ci++;
-                mounted[i] = (newView, newItemElement, true);
+                nextMounted.Add((newView, true));
                 continue;
             }
 
@@ -416,31 +409,19 @@ internal static class TemplatedListLifecycle
             {
                 if (fv.Items[ci] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
                 fv.Items.RemoveAt(ci);
-                mounted[i] = (oldItemElement, oldMountedElement, false);
             }
             var ctrl = reconciler.Mount(newItemElement, requestRerender);
             reconciler.EnsureItemIdentity(ctrl, newItemElement);
             if (ctrl is not null) fv.Items.Insert(ci++, ctrl);
-            mounted[i] = (newView, newItemElement, ctrl is not null);
+            nextMounted.Add((newView, ctrl is not null));
         }
 
-        // Trim from the native tail as before, including any entries outside the record.
-        try
+        // Remove excess: every control past the shared items belongs to a removed item.
+        while (fv.Items.Count > ci)
         {
-            while (fv.Items.Count > ci)
-            {
-                int last = fv.Items.Count - 1;
-                if (fv.Items[last] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
-                fv.Items.RemoveAt(last);
-            }
-        }
-        finally
-        {
-            // If an unmount threw, keep the records for every control still in Items.
-            int keep = shared, remaining = fv.Items.Count - ci;
-            while (remaining > 0 && keep < mounted.Count)
-                if (mounted[keep++].HasControl) remaining--;
-            if (keep < mounted.Count) mounted.RemoveRange(keep, mounted.Count - keep);
+            int last = fv.Items.Count - 1;
+            if (fv.Items[last] is UIElement oldCtrl) reconciler.UnmountChild(oldCtrl);
+            fv.Items.RemoveAt(last);
         }
 
         // Add new
@@ -451,8 +432,9 @@ internal static class TemplatedListLifecycle
             var ctrl = reconciler.Mount(keyed, requestRerender);
             reconciler.EnsureItemIdentity(ctrl, keyed);
             if (ctrl is not null) fv.Items.Add(ctrl);
-            mounted.Add((view, keyed, ctrl is not null));
+            nextMounted.Add((view, ctrl is not null));
         }
+        fvState.MountedItemElements = nextMounted;
         // Issue #495 — drift-guarded, suppressed write. Previously
         // unconditional, which would write -1 when n.GetSelectedIndex() == -1
         // (the default for TemplatedFlipViewElement<T> is 0, so the prior

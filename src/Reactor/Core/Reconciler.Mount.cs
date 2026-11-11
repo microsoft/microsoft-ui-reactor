@@ -140,9 +140,6 @@ public sealed partial class Reconciler
 
         if (control is not null)
         {
-            if (_failedFlyoutUnmounts is not null && control is FrameworkElement mountedFe
-                && TryGetReactorState(mountedFe, out var mountedState))
-                _failedFlyoutUnmounts.Remove(mountedState);
             DebugUIElementsCreated++;
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
