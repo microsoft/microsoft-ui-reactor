@@ -1004,9 +1004,9 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 
 > **Don't foreground the Host with a bare `SetForegroundWindow` from the test process.** winapp's
 > click/drag verbs activate the Host with a real pointer press, but a test that asks for the
-> foreground itself is subject to Windows' foreground lock: once another process (winapp, a
-> previous class's Host) has injected input, the long-lived test process's call is silently
-> refused. Every retry then repeats the same refused call. `MarkdownSelectionInputProofTests.AcquireForeground`
+> foreground itself is subject to Windows' foreground lock: once another process's input (such as
+> an earlier winapp click) has activated a different window, the long-lived test process's call is
+> silently refused. Every retry then repeats the same refused call. `MarkdownSelectionInputProofTests.AcquireForeground`
 > first injects a zero mouse input (no movement, no button) so the test process owns the last
 > input, then falls back to an `AttachThreadInput` bridge. On timeout it reports what held the foreground.
 

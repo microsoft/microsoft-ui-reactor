@@ -293,22 +293,27 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     /// Brings the owned host to the foreground. Unlike every other E2E test, this one does not reach
     /// the host through a winapp click (whose real pointer press activates the window); it asks for
     /// the foreground itself, from the long-lived test process. Windows' foreground lock refuses a
-    /// bare <c>SetForegroundWindow</c> from a process once another process has injected input since
-    /// it last held the foreground, which earlier classes' winapp clicks always do, so whether the
-    /// call took depended on run order and timing, and every retry repeated the same refused call.
-    /// A zero mouse input (no movement, no button) makes this process the last input source, which
-    /// the lock honours; an <c>AttachThreadInput</c> bridge covers the remaining cases.
+    /// bare <c>SetForegroundWindow</c> from that process after another process's input (such as an
+    /// earlier class's winapp click) has activated a different window, so whether the call took
+    /// depended on run order and timing, and every retry repeated the same refused call. A zero
+    /// mouse input (no movement, no button) makes this process the last input source, which the
+    /// lock honours; an <c>AttachThreadInput</c> bridge covers the remaining cases. The zero input
+    /// is best-effort: if it is refused, the foreground predicate still decides, and the timeout
+    /// reports the refusal alongside the foreground diagnostics.
     /// </summary>
     private static void AcquireForeground()
     {
         var host = (nint)TestSession.HostHwnd;
         bool requested = false;
+        uint creditSent = 0;
+        int creditError = 0;
         var until = DateTime.UtcNow.AddSeconds(WaitSeconds);
         do
         {
             if (HostOwnsForeground()) return;
             if (IsIconic(host)) ShowWindow(host, SwRestore);
-            Send(new Input { Type = 0 });
+            creditSent = SendInput(1, [new Input { Type = 0 }], Marshal.SizeOf<Input>());
+            creditError = creditSent == 1 ? 0 : Marshal.GetLastWin32Error();
             requested = SetForegroundWindow(host);
             if (!HostOwnsForeground())
             {
@@ -331,7 +336,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         } while (DateTime.UtcNow < until);
         if (HostOwnsForeground()) return;
         SessionInteractivityGuard.RecheckAfterFailure("Owned host foreground");
-        Assert.Fail($"Timed out: owned host foreground; {DescribeForeground(host, requested)}");
+        Assert.Fail($"Timed out: owned host foreground; zeroInputSent={creditSent} (error {creditError}); " +
+            DescribeForeground(host, requested));
     }
 
     private static unsafe string DescribeForeground(nint host, bool lastRequestResult)
