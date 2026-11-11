@@ -217,7 +217,9 @@ internal static class ControlledOptionalSelfTestHelpers
     // own echo (or never reserved, when the write is skipped); a leftover
     // suppress-counter token would swallow the user's next real edit.
     // RunEchoNoStrandAsync only covers a write equal to the current value, and
-    // RunBoundUpdatesControlAsync stops before any user edit.
+    // RunBoundUpdatesControlAsync stops before any user edit. The Mount write is
+    // checked the same way first: its echo must not reach the callback either
+    // (RichEditBox raises it after the trampoline is wired, so the engine arms it).
     internal static async Task RunUserEditAfterStateWriteAsync<TControl, TValue>(
         Harness h,
         string fixtureName,
@@ -235,41 +237,29 @@ internal static class ControlledOptionalSelfTestHelpers
             var (value, setValue) = ctx.UseState(scenario.FirstValue);
             return VStack(
                 Button(writeLabel, () => setValue(writtenValue)),
-                scenario.CreateElement(
-                    Optional<TValue>.Of(value),
-                    v =>
-                    {
-                        callbacks.Add(v);
-                        setValue(v);
-                    }));
+                ControlledElement(scenario, value, callbacks, setValue));
         });
 
         await Harness.Render();
         var control = scenario.FindControl(h);
         h.Check($"{prefix}_ControlFound", control is not null);
         if (control is null) return;
-        await Harness.Render(50);
+
+        var (tokens, armPending) = await WaitForEchoSettledAsync(control, callbacks);
+        h.Check(
+            $"{prefix}_NoEchoSuppressionLeftAfterMount",
+            tokens == 0 && !armPending,
+            $"EchoSuppressCount={tokens}, valueDiffArmPending={armPending}");
+        h.Check(
+            $"{prefix}_MountEchoSuppressed",
+            callbacks.Count == 0,
+            $"callbacks=[{string.Join(", ", callbacks)}]");
         callbacks.Clear();
 
         h.ClickButton(writeLabel);
         await Harness.Render();
 
-        // Let the write's echo land (some controls raise it asynchronously):
-        // wait until no counter token and no value-diff arm is pending. After
-        // that nothing may be left reserved to suppress a later event.
-        var tokens = -1;
-        var armPending = false;
-        await Harness.WaitFor(
-            () =>
-            {
-                var state = control is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var s) ? s : null;
-                tokens = state?.EchoSuppressCount ?? 0;
-                armPending = state?.PendingEchoMatch is not null;
-                return tokens == 0 && !armPending;
-            },
-            maxPasses: 25,
-            perPassMs: 20);
-        await Harness.Render();
+        (tokens, armPending) = await WaitForEchoSettledAsync(control, callbacks);
         h.Check(
             $"{prefix}_NoEchoSuppressionLeftAfterWrite",
             tokens == 0 && !armPending,
@@ -281,23 +271,61 @@ internal static class ControlledOptionalSelfTestHelpers
 
         callbacks.Clear();
         scenario.SetValue(control, scenario.UserValue);
-        var callbackObserved = await Harness.WaitFor(
-            () => callbacks.Count > 0 && ValuesEqual(callbacks[^1], scenario.UserValue),
-            maxPasses: 10,
-            perPassMs: 20);
-        if (!callbackObserved && scenario.Name is "AutoSuggestBox")
-        {
-            h.Skip(
-                $"{prefix}_UserEditReachesCallback",
-                "WinUI programmatic selftest path does not synthesize the user-only change event for this control");
-            return;
-        }
-
         h.Check(
             $"{prefix}_UserEditReachesCallback",
-            callbackObserved,
+            await WaitForCallbackAsync(callbacks, scenario.UserValue),
             $"callbacks=[{string.Join(", ", callbacks)}]");
     }
+
+    private static Element ControlledElement<TControl, TValue>(
+        Scenario<TControl, TValue> scenario,
+        TValue value,
+        List<TValue> callbacks,
+        Action<TValue> setValue)
+        where TControl : DependencyObject =>
+        scenario.CreateElement(
+            Optional<TValue>.Of(value),
+            v =>
+            {
+                callbacks.Add(v);
+                setValue(v);
+            });
+
+    private static (int Tokens, bool ArmPending) ReadEchoState(DependencyObject control)
+    {
+        var state = control is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var s) ? s : null;
+        return (state?.EchoSuppressCount ?? 0, state?.PendingEchoMatch is not null);
+    }
+
+    // Lets a programmatic write's echo land (some controls raise it
+    // asynchronously): waits until no counter token and no value-diff arm is
+    // pending. A write that should have armed but didn't leaves nothing to wait
+    // for while its deferred echo is still on the way, so then give that echo a
+    // few passes to show up in the callbacks before the caller checks them.
+    private static async Task<(int Tokens, bool ArmPending)> WaitForEchoSettledAsync<TValue>(
+        DependencyObject control,
+        List<TValue> callbacks)
+    {
+        var echo = (Tokens: -1, ArmPending: false);
+        await Harness.WaitFor(
+            () =>
+            {
+                echo = ReadEchoState(control);
+                return echo.Tokens == 0 && !echo.ArmPending;
+            },
+            maxPasses: 25,
+            perPassMs: 20);
+        await Harness.WaitFor(() => callbacks.Count > 0, maxPasses: 5, perPassMs: 20);
+        return echo;
+    }
+
+    // AutoSuggestBox reports a text change about 150 ms after it happens, so
+    // allow well past that.
+    private static Task<bool> WaitForCallbackAsync<TValue>(List<TValue> callbacks, TValue expected) =>
+        Harness.WaitFor(
+            () => callbacks.Count > 0 && ValuesEqual(callbacks[^1], expected),
+            maxPasses: 40,
+            perPassMs: 20);
 
     internal static async Task RunForceClearSentinelAsync<TControl>(
         Harness h,
