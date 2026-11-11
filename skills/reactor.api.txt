@@ -1,9 +1,10 @@
 # Reactor API — signatures index (generated)
-# Source of truth: Reactor.dll public surface.
+# Source of truth: Reactor.dll and Reactor.Advanced.dll public surfaces.
 # Regenerate: `mur --regen-api`  (or build tools/Reactor.SignaturesGen — its
 #             AfterBuild target rewrites this file).
 # Format: one symbol per line. No prose. Alphabetized within each section.
 # Sections: Factories, Modifiers, Reference builders, Hooks, Theme, Enums, Public types.
+# Advanced sections: Factories, Modifiers, Hooks, Enums, Public types.
 # Public types covers ctors/properties/methods/events on every public type,
 # including public *static* classes — so process-wide entry points such as
 # ControlRegistry.Register and ReactorApp.Run are listed there, alongside
@@ -310,7 +311,7 @@ EllipseElement.Fill(Brush brush) → EllipseElement
 EllipseElement.Set(Action<Ellipse> configure) → EllipseElement
 ExpanderElement.ContentTransitions(TransitionCollection transitions) → ExpanderElement
 ExpanderElement.Direction(ExpandDirection dir) → ExpanderElement
-ExpanderElement.HeaderTemplate(Element header) → ExpanderElement
+ExpanderElement.HeaderContent(Element header) → ExpanderElement
 ExpanderElement.IsExpandedChanged(Action<bool> handler) → ExpanderElement
 ExpanderElement.Set(Action<Expander> configure) → ExpanderElement
 FlexElement.FlexPadding(double horizontal, double vertical) → FlexElement
@@ -835,6 +836,7 @@ TitleBarElement.Content(Element content) → TitleBarElement
 TitleBarElement.HeightOption(WindowTitleBarHeight height) → TitleBarElement
 TitleBarElement.Icon(IconData icon) → TitleBarElement
 TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.LeftHeader(Element leftHeader) → TitleBarElement
 TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
@@ -2495,7 +2497,7 @@ ToString() → string
 new(string Header, Element Content, Optional<bool> IsExpanded = default, Action<bool> OnIsExpandedChanged = null)
 Action<bool> OnIsExpandedChanged { get; init; }
 Element Content { get; init; }
-Element HeaderTemplate { get; init; }
+Element HeaderContent { get; init; }
 ExpandDirection ExpandDirection { get; init; }
 Optional<bool> IsExpanded { get; init; }
 TransitionCollection ContentTransitions { get; init; }
@@ -6044,6 +6046,7 @@ new(string Title)
 Action OnBackRequested { get; init; }
 Action OnPaneToggleRequested { get; init; }
 Element Content { get; init; }
+Element LeftHeader { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
 WindowTitleBarHeight? HeightOption { get; init; }
@@ -6578,4 +6581,1912 @@ Equals(XamlPageElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+# Optional package: Microsoft.UI.Reactor.Advanced
+# Advanced factories: using static Microsoft.UI.Reactor.Advanced.Factories;
+
+## Advanced factories
+# All in `Microsoft.UI.Reactor.Advanced.Factories` — `using static Microsoft.UI.Reactor.Advanced.Factories;`
+
+AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
+Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement<DataGridElement<T>>
+DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement<DataGridElement<T>>
+Markdown(string markdown) → Element
+Markdown(string markdown, MarkdownOptions options) → Element
+Win2DAnimatedCanvas(Action<CanvasAnimatedUpdateEventArgs, object> onUpdate, Action<CanvasDrawingSession, CanvasAnimatedDrawEventArgs, object> onDraw, object drawState = null, bool isPaused = false) → Win2DAnimatedCanvasElement
+Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, Func<CanvasControl, Task> onCreateResources, object redrawKey = null) → Win2DCanvasElement
+Win2DCanvas(Action<CanvasDrawingSession, CanvasDrawEventArgs> onDraw, object redrawKey = null) → Win2DCanvasElement
+Win2DVirtualCanvas(Action<CanvasDrawingSession, Rect> onRegionDraw, Size contentSize) → Win2DVirtualCanvasElement
+
+## Advanced modifiers (extension methods on Element)
+# Fluent — preserves concrete element type. Type-specific sugar (e.g. .Bold()
+# on TextBlockElement) MUST come before generic .Margin/.Padding/etc.
+
+DataGridElement<T>.SelectionChanged<T>(Action<IReadOnlySet<RowKey>> handler) → DataGridElement<T>
+DockManager.ActiveContentChanged(Action<DockActiveContentChangedEventArgs> handler) → DockManager
+DockManager.ContentDocked(Action<DockContentDockedEventArgs> handler) → DockManager
+DockManager.ContentDocking(Action<DockContentDockingEventArgs> handler) → DockManager
+DockManager.ContentFloated(Action<DockContentFloatedEventArgs> handler) → DockManager
+DockManager.ContentFloating(Action<DockContentFloatingEventArgs> handler) → DockManager
+DockManager.DocumentClosed(Action<DockDocumentClosedEventArgs> handler) → DockManager
+DockManager.DocumentClosing(Action<DockDocumentClosingEventArgs> handler) → DockManager
+DockManager.DropTargetConfirmed(Action<DockTarget> handler) → DockManager
+DockManager.DropTargetHovered(Action<DockTarget?> handler) → DockManager
+DockManager.DropTargetsDismissed(Action handler) → DockManager
+DockManager.FloatingWindowClosed(Action<DockFloatingWindowClosedEventArgs> handler) → DockManager
+DockManager.FloatingWindowCreated(Action<DockFloatingWindowCreatedEventArgs> handler) → DockManager
+DockManager.LayoutChanged(Action<DockLayoutChangedEventArgs> handler) → DockManager
+DockManager.LayoutChanging(Action<DockLayoutChangingEventArgs> handler) → DockManager
+DockManager.LiveLayoutChanged(Action<DockNode> handler) → DockManager
+DockManager.SplitterDragCompleted(Action handler) → DockManager
+DockManager.ToolWindowClosed(Action<DockToolWindowClosedEventArgs> handler) → DockManager
+DockManager.ToolWindowClosing(Action<DockToolWindowClosingEventArgs> handler) → DockManager
+DockManager.ToolWindowHidden(Action<DockToolWindowHiddenEventArgs> handler) → DockManager
+DockManager.ToolWindowHiding(Action<DockToolWindowHidingEventArgs> handler) → DockManager
+Win2DAnimatedCanvasElement.ClearColor(Color color) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.Paused(bool paused = true) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.Set(Action<CanvasAnimatedControl> setter) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.TargetFps(double fps) → Win2DAnimatedCanvasElement
+Win2DAnimatedCanvasElement.UseSharedDevice(bool useSharedDevice = true) → Win2DAnimatedCanvasElement
+Win2DCanvasElement.ClearColor(Color color) → Win2DCanvasElement
+Win2DCanvasElement.Set(Action<CanvasControl> setter) → Win2DCanvasElement
+Win2DCanvasElement.UseSharedDevice(bool useSharedDevice = true) → Win2DCanvasElement
+Win2DVirtualCanvasElement.Set(Action<CanvasVirtualControl> setter) → Win2DVirtualCanvasElement
+Win2DVirtualCanvasElement.UseSharedDevice(bool useSharedDevice = true) → Win2DVirtualCanvasElement
+
+## Advanced hooks (RenderContext / Component)
+# Call from Render() / function-component body. Same order every render —
+# never inside if/for. Use the result conditionally, not the call.
+
+RenderContext.UseActivePaneKey() → object
+RenderContext.UseCanvasResources<TResources>(Func<CanvasDevice, ValueTask<TResources>> create, Action<TResources> dispose = null) → Ref<TResources>
+RenderContext.UseDockHost() → DockHostModel
+RenderContext.UseDockLayout() → DockLayoutSnapshot
+RenderContext.UseDockPanePersisted<T>(string key, T initialValue) → ValueTuple<T, Action<T>>
+RenderContext.UseDockState() → DockPaneState
+RenderContext.UseDrawCommand<TState>(TState state, Action<CanvasDrawingSession, CanvasDrawEventArgs, TState> draw, object[] deps) → Action<CanvasDrawingSession, CanvasDrawEventArgs>
+RenderContext.UseDrawState<T>(Func<T> init) → Ref<T>
+RenderContext.UseIsActivePane() → bool
+RenderContext.UsePane() → DockPaneInfo
+
+## Advanced enums (public, under Microsoft.UI.Reactor.*)
+
+ChartAxisType { X, Y }
+DashStyle { Solid, Dash4_2, Dash2_2, Dash6_2_2_2, Dash8_4, Dash1_1 }
+MarkerShape { Circle, Square, Triangle, Diamond, Plus, Cross, Star, Hexagon }
+ChartType { Line, Bar, Area }
+LinkOrientation { Horizontal, Vertical }
+SankeyNodeAlign { Left, Right, Center, Justify }
+TreemapTiling { Squarify, Slice, Dice, SliceDice }
+EditMode { Cell, Row }
+SelectionMode { None, Single, Multiple }
+DockOperationKind { Mount, DragStart, DragHover, DragConfirm, DragCancel, DragTearOut, SplitterResize, SplitterTrace, LayoutChange, Note }
+DockFloatingCloseReason { ContentClosed, MigratedToHost, MigratedToFloat }
+DockGroupRole { General, DocumentArea, ToolWindowStrip }
+DockPaneState { Docked, Floating, AutoHidden, AutoHiddenExpanded, Hidden }
+DockSide { Left, Top, Right, Bottom }
+DockSides { None, Left, Top, Right, Bottom, All }
+DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom, DockLeft, DockTop, DockRight, DockBottom }
+TabChrome { Win11, Flat, TitleBar }
+TabPosition { Top, Bottom }
+MarkdownAlign { Default, Left, Center, Right }
+MarkdownBlockType { Doc, Quote, Ul, Ol, Li, Hr, H, Code, Html, P, Table, Thead, Tbody, Tr, Th, Td }
+MarkdownParserFlags { None, DialectCommonMark, CollapseWhitespace, PermissiveAtxHeaders, PermissiveUrlAutolinks, PermissiveEmailAutolinks, NoIndentedCodeBlocks, NoHtmlBlocks, NoHtmlSpans, NoHtml, Tables, Strikethrough, PermissiveWwwAutolinks, PermissiveAutolinks, TaskLists, DialectGitHub, LatexMathSpans, WikiLinks, Underline, HardSoftBreaks }
+MarkdownSpanType { Em, Strong, A, Img, Code, Del, LatexMath, LatexMathDisplay, WikiLink, U }
+MarkdownTextType { Normal, NullChar, Br, SoftBr, Entity, Code, Html, LatexMath }
+
+## Advanced public types (ctors / properties / methods / events)
+# Every public type not already covered above. Members alphabetized within
+# each type: constructors, then properties, then methods, then events.
+
+### class ArcGenerator
+new()
+Centroid(double startAngle, double endAngle, double innerRadius = 0, double outerRadius = 100) → ValueTuple<double, double>
+Centroid(double startAngle, double endAngle, double? innerRadius = null, double? outerRadius = null) → ValueTuple<double, double>
+Generate(double startAngle, double endAngle, double padAngle = 0, double? innerRadius = null, double? outerRadius = null) → string
+Generate<T>(PieArc<T> arc) → string
+SetCornerRadius(double r) → ArcGenerator
+SetDigits(int? digits) → ArcGenerator
+SetInnerRadius(double r) → ArcGenerator
+SetOuterRadius(double r) → ArcGenerator
+
+### static class AreaGenerator
+Create<T>(Func<T, double> x, Func<T, double> y) → AreaGenerator<T>
+Create<T>(Func<T, double> x, Func<T, double> y0, Func<T, double> y1) → AreaGenerator<T>
+FromArrays() → AreaGenerator<double[]>
+
+### class AreaGenerator<T>
+new(Func<T, int, double> x0, Func<T, int, double> y0, Func<T, int, double> y1)
+Generate(IReadOnlyList<T> data) → string
+SetDefined(Func<T, int, bool> defined) → AreaGenerator<T>
+SetDigits(int? digits) → AreaGenerator<T>
+SetX(Func<T, int, double> x) → AreaGenerator<T>
+SetX0(Func<T, int, double> x0) → AreaGenerator<T>
+SetX1(Func<T, int, double> x1) → AreaGenerator<T>
+SetY0(Func<T, int, double> y0) → AreaGenerator<T>
+SetY1(Func<T, int, double> y1) → AreaGenerator<T>
+
+### static class BandScale
+Create() → BandScale<string>
+Create<TDomain>(TDomain[] domain) → BandScale<TDomain>
+
+### class BandScale<TDomain>
+new()
+TDomain[] Domain { get; set; }
+double Align { get; set; }
+double Bandwidth { get; }
+double Padding { get; set; }
+double PaddingInner { get; set; }
+double PaddingOuter { get; set; }
+double Step { get; }
+double[] Range { get; set; }
+Copy() → BandScale<TDomain>
+Map(TDomain x) → double
+SetAlign(double a) → BandScale<TDomain>
+SetDomain(TDomain[] domain) → BandScale<TDomain>
+SetPadding(double p) → BandScale<TDomain>
+SetPaddingInner(double p) → BandScale<TDomain>
+SetPaddingOuter(double p) → BandScale<TDomain>
+SetRange(double[] range) → BandScale<TDomain>
+SetRound(bool round) → BandScale<TDomain>
+
+### class Bin<T>
+List<T> Items { get; init; }
+double X0 { get; init; }
+double X1 { get; init; }
+int Count { get; }
+
+### static class BinGenerator
+Create() → BinGenerator<double>
+Create<T>(Func<T, double> value) → BinGenerator<T>
+
+### class BinGenerator<T>
+new(Func<T, double> value)
+Generate(IReadOnlyList<T> data) → Bin<T>[]
+SetThresholdCount(int count) → BinGenerator<T>
+SetThresholds(Func<double[], int, double[]> thresholds) → BinGenerator<T>
+SetValue(Func<T, double> value) → BinGenerator<T>
+
+### record CellContext<T>
+new(T Row, RowKey Key, FieldDescriptor Column, object Value, bool IsEditing, Action<object> SetValue)
+Action<object> SetValue { get; init; }
+FieldDescriptor Column { get; init; }
+RowKey Key { get; init; }
+T Row { get; init; }
+bool IsEditing { get; init; }
+object Value { get; init; }
+Deconstruct(ref T Row, ref RowKey Key, ref FieldDescriptor Column, ref object Value, ref bool IsEditing, ref Action<object> SetValue) → void
+Equals(CellContext<T> other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartAxisDescriptor
+new(ChartAxisType AxisType, string Label, double Min, double Max, string Units = null)
+ChartAxisType AxisType { get; init; }
+double Max { get; init; }
+double Min { get; init; }
+string Label { get; init; }
+string Units { get; init; }
+Deconstruct(ref ChartAxisType AxisType, ref string Label, ref double Min, ref double Max, ref string Units) → void
+Equals(ChartAxisDescriptor other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class ChartElement<T>
+new()
+AlternateView(Element view) → ChartElement<T>
+AnnounceEveryFrame() → ChartElement<T>
+AxisLabel(ChartAxisType axis, string label) → ChartElement<T>
+ChartBackground(Color background) → ChartElement<T>
+ChartBackground(D3Color background) → ChartElement<T>
+ChartBackground(string background) → ChartElement<T>
+ColorOnly() → ChartElement<T>
+DataLabel(Func<T, int, string> labeller) → ChartElement<T>
+Description(string description) → ChartElement<T>
+DisableKeyboard() → ChartElement<T>
+Fill(string color) → ChartElement<T>
+FillOpacity(double opacity) → ChartElement<T>
+FocusColor(Color color) → ChartElement<T>
+Height(double height) → ChartElement<T>
+Interactive() → ChartElement<T>
+Margin(double left, double top, double right, double bottom) → ChartElement<T>
+OnBrushChanged(Action<ChartRange> handler) → ChartElement<T>
+OnPointInvoke(Action<T, int> handler) → ChartElement<T>
+OnReady(Action<ChartHandle<T>> callback) → ChartElement<T>
+Palette(ChartPalette palette) → ChartElement<T>
+RawColors(D3Color[] colors) → ChartElement<T>
+SeriesColors(D3Color[] colors) → ChartElement<T>
+SeriesDashes(DashStyle[] dashes) → ChartElement<T>
+SeriesName(string name) → ChartElement<T>
+SeriesNames(string[] names) → ChartElement<T>
+SeriesShapes(MarkerShape[] shapes) → ChartElement<T>
+ShowAxes(bool show) → ChartElement<T>
+ShowGrid(bool show) → ChartElement<T>
+Stroke(string color) → ChartElement<T>
+StrokeWidth(double width) → ChartElement<T>
+TightHitTest() → ChartElement<T>
+Title(string title) → ChartElement<T>
+ToElement() → Element
+Units(string xUnits = null, string yUnits = null) → ChartElement<T>
+Width(double width) → ChartElement<T>
+XTickLabelView(Func<double, Element> render, Func<double, string> name = null, bool interactive = false) → ChartElement<T>
+YTickLabelView(Func<double, Element> render, Func<double, string> name = null, bool interactive = false) → ChartElement<T>
+
+### class ChartHandle<T>
+Canvas Canvas { get; }
+
+### class ChartPalette
+IReadOnlyList<D3Color> Colors { get; }
+int Count { get; }
+ContrastRatio(D3Color a, D3Color b) → double
+DeltaE(D3Color a, D3Color b) → double
+FromColors(D3Color[] colors) → ChartPalette
+FromRaw(D3Color[] colors) → ChartPalette
+GetDash(int seriesIndex) → DashStyle
+GetDashArray(DashStyle dash) → double[]
+GetMarker(int seriesIndex) → MarkerShape
+Harden(D3Color[] input, HardenOptions options = null) → HardenResult
+RelativeLuminance(D3Color c) → double
+
+### record ChartPointDescriptor
+new(string XLabel, double YValue, string FormattedLabel = null)
+double YValue { get; init; }
+string FormattedLabel { get; init; }
+string XLabel { get; init; }
+Deconstruct(ref string XLabel, ref double YValue, ref string FormattedLabel) → void
+Equals(ChartPointDescriptor other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartRange
+new(double Start, double End)
+double End { get; init; }
+double Start { get; init; }
+Deconstruct(ref double Start, ref double End) → void
+Equals(ChartRange other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartSeriesDescriptor
+new(string Name, IReadOnlyList<ChartPointDescriptor> Points)
+IReadOnlyList<ChartPointDescriptor> Points { get; init; }
+string Name { get; init; }
+Deconstruct(ref string Name, ref IReadOnlyList<ChartPointDescriptor> Points) → void
+Equals(ChartSeriesDescriptor other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record ChartViewport
+new(double XMin, double XMax, double YMin, double YMax)
+double XMax { get; init; }
+double XMin { get; init; }
+double YMax { get; init; }
+double YMin { get; init; }
+Deconstruct(ref double XMin, ref double XMax, ref double YMin, ref double YMax) → void
+Equals(ChartViewport other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class Charts
+AreaChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) → ChartElement<T>
+BarChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) → ChartElement<T>
+ForceGraph(IReadOnlyList<ForceNode> nodes, IReadOnlyList<ForceLink> links) → ForceGraphElement
+LineChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) → ChartElement<T>
+PieChart<T>(IReadOnlyList<T> data, Func<T, double> value, Func<T, string> label = null) → PieChartElement<T>
+TreeChart<T>(T root, Func<T, IEnumerable<T>> children, Func<T, string> label = null) → TreeChartElement<T>
+WithAlternateView(Element chartElement, Element alternateView) → Element
+
+### struct ChordArc
+ChordEnd Source { get; init; }
+ChordEnd Target { get; init; }
+Equals(ChordArc other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### struct ChordData
+ChordArc[] Chords { get; init; }
+ChordGroup[] Groups { get; init; }
+Equals(ChordData other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### struct ChordEnd
+double EndAngle { get; init; }
+double StartAngle { get; init; }
+double Value { get; init; }
+int Index { get; init; }
+Equals(ChordEnd other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### struct ChordGroup
+double EndAngle { get; init; }
+double StartAngle { get; init; }
+double Value { get; init; }
+int Index { get; init; }
+Equals(ChordGroup other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class ChordLayout
+new()
+Generate(double[][] matrix) → ChordData
+SetPadAngle(double angle) → ChordLayout
+
+### static class ClusterLayout
+Create<T>() → ClusterLayout<T>
+
+### class ClusterLayout<T>
+new()
+Hierarchy(T root, Func<T, IEnumerable<T>> childrenAccessor) → TreeNode<T>
+Layout(TreeNode<T> root) → TreeNode<T>
+Separation(Func<TreeNode<T>, TreeNode<T>, double> separation) → ClusterLayout<T>
+Size(double width, double height) → ClusterLayout<T>
+
+### class ColumnBuilder<T>
+Build() → FieldDescriptor
+CellRenderer(Func<object, Element> renderer) → ColumnBuilder<T>
+NotFilterable() → ColumnBuilder<T>
+NotSortable() → ColumnBuilder<T>
+Validate(IValidator[] validators) → ColumnBuilder<T>
+ValidateAsync(IAsyncValidator[] validators) → ColumnBuilder<T>
+Width(double? width = null, double? min = null, double? max = null, double? flex = null) → ColumnBuilder<T>
+WithEditor(Func<object, Action<object>, Element> editor) → ColumnBuilder<T>
+
+### class ContourGenerator
+new(int width, int height)
+Generate(double[] values) → ContourMultiPolygon[]
+SetThresholdCount(int count) → ContourGenerator
+SetThresholds(double[] thresholds) → ContourGenerator
+
+### class ContourMultiPolygon
+List<List<ValueTuple<double, double>>> Coordinates { get; init; }
+double Value { get; init; }
+
+### static class D3Bisect
+BisectCenter(double[] array, double x, int lo = 0, int hi = -1) → int
+BisectLeft(double[] array, double x, int lo = 0, int hi = -1) → int
+BisectRight(double[] array, double x, int lo = 0, int hi = -1) → int
+
+### static class D3Charts
+ForcedColorsTheme ForcedColors { get; set; }
+SolidColorBrush ChartAxis { get; }
+SolidColorBrush ChartDisabled { get; }
+SolidColorBrush ChartForeground { get; }
+SolidColorBrush ChartGrid { get; }
+SolidColorBrush ChartMutedForeground { get; }
+SolidColorBrush ChartSelection { get; }
+SolidColorBrush ChartSelectionText { get; }
+SolidColorBrush ChartSubtleFill { get; }
+SolidColorBrush ChartSubtleStroke { get; }
+SolidColorBrush ChartSurface { get; }
+bool IsDarkTheme { get; set; }
+bool IsForcedColors { get; set; }
+bool IsReducedMotion { get; set; }
+Brush(D3Color c) → SolidColorBrush
+Brush(D3Color c, double opacity) → SolidColorBrush
+Brush(string color) → SolidColorBrush
+Brush(string color, double opacity) → SolidColorBrush
+ChartSeries(int seriesIndex) → SolidColorBrush
+ChartSeriesDash(int seriesIndex) → DashStyle
+ChartSeriesMarker(int seriesIndex) → MarkerShape
+ChartSurfaceAlpha(byte alpha) → SolidColorBrush
+D3ArcPath(double startAngle, double endAngle, double cx, double cy, double innerRadius = 0, double outerRadius = 100, double padAngle = 0, Brush fill = null, Brush stroke = null, double strokeWidth = 1.5) → PathElement
+D3AreaPath<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y0, Func<T, double> y1, Brush fill = null, Brush stroke = null, double strokeWidth = 1.5) → PathElement
+D3Axes(LinearScale xs, LinearScale ys, double left, double top, double width, double height, int xTicks = 6, int yTicks = 5, Func<double, Element> xTickLabel = null, Func<double, Element> yTickLabel = null, Func<double, string> xTickName = null, Func<double, string> yTickName = null, bool xTickInteractive = false, bool yTickInteractive = false) → Element[]
+D3Canvas(double width, double height, Element[] children) → CanvasElement
+D3Circle(double cx, double cy, double r) → EllipseElement
+D3Grid(LinearScale ys, double left, double width, int ticks = 5) → Element[]
+D3Legend(double x, double y, IEnumerable<ValueTuple<string, SolidColorBrush>> items, double fontSize = 11) → Element[]
+D3Line(double x1, double y1, double x2, double y2) → LineElement
+D3LinePath<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y, Brush stroke = null, double strokeWidth = 1.5, CurveFactory curve = null, Func<T, int, bool> defined = null) → PathElement
+D3Link(double x1, double y1, double x2, double y2, Brush stroke = null, double strokeWidth = 1.5) → PathElement
+D3Path(string pathData, Brush stroke = null, Brush fill = null, double strokeWidth = 1.5) → PathElement
+D3PathTranslated(string pathData, double translateX, double translateY, Brush stroke = null, Brush fill = null, double strokeWidth = 1.5) → PathElement
+D3Pie<T>(IReadOnlyList<T> data, Func<T, double> value, double cx, double cy, double outerRadius = 150, double innerRadius = 0, double padAngle = 0, bool sort = true, Brush stroke = null, double strokeWidth = 1.5, IReadOnlyList<D3Color> palette = null) → Element[]
+D3Rect(double x, double y, double width, double height) → RectangleElement
+Fmt(double v) → string
+Gray(byte v, byte alpha = 255) → SolidColorBrush
+Text(double x, double y, string text, double fontSize = 10, Brush foreground = null) → TextBlockElement
+TextCenter(double x, double y, string text, double width, double fontSize = 10, Brush foreground = null) → TextBlockElement
+TextRight(double x, double y, string text, double width, double fontSize = 10, Brush foreground = null) → TextBlockElement
+
+### struct D3Color
+new(byte r, byte g, byte b, double opacity = 1)
+byte B { get; }
+byte G { get; }
+byte R { get; }
+double Opacity { get; }
+Brighter(double k = 1) → D3Color
+Darker(double k = 1) → D3Color
+Parse(string format) → D3Color
+ToHex() → string
+ToRgb() → string
+ToString() → string
+
+### static class D3Curve
+CardinalWithTension(double tension) → CurveFactory
+CatmullRomWithAlpha(double alpha) → CurveFactory
+
+### static class D3Ease
+Back(double s = 1.70158) → Func<double, double>
+BackIn(double s = 1.70158) → Func<double, double>
+BackOut(double s = 1.70158) → Func<double, double>
+Bounce(double t) → double
+BounceIn(double t) → double
+BounceOut(double t) → double
+Circle(double t) → double
+CircleIn(double t) → double
+CircleOut(double t) → double
+Cubic(double t) → double
+CubicIn(double t) → double
+CubicOut(double t) → double
+Elastic(double amplitude = 1, double period = 0.3) → Func<double, double>
+ElasticIn(double amplitude = 1, double period = 0.3) → Func<double, double>
+ElasticOut(double amplitude = 1, double period = 0.3) → Func<double, double>
+Exp(double t) → double
+ExpIn(double t) → double
+ExpOut(double t) → double
+Linear(double t) → double
+Poly(double e = 3) → Func<double, double>
+PolyIn(double e = 3) → Func<double, double>
+PolyOut(double e = 3) → Func<double, double>
+Quad(double t) → double
+QuadIn(double t) → double
+QuadOut(double t) → double
+Sin(double t) → double
+SinIn(double t) → double
+SinOut(double t) → double
+
+### static class D3Extent
+Extent(IEnumerable<double> values) → ValueTuple<double, double>
+Extent<T>(IEnumerable<T> values, Func<T, double> valueOf) → ValueTuple<double, double>
+
+### static class D3Format
+Format(string specifier) → Func<double, string>
+FormatPrefix(string specifier, double reference) → Func<double, string>
+FormatValue(double value, string specifier) → string
+PrecisionFixed(double step) → int
+PrecisionPrefix(double step, double value) → int
+PrecisionRound(double step, double max) → int
+
+### static class D3Group
+Group<T, TKey>(IEnumerable<T> values, Func<T, TKey> key) → Dictionary<TKey, List<T>>
+Index<T, TKey>(IEnumerable<T> values, Func<T, TKey> key) → Dictionary<TKey, T>
+Rollup<T, TKey, TResult>(IEnumerable<T> values, Func<T, TKey> key, Func<IEnumerable<T>, TResult> reduce) → Dictionary<TKey, TResult>
+
+### static class D3Interpolate
+Number(double a, double b) → Func<double, double>
+Round(double a, double b) → Func<double, double>
+
+### static class D3InterpolateColor
+Array(double[] a, double[] b) → Func<double, double[]>
+Date(DateTime a, DateTime b) → Func<double, DateTime>
+Hsl(D3Color a, D3Color b) → Func<double, D3Color>
+Rgb(D3Color a, D3Color b) → Func<double, D3Color>
+Rgb(string a, string b) → Func<double, D3Color>
+
+### static class D3Polygon
+Area(IReadOnlyList<ValueTuple<double, double>> polygon) → double
+Centroid(IReadOnlyList<ValueTuple<double, double>> polygon) → ValueTuple<double, double>
+Contains(IReadOnlyList<ValueTuple<double, double>> polygon, ValueTuple<double, double> point) → bool
+Hull(IReadOnlyList<ValueTuple<double, double>> points) → ValueTuple<double, double>[]
+Length(IReadOnlyList<ValueTuple<double, double>> polygon) → double
+
+### static class D3Random
+Bates(int n) → Func<double>
+Bernoulli(double p = 0.5) → Func<int>
+Binomial(int n, double p = 0.5) → Func<int>
+Cauchy(double location = 0, double scale = 1) → Func<double>
+Exponential(double lambda = 1) → Func<double>
+Geometric(double p = 0.5) → Func<int>
+Int(int min, int max) → Func<int>
+IrwinHall(int n) → Func<double>
+LogNormal(double mu = 0, double sigma = 1) → Func<double>
+Normal(double mu = 0, double sigma = 1) → Func<double>
+Pareto(double alpha = 1) → Func<double>
+Poisson(double lambda = 1) → Func<int>
+Uniform(double min = 0, double max = 1) → Func<double>
+Weibull(double k = 1, double lambda = 1) → Func<double>
+
+### static class D3Range
+Range(double start, double stop, double step = 1) → double[]
+Range(double stop) → double[]
+
+### static class D3Statistics
+CumSum(IEnumerable<double> values) → double[]
+Deviation(IEnumerable<double> values) → double
+Max(IEnumerable<double> values) → double
+Max<T>(IEnumerable<T> values, Func<T, double> valueOf) → double
+Mean(IEnumerable<double> values) → double
+Mean<T>(IEnumerable<T> values, Func<T, double> valueOf) → double
+Median(IEnumerable<double> values) → double
+Median<T>(IEnumerable<T> values, Func<T, double> valueOf) → double
+Min(IEnumerable<double> values) → double
+Min<T>(IEnumerable<T> values, Func<T, double> valueOf) → double
+Quantile(IEnumerable<double> values, double p) → double
+QuantileSorted(double[] sorted, double p) → double
+Sum(IEnumerable<double> values) → double
+Sum<T>(IEnumerable<T> values, Func<T, double> valueOf) → double
+Variance(IEnumerable<double> values) → double
+
+### static class D3Ticks
+TickIncrement(double start, double stop, int count) → long
+TickStep(double start, double stop, int count) → double
+Ticks(double start, double stop, int count) → double[]
+
+### class DataGridComponent<T>
+new()
+Render() → Element
+
+### record DataGridElement<T>
+Action<IReadOnlySet<RowKey>> OnSelectionChanged { get; init; }
+EditMode EditMode { get; init; }
+Element EmptyTemplate { get; init; }
+Element LoadingTemplate { get; init; }
+Func<CellContext<T>, Element> CellTemplate { get; init; }
+Func<FieldDescriptor, FieldDescriptor> ColumnOverrides { get; init; }
+Func<FieldDescriptor, double, Element> PlaceholderCellTemplate { get; init; }
+Func<HeaderContext, Element> HeaderTemplate { get; init; }
+Func<RowContext<T>, Element> RowTemplate { get; init; }
+Func<RowKey, T, Task> OnRowChanged { get; init; }
+Func<T, RowKey, Element> RowDetailTemplate { get; init; }
+IDataSource<T> Source { get; init; }
+IReadOnlyList<FieldDescriptor> Columns { get; init; }
+SelectionMode SelectionMode { get; init; }
+TypeRegistry Registry { get; init; }
+bool AllowColumnReorder { get; init; }
+bool AllowColumnResize { get; init; }
+bool Editable { get; init; }
+bool ShowHeaders { get; init; }
+bool ShowSearch { get; init; }
+double EstimatedRowHeight { get; init; }
+double? RowHeight { get; init; }
+Equals(DataGridElement<T> other) → bool
+Equals(Element other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class DataGridState<T>
+new(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, SelectionMode selectionMode, int blockSize = 0)
+Action<RowKey, T, T> CommitDispatcher { get; set; }
+DataPageCache<T> PageCache { get; }
+IReadOnlyList<FieldDescriptor> AllColumns { get; }
+IReadOnlyList<FieldDescriptor> Columns { get; }
+IReadOnlyList<FilterDescriptor> Filters { get; }
+IReadOnlyList<SortDescriptor> Sorts { get; }
+IReadOnlyList<T> LoadedItems { get; }
+IReadOnlySet<RowKey> ExpandedRows { get; }
+IReadOnlySet<RowKey> SelectedKeys { get; }
+IReadOnlySet<string> HiddenColumns { get; }
+InfiniteResource<T> HookResource { get; }
+RowKey? AnchorKey { get; }
+RowKey? EditingRowKey { get; }
+RowKey? FocusedKey { get; }
+SelectionMode SelectionMode { get; }
+ValidationContext EditValidation { get; }
+bool HasPendingCommits { get; }
+bool HasValidationErrors { get; }
+bool IsEditing { get; }
+bool IsLoading { get; }
+bool IsRowEditing { get; }
+int EditingVersion { get; }
+int FocusedColIndex { get; }
+int FocusedRowIndex { get; }
+int ItemCount { get; }
+int MaxClientFallbackPageSize { get; set; }
+int SelectionVersion { get; }
+int? TotalCount { get; }
+object EditingValue { get; }
+string EditingColumnName { get; }
+string SearchQuery { get; }
+string[] RowKeyCache { get; }
+BeginAsyncCommit(RowKey key, T originalItem) → void
+BeginEdit() → bool
+BeginEdit(int rowIndex, int colIndex) → bool
+BeginRowEdit(int rowIndex) → bool
+CancelEdit() → void
+CancelRowEdit() → void
+ClearAllFilters() → void
+ClearFilter(string field) → void
+ClearSelection() → void
+CollapseAllRows() → void
+CollapseRow(RowKey key) → void
+CommitAndMoveNext() → ValueTuple<RowKey, T>?
+CommitAndMovePrev() → ValueTuple<RowKey, T>?
+CommitEdit() → ValueTuple<RowKey, T>?
+CommitRowEdit() → ValueTuple<RowKey, T>?
+CompleteAsyncCommit(RowKey key) → void
+DismissCommitError(RowKey key) → void
+EnsureRangeLoaded(int firstRow, int lastRow) → void
+ExpandRow(RowKey key) → void
+FailAsyncCommit(RowKey key, string errorMessage) → void
+FocusEnd() → void
+FocusHome() → void
+FocusNextCell() → bool
+FocusNextRowEditColumn() → bool
+FocusPrevCell() → bool
+FocusPrevRowEditColumn() → bool
+GetAllValidationMessages() → IReadOnlyList<ValidationMessage>
+GetColumnWidth(string columnName) → double
+GetCommitError(RowKey key) → string
+GetFilter(string field) → FilterDescriptor
+GetItemAt(int index) → T
+GetPinnedColumnGroups() → ValueTuple<IReadOnlyList<FieldDescriptor>, IReadOnlyList<FieldDescriptor>, IReadOnlyList<FieldDescriptor>>
+GetRowEditValue(string columnName) → object
+GetRowIndex(RowKey key) → int
+GetRowKeyAt(int index) → string
+GetSortDirection(string field) → SortDirection?
+GetValidationMessages(string fieldName) → IReadOnlyList<ValidationMessage>
+HandleRowClick(RowKey key, bool ctrlKey = false, bool shiftKey = false, IReadOnlyList<RowKey> visibleOrder = null) → void
+HideColumn(string columnName) → void
+IsColumnInRowEdit(RowKey rowKey, string columnName) → bool
+IsColumnVisible(string columnName) → bool
+IsCommitting(RowKey key) → bool
+IsExpanded(RowKey key) → bool
+IsItemLoaded(int index) → bool
+IsSelected(RowKey key) → bool
+LoadDataAsync(CancellationToken cancellationToken = default) → Task
+MoveFocus(int rowDelta, int colDelta) → void
+PinColumn(string columnName, PinPosition position) → void
+ReorderColumn(int fromIndex, int toIndex) → void
+ResizeColumn(string columnName, double newWidth) → void
+SelectAll(IReadOnlyList<RowKey> allKeys) → void
+SelectRange(RowKey from, RowKey to, IReadOnlyList<RowKey> visibleOrder) → void
+SetFilter(FilterDescriptor filter) → void
+SetFocus(int rowIndex, int colIndex) → void
+SetHookResource(InfiniteResource<T> resource) → void
+SetSearchQuery(string query) → void
+SetSelectionMode(SelectionMode mode) → void
+ShowColumn(string columnName) → void
+ToggleColumnVisibility(string columnName) → void
+ToggleRowExpansion(RowKey key) → void
+ToggleSort(string field, bool additive = false) → void
+UpdateEditingValue(object value) → void
+UpdateRowEditValue(string columnName, object value) → void
+ValidateFieldAsync(string fieldName, object value, CancellationToken cancellationToken = default) → Task
+event Action StateChanged
+
+### class Delaunay
+ValueTuple<double, double>[] Points { get; }
+int[] Halfedges { get; }
+int[] Hull { get; }
+int[] Triangles { get; }
+Find(double x, double y) → int
+From(IReadOnlyList<ValueTuple<double, double>> points) → Delaunay
+Neighbors(int index) → IEnumerable<int>
+Voronoi(double xmin = 0, double ymin = 0, double xmax = 960, double ymax = 500) → Voronoi
+
+### class DensityContourGenerator
+new()
+Generate(IReadOnlyList<ValueTuple<double, double>> points) → ContourMultiPolygon[]
+SetBandwidth(double bandwidth) → DensityContourGenerator
+SetCellSize(int size) → DensityContourGenerator
+SetSize(int width, int height) → DensityContourGenerator
+SetThresholdCount(int count) → DensityContourGenerator
+SetThresholds(double[] thresholds) → DensityContourGenerator
+
+### class DockActiveContentChangedEventArgs
+new()
+DockableContent ActiveContent { get; init; }
+DockableContent PreviousContent { get; init; }
+
+### class DockCancelEventArgs
+bool Cancel { get; set; }
+
+### class DockContentDockedEventArgs
+DockTarget Target { get; init; }
+DockableContent Content { get; init; }
+
+### class DockContentDockingEventArgs
+DockTarget Target { get; init; }
+DockableContent Content { get; init; }
+
+### class DockContentFloatedEventArgs
+DockableContent Content { get; init; }
+
+### class DockContentFloatingEventArgs
+DockableContent Content { get; init; }
+
+### struct DockDisplay
+new(double X, double Y, double Width, double Height)
+double Bottom { get; }
+double Height { get; init; }
+double Right { get; }
+double Width { get; init; }
+double X { get; init; }
+double Y { get; init; }
+Deconstruct(ref double X, ref double Y, ref double Width, ref double Height) → void
+Equals(DockDisplay other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class DockDocumentClosedEventArgs
+DockableContent Document { get; init; }
+
+### class DockDocumentClosingEventArgs
+DockableContent Document { get; init; }
+
+### struct DockFloatingBounds
+new(double X, double Y, double Width, double Height)
+double Height { get; init; }
+double Width { get; init; }
+double X { get; init; }
+double Y { get; init; }
+Deconstruct(ref double X, ref double Y, ref double Width, ref double Height) → void
+Equals(DockFloatingBounds other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class DockFloatingClamp
+Clamp(DockFloatingBounds saved, IReadOnlyList<DockDisplay> displays) → DockFloatingBounds
+IsSufficientlyVisible(DockFloatingBounds saved, IReadOnlyList<DockDisplay> displays) → bool
+
+### static class DockFloatingWindow
+Open(DockableContent pane, string title = null, double width = 480, double height = 320, ReactorWindow owner = null, DockFloatingBounds? savedBounds = null, IReadOnlyList<DockDisplay> displays = null, DockManager manager = null, double opacity = 1, bool noActivate = false, bool ignorePointerInput = false, ValueTuple<double, double>? initialPosition = null) → ReactorWindow
+
+### class DockFloatingWindowClosedEventArgs
+DockFloatingCloseReason Reason { get; init; }
+DockableContent Content { get; init; }
+
+### class DockFloatingWindowCreatedEventArgs
+new()
+DockableContent DraggedSource { get; init; }
+
+### class DockHostModel
+new()
+DockNode Root { get; }
+DockableContent ActiveContent { get; }
+IDockLayoutStrategy LayoutStrategy { get; }
+IReadOnlyList<FloatingDockWindow> Floating { get; }
+IReadOnlyList<ToolWindow> BottomSide { get; }
+IReadOnlyList<ToolWindow> LeftSide { get; }
+IReadOnlyList<ToolWindow> RightSide { get; }
+IReadOnlyList<ToolWindow> TopSide { get; }
+Activate(DockableContent content) → void
+AllContent() → IEnumerable<DockableContent>
+Close(DockableContent content) → void
+Descendants() → IEnumerable<DockableContent>
+Dock(DockableContent content, DockTabGroup targetGroup, DockTarget target = DockTarget.Center) → void
+Dock(DockableContent content, DockTarget target) → void
+Float(DockableContent content) → void
+Hide(ToolWindow toolWindow) → void
+PinToSide(ToolWindow toolWindow, DockSide side) → void
+Show(DockableContent content) → void
+
+### class DockHostRecord
+DockManager Manager { get; }
+string Id { get; init; }
+
+### static class DockHostRegistry
+Get(string id) → DockHostRecord
+Register(DockManager manager) → DockHostRecord
+Snapshot() → IReadOnlyList<DockHostRecord>
+Unregister(DockManager manager) → void
+
+### class DockLayoutChangedEventArgs
+new()
+
+### class DockLayoutChangingEventArgs
+new()
+
+### class DockLayoutLoadResult
+new()
+DockNode Root { get; init; }
+IReadOnlyList<FloatingDockWindow> Floating { get; init; }
+IReadOnlyList<ToolWindow> BottomSide { get; init; }
+IReadOnlyList<ToolWindow> LeftSide { get; init; }
+IReadOnlyList<ToolWindow> RightSide { get; init; }
+IReadOnlyList<ToolWindow> TopSide { get; init; }
+bool IsFallback { get; init; }
+bool Success { get; init; }
+int Schema { get; init; }
+string ActiveKey { get; init; }
+string FailureReason { get; init; }
+Fallback(string reason) → DockLayoutLoadResult
+
+### class DockLayoutMigrationRegistry
+new()
+new(bool includeBuiltins)
+Add(IDockLayoutMigration migration) → DockLayoutMigrationRegistry
+DetectSchema(JsonNode root) → int
+TryUpgrade(JsonNode root, int fromVersion, int toVersion, ref JsonNode migrated, ref string failureReason) → bool
+
+### static class DockLayoutOps
+FindContainer(DockNode root, DockableContent pane) → DockNode
+InsertPaneAtTarget(DockNode root, DockableContent pane, DockTarget target) → DockNode
+InsertPaneAtTarget(DockNode root, DockableContent pane, DockTarget target, ref DockRoutingFallback fallback) → DockNode
+MovePaneToTarget(DockNode root, DockableContent pane, DockTarget target) → DockNode
+RemovePane(DockNode root, DockableContent pane) → ValueTuple<DockNode, bool>
+
+### static class DockLayoutSerializer
+Load(string json) → DockLayoutLoadResult
+Load(string json, DockLayoutMigrationRegistry migrations) → DockLayoutLoadResult
+Save(DockNode root, IReadOnlyList<ToolWindow> leftSide = null, IReadOnlyList<ToolWindow> topSide = null, IReadOnlyList<ToolWindow> rightSide = null, IReadOnlyList<ToolWindow> bottomSide = null, IReadOnlyList<FloatingDockWindow> floating = null, object activeKey = null) → string
+
+### record DockLayoutSnapshot
+new(DockNode Root, IReadOnlyList<ToolWindow> LeftSide, IReadOnlyList<ToolWindow> TopSide, IReadOnlyList<ToolWindow> RightSide, IReadOnlyList<ToolWindow> BottomSide, IReadOnlyList<FloatingDockWindow> Floating, DockableContent ActiveContent)
+DockNode Root { get; init; }
+DockableContent ActiveContent { get; init; }
+IReadOnlyList<FloatingDockWindow> Floating { get; init; }
+IReadOnlyList<ToolWindow> BottomSide { get; init; }
+IReadOnlyList<ToolWindow> LeftSide { get; init; }
+IReadOnlyList<ToolWindow> RightSide { get; init; }
+IReadOnlyList<ToolWindow> TopSide { get; init; }
+Deconstruct(ref DockNode Root, ref IReadOnlyList<ToolWindow> LeftSide, ref IReadOnlyList<ToolWindow> TopSide, ref IReadOnlyList<ToolWindow> RightSide, ref IReadOnlyList<ToolWindow> BottomSide, ref IReadOnlyList<FloatingDockWindow> Floating, ref DockableContent ActiveContent) → void
+Equals(DockLayoutSnapshot other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockManager
+new()
+Action OnDropTargetsDismissed { get; init; }
+Action OnSplitterDragCompleted { get; init; }
+Action<DockActiveContentChangedEventArgs> OnActiveContentChanged { get; init; }
+Action<DockContentDockedEventArgs> OnContentDocked { get; init; }
+Action<DockContentDockingEventArgs> OnContentDocking { get; init; }
+Action<DockContentFloatedEventArgs> OnContentFloated { get; init; }
+Action<DockContentFloatingEventArgs> OnContentFloating { get; init; }
+Action<DockDocumentClosedEventArgs> OnDocumentClosed { get; init; }
+Action<DockDocumentClosingEventArgs> OnDocumentClosing { get; init; }
+Action<DockFloatingWindowClosedEventArgs> OnFloatingWindowClosed { get; init; }
+Action<DockFloatingWindowCreatedEventArgs> OnFloatingWindowCreated { get; init; }
+Action<DockLayoutChangedEventArgs> OnLayoutChanged { get; init; }
+Action<DockLayoutChangingEventArgs> OnLayoutChanging { get; init; }
+Action<DockNode> OnLiveLayoutChanged { get; init; }
+Action<DockTarget> OnDropTargetConfirmed { get; init; }
+Action<DockTarget?> OnDropTargetHovered { get; init; }
+Action<DockToolWindowClosedEventArgs> OnToolWindowClosed { get; init; }
+Action<DockToolWindowClosingEventArgs> OnToolWindowClosing { get; init; }
+Action<DockToolWindowHiddenEventArgs> OnToolWindowHidden { get; init; }
+Action<DockToolWindowHidingEventArgs> OnToolWindowHiding { get; init; }
+Dictionary<string, double[]> SplitRatios { get; init; }
+DockNode Layout { get; init; }
+DockOperationLog OperationLog { get; init; }
+DockableContent ActiveDocument { get; init; }
+IDockAdapter Adapter { get; init; }
+IDockLayoutStrategy LayoutStrategy { get; init; }
+IReadOnlyList<DockableContent> BottomSide { get; init; }
+IReadOnlyList<DockableContent> LeftSide { get; init; }
+IReadOnlyList<DockableContent> RightSide { get; init; }
+IReadOnlyList<DockableContent> TopSide { get; init; }
+bool ShowDropTargets { get; init; }
+int LayoutSchemaVersion { get; init; }
+string PersistenceId { get; init; }
+Equals(DockManager other) → bool
+Equals(Element other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockNode
+Equals(DockNode other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockOperation
+new()
+DateTime TimestampUtc { get; init; }
+DockNode Layout { get; init; }
+DockOperationKind Kind { get; init; }
+DockTarget? Target { get; init; }
+IReadOnlyDictionary<string, double[]> Ratios { get; init; }
+string Description { get; init; }
+string LayoutJson { get; init; }
+string PaneKey { get; init; }
+Equals(DockOperation other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class DockOperationLog
+new()
+DockOperation Current { get; }
+IReadOnlyList<DockOperation> Operations { get; }
+bool EmitToDebug { get; set; }
+int Count { get; }
+int Cursor { get; }
+Append(DockOperation op) → void
+Record(DockOperationKind kind, string description, DockNode layout = null, IDictionary<string, double[]> ratios = null, string paneKey = null, DockTarget? target = null) → DockOperation
+Reset() → void
+Rewind() → DockOperation
+SeekTo(int index) → DockOperation
+StepForward() → DockOperation
+TruncateAfterCursor() → void
+
+### struct DockPaneInfo
+new(object Key, string Title, DockableContent Content)
+DockableContent Content { get; init; }
+object Key { get; init; }
+string Title { get; init; }
+Deconstruct(ref object Key, ref string Title, ref DockableContent Content) → void
+Equals(DockPaneInfo other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockRoutingFallback
+new(string Description)
+string Description { get; init; }
+Deconstruct(ref string Description) → void
+Equals(DockRoutingFallback other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class DockSideExtensions
+DockSide.ToFlag() → DockSides
+
+### record DockSnapshot
+new()
+DockSnapshotNode Root { get; init; }
+IReadOnlyList<DockSnapshotPane> BottomSide { get; init; }
+IReadOnlyList<DockSnapshotPane> LeftSide { get; init; }
+IReadOnlyList<DockSnapshotPane> RightSide { get; init; }
+IReadOnlyList<DockSnapshotPane> TopSide { get; init; }
+string ActiveKey { get; init; }
+string HostId { get; init; }
+Equals(DockSnapshot other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class DockSnapshotBuilder
+FromManager(DockManager manager) → DockSnapshot
+FromRecord(DockHostRecord record) → DockSnapshot
+
+### record DockSnapshotLeaf
+new(DockSnapshotPane Pane)
+DockSnapshotPane Pane { get; init; }
+string Kind { get; }
+Deconstruct(ref DockSnapshotPane Pane) → void
+Equals(DockSnapshotLeaf other) → bool
+Equals(DockSnapshotNode other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockSnapshotNode
+string Kind { get; }
+Equals(DockSnapshotNode other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockSnapshotPane
+new(string Key, string Title, string Role, bool CanClose, bool CanFloat, bool CanMove)
+bool CanClose { get; init; }
+bool CanFloat { get; init; }
+bool CanMove { get; init; }
+string Key { get; init; }
+string Role { get; init; }
+string Title { get; init; }
+Deconstruct(ref string Key, ref string Title, ref string Role, ref bool CanClose, ref bool CanFloat, ref bool CanMove) → void
+Equals(DockSnapshotPane other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockSnapshotSplit
+new(string Orientation, IReadOnlyList<DockSnapshotNode> Children)
+IReadOnlyList<DockSnapshotNode> Children { get; init; }
+string Kind { get; }
+string Orientation { get; init; }
+Deconstruct(ref string Orientation, ref IReadOnlyList<DockSnapshotNode> Children) → void
+Equals(DockSnapshotNode other) → bool
+Equals(DockSnapshotSplit other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockSnapshotTabGroup
+new(int SelectedIndex, IReadOnlyList<DockSnapshotPane> Documents)
+IReadOnlyList<DockSnapshotPane> Documents { get; init; }
+int SelectedIndex { get; init; }
+string Kind { get; }
+Deconstruct(ref int SelectedIndex, ref IReadOnlyList<DockSnapshotPane> Documents) → void
+Equals(DockSnapshotNode other) → bool
+Equals(DockSnapshotTabGroup other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockSplit
+new(Orientation Orientation, IReadOnlyList<DockNode> Children, double? Width = null, double? Height = null, double? MinWidth = null, double? MinHeight = null, double? MaxWidth = null, double? MaxHeight = null)
+IReadOnlyList<DockNode> Children { get; init; }
+Orientation Orientation { get; init; }
+double? Height { get; init; }
+double? MaxHeight { get; init; }
+double? MaxWidth { get; init; }
+double? MinHeight { get; init; }
+double? MinWidth { get; init; }
+double? Width { get; init; }
+Deconstruct(ref Orientation Orientation, ref IReadOnlyList<DockNode> Children, ref double? Width, ref double? Height, ref double? MinWidth, ref double? MinHeight, ref double? MaxWidth, ref double? MaxHeight) → void
+Equals(DockNode other) → bool
+Equals(DockSplit other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockTabGroup
+new(IReadOnlyList<DockableContent> Documents, TabPosition TabPosition = TabPosition.Top, bool CompactTabs = false, bool ShowWhenEmpty = false, int SelectedIndex = -1, double? Width = null, double? Height = null, TabChrome TabChrome = TabChrome.Win11, DockGroupRole Role = DockGroupRole.General)
+DockGroupRole Role { get; init; }
+IReadOnlyList<DockableContent> Documents { get; init; }
+TabChrome TabChrome { get; init; }
+TabPosition TabPosition { get; init; }
+bool CompactTabs { get; init; }
+bool ShowWhenEmpty { get; init; }
+double? Height { get; init; }
+double? Width { get; init; }
+int SelectedIndex { get; init; }
+Deconstruct(ref IReadOnlyList<DockableContent> Documents, ref TabPosition TabPosition, ref bool CompactTabs, ref bool ShowWhenEmpty, ref int SelectedIndex, ref double? Width, ref double? Height, ref TabChrome TabChrome, ref DockGroupRole Role) → void
+Equals(DockNode other) → bool
+Equals(DockTabGroup other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record DockTabGroupContext
+new(DockableContent DraggedSource)
+DockableContent DraggedSource { get; init; }
+Deconstruct(ref DockableContent DraggedSource) → void
+Equals(DockTabGroupContext other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class DockToolWindowClosedEventArgs
+DockableContent ToolWindow { get; init; }
+
+### class DockToolWindowClosingEventArgs
+DockableContent ToolWindow { get; init; }
+
+### class DockToolWindowHiddenEventArgs
+DockableContent ToolWindow { get; init; }
+
+### class DockToolWindowHidingEventArgs
+DockableContent ToolWindow { get; init; }
+
+### record DockableContent
+new(string Title, Element Content = null, object Key = null, bool CanClose = false, bool CanPin = false, double? Width = null, double? Height = null, string PersistenceState = null)
+Element Content { get; init; }
+bool CanClose { get; init; }
+bool CanFloat { get; init; }
+bool CanMove { get; init; }
+bool CanPin { get; init; }
+double? Height { get; init; }
+double? Width { get; init; }
+object Key { get; init; }
+string PersistenceState { get; init; }
+string Title { get; init; }
+Equals(DockNode other) → bool
+Equals(DockableContent other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class DockingNativeInterop
+Register(Reconciler reconciler) → void
+
+### static class DockingStrings
+Func<string, string> Resolver { get; set; }
+Get(string key) → string
+LiveAnnouncement(string key, string paneTitle) → string
+SidePinTooltip(string paneTitle) → string
+
+### record Document
+new()
+bool CanDockAsToolWindow { get; init; }
+Equals(DockableContent other) → bool
+Equals(Document other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record Document<TState>
+new()
+TState State { get; init; }
+Equals(Document other) → bool
+Equals(Document<TState> other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record FloatingDockWindow
+IReadOnlyList<DockableContent> Contents { get; init; }
+double Height { get; init; }
+double Width { get; init; }
+double X { get; init; }
+double Y { get; init; }
+object Id { get; init; }
+Equals(FloatingDockWindow other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class ForceGraphElement
+new()
+AlternateView(Element view) → ForceGraphElement
+Charge(double strength) → ForceGraphElement
+Description(string description) → ForceGraphElement
+Distance(double distance) → ForceGraphElement
+Height(double height) → ForceGraphElement
+Iterations(int count) → ForceGraphElement
+LinkColor(string color) → ForceGraphElement
+NodeColor(string color) → ForceGraphElement
+OnReady(Action<ForceGraphHandle> callback) → ForceGraphElement
+Title(string title) → ForceGraphElement
+ToElement() → Element
+Width(double width) → ForceGraphElement
+
+### class ForceGraphHandle
+Canvas Canvas { get; }
+Ellipse[] NodeEllipses { get; }
+ForceSimulation Simulation { get; }
+Line[] LinkLines { get; }
+TextBlock[] NodeLabels { get; }
+SyncPositions() → void
+
+### struct ForceLink
+new(int Source, int Target, double Strength = 1, double Distance = 50)
+double Distance { get; set; }
+double Strength { get; set; }
+int Source { get; set; }
+int Target { get; set; }
+Deconstruct(ref int Source, ref int Target, ref double Strength, ref double Distance) → void
+Equals(ForceLink other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class ForceNode
+new()
+double Radius { get; set; }
+double Vx { get; set; }
+double Vy { get; set; }
+double X { get; set; }
+double Y { get; set; }
+double? Fx { get; set; }
+double? Fy { get; set; }
+int Index { get; }
+object Data { get; set; }
+string Label { get; set; }
+
+### class ForceSimulation
+new()
+IReadOnlyList<ForceLink> Links { get; }
+IReadOnlyList<ForceNode> Nodes { get; }
+double Alpha { get; set; }
+double AlphaMin { get; set; }
+double AlphaTarget { get; set; }
+AlphaDecay(double decay) → ForceSimulation
+Center(double x, double y) → ForceSimulation
+CenterStrength(double strength) → ForceSimulation
+ChargeStrength(double strength) → ForceSimulation
+CollisionRadius(double radius) → ForceSimulation
+InitializePositions() → ForceSimulation
+LinkDistance(double distance) → ForceSimulation
+LinkStrength(double strength) → ForceSimulation
+Run(int iterations = 300) → ForceSimulation
+SetLinks(IEnumerable<ForceLink> links) → ForceSimulation
+SetNodes(IEnumerable<ForceNode> nodes) → ForceSimulation
+Tick() → void
+VelocityDecay(double decay) → ForceSimulation
+
+### class ForcedColorsTheme
+new()
+Color Background { get; init; }
+Color Foreground { get; init; }
+Color GrayText { get; init; }
+Color Highlight { get; init; }
+Color HighlightText { get; init; }
+Color Hotlight { get; init; }
+Color[] SeriesColors { get; init; }
+FromSystem() → ForcedColorsTheme
+
+### record HardenDiff
+new(int Index, D3Color Original, D3Color Adjusted, string Reason)
+D3Color Adjusted { get; init; }
+D3Color Original { get; init; }
+int Index { get; init; }
+string Reason { get; init; }
+Deconstruct(ref int Index, ref D3Color Original, ref D3Color Adjusted, ref string Reason) → void
+Equals(HardenDiff other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class HardenOptions
+new()
+D3Color? Background { get; init; }
+double MinBackgroundContrast { get; init; }
+double MinColorblindDeltaE { get; init; }
+double MinPairwiseContrast { get; init; }
+int MaxPasses { get; init; }
+
+### class HardenResult
+ChartPalette Palette { get; init; }
+IReadOnlyList<HardenDiff> Diffs { get; init; }
+bool PassedWithoutChanges { get; init; }
+
+### record HeaderContext
+new(FieldDescriptor Column, SortDirection? CurrentSort, Action ToggleSort, Action<double> Resize)
+Action ToggleSort { get; init; }
+Action<double> Resize { get; init; }
+FieldDescriptor Column { get; init; }
+SortDirection? CurrentSort { get; init; }
+Deconstruct(ref FieldDescriptor Column, ref SortDirection? CurrentSort, ref Action ToggleSort, ref Action<double> Resize) → void
+Equals(HeaderContext other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### interface ICurve
+LineEnd() → void
+LineStart() → void
+Point(double x, double y) → void
+
+### interface IDockAdapter
+GetFloatingWindowTitleBar(DockableContent draggedSource) → Element
+OnContentCreated(DockableContent content) → Element
+OnGroupCreated(DockTabGroupContext group) → void
+
+### interface IDockLayoutMigration
+int FromVersion { get; }
+int ToVersion { get; }
+Migrate(JsonNode root) → JsonNode
+
+### interface IDockLayoutStrategy
+AfterInsertDocument(DockHostModel model, Document document) → void
+AfterInsertToolWindow(DockHostModel model, ToolWindow toolWindow) → void
+BeforeInsertDocument(DockHostModel model, Document document) → bool
+BeforeInsertToolWindow(DockHostModel model, ToolWindow toolWindow) → bool
+
+### interface ISymbolType
+Draw(PathBuilder path, double size) → void
+
+### static class LineGenerator
+Create() → LineGenerator<ValueTuple<double, double>>
+Create<T>(Func<T, double> x, Func<T, double> y) → LineGenerator<T>
+FromArrays() → LineGenerator<double[]>
+
+### class LineGenerator<T>
+new(Func<T, int, double> x, Func<T, int, double> y)
+int? Digits { get; }
+Generate(IReadOnlyList<T> data) → string
+SetCurve(CurveFactory curve) → LineGenerator<T>
+SetDefined(Func<T, int, bool> defined) → LineGenerator<T>
+SetDigits(int? digits) → LineGenerator<T>
+SetX(Func<T, int, double> x) → LineGenerator<T>
+SetY(Func<T, int, double> y) → LineGenerator<T>
+
+### class LinearScale
+new()
+new(double[] domain, double[] range)
+bool Clamped { get; set; }
+double? Unknown { get; set; }
+double[] Domain { get; set; }
+double[] Range { get; set; }
+Copy() → LinearScale
+Invert(double y) → double
+Map(double x) → double
+Nice(int count = 10) → LinearScale
+SetClamp(bool clamp) → LinearScale
+SetDomain(double[] domain) → LinearScale
+SetRange(double[] range) → LinearScale
+SetUnknown(double? unknown) → LinearScale
+Ticks(int count = 10) → double[]
+
+### static class LinkGenerator
+Horizontal<TNode>(Func<TNode, double> x, Func<TNode, double> y) → LinkGenerator<ValueTuple<TNode, TNode>>
+Vertical<TNode>(Func<TNode, double> x, Func<TNode, double> y) → LinkGenerator<ValueTuple<TNode, TNode>>
+
+### class LinkGenerator<T>
+new(Func<T, ValueTuple<double, double>> source, Func<T, ValueTuple<double, double>> target, LinkOrientation orientation = LinkOrientation.Vertical)
+Generate(T datum) → string
+SetDigits(int? digits) → LinkGenerator<T>
+SetSource(Func<T, ValueTuple<double, double>> source) → LinkGenerator<T>
+SetTarget(Func<T, ValueTuple<double, double>> target) → LinkGenerator<T>
+
+### class LogScale
+new()
+new(double[] domain, double[] range)
+bool Clamped { get; set; }
+double Base { get; set; }
+double[] Domain { get; set; }
+double[] Range { get; set; }
+Copy() → LogScale
+Invert(double y) → double
+Map(double x) → double
+Nice() → LogScale
+SetBase(double b) → LogScale
+SetClamp(bool clamp) → LogScale
+SetDomain(double[] domain) → LogScale
+SetRange(double[] range) → LogScale
+Ticks(int count = 10) → double[]
+
+### struct MarkdownAttribute
+new(string text, MarkdownTextType[] substrTypes, int[] substrOffsets)
+Simple(string text) → MarkdownAttribute
+
+### record MarkdownLink
+RichTextBlockElement Label { get; init; }
+Uri Uri { get; init; }
+string Text { get; init; }
+Equals(MarkdownLink other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record MarkdownOptions
+new()
+Func<Element, Element> BlockQuote { get; init; }
+Func<Element, Element> ListItem { get; init; }
+Func<Element, Element> Paragraph { get; init; }
+Func<Element> ThematicBreak { get; init; }
+Func<Element[], Element> UnorderedList { get; init; }
+Func<Element[], MarkdownAlign[], Element> Table { get; init; }
+Func<MarkdownLink, Element> LinkBuilder { get; init; }
+Func<int, Element, Element> Heading { get; init; }
+Func<int, Element[], Element> OrderedList { get; init; }
+Func<string, Element> HtmlBlock { get; init; }
+Func<string, Uri, Element> Image { get; init; }
+Func<string, string, Element> CodeBlock { get; init; }
+MarkdownParserFlags ParserFlags { get; init; }
+MarkdownTextSelectionOptions TextSelection { get; init; }
+ThemeRef? TableHeaderBackground { get; init; }
+Thickness TableCellPadding { get; init; }
+bool UnifiedRichText { get; init; }
+int MaxInputBytes { get; init; }
+string CodeFontFamily { get; init; }
+Equals(MarkdownOptions other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class MarkdownTextSelection
+Scope(MarkdownTextSelectionOptions options, Element content) → Element
+Surface(string text, Element content, string separatorAfter = "\n") → Element
+Visibility(bool isVisible, Element content) → Element
+
+### record MarkdownTextSelectionOptions
+new()
+Action<string, bool> OnCopyResult { get; init; }
+Equals(MarkdownTextSelectionOptions other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class OrdinalScale
+Create() → OrdinalScale<string>
+Create<TDomain>(IEnumerable<TDomain> domain, double[] range) → OrdinalScale<TDomain>
+
+### class OrdinalScale<TDomain>
+new()
+new(IEnumerable<TDomain> domain, double[] range)
+TDomain[] Domain { get; set; }
+bool AllowImplicitGrowth { get; set; }
+double Unknown { get; set; }
+double[] Range { get; set; }
+Copy() → OrdinalScale<TDomain>
+Map(TDomain x) → double
+SetDomain(TDomain[] domain) → OrdinalScale<TDomain>
+SetRange(double[] range) → OrdinalScale<TDomain>
+SetUnknown(double unknown) → OrdinalScale<TDomain>
+
+### static class PackLayout
+Create<T>() → PackLayout<T>
+
+### class PackLayout<T>
+new()
+Layout(T root, Func<T, IEnumerable<T>> children, Func<T, double> value) → PackNode<T>
+SetPadding(double padding) → PackLayout<T>
+Size(double radius) → PackLayout<T>
+
+### class PackNode<T>
+List<PackNode<T>> Children { get; }
+PackNode<T> Parent { get; init; }
+PackNode<T> TopAncestor { get; }
+T Data { get; init; }
+double R { get; }
+double Value { get; }
+double X { get; }
+double Y { get; }
+int Depth { get; init; }
+Descendants() → IEnumerable<PackNode<T>>
+Leaves() → IEnumerable<PackNode<T>>
+
+### static class PartitionLayout
+Create<T>() → PartitionLayout<T>
+
+### class PartitionLayout<T>
+new()
+Layout(PartitionNode<T> root) → PartitionNode<T>
+Layout(T root, Func<T, IEnumerable<T>> children, Func<T, double> value) → PartitionNode<T>
+SetPadding(double p) → PartitionLayout<T>
+SetRound(bool round) → PartitionLayout<T>
+Size(double x1, double y1) → PartitionLayout<T>
+
+### class PartitionNode<T>
+List<PartitionNode<T>> Children { get; }
+PartitionNode<T> Parent { get; init; }
+PartitionNode<T> TopAncestor { get; }
+T Data { get; init; }
+double Height { get; }
+double Value { get; }
+double Width { get; }
+double X0 { get; }
+double X1 { get; }
+double Y0 { get; }
+double Y1 { get; }
+int Depth { get; init; }
+Ancestors() → IEnumerable<PartitionNode<T>>
+Descendants() → IEnumerable<PartitionNode<T>>
+Leaves() → IEnumerable<PartitionNode<T>>
+ToPolar(double totalWidth, double totalHeight, double maxRadius) → ValueTuple<double, double, double, double>
+
+### class PathBuilder
+new(int? digits = null)
+Arc(double x, double y, double r, double a0, double a1, bool ccw = false) → PathBuilder
+ArcTo(double x1, double y1, double x2, double y2, double r) → PathBuilder
+BezierCurveTo(double x1, double y1, double x2, double y2, double x, double y) → PathBuilder
+ClosePath() → PathBuilder
+Create() → PathBuilder
+CreateRound(int digits = 3) → PathBuilder
+LineTo(double x, double y) → PathBuilder
+MoveTo(double x, double y) → PathBuilder
+QuadraticCurveTo(double x1, double y1, double x, double y) → PathBuilder
+Rect(double x, double y, double w, double h) → PathBuilder
+ToString() → string
+
+### struct PieArc<T>
+new(T Data, double Value, int Index, double StartAngle, double EndAngle, double PadAngle)
+T Data { get; init; }
+double EndAngle { get; init; }
+double PadAngle { get; init; }
+double StartAngle { get; init; }
+double Value { get; init; }
+int Index { get; init; }
+Deconstruct(ref T Data, ref double Value, ref int Index, ref double StartAngle, ref double EndAngle, ref double PadAngle) → void
+Equals(PieArc<T> other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class PieChartElement<T>
+new()
+AlternateView(Element view) → PieChartElement<T>
+ChartBackground(Color background) → PieChartElement<T>
+ChartBackground(D3Color background) → PieChartElement<T>
+ChartBackground(string background) → PieChartElement<T>
+ColorOnly() → PieChartElement<T>
+DataLabel(Func<T, int, string> labeller) → PieChartElement<T>
+Description(string description) → PieChartElement<T>
+Height(double height) → PieChartElement<T>
+InnerRadius(double radius) → PieChartElement<T>
+LabelRadiusOffset(double offset) → PieChartElement<T>
+LabelView(Func<T, PieSliceLayout, Element> render, Func<T, string> name = null, bool interactive = false) → PieChartElement<T>
+OnReady(Action<PieChartHandle<T>> callback) → PieChartElement<T>
+PadAngle(double angle) → PieChartElement<T>
+Palette(ChartPalette palette) → PieChartElement<T>
+SeriesNames(string[] names) → PieChartElement<T>
+SetColors(D3Color[] colors) → PieChartElement<T>
+Title(string title) → PieChartElement<T>
+ToElement() → Element
+Width(double width) → PieChartElement<T>
+
+### class PieChartHandle<T>
+Canvas Canvas { get; }
+
+### static class PieGenerator
+Create() → PieGenerator<double>
+Create<T>(Func<T, double> value) → PieGenerator<T>
+Generate<T>(IReadOnlyList<T> data, Func<T, double> value, bool sort = true, double padAngle = 0) → PieArc<T>[]
+
+### class PieGenerator<T>
+new(Func<T, int, double> value)
+Generate(IReadOnlyList<T> data) → PieArc<T>[]
+SetEndAngle(double angle) → PieGenerator<T>
+SetPadAngle(double angle) → PieGenerator<T>
+SetSort(Comparison<T> sort) → PieGenerator<T>
+SetSortValues(Comparison<double> sortValues) → PieGenerator<T>
+SetStartAngle(double angle) → PieGenerator<T>
+SetValue(Func<T, int, double> value) → PieGenerator<T>
+
+### struct PieSliceLayout
+new(int Index, double Value, double Fraction, double CentroidX, double CentroidY, double StartAngle, double EndAngle, double InnerRadius, double OuterRadius, D3Color Color)
+D3Color Color { get; init; }
+double CentroidX { get; init; }
+double CentroidY { get; init; }
+double EndAngle { get; init; }
+double Fraction { get; init; }
+double InnerRadius { get; init; }
+double OuterRadius { get; init; }
+double StartAngle { get; init; }
+double Value { get; init; }
+int Index { get; init; }
+Deconstruct(ref int Index, ref double Value, ref double Fraction, ref double CentroidX, ref double CentroidY, ref double StartAngle, ref double EndAngle, ref double InnerRadius, ref double OuterRadius, ref D3Color Color) → void
+Equals(PieSliceLayout other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### static class PointScale
+Create() → PointScale<string>
+Create<TDomain>(TDomain[] domain) → PointScale<TDomain>
+
+### class PointScale<TDomain>
+new()
+TDomain[] Domain { get; set; }
+double Align { get; set; }
+double Padding { get; set; }
+double Step { get; }
+double[] Range { get; set; }
+Copy() → PointScale<TDomain>
+Map(TDomain x) → double
+SetAlign(double a) → PointScale<TDomain>
+SetDomain(TDomain[] domain) → PointScale<TDomain>
+SetPadding(double p) → PointScale<TDomain>
+SetRange(double[] range) → PointScale<TDomain>
+
+### class PowScale
+new()
+new(double exponent)
+bool Clamped { get; set; }
+double Exponent { get; set; }
+double[] Domain { get; set; }
+double[] Range { get; set; }
+Copy() → PowScale
+Invert(double y) → double
+Map(double x) → double
+Nice(int count = 10) → PowScale
+SetClamp(bool clamp) → PowScale
+SetDomain(double[] domain) → PowScale
+SetExponent(double exp) → PowScale
+SetRange(double[] range) → PowScale
+Sqrt() → PowScale
+Ticks(int count = 10) → double[]
+
+### class QuantileScale
+new()
+double[] Domain { get; set; }
+double[] Range { get; set; }
+Copy() → QuantileScale
+InvertExtent(double y) → ValueTuple<double, double>
+Map(double x) → double
+Quantiles() → double[]
+SetDomain(double[] domain) → QuantileScale
+SetRange(double[] range) → QuantileScale
+
+### class QuantizeScale
+new()
+double[] Domain { get; set; }
+double[] Range { get; set; }
+Copy() → QuantizeScale
+InvertExtent(double y) → ValueTuple<double, double>
+Map(double x) → double
+SetDomain(double x0, double x1) → QuantizeScale
+SetRange(double[] range) → QuantizeScale
+Thresholds() → double[]
+
+### static class RadialAreaGenerator
+Create<T>(Func<T, double> angle, Func<T, double> innerRadius, Func<T, double> outerRadius) → RadialAreaGenerator<T>
+
+### class RadialAreaGenerator<T>
+new(Func<T, int, double> angle, Func<T, int, double> innerRadius, Func<T, int, double> outerRadius)
+Generate(IReadOnlyList<T> data) → string
+SetAngle(Func<T, int, double> angle) → RadialAreaGenerator<T>
+SetDefined(Func<T, int, bool> defined) → RadialAreaGenerator<T>
+SetDigits(int? digits) → RadialAreaGenerator<T>
+SetEndAngle(Func<T, int, double> angle) → RadialAreaGenerator<T>
+SetInnerRadius(Func<T, int, double> r) → RadialAreaGenerator<T>
+SetOuterRadius(Func<T, int, double> r) → RadialAreaGenerator<T>
+SetStartAngle(Func<T, int, double> angle) → RadialAreaGenerator<T>
+
+### static class RadialLineGenerator
+Create() → RadialLineGenerator<ValueTuple<double, double>>
+Create<T>(Func<T, double> angle, Func<T, double> radius) → RadialLineGenerator<T>
+
+### class RadialLineGenerator<T>
+new(Func<T, int, double> angle, Func<T, int, double> radius)
+Generate(IReadOnlyList<T> data) → string
+SetAngle(Func<T, int, double> angle) → RadialLineGenerator<T>
+SetCurve(CurveFactory curve) → RadialLineGenerator<T>
+SetDefined(Func<T, int, bool> defined) → RadialLineGenerator<T>
+SetDigits(int? digits) → RadialLineGenerator<T>
+SetRadius(Func<T, int, double> radius) → RadialLineGenerator<T>
+
+### static class RadialLinkGenerator
+Create<TNode>(Func<TNode, double> angle, Func<TNode, double> radius) → RadialLinkGenerator<ValueTuple<TNode, TNode>>
+
+### class RadialLinkGenerator<T>
+new(Func<T, ValueTuple<double, double>> source, Func<T, ValueTuple<double, double>> target)
+Generate(T datum) → string
+SetDigits(int? digits) → RadialLinkGenerator<T>
+SetSource(Func<T, ValueTuple<double, double>> source) → RadialLinkGenerator<T>
+SetTarget(Func<T, ValueTuple<double, double>> target) → RadialLinkGenerator<T>
+
+### class RibbonGenerator
+new()
+Generate(ChordArc chord) → string
+SetDigits(int? digits) → RibbonGenerator
+SetRadius(double r) → RibbonGenerator
+
+### record RowContext<T>
+new(T Row, RowKey Key, int RowIndex, bool IsSelected, bool IsEditing, IReadOnlyList<Element> Cells)
+IReadOnlyList<Element> Cells { get; init; }
+RowKey Key { get; init; }
+T Row { get; init; }
+bool IsEditing { get; init; }
+bool IsSelected { get; init; }
+int RowIndex { get; init; }
+Deconstruct(ref T Row, ref RowKey Key, ref int RowIndex, ref bool IsSelected, ref bool IsEditing, ref IReadOnlyList<Element> Cells) → void
+Equals(RowContext<T> other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class SankeyGraph
+new()
+List<SankeyLink> Links { get; set; }
+List<SankeyNode> Nodes { get; set; }
+
+### class SankeyLayout
+new()
+Layout(SankeyGraph graph) → SankeyGraph
+LinkPath(SankeyLink link, int? digits = 3) → string
+SetAlign(SankeyNodeAlign align) → SankeyLayout
+SetIterations(int iterations) → SankeyLayout
+SetNodePadding(double padding) → SankeyLayout
+SetNodeWidth(double width) → SankeyLayout
+Size(double x1, double y1) → SankeyLayout
+
+### class SankeyLink
+SankeyNode Source { get; }
+SankeyNode Target { get; }
+double Value { get; set; }
+double Width { get; }
+double Y0 { get; }
+double Y1 { get; }
+string SourceId { get; init; }
+string TargetId { get; init; }
+
+### class SankeyNode
+List<SankeyLink> SourceLinks { get; }
+List<SankeyLink> TargetLinks { get; }
+double Value { get; }
+double X0 { get; }
+double X1 { get; }
+double Y0 { get; }
+double Y1 { get; }
+int Depth { get; }
+int Height { get; }
+string Id { get; init; }
+string Label { get; set; }
+
+### static class StackGenerator
+Create<T>() → StackGenerator<T>
+
+### class StackGenerator<T>
+new()
+Generate(IReadOnlyList<T> data) → StackSeries[]
+SetKeys(string[] keys) → StackGenerator<T>
+SetValue(Func<T, string, double> value) → StackGenerator<T>
+
+### struct StackPoint
+new(double Y0, double Y1)
+double Y0 { get; set; }
+double Y1 { get; set; }
+Deconstruct(ref double Y0, ref double Y1) → void
+Equals(StackPoint other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class StackSeries
+StackPoint[] Points { get; set; }
+string Key { get; init; }
+
+### static class Stratify
+Create<T>() → Stratify<T>
+
+### class Stratify<T>
+new()
+Build(IEnumerable<T> data) → TreeNode<T>
+BuildPartition(IEnumerable<T> data, Func<T, double> value) → PartitionNode<T>
+BuildTreemap(IEnumerable<T> data, Func<T, double> value) → TreemapNode<T>
+SetId(Func<T, string> id) → Stratify<T>
+SetParentId(Func<T, string> parentId) → Stratify<T>
+
+### static class SymbolGenerator
+Create() → SymbolGenerator<object>
+Create<T>(ISymbolType type, double size = 64) → SymbolGenerator<T>
+
+### class SymbolGenerator<T>
+new(Func<T, int, ISymbolType> type, Func<T, int, double> size)
+Generate(T datum, int index = 0) → string
+SetDigits(int? digits) → SymbolGenerator<T>
+SetSize(Func<T, int, double> size) → SymbolGenerator<T>
+SetSize(double size) → SymbolGenerator<T>
+SetType(Func<T, int, ISymbolType> type) → SymbolGenerator<T>
+SetType(ISymbolType type) → SymbolGenerator<T>
+
+### class ThresholdScale
+new()
+double[] Domain { get; set; }
+double[] Range { get; set; }
+Copy() → ThresholdScale
+InvertExtent(double y) → ValueTuple<double, double>
+Map(double x) → double
+SetDomain(double[] domain) → ThresholdScale
+SetRange(double[] range) → ThresholdScale
+
+### record ToolWindow
+new()
+DockSides AllowedSides { get; init; }
+bool CanAutoHide { get; init; }
+bool CanDockAsDocument { get; init; }
+bool CanHide { get; init; }
+Equals(DockableContent other) → bool
+Equals(ToolWindow other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class TreeChartElement<T>
+new()
+AlternateView(Element view) → TreeChartElement<T>
+Description(string description) → TreeChartElement<T>
+Height(double height) → TreeChartElement<T>
+LinkColor(string color) → TreeChartElement<T>
+NodeColor(string color) → TreeChartElement<T>
+NodeRadius(double radius) → TreeChartElement<T>
+OnReady(Action<TreeChartHandle> callback) → TreeChartElement<T>
+Title(string title) → TreeChartElement<T>
+ToElement() → Element
+Width(double width) → TreeChartElement<T>
+
+### class TreeChartHandle
+Canvas Canvas { get; }
+
+### static class TreeLayout
+Create<T>() → TreeLayout<T>
+
+### class TreeLayout<T>
+new()
+Hierarchy(T root, Func<T, IEnumerable<T>> childrenAccessor) → TreeNode<T>
+Layout(TreeNode<T> root) → TreeNode<T>
+Separation(double sep) → TreeLayout<T>
+Size(double width, double height) → TreeLayout<T>
+
+### class TreeNode<T>
+new(T data)
+List<TreeNode<T>> Children { get; }
+T Data { get; }
+TreeNode<T> Parent { get; }
+TreeNode<T> TopAncestor { get; }
+double X { get; }
+double Y { get; }
+int Depth { get; }
+Descendants() → IEnumerable<TreeNode<T>>
+
+### static class TreemapLayout
+Create<T>() → TreemapLayout<T>
+
+### class TreemapLayout<T>
+new()
+Hierarchy(T root, Func<T, IEnumerable<T>> children, Func<T, double> value) → TreemapNode<T>
+Layout(TreemapNode<T> root) → TreemapNode<T>
+SetPadding(double p) → TreemapLayout<T>
+SetPaddingInner(double p) → TreemapLayout<T>
+SetPaddingOuter(double p) → TreemapLayout<T>
+SetTiling(TreemapTiling tiling) → TreemapLayout<T>
+Size(double x1, double y1) → TreemapLayout<T>
+
+### class TreemapNode<T>
+List<TreemapNode<T>> Children { get; }
+T Data { get; init; }
+TreemapNode<T> Parent { get; init; }
+TreemapNode<T> TopAncestor { get; }
+double Height { get; }
+double Value { get; }
+double Width { get; }
+double X0 { get; }
+double X1 { get; }
+double Y0 { get; }
+double Y1 { get; }
+int Depth { get; init; }
+Descendants() → IEnumerable<TreemapNode<T>>
+Leaves() → IEnumerable<TreemapNode<T>>
+
+### static class TypedColumns
+CheckBoxColumn<T>(string name, Func<T, object> accessor, string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+ColorColumn<T>(string name, Func<T, object> accessor, string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+ComboBoxColumn<T, TValue>(string name, Func<T, object> accessor, IReadOnlyList<TValue> choices, string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+DateColumn<T>(string name, Func<T, object> accessor, string format = "d", string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+HyperlinkColumn<T>(string name, Func<T, object> accessor, string displayTextFormat = null, string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+NumberColumn<T>(string name, Func<T, object> accessor, double? min = null, double? max = null, double smallChange = 1, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+TimeColumn<T>(string name, Func<T, object> accessor, string format = "t", string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+ToggleSwitchColumn<T>(string name, Func<T, object> accessor, string onContent = null, string offContent = null, string displayName = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+
+### class Voronoi
+ValueTuple<double, double>[] Circumcenters { get; }
+CellPolygon(int index) → ValueTuple<double, double>[]
+Contains(int index, double x, double y) → bool
+
+### record Win2DAnimatedCanvasElement
+Action<CanvasAnimatedControl>[] Setters { get; init; }
+Action<CanvasAnimatedUpdateEventArgs, object> OnUpdate { get; init; }
+Action<CanvasDrawingSession, CanvasAnimatedDrawEventArgs, object> OnDraw { get; init; }
+Color ClearColor { get; init; }
+Func<CanvasAnimatedControl, Task> OnCreateResources { get; init; }
+TimeSpan TargetElapsedTime { get; init; }
+bool IsPaused { get; init; }
+bool UseSharedDevice { get; init; }
+object DrawState { get; init; }
+Equals(Element other) → bool
+Equals(Win2DAnimatedCanvasElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class Win2DAnimatedCanvasHandler
+new()
+Mount(MountContext ctx, Win2DAnimatedCanvasElement el) → CanvasAnimatedControl
+Unmount(UnmountContext ctx, CanvasAnimatedControl ctrl) → void
+Update(UpdateContext ctx, Win2DAnimatedCanvasElement oldEl, Win2DAnimatedCanvasElement newEl, CanvasAnimatedControl ctrl) → void
+
+### record Win2DCanvasElement
+Action<CanvasControl>[] Setters { get; init; }
+Action<CanvasDrawingSession, CanvasDrawEventArgs> OnDraw { get; init; }
+Color ClearColor { get; init; }
+Func<CanvasControl, Task> OnCreateResources { get; init; }
+bool UseSharedDevice { get; init; }
+object RedrawKey { get; init; }
+Equals(Element other) → bool
+Equals(Win2DCanvasElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class Win2DCanvasHandler
+new()
+Mount(MountContext ctx, Win2DCanvasElement el) → CanvasControl
+Unmount(UnmountContext ctx, CanvasControl ctrl) → void
+Update(UpdateContext ctx, Win2DCanvasElement oldEl, Win2DCanvasElement newEl, CanvasControl ctrl) → void
+
+### record Win2DVirtualCanvasElement
+Action<CanvasDrawingSession, Rect> OnRegionDraw { get; init; }
+Action<CanvasVirtualControl>[] Setters { get; init; }
+Func<CanvasVirtualControl, Task> OnCreateResources { get; init; }
+IReadOnlyList<Rect> InvalidateRegions { get; init; }
+Size ContentSize { get; init; }
+bool UseSharedDevice { get; init; }
+Equals(Element other) → bool
+Equals(Win2DVirtualCanvasElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### class Win2DVirtualCanvasHandler
+new()
+Mount(MountContext ctx, Win2DVirtualCanvasElement el) → CanvasVirtualControl
+Unmount(UnmountContext ctx, CanvasVirtualControl ctrl) → void
+Update(UpdateContext ctx, Win2DVirtualCanvasElement oldEl, Win2DVirtualCanvasElement newEl, CanvasVirtualControl ctrl) → void
 

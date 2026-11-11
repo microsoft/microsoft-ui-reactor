@@ -456,13 +456,50 @@ public sealed partial class Reconciler : IDisposable
     // recursive mounts and nested passes just count.
     private int _entryDepth;
 
-    private EntryFrame EnterFrame()
+    private EntryFrame EnterFrame(string perfEntry, Element? element)
     {
         var scope = _entryDepth == 0 ? RenderErrorDispatch.EnterPropagationScope() : default;
+        bool perfSpan = false;
         if (_entryDepth == 0)
+        {
             _passId++;
+            // The perf Reconcile span covers each outermost entry: a host pass's reconcile, and
+            // a row an ItemsRepeater / ListView realizes or updates during layout, which runs
+            // outside any host pass. Stopped in EntryFrame.Dispose, after the whole entry.
+            if (Diagnostics.ReactorPerfTrace.PassEnabled)
+            {
+                Diagnostics.ReactorPerfTrace.ReconcileStart(perfEntry,
+                    element is null ? "null" : Diagnostics.ComponentNames.For(element.GetType()));
+                perfSpan = true;
+                // Tally this entry's panel child edits for the Reconcile Stop.
+                _perfEdits = default;
+                _perfTally = true;
+            }
+        }
         _entryDepth++;
-        return new EntryFrame(this, scope);
+        return new EntryFrame(this, scope, perfSpan);
+    }
+
+    // The panel child edits made during the open perf Reconcile span (all containers, every
+    // depth), written on its Stop. _perfTally is true only while that span is open, so with
+    // no session listening ReconcileChildrenTraced reads one bool and counts nothing.
+    private bool _perfTally;
+    private PerfEdits _perfEdits;
+
+    // Test-only: the tally must be closed between entries, or every child reconcile pays for it.
+    internal bool PerfTallyOpenForTests => _perfTally;
+
+    private struct PerfEdits
+    {
+        public uint Inserted, Removed, Moved, Replaced;
+
+        public void Add(PanelChildCollection collection)
+        {
+            Inserted += collection.InsertCount;
+            Removed += collection.RemoveCount;
+            Moved += collection.MoveCount;
+            Replaced += collection.ReplaceCount;
+        }
     }
 
     // Identifies the outermost Reconcile/Mount pass in flight (advanced on entry at depth
@@ -472,12 +509,18 @@ public sealed partial class Reconciler : IDisposable
     // so the host's ActualTheme still shows the previous theme at that point.
     private long _passId;
 
-    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope) : IDisposable
+    private readonly struct EntryFrame(Reconciler owner, RenderErrorDispatch.PropagationScope scope, bool perfSpan) : IDisposable
     {
         public void Dispose()
         {
             scope.Dispose();
             owner._entryDepth--;
+            if (perfSpan)
+            {
+                owner._perfTally = false;
+                var edits = owner._perfEdits;
+                Diagnostics.ReactorPerfTrace.ReconcileStop(edits.Inserted, edits.Removed, edits.Moved, edits.Replaced);
+            }
         }
     }
 
@@ -1406,6 +1449,9 @@ public sealed partial class Reconciler : IDisposable
     public Reconciler(ILogger? logger = null)
     {
         _logger = logger;
+        // Registered before the first render, so a perf session already running (or started
+        // later, e.g. by `winapp perf`) enables the provider. Once per process.
+        Diagnostics.ReactorPerfTrace.EnsureRegistered();
         // Spec 048 §3.4 — no more bootstrap. Built-in handlers register
         // themselves lazily on first factory call (per-control Reg<>/
         // RegDecorator<> cctor latch in `Dsl.cs`), or callers register
@@ -3229,7 +3275,7 @@ public sealed partial class Reconciler : IDisposable
     {
         // A top-level pass is an outermost Reactor frame for render-error propagation
         // (issue #1291); see EnterFrame. Nested passes and mounts just count.
-        using var entryFrame = EnterFrame();
+        using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Reconcile, newElement);
         // Declared before the reconcile work so it is disposed after it: validation changes raised by mount,
         // update, or unmount are announced only once the whole pass has finished.
         using var validationScope = Controls.Validation.ValidationRenderScope.BeginReconcile();
@@ -3394,6 +3440,32 @@ public sealed partial class Reconciler : IDisposable
     internal int ReconcileTraceDepthForTests => _reconcileTraceDepth;
 
     /// <summary>
+    /// Starts the <c>Microsoft-UI-Reactor-Perf</c> ComponentRender span for a component node
+    /// when its keyword is on (an inactive span otherwise). Disposed at the end of the mount or
+    /// update, so the span covers Render(), the effects flush and the subtree's reconcile — the
+    /// component's inclusive cost, including the WinUI controls its subtree creates.
+    /// </summary>
+    private static Diagnostics.ReactorPerfTrace.ComponentSpan BeginPerfComponentSpan(
+        ComponentNode node, Element element, string reason)
+    {
+        if (!Diagnostics.ReactorPerfTrace.ComponentEnabled) return default;
+        return Diagnostics.ReactorPerfTrace.ComponentSpan.Begin(
+            (ulong)node.EnsureDiagnosticId(), PerfComponentName(node, element), reason, element.CallSite);
+    }
+
+    /// <summary>
+    /// A component node's name on the <c>Microsoft-UI-Reactor-Perf</c> spans: a class
+    /// component's type name, or a function / memo component's render-function name
+    /// (<see cref="Diagnostics.ComponentNames.ForRenderFunction(Element)"/>). The latter reads
+    /// <c>Delegate.Method</c>, so it is resolved on the component's first traced render and
+    /// kept for its lifetime, like its componentId.
+    /// </summary>
+    internal static string PerfComponentName(ComponentNode node, Element? element)
+        => node.Component is null && element is FuncElement or MemoElement
+            ? node.PerfName ??= Diagnostics.ComponentNames.ForRenderFunction(element)
+            : Diagnostics.ComponentNames.For(node.Component, element);
+
+    /// <summary>
     /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
     /// the id → wrapper registry current. Only called when the event is enabled. A null
     /// <paramref name="wrapper"/> reports the render without touching the registry
@@ -3403,8 +3475,7 @@ public sealed partial class Reconciler : IDisposable
     private static void EmitComponentRendered(
         ComponentNode node, UIElement? wrapper, Element element, string reason, long startTimestamp)
     {
-        long id = node.DiagnosticId;
-        if (id == 0) node.DiagnosticId = id = Diagnostics.ComponentRenderTrace.NextId();
+        long id = node.EnsureDiagnosticId();
         // Rechecks the live gate: the decision to trace was made before Render() ran, and a
         // listener can dispose itself from an earlier event's callback (for instance a
         // hot-reload hook-order retry's aborted attempt). Nothing is mapped while it is off.
@@ -3682,11 +3753,12 @@ public sealed partial class Reconciler : IDisposable
                     : Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
             else if (newEl is FuncElement
-                && (traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
+                && ((traceEnabled = Diagnostics.ComponentRenderTrace.IsEnabled).Value
+                    || Diagnostics.ReactorPerfTrace.ComponentEnabled)
                 && HasConsumedContextChanged(node))
             {
                 // No gate can skip a function component, so this only refines the
-                // ComponentRendered reason (and is only computed while it is traced).
+                // reported reason (and is only computed while a render event is traced).
                 memoReason = Diagnostics.ComponentRenderTrace.Reasons.Context;
             }
 
@@ -3716,6 +3788,12 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // ── Render the component ──
+        // Perf span: Render(), effects and the subtree reconcile below (closes on every exit).
+        using var perfSpan = Diagnostics.ReactorPerfTrace.ComponentEnabled
+            ? BeginPerfComponentSpan(node, newEl, Diagnostics.ComponentRenderTrace.ClassifyUpdate(
+                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason))
+            : default;
+
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
         var componentRerender = CreateComponentRerender(node, requestRerender);
@@ -3941,7 +4019,7 @@ public sealed partial class Reconciler : IDisposable
                 uiDq.TryEnqueue(() =>
                 {
                     node.SelfTriggered = true;
-                    InvokeRerenderTracked(requestRerender);
+                    InvokeRerenderTracked(requestRerender, node);
                 });
                 return;
             }
@@ -3949,14 +4027,16 @@ public sealed partial class Reconciler : IDisposable
             // Either we're on the UI thread, or no UI DQ has been captured
             // (test/headless host) — run inline.
             node.SelfTriggered = true;
-            InvokeRerenderTracked(requestRerender);
+            InvokeRerenderTracked(requestRerender, node);
         };
     }
 
-    private static void InvokeRerenderTracked(Action requestRerender)
+    private static void InvokeRerenderTracked(Action requestRerender, ComponentNode requester)
     {
         t_rerenderDepth++;
-        try { requestRerender(); }
+        // The perf RenderPass names the component that asked: the innermost wrapper claims the
+        // thread before the request climbs through its ancestors' wrappers to the host.
+        try { Diagnostics.RenderPassRequests.InvokeAs(requester, requestRerender); }
         finally { t_rerenderDepth--; }
     }
 
@@ -4027,20 +4107,7 @@ public sealed partial class Reconciler : IDisposable
     private void ReconcileChildren(
         Element[] oldChildren, Element[] newChildren,
         WinUI.Panel panel, Action requestRerender)
-    {
-        var childCollection = new PanelChildCollection(panel);
-        // Skip the try/finally and event emit when the Reconcile keyword is off.
-        if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Informational,
-                Diagnostics.ReactorEventSource.Keywords.Reconcile))
-        {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel);
-            return;
-        }
-        Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel); }
-        finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
-    }
+        => ReconcileChildrenTraced(oldChildren, newChildren, new PanelChildCollection(panel), requestRerender, panel);
 
     // Spec 047 §14 — keyed-reconcile entrypoint for the V1 descriptor Panel<>
     // strategy. The descriptor resolves the live collection as a
@@ -4052,18 +4119,47 @@ public sealed partial class Reconciler : IDisposable
         Element[] oldChildren, Element[] newChildren,
         UIElementCollection collection, Action requestRerender,
         UIElement? parentControl = null)
+        => ReconcileChildrenTraced(oldChildren, newChildren, new PanelChildCollection(collection), requestRerender, parentControl);
+
+    private void ReconcileChildrenTraced(
+        Element[] oldChildren, Element[] newChildren,
+        PanelChildCollection childCollection, Action requestRerender, UIElement? parentControl)
     {
-        var childCollection = new PanelChildCollection(collection);
-        if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Informational,
-                Diagnostics.ReactorEventSource.Keywords.Reconcile))
+        // Skip the try/finally and event emits when neither provider wants the span.
+        bool traceSource = Diagnostics.ReactorEventSource.Log.IsEnabled(
+            global::System.Diagnostics.Tracing.EventLevel.Informational,
+            Diagnostics.ReactorEventSource.Keywords.Reconcile);
+        bool tracePerf = Diagnostics.ReactorPerfTrace.ChildrenEnabled;
+        if (!traceSource && !tracePerf)
         {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
+            if (!_perfTally)
+            {
+                ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
+                return;
+            }
+            // Only the enclosing Reconcile span's edit tally wants this container's counts.
+            try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
+            finally { _perfEdits.Add(childCollection); }
             return;
         }
-        Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
+        if (traceSource)
+            Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
+        if (tracePerf)
+            Diagnostics.ReactorPerfTrace.ChildReconcileStart((uint)oldChildren.Length, (uint)newChildren.Length);
         try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
-        finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
+        finally
+        {
+            if (traceSource)
+                Diagnostics.ReactorEventSource.Log.ChildReconcileStop();
+            // The counts are this container's own collection edits; a nested container's edits
+            // are reported by its own (nested) span.
+            if (tracePerf)
+                Diagnostics.ReactorPerfTrace.ChildReconcileStop(
+                    childCollection.InsertCount, childCollection.RemoveCount,
+                    childCollection.MoveCount, childCollection.ReplaceCount);
+            if (_perfTally)
+                _perfEdits.Add(childCollection);
+        }
     }
 
     /// <summary>
@@ -5700,6 +5796,9 @@ public sealed partial class Reconciler : IDisposable
                 {
                     WinUI.Control c => c.BorderBrush,
                     WinUI.Border b => b.BorderBrush,
+                    WinUI.Grid g => g.BorderBrush,
+                    WinUI.StackPanel s => s.BorderBrush,
+                    WinUI.RelativePanel r => r.BorderBrush,
                     _ => null,
                 };
             }
@@ -5851,6 +5950,9 @@ public sealed partial class Reconciler : IDisposable
             {
                 if (fe is WinUI.Control c) c.BorderBrush = bb;
                 else if (fe is WinUI.Border b) b.BorderBrush = bb;
+                else if (fe is WinUI.Grid g) g.BorderBrush = bb;
+                else if (fe is WinUI.StackPanel s) s.BorderBrush = bb;
+                else if (fe is WinUI.RelativePanel r) r.BorderBrush = bb;
             }
         }
     }
@@ -6482,16 +6584,22 @@ public sealed partial class Reconciler : IDisposable
             else if (fe is WinUI.RelativePanel crRelative) crRelative.ClearValue(WinUI.RelativePanel.CornerRadiusProperty);
         }
 
-        // BorderBrush / BorderThickness (on Control and Border)
+        // BorderBrush / BorderThickness (Control, Border, and concrete panels)
         if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.BorderBrush = m.BorderBrush;
             else if (fe is WinUI.Border bbBdr) bbBdr.BorderBrush = m.BorderBrush;
+            else if (fe is WinUI.Grid bbGrid) bbGrid.BorderBrush = m.BorderBrush;
+            else if (fe is WinUI.StackPanel bbStack) bbStack.BorderBrush = m.BorderBrush;
+            else if (fe is WinUI.RelativePanel bbRelative) bbRelative.BorderBrush = m.BorderBrush;
         }
         else if (m.BorderBrush is null && oldM?.BorderBrush is not null)
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.ClearValue(WinUI.Control.BorderBrushProperty);
             else if (fe is WinUI.Border bbBdr) bbBdr.ClearValue(WinUI.Border.BorderBrushProperty);
+            else if (fe is WinUI.Grid bbGrid) bbGrid.ClearValue(WinUI.Grid.BorderBrushProperty);
+            else if (fe is WinUI.StackPanel bbStack) bbStack.ClearValue(WinUI.StackPanel.BorderBrushProperty);
+            else if (fe is WinUI.RelativePanel bbRelative) bbRelative.ClearValue(WinUI.RelativePanel.BorderBrushProperty);
         }
         // Apply physical border thickness, then overlay logical (BiDi-aware) inline border
         var resolvedBorder = m.BorderThickness;
@@ -6500,7 +6608,15 @@ public sealed partial class Reconciler : IDisposable
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
             // Same base rule as Margin/Padding: the previous render's physical thickness, not
             // the live control value, which already carries the last render's inline overlay.
-            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? (fe is WinUI.Control bc ? bc.BorderThickness : fe is WinUI.Border bb ? bb.BorderThickness : new Thickness());
+            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? (fe switch
+            {
+                WinUI.Control c => c.BorderThickness,
+                WinUI.Border b => b.BorderThickness,
+                WinUI.Grid g => g.BorderThickness,
+                WinUI.StackPanel s => s.BorderThickness,
+                WinUI.RelativePanel r => r.BorderThickness,
+                _ => new Thickness(),
+            });
             var inlineStartThickness = m.BorderInlineStart.Value;
             if (isRtl)
                 resolvedBorder = new Thickness(baseBorder.Left, baseBorder.Top, inlineStartThickness.Left, baseBorder.Bottom);
@@ -6514,11 +6630,17 @@ public sealed partial class Reconciler : IDisposable
         {
             if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = resolvedBorder.Value;
             else if (fe is WinUI.Border btBdr) btBdr.BorderThickness = resolvedBorder.Value;
+            else if (fe is WinUI.Grid btGrid) btGrid.BorderThickness = resolvedBorder.Value;
+            else if (fe is WinUI.StackPanel btStack) btStack.BorderThickness = resolvedBorder.Value;
+            else if (fe is WinUI.RelativePanel btRelative) btRelative.BorderThickness = resolvedBorder.Value;
         }
         else if (!resolvedBorder.HasValue && (oldM?.BorderThickness.HasValue == true || oldM?.BorderInlineStart.HasValue == true))
         {
             if (fe is WinUI.Control btCtrl) btCtrl.ClearValue(WinUI.Control.BorderThicknessProperty);
             else if (fe is WinUI.Border btBdr) btBdr.ClearValue(WinUI.Border.BorderThicknessProperty);
+            else if (fe is WinUI.Grid btGrid) btGrid.ClearValue(WinUI.Grid.BorderThicknessProperty);
+            else if (fe is WinUI.StackPanel btStack) btStack.ClearValue(WinUI.StackPanel.BorderThicknessProperty);
+            else if (fe is WinUI.RelativePanel btRelative) btRelative.ClearValue(WinUI.RelativePanel.BorderThicknessProperty);
         }
 
         // Background (Panel, Control, or Border)
@@ -7644,6 +7766,7 @@ public sealed partial class Reconciler : IDisposable
         WinUI.Border => "Border",
         WinUI.StackPanel => "StackPanel",
         WinUI.Grid => "Grid",
+        WinUI.RelativePanel => "RelativePanel",
         WinUI.Button => "Button",
         WinUI.TextBox => "TextBox",
         TextBlock => "TextBlock",
@@ -7659,7 +7782,8 @@ public sealed partial class Reconciler : IDisposable
             return "Background";
         if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock))
             return "Foreground";
-        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border))
+        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
+            || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
             return "BorderBrush";
         return null;
     }
@@ -7999,10 +8123,22 @@ public sealed partial class Reconciler : IDisposable
         private volatile bool _selfTriggered;
         public bool SelfTriggered { get => _selfTriggered; set => _selfTriggered = value; }
         /// <summary>
-        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c>;
-        /// 0 until the node first renders while that event is enabled.
+        /// <c>componentId</c> of this node in <c>ReactorEventSource.ComponentRendered</c> and the
+        /// <c>Microsoft-UI-Reactor-Perf</c> events; 0 until first assigned
+        /// (<see cref="EnsureDiagnosticId"/>). Lives on the node's <see cref="RenderContext"/>,
+        /// so a state change the component makes reports the same id.
         /// </summary>
-        public long DiagnosticId { get; set; }
+        public long DiagnosticId => (Component?.Context ?? Context)?.DiagnosticId ?? 0;
+
+        /// <summary><see cref="DiagnosticId"/>, assigning it on first use.</summary>
+        public long EnsureDiagnosticId()
+            => (Component?.Context ?? Context)?.EnsureDiagnosticId() ?? 0;
+
+        /// <summary>
+        /// A function or memo component's name on the perf spans, resolved on its first traced
+        /// render (see <see cref="PerfComponentName"/>); null until then and for class components.
+        /// </summary>
+        public string? PerfName { get; set; }
     }
 
     /// <summary>

@@ -28,11 +28,60 @@ Conventions for contributors:
 
 ### Added
 
+- Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
+  `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
+  A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
+  (`0902a96c-4e92-5b91-4d2b-5a8058055c78`), writes a `RenderPass` span per host render pass,
+  an inclusive `ComponentRender` span per component render (mount, update, the host root, and
+  rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
+  spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
+  setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
+  check. Schema: `docs/reference/perf-trace-events.md` (issue #1484).
+
+- `Microsoft-UI-Reactor-Perf` schema revision 2, with fields appended so decoders for the first
+  revision keep working (event versions stay 0). `RenderPass` Start names the component whose
+  re-render request scheduled the pass (`requesterId`, `requesterName`, `requestCount`), with
+  no need for the verbose `State` keyword. `ComponentRender` Start carries the C# call site that
+  created the component from the source map (`callSiteFile` (the file name only),
+  `callSiteLine`, `callSiteColumn`). `Reconcile` Stop counts the panel child edits made during
+  the entry at the default level (`inserted`, `removed`, `moved`, `replaced`). Function and memo
+  components are named by their render function, as DevTools names them
+  (`RenderEachTime in MainPage.Render`), instead of all reporting `FuncElement` / `MemoElement`
+  (issue #1489).
+
+- `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
+  before the title bar's title, using the same child lifecycle as `RightHeader`
+  (issue #1478).
+
+- Opt-in message-wide Markdown text selection in Reactor Advanced:
+  `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
+  and composable `Visibility` gates coordinate separately rendered Markdown leaves,
+  lists, code and tables. Includes grapheme-aware caret movement, modern ScrollView /
+  ItemsView scrolling, UIA TextPattern ranges and feedback-only `OnCopyResult` after
+  Reactor's single clipboard write (openclaw/openclaw-windows-node#1844).
+
 - `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
 
 ### Changed
+
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
+- `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
+  now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
+  may need to use the corresponding fluent modifiers instead. The same writes on
+  `RelativePanel` now report `REACTOR_MOD_002` (Info), since it is not pooled
+  (issue #1039).
+
+- The generated API index now includes Reactor Advanced factories, modifiers, hooks,
+  enums and public types alongside the core Reactor surface, keeping `mur --api` and
+  both shipped agent-reference copies complete (PR #1475).
 
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
@@ -52,6 +101,34 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
+  `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids
+  and stack panels release their border values before reuse. The Regedit example
+  uses the supported fluent modifiers (issue #1039).
+
+- Unkeyed Markdown selection scopes clear their selection and caret when a
+  wholesale content replacement retains no surface text or prefix/suffix text,
+  rather than carrying selection into an unrelated message; streaming edits keep
+  their existing remapping behavior (PR #1475).
+
+- Pooled controls release `HorizontalContentAlignment` and `VerticalContentAlignment`
+  on return, preventing content alignment from leaking into the next element that
+  reuses the control ([issue #1013](https://github.com/microsoft/microsoft-ui-reactor/issues/1013)).
+
+- `UseInfiniteResource` and `UseDataSource` isolate cached pages by the hook's initial
+  page size. Hooks with different sizes no longer reuse incompatible pages, while
+  hooks with matching sizes and query dependencies can still share them
+  (spec 020 §7.2–7.3; #1452, case 3).
+- `UseDataSource` retains its initial normalized page size across rerenders and
+  query restarts, keeping requests and cursor offsets aligned with resource row
+  positions. To use a different size, remount the calling component by changing
+  its key from the parent (part of #1452, case 2).
+- `DataGrid` under `ReactorFeatureFlags.UseHookBasedPaging` now keeps its mount-time page
+  size, matching the legacy paging path. Changing `RowHeight` or `EstimatedRowHeight` at
+  runtime no longer restarts pagination or discards loaded rows when a sort or filter is
+  active. It also no longer emits the `UseDataSource.PageSize` warning (follow-up to #1458,
+  part of #1452).
 
 - `PersonPicture`'s `ProfilePicture` no longer throws during reconciliation for empty,
   relative, or malformed URIs; it shows no picture instead. Removing `ProfilePicture` on

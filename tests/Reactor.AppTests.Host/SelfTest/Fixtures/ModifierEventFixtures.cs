@@ -1175,9 +1175,11 @@ internal static class ModifierEventFixtures
     //  renter still carrying the previous renter's LOCAL values — and a local
     //  value outranks every Style setter in WinUI's precedence order, so the
     //  new renter could never show its styled padding/background again.
+    //  Issue #1013 extends the Control checks to HorizontalContentAlignment and
+    //  VerticalContentAlignment, which have the same pool-return leak.
     //
     //  ScrollViewer is the Control carrier precisely because ScrollViewerElement
-    //  declares none of the six properties: any local value that survives the
+    //  declares none of the eight properties: any local value that survives the
     //  recycle came from ApplyModifiers, not from the descriptor re-writing it
     //  on the second mount. A Button would be vacuous for IsEnabled —
     //  ButtonElement writes EffectiveIsEnabled unconditionally on every mount,
@@ -1210,7 +1212,9 @@ internal static class ModifierEventFixtures
                             .BorderThickness(6)
                             .BorderBrush("#FF3366CC")
                             .Background("#FF224466")
-                            .IsEnabled(false),
+                            .IsEnabled(false)
+                            .HorizontalContentAlignment(HorizontalAlignment.Right)
+                            .VerticalContentAlignment(VerticalAlignment.Bottom),
                         1 => Empty(),
                         // Remounted with no modifiers at all.
                         _ => Factories.ScrollViewer(Factories.TextBlock("pool-cp-control-2")),
@@ -1226,7 +1230,9 @@ internal static class ModifierEventFixtures
                                 Factories.TextBlock("pool-cp-panel"))
                             .Background("#FF884422")
                             .Padding(19)
-                            .CornerRadius(7),
+                            .CornerRadius(7)
+                            .BorderThickness(3)
+                            .BorderBrush("#FFFF0000"),
                         1 => Empty(),
                         _ => Factories.Grid([GridSize.Star()], [GridSize.Star()],
                                 Factories.TextBlock("pool-cp-panel-2")),
@@ -1249,12 +1255,16 @@ internal static class ModifierEventFixtures
                 && firstControl.ReadLocalValue(Control.BorderThicknessProperty) != DependencyProperty.UnsetValue
                 && firstControl.ReadLocalValue(Control.BorderBrushProperty) != DependencyProperty.UnsetValue
                 && firstControl.ReadLocalValue(Control.BackgroundProperty) != DependencyProperty.UnsetValue
-                && firstControl.ReadLocalValue(Control.IsEnabledProperty) != DependencyProperty.UnsetValue);
+                && firstControl.ReadLocalValue(Control.IsEnabledProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.HorizontalContentAlignmentProperty) != DependencyProperty.UnsetValue
+                && firstControl.ReadLocalValue(Control.VerticalContentAlignmentProperty) != DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase0_PanelLocalValuesWritten",
                 firstPanel is not null
                 && firstPanel.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue
                 && firstPanel.ReadLocalValue(WinUI.Grid.PaddingProperty) != DependencyProperty.UnsetValue
-                && firstPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) != DependencyProperty.UnsetValue);
+                && firstPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) != DependencyProperty.UnsetValue
+                && firstPanel.ReadLocalValue(WinUI.Grid.BorderThicknessProperty) != DependencyProperty.UnsetValue
+                && firstPanel.ReadLocalValue(WinUI.Grid.BorderBrushProperty) != DependencyProperty.UnsetValue);
 
             H.ClickButton("DropPoolCp");
             await Harness.Render();
@@ -1303,12 +1313,20 @@ internal static class ModifierEventFixtures
             H.Check("PoolCp_Phase2_ControlIsEnabledCleared",
                 secondControl.ReadLocalValue(Control.IsEnabledProperty) == DependencyProperty.UnsetValue
                 && secondControl.IsEnabled);
+            H.Check("PoolCp_Phase2_ControlHorizontalContentAlignmentCleared",
+                secondControl.ReadLocalValue(Control.HorizontalContentAlignmentProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_ControlVerticalContentAlignmentCleared",
+                secondControl.ReadLocalValue(Control.VerticalContentAlignmentProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase2_PanelBackgroundCleared",
                 secondPanel.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase2_PanelPaddingCleared",
                 secondPanel.ReadLocalValue(WinUI.Grid.PaddingProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolCp_Phase2_PanelCornerRadiusCleared",
                 secondPanel.ReadLocalValue(WinUI.Grid.CornerRadiusProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_PanelBorderThicknessCleared",
+                secondPanel.ReadLocalValue(WinUI.Grid.BorderThicknessProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolCp_Phase2_PanelBorderBrushCleared",
+                secondPanel.ReadLocalValue(WinUI.Grid.BorderBrushProperty) == DependencyProperty.UnsetValue);
         }
     }
 
@@ -1340,7 +1358,9 @@ internal static class ModifierEventFixtures
                         0 => VStack(Factories.TextBlock("pool-stack-carrier"))
                             .Padding(17)
                             .CornerRadius(9)
-                            .Background("#FF335577"),
+                            .Background("#FF335577")
+                            .BorderThickness(3)
+                            .BorderBrush("#FFFF0000"),
                         1 => Empty(),
                         // Remounted with no modifiers at all.
                         _ => VStack(Factories.TextBlock("pool-stack-carrier-2")),
@@ -1355,7 +1375,9 @@ internal static class ModifierEventFixtures
                 first is not null
                 && first.ReadLocalValue(StackPanel.PaddingProperty) != DependencyProperty.UnsetValue
                 && first.ReadLocalValue(StackPanel.CornerRadiusProperty) != DependencyProperty.UnsetValue
-                && first.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue);
+                && first.ReadLocalValue(Panel.BackgroundProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(StackPanel.BorderThicknessProperty) != DependencyProperty.UnsetValue
+                && first.ReadLocalValue(StackPanel.BorderBrushProperty) != DependencyProperty.UnsetValue);
 
             H.ClickButton("DropPoolStack");
             await Harness.Render();
@@ -1382,6 +1404,10 @@ internal static class ModifierEventFixtures
                 second.ReadLocalValue(StackPanel.CornerRadiusProperty) == DependencyProperty.UnsetValue);
             H.Check("PoolStack_Phase2_BackgroundCleared",
                 second.ReadLocalValue(Panel.BackgroundProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolStack_Phase2_BorderThicknessCleared",
+                second.ReadLocalValue(StackPanel.BorderThicknessProperty) == DependencyProperty.UnsetValue);
+            H.Check("PoolStack_Phase2_BorderBrushCleared",
+                second.ReadLocalValue(StackPanel.BorderBrushProperty) == DependencyProperty.UnsetValue);
         }
     }
 

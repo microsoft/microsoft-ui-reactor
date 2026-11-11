@@ -1740,19 +1740,30 @@
         "md",
         "rich text render",
         "commonmark",
-        "formatted text"
+        "formatted text",
+        "cross-block selection",
+        "message selection"
       ],
       "relatedControls": [
         "RichTextBlock"
       ],
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor.Advanced",
+      "usings": [
+        "Microsoft.UI.Reactor.Markdown",
+        "Microsoft.UI.Reactor.Advanced.Factories"
+      ],
       "galleryRoute": "markdown",
       "samples": [
         {
           "header": "Formatted markdown",
           "language": "csharp",
           "code": "var markdown = @\"# Markdown sample\n\nMarkdown renders **bold** text, *italic* text, and `inline code`.\n\n- Create declarative UI\n- Compose reusable components\n- Keep samples readable\";\n\nBorder(Markdown(markdown))\n    .Padding(16)\n    .Background(Theme.SubtleFill)\n    .CornerRadius(8)"
+        },
+        {
+          "header": "Message-wide selection (opt-in)",
+          "language": "csharp",
+          "code": "var selection = new MarkdownTextSelectionOptions();\nvar options = new MarkdownOptions { TextSelection = selection };\nMarkdownTextSelection.Scope(selection, VStack(\n    Markdown(\"# Answer\\n\\nFirst paragraph.\", options),\n    Markdown(\"- First item\\n- Second item\\n\\n```cs\\nvar x = 1;\\n```\", options),\n    MarkdownTextSelection.Surface(\"Custom visible text\", TextBlock(\"Custom visible text\"))\n))"
         },
         {
           "header": "Links and lists",

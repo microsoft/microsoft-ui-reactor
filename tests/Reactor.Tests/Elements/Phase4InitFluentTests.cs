@@ -509,6 +509,15 @@ public class Phase4InitFluentTests
     }
 
     [Fact]
+    public void TitleBar_LeftHeader_Sets()
+    {
+        var header = HStack(TextBlock("Navigation"), Button("Help"));
+        var titleBar = TitleBar("App");
+        Assert.Null(titleBar.LeftHeader);
+        Assert.Same(header, titleBar.LeftHeader(header).LeftHeader);
+    }
+
+    [Fact]
     public void TitleBar_Icon_IconData_Sets()
     {
         var icon = new SymbolIconData("Home");
@@ -972,11 +981,12 @@ public class Phase4InitFluentTests
     }
 
     [Fact]
-    public void Expander_HeaderTemplate_Sets()
+    public void Expander_HeaderContent_Sets()
     {
         var header = TextBlock("Custom header");
-        var el = Expander("string header", TextBlock("body")).HeaderTemplate(header);
-        Assert.Same(header, el.HeaderTemplate);
+        var el = Expander("string header", TextBlock("body"));
+        Assert.Null(el.HeaderContent);
+        Assert.Same(header, el.HeaderContent(header).HeaderContent);
     }
 
     [Fact]

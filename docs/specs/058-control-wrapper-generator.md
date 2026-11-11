@@ -2,6 +2,11 @@
 
 ## Status
 
+**API naming update:** references below to the Element-valued
+`Expander.HeaderTemplate` use its historical name. This slot is now
+`Expander.HeaderContent`, and still writes to native `Expander.Header`. See the
+[migration notes](../guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
 **Proposed — design v0 (2026-06-08). Prototype exists; design is open.** A working spike already lives in the tree (`src/Reactor.Wrappers.Generator`, consumed by `samples/apps/wct-controls`). This document exists so we can settle the *shape* of the feature before we keep iterating on the implementation.
 
 **The decisions below are deliberately left open for the maintainer (@azchohfi).** Where this doc lists options it states a recommendation, but the recommendation is not a decision — §7 is the decision surface and every row is `TBD`.

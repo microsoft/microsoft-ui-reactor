@@ -35,6 +35,18 @@ public class DataGridStateTests
             new() { Name = "Price", FieldType = typeof(double), GetValue = o => ((TestItem)o).Price, Width = 100 },
         };
     }
+
+    // ── Block size ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 50)]
+    [InlineData(90, 90)]
+    public void BlockSize_IsMountTimeValue_OrCacheDefault(int ctorBlockSize, int expected)
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.None, ctorBlockSize);
+
+        Assert.Equal(expected, state.BlockSize);
+    }
 
     // ── Sort state transitions ────────────────────────────────────
 

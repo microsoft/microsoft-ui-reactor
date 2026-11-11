@@ -1002,6 +1002,15 @@ suite rather than merely lose continuity, and the harness synthesizes an id inst
 > mid-test — a real and reproducible source of local flake that is *not* a product regression.
 > Running the tier on a desktop you are not also using is the only fix for that.
 
+> **Don't foreground the Host with a bare `SetForegroundWindow` from the test process.** winapp's
+> click/drag verbs activate the Host with a real pointer press, but a test that asks for the
+> foreground itself is subject to Windows' foreground lock: once another process's input (such as
+> an earlier winapp click) has activated a different window, the long-lived test process's call is
+> silently refused. Every retry then repeats the same refused call. `MarkdownSelectionInputProofTests.AcquireForeground`
+> first injects a zero mouse input (no movement, no button) so the test process owns the last
+> input, then retries `SetForegroundWindow` each poll. It avoids an `AttachThreadInput` bridge,
+> which can block on a hung foreground thread. On timeout it reports what held the foreground.
+
 > **Our own Host launch is one of those windows.** The guarantee covers the *body* of a run,
 > not its startup. `HostLaunch.LaunchAndBind` starts the Host and brings its window up directly,
 > before any `winapp ui` call has been made and therefore before this suite holds a turn at all.
@@ -1063,10 +1072,13 @@ dotnet-coverage collect -s coverage.settings.xml \
 dotnet build src/Reactor                      -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
 dotnet build tests/Reactor.AppTests.Host      -c Debug -p:Optimize=false -p:DebugType=portable --no-incremental
 
-# Step 2: Instrument Reactor.dll statically
+# Step 2: Instrument the product DLLs statically
 #         (dynamic instrumentation skips referenced assemblies)
 dotnet-coverage instrument \
   "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.dll" \
+  -s coverage.settings.xml
+dotnet-coverage instrument \
+  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.Advanced.dll" \
   -s coverage.settings.xml
 
 # Step 3: Collect
@@ -1075,8 +1087,12 @@ dotnet-coverage collect -s coverage.settings.xml \
   -- dotnet run --project tests/Reactor.AppTests.Host --no-build -- --self-test
 
 # --- Merge ---
-dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml \
-  --output merged.cobertura.xml --output-format cobertura
+# The exact union of covered lines. Not `dotnet-coverage merge`: it drops covered lines
+# from these reports (tests/coverage/ci/README.md explains why). It refuses reports that
+# do not list the same lines, such as a selftest report whose Reactor.Advanced.dll was
+# not instrumented in Step 2.
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml \
+  unit.cobertura.xml selftest.cobertura.xml
 ```
 
 Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the winapp/E2E runner.
@@ -1089,7 +1105,7 @@ red selftest fixture — the `CenterOnCurrent` pair in §2 above is the usual on
 both legs collected and no merged file. Merge them by hand:
 
 ```powershell
-dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura
+pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile coverage\merged.cobertura.xml coverage\unit.cobertura.xml coverage\selftest.cobertura.xml
 ```
 
 ### Running coverage in CI

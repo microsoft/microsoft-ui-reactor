@@ -291,6 +291,20 @@ signatures.
 | `Markdown(markdown)` | `string → Element` |
 | `Markdown(markdown, options)` | `(string, MarkdownOptions) → Element` |
 
+Cross-block selection (Advanced, `Microsoft.UI.Reactor.Markdown`) needs **one**
+`MarkdownTextSelection.Scope(options, content)` around the complete message.
+`MarkdownOptions.TextSelection = options` only asks the parser to emit semantic
+surfaces; it is not sufficient by itself and a missing scope emits a warning.
+Surfaces belong to their nearest scope by structure, not options identity; only
+the scope's `OnCopyResult` callback supplies copy feedback.
+Wrap custom visible text in `Surface(text, content)` and keep toolbar chrome outside.
+`Visibility(include, content)` gates **selection membership**, not native visibility:
+the app still controls its Expander/visibility. Key the scope by message identity
+(`.WithKey(message.Id)`) when a virtualized row can display a different message.
+Unkeyed wholesale text replacement clears selection when neither nonblank surface
+text nor a nonblank prefix/suffix of a reused surface survives; shared text is
+ambiguous, so this fallback is not a substitute for message keys.
+
 ## Icons
 
 | Factory | Signature |
