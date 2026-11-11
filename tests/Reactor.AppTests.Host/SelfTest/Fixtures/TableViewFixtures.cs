@@ -81,7 +81,15 @@ internal static partial class TableViewFixtures
             var first = Rows();
             var second = new Row[] { new(4, "Dave", "B", 7) };
             var clicks = new List<int>();
+            var renderErrors = new List<string>();
             var host = H.CreateHost();
+            // Recorded for the failure detail: a CI miss showed the whole subtree replaced
+            // (no phase marker visible), which is what the render-error fallback does.
+            host.RenderErrorHandler = e =>
+            {
+                renderErrors.Add($"{e.Source}: {e.Exception.GetType().Name} 0x{e.Exception.HResult:X8}: {e.Exception.Message} @ {e.Exception.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
+                return null;
+            };
             host.Mount(ctx =>
             {
                 var (phase, setPhase) = ctx.UseState(0);
@@ -119,8 +127,9 @@ internal static partial class TableViewFixtures
             H.Check("TableView_Update_ColumnAddedStructurally",
                 await Harness.WaitFor(() => table!.Columns.Count == 3 && H.FindText("group:B") is not null,
                     maxPasses: 80, perPassMs: 25),
-                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null} shownPhase={(H.FindText("phase:2") is not null ? 2 : H.FindText("phase:1") is not null ? 1 : H.FindText("phase:0") is not null ? 0 : -1)} clicksSeenAtPhase=[{string.Join(",", clicks)}]");
+                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null} shownPhase={(H.FindText("phase:2") is not null ? 2 : H.FindText("phase:1") is not null ? 1 : H.FindText("phase:0") is not null ? 0 : -1)} clicksSeenAtPhase=[{string.Join(",", clicks)}] renderErrors=[{string.Join(" | ", renderErrors)}]");
 
+            H.Check("TableView_Update_NoRenderError", renderErrors.Count == 0, string.Join(" | ", renderErrors));
             host.Mount(_ => TextBlock("TableView unmounted"));
             await Harness.Render();
         }
