@@ -643,7 +643,8 @@ internal class PerfTrace_ReentrantMountEffectsNameLiveRoot(Harness h) : SelfTest
 /// <summary>
 /// A root mounted over another, on each host, then asking for a render from its own state:
 /// the pass names the new root — its rerender is bound to its own diagnostics, not to the
-/// retired root's.
+/// retired root's. On the control the first root is a function root that asks once too, so
+/// both of the control's root kinds are covered.
 /// </summary>
 internal class PerfTrace_RemountedRootNamesItself(Harness h) : SelfTestFixtureBase(h)
 {
@@ -666,13 +667,23 @@ internal class PerfTrace_RemountedRootNamesItself(Harness h) : SelfTestFixtureBa
 
         Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
         var controlRoot = new PerfTraceRemountedRoot();
+        Action? funcBump = null;
         var controlRun = hostRun is null ? null : await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
             async () =>
             {
                 control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
-                control.Mount(new PerfTraceReplacementRoot());
+                // A function root first: its own request names it, then the class root replaces it.
+                control.Mount(ctx =>
+                {
+                    var (n, setN) = ctx.UseState(0);
+                    funcBump = () => setN(n + 1);
+                    return TextBlock($"perf control function root {n}");
+                });
                 H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
-                await Harness.WaitFor(() => H.FindText("perf replacement root") is not null, maxPasses: 32, perPassMs: 10);
+                await Harness.WaitFor(() => H.FindText("perf control function root 0") is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                funcBump!();
+                await Harness.WaitFor(() => H.FindText("perf control function root 1") is not null, maxPasses: 32, perPassMs: 10);
                 await control.WaitForIdleAsync();
                 control.Mount(controlRoot);
                 await Harness.WaitFor(() => controlRoot.Bump is not null, maxPasses: 32, perPassMs: 10);
@@ -689,19 +700,27 @@ internal class PerfTrace_RemountedRootNamesItself(Harness h) : SelfTestFixtureBa
             H.Skip("PerfTrace_RemountedRoot_ControlNamesNewRoot", PerfTraceScenario.SkipReason);
             return;
         }
-        Check("PerfTrace_RemountedRoot_HostNamesNewRoot", "host", hostRun.Value.Events);
-        Check("PerfTrace_RemountedRoot_ControlNamesNewRoot", "control", controlRun.Value.Events);
+        Check("PerfTrace_RemountedRoot_HostNamesNewRoot", "host", hostRun.Value.Events, functionRootFirst: false);
+        Check("PerfTrace_RemountedRoot_ControlNamesNewRoot", "control", controlRun.Value.Events, functionRootFirst: true);
     }
 
-    private void Check(string name, string label, List<CapturedEtwEvent> events)
+    private void Check(string name, string label, List<CapturedEtwEvent> events, bool functionRootFirst)
     {
-        var root = events.FirstOrDefault(e => e.Name == "ComponentRender" && e.Opcode == 1
-            && e.Fields.TryGetValue("name", out var n) && (string)n == nameof(PerfTraceRemountedRoot));
+        string Name(CapturedEtwEvent e) => e.Fields.TryGetValue("name", out var n) ? (string)n : "";
+        var starts = events.Where(e => e.Name == "ComponentRender" && e.Opcode == 1).ToList();
+        var root = starts.FirstOrDefault(e => Name(e) == nameof(PerfTraceRemountedRoot));
+        var function = starts.FirstOrDefault(e => Name(e).StartsWith("render in ", StringComparison.Ordinal));
         var requested = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1 && (ulong)e.Fields["requesterId"] != 0)
             .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}").ToList();
-        Console.WriteLine($"# perf remounted root {label}: root={root?.Fields["componentId"]} requesters={string.Join(",", requested)}");
+        Console.WriteLine($"# perf remounted root {label}: root={root?.Fields["componentId"]} function={function?.Fields["componentId"]} requesters={string.Join(",", requested)}");
+        var expected = new List<string>();
+        if (functionRootFirst && function is not null)
+            expected.Add($"{function.Fields["componentId"]}/{Name(function)}");
+        if (root is not null)
+            expected.Add($"{root.Fields["componentId"]}/{nameof(PerfTraceRemountedRoot)}");
         H.Check(name, root is not null && (ulong)root.Fields["componentId"] != 0
-            && requested.SequenceEqual([$"{root.Fields["componentId"]}/{nameof(PerfTraceRemountedRoot)}"]));
+            && (!functionRootFirst || (function is not null && (ulong)function.Fields["componentId"] != 0))
+            && requested.SequenceEqual(expected));
     }
 }
 
