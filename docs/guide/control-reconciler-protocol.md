@@ -656,7 +656,8 @@ its own event trampolines. For these decorators,
 Decorator lifecycle callbacks resolve the current decorator separately.
 Exit transitions, connected-animation keys, and `.Animate()` curves use the
 first non-null configuration from the outermost decorator inward, ending at
-the target.
+the actual target. If Memo or a forwarding handler hides the target from the
+source chain, lookup resumes at its tag and follows any exposed decorator targets.
 A non-null ambient animation curve still takes precedence over `.Animate()`.
 Unmount clears refs and animation state throughout the decorator chain and runs the
 decorator's teardown before the target's own handler. Pool return clears both
@@ -668,6 +669,10 @@ control. Replacing an inner flyout releases its Reactor content and input
 pass-through subtrees. Inner updates still reconcile their target, but leave
 the outer flyout's content and lifecycle callbacks untouched. Such nesting
 emits a `Flyout.NestedTarget` diagnostic warning.
+Inner updates, including custom decorators, keep an enclosing flyout's published
+tag while it is updating, so a forwarding target that throws afterward does not
+hide the outer flyout from teardown.
+Skipping the retained source after re-keying also preserves its published tag.
 
 Keyed FlipView pages keep both the source view for positional matching and the
 key-stamped instance used for updates. Memo resource and dirty-descendant

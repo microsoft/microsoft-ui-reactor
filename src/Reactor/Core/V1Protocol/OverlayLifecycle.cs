@@ -444,18 +444,26 @@ internal static class OverlayLifecycle
     private static FlyoutOwnership? FlyoutOwner(WinPrim.FlyoutBase? flyout) =>
         s_flyoutOwnerProperty is { } property ? flyout?.GetValue(property) as FlyoutOwnership : null;
 
-    /// <summary>Refreshes the installed flyout's retained or reconstructed owner identity.</summary>
-    internal static void RefreshFlyoutOwner(FrameworkElement target, Element? oldElement, Element newElement,
+    /// <summary>Checks whether an enclosing flyout is updating this target.</summary>
+    internal static bool IsFlyoutOwnerUpdating(FrameworkElement target) =>
+        FlyoutOwner(Reconciler.GetFlyoutOnControl(target)) is { UpdateDepth: > 0 };
+
+    /// <summary>Refreshes a matching owner and returns the installed flyout's published tag.</summary>
+    internal static Element RefreshFlyoutOwner(FrameworkElement target, Element? oldElement, Element newElement,
         bool tagOnly = false, bool reconstructingMemo = false)
     {
-        if (oldElement is null || (ReferenceEquals(oldElement, newElement) && !reconstructingMemo)) return;
         var owner = FlyoutOwner(Reconciler.GetFlyoutOnControl(target));
-        if (owner is not null && (owner.Matches(oldElement)
+        if (owner is null) return newElement;
+        if (oldElement is not null && (!ReferenceEquals(oldElement, newElement) || reconstructingMemo)
+            && (owner.Matches(oldElement)
             || (reconstructingMemo && owner.MatchesReconstructed(oldElement, newElement))))
         {
             owner.Tag = newElement;
             if (!tagOnly) owner.Element = newElement;
         }
+        // Keep the enclosing owner's identity for inactive inner updates. A self-skip
+        // also keeps a re-keyed tag rather than publishing its unkeyed source again.
+        return owner.Tag;
     }
 
     private readonly struct FlyoutUpdateScope : IDisposable

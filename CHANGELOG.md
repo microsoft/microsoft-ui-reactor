@@ -66,13 +66,15 @@ Conventions for contributors:
   flyout callbacks and teardown still use the current decorator. Exit transitions,
   connected-animation keys and `.Animate()` curves use the first configured value
   from the outermost decorator inward to the target. Unmount also releases refs
-  and animation state on intermediate decorators. Nested decorators attach only
-  the outermost native flyout, including through transparent Memo or RegisterType
-  targets. They clean up displaced content and keep inner updates
+  and animation state on intermediate decorators and target chains exposed behind
+  transparent wrappers. Nested decorators attach only the outermost native flyout,
+  including through transparent Memo or RegisterType targets. They clean up displaced
+  content and keep inner updates
   from changing the outer flyout or duplicating its callbacks. Ownership also
   survives keyed FlipView updates and Memo resource or dirty-descendant refreshes,
-  including skipped branches and retries after a throwing target update. For these
-  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  including skipped branches, failed forwarded updates through custom decorators
+  and subsequent retries. For these decorators, the provisional
+  `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §4.5; #942).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,

@@ -69,15 +69,18 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
 
     private void TagControl(FrameworkElement control, TElement element)
     {
+        // Built-in flyout handlers publish only after claiming the installed slot.
+        // An inactive inner decorator must not replace its enclosing owner's tag,
+        // which teardown still needs if the forwarding target later throws.
         if (PreservesTargetTag)
-            Reconciler.SetDecoratorElementTag(control, element);
-        else
-        {
-            // This decorator owns the mounted identity, even when its target is a flyout.
-            var state = Reconciler.GetOrCreateReactorState(control);
-            state.Element = element;
+            return;
+        // This decorator owns the target identity, even when its child is a flyout.
+        var state = Reconciler.GetOrCreateReactorState(control);
+        state.Element = element;
+        // An enclosing flyout still owns the native slot while its target updates.
+        // Keep that tag if an ancestor throws before the flyout can publish its next tag.
+        if (state.DecoratorElement is not null && !OverlayLifecycle.IsFlyoutOwnerUpdating(control))
             state.DecoratorElement = null;
-        }
     }
 
     public V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler)

@@ -793,7 +793,7 @@ public sealed partial class Reconciler : IDisposable
                 realized = realized with { Key = key };
                 if (state.DecoratorElement is not null)
                 {
-                    V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, previous, realized, tagOnly: true);
+                    realized = V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, previous, realized, tagOnly: true);
                     state.DecoratorElement = realized;
                 }
                 else state.Element = realized;
@@ -1933,8 +1933,12 @@ public sealed partial class Reconciler : IDisposable
         if (IsFlyoutDecorator(newEl)
             && _v1Handlers.TryGet(newEl.GetType(), out var entry) && entry.PreservesTargetTag)
         {
-            V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, oldEl, newEl, tagOnly, ReconstructingKeyedMemo);
-            SetDecoratorElementTag(control, newEl);
+            // The published instance is already live. Aliases and inactive inner
+            // elements still need the installed owner's tag below.
+            if (ReferenceEquals(oldEl, newEl) && !ReconstructingKeyedMemo
+                && ReferenceEquals(GetMountedElement(control), newEl)) return;
+            var tag = V1Protocol.OverlayLifecycle.RefreshFlyoutOwner(control, oldEl, newEl, tagOnly, ReconstructingKeyedMemo);
+            SetDecoratorElementTag(control, tag);
         }
         else
             SetElementTagIfNeeded(control, newEl,
@@ -2050,12 +2054,22 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>Returns the first non-null value in the mounted decorator chain, outermost first.</summary>
     internal static T? FindMountedElementValue<T>(UIElement control, Func<Element, T?> select) where T : class
     {
-        var current = GetMountedElement(control);
+        if (control is not FrameworkElement fe || !TryGetReactorState(fe, out var state)) return null;
+        var target = state.Element;
+        var current = state.DecoratorElement ?? target;
         for (var depth = 0; current is not null; depth++)
         {
             if (select(current) is { } value) return value;
+            if (ReferenceEquals(current, target)) target = null;
             if (depth == ReactorSourceMap.MaxDecoratorDepth) break;
             current = ReactorSourceMap.DecoratorTarget(current);
+        }
+        // Memo and forwarding handlers can hide another decorator chain behind the target tag.
+        for (var depth = 0; target is not null; depth++)
+        {
+            if (select(target) is { } value) return value;
+            if (depth == ReactorSourceMap.MaxDecoratorDepth) break;
+            target = ReactorSourceMap.DecoratorTarget(target);
         }
         return null;
     }
@@ -4359,8 +4373,11 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
-        var current = GetMountedElement(control);
+        TryGetReactorState(control, out var state);
+        var target = state?.Element;
+        var current = state?.DecoratorElement ?? target;
         CleanupElementStateForUnmount(control, current);
+        if (ReferenceEquals(current, target)) target = null;
         // Reference edges belong to the control, even when it has no element tag.
         TeardownReferenceEdges(control);
         for (var depth = 0; current is not null && depth < ReactorSourceMap.MaxDecoratorDepth; depth++)
@@ -4368,6 +4385,14 @@ public sealed partial class Reconciler : IDisposable
             current = ReactorSourceMap.DecoratorTarget(current);
             if (current is null) break;
             CleanupElementStateForUnmount(control, current);
+            if (ReferenceEquals(current, target)) target = null;
+        }
+        // A hidden target can itself be a decorator with more state to release.
+        for (var depth = 0; target is not null; depth++)
+        {
+            CleanupElementStateForUnmount(control, target);
+            if (depth == ReactorSourceMap.MaxDecoratorDepth) break;
+            target = ReactorSourceMap.DecoratorTarget(target);
         }
     }
 
