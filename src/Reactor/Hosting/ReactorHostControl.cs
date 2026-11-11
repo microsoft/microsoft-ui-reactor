@@ -159,7 +159,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private Action? _rootRerenderAction;
 
     // Who scheduled the next pass, for the perf RenderPass Start.
-    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests _perfRequests = new();
+    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests _perfRequests;
 
     // One closure per root, not per render.
     private Action RootRerenderAction()
@@ -284,6 +284,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _reconciler.ThemeAnchor = this;
+        _perfRequests = new(() => _needsRerender);
         // Diagnostics mode needs call sites stamped from the very first render, so it
         // implies source mapping (REACTOR_SOURCEMAP=1 alone remains the narrower opt-in).
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
@@ -821,8 +822,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     {
         if (_disposed) return;
 
-        // Before the flag is set below: whether a pass was already pending.
-        _perfRequests.Note(passPending: _needsRerender);
+        // Before the flag is set below: Note reads it to see whether a pass was already pending.
+        _perfRequests.Note();
 
         if (AnimationScope.HasScope)
             _pendingAnimationCurve = AnimationScope.Current;

@@ -27,9 +27,18 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// next one. Noting (any thread) and taking (the UI thread) share one lock, so a request's
 /// count and requester always land in the same pass.</para>
 ///
+/// <para><b>At a pass boundary.</b> Whether the host already had a pass pending comes from the
+/// host's needs-rerender flag, which the render loop clears just before the pass takes its
+/// requests. A request on another thread can read that flag
+/// before the clear and note after the take; the pass sequence number read before the flag
+/// detects that (a pass started in between, so the flag was the old pass's) and the request
+/// is credited to the next pass. A request that notes between the clear and the take is the
+/// starting pass's: its state was written before it asked, so that pass renders it. The flag
+/// it then sets may run one more pass, which reports <c>requestCount</c> 0.</para>
+///
 /// <para><b>Cost.</b> Everything here runs only while the <c>Pass</c> keyword is on; with no
 /// session listening the hosts and wrappers make one enable check and nothing else, and an
-/// untraced pass makes two plain reads.</para>
+/// untraced pass makes two plain reads and one plain store.</para>
 /// </remarks>
 internal sealed class RenderPassRequests
 {
@@ -42,9 +51,20 @@ internal sealed class RenderPassRequests
     // slot, so a later claimed request cannot take credit for a pass it did not schedule.
     private static readonly object Unclaimed = new();
 
+    // The host's needs-rerender flag: set by a request, cleared by the render loop as a pass
+    // starts (before that pass takes its requests). Read only while tracing.
+    private readonly Func<bool>? _passPending;
     private readonly Lock _gate = new();
     private object? _first;
     private int _count;
+    // Passes started (traced or not), incremented as each takes or discards its requests.
+    private int _passes;
+
+    /// <param name="passPending">
+    /// Whether the host has a pass pending (its needs-rerender flag); null for a host that
+    /// never has one queued when a request arrives.
+    /// </param>
+    internal RenderPassRequests(Func<bool>? passPending = null) => _passPending = passPending;
 
     // Test-only: runs inside the lock, between counting a request and recording its requester.
     internal Action? BetweenCountAndRequesterForTests { get; set; }
@@ -82,22 +102,23 @@ internal sealed class RenderPassRequests
 
     /// <summary>
     /// Records a render request while the Pass keyword is on; with no session listening it is
-    /// one enable check. Every host's <c>RequestRender</c> calls it first.
+    /// one enable check. Every host's <c>RequestRender</c> calls it first, before it sets its
+    /// needs-rerender flag. If the host already had a pass pending and nothing was noted for
+    /// it, a request made before the session started listening scheduled that pass, so it
+    /// names nobody rather than this request, which only coalesced into it.
     /// </summary>
-    /// <param name="passPending">
-    /// Whether the host already had a pass pending when this request arrived (its
-    /// needs-rerender flag, read before the request sets it). If nothing was noted for that pass,
-    /// a request made before the session started listening scheduled it, so the pass names
-    /// nobody rather than this request, which only coalesced into it.
-    /// </param>
     [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    internal void Note(bool passPending)
+    internal void Note()
     {
-        if (ReactorPerfTrace.PassEnabled) NoteCore(passPending);
+        if (ReactorPerfTrace.PassEnabled) NoteCore();
     }
 
-    private void NoteCore(bool passPending)
+    private void NoteCore()
     {
+        // The pass count before the flag: if a pass starts after this read, the flag may have
+        // been that pass's (read before the render loop cleared it), not one still pending.
+        int passes = Volatile.Read(ref _passes);
+        bool passPending = _passPending?.Invoke() ?? false;
         // Consumed by the one request it was claimed for: a pass that request runs
         // synchronously (a host's first render) must not credit its own requests to it.
         object requester = ConsumeClaim() ?? Unclaimed;
@@ -105,7 +126,7 @@ internal sealed class RenderPassRequests
         {
             _count++;
             BetweenCountAndRequesterForTests?.Invoke();
-            if (passPending) _first ??= Unclaimed;
+            if (passPending && passes == _passes) _first ??= Unclaimed;
             _first ??= requester;
         }
     }
@@ -121,14 +142,16 @@ internal sealed class RenderPassRequests
     internal bool HasPending => _first is not null || _count != 0;
 
     /// <summary>
-    /// The requester of the first request noted since the last call (null when that request
-    /// was unclaimed, or there was none), and how many requests were; clears both.
+    /// Starts a traced pass: the requester of the first request noted since the last pass
+    /// started (null when that request was unclaimed or came before the session, or there was
+    /// none), and how many requests were; clears both.
     /// </summary>
     internal object? Take(out uint count)
     {
         object? first;
         lock (_gate)
         {
+            _passes++;
             count = (uint)_count;
             _count = 0;
             first = _first;
@@ -138,12 +161,15 @@ internal sealed class RenderPassRequests
     }
 
     /// <summary>
-    /// Drops what was noted for a pass that is starting untraced (the session stopped after the
+    /// Starts an untraced pass: drops what was noted for it (the session stopped after the
     /// request), so a later traced pass never reports a requester that did not schedule it.
-    /// With nothing noted it is one plain read.
+    /// With nothing noted it is one plain read and one plain store.
     /// </summary>
     internal void DiscardStale()
     {
         if (HasPending) Take(out _);
+        // Passes start on the UI thread only, so this is the one writer; the release orders
+        // the host's flag clear before it, for NoteCore's read on another thread.
+        else Volatile.Write(ref _passes, _passes + 1);
     }
 }

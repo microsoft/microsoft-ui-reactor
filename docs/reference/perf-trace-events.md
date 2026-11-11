@@ -94,7 +94,9 @@ fields of the same event.
     `requesterId` is `0`.
   - `requestCount` — how many render requests coalesced into this pass while the `Pass`
     keyword was on, named or not. `0` means none were recorded (the requests came before the
-    session started).
+    session started). A request made on another thread just as a pass starts is counted in
+    that pass when the pass already renders its update; the host may still run one more pass
+    for it, which reports `requestCount` `0`.
 - **`ComponentRender`** — one component render, **inclusive**: `Render()`, the component's
   effects flush, and the reconcile of the subtree it returned (so the WinUI controls its
   subtree creates fall inside it). Emitted on mount, on update, for a host's root component,

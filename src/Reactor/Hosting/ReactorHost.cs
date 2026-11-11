@@ -184,7 +184,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private Microsoft.UI.Dispatching.DispatcherQueueHandler? _renderLoopHandler;
 
     // Who scheduled the next pass, for the perf RenderPass Start.
-    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests _perfRequests = new();
+    private readonly Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests _perfRequests;
 
     // Test-only (InternalsVisibleTo Reactor.AppTests.Host).
     internal Microsoft.UI.Reactor.Core.Diagnostics.RenderPassRequests PerfRequestsForTests => _perfRequests;
@@ -358,6 +358,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // Microsoft.Extensions.Logging call paths.
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
+        _perfRequests = new(() => _needsRerender);
         // Diagnostics mode needs call sites stamped from the very first render, so it
         // implies source mapping (REACTOR_SOURCEMAP=1 alone remains the narrower opt-in).
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
@@ -893,8 +894,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     {
         if (_disposed) return;
 
-        // Before the flag is set below: whether a pass was already pending.
-        _perfRequests.Note(passPending: _needsRerender);
+        // Before the flag is set below: Note reads it to see whether a pass was already pending.
+        _perfRequests.Note();
 
         if (force)
             _reconciler.ForceFullRenderPending = true;
