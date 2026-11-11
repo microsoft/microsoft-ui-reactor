@@ -66,9 +66,31 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     // Render() can Mount() a replacement, and the attempt in progress is still the old root's.
     private Microsoft.UI.Reactor.Core.Diagnostics.RootRenderDiagnostics? _renderingRootDiagnostics;
     private Component? _renderingRoot;
+    // The render-function root's context as of the same snapshot: a reentrant Mount() replaces
+    // _funcContext mid-pass, and the root diagnostics must keep naming the root that rendered.
+    private RenderContext? _renderingFuncContext;
+
+    // The rendering root's context: the pass snapshot while a pass runs, else the live root's.
+    private RenderContext? RootDiagnosticContext => _renderingRootDiagnostics is null
+        ? _rootComponent?.Context ?? _funcContext
+        : _renderingRoot?.Context ?? _renderingFuncContext;
     // The root mount site as of the same snapshot: a root render function's hooks resolve
     // through it, and a reentrant Mount() replaces the live one mid-pass.
     private SourceLocation? _renderingMountSite;
+
+    // Process-unique id on this host's Microsoft-UI-Reactor-Perf RenderPass spans.
+    private readonly ulong _perfHostId = Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.NextHostId();
+
+    // The root's perf spans; see RootRenderDiagnostics. Callers of BeginRootPerfSpan check the keyword.
+    private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentSpan BeginRootPerfSpan(bool hotReloadRender)
+        => (_renderingRootDiagnostics ?? _rootDiagnostics).BeginPerfSpan(
+            _rootComponent, _funcContext, hotReloadRender, _reconciler.ForceFullRenderPending);
+
+    private Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.EffectsSpan BeginRootEffectsPerfSpan(Component? effectsRoot)
+        // The live root's: the effects flushed are the live root's (_rootComponent or _funcContext),
+        // which a reentrant Mount() during the pass may already have replaced.
+        => _rootDiagnostics.BeginEffectsPerfSpan(effectsRoot?.Context ?? _funcContext);
+
     // Whether the root of the same snapshot is a render function.
     private bool _renderingFunctionRoot;
     private Func<RenderContext, Element>? _rootRenderFunc;
@@ -417,7 +439,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private void TraceRootRendered(bool hotReloadRender, double elapsedMilliseconds)
         => (_renderingRootDiagnostics ?? _rootDiagnostics).TraceRendered(
             _renderingRoot is null ? nameof(FuncElement) : Microsoft.UI.Reactor.Core.Diagnostics.ComponentNames.For(_renderingRoot, element: null),
-            hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds);
+            hotReloadRender, _reconciler.ForceFullRenderPending, elapsedMilliseconds,
+            RootDiagnosticContext);
 
     // True when a re-entrant Mount replaced the root this pass is rendering (RetireRoot
     // swaps the diagnostics instance the pass snapshotted).
@@ -822,14 +845,21 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // mounting a new host) restores that frame's marker instead of clearing it.
         using (RenderErrorDispatch.EnterPropagationScope())
         {
+            // The pass span: root render, reconcile, commit and root effects.
+            bool perfPass = Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.PassEnabled;
+            if (perfPass)
+                Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.RenderPassStart(_perfHostId);
             try
             {
                 Render();
             }
             finally
             {
+                if (perfPass)
+                    Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.RenderPassStop(_perfHostId);
                 _renderingRoot = null;
                 _renderingRootDiagnostics = null;
+                _renderingFuncContext = null;
                 _renderingMountSite = null;
                 _renderingFunctionRoot = false;
                 // Reset the gate so future setState calls can enqueue — also when a render
@@ -975,6 +1005,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // The root whose effects are being flushed, captured before app code runs: an effect
         // can Mount() a replacement root and then throw, and the failure is the original's.
         Component? effectsRoot = null;
+        // Ended before the root effects, or by the finally on any early exit.
+        Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentSpan rootPerfSpan = default;
         try
         {
             if (_deferredRetirements is not null)
@@ -988,6 +1020,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             // clears the snapshot when the pass ends).
             _renderingRoot = _rootComponent;
             _renderingRootDiagnostics = _rootDiagnostics;
+            _renderingFuncContext = _rootComponent is null ? _funcContext : null;
             _renderingMountSite = _mountSite.Value;
             _renderingFunctionRoot = _rootComponent is null && _rootRenderFunc is not null;
             // Same snapshot for component inspection: Render() can Mount() a replacement, and the
@@ -1002,6 +1035,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             _reconciler.BeginRootPass();
 
             _phaseSw.Restart();
+
+            if (Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (_rootComponent is not null || (_rootRenderFunc is not null && _funcContext is not null)))
+                rootPerfSpan = BeginRootPerfSpan(hotReloadRender);
 
             // Captured before app code runs: the root's Render() can Mount() a replacement
             // root and then throw, and the failure belongs to the component that threw.
@@ -1033,7 +1070,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 }
                 // A propagation the app requested (RenderError.Propagate()) leaves without a
                 // fallback; the root's Render() still ran, so report it on the way out.
-                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled || rootPerfSpan.IsActive)
                 {
                     TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
                     throw;
@@ -1065,7 +1102,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                     return;
                 }
                 // See the component branch: report an app-requested propagation on the way out.
-                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled)
+                catch (Exception) when (Microsoft.UI.Reactor.Core.Diagnostics.ComponentRenderTrace.IsEnabled || rootPerfSpan.IsActive)
                 {
                     TraceRootRendered(hotReloadRender, _phaseSw.Elapsed.TotalMilliseconds);
                     throw;
@@ -1100,13 +1137,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                     _renderedRoot = passRoot;
                 // Commit the render like any other: the root's effects still run, and a
                 // failure among them is routed as an effect failure by the outer catch.
+                rootPerfSpan.Dispose();
+                rootPerfSpan = default;
                 failurePhase = RenderErrorSource.Effects;
                 // Captured like the non-null path's, so a failure is named after this root.
                 effectsRoot = _rootComponent;
-                if (effectsRoot is not null)
-                    effectsRoot.Context.FlushEffects();
-                else if (_funcContext is not null)
-                    _funcContext.FlushEffects();
+                using (BeginRootEffectsPerfSpan(effectsRoot))
+                {
+                    if (effectsRoot is not null)
+                        effectsRoot.Context.FlushEffects();
+                    else if (_funcContext is not null)
+                        _funcContext.FlushEffects();
+                }
                 failurePhase = RenderErrorSource.Reconcile;
                 return;
             }
@@ -1221,12 +1263,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
             _phaseSw.Restart();
 
+            // The root's span covers its render, the reconcile and the commit; effects are separate.
+            rootPerfSpan.Dispose();
+            rootPerfSpan = default;
             failurePhase = RenderErrorSource.Effects;
             effectsRoot = _rootComponent;
-            if (effectsRoot is not null)
-                effectsRoot.Context.FlushEffects();
-            else if (_funcContext is not null)
-                _funcContext.FlushEffects();
+            using (BeginRootEffectsPerfSpan(effectsRoot))
+            {
+                if (effectsRoot is not null)
+                    effectsRoot.Context.FlushEffects();
+                else if (_funcContext is not null)
+                    _funcContext.FlushEffects();
+            }
             failurePhase = RenderErrorSource.Reconcile;
 
             double effectsMs = _phaseSw.Elapsed.TotalMilliseconds;
@@ -1312,6 +1360,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         }
         finally
         {
+            rootPerfSpan.Dispose();
             _reconciler.EndRootPass();
             _isRendering = false;
             if (hotReloadRetryPass) _reconciler.HotReloadRetryPending = false;

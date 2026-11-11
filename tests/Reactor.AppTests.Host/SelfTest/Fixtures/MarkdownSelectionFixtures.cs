@@ -419,7 +419,7 @@ internal static partial class MarkdownSelectionFixtures
             Element Disclosure(bool expanded) => MarkdownTextSelection.Scope(options, VStack(
                 Expander("", MarkdownTextSelection.Visibility(expanded,
                     Md("disclosure body", new MarkdownOptions { TextSelection = options })),
-                    isExpanded: expanded).HeaderTemplate(
+                    isExpanded: expanded).HeaderContent(
                         VStack(MarkdownTextSelection.Surface("Disclosure", TextBlock("Disclosure"), ""),
                             MarkdownTextSelection.Surface(" summary",
                                 TextBlock(" summary").TextWrapping(Microsoft.UI.Xaml.TextWrapping.Wrap)))),

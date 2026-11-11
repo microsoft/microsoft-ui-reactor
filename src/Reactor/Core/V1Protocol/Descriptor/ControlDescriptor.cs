@@ -457,7 +457,7 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// The callback runs before, and independently of, the descriptor's
     /// <see cref="OnUnmount"/> hook. Declaring this callback roots a ReactorState
     /// per control, including keyless controls without element callbacks.
-    /// For example, Expander.HeaderTemplate owns a secondary Element child while
+    /// For example, Expander.HeaderContent owns a secondary Element child while
     /// the primary children strategy owns Content. Pair it with OneWayConditional
     /// for a string Header fallback when the Element slot is null.</summary>
     public ControlDescriptor<TElement, TControl> ImperativeBridged(
