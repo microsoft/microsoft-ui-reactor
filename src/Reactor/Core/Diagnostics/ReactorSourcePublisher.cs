@@ -186,6 +186,20 @@ internal static class ReactorSourcePublisher
     }
 
     /// <summary>
+    /// A process-lifetime instance of a rewritten <paramref name="value"/>, for writing onto a
+    /// control the reconciler reached outside the live tree. CsWinRT boxes a string written to a
+    /// DependencyProperty as a managed CCW, and XAML's reference tracking keeps that CCW's
+    /// string alive only while it can reach the control: a closed CommandBarFlyout's commands
+    /// stop being reachable after a root swap, so a string nothing else references is collected
+    /// while the command still points at it, and every later read of the property throws.
+    /// Values <see cref="PublishItem"/> writes are already held by <c>Cache.Parts</c>.
+    /// Keyed values are returned as is: keys come from data, so caching them would be unbounded,
+    /// and item records (the controls this protects) carry none.
+    /// </summary>
+    internal static string Retained(string value)
+        => value.Contains("|key=", StringComparison.Ordinal) ? value : Cache.Retained.GetOrAdd(value, value);
+
+    /// <summary>
     /// Adds the host-root fields (<c>root=</c>, and <c>hooks=</c> when the value has none) to a
     /// value already published for a host's root content control. Used when the root element
     /// is a <c>Memo(key, …)</c>: its factory output published itself when it mounted, and the
@@ -405,6 +419,10 @@ internal static class ReactorSourcePublisher
 
         /// <summary><c>at=</c> texts published by more than one call site.</summary>
         internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> Ambiguous =
+            new(StringComparer.Ordinal);
+
+        /// <summary>Unkeyed rewritten values (see <see cref="Retained"/>); bounded like <see cref="Parts"/>.</summary>
+        internal static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, string> Retained =
             new(StringComparer.Ordinal);
     }
 

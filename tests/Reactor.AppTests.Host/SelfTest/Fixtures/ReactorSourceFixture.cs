@@ -651,8 +651,9 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
     }
 
     // Items a root swap re-attributes. The retained CommandBarFlyout's command is checked apart
-    // (CheckFlyoutCommandOwner): a closed CommandBarFlyout's commands can be reset by a garbage
-    // collection (label and every value gone) whether or not Reactor publishes anything on them.
+    // (CheckFlyoutCommandOwner): after a root swap, a garbage collection can reset a closed
+    // CommandBarFlyout's commands (label and every value gone). That reset is not the owner
+    // rewrite: it reproduces with the rewrite of the command suppressed.
     private static readonly string[] RetainedMenuItems =
         ["remount-menu-item", "remount-submenu-item", "remount-bar-item", "remount-primary", "remount-secondary",
          "remount-hidden-bar-item", "remount-hidden-primary", "remount-hidden-secondary"];
@@ -668,6 +669,39 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
             H.Skip(name, "the closed CommandBarFlyout's command was reset by a collection");
         else
             H.Check(name, owned, RetainedItemSource(RetainedFlyoutCommand) ?? "<not found>");
+    }
+
+    // After a root swap the closed CommandBarFlyout's command is no longer kept reachable by XAML's
+    // reference tracking, so a renamed value nothing else references was collected by the next GC
+    // while the command still pointed at it, and reading it threw a NullReferenceException from
+    // CsWinRT (the flaky crash of this fixture). Force that collection and read it straight away,
+    // before XAML gets a pass to reset the command.
+    private void CheckRenamedCommandSurvivesCollection(string name, string owner)
+    {
+        if (RetainedFlyoutCommandLabels() != RetainedFlyoutCommand)
+        {
+            H.Skip(name, "the closed CommandBarFlyout's command was reset by a collection before the probe");
+            return;
+        }
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        string detail;
+        bool owned;
+        try
+        {
+            var command = (H.FindControl<WinUI.Button>(b => b.Content as string == "remount-commands-target")?.Flyout as WinUI.CommandBarFlyout)
+                ?.PrimaryCommands.FirstOrDefault() as WinUI.AppBarButton;
+            var value = command is null ? null : ReactorDiagnostics.GetSource(command);
+            owned = value?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true;
+            detail = value ?? "<not found>";
+        }
+        catch (NullReferenceException ex)
+        {
+            owned = false;
+            detail = $"reading the command's value threw {ex.GetType().Name}: the value was collected";
+        }
+        H.Check(name, owned, detail);
     }
 
     // The tooltip a .WithToolTip modifier hung on the hosted AppBarButton (or on its host wrapper).
@@ -784,6 +818,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                     RetainedItemSource(item) ?? "<not found>");
             host.Mount(new RemountRootB());
             await Harness.Render();
+            CheckRenamedCommandSurvivesCollection("ReactorSource_RootRemount_Host_RenamedCommandSurvivesCollection", nameof(RemountRootB));
             Console.WriteLine($"# remount (ReactorHost): {Source("remount-leaf")} / {Source("remount-nested")}");
             H.Check("ReactorSource_RootRemount_Host_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_Host_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
@@ -861,6 +896,7 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
                     RetainedItemSource(item) ?? "<not found>");
             hostControl.Mount(new RemountRootB());
             H.Check("ReactorSource_RootRemount_HostControl_LeafRenamed", await Owned("remount-leaf", nameof(RemountRootB)));
+            CheckRenamedCommandSurvivesCollection("ReactorSource_RootRemount_HostControl_RenamedCommandSurvivesCollection", nameof(RemountRootB));
             H.Check("ReactorSource_RootRemount_HostControl_FlyoutContentRenamed", await Owned("remount-flyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_ComponentTargetFlyoutRenamed", await Owned("remount-cflyout-body", nameof(RemountRootB)));
             H.Check("ReactorSource_RootRemount_HostControl_UnopenedNestedContentRenamed", await Owned("remount-nflyout-inner", nameof(RemountRootB)));

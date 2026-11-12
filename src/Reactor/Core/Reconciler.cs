@@ -1014,7 +1014,7 @@ public sealed partial class Reconciler : IDisposable
             if (node.GetValue(Diagnostics.ReactorDiagnostics.SourceProperty) is string value)
             {
                 if (rewrite(node, value) is { } rewritten && !string.Equals(rewritten, value, StringComparison.Ordinal))
-                    node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, rewritten);
+                    node.SetValue(Diagnostics.ReactorDiagnostics.SourceProperty, Diagnostics.ReactorSourcePublisher.Retained(rewritten));
                 componentWrapper = Diagnostics.ReactorSourcePublisher.IsComponentWrapper(value);
             }
 

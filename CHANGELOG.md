@@ -107,6 +107,15 @@ Conventions for contributors:
 
 ### Fixed
 
+- In diagnostics mode (`REACTOR_DIAGNOSTICS=1`), mounting a different root over content
+  that keeps a closed `CommandBarFlyout` no longer leaves that flyout's commands holding
+  a collected `ReactorSource` value. CsWinRT boxes a string written to a
+  DependencyProperty as a managed CCW, and XAML stops keeping it alive on those commands
+  after the swap. The next garbage collection freed the renamed value, and any later read
+  of the property threw `NullReferenceException`, including Reactor's own walk on the next
+  root swap. The renamed values are now held for the process, like the values written
+  when the commands mounted (spec 010).
+
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so
   flyout callbacks and teardown still use the current decorator. Exit transitions
