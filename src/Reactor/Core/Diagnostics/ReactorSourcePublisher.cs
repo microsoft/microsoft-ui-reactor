@@ -186,8 +186,8 @@ internal static class ReactorSourcePublisher
     }
 
     /// <summary>
-    /// A process-lifetime instance of a rewritten <paramref name="value"/>, for writing onto a
-    /// control the reconciler reached outside the live tree. CsWinRT boxes a string written to a
+    /// A process-lifetime instance of a rewritten <paramref name="value"/>. The walk that rewrites
+    /// values also reaches controls outside the live tree. CsWinRT boxes a string written to a
     /// DependencyProperty as a managed CCW, and XAML's reference tracking keeps that CCW's
     /// string alive only while it can reach the control: a closed CommandBarFlyout's commands
     /// stop being reachable after a root swap, so a string nothing else references is collected
