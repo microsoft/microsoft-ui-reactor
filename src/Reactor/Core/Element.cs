@@ -3777,13 +3777,22 @@ public partial record AutoSuggestBoxElement(
     internal Action<WinUI.AutoSuggestBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // A programmatic Text write raises TextChanged with Reason=ProgrammaticChange, about
+    // 150 ms later and debounced (several writes can merge into one event). Every
+    // TextChanged, whatever its reason, consumes the pending arm, so the write's own echo
+    // spends it even though that echo never reaches the callback. No armOnMount: the
+    // Mount write's echo is a ProgrammaticChange too, so the reason filter drops it
+    // without an arm. (On the counter, the reason filter returned before the token
+    // was taken, so it stayed reserved and swallowed the user's next keystroke after
+    // every state write.)
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>
         __TextChangedTrampoline = (s, args) =>
         {
-            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             var asb = (WinUI.AutoSuggestBox)s!;
             if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(asb, out var state)) return;
-            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
+            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, asb.Text)) return;
+            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             (state.Element as AutoSuggestBoxElement)?.OnTextChanged?.Invoke(asb.Text);
         };
 
@@ -3891,7 +3900,8 @@ public partial record AutoSuggestBoxElement(
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
                 slotIsNull:  static p => p.TextChangedTrampoline is null,
-                setSlot:     static (p, h) => p.TextChangedTrampoline = h)
+                setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+                valueDiffEcho: true)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxQuerySubmittedEventArgs>>(
                 subscribe:        static (c, h) => c.QuerySubmitted += h,
@@ -4535,18 +4545,26 @@ public partial record RichEditBoxElement(
     internal override bool HasCallbacks => OnTextChanged is not null;
 
     // Text round-trips through the RichEditBox document (not a Text DP): the set
-    // writes Document.SetText (guarded on non-empty, manual BeginSuppress because
-    // SetText fires TextChanged asynchronously), readBack/trampoline read
-    // Document.GetText trimming a trailing \r. Reused verbatim from the hand-written
-    // descriptor so the deferred suppress-counter echo behaviour is identical.
+    // writes Document.SetText (skipped for an empty value), readBack/trampoline read
+    // it back through ReadDocumentText.
+    //
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // SetText raises TextChanged asynchronously, so the arm is consumed by the next
+    // TextChanged after the write; it only drops that event when its readback equals
+    // the written text, so a write whose echo never comes (or is merged) can't
+    // swallow a real edit. The engine arms before calling set, on Update and, with
+    // armOnMount, on Mount too, since the Mount write echoes after the trampoline
+    // is wired. It clears the arm when set skipped the write. (The counter took
+    // one token from the engine's Update wrapper and a second one from set for a
+    // single TextChanged, so the user's next edit after every state write was
+    // dropped.)
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __TextChangedTrampoline = (s, _) =>
     {
         var r = (WinUI.RichEditBox)s!;
         if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(r, out var state)) return;
-        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
-        r.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-        (state.Element as RichEditBoxElement)
-            ?.OnTextChanged?.Invoke(text?.TrimEnd('\r') ?? "");
+        var text = ReadDocumentText(r);
+        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, text)) return;
+        (state.Element as RichEditBoxElement)?.OnTextChanged?.Invoke(text);
     };
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RichEditBoxElement, WinUI.RichEditBox> Customize(
@@ -4556,21 +4574,47 @@ public partial record RichEditBoxElement(
             set:         static (c, v) =>
             {
                 if (!string.IsNullOrEmpty(v))
-                {
-                    global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.BeginSuppress(c);
                     c.Document.SetText(global::Microsoft.UI.Text.TextSetOptions.None, v);
-                }
             },
-            readBack:    static c =>
-            {
-                c.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-                return text?.TrimEnd('\r') ?? "";
-            },
+            readBack:    static c => ReadDocumentText(c),
             subscribe:   static (c, h) => c.TextChanged += h,
             callback:    static e => e.OnTextChanged,
             trampoline:  __TextChangedTrampoline,
             slotIsNull:  static p => p.TextChangedTrampoline is null,
-            setSlot:     static (p, h) => p.TextChangedTrampoline = h);
+            setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+            comparer:    DocumentTextComparer.Instance,
+            valueDiffEcho: true,
+            armOnMount:  true);
+
+    // GetText(None) returns every line break as \r and always ends with one more \r,
+    // the document's implicit final paragraph mark: "" reads back as "\r", "a" as
+    // "a\r", "a\n" as "a\r\r". Drop only that mark, so a trailing line break the
+    // text really has (written by state or typed by the user) survives the round
+    // trip, and "text" and "text\n" stay different values.
+    private static string ReadDocumentText(WinUI.RichEditBox box)
+    {
+        box.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var raw);
+        if (string.IsNullOrEmpty(raw)) return "";
+        return raw[^1] == '\r' ? raw[..^1] : raw;
+    }
+
+    // The document stores every line break as \r, so "a\nb" reads back as "a\rb".
+    // Compare with \r\n and \n normalized to \r, so a multi-line write matches its
+    // own echo and isn't rewritten on every render. Trailing breaks still count.
+    private sealed class DocumentTextComparer : global::System.Collections.Generic.IEqualityComparer<string>
+    {
+        internal static readonly DocumentTextComparer Instance = new();
+
+        public bool Equals(string? x, string? y) =>
+            string.Equals(Normalize(x), Normalize(y), global::System.StringComparison.Ordinal);
+
+        public int GetHashCode(string obj) =>
+            global::System.StringComparer.Ordinal.GetHashCode(Normalize(obj));
+
+        private static string Normalize(string? s) =>
+            (s ?? "").Replace("\r\n", "\r", global::System.StringComparison.Ordinal)
+                .Replace('\n', '\r');
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════

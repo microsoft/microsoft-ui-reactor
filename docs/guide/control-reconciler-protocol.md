@@ -321,8 +321,10 @@ public TControl Mount(MountContext ctx, TElement el)
     else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
         binder.Bind(feBinder, oldElement: null, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
 
-    // Phase 1: all bare initial writes (no echo possible — subscriptions
-    // not yet live). §14 Phase 3-final: dispatch through the
+    // Phase 1: all initial writes, bare (a synchronous echo has no live
+    // subscription to reach). A deferred echo lands after phase 2, so
+    // entries for such controls arm their write (HandCodedControlled
+    // armOnMount). §14 Phase 3-final: dispatch through the
     // context-carrying overload so OneWayBridged entries can reach the
     // reconciler/rerender helpers; existing entries forward to the
     // parameterless overload via the virtual default on PropEntry.

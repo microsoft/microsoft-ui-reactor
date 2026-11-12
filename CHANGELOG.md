@@ -64,6 +64,11 @@ Conventions for contributors:
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
 
+- `ControlDescriptor.HandCodedControlled` takes `armOnMount`. With `valueDiffEcho`, it arms
+  the Mount write's echo as well as Update's, for a control whose change event arrives
+  after the trampoline is wired, as `RichEditBox`'s `Document.SetText` does
+  (spec 047 §8.3).
+
 ### Changed
 
 - **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
@@ -101,6 +106,12 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- A controlled `RichEditBox` or `AutoSuggestBox` no longer drops the user's first edit after
+  a state write (#1455). Both now suppress their asynchronous echo with the value-diff arm
+  instead of the suppress counter, which kept a token after every write. A `RichEditBox`
+  state change that only adds a trailing line break (`"text"` to `"text\n"`) is written
+  again, and `onTextChanged` keeps a trailing break the user types (spec 047 §8.3).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
   `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids

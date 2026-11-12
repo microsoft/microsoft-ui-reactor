@@ -1591,8 +1591,8 @@ public sealed partial class Reconciler : IDisposable
         // from EchoSuppressCount. See ApplySetters / ChangeEchoSuppressor.
         public int EchoSuppressScopeDepth;
         // Spec 047 §8 value-diff echo suppression. A programmatic controlled
-        // write on a migrated single-value, exact-comparable, synchronous
-        // round-trip (e.g. ComboBox.SelectedIndex, ToggleSwitch.IsOn) arms this
+        // write on a migrated single-value, exact-comparable round-trip (e.g.
+        // ComboBox.SelectedIndex, ToggleSwitch.IsOn, RichEditBox.Text) arms this
         // one-shot predicate with the value it just wrote; the change-event
         // trampoline drops the single matching echo (readback satisfies the
         // predicate) via ChangeEchoSuppressor.ShouldSuppressEcho, then clears it.
@@ -1603,8 +1603,12 @@ public sealed partial class Reconciler : IDisposable
         // ReactorBinding.WriteSuppressed API, and double-valued controls.
         //
         // Single pending slot — correct only because migrated controls have
-        // exactly one controlled round-trip property whose event fires
-        // synchronously inside the write. Reset everywhere the counter is reset
+        // exactly one controlled round-trip property. Most raise its event
+        // synchronously inside the write. RichEditBox and AutoSuggestBox raise
+        // it later (AutoSuggestBox debounced, possibly merging writes); a newer
+        // write overwrites the arm, and the next event consumes it and is
+        // dropped only if its readback matches, so a late, merged or missing
+        // echo can't swallow a real edit. Reset everywhere the counter is reset
         // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
         // stale arm can't suppress the first real event of a later lifecycle.
         public Func<object?, bool>? PendingEchoMatch;
