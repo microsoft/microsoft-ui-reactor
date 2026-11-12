@@ -15,12 +15,11 @@ public sealed record Page<TItem, TCursor>(
 
 /// <summary>
 /// The four discrete load states of an <see cref="InfiniteResource{TItem}"/>.
-/// Mirrors Android Paging 3's <c>LoadState</c>.
+/// Mirrors Android Paging 3's <c>LoadState</c>. The hierarchy is <c>closed</c>, so a C# 15+
+/// <c>switch</c> over all four cases is exhaustive without a discard arm.
 /// </summary>
-public abstract record LoadState
+public closed record LoadState
 {
-    private protected LoadState() { }
-
     /// <summary>A page fetch is in flight.</summary>
     public sealed record Loading : LoadState { public static readonly Loading Instance = new(); }
 
