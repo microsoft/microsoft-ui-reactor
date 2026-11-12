@@ -3509,6 +3509,10 @@ still available). Omitting the <code>reloading</code> arm makes it fall through 
 <code>loading</code> arm, so a refresh shows the loading UI. To keep the last-known value
 visible while revalidating (stale-while-revalidate), pass a <code>reloading:</code> handler
 explicitly.</p>
+<p><code>AsyncValue&lt;T&gt;</code> is a <code>closed</code> hierarchy, so with C# 15 (the default for <code>net11.0</code>
+apps, or <code>&lt;LangVersion&gt;15&lt;/LangVersion&gt;</code> on <code>net10.0</code>) a plain <code>switch</code> over the four
+cases is exhaustive without a <code>_</code> arm, and forgetting a case is warning CS8509. Older
+compilers still work; they just need the <code>_</code> arm. <code>LoadState</code> below is closed the same way.</p>
 <h2 id="infinite-scroll-with-useinfiniteresource">Infinite Scroll with UseInfiniteResource<a class="headerlink" href="#infinite-scroll-with-useinfiniteresource" title="Permanent link">&para;</a></h2>
 <p><code>UseInfiniteResource</code> models a cursor-paginated read. Drive fetches from
 <code>ItemAt(i)</code> inside a <code>VirtualList</code> <code>renderItem</code> — that's the pull model:
