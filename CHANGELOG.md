@@ -63,9 +63,10 @@ Conventions for contributors:
 
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so
-  flyout callbacks and teardown still use the current decorator. Exit transitions,
-  connected-animation keys and `.Animate()` curves use the first configured value
-  from the outermost decorator inward to the target. Unmount also releases refs
+  flyout callbacks and teardown still use the current decorator. Exit transitions
+  and connected-animation keys use the first configured value from the outermost
+  decorator inward. Animated modifiers use the current render's `.Animate()`
+  curve when a flyout target or decorator updates. Unmount also releases refs
   and animation state on intermediate decorators. Nested decorators attach only
   the outermost native flyout, including through transparent Memo or RegisterType
   targets. They clean up displaced content and keep inner updates

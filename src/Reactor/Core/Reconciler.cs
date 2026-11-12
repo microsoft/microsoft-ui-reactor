@@ -1542,6 +1542,7 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
+        internal bool HasPropertyAnimationVisual;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -2049,10 +2050,10 @@ public sealed partial class Reconciler : IDisposable
         return state.DecoratorElement ?? state.Element;
     }
 
-    /// <summary>Returns the first non-null value in the mounted decorator chain, outermost first.</summary>
-    internal static T? FindMountedElementValue<T>(UIElement control, Func<Element, T?> select) where T : class
+    /// <summary>Walks the supplied or mounted decorator chain, returning the first non-null value.</summary>
+    internal static T? FindMountedElementValue<T>(UIElement control, Func<Element, T?> select, Element? current = null) where T : class
     {
-        var current = GetMountedElement(control);
+        current ??= GetMountedElement(control);
         for (var depth = 0; current is not null; depth++)
         {
             if (select(current) is { } value) return value;
@@ -2959,6 +2960,8 @@ public sealed partial class Reconciler : IDisposable
     // (Flyout, MenuFlyout, …) or a transparent wrapper shares the host's control but
     // sits at a shallower depth, so only the owner's own Update/skip may re-snapshot.
     private Element? _reconcilingElement;
+    // Until the target update returns, its mounted decorator still describes the previous render.
+    internal (FrameworkElement? Target, Element? Decorator) UpdatingFlyout;
 
     private static bool MayHostContextCapture(UIElement control)
         => control is WinUI.ScrollViewer or WinUI.ItemsRepeater or WinUI.ItemsView
@@ -5563,6 +5566,7 @@ public sealed partial class Reconciler : IDisposable
     {
         ElementPool.MarkCompositorTainted(uie);
         var visual = ElementCompositionPreview.GetElementVisual(uie);
+        GetOrCreateReactorState(uie).HasPropertyAnimationVisual = true;
         var compositor = visual.Compositor;
 
         // Start from existing implicit animations (layout may have set Offset/Size)
@@ -6401,6 +6405,13 @@ public sealed partial class Reconciler : IDisposable
     private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
         => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
 
+    private Element? GetModifierAnimationSource(FrameworkElement control)
+    {
+        if (_reconcilingElement?.AnimationConfig is not null) return _reconcilingElement;
+        if (ReferenceEquals(UpdatingFlyout.Target, control)) return UpdatingFlyout.Decorator;
+        return _reconcilingElement is { } element && IsFlyoutDecorator(element) ? element : null;
+    }
+
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
         bool keepRemovedBackground = false)
     {
@@ -6527,7 +6538,7 @@ public sealed partial class Reconciler : IDisposable
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value);
+            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe));
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
             // Note: if the set arm started a compositor animation on Visual.Opacity,
             // clearing the XAML DP does not cancel it — neither did the previous
@@ -6542,13 +6553,13 @@ public sealed partial class Reconciler : IDisposable
         // given the mechanical arm the plain-DP modifiers below get.
         // ModifierUnsetClearValueTests.MissingUnsetArmExceptions records the same four names.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
-            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value);
+            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe));
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
-            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value);
+            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe));
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
-            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value);
+            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe));
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
-            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value);
+            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe));
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
         else if (!m.IsVisible.HasValue && oldM?.IsVisible.HasValue == true)

@@ -17,15 +17,20 @@ internal static class AnimationHelper
     /// Sets a scalar property on a UIElement, animating via the compositor if
     /// <see cref="AnimationScope.Current"/> is non-null.
     /// </summary>
-    internal static void SetOrAnimate(UIElement element, string property, float value)
+    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null)
     {
         // Resolve animation curve: prefer ambient WithAnimation scope,
         // fall back to element's .Animate() config curve.
         var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig)?.Curve;
+        curve ??= Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig, source)?.Curve;
 
         if (curve is null)
         {
+            if (property == "Rotation" && GetFlyoutTransformVisual(element, source) is { } visualTarget)
+            {
+                visualTarget.RotationAngleInDegrees = value;
+                return;
+            }
             SetScalarDirect(element, property, value);
             return;
         }
@@ -236,13 +241,19 @@ internal static class AnimationHelper
     /// Sets a Vector3 property on a UIElement, animating via the compositor if
     /// <see cref="AnimationScope.Current"/> is non-null.
     /// </summary>
-    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value)
+    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null)
     {
         var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig)?.Curve;
+        curve ??= Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig, source)?.Curve;
 
         if (curve is null)
         {
+            if (property is "Scale" or "CenterPoint" && GetFlyoutTransformVisual(element, source) is { } visualTarget)
+            {
+                if (property == "Scale") visualTarget.Scale = value;
+                else visualTarget.CenterPoint = value;
+                return;
+            }
             SetVector3Direct(element, property, value);
             return;
         }
@@ -286,6 +297,11 @@ internal static class AnimationHelper
                 break;
         }
     }
+
+    // After .Animate() takes the handoff Visual, WinUI rejects direct XAML transform writes.
+    private static Visual? GetFlyoutTransformVisual(UIElement element, Element? source) =>
+        source is not null && element is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var state)
+            && state.HasPropertyAnimationVisual ? ElementCompositionPreview.GetElementVisual(fe) : null;
 
     private static string CompositorPropertyName(string property) => property switch
     {

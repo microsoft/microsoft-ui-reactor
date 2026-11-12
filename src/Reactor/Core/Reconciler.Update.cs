@@ -207,6 +207,13 @@ public sealed partial class Reconciler
         // ResourceOverrides against it.
         _ambientRequestedTheme = effectiveTheme;
 
+        // The target writes its modifiers inside flyout dispatch. Release the old curve
+        // first so that a direct write cannot trigger its implicit animation once more.
+        bool removedFlyoutCurve = oldEl.AnimationConfig is not null && newEl.AnimationConfig is null
+            && (ReferenceEquals(UpdatingFlyout.Target, control) || IsFlyoutDecorator(newEl));
+        // LayoutAnimation, if present, installs its current entries after dispatch.
+        if (removedFlyoutCurve) ClearPropertyAnimation(control, layoutConfig: null);
+
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
         //   (3) global `ControlRegistry`, (4) composition-primitive switch.
@@ -371,7 +378,7 @@ public sealed partial class Reconciler
         // Apply or clear compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, newEl.LayoutAnimation);
-        else if (oldEl.AnimationConfig is not null)
+        else if (!removedFlyoutCurve && oldEl.AnimationConfig is not null)
             ClearPropertyAnimation(target, newEl.LayoutAnimation);
 
         // Apply or clear interaction states (.InteractionStates() modifier)

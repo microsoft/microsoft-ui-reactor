@@ -59,16 +59,24 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         if (PreservesTargetTag && control is FrameworkElement target)
         {
             var state = Reconciler.GetOrCreateReactorState(target);
+            var previousFlyout = reconciler.UpdatingFlyout;
             state.ActiveFlyoutUpdates++;
             try
             {
                 // Memo can reconstruct old/new from one factory call. Diff the outer flyout
                 // against the configuration actually installed on the control.
-                if (state.ActiveFlyoutUpdates == 1 && state.DecoratorElement is TElement mounted)
-                    typedOld = mounted;
+                if (state.ActiveFlyoutUpdates == 1)
+                {
+                    if (state.DecoratorElement is TElement mounted) typedOld = mounted;
+                    reconciler.UpdatingFlyout = (target, typedNew);
+                }
                 return _handler.Update(ctx, typedOld, typedNew, control);
             }
-            finally { state.ActiveFlyoutUpdates--; }
+            finally
+            {
+                reconciler.UpdatingFlyout = previousFlyout;
+                state.ActiveFlyoutUpdates--;
+            }
         }
         var next = _handler.Update(ctx, typedOld, typedNew, control);
 
