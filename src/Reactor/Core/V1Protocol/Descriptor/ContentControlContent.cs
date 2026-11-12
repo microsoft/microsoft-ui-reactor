@@ -24,18 +24,39 @@ internal static class ContentControlContent
         // The helper owns both reconciliation and removal. Native setters run
         // between the text bridge and this existing post-setter strategy, so a
         // declared Element wins while an undeclared slot leaves setter content alone.
+        // Teardown runs through the strategy, so callback-free controls stay untagged;
+        // the generic ContentControl walk reaches the owned child, which is always Content.
         descriptor.Children = new Imperative<TElement, TControl>((ctx, oldElement, newElement, control) =>
         {
-            if (getChild(newElement) is not { } newChild) return;
+            // Lifecycle actions run after this strategy and may replace Content with UI the
+            // helper does not own, displacing its child; an unmount action may clear it before
+            // teardown. The generic walk would pool that UI and miss the child, so tag the
+            // control to route teardown through Unmount, which works from the owned record.
+            if (newElement.Modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
+                or { OnUnmountAction: not null })
+                EnsureTagged(control, newElement);
+            if (getChild(newElement) is not { } newChild)
+            {
+                // Setter-supplied UI is not ours either, for the same reason.
+                if (control.Content is UIElement)
+                    EnsureTagged(control, newElement);
+                return;
+            }
             var hadContent = OwnedContent.TryGetValue(control, out var state);
             state ??= OwnedContent.GetValue(control, static _ => new ContentState());
             state.Child = ctx.ReconcileChild(hadContent ? getChild(oldElement) : null, newChild, state.Child);
             if (!ReferenceEquals(control.Content, state.Child)) control.Content = state.Child;
-        });
+        })
+        {
+            Unmount = static (ctx, control) => UnmountOwnedContent(ctx.Reconciler, control),
+        };
 
         return descriptor.ImperativeBridged(
             mount: (_, control, element) =>
             {
+                // An untagged control's teardown skips the strategy, so a pooled
+                // control can arrive with a record of a child already unmounted.
+                OwnedContent.Remove(control);
                 control.Content = getChild(element) is null ? getText(element) : null;
             },
             update: (ctx, control, oldElement, newElement) =>
@@ -61,8 +82,13 @@ internal static class ContentControlContent
                 {
                     control.Content = getText(newElement);
                 }
-            },
-            unmount: static (ctx, control) => UnmountOwnedContent(ctx.Reconciler, control));
+            });
+    }
+
+    private static void EnsureTagged(ContentControl control, Element element)
+    {
+        if (!Reconciler.TryGetReactorState(control, out _))
+            Reconciler.SetElementTag(control, element);
     }
 
     private static void UnmountOwnedContent(Reconciler reconciler, ContentControl control)

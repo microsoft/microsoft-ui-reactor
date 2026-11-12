@@ -3056,6 +3056,7 @@ ToString() → string
 ### record Imperative<TElement, TControl>
 new(Action<MountContext, TElement, TElement, TControl> Reconcile)
 Action<MountContext, TElement, TElement, TControl> Reconcile { get; init; }
+Action<UnmountContext, TControl> Unmount { get; init; }
 Deconstruct(ref Action<MountContext, TElement, TElement, TControl> Reconcile) → void
 Equals(ChildrenStrategy<TElement, TControl> other) → bool
 Equals(Imperative<TElement, TControl> other) → bool

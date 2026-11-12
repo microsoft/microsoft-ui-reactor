@@ -33,6 +33,8 @@ public sealed partial class Reconciler : IDisposable
 {
     private readonly Dictionary<UIElement, ComponentNode> _componentNodes = new();
     private readonly Dictionary<UIElement, ErrorBoundaryNode> _errorBoundaryNodes = new();
+    // Test seam: boundaries still registered, so a teardown path that leaks one is observable.
+    internal int ErrorBoundaryNodeCount => _errorBoundaryNodes.Count;
     // internal so NavigationHostLifecycle (V1-owned mount/update) can record and
     // look up per-instance navigation state; teardown stays here (Dispose loop +
     // CleanupNavigationHostNode).
@@ -5003,6 +5005,9 @@ public sealed partial class Reconciler : IDisposable
             RunUnmountCleanups(node);
             _componentNodes.Remove(control);
         }
+
+        // Mirrors UnmountRecursive: the wrapper may be pooled and reused by an unrelated element.
+        _errorBoundaryNodes.Remove(control);
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount on the
         // UnmountAndCollect path. Standard handlers return CollectSelf
