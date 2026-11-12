@@ -217,19 +217,29 @@ internal static class ButtonContentFixture
                     .OnMount(fe => ((WinUI.ContentControl)fe).Content = displacing), Noop)!;
             H.SetContent(displacedControl);
             await Harness.Render();
-            var displacedMounted = counters.Mounts == 1 && counters.Cleanups == 0;
+            H.Check("Untagged_OnMountDisplacedChildMounted", counters.Mounts == 1 && counters.Cleanups == 0);
+
+            // An unmount action that clears Content runs before the generic walk could find the child.
+            var clearedCounters = new Counters();
+            var clearedControl = (FrameworkElement)reconciler.Mount(
+                Button(Component<ContentProbe, ProbeProps>(new("cleared", clearedCounters)))
+                    .OnUnmount(fe => ((WinUI.ContentControl)fe).Content = null), Noop)!;
+            H.SetContent(clearedControl);
+            await Harness.Render();
+            H.Check("Untagged_OnUnmountChildMounted", clearedCounters.Mounts == 1 && clearedCounters.Cleanups == 0);
             H.SetContent(null);
 
             reconciler.UnmountAndPool(setterControl);
             reconciler.UnmountAndPool(boundaryControl);
             reconciler.UnmountAndPool(onMountControl);
             reconciler.UnmountAndPool(displacedControl);
+            reconciler.UnmountAndPool(clearedControl);
             H.Check("Untagged_SetterContentSurvivesPooledRemoval", IsIntact(native));
             H.Check("Untagged_PooledRemovalDropsErrorBoundary", boundaries == 1
                 && reconciler.ErrorBoundaryNodeCount == 0);
             H.Check("Untagged_OnMountContentSurvivesPooledRemoval", IsIntact(onMountNative));
-            H.Check("Untagged_OnMountDisplacedChildCleanedUp", displacedMounted
-                && counters.Cleanups == 1 && IsIntact(displacing));
+            H.Check("Untagged_OnMountDisplacedChildCleanedUp", counters.Cleanups == 1 && IsIntact(displacing));
+            H.Check("Untagged_OnUnmountClearedChildCleanedUp", clearedCounters.Cleanups == 1);
         }
 
         private static WinUI.StackPanel NativePanel()

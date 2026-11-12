@@ -29,9 +29,11 @@ internal static class ContentControlContent
         descriptor.Children = new Imperative<TElement, TControl>((ctx, oldElement, newElement, control) =>
         {
             // Lifecycle actions run after this strategy and may replace Content with UI the
-            // helper does not own, displacing its child. The generic walk would pool that UI
-            // and miss the displaced child, so tag the control to route teardown through Unmount.
-            if (newElement.Modifiers is { OnMountAction: not null } or { OnUpdateAction: not null })
+            // helper does not own, displacing its child; an unmount action may clear it before
+            // teardown. The generic walk would pool that UI and miss the child, so tag the
+            // control to route teardown through Unmount, which works from the owned record.
+            if (newElement.Modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
+                or { OnUnmountAction: not null })
                 EnsureTagged(control, newElement);
             if (getChild(newElement) is not { } newChild)
             {
