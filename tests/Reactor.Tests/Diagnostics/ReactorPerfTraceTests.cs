@@ -27,14 +27,16 @@ public sealed class ReactorPerfTraceTests
 
     private const int UnicodeString = 1, UInt32 = 8, UInt64 = 10, Bool32 = 13;
 
+    // Fields appended in schema revision 2 sit after the revision-1 fields of the same event.
     private static readonly EventSchema[] DocumentedSchema =
     [
-        new(1, "RenderPass", 1, 4, 0x1, [new("hostId", UInt64)]),
+        new(1, "RenderPass", 1, 4, 0x1, [new("hostId", UInt64), new("requesterId", UInt64), new("requesterName", UnicodeString), new("requestCount", UInt32)]),
         new(2, "RenderPass", 2, 4, 0x1, [new("hostId", UInt64)]),
-        new(3, "ComponentRender", 1, 4, 0x2, [new("componentId", UInt64), new("name", UnicodeString), new("reason", UnicodeString)]),
+        new(3, "ComponentRender", 1, 4, 0x2, [new("componentId", UInt64), new("name", UnicodeString), new("reason", UnicodeString),
+            new("callSiteFile", UnicodeString), new("callSiteLine", UInt32), new("callSiteColumn", UInt32)]),
         new(4, "ComponentRender", 2, 4, 0x2, [new("componentId", UInt64)]),
         new(5, "Reconcile", 1, 4, 0x1, [new("entry", UnicodeString), new("element", UnicodeString)]),
-        new(6, "Reconcile", 2, 4, 0x1, []),
+        new(6, "Reconcile", 2, 4, 0x1, [new("inserted", UInt32), new("removed", UInt32), new("moved", UInt32), new("replaced", UInt32)]),
         new(7, "Effects", 1, 4, 0x1, [new("componentId", UInt64)]),
         new(8, "Effects", 2, 4, 0x1, [new("componentId", UInt64)]),
         new(9, "ChildReconcile", 1, 5, 0x4, [new("oldCount", UInt32), new("newCount", UInt32)]),
@@ -202,6 +204,430 @@ public sealed class ReactorPerfTraceTests
         Assert.Equal("hotReload", root.PeekReason(hotReloadRender: false, forcePending: false));
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\someone\src\App\MainPage.cs", "MainPage.cs")]
+    [InlineData("/_/src/App/Pages/Row.cs", "Row.cs")]
+    [InlineData(@"C:\mixed/sep\Grid.cs", "Grid.cs")]
+    [InlineData("Bare.cs", "Bare.cs")]
+    [InlineData("", "")]
+    public void CallSiteFile_IsTheFileNameWithoutItsDirectories(string path, string expected)
+        => Assert.Equal(expected, path[ReactorPerfTrace.FileNameStart(path)..]);
+
+    private static Element NamedRender(RenderContext ctx) => TextBlock("named");
+
+    private sealed class NamedComponent : Component
+    {
+        public override Element Render() => TextBlock("class");
+    }
+
+    [Fact]
+    public void FunctionAndMemoComponents_AreNamedByTheirRenderFunction_AsDevToolsNamesThem()
+    {
+        // A method group names the method; a lambda names the factory and the method it is
+        // written in. Never the element type, which every function component shares.
+        Assert.Equal("ReactorPerfTraceTests.NamedRender", ComponentNames.ForRenderFunction(RenderEachTime(NamedRender)));
+        Assert.Equal("RenderEachTime in ReactorPerfTraceTests." + nameof(FunctionAndMemoComponents_AreNamedByTheirRenderFunction_AsDevToolsNamesThem),
+            ComponentNames.ForRenderFunction(RenderEachTime(_ => TextBlock("lambda"))));
+        Assert.Equal("Memo in ReactorPerfTraceTests." + nameof(FunctionAndMemoComponents_AreNamedByTheirRenderFunction_AsDevToolsNamesThem),
+            ComponentNames.ForRenderFunction(Memo(_ => TextBlock("memo"))));
+        Assert.Equal("render", ComponentNames.ForRenderFunction(null, ComponentNames.RootRenderFunctionFallback));
+        // Anything else keeps its ComponentNames.For name.
+        Assert.Equal(nameof(NamedComponent), ComponentNames.ForRenderFunction(Component<NamedComponent>()));
+    }
+
+    [Fact]
+    public void PerfComponentName_ResolvesAFunctionComponentOnce_AndClassComponentsEveryTime()
+    {
+        var func = new Reconciler.ComponentNode { Context = new RenderContext() };
+        Assert.Equal("ReactorPerfTraceTests.NamedRender", Reconciler.PerfComponentName(func, RenderEachTime(NamedRender)));
+        // Kept for the component's lifetime, even if a later render passes another function.
+        Assert.Equal("ReactorPerfTraceTests.NamedRender", Reconciler.PerfComponentName(func, RenderEachTime(_ => TextBlock("other"))));
+        Assert.Equal("ReactorPerfTraceTests.NamedRender", func.PerfName);
+
+        var memo = new Reconciler.ComponentNode { Context = new RenderContext() };
+        Assert.StartsWith("Memo in ", Reconciler.PerfComponentName(memo, Memo(_ => TextBlock("m"))));
+
+        var cls = new Reconciler.ComponentNode { Component = new NamedComponent() };
+        Assert.Equal(nameof(NamedComponent), Reconciler.PerfComponentName(cls, Component<NamedComponent>()));
+        Assert.Null(cls.PerfName);
+    }
+
+    [Fact]
+    public void RenderPassRequests_TheInnermostClaimAndTheFirstRequestWin()
+    {
+        object inner = new(), outer = new(), later = new();
+        var requests = new RenderPassRequests();
+        try
+        {
+            // Nobody listening: a request records nothing, claimed or not.
+            Assert.True(RenderPassRequests.Claim(inner));
+            requests.Note();
+            RenderPassRequests.Release();
+            Assert.False(requests.HasPending);
+
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+
+            // A request climbing through its ancestors: the first claim on the thread holds.
+            Assert.True(RenderPassRequests.Claim(inner));
+            Assert.False(RenderPassRequests.Claim(outer));
+            requests.Note();
+            RenderPassRequests.Release();
+            Assert.Null(RenderPassRequests.CurrentForTests);
+
+            // An unclaimed request counts but names nobody; a later claimed one does not displace the first.
+            requests.Note();
+            Assert.True(RenderPassRequests.Claim(later));
+            requests.Note();
+            RenderPassRequests.Release();
+            Assert.True(requests.HasPending);
+
+            Assert.Same(inner, requests.Take(out uint count));
+            Assert.Equal(3u, count);
+            Assert.False(requests.HasPending);
+            Assert.Null(requests.Take(out count));
+            Assert.Equal(0u, count);
+
+            // Requests that name nobody still leave something to take.
+            requests.Note();
+            Assert.True(requests.HasPending);
+            Assert.Null(requests.Take(out count));
+            Assert.Equal(1u, count);
+
+            // An untraced pass discards what a session noted before it stopped.
+            Assert.True(RenderPassRequests.Claim(inner));
+            requests.Note();
+            RenderPassRequests.Release();
+            requests.DiscardStale();
+            Assert.False(requests.HasPending);
+            Assert.Null(requests.Take(out count));
+            Assert.Equal(0u, count);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public void RootPerfName_IsResolvedOncePerRoot_AndResetWithIt()
+    {
+        var root = new RootRenderDiagnostics();
+        Assert.Equal("ReactorPerfTraceTests.NamedRender", root.PerfName(null, (Func<RenderContext, Element>)NamedRender));
+        Assert.Equal("ReactorPerfTraceTests.NamedRender", root.PerfName(null, (Func<RenderContext, Element>)(_ => TextBlock("x"))));
+        // A new root (Reset) resolves its own name.
+        root.Reset();
+        Assert.Equal("render in ReactorPerfTraceTests." + nameof(RootPerfName_IsResolvedOncePerRoot_AndResetWithIt),
+            root.PerfName(null, (Func<RenderContext, Element>)(_ => TextBlock("y"))));
+        // A class root is named by its type every time.
+        Assert.Equal(nameof(NamedComponent), root.PerfName(new NamedComponent(), null));
+    }
+
+    [Fact]
+    public void InvokeAs_ClaimsOnlyWhileThePassKeywordIsOn_AndAlwaysReleases()
+    {
+        object requester = new();
+        object? seen = "unset";
+        try
+        {
+            RenderPassRequests.InvokeAs(requester, () => seen = RenderPassRequests.CurrentForTests);
+            Assert.Null(seen);
+
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Component, 0);
+            RenderPassRequests.InvokeAs(requester, () => seen = RenderPassRequests.CurrentForTests);
+            Assert.Null(seen);
+
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            RenderPassRequests.InvokeAs(requester, () => seen = RenderPassRequests.CurrentForTests);
+            Assert.Same(requester, seen);
+            Assert.Null(RenderPassRequests.CurrentForTests);
+
+            // Nested: the inner (first) requester stays; the outer leaves its claim alone.
+            object other = new();
+            RenderPassRequests.InvokeAs(requester, () =>
+                RenderPassRequests.InvokeAs(other, () => seen = RenderPassRequests.CurrentForTests));
+            Assert.Same(requester, seen);
+
+            // A throwing request still releases the claim.
+            Assert.Throws<InvalidOperationException>(() =>
+                RenderPassRequests.InvokeAs(requester, () => throw new InvalidOperationException()));
+            Assert.Null(RenderPassRequests.CurrentForTests);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public void PassStart_NamesTheRequester_TheRoot_OrNobody()
+    {
+        ReactorPerfTrace.EnsureRegistered();
+        ulong hostId = 0xFACE_0000_0000_0000UL | (uint)Random.Shared.Next();
+        var rootContext = new RenderContext();
+        Func<RenderContext, Element> rootRender = NamedRender;
+        var child = new Reconciler.ComponentNode { Context = new RenderContext(), Element = Memo(_ => TextBlock("c")) };
+
+        var events = Capture(level: 4, keywords: ReactorPerfTrace.Keywords.Pass, () =>
+        {
+            var root = new RootRenderDiagnostics();
+            var requests = new RenderPassRequests();
+
+            RenderPassRequests.InvokeAs(child, requests.Note);
+            root.RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
+
+            root.RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
+
+            requests.Note();
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
+
+            // A root claim with no live root (disposed between the request and the pass).
+            root.RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, funcContext: null, renderFunc: null);
+
+            // A request from a root that was replaced (remounted) before the pass names nobody.
+            new RootRenderDiagnostics().RequestFromRoot(requests.Note);
+            root.WritePassStart(hostId, requests, root: null, rootContext, rootRender);
+
+            // An untraced pass drops what was noted; a traced one writes.
+            RenderPassRequests.InvokeAs(child, requests.Note);
+            root.BeginPass(perfPass: false, hostId, requests, root: null, rootContext, rootRender);
+            root.BeginPass(perfPass: true, hostId, requests, root: null, rootContext, rootRender);
+        });
+
+        var starts = events.Where(e => e.Id == 1 && Equals(e.Fields["hostId"], hostId))
+            .Select(e => ((ulong)e.Fields["requesterId"], (string)e.Fields["requesterName"], (uint)e.Fields["requestCount"]))
+            .ToList();
+        Assert.Equal(
+            new[]
+            {
+                ((ulong)child.DiagnosticId, child.PerfName!, 2u),
+                ((ulong)rootContext.DiagnosticId, "ReactorPerfTraceTests.NamedRender", 1u),
+                (0UL, "", 1u),
+                (0UL, "", 1u),
+                (0UL, "", 1u),
+                (0UL, "", 0u),
+            },
+            starts);
+        // The ids compared above were assigned by the code under test, not left at 0.
+        Assert.NotEqual(0, child.DiagnosticId);
+        Assert.NotEqual(0, rootContext.DiagnosticId);
+        Assert.StartsWith("Memo in ", child.PerfName);
+    }
+
+    [Fact]
+    public void Note_ConsumesTheClaim_SoAPassItRunsSynchronouslyIsNotCreditedToIt()
+    {
+        object outer = new(), inner = new();
+        var first = new RenderPassRequests();
+        var nested = new RenderPassRequests();
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            // A host's first render runs inside the request that scheduled it; a request made
+            // during that pass (here: after Note, still inside the outer request) is not the
+            // outer one's.
+            RenderPassRequests.InvokeAs(outer, () =>
+            {
+                first.Note();
+                Assert.Null(RenderPassRequests.CurrentForTests);
+                nested.Note();
+            });
+            Assert.Same(outer, first.Take(out uint firstCount));
+            Assert.Equal(1u, firstCount);
+            Assert.Null(nested.Take(out uint nestedCount));
+            Assert.Equal(1u, nestedCount);
+
+            RenderPassRequests.InvokeAs(outer, () =>
+            {
+                first.Note();
+                RenderPassRequests.InvokeAs(inner, nested.Note);
+            });
+            Assert.Same(outer, first.Take(out firstCount));
+            Assert.Same(inner, nested.Take(out nestedCount));
+            Assert.Equal(1u, nestedCount);
+            Assert.Null(RenderPassRequests.CurrentForTests);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public void RenderPassRequests_AnUnclaimedFirstRequest_NamesNobody_EvenIfAClaimedOneCoalesces()
+    {
+        object later = new();
+        var requests = new RenderPassRequests();
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            // A host-level request scheduled the pass; a component's request only joined it.
+            requests.Note();
+            RenderPassRequests.InvokeAs(later, requests.Note);
+            Assert.Null(requests.Take(out uint count));
+            Assert.Equal(2u, count);
+
+            // The next pass starts clean: its first request is the component's.
+            RenderPassRequests.InvokeAs(later, requests.Note);
+            requests.Note();
+            Assert.Same(later, requests.Take(out count));
+            Assert.Equal(2u, count);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public void RenderPassRequests_APassPendingBeforeTheSession_NamesNobody()
+    {
+        object later = new();
+        bool pending = false;
+        var requests = new RenderPassRequests(() => pending);
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            // The host already had a pass pending when the first traced request arrived: an
+            // untraced request scheduled it, and this one only joined it.
+            pending = true;
+            RenderPassRequests.InvokeAs(later, requests.Note);
+            Assert.Null(requests.Take(out uint count));
+            Assert.Equal(1u, count);
+
+            // Once something traced was noted for the pending pass, it keeps the credit.
+            pending = false;
+            RenderPassRequests.InvokeAs(later, requests.Note);
+            pending = true;
+            requests.Note();
+            Assert.Same(later, requests.Take(out count));
+            Assert.Equal(2u, count);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RenderPassRequests_APassStartingBetweenTheFlagReadAndTheNote_DoesNotMakeTheRequestAnonymous(bool tracedPass)
+    {
+        // A request on another thread reads the host's flag while the previous pass is still
+        // pending; that pass then starts (the render loop clears the flag and takes, or discards
+        // when untraced) before the request is noted. The flag was the started pass's, so the
+        // request is the next pass's first — not a request that joined a pending pass.
+        object requester = new();
+        RenderPassRequests? requests = null;
+        requests = new RenderPassRequests(() =>
+        {
+            if (tracedPass) requests!.Take(out _);
+            else requests!.DiscardStale();
+            return true;
+        });
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            RenderPassRequests.InvokeAs(requester, requests.Note);
+            Assert.Same(requester, requests.Take(out uint count));
+            Assert.Equal(1u, count);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public void RenderPassRequests_ANoteBetweenTheFlagClearAndTheTake_BelongsToTheStartingPass()
+    {
+        // The render loop has cleared the flag but not yet taken: the request's state is already
+        // written, so the starting pass renders it and counts it; the flag the request sets
+        // afterwards may run one more pass, which has nothing recorded.
+        object requester = new();
+        var requests = new RenderPassRequests(() => false);
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            RenderPassRequests.InvokeAs(requester, requests.Note);
+            Assert.Same(requester, requests.Take(out uint count));
+            Assert.Equal(1u, count);
+            Assert.Null(requests.Take(out count));
+            Assert.Equal(0u, count);
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+    }
+
+    [Fact]
+    public async Task RenderPassRequests_ATakeRacingANote_NeverSplitsTheRequest()
+    {
+        // A worker-thread request is counted, then its requester recorded; a pass starting on the
+        // UI thread in between must wait, or it takes the count without the requester (and the
+        // next pass reports the requester with no count).
+        object requester = new();
+        var requests = new RenderPassRequests();
+        Task<(object? First, uint Count)>? take = null;
+        bool tookInsideNote = false;
+        requests.BetweenCountAndRequesterForTests = () =>
+        {
+            take = Task.Run(() => (requests.Take(out uint c), c));
+            tookInsideNote = SpinWait.SpinUntil(() => take.IsCompleted, 200);
+        };
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Pass, 0);
+            RenderPassRequests.InvokeAs(requester, requests.Note);
+        }
+        finally
+        {
+            requests.BetweenCountAndRequesterForTests = null;
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            RenderPassRequests.Release();
+        }
+
+        Assert.NotNull(take);
+        var (first, count) = await take;
+        Assert.False(tookInsideNote);
+        Assert.Same(requester, first);
+        Assert.Equal(1u, count);
+        Assert.False(requests.HasPending);
+    }
+
+    [Fact]
+    public void RootSpan_CarriesTheMountSiteAndTheRenderFunctionName()
+    {
+        ReactorPerfTrace.EnsureRegistered();
+        var context = new RenderContext();
+        Func<RenderContext, Element> render = NamedRender;
+        var events = Capture(level: 4, keywords: ReactorPerfTrace.Keywords.Component, () =>
+        {
+            var root = new RootRenderDiagnostics();
+            using (root.BeginPerfSpan(null, context, render, new SourceLocation("/_/samples/App/Program.cs", 12, 5), false, false)) { }
+            using (root.BeginPerfSpan(null, context, render, mountSite: null, false, false)) { }
+        });
+
+        var starts = events.Where(e => e.Id == 3 && Equals(e.Fields["componentId"], (ulong)context.DiagnosticId)).ToList();
+        Assert.Equal(2, starts.Count);
+        Assert.All(starts, e => Assert.Equal("ReactorPerfTraceTests.NamedRender", e.Fields["name"]));
+        Assert.Equal(("Program.cs", 12u, 5u),
+            ((string)starts[0].Fields["callSiteFile"], (uint)starts[0].Fields["callSiteLine"], (uint)starts[0].Fields["callSiteColumn"]));
+        Assert.Equal(("", 0u, 0u),
+            ((string)starts[1].Fields["callSiteFile"], (uint)starts[1].Fields["callSiteLine"], (uint)starts[1].Fields["callSiteColumn"]));
+    }
+
     [Fact]
     public void PrivateSession_RecordsEveryEvent_AndTdhDecodesTheDocumentedSchema()
     {
@@ -216,13 +642,14 @@ public sealed class ReactorPerfTraceTests
 
         var events = Capture(level: 5, keywords: 0xF, () =>
         {
-            ReactorPerfTrace.RenderPassStart(hostId);
-            ReactorPerfTrace.ComponentRenderStart(componentId, name, "mount");
+            ReactorPerfTrace.RenderPassStart(hostId, componentId, name, 3);
+            ReactorPerfTrace.ComponentRenderStart(componentId, name, "mount",
+                new SourceLocation(@"C:\Users\someone\src\App\Pages\" + name + ".cs", 42, 7));
             ReactorPerfTrace.ReconcileStart("reconcile", name);
             ReactorPerfTrace.ChildReconcileStart(3, 4);
             ReactorPerfTrace.ChildReconcileStop(1, 2, 3, 4);
             ReactorPerfTrace.KeyedListDiagnostic("duplicateKey", true);
-            ReactorPerfTrace.ReconcileStop();
+            ReactorPerfTrace.ReconcileStop(5, 6, 7, 8);
             ReactorPerfTrace.ComponentRenderStop(componentId);
             ReactorPerfTrace.EffectsStart(componentId);
             ReactorPerfTrace.EffectsStop(componentId);
@@ -249,9 +676,17 @@ public sealed class ReactorPerfTraceTests
             Assert.Equal(Environment.ProcessId, e.ProcessId);
         }
 
+        Assert.Equal(hostId, ours[0].Fields["hostId"]);
+        Assert.Equal(componentId, ours[0].Fields["requesterId"]);
+        Assert.Equal(name, ours[0].Fields["requesterName"]);
+        Assert.Equal(3u, ours[0].Fields["requestCount"]);
         Assert.Equal(componentId, ours[1].Fields["componentId"]);
         Assert.Equal(name, ours[1].Fields["name"]);
         Assert.Equal("mount", ours[1].Fields["reason"]);
+        // The directories (which here carry a user name) never reach the payload.
+        Assert.Equal(name + ".cs", ours[1].Fields["callSiteFile"]);
+        Assert.Equal(42u, ours[1].Fields["callSiteLine"]);
+        Assert.Equal(7u, ours[1].Fields["callSiteColumn"]);
         Assert.Equal("reconcile", ours[2].Fields["entry"]);
         Assert.Equal(name, ours[2].Fields["element"]);
         Assert.Equal(3u, ours[3].Fields["oldCount"]);
@@ -260,6 +695,8 @@ public sealed class ReactorPerfTraceTests
             new[] { "inserted", "removed", "moved", "replaced" }.Select(k => ours[4].Fields[k]));
         Assert.Equal("duplicateKey", ours[5].Fields["kind"]);
         Assert.Equal(true, ours[5].Fields["bailedOut"]);
+        Assert.Equal(new object[] { 5u, 6u, 7u, 8u },
+            new[] { "inserted", "removed", "moved", "replaced" }.Select(k => ours[6].Fields[k]));
         Assert.Equal(componentId, ours[7].Fields["componentId"]);
         Assert.Equal(componentId, ours[8].Fields["componentId"]);
         Assert.Equal(componentId, ours[10].Fields["componentId"]);
@@ -443,7 +880,7 @@ public sealed class ReactorPerfTraceTests
                 probeEnabled = probe.IsEnabled();
                 probe.Ping(1);
                 ReactorPerfTrace.ReconcileStart("reconcile", "Probe");
-                ReactorPerfTrace.ReconcileStop();
+                ReactorPerfTrace.ReconcileStop(0, 0, 0, 0);
                 capture.Stop();
             }
 

@@ -42,6 +42,17 @@ Conventions for contributors:
   setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
   check. Schema: `docs/reference/perf-trace-events.md` (issue #1484).
 
+- `Microsoft-UI-Reactor-Perf` schema revision 2, with fields appended so decoders for the first
+  revision keep working (event versions stay 0). `RenderPass` Start names the component whose
+  re-render request scheduled the pass (`requesterId`, `requesterName`, `requestCount`), with
+  no need for the verbose `State` keyword. `ComponentRender` Start carries the C# call site that
+  created the component from the source map (`callSiteFile` (the file name only),
+  `callSiteLine`, `callSiteColumn`). `Reconcile` Stop counts the panel child edits made during
+  the entry at the default level (`inserted`, `removed`, `moved`, `replaced`). Function and memo
+  components are named by their render function, as DevTools names them
+  (`RenderEachTime in MainPage.Render`), instead of all reporting `FuncElement` / `MemoElement`
+  (issue #1489).
+
 - `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
   before the title bar's title, using the same child lifecycle as `RightHeader`
   (issue #1478).
@@ -91,6 +102,15 @@ Conventions for contributors:
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
+- **The guide, README, agent kit and `bootstrap.ps1` now describe Windows App SDK template pack
+  `0.0.8-alpha`** (microsoft/WindowsAppSDK#6845; spec 022). That pack adds `reactor-singlefile`, a
+  one-file app with no `.csproj`, and a `--packaging Packaged|Unpackaged` option on the four project
+  templates, so the unpackaged shape no longer needs a hand edit after scaffolding. Its scaffolds no
+  longer reference the `Microsoft.WindowsAppSDK` metapackage and the `--wasdk-version` option is
+  gone: the Windows App SDK arrives through `Microsoft.UI.Reactor` at the version Reactor depends on.
+  Add the metapackage yourself for a self-contained app or a newer WinUI. An older installed pack
+  rejects `--packaging` and lacks `reactor-singlefile`; update it with
+  `winapp new --list --template-version latest`.
 
 ### Deprecated
 

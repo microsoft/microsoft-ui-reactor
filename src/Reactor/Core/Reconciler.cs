@@ -471,10 +471,35 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorPerfTrace.ReconcileStart(perfEntry,
                     element is null ? "null" : Diagnostics.ComponentNames.For(element.GetType()));
                 perfSpan = true;
+                // Tally this entry's panel child edits for the Reconcile Stop.
+                _perfEdits = default;
+                _perfTally = true;
             }
         }
         _entryDepth++;
         return new EntryFrame(this, scope, perfSpan);
+    }
+
+    // The panel child edits made during the open perf Reconcile span (all containers, every
+    // depth), written on its Stop. _perfTally is true only while that span is open, so with
+    // no session listening ReconcileChildrenTraced reads one bool and counts nothing.
+    private bool _perfTally;
+    private PerfEdits _perfEdits;
+
+    // Test-only: the tally must be closed between entries, or every child reconcile pays for it.
+    internal bool PerfTallyOpenForTests => _perfTally;
+
+    private struct PerfEdits
+    {
+        public uint Inserted, Removed, Moved, Replaced;
+
+        public void Add(PanelChildCollection collection)
+        {
+            Inserted += collection.InsertCount;
+            Removed += collection.RemoveCount;
+            Moved += collection.MoveCount;
+            Replaced += collection.ReplaceCount;
+        }
     }
 
     // Identifies the outermost Reconcile/Mount pass in flight (advanced on entry at depth
@@ -491,7 +516,11 @@ public sealed partial class Reconciler : IDisposable
             scope.Dispose();
             owner._entryDepth--;
             if (perfSpan)
-                Diagnostics.ReactorPerfTrace.ReconcileStop();
+            {
+                owner._perfTally = false;
+                var edits = owner._perfEdits;
+                Diagnostics.ReactorPerfTrace.ReconcileStop(edits.Inserted, edits.Removed, edits.Moved, edits.Replaced);
+            }
         }
     }
 
@@ -3421,8 +3450,20 @@ public sealed partial class Reconciler : IDisposable
     {
         if (!Diagnostics.ReactorPerfTrace.ComponentEnabled) return default;
         return Diagnostics.ReactorPerfTrace.ComponentSpan.Begin(
-            (ulong)node.EnsureDiagnosticId(), Diagnostics.ComponentNames.For(node.Component, element), reason);
+            (ulong)node.EnsureDiagnosticId(), PerfComponentName(node, element), reason, element.CallSite);
     }
+
+    /// <summary>
+    /// A component node's name on the <c>Microsoft-UI-Reactor-Perf</c> spans: a class
+    /// component's type name, or a function / memo component's render-function name
+    /// (<see cref="Diagnostics.ComponentNames.ForRenderFunction(Element)"/>). The latter reads
+    /// <c>Delegate.Method</c>, so it is resolved on the component's first traced render and
+    /// kept for its lifetime, like its componentId.
+    /// </summary>
+    internal static string PerfComponentName(ComponentNode node, Element? element)
+        => node.Component is null && element is FuncElement or MemoElement
+            ? node.PerfName ??= Diagnostics.ComponentNames.ForRenderFunction(element)
+            : Diagnostics.ComponentNames.For(node.Component, element);
 
     /// <summary>
     /// Emits <c>ReactorEventSource.ComponentRendered</c> for a component node and keeps
@@ -3978,7 +4019,7 @@ public sealed partial class Reconciler : IDisposable
                 uiDq.TryEnqueue(() =>
                 {
                     node.SelfTriggered = true;
-                    InvokeRerenderTracked(requestRerender);
+                    InvokeRerenderTracked(requestRerender, node);
                 });
                 return;
             }
@@ -3986,14 +4027,16 @@ public sealed partial class Reconciler : IDisposable
             // Either we're on the UI thread, or no UI DQ has been captured
             // (test/headless host) — run inline.
             node.SelfTriggered = true;
-            InvokeRerenderTracked(requestRerender);
+            InvokeRerenderTracked(requestRerender, node);
         };
     }
 
-    private static void InvokeRerenderTracked(Action requestRerender)
+    private static void InvokeRerenderTracked(Action requestRerender, ComponentNode requester)
     {
         t_rerenderDepth++;
-        try { requestRerender(); }
+        // The perf RenderPass names the component that asked: the innermost wrapper claims the
+        // thread before the request climbs through its ancestors' wrappers to the host.
+        try { Diagnostics.RenderPassRequests.InvokeAs(requester, requestRerender); }
         finally { t_rerenderDepth--; }
     }
 
@@ -4089,7 +4132,14 @@ public sealed partial class Reconciler : IDisposable
         bool tracePerf = Diagnostics.ReactorPerfTrace.ChildrenEnabled;
         if (!traceSource && !tracePerf)
         {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
+            if (!_perfTally)
+            {
+                ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
+                return;
+            }
+            // Only the enclosing Reconcile span's edit tally wants this container's counts.
+            try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
+            finally { _perfEdits.Add(childCollection); }
             return;
         }
         if (traceSource)
@@ -4107,6 +4157,8 @@ public sealed partial class Reconciler : IDisposable
                 Diagnostics.ReactorPerfTrace.ChildReconcileStop(
                     childCollection.InsertCount, childCollection.RemoveCount,
                     childCollection.MoveCount, childCollection.ReplaceCount);
+            if (_perfTally)
+                _perfEdits.Add(childCollection);
         }
     }
 
@@ -8095,6 +8147,12 @@ public sealed partial class Reconciler : IDisposable
         /// <summary><see cref="DiagnosticId"/>, assigning it on first use.</summary>
         public long EnsureDiagnosticId()
             => (Component?.Context ?? Context)?.EnsureDiagnosticId() ?? 0;
+
+        /// <summary>
+        /// A function or memo component's name on the perf spans, resolved on its first traced
+        /// render (see <see cref="PerfComponentName"/>); null until then and for class components.
+        /// </summary>
+        public string? PerfName { get; set; }
     }
 
     /// <summary>
