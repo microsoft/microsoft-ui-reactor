@@ -686,22 +686,16 @@ internal class ReactorSource_RootRemountRenamesOwner(Harness h) : SelfTestFixtur
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
-        string detail;
-        bool owned;
-        try
+        // Read inside the check: a collected value throws from CsWinRT, which H.Check reports as a
+        // failure of this check instead of crashing the fixture.
+        H.Check(name, () =>
         {
             var command = (H.FindControl<WinUI.Button>(b => b.Content as string == "remount-commands-target")?.Flyout as WinUI.CommandBarFlyout)
                 ?.PrimaryCommands.FirstOrDefault() as WinUI.AppBarButton;
             var value = command is null ? null : ReactorDiagnostics.GetSource(command);
-            owned = value?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true;
-            detail = value ?? "<not found>";
-        }
-        catch (NullReferenceException ex)
-        {
-            owned = false;
-            detail = $"reading the command's value threw {ex.GetType().Name}: the value was collected";
-        }
-        H.Check(name, owned, detail);
+            Console.WriteLine($"# {name}: {value ?? "<not found>"}");
+            return value?.Contains($"|owner={owner}|", StringComparison.Ordinal) == true;
+        });
     }
 
     // The tooltip a .WithToolTip modifier hung on the hosted AppBarButton (or on its host wrapper).
