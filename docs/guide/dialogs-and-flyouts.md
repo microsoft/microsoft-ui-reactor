@@ -125,12 +125,16 @@ Native `.Set(dialog => ...)` callbacks run last and can override the theme.
 
 ### Dialog style and entrance animation
 
-Reactor applies the application's `DefaultContentDialogStyle`, when available,
-before mounting the dialog content and calling `ShowAsync`. Resolving the style
-before the first template realization restores WinUI's native entrance animation
+Reactor resolves the dialog style before mounting its content and calling
+`ShowAsync`. An application-level implicit `ContentDialog` style, including one
+in a merged resource dictionary, takes priority over `DefaultContentDialogStyle`.
+Resolving the style before the first template realization restores WinUI's native
+entrance animation
 ([WinUI #8476](https://github.com/microsoft/microsoft-ui-xaml/issues/8476)).
 Native `.Set(dialog => dialog.Style = customStyle)` callbacks run afterward,
 so an explicitly supplied style takes priority when opening or updating a dialog.
+The order is: caller `.Set(...)` style, application implicit style, then
+`DefaultContentDialogStyle`.
 
 ### Three-button dialogs
 

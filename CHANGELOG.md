@@ -102,9 +102,11 @@ Conventions for contributors:
 
 ### Fixed
 
-- `ContentDialog` applies `DefaultContentDialogStyle` before its first template
-  realization, restoring the native entrance animation for programmatically
-  created dialogs. Caller `.Set(...)` styles keep priority (issue #1487;
+- `ContentDialog` resolves the application implicit style, falling back to
+  `DefaultContentDialogStyle`, before its first template realization. This restores
+  the native entrance animation for programmatically created dialogs while
+  preserving app-level implicit styles. Caller `.Set(...)` styles keep priority
+  (issue #1487;
   [WinUI #8476](https://github.com/microsoft/microsoft-ui-xaml/issues/8476)).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,

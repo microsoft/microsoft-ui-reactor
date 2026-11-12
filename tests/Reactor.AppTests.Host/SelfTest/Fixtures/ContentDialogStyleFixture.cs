@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -10,13 +11,14 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 // The entrance animation itself is verified by frame-by-frame recordings.
 // These checks exercise the style's rendered effect and the existing dialog
 // contract, without depending on animation timing or WinUI template part names.
-internal sealed class ContentDialogStyleFixture(Harness h, bool setterStyle) : SelfTestFixtureBase(h)
+internal sealed class ContentDialogStyleFixture(Harness h, bool setterStyle, bool implicitStyle = false) : SelfTestFixtureBase(h)
 {
     private const string ResourceKey = "DefaultContentDialogStyle";
     private const string Title = "ContentDialog style regression";
     private static readonly global::Windows.UI.Color DefaultColor = global::Windows.UI.Color.FromArgb(255, 20, 110, 180);
     private static readonly global::Windows.UI.Color FirstColor = global::Windows.UI.Color.FromArgb(255, 30, 130, 70);
     private static readonly global::Windows.UI.Color SecondColor = global::Windows.UI.Color.FromArgb(255, 150, 50, 140);
+    private static readonly global::Windows.UI.Color ImplicitColor = global::Windows.UI.Color.FromArgb(255, 180, 90, 20);
 
     public override async Task RunAsync()
     {
@@ -35,12 +37,31 @@ internal sealed class ContentDialogStyleFixture(Harness h, bool setterStyle) : S
         // after the dialog is gone, keeping other fixtures' resources intact.
         var resources = new ResourceDictionary { [ResourceKey] = fallback };
         resources.MergedDictionaries.Add(originalResources);
+        // WinUI's merged dictionary also supplies an implicit style. Mask that
+        // entry in fallback cases so they really exercise the named default.
+        if (!implicitStyle) resources[typeof(WinUI.ContentDialog)] = null!;
+        var inheritedColor = implicitStyle ? ImplicitColor : DefaultColor;
         try
         {
             Application.Current.Resources = resources;
+            if (implicitStyle)
+            {
+                // Load a genuinely unkeyed style: inserting a hand-chosen key
+                // would only test our assumption about how XAML stores it.
+                var dictionary = (ResourceDictionary)XamlReader.Load("""
+                    <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                        <Style TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
+                            <Setter Property="Background" Value="#FFB45A14" />
+                        </Style>
+                    </ResourceDictionary>
+                    """);
+                resources.MergedDictionaries.Add(dictionary);
+                Console.WriteLine("# Implicit ContentDialog style keys: " + string.Join(", ",
+                    dictionary.Keys.Select(key => $"{key.GetType().Name}: {key}")));
+            }
             host.Mount(_ => Component<Scene, SceneProps>(new(state, setter => setState = setter, counts)));
             var dialog = await Open();
-            await Surface("InitialRenderedStyle", setterStyle ? FirstColor : DefaultColor);
+            await Surface("InitialRenderedStyle", setterStyle ? FirstColor : inheritedColor);
             var editor = Editor(dialog) ?? throw new InvalidOperationException("Editor did not realize.");
             editor.Text = "user draft";
             await Harness.Render();
@@ -51,7 +72,7 @@ internal sealed class ContentDialogStyleFixture(Harness h, bool setterStyle) : S
             state = state with { Revision = 1, CustomStyle = setterStyle ? second : null };
             setState!(state);
             await Harness.Render();
-            await Surface("UpdatedRenderedStyle", setterStyle ? SecondColor : DefaultColor);
+            await Surface("UpdatedRenderedStyle", setterStyle ? SecondColor : inheritedColor);
             var updatedEditor = Editor(Current());
             H.Check("DialogStyle_UpdatePreservesInput", ReferenceEquals(dialog, Current())
                 && ReferenceEquals(editor, updatedEditor) && updatedEditor?.Text == "user draft"
@@ -73,7 +94,7 @@ internal sealed class ContentDialogStyleFixture(Harness h, bool setterStyle) : S
             state = state with { IsOpen = true, Revision = 2, CustomStyle = setterStyle ? first : null };
             setState(state);
             dialog = await Open();
-            await Surface("ReopenedRenderedStyle", setterStyle ? FirstColor : DefaultColor);
+            await Surface("ReopenedRenderedStyle", setterStyle ? FirstColor : inheritedColor);
             H.Check("DialogStyle_ReopenStartsFresh", Editor(dialog)?.Text == "seed"
                 && ContentDialogProbe.FindButton(dialog, "Count 0") is not null
                 && counts.Mounts == 2 && counts.Cleanups == 1 && counts.Opened == 2);
