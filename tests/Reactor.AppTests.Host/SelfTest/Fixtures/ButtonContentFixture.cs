@@ -82,6 +82,7 @@ internal static class ButtonContentFixture
             {
                 await CheckSetterContent(scenario);
                 await CheckElementToSetterContent(scenario);
+                await CheckDeclaredContentWithSetter(scenario);
                 await CheckAccessibleCaption(scenario);
                 var counters = new Counters();
                 var host = H.CreateHost();
@@ -282,6 +283,42 @@ internal static class ButtonContentFixture
                 H.SetContent(null);
             }
             H.Check($"{scenario.Name}_SetterTransitionCleanupOnce", counters.Cleanups == 1);
+        }
+
+        private async Task CheckDeclaredContentWithSetter(Scenario scenario)
+        {
+            var reconciler = new Reconciler();
+            var counters = new Counters();
+            var icon = new WinUI.SymbolIcon(WinUI.Symbol.Save);
+            var current = WithNativeContent(
+                scenario.Create(Component<ContentProbe, ProbeProps>(new("declared", counters)), Noop), icon);
+            var control = (WinUI.ContentControl)reconciler.Mount(current, Noop)!;
+            H.SetContent(control);
+            try
+            {
+                await Harness.Render();
+                var original = control.Content;
+                var draft = FindDraft();
+                H.Check($"{scenario.Name}_DeclaredContentWinsSetterOnMount", !ReferenceEquals(original, icon)
+                    && FindLabel()?.Text == "declared" && draft is not null && counters.Mounts == 1);
+                if (draft is null) return;
+                draft.Text = "kept draft";
+                await Harness.Render();
+                var next = WithNativeContent(
+                    scenario.Create(Component<ContentProbe, ProbeProps>(new("updated", counters)), Noop), icon);
+                reconciler.Reconcile(current, next, control, Noop);
+                current = next;
+                await Harness.Render();
+                H.Check($"{scenario.Name}_DeclaredContentRetainedDespiteSetter", ReferenceEquals(control.Content, original)
+                    && ReferenceEquals(FindDraft(), draft) && draft.Text == "kept draft"
+                    && FindLabel()?.Text == "updated" && counters.Mounts == 1 && counters.Cleanups == 0);
+            }
+            finally
+            {
+                reconciler.UnmountChild(control);
+                H.SetContent(null);
+            }
+            H.Check($"{scenario.Name}_DeclaredContentWithSetterCleanedOnce", counters.Cleanups == 1);
         }
 
         private static Element WithNativeContent(Element element, UIElement content) => element switch

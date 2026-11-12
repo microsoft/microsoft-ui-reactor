@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -6,6 +7,13 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 // Shared by the button family: a real child subtree or the existing string API.
 internal static class ContentControlContent
 {
+    private sealed class ContentState
+    {
+        internal UIElement? Child;
+    }
+
+    private static readonly ConditionalWeakTable<ContentControl, ContentState> OwnedContent = new();
+
     internal static ControlDescriptor<TElement, TControl> WithContent<TElement, TControl>(
         this ControlDescriptor<TElement, TControl> descriptor,
         Func<TElement, Element?> getChild,
@@ -13,17 +21,17 @@ internal static class ContentControlContent
         where TElement : Element
         where TControl : ContentControl, new()
     {
-        descriptor.Children = new SingleContent<TElement, TControl>(
-            GetChild: getChild,
-            SetChild: static (control, child) =>
-            {
-                if (child is not null || control.Content is UIElement)
-                    control.Content = child;
-            })
+        // The helper owns both reconciliation and removal. Native setters run
+        // between the text bridge and this existing post-setter strategy, so a
+        // declared Element wins while an undeclared slot leaves setter content alone.
+        descriptor.Children = new Imperative<TElement, TControl>((ctx, oldElement, newElement, control) =>
         {
-            GetCurrentChild = static control => control.Content as UIElement,
-            ChildRemovalHandledByHandler = true,
-        };
+            if (getChild(newElement) is not { } newChild) return;
+            var hadContent = OwnedContent.TryGetValue(control, out var state);
+            state ??= OwnedContent.GetValue(control, static _ => new ContentState());
+            state.Child = ctx.ReconcileChild(hadContent ? getChild(oldElement) : null, newChild, state.Child);
+            if (!ReferenceEquals(control.Content, state.Child)) control.Content = state.Child;
+        });
 
         return descriptor.ImperativeBridged(
             mount: (_, control, element) =>
@@ -46,14 +54,21 @@ internal static class ContentControlContent
                 {
                     // Tear down only a declared child, before text replaces the
                     // slot and setters run. Null-to-null owns no native subtree.
-                    if (control.Content is UIElement previous)
-                        ctx.Reconciler.UnmountChild(previous);
+                    UnmountOwnedContent(ctx.Reconciler, control);
                     control.Content = getText(newElement);
                 }
                 else if (!string.Equals(getText(oldElement), getText(newElement), StringComparison.Ordinal))
                 {
                     control.Content = getText(newElement);
                 }
-            });
+            },
+            unmount: static (ctx, control) => UnmountOwnedContent(ctx.Reconciler, control));
+    }
+
+    private static void UnmountOwnedContent(Reconciler reconciler, ContentControl control)
+    {
+        if (!OwnedContent.Remove(control, out var state) || state.Child is not { } child) return;
+        reconciler.UnmountChild(child);
+        if (ReferenceEquals(control.Content, child)) control.Content = null;
     }
 }

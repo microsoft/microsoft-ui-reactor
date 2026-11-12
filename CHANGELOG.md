@@ -79,6 +79,8 @@ Conventions for contributors:
   takes precedence over fallback text, including for the caption-derived
   accessible name; icon-only content should supply `.AutomationName(...)`
   (issue #1482).
+- The button content helper owns its declared subtree's mount, reconciliation,
+  and teardown, including transitions to native setter-supplied content.
 - `CheckBox(value, callback, null)` and `ThreeStateCheckBox(value, callback, null)`
   are now ambiguous between string and Element content overloads. Use `label: null`
   or cast to `(string?)null` to select the existing text overload (issue #1482).
