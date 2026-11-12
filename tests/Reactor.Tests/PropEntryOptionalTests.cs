@@ -49,6 +49,37 @@ public class PropEntryOptionalTests
         Assert.IsType<HandCodedControlledPropEntry<TestElement, WinUI.Button, FakePayload, bool, EventHandler<EventArgs>>>(entry);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void HandCodedControlled_ArmOnMount_RequiresValueDiffEcho(bool valueDiffEcho)
+    {
+        var descriptor = new ControlDescriptor<TestElement, WinUI.Button>();
+        void Add() => descriptor.HandCodedControlled<FakePayload, bool, EventHandler<EventArgs>>(
+            get: e => e.Value,
+            set: (c, v) => c.IsEnabled = v,
+            readBack: c => c.IsEnabled,
+            subscribe: (_, _) => { },
+            callback: e => e.OnValueChanged,
+            trampoline: (_, _) => { },
+            slotIsNull: p => p.Changed is null,
+            setSlot: (p, h) => p.Changed = h,
+            valueDiffEcho: valueDiffEcho,
+            armOnMount: true);
+
+        if (valueDiffEcho)
+        {
+            Add();
+            Assert.Single(descriptor.Properties);
+        }
+        else
+        {
+            var ex = Assert.Throws<ArgumentException>(Add);
+            Assert.Equal("armOnMount", ex.ParamName);
+            Assert.Empty(descriptor.Properties);
+        }
+    }
+
     [Fact]
     public void InitialOnly_Builder_Adds_InitialOnlyEntry()
     {

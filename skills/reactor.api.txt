@@ -311,7 +311,7 @@ EllipseElement.Fill(Brush brush) → EllipseElement
 EllipseElement.Set(Action<Ellipse> configure) → EllipseElement
 ExpanderElement.ContentTransitions(TransitionCollection transitions) → ExpanderElement
 ExpanderElement.Direction(ExpandDirection dir) → ExpanderElement
-ExpanderElement.HeaderTemplate(Element header) → ExpanderElement
+ExpanderElement.HeaderContent(Element header) → ExpanderElement
 ExpanderElement.IsExpandedChanged(Action<bool> handler) → ExpanderElement
 ExpanderElement.Set(Action<Expander> configure) → ExpanderElement
 FlexElement.FlexPadding(double horizontal, double vertical) → FlexElement
@@ -836,6 +836,7 @@ TitleBarElement.Content(Element content) → TitleBarElement
 TitleBarElement.HeightOption(WindowTitleBarHeight height) → TitleBarElement
 TitleBarElement.Icon(IconData icon) → TitleBarElement
 TitleBarElement.Icon(string imageUri) → TitleBarElement
+TitleBarElement.LeftHeader(Element leftHeader) → TitleBarElement
 TitleBarElement.NoIcon() → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
@@ -1828,7 +1829,7 @@ PoolPolicy<TControl> PoolPolicy { get; init; }
 CoercingOneWay<TValue>(Func<TElement, TValue> get, Action<TControl, TValue> set, Func<TControl, TValue, bool> coercesController, IEqualityComparer<TValue> comparer = null) → ControlDescriptor<TElement, TControl>
 CollectionDiffControlled<TPayload, TItem, TKey, TDelegate>(Func<TElement, IReadOnlyList<TItem>> get, Func<TControl, IList<TItem>> getVector, Func<TItem, TKey> key, Action<TControl, TDelegate> subscribe, Func<TElement, Delegate> callbackPresent, TDelegate trampoline, Func<TPayload, bool> slotIsNull, Action<TPayload, TDelegate> setSlot, IEqualityComparer<TKey> keyComparer = null) → ControlDescriptor<TElement, TControl>
 Controlled<TValue, TArgs>(Func<TElement, Optional<TValue>> get, Action<TControl, TValue> set, Action<FrameworkElement, EventHandler<TArgs>> subscribe, Action<FrameworkElement, EventHandler<TArgs>> unsubscribe, Func<TElement, Action<TValue>> callback, Func<TControl, TValue> readBack, IEqualityComparer<TValue> comparer = null) → ControlDescriptor<TElement, TControl>
-HandCodedControlled<TPayload, TValue, TDelegate>(Func<TElement, Optional<TValue>> get, Action<TControl, TValue> set, Func<TControl, TValue> readBack, Action<TControl, TDelegate> subscribe, Func<TElement, Action<TValue>> callback, TDelegate trampoline, Func<TPayload, bool> slotIsNull, Action<TPayload, TDelegate> setSlot, IEqualityComparer<TValue> comparer = null, bool valueDiffEcho = false) → ControlDescriptor<TElement, TControl>
+HandCodedControlled<TPayload, TValue, TDelegate>(Func<TElement, Optional<TValue>> get, Action<TControl, TValue> set, Func<TControl, TValue> readBack, Action<TControl, TDelegate> subscribe, Func<TElement, Action<TValue>> callback, TDelegate trampoline, Func<TPayload, bool> slotIsNull, Action<TPayload, TDelegate> setSlot, IEqualityComparer<TValue> comparer = null, bool valueDiffEcho = false, bool armOnMount = false) → ControlDescriptor<TElement, TControl>
 HandCodedEvent<TPayload, TDelegate>(Action<TControl, TDelegate> subscribe, Func<TElement, Delegate> callbackPresent, TDelegate trampoline, Func<TPayload, bool> slotIsNull, Action<TPayload, TDelegate> setSlot) → ControlDescriptor<TElement, TControl>
 Immediate<TPayload>(Func<TElement, Delegate> callbackGate, DependencyProperty observeProperty, DependencyPropertyChangedCallback observeCallback, Func<TPayload, bool> observeSlotIsNull, Action<TPayload, DependencyPropertyChangedCallback> setObserveSlot, RoutedEventHandler loadedHook) → ControlDescriptor<TElement, TControl>
 Imperative(Action<TControl, TElement> mount, Action<TControl, TElement, TElement> update) → ControlDescriptor<TElement, TControl>
@@ -2496,7 +2497,7 @@ ToString() → string
 new(string Header, Element Content, Optional<bool> IsExpanded = default, Action<bool> OnIsExpandedChanged = null)
 Action<bool> OnIsExpandedChanged { get; init; }
 Element Content { get; init; }
-Element HeaderTemplate { get; init; }
+Element HeaderContent { get; init; }
 ExpandDirection ExpandDirection { get; init; }
 Optional<bool> IsExpanded { get; init; }
 TransitionCollection ContentTransitions { get; init; }
@@ -6045,6 +6046,7 @@ new(string Title)
 Action OnBackRequested { get; init; }
 Action OnPaneToggleRequested { get; init; }
 Element Content { get; init; }
+Element LeftHeader { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
 WindowTitleBarHeight? HeightOption { get; init; }

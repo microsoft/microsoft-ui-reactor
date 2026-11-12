@@ -28,6 +28,31 @@ Conventions for contributors:
 
 ### Added
 
+- Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
+  `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
+  A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
+  (`0902a96c-4e92-5b91-4d2b-5a8058055c78`), writes a `RenderPass` span per host render pass,
+  an inclusive `ComponentRender` span per component render (mount, update, the host root, and
+  rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
+  spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
+  setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
+  check. Schema: `docs/reference/perf-trace-events.md` (issue #1484).
+
+- `Microsoft-UI-Reactor-Perf` schema revision 2, with fields appended so decoders for the first
+  revision keep working (event versions stay 0). `RenderPass` Start names the component whose
+  re-render request scheduled the pass (`requesterId`, `requesterName`, `requestCount`), with
+  no need for the verbose `State` keyword. `ComponentRender` Start carries the C# call site that
+  created the component from the source map (`callSiteFile` (the file name only),
+  `callSiteLine`, `callSiteColumn`). `Reconcile` Stop counts the panel child edits made during
+  the entry at the default level (`inserted`, `removed`, `moved`, `replaced`). Function and memo
+  components are named by their render function, as DevTools names them
+  (`RenderEachTime in MainPage.Render`), instead of all reporting `FuncElement` / `MemoElement`
+  (issue #1489).
+
+- `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
+  before the title bar's title, using the same child lifecycle as `RightHeader`
+  (issue #1478).
+
 - Opt-in message-wide Markdown text selection in Reactor Advanced:
   `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
   and composable `Visibility` gates coordinate separately rendered Markdown leaves,
@@ -39,7 +64,19 @@ Conventions for contributors:
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
 
+- `ControlDescriptor.HandCodedControlled` takes `armOnMount`. With `valueDiffEcho`, it arms
+  the Mount write's echo as well as Update's, for a control whose change event arrives
+  after the trampoline is wired, as `RichEditBox`'s `Document.SetText` does
+  (spec 047 §8.3).
+
 ### Changed
+
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
 
 - `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
   now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
@@ -54,6 +91,15 @@ Conventions for contributors:
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
+- **The guide, README, agent kit and `bootstrap.ps1` now describe Windows App SDK template pack
+  `0.0.8-alpha`** (microsoft/WindowsAppSDK#6845; spec 022). That pack adds `reactor-singlefile`, a
+  one-file app with no `.csproj`, and a `--packaging Packaged|Unpackaged` option on the four project
+  templates, so the unpackaged shape no longer needs a hand edit after scaffolding. Its scaffolds no
+  longer reference the `Microsoft.WindowsAppSDK` metapackage and the `--wasdk-version` option is
+  gone: the Windows App SDK arrives through `Microsoft.UI.Reactor` at the version Reactor depends on.
+  Add the metapackage yourself for a self-contained app or a newer WinUI. An older installed pack
+  rejects `--packaging` and lacks `reactor-singlefile`; update it with
+  `winapp new --list --template-version latest`.
 
 ### Deprecated
 
@@ -74,6 +120,12 @@ Conventions for contributors:
   from changing the outer flyout or duplicating its callbacks. For these
   decorators, the provisional `Reconciler.GetElementTag` now returns the target's
   tag instead of the decorator element (spec 047 §14 Phase 1; #942).
+
+- A controlled `RichEditBox` or `AutoSuggestBox` no longer drops the user's first edit after
+  a state write (#1455). Both now suppress their asynchronous echo with the value-diff arm
+  instead of the suppress counter, which kept a token after every write. A `RichEditBox`
+  state change that only adds a trailing line break (`"text"` to `"text\n"`) is written
+  again, and `onTextChanged` keeps a trailing break the user types (spec 047 §8.3).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
   `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids

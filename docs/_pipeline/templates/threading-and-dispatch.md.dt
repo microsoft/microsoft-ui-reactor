@@ -137,24 +137,30 @@ echoes with a documented hybrid — two mechanisms, both parked on the
 same attached `ReactorState`.
 
 **Value-diff (the arm).** For controlled round-trips that are single
-valued, exactly comparable, and synchronous — `ComboBox`, `FlipView`,
-`GridView`, `ListBox`, `Pivot`, `PipsPager`, `RadioButtons`,
-`SelectorBar`, `TabView`, `TemplatedFlipView`, `ToggleSwitch`,
-`TextBox` — the engine arms `ReactorState.PendingEchoMatch` with a
-one-shot predicate describing the value it is about to write
-(`ArmExpectedEcho`), then writes bare. The change trampoline calls
-`ShouldSuppressEcho`, which consumes the arm and drops the single event
-whose readback matches. A mismatch means a real user change superseded
-the pending write, so the arm is cleared and the event falls through.
-Descriptor authors opt in via `.Controlled` / `.HandCodedControlled`
-(`valueDiffEcho`).
+valued and exactly comparable — `ComboBox`, `FlipView`, `GridView`,
+`ListBox`, `Pivot`, `PipsPager`, `RadioButtons`, `SelectorBar`,
+`TabView`, `TemplatedFlipView`, `ToggleSwitch`, `TextBox`, plus
+`RichEditBox` and `AutoSuggestBox`, whose echo comes later — the engine
+arms `ReactorState.PendingEchoMatch` with a one-shot predicate
+describing the value it is about to write (`ArmExpectedEcho`), then
+writes bare. The change trampoline calls `ShouldSuppressEcho`, which
+consumes the arm on the next event and drops it only when its readback
+matches. A mismatch means a real user change superseded the pending
+write, so the event falls through. A deferred echo keeps the arm until
+it lands; if it never comes, or merges with the user's edit, the next
+event still consumes the arm and a mismatch lets it through, so nothing
+stays reserved. Descriptor authors opt in via `.Controlled` /
+`.HandCodedControlled` (`valueDiffEcho`). Mount writes stay bare, since
+a synchronous echo fires before the trampoline is wired; pass
+`armOnMount: true` as well when the Mount write's echo is deferred and
+would otherwise reach the callback (`RichEditBox`'s `Document.SetText`).
 
 **Counter (the fallback).** `ChangeEchoSuppressor` is retained for
 everything value-diff cannot model: doubles (`Slider` / `NumberBox`
 value), `NumberBox` coercion, `CalendarView`'s collection diff,
-deferred or coercing strings (AutoSuggest / Password / RichEdit),
-`Expander`, `CheckBox` path B, the `ApplySetters` suppression scope,
-and the public `WriteSuppressed` primitive.
+coercing strings (`PasswordBox`), `Expander`, `CheckBox` path B, the
+`ApplySetters` suppression scope, and the public `WriteSuppressed`
+primitive.
 
 ```csharp snippet="source:src/Reactor/Core/ChangeEchoSuppressor.cs#change-echo"
 ```

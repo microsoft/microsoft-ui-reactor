@@ -920,7 +920,7 @@ public abstract record Element
                 pa.IsOpen == pb.IsOpen
                 && pa.IsLightDismissEnabled == pb.IsLightDismissEnabled,
 
-            // TitleBar: own-props check (ignore Content/RightHeader slots which
+            // TitleBar: own-props check (ignore LeftHeader/Content/RightHeader slots which
             // recurse as children). Without this, TitleBar flashes yellow on
             // every reconcile even when only descendants changed.
             (TitleBarElement ta, TitleBarElement tb) =>
@@ -3777,13 +3777,22 @@ public partial record AutoSuggestBoxElement(
     internal Action<WinUI.AutoSuggestBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // A programmatic Text write raises TextChanged with Reason=ProgrammaticChange, about
+    // 150 ms later and debounced (several writes can merge into one event). Every
+    // TextChanged, whatever its reason, consumes the pending arm, so the write's own echo
+    // spends it even though that echo never reaches the callback. No armOnMount: the
+    // Mount write's echo is a ProgrammaticChange too, so the reason filter drops it
+    // without an arm. (On the counter, the reason filter returned before the token
+    // was taken, so it stayed reserved and swallowed the user's next keystroke after
+    // every state write.)
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>
         __TextChangedTrampoline = (s, args) =>
         {
-            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             var asb = (WinUI.AutoSuggestBox)s!;
             if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(asb, out var state)) return;
-            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
+            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, asb.Text)) return;
+            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             (state.Element as AutoSuggestBoxElement)?.OnTextChanged?.Invoke(asb.Text);
         };
 
@@ -3891,7 +3900,8 @@ public partial record AutoSuggestBoxElement(
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
                 slotIsNull:  static p => p.TextChangedTrampoline is null,
-                setSlot:     static (p, h) => p.TextChangedTrampoline = h)
+                setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+                valueDiffEcho: true)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxQuerySubmittedEventArgs>>(
                 subscribe:        static (c, h) => c.QuerySubmitted += h,
@@ -4535,18 +4545,26 @@ public partial record RichEditBoxElement(
     internal override bool HasCallbacks => OnTextChanged is not null;
 
     // Text round-trips through the RichEditBox document (not a Text DP): the set
-    // writes Document.SetText (guarded on non-empty, manual BeginSuppress because
-    // SetText fires TextChanged asynchronously), readBack/trampoline read
-    // Document.GetText trimming a trailing \r. Reused verbatim from the hand-written
-    // descriptor so the deferred suppress-counter echo behaviour is identical.
+    // writes Document.SetText (skipped for an empty value), readBack/trampoline read
+    // it back through ReadDocumentText.
+    //
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // SetText raises TextChanged asynchronously, so the arm is consumed by the next
+    // TextChanged after the write; it only drops that event when its readback equals
+    // the written text, so a write whose echo never comes (or is merged) can't
+    // swallow a real edit. The engine arms before calling set, on Update and, with
+    // armOnMount, on Mount too, since the Mount write echoes after the trampoline
+    // is wired. It clears the arm when set skipped the write. (The counter took
+    // one token from the engine's Update wrapper and a second one from set for a
+    // single TextChanged, so the user's next edit after every state write was
+    // dropped.)
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __TextChangedTrampoline = (s, _) =>
     {
         var r = (WinUI.RichEditBox)s!;
         if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(r, out var state)) return;
-        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
-        r.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-        (state.Element as RichEditBoxElement)
-            ?.OnTextChanged?.Invoke(text?.TrimEnd('\r') ?? "");
+        var text = ReadDocumentText(r);
+        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, text)) return;
+        (state.Element as RichEditBoxElement)?.OnTextChanged?.Invoke(text);
     };
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RichEditBoxElement, WinUI.RichEditBox> Customize(
@@ -4556,21 +4574,47 @@ public partial record RichEditBoxElement(
             set:         static (c, v) =>
             {
                 if (!string.IsNullOrEmpty(v))
-                {
-                    global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.BeginSuppress(c);
                     c.Document.SetText(global::Microsoft.UI.Text.TextSetOptions.None, v);
-                }
             },
-            readBack:    static c =>
-            {
-                c.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-                return text?.TrimEnd('\r') ?? "";
-            },
+            readBack:    static c => ReadDocumentText(c),
             subscribe:   static (c, h) => c.TextChanged += h,
             callback:    static e => e.OnTextChanged,
             trampoline:  __TextChangedTrampoline,
             slotIsNull:  static p => p.TextChangedTrampoline is null,
-            setSlot:     static (p, h) => p.TextChangedTrampoline = h);
+            setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+            comparer:    DocumentTextComparer.Instance,
+            valueDiffEcho: true,
+            armOnMount:  true);
+
+    // GetText(None) returns every line break as \r and always ends with one more \r,
+    // the document's implicit final paragraph mark: "" reads back as "\r", "a" as
+    // "a\r", "a\n" as "a\r\r". Drop only that mark, so a trailing line break the
+    // text really has (written by state or typed by the user) survives the round
+    // trip, and "text" and "text\n" stay different values.
+    private static string ReadDocumentText(WinUI.RichEditBox box)
+    {
+        box.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var raw);
+        if (string.IsNullOrEmpty(raw)) return "";
+        return raw[^1] == '\r' ? raw[..^1] : raw;
+    }
+
+    // The document stores every line break as \r, so "a\nb" reads back as "a\rb".
+    // Compare with \r\n and \n normalized to \r, so a multi-line write matches its
+    // own echo and isn't rewritten on every render. Trailing breaks still count.
+    private sealed class DocumentTextComparer : global::System.Collections.Generic.IEqualityComparer<string>
+    {
+        internal static readonly DocumentTextComparer Instance = new();
+
+        public bool Equals(string? x, string? y) =>
+            string.Equals(Normalize(x), Normalize(y), global::System.StringComparison.Ordinal);
+
+        public int GetHashCode(string obj) =>
+            global::System.StringComparer.Ordinal.GetHashCode(Normalize(obj));
+
+        private static string Normalize(string? s) =>
+            (s ?? "").Replace("\r\n", "\r", global::System.StringComparison.Ordinal)
+                .Replace('\n', '\r');
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -4791,15 +4835,15 @@ public partial record BorderElement(Element? Child) : Element
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>
-// Spec 058 §15 (P5.23) — ExpandDirection auto. Content + HeaderTemplate are both Element-typed so
+// Spec 058 §15 (P5.23) — ExpandDirection auto. Content + HeaderContent are both Element-typed so
 // auto content-slot detection is ambiguous → overwrite d.Children with SingleContent(Content) in
-// Customize. HeaderTemplate (ImperativeBridged, Element header wins), gated string Header, IsExpanded
+// Customize. HeaderContent (ImperativeBridged, Element header wins), gated string Header, IsExpanded
 // (counter-echo HandCodedControlled over Expanding + Collapsed event) are bespoke. ContentTransitions
 // (TransitionCollection) is Excluded (legacy gap — escape-hatched via setter). Replaces ExpanderDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Expander), Exclude = new[] { "ContentTransitions" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Header")]
-[global::Microsoft.UI.Reactor.Wrappers.WrapManual("HeaderTemplate")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("HeaderContent")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsExpanded")]
 public partial record ExpanderElement(
     string Header,
@@ -4809,8 +4853,9 @@ public partial record ExpanderElement(
 ) : Element
 {
     public ExpandDirection ExpandDirection { get; init; } = ExpandDirection.Down;
-    /// <summary>Custom Element header (overrides the string <see cref="Header"/>).</summary>
-    public Element? HeaderTemplate { get; init; }
+    /// <summary>Custom Element content assigned to the native Expander's Header,
+    /// overriding the string <see cref="Header"/>. This is a mounted child, not a DataTemplate.</summary>
+    public Element? HeaderContent { get; init; }
     /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
     public Microsoft.UI.Xaml.Media.Animation.TransitionCollection? ContentTransitions { get; init; }
     internal Action<WinUI.Expander>[] Setters { get; init; } = [];
@@ -4845,22 +4890,22 @@ public partial record ExpanderElement(
             .ImperativeBridged(
                 mount: static (ctx, c, e) =>
                 {
-                    if (e.HeaderTemplate is null) return;
-                    var mounted = ctx.MountChild(e.HeaderTemplate);
+                    if (e.HeaderContent is null) return;
+                    var mounted = ctx.MountChild(e.HeaderContent);
                     if (mounted is not null) c.Header = mounted;
                 },
                 update: static (ctx, c, oldEl, newEl) =>
                 {
-                    if (oldEl.HeaderTemplate is null && newEl.HeaderTemplate is null) return;
+                    if (oldEl.HeaderContent is null && newEl.HeaderContent is null) return;
                     var existing = c.Header as global::Microsoft.UI.Xaml.UIElement;
                     var next = ctx.Reconciler.ReconcileV1Child(
-                        oldEl.HeaderTemplate, newEl.HeaderTemplate, existing, ctx.RequestRerender);
+                        oldEl.HeaderContent, newEl.HeaderContent, existing, ctx.RequestRerender);
                     if (!ReferenceEquals(existing, next))
                         c.Header = next;
                 },
                 unmount: static (ctx, c) =>
                 {
-                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderTemplate: not null }) return;
+                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderContent: not null }) return;
                     if (c.Header is global::Microsoft.UI.Xaml.UIElement child)
                         ctx.Reconciler.UnmountChild(child);
                     c.Header = null;
@@ -4868,7 +4913,7 @@ public partial record ExpanderElement(
             .OneWayConditional(
                 get:         static e => e.Header ?? string.Empty,
                 set:         static (c, v) => c.Header = v,
-                shouldWrite: static e => e.HeaderTemplate is null)
+                shouldWrite: static e => e.HeaderContent is null)
             .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ExpanderEventPayload, bool,
                 global::Windows.Foundation.TypedEventHandler<WinUI.Expander, WinUI.ExpanderExpandingEventArgs>>(
                 get:         static e => e.IsExpanded,
@@ -5203,12 +5248,13 @@ public partial record NavigationViewElement(
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/
-// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. Content+RightHeader (NamedSlots → overwrite d.Children),
+// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. LeftHeader+Content+RightHeader (NamedSlots → overwrite d.Children),
 // Icon (Icon→IconSource via IconResolver transform), the window.SetTitleBar registration
 // (.Imperative) and the BackRequested/PaneToggleRequested events (Excluded) are bespoke.
 // Replaces TitleBarDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.TitleBar), Exclude = new[] { "BackRequested", "PaneToggleRequested" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("LeftHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Icon")]
 public partial record TitleBarElement(
@@ -5259,6 +5305,8 @@ public partial record TitleBarElement(
     /// </remarks>
     public WindowTitleBarTheme? PreferredTheme { get; init; }
     public Element? Content { get; init; }
+    /// <summary>Custom content in the title bar's leading header slot.</summary>
+    public Element? LeftHeader { get; init; }
     public Element? RightHeader { get; init; }
     /// <summary>
     /// Icon shown in the title bar's leading slot. Mirrors WinUI 3
@@ -5302,6 +5350,13 @@ public partial record TitleBarElement(
     {
         d.Children = new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlots<TitleBarElement, WinUI.TitleBar>(new[]
         {
+            new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<TitleBarElement, WinUI.TitleBar>(
+                Name: "LeftHeader",
+                GetChild: static e => e.LeftHeader,
+                SetChild: static (c, ui) => c.LeftHeader = ui)
+            {
+                GetCurrentChild = static c => c.LeftHeader as global::Microsoft.UI.Xaml.UIElement,
+            },
             new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<TitleBarElement, WinUI.TitleBar>(
                 Name: "Content",
                 GetChild: static e => e.Content,

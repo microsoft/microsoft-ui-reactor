@@ -333,7 +333,19 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// <see cref="Controlled{TValue,TArgs}"/>: unset skips writes, set values
     /// perform a bare initial write and a suppressed write on control drift.
     /// Subscription is gated on <paramref name="callback"/> returning non-null
-    /// on the mounted element.</para></summary>
+    /// on the mounted element.</para>
+    ///
+    /// <para><paramref name="valueDiffEcho"/> replaces the Update write's
+    /// suppress-counter token with the spec 047 §8 value-diff arm, which the
+    /// trampoline consumes on the next change event and which drops that event
+    /// only when its readback matches the written value.
+    /// <paramref name="armOnMount"/> (requires <paramref name="valueDiffEcho"/>)
+    /// arms the Mount write too. Set it when the control raises its change
+    /// event after the write returns (e.g. <c>RichEditBox</c>'s
+    /// <c>Document.SetText</c>) and the trampoline cannot tell that echo apart
+    /// on its own: the echo lands after the trampoline is wired and would
+    /// otherwise reach the callback. The <paramref name="set"/> lambda stays a
+    /// plain write; the entry does the arming.</para></summary>
     public ControlDescriptor<TElement, TControl> HandCodedControlled<TPayload, TValue, TDelegate>(
         Func<TElement, Optional<TValue>> get,
         Action<TControl, TValue> set,
@@ -344,12 +356,13 @@ public sealed class ControlDescriptor<TElement, TControl>
         Func<TPayload, bool> slotIsNull,
         Action<TPayload, TDelegate> setSlot,
         IEqualityComparer<TValue>? comparer = null,
-        bool valueDiffEcho = false)
+        bool valueDiffEcho = false,
+        bool armOnMount = false)
         where TPayload : class, new()
         where TDelegate : Delegate
     {
         _properties.Add(new HandCodedControlledPropEntry<TElement, TControl, TPayload, TValue, TDelegate>(
-            get, set, readBack, subscribe, callback, trampoline, slotIsNull, setSlot, comparer, valueDiffEcho));
+            get, set, readBack, subscribe, callback, trampoline, slotIsNull, setSlot, comparer, valueDiffEcho, armOnMount));
         return this;
     }
 
@@ -457,7 +470,7 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// The callback runs before, and independently of, the descriptor's
     /// <see cref="OnUnmount"/> hook. Declaring this callback roots a ReactorState
     /// per control, including keyless controls without element callbacks.
-    /// For example, Expander.HeaderTemplate owns a secondary Element child while
+    /// For example, Expander.HeaderContent owns a secondary Element child while
     /// the primary children strategy owns Content. Pair it with OneWayConditional
     /// for a string Header fallback when the Element slot is null.</summary>
     public ControlDescriptor<TElement, TControl> ImperativeBridged(
