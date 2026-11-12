@@ -3594,6 +3594,15 @@ selection. The change handler fires with the plain text content; for
 formatted output you read <code>RichEditBox.Document</code> through <code>.Set(...)</code> and
 serialize the text range yourself. Single-line text input belongs in
 <a href="../forms/"><code>TextBox</code></a>, not here.</p>
+<p>The document stores every line break as <code>\r</code>, so the text the handler
+reports uses <code>\r</code> between paragraphs: <code>"a\nb"</code> written from state comes
+back as <code>"a\rb"</code> after the first edit. Reactor treats <code>\r\n</code>, <code>\n</code> and
+<code>\r</code> as the same break when it compares state with the document, so
+storing the reported text back into state doesn't rewrite the document.
+Trailing breaks are part of the text: <code>"abc\n"</code> and <code>"abc"</code> are different
+values, and pressing Enter at the end reports <code>"abc\r"</code>. Only the
+document's own final paragraph mark, which <code>Document.GetText</code> always
+appends, is left out.</p>
 <table>
 <thead>
 <tr>

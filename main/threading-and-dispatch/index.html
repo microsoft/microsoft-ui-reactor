@@ -3580,23 +3580,29 @@ callback with a value the framework just wrote. Reactor drops those
 echoes with a documented hybrid — two mechanisms, both parked on the
 same attached <code>ReactorState</code>.</p>
 <p><strong>Value-diff (the arm).</strong> For controlled round-trips that are single
-valued, exactly comparable, and synchronous — <code>ComboBox</code>, <code>FlipView</code>,
-<code>GridView</code>, <code>ListBox</code>, <code>Pivot</code>, <code>PipsPager</code>, <code>RadioButtons</code>,
-<code>SelectorBar</code>, <code>TabView</code>, <code>TemplatedFlipView</code>, <code>ToggleSwitch</code>,
-<code>TextBox</code> — the engine arms <code>ReactorState.PendingEchoMatch</code> with a
-one-shot predicate describing the value it is about to write
-(<code>ArmExpectedEcho</code>), then writes bare. The change trampoline calls
-<code>ShouldSuppressEcho</code>, which consumes the arm and drops the single event
-whose readback matches. A mismatch means a real user change superseded
-the pending write, so the arm is cleared and the event falls through.
-Descriptor authors opt in via <code>.Controlled</code> / <code>.HandCodedControlled</code>
-(<code>valueDiffEcho</code>).</p>
+valued and exactly comparable — <code>ComboBox</code>, <code>FlipView</code>, <code>GridView</code>,
+<code>ListBox</code>, <code>Pivot</code>, <code>PipsPager</code>, <code>RadioButtons</code>, <code>SelectorBar</code>,
+<code>TabView</code>, <code>TemplatedFlipView</code>, <code>ToggleSwitch</code>, <code>TextBox</code>, plus
+<code>RichEditBox</code> and <code>AutoSuggestBox</code>, whose echo comes later — the engine
+arms <code>ReactorState.PendingEchoMatch</code> with a one-shot predicate
+describing the value it is about to write (<code>ArmExpectedEcho</code>), then
+writes bare. The change trampoline calls <code>ShouldSuppressEcho</code>, which
+consumes the arm on the next event and drops it only when its readback
+matches. A mismatch means a real user change superseded the pending
+write, so the event falls through. A deferred echo keeps the arm until
+it lands; if it never comes, or merges with the user's edit, the next
+event still consumes the arm and a mismatch lets it through, so nothing
+stays reserved. Descriptor authors opt in via <code>.Controlled</code> /
+<code>.HandCodedControlled</code> (<code>valueDiffEcho</code>). Mount writes stay bare, since
+a synchronous echo fires before the trampoline is wired; pass
+<code>armOnMount: true</code> as well when the Mount write's echo is deferred and
+would otherwise reach the callback (<code>RichEditBox</code>'s <code>Document.SetText</code>).</p>
 <p><strong>Counter (the fallback).</strong> <code>ChangeEchoSuppressor</code> is retained for
 everything value-diff cannot model: doubles (<code>Slider</code> / <code>NumberBox</code>
 value), <code>NumberBox</code> coercion, <code>CalendarView</code>'s collection diff,
-deferred or coercing strings (AutoSuggest / Password / RichEdit),
-<code>Expander</code>, <code>CheckBox</code> path B, the <code>ApplySetters</code> suppression scope,
-and the public <code>WriteSuppressed</code> primitive.</p>
+coercing strings (<code>PasswordBox</code>), <code>Expander</code>, <code>CheckBox</code> path B, the
+<code>ApplySetters</code> suppression scope, and the public <code>WriteSuppressed</code>
+primitive.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">internal</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">BeginSuppress</span><span class="p">(</span><span class="n">UIElement</span><span class="w"> </span><span class="n">control</span><span class="p">)</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="p">{</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">control</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="n">FrameworkElement</span><span class="w"> </span><span class="n">fe</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
