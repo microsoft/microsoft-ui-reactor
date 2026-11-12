@@ -65,9 +65,10 @@ Conventions for contributors:
   after mount, update and pool reuse. Decorator identity is stored separately so
   flyout callbacks and teardown still use the current decorator. Exit transitions
   and connected-animation keys use the first configured value from the outermost
-  decorator inward. Animated modifiers use the current render's `.Animate()`
-  curve when a flyout target or decorator updates. Unmount also releases refs
-  and animation state on intermediate decorators. Nested decorators attach only
+  decorator inward. Animated modifiers select the current render's `.Animate()`
+  curve when a flyout target or decorator updates, with ambient curves taking
+  precedence. Unmount also releases refs and animation state on intermediate
+  decorators. Nested decorators attach only
   the outermost native flyout, including through transparent Memo or RegisterType
   targets. They clean up displaced content and keep inner updates
   from changing the outer flyout or duplicating its callbacks. For these

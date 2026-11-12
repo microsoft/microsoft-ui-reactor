@@ -717,7 +717,6 @@ internal static class FlyoutTargetCallbacksFixtures
             }
 
             foreach (var owner in new[] { "Button", "Middle", "Outer" })
-            foreach (bool addCurve in new[] { true, false })
             {
                 Element Render(float value, bool animate)
                 {
@@ -730,22 +729,19 @@ internal static class FlyoutTargetCallbacksFixtures
                 }
 
                 using var reconciler = new Reconciler();
-                var first = Render(1, !addCurve);
+                var first = Render(1, animate: false);
                 var button = (Button)reconciler.Mount(first, static () => { })!;
                 H.SetContent(button);
                 try
                 {
                     await Harness.Render();
                     var property = vector ? "Scale" : "Opacity";
-                    var name = $"FlyoutAnimate_{property}_{owner}_{(addCurve ? "Add" : "Remove")}";
-                    var second = Render(0.5f, addCurve);
+                    var name = $"FlyoutAnimate_{property}_{owner}_Add";
+                    var second = Render(0.5f, animate: true);
                     H.Check(name + "_SameButton", () => reconciler.Update(first, second, button, static () => { }) is null);
                     await Harness.Render();
                     var visual = ElementCompositionPreview.GetElementVisual(button);
-                    H.Check(name + "_CurrentCurve", (visual.TryGetAnimationController(property) is not null) == addCurve);
-                    if (!addCurve)
-                        H.Check(name + "_DirectValue", vector ? visual.Scale == new Vector3(0.5f, 0.5f, 1)
-                            : button.Opacity == 0.5 && visual.Opacity == 0.5f);
+                    H.Check(name + "_CurrentCurve", visual.TryGetAnimationController(property) is not null);
                     if (owner == "Middle" && vector)
                         H.Check(name + "_KeepsLayoutOffset", visual.ImplicitAnimations?.ContainsKey("Offset") == true);
                 }

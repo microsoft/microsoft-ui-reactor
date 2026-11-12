@@ -26,11 +26,6 @@ internal static class AnimationHelper
 
         if (curve is null)
         {
-            if (property == "Rotation" && GetFlyoutTransformVisual(element, source) is { } visualTarget)
-            {
-                visualTarget.RotationAngleInDegrees = value;
-                return;
-            }
             SetScalarDirect(element, property, value);
             return;
         }
@@ -248,12 +243,6 @@ internal static class AnimationHelper
 
         if (curve is null)
         {
-            if (property is "Scale" or "CenterPoint" && GetFlyoutTransformVisual(element, source) is { } visualTarget)
-            {
-                if (property == "Scale") visualTarget.Scale = value;
-                else visualTarget.CenterPoint = value;
-                return;
-            }
             SetVector3Direct(element, property, value);
             return;
         }
@@ -297,11 +286,6 @@ internal static class AnimationHelper
                 break;
         }
     }
-
-    // After .Animate() takes the handoff Visual, WinUI rejects direct XAML transform writes.
-    private static Visual? GetFlyoutTransformVisual(UIElement element, Element? source) =>
-        source is not null && element is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var state)
-            && state.HasPropertyAnimationVisual ? ElementCompositionPreview.GetElementVisual(fe) : null;
 
     private static string CompositorPropertyName(string property) => property switch
     {

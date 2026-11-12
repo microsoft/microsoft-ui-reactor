@@ -656,8 +656,9 @@ its own event trampolines. For these decorators,
 Decorator lifecycle callbacks resolve the current decorator separately.
 Exit transitions and connected-animation keys use the first configured value
 from the outermost decorator inward to the target. For a modifier update, a
-non-null ambient animation curve takes precedence, followed by the element's
-own `.Animate()` curve, then the first curve in the current flyout chain.
+non-null ambient animation curve takes precedence. The current render's element
+is checked next for its own `.Animate()` curve; the current flyout chain is
+used only as a fallback.
 Unmount clears refs and animation state throughout the decorator chain and runs the
 decorator's teardown before the target's own handler. Pool return clears both
 identities. Other decorators retain their existing tag behavior.

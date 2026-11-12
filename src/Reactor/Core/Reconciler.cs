@@ -1542,7 +1542,6 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
-        internal bool HasPropertyAnimationVisual;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -5566,7 +5565,6 @@ public sealed partial class Reconciler : IDisposable
     {
         ElementPool.MarkCompositorTainted(uie);
         var visual = ElementCompositionPreview.GetElementVisual(uie);
-        GetOrCreateReactorState(uie).HasPropertyAnimationVisual = true;
         var compositor = visual.Compositor;
 
         // Start from existing implicit animations (layout may have set Offset/Size)
