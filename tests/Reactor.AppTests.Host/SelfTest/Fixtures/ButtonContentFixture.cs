@@ -34,6 +34,20 @@ internal static class ButtonContentFixture
         }
     }
 
+    // Callback-free, unkeyed, modifier-free button-family controls: nothing asks
+    // for an element tag, so their content must be torn down without one.
+    internal sealed class UntaggedHost : Component<Counters>
+    {
+        public override Element Render()
+        {
+            var (shown, setShown) = UseState(true);
+            return VStack(
+                Button("BC_UntaggedToggle", () => setShown(!shown)),
+                DropDownButton("BC_UntaggedText"),
+                shown ? Button(Component<ContentProbe, ProbeProps>(new("untagged", Props))) : null);
+        }
+    }
+
     internal sealed record ProbeProps(string Label, Counters Counters);
     internal sealed class ContentProbe : Component<ProbeProps>
     {
@@ -77,6 +91,7 @@ internal static class ButtonContentFixture
 
         public override async Task RunAsync()
         {
+            await CheckUntaggedControls();
             await CheckUncaptionedControls();
             foreach (var scenario in Scenarios)
             {
@@ -137,6 +152,35 @@ internal static class ButtonContentFixture
                     && counters.Cleanups == 3);
             }
         }
+
+        private async Task CheckUntaggedControls()
+        {
+            var counters = new Counters();
+            var host = H.CreateHost();
+            host.Mount(_ => Component<UntaggedHost, Counters>(counters));
+            await Harness.Render();
+            var text = H.FindControl<WinUI.DropDownButton>(c => c.Content as string == "BC_UntaggedText");
+            H.Check("Untagged_TextControlHasNoState", text is not null && !Reconciler.TryGetReactorState(text, out _));
+            var target = FindUntaggedTarget();
+            H.Check("Untagged_ContentControlHasNoState", target is not null
+                && !Reconciler.TryGetReactorState(target, out _) && counters.Mounts == 1);
+
+            H.ClickButton("BC_UntaggedToggle");
+            await Harness.Render();
+            H.Check("Untagged_RemovalRunsCleanup", FindUntaggedTarget() is null && counters.Cleanups == 1);
+
+            // The removed Button may come back from the pool: it must mount a fresh
+            // child rather than reconcile against the one already torn down.
+            H.ClickButton("BC_UntaggedToggle");
+            await Harness.Render();
+            H.Check("Untagged_RemountMountsFreshChild", FindUntaggedTarget() is not null
+                && FindDraft()?.Text == "initial draft" && counters.Mounts == 2 && counters.Cleanups == 1);
+
+            H.ClickButton("BC_UntaggedToggle");
+            await Harness.Render();
+        }
+
+        private WinUI.Button? FindUntaggedTarget() => H.FindControl<WinUI.Button>(b => b.Content is UIElement);
 
         private async Task CheckUncaptionedControls()
         {

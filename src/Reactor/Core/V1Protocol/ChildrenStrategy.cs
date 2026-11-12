@@ -306,7 +306,16 @@ public sealed record TemplatedItems<TItem, TElement, TControl>(
 public sealed record Imperative<TElement, TControl>(
     Action<MountContext, TElement, TElement, TControl> Reconcile) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
-    where TControl : UIElement;
+    where TControl : UIElement
+{
+    /// <summary>Optional teardown for the children <see cref="Reconcile"/> mounted.
+    /// The engine has no view onto imperative slots, so when unmount dispatches to
+    /// the handler it calls this instead of walking them. Unmount each owned child
+    /// while it is still parented, then detach it. Declaring it does not tag every
+    /// control: a control without an element tag is torn down by the engine's
+    /// generic child walk, which must therefore be able to reach the owned children.</summary>
+    public Action<UnmountContext, TControl>? Unmount { get; init; }
+}
 
 // ════════════════════════════════════════════════════════════════════════
 //  §14 Phase 3 finish — G3 children strategies (TreeView, TabView, Pivot)

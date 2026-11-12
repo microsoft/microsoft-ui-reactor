@@ -484,7 +484,12 @@ where none of them fit — for example, a control whose children live
 on three different non-collection properties that must reconcile
 together. Reach for it last; you give up the engine's keyed reconcile
 and lose descendant component state across re-renders that touch the
-imperative slot.
+imperative slot. The engine cannot see imperative slots, so set the
+strategy's `Unmount` to tear down the children `Reconcile` mounted.
+A control without an element tag skips that callback and is torn down
+by the engine's generic child walk instead, so keep owned children
+where that walk finds them (a `ContentControl`'s `Content`, a panel's
+`Children`).
 
 ## Step 6 — Wrap the constructor in a factory holder, then use it
 
