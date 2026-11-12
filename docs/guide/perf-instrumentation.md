@@ -205,7 +205,12 @@ through a second, raw ETW provider, `Microsoft-UI-Reactor-Perf`
 host render pass, a `ComponentRender` span per component render
 (mount, update, and rows a virtualized list realizes during layout),
 `Reconcile`, `Effects` and `ChildReconcile` spans, and `StateChange`
-naming the component whose setter ran. Its events are TraceLogging, so
+naming the component whose setter ran. At the default level each pass
+also names the component whose request scheduled it, each component
+span carries the C# line that created the component (when source
+mapping is on), and each reconcile counts its child edits. Function and
+memo components are named by their render function, as DevTools names
+them. Its events are TraceLogging, so
 WPA and any TDH-based decoder read them without a manifest, and they
 nest with `Microsoft-Windows-XAML` on the UI thread's timeline. The
 same no-consumer rule applies: each emit site is one enabled check.
