@@ -177,6 +177,10 @@ public static partial class Factories
         return new(content, navigateUri, onClick);
     }
 
+    /// <summary>Creates a hyperlink button with declarative content.</summary>
+    public static HyperlinkButtonElement HyperlinkButton(Element content, Uri? navigateUri = null, Action? onClick = null)
+        => new("", navigateUri, onClick) { ContentElement = content };
+
     /// <summary>
     /// Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute →
     /// Click. For external navigation, chain <see cref="ElementExtensions.NavigateUri(HyperlinkButtonElement, Uri)"/>:
@@ -192,6 +196,10 @@ public static partial class Factories
         return new(label, onClick);
     }
 
+    /// <summary>Creates a repeat button with declarative content.</summary>
+    public static RepeatButtonElement RepeatButton(Element content, Action? onClick = null)
+        => new("", onClick) { ContentElement = content };
+
     /// <summary>Creates a RepeatButton driven by a Command. Click auto-repeats while held.</summary>
     public static RepeatButtonElement RepeatButton(Core.Command command)
     {
@@ -202,6 +210,10 @@ public static partial class Factories
     {
         return new(label, isChecked, onIsCheckedChanged);
     }
+
+    /// <summary>Creates a toggle button with declarative content.</summary>
+    public static ToggleButtonElement ToggleButton(Element content, bool isChecked = false, Action<bool>? onIsCheckedChanged = null)
+        => new("", isChecked, onIsCheckedChanged) { ContentElement = content };
 
     /// <summary>
     /// Creates a ToggleButton driven by a Command. The command fires on each toggle
@@ -222,15 +234,33 @@ public static partial class Factories
         return new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
     }
 
+    /// <summary>Creates a three-state toggle button with declarative content.</summary>
+    public static ToggleButtonElement ThreeStateToggleButton(Element content, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null)
+        => new("", checkedState == true)
+        {
+            ContentElement = content,
+            IsThreeState = true,
+            CheckedState = checkedState,
+            OnCheckedStateChanged = onCheckedStateChanged,
+        };
+
     public static DropDownButtonElement DropDownButton(string label, Element? flyout = null)
     {
         return new(label, flyout);
     }
 
+    /// <summary>Creates a drop-down button with declarative content.</summary>
+    public static DropDownButtonElement DropDownButton(Element content, Element? flyout = null)
+        => new("") { ContentElement = content, Flyout = flyout };
+
     public static SplitButtonElement SplitButton(string label, Action? onClick = null, Element? flyout = null)
     {
         return new(label, onClick, flyout);
     }
+
+    /// <summary>Creates a split button with declarative primary content.</summary>
+    public static SplitButtonElement SplitButton(Element content, Action? onClick = null, Element? flyout = null)
+        => new("", onClick, flyout) { ContentElement = content };
 
     /// <summary>
     /// Creates a SplitButton driven by a Command for the primary action. The flyout
@@ -251,6 +281,10 @@ public static partial class Factories
     {
         return new(label, isChecked, onIsCheckedChanged, flyout);
     }
+
+    /// <summary>Creates a toggle split button with declarative primary content.</summary>
+    public static ToggleSplitButtonElement ToggleSplitButton(Element content, Optional<bool> isChecked = default, Action<bool>? onIsCheckedChanged = null, Element? flyout = null)
+        => new("", isChecked, onIsCheckedChanged, flyout) { ContentElement = content };
 
     /// <summary>Creates a ToggleSplitButton driven by a Command (fires on each toggle).</summary>
     public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, Optional<bool> isChecked = default, Element? flyout = null)
@@ -310,6 +344,10 @@ public static partial class Factories
         return new(isChecked, onIsCheckedChanged, label);
     }
 
+    /// <summary>Creates a check box with declarative content.</summary>
+    public static CheckBoxElement CheckBox(Optional<bool?> isChecked, Action<bool>? onIsCheckedChanged, Element content)
+        => new(isChecked, onIsCheckedChanged) { ContentElement = content };
+
     /// <summary>
     /// Creates a three-state <see cref="CheckBoxElement"/>. <paramref name="checkedState"/>
     /// defaults to <see cref="Optional{T}.Unset"/> — omit it to let the control own its state.
@@ -319,6 +357,16 @@ public static partial class Factories
         return new(checkedState, Label: label) { IsThreeState = true, CheckedState = checkedState.HasValue ? checkedState.Value : null, OnCheckedStateChanged = onCheckedStateChanged };
     }
 
+    /// <summary>Creates a three-state check box with declarative content.</summary>
+    public static CheckBoxElement ThreeStateCheckBox(Optional<bool?> checkedState, Action<bool?>? onCheckedStateChanged, Element content)
+        => new(checkedState)
+        {
+            ContentElement = content,
+            IsThreeState = true,
+            CheckedState = checkedState.HasValue ? checkedState.Value : null,
+            OnCheckedStateChanged = onCheckedStateChanged,
+        };
+
     /// <summary>
     /// Creates a <see cref="RadioButtonElement"/>. <paramref name="isChecked"/> defaults to
     /// <see cref="Optional{T}.Unset"/> — omit it to let the control own its checked state.
@@ -327,6 +375,10 @@ public static partial class Factories
     {
         return new(label, isChecked, onIsCheckedChanged, groupName);
     }
+
+    /// <summary>Creates a radio button with declarative content.</summary>
+    public static RadioButtonElement RadioButton(Element content, Optional<bool> isChecked = default, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
+        => new("", isChecked, onIsCheckedChanged, groupName) { ContentElement = content };
 
     /// <summary>
     /// Creates a <see cref="RadioButtonsElement"/>. <paramref name="selectedIndex"/> defaults

@@ -42,6 +42,7 @@ Canvas(Element[] children) → CanvasElement
 Caption(string content) → TextBlockElement
 Card(Element child) → BorderElement
 CheckBox(Optional<bool?> isChecked = default, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
+CheckBox(Optional<bool?> isChecked, Action<bool> onIsCheckedChanged, Element content) → CheckBoxElement
 ColorPicker(Optional<Color> color = default, Action<Color> onColorChanged = null) → ColorPickerElement
 ComboBox(Element[] itemElements, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
 ComboBox(string[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
@@ -55,6 +56,7 @@ ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMo
 DatePicker(Optional<DateTimeOffset> date = default, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
 Display(string content) → TextBlockElement
+DropDownButton(Element content, Element flyout = null) → DropDownButtonElement
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
 Ellipse() → EllipseElement
 Empty() → Element
@@ -91,6 +93,7 @@ Heading(string content) → TextBlockElement
 Hyperlink(string text, Action onClick) → RichTextHyperlink
 Hyperlink(string text, Uri navigateUri) → RichTextHyperlink
 HyperlinkButton(Command command) → HyperlinkButtonElement
+HyperlinkButton(Element content, Uri navigateUri = null, Action onClick = null) → HyperlinkButtonElement
 HyperlinkButton(string content, Uri navigateUri = null, Action onClick = null) → HyperlinkButtonElement
 Icon(IconData data) → IconElement
 Icon(Symbol symbol) → IconElement
@@ -158,6 +161,7 @@ ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
 PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement<PropertyGridElement>
+RadioButton(Element content, Optional<bool> isChecked = default, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
 RadioButton(string label, Optional<bool> isChecked = default, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
 RadioButtons(string[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
@@ -167,6 +171,7 @@ RefreshContainer(Element content, Action onRefreshRequested = null) → RefreshC
 RelativePanel(Element[] children) → RelativePanelElement
 RenderEachTime(Func<RenderContext, Element> render) → FuncElement
 RepeatButton(Command command) → RepeatButtonElement
+RepeatButton(Element content, Action onClick = null) → RepeatButtonElement
 RepeatButton(string label, Action onClick = null) → RepeatButtonElement
 RichEditBox(Optional<string> text = default, Action<string> onTextChanged = null) → RichEditBoxElement
 RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
@@ -179,6 +184,7 @@ SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
 Slider(Optional<double> value = default, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 SplitButton(Command command, Element flyout = null) → SplitButtonElement
+SplitButton(Element content, Action onClick = null, Element flyout = null) → SplitButtonElement
 SplitButton(string label, Action onClick = null, Element flyout = null) → SplitButtonElement
 SplitView(Element pane = null, Element content = null) → SplitViewElement
 SubHeading(string content) → TextBlockElement
@@ -197,15 +203,19 @@ Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
 ThreeStateCheckBox(Optional<bool?> checkedState = default, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
+ThreeStateCheckBox(Optional<bool?> checkedState, Action<bool?> onCheckedStateChanged, Element content) → CheckBoxElement
+ThreeStateToggleButton(Element content, bool? checkedState = null, Action<bool?> onCheckedStateChanged = null) → ToggleButtonElement
 ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> onCheckedStateChanged = null) → ToggleButtonElement
 TimePicker(Optional<TimeSpan> time = default, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
 TitleLarge(string content) → TextBlockElement
 ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
+ToggleButton(Element content, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
 ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
 ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData
 ToggleSplitButton(Command command, Optional<bool> isChecked = default, Element flyout = null) → ToggleSplitButtonElement
+ToggleSplitButton(Element content, Optional<bool> isChecked = default, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
 ToggleSplitButton(string label, Optional<bool> isChecked = default, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
 ToggleSwitch(Optional<bool> isOn = default, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
@@ -1564,6 +1574,7 @@ ToggleIndicator() → Func<object, Element>
 new(Optional<bool?> IsChecked = default, Action<bool> OnIsCheckedChanged = null, string Label = null)
 Action<bool> OnIsCheckedChanged { get; init; }
 Action<bool?> OnCheckedStateChanged { get; init; }
+Element ContentElement { get; init; }
 Optional<bool?> IsChecked { get; init; }
 bool IsThreeState { get; init; }
 bool? CheckedState { get; init; }
@@ -2131,6 +2142,7 @@ ToString() → string
 
 ### record DropDownButtonElement
 new(string Label, Element Flyout = null)
+Element ContentElement { get; init; }
 Element Flyout { get; init; }
 string Label { get; init; }
 Deconstruct(ref string Label, ref Element Flyout) → void
@@ -2920,6 +2932,7 @@ new(string message)
 new(string Content, Uri NavigateUri = null, Action OnClick = null)
 Action OnClick { get; init; }
 Command Command { get; init; }
+Element ContentElement { get; init; }
 Uri NavigateUri { get; init; }
 string Content { get; init; }
 Deconstruct(ref string Content, ref Uri NavigateUri, ref Action OnClick) → void
@@ -4487,6 +4500,7 @@ event Action<string> EntryChanged
 ### record RadioButtonElement
 new(string Label, Optional<bool> IsChecked = default, Action<bool> OnIsCheckedChanged = null, string GroupName = null)
 Action<bool> OnIsCheckedChanged { get; init; }
+Element ContentElement { get; init; }
 Optional<bool> IsChecked { get; init; }
 string GroupName { get; init; }
 string Label { get; init; }
@@ -4994,6 +5008,7 @@ long TotalRenders { get; init; }
 new(string Label, Action OnClick = null)
 Action OnClick { get; init; }
 Command Command { get; init; }
+Element ContentElement { get; init; }
 int Delay { get; init; }
 int Interval { get; init; }
 string Label { get; init; }
@@ -5497,6 +5512,7 @@ ToString() → string
 new(string Label, Action OnClick = null, Element Flyout = null)
 Action OnClick { get; init; }
 Command Command { get; init; }
+Element ContentElement { get; init; }
 Element Flyout { get; init; }
 string Label { get; init; }
 Deconstruct(ref string Label, ref Action OnClick, ref Element Flyout) → void
@@ -6070,6 +6086,7 @@ new(string Label, bool IsChecked = false, Action<bool> OnIsCheckedChanged = null
 Action<bool> OnIsCheckedChanged { get; init; }
 Action<bool?> OnCheckedStateChanged { get; init; }
 Command Command { get; init; }
+Element ContentElement { get; init; }
 bool IsChecked { get; init; }
 bool IsThreeState { get; init; }
 bool? CheckedState { get; init; }
@@ -6099,6 +6116,7 @@ ToString() → string
 new(string Label, Optional<bool> IsChecked = default, Action<bool> OnIsCheckedChanged = null, Element Flyout = null)
 Action<bool> OnIsCheckedChanged { get; init; }
 Command Command { get; init; }
+Element ContentElement { get; init; }
 Element Flyout { get; init; }
 Optional<bool> IsChecked { get; init; }
 string Label { get; init; }

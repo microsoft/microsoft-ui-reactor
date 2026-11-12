@@ -338,6 +338,17 @@ internal static class OverlayLifecycle
             IsPrimaryButtonEnabled = cdEl.IsPrimaryButtonEnabled,
             IsSecondaryButtonEnabled = cdEl.IsSecondaryButtonEnabled,
         };
+        // Resolve the style before the first template realization so WinUI's
+        // entrance animation survives ShowAsync (microsoft-ui-xaml#8476).
+        // Keep app-level implicit styles, including those in merged dictionaries.
+        // Caller setters still run last and may supply their own style.
+        var appResources = Application.Current.Resources;
+        if (appResources.TryGetValue(typeof(WinUI.ContentDialog), out var implicitValue)
+            && implicitValue is Style implicitStyle)
+            dialog.Style = implicitStyle;
+        else if (appResources.TryGetValue("DefaultContentDialogStyle", out var defaultStyle)
+            && defaultStyle is Style style)
+            dialog.Style = style;
         if (cdEl.SecondaryButtonText is not null) dialog.SecondaryButtonText = cdEl.SecondaryButtonText;
         if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
         if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;

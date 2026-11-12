@@ -28,6 +28,10 @@ Conventions for contributors:
 
 ### Added
 
+- Element-valued content overloads for `HyperlinkButton`, `RepeatButton`,
+  `ToggleButton` / `ThreeStateToggleButton`, `DropDownButton`, `SplitButton`,
+  `ToggleSplitButton`, `CheckBox` / `ThreeStateCheckBox`, and `RadioButton`
+  (issue #1482).
 - Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
   `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
   A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
@@ -71,6 +75,20 @@ Conventions for contributors:
 
 ### Changed
 
+- Public `SingleContent` strategies leave native setter-supplied content intact
+  when no Element child is declared (on mount or on both sides of an update).
+  Declare `Empty()` to clear the slot explicitly; this also applies to
+  third-party control handlers (issue #1482).
+- `Button` and the button family share content reconciliation that preserves
+  descendant state and cleans up replaced content. Declared `ContentElement`
+  takes precedence over fallback text, including for the caption-derived
+  accessible name; icon-only content should supply `.AutomationName(...)`
+  (issue #1482).
+- The button content helper owns its declared subtree's mount, reconciliation,
+  and teardown, including transitions to native setter-supplied content.
+- `CheckBox(value, callback, null)` and `ThreeStateCheckBox(value, callback, null)`
+  are now ambiguous between string and Element content overloads. Use `label: null`
+  or cast to `(string?)null` to select the existing text overload (issue #1482).
 - **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
   `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
   child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
@@ -115,6 +133,13 @@ Conventions for contributors:
   of the property threw `NullReferenceException`, including Reactor's own walk on the next
   root swap. The renamed values are now held for the process, like the values written
   when the commands mounted (spec 010).
+
+- `ContentDialog` resolves the application implicit style, falling back to
+  `DefaultContentDialogStyle`, before its first template realization. This restores
+  the native entrance animation for programmatically created dialogs while
+  preserving app-level implicit styles. Caller `.Set(...)` styles keep priority
+  (issue #1487;
+  [WinUI #8476](https://github.com/microsoft/microsoft-ui-xaml/issues/8476)).
 
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so

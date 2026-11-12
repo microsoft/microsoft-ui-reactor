@@ -344,7 +344,7 @@ public sealed partial class Reconciler
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never
         // set an explicit name. No-ops when the author did.
-        if (target is FrameworkElement captionFe)
+        if (target is FrameworkElement captionFe && modifiers?.AutomationName is null)
             UpdateDefaultAutomationName(
                 captionFe,
                 ResolveCaptionForElement(oldEl),
