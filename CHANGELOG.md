@@ -130,6 +130,13 @@ Conventions for contributors:
 - Removing a subtree through the pooled teardown path now unregisters the
   `ErrorBoundary` nodes inside it, as the non-pooled path already did, so a
   recycled wrapper control no longer keeps a stale boundary record (issue #1482).
+- `ContentDialog` resolves the application implicit style, falling back to
+  `DefaultContentDialogStyle`, before its first template realization. This restores
+  the native entrance animation for programmatically created dialogs while
+  preserving app-level implicit styles. Caller `.Set(...)` styles keep priority
+  (issue #1487;
+  [WinUI #8476](https://github.com/microsoft/microsoft-ui-xaml/issues/8476)).
+
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so
   flyout callbacks and teardown still use the current decorator. Exit transitions
