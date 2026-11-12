@@ -236,6 +236,14 @@ public static partial class AccessibilityScanner
         SemanticZoomElement sz => Pair(sz.ZoomedInView, sz.ZoomedOutView),
         NavigationViewElement nv => Single(nv.Content),
         ButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        HyperlinkButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        RepeatButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        ToggleButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        DropDownButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        SplitButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        ToggleSplitButtonElement btn => SingleOrEmpty(btn.ContentElement),
+        CheckBoxElement btn => SingleOrEmpty(btn.ContentElement),
+        RadioButtonElement btn => SingleOrEmpty(btn.ContentElement),
 
         // List/collection elements with item arrays
         ListViewElement lv => lv.Items,
@@ -257,26 +265,31 @@ public static partial class AccessibilityScanner
     //  Per-element checks (A11Y_001 – A11Y_005)
     // ════════════════════════════════════════════════════════════════
 
-    /// <summary>A11Y_001: Icon-only Button without accessible name.</summary>
+    /// <summary>A11Y_001: Icon-only button-family control without accessible name.</summary>
     private static void CheckIconButton(Element el, ScanContext ctx, List<A11yDiagnostic> findings)
     {
-        if (el is not ButtonElement btn) return;
+        if (el is not (ButtonElement or HyperlinkButtonElement or RepeatButtonElement
+            or ToggleButtonElement or DropDownButtonElement or SplitButtonElement
+            or ToggleSplitButtonElement or CheckBoxElement or RadioButtonElement)) return;
+
+        // Plain selection controls may use an external form label. Only their
+        // explicitly composed content belongs to this icon-button check.
+        if (el is CheckBoxElement { ContentElement: null } or RadioButtonElement { ContentElement: null }) return;
 
         // Only flag buttons that have a non-text content element (icon) and
         // either no label or a label that looks like an emoji/symbol
-        bool isIconOnly = btn.ContentElement is not null
-            || string.IsNullOrWhiteSpace(btn.Label)
-            || IsLikelyEmoji(btn.Label);
+        var caption = Reconciler.ResolveCaptionForElement(el);
+        bool isIconOnly = string.IsNullOrWhiteSpace(caption) || IsLikelyEmoji(caption);
         if (!isIconOnly) return;
 
         // Check if AutomationName is set
-        if (HasAutomationName(el)) return;
+        if (HasAutomationName(el) || HasLabeledBy(el)) return;
 
         findings.Add(new A11yDiagnostic
         {
             Id = "A11Y_001",
             Severity = "warning",
-            Message = "Icon-only Button has no accessible name — screen readers cannot describe this control",
+            Message = "Icon-only button has no accessible name — screen readers cannot describe this control",
             WcagCriterion = "1.1.1",
             ElementType = el.GetType().Name,
             AutomationId = GetAutomationId(el),

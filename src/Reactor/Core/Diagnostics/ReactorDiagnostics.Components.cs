@@ -174,7 +174,7 @@ public static partial class ReactorDiagnostics
     {
         ArgumentNullException.ThrowIfNull(control);
         EnsureUIThread(control);
-        var tag = Reconciler.GetElementTag(control);
+        var tag = Reconciler.GetMountedElement(control);
         if (tag is null) return global::System.Array.Empty<AppliedProperty>();
         var chain = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag);
         if (Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, chain[^1]))

@@ -224,6 +224,16 @@ formatted output you read `RichEditBox.Document` through `.Set(...)` and
 serialize the text range yourself. Single-line text input belongs in
 [`TextBox`](forms.md), not here.
 
+The document stores every line break as `\r`, so the text the handler
+reports uses `\r` between paragraphs: `"a\nb"` written from state comes
+back as `"a\rb"` after the first edit. Reactor treats `\r\n`, `\n` and
+`\r` as the same break when it compares state with the document, so
+storing the reported text back into state doesn't rewrite the document.
+Trailing breaks are part of the text: `"abc\n"` and `"abc"` are different
+values, and pressing Enter at the end reports `"abc\r"`. Only the
+document's own final paragraph mark, which `Document.GetText` always
+appends, is left out.
+
 | Fluent | Effect |
 |---|---|
 | `.AcceptsReturn(bool)` | Enter starts a new paragraph instead of submitting. |
