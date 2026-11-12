@@ -98,7 +98,7 @@ internal static class ButtonContentFixture
             try
             {
                 await CheckUntaggedControls();
-                CheckUntaggedPooledTeardown();
+                await CheckUntaggedPooledTeardown();
             }
             finally
             {
@@ -195,24 +195,52 @@ internal static class ButtonContentFixture
         private WinUI.Button? FindUntaggedTarget() => H.FindControl<WinUI.Button>(b => b.Content is UIElement);
 
         // The pooling teardown is the path a removed untagged control takes.
-        private void CheckUntaggedPooledTeardown()
+        private async Task CheckUntaggedPooledTeardown()
         {
             var reconciler = new Reconciler();
-            var native = new WinUI.StackPanel();
-            native.Children.Add(new WinUI.TextBlock { Text = "native" });
+            var native = NativePanel();
             var setterControl = (FrameworkElement)reconciler.Mount(
                 DropDownButton("BC_SetterNative").Set(c => c.Content = native), Noop)!;
             var boundaryControl = (FrameworkElement)reconciler.Mount(
                 Button(ErrorBoundary(TextBlock("guarded"), TextBlock("fallback"))), Noop)!;
             var boundaries = reconciler.ErrorBoundaryNodeCount;
 
+            // Lifecycle actions run after the content strategy: one replaces native-only content,
+            // the other displaces a declared child that still needs its cleanup.
+            var onMountNative = NativePanel();
+            var onMountControl = (FrameworkElement)reconciler.Mount(DropDownButton("BC_OnMountNative")
+                .OnMount(fe => ((WinUI.ContentControl)fe).Content = onMountNative), Noop)!;
+            var counters = new Counters();
+            var displacing = NativePanel();
+            var displacedControl = (FrameworkElement)reconciler.Mount(
+                Button(Component<ContentProbe, ProbeProps>(new("displaced", counters)))
+                    .OnMount(fe => ((WinUI.ContentControl)fe).Content = displacing), Noop)!;
+            H.SetContent(displacedControl);
+            await Harness.Render();
+            var displacedMounted = counters.Mounts == 1 && counters.Cleanups == 0;
+            H.SetContent(null);
+
             reconciler.UnmountAndPool(setterControl);
             reconciler.UnmountAndPool(boundaryControl);
-            H.Check("Untagged_SetterContentSurvivesPooledRemoval", native.Children.Count == 1
-                && (native.Children[0] as WinUI.TextBlock)?.Text == "native");
+            reconciler.UnmountAndPool(onMountControl);
+            reconciler.UnmountAndPool(displacedControl);
+            H.Check("Untagged_SetterContentSurvivesPooledRemoval", IsIntact(native));
             H.Check("Untagged_PooledRemovalDropsErrorBoundary", boundaries == 1
                 && reconciler.ErrorBoundaryNodeCount == 0);
+            H.Check("Untagged_OnMountContentSurvivesPooledRemoval", IsIntact(onMountNative));
+            H.Check("Untagged_OnMountDisplacedChildCleanedUp", displacedMounted
+                && counters.Cleanups == 1 && IsIntact(displacing));
         }
+
+        private static WinUI.StackPanel NativePanel()
+        {
+            var panel = new WinUI.StackPanel();
+            panel.Children.Add(new WinUI.TextBlock { Text = "native" });
+            return panel;
+        }
+
+        private static bool IsIntact(WinUI.StackPanel panel)
+            => panel.Children.Count == 1 && (panel.Children[0] as WinUI.TextBlock)?.Text == "native";
 
         private async Task CheckUncaptionedControls()
         {

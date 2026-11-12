@@ -28,12 +28,16 @@ internal static class ContentControlContent
         // the generic ContentControl walk reaches the owned child, which is always Content.
         descriptor.Children = new Imperative<TElement, TControl>((ctx, oldElement, newElement, control) =>
         {
+            // Lifecycle actions run after this strategy and may replace Content with UI the
+            // helper does not own, displacing its child. The generic walk would pool that UI
+            // and miss the displaced child, so tag the control to route teardown through Unmount.
+            if (newElement.Modifiers is { OnMountAction: not null } or { OnUpdateAction: not null })
+                EnsureTagged(control, newElement);
             if (getChild(newElement) is not { } newChild)
             {
-                // Setter-supplied UI is not ours: the generic walk would tear it down and
-                // pool it, so tag the control to route its teardown through Unmount.
-                if (control.Content is UIElement && !Reconciler.TryGetReactorState(control, out _))
-                    Reconciler.SetElementTag(control, newElement);
+                // Setter-supplied UI is not ours either, for the same reason.
+                if (control.Content is UIElement)
+                    EnsureTagged(control, newElement);
                 return;
             }
             var hadContent = OwnedContent.TryGetValue(control, out var state);
@@ -77,6 +81,12 @@ internal static class ContentControlContent
                     control.Content = getText(newElement);
                 }
             });
+    }
+
+    private static void EnsureTagged(ContentControl control, Element element)
+    {
+        if (!Reconciler.TryGetReactorState(control, out _))
+            Reconciler.SetElementTag(control, element);
     }
 
     private static void UnmountOwnedContent(Reconciler reconciler, ContentControl control)
