@@ -65,7 +65,7 @@ public static class ReactorBinding
     /// generated wrapper compiles against Reactor's public surface alone (no
     /// <c>InternalsVisibleTo</c>) — the read-side gap called out in spec 062 §14.
     /// It maps to the counter/scope channel (paired with <c>WriteSuppressed</c>),
-    /// not the synchronous value-diff channel.</para>
+    /// not the value-diff channel.</para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
     public static bool ShouldSuppressEcho(UIElement target)

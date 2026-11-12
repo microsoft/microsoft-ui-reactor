@@ -683,17 +683,17 @@ if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
 # ---------------------------------------------------------------------------
 # Reactor's app templates ship inside the Windows App SDK template pack
 # (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), next to the WinUI 3 XAML
-# ones. That pack owns the `reactor`, `reactor-mvu`, `reactor-navview`, and
-# `reactor-tabview` short names, and the apps it scaffolds are **packaged**
-# (single-project MSIX) — so `dotnet run` launches them with package identity,
-# equivalent to F5 in Visual Studio.
+# ones. That pack owns the `reactor`, `reactor-mvu`, `reactor-navview`,
+# `reactor-tabview` and (from 0.0.8-alpha) `reactor-singlefile` short names, and
+# the apps it scaffolds are **packaged** (single-project MSIX) by default — so
+# `dotnet run` launches them with package identity, equivalent to F5 in Visual
+# Studio.
 #
 # This repo used to ship its own `Microsoft.UI.Reactor.ProjectTemplates` pack
 # (`dotnet new reactorapp`, unpackaged). It was removed once the Windows App SDK
 # pack shipped the Reactor templates; the published versions are deprecated on
 # NuGet.org with a pointer here. For an unpackaged app, scaffold with
-# `dotnet new reactor` and set `<WindowsPackageType>None</WindowsPackageType>`
-# (see docs/guide/packaging.md).
+# `dotnet new reactor --packaging Unpackaged` (see docs/guide/packaging.md).
 #
 # Hoisted so the closing "Next:" guidance can gate on it: printing
 # `dotnet new reactor` after verification failed would hand the user the exact
@@ -976,7 +976,28 @@ if ($SkipTemplates) {
     Write-Host '    cd MyApp'
     Write-Host '    dotnet run'
     Write-Host ''
-    Write-Host 'Other Reactor templates: reactor-mvu, reactor-navview, reactor-tabview'
+    # `reactor-singlefile` arrived in a later pack than the other four, and step
+    # 5 keeps an already-installed older pack, so name it only when this
+    # machine's pack provides it — the same false-promise rule as above. Same
+    # whole-token, case-sensitive match as step 5 and bootstrap.yml: a plain
+    # substring also hits `winui-reactor-singlefile` and the no-match hint.
+    #
+    # With no match, `dotnet new list` writes to stderr and exits 103. Windows
+    # PowerShell 5.1 turns redirected native stderr into error records, which
+    # the script-wide 'Stop' makes terminating: bootstrap would die after
+    # printing "Bootstrap complete." So the probe runs under 'Continue', scoped
+    # to its own script block.
+    $otherTemplates = @('reactor-mvu', 'reactor-navview', 'reactor-tabview')
+    $singleFileListing = & {
+        $ErrorActionPreference = 'Continue'
+        & dotnet new list reactor-singlefile 2>&1 | Out-String
+    }
+    if ($LASTEXITCODE -eq 0 -and
+        $singleFileListing -notmatch 'No templates found' -and
+        $singleFileListing -cmatch '(?<![^\s,])reactor-singlefile(?![^\s,])') {
+        $otherTemplates += 'reactor-singlefile'
+    }
+    Write-Host "Other Reactor templates: $($otherTemplates -join ', ')"
     Write-Host '    dotnet new list reactor'
 }
 Write-Host ''

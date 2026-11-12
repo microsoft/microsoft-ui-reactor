@@ -88,27 +88,9 @@ internal sealed class FlyoutHandler : IDecoratorElementHandler<FlyoutElement>
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, FlyoutElement? element, UIElement control)
     {
-        // §4.5: the flyout's Content + OverlayInputPassThroughElement are Reactor
-        // subtrees hung off the side flyout object (attached to the Target), NOT
-        // in the Target control's visual child tree — the generic UnmountRecursive
-        // recursion never reaches them, so their child component cleanups would
-        // leak. Tear them down here, then detach the flyout from the Target so a
-        // pooled/reused Target retains no stale flyout state. Keep
-        // ContinueDefaultTraversal so the Target subtree still tears down.
+        // Side-owned subtrees must be released by the decorator that installed them.
         if (control is FrameworkElement targetFe)
-        {
-            if (Reconciler.GetFlyoutOnControl(targetFe) is WinUI.Flyout flyout)
-            {
-                if (flyout.Content is UIElement content)
-                    ctx.Reconciler.UnmountChild(content);
-                flyout.Content = null;
-                if (flyout.OverlayInputPassThroughElement is UIElement passThrough)
-                    ctx.Reconciler.UnmountChild(passThrough);
-                flyout.OverlayInputPassThroughElement = null;
-            }
-
-            Reconciler.ClearFlyoutOnControl(targetFe);
-        }
+            OverlayLifecycle.ReleaseFlyout(ctx.Reconciler, targetFe, element);
         return V1UnmountDisposition.ContinueDefaultTraversal;
     }
 
@@ -151,7 +133,11 @@ internal sealed class MenuFlyoutHandler : IDecoratorElementHandler<MenuFlyoutEle
         => OverlayLifecycle.UpdateMenuFlyout(ctx.Reconciler, oldEl, newEl, control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, MenuFlyoutElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        if (control is FrameworkElement targetFe)
+            OverlayLifecycle.ReleaseFlyout(ctx.Reconciler, targetFe, element);
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 
     public Element? GetSourceTarget(MenuFlyoutElement element) => element.Target;
 }
@@ -201,14 +187,8 @@ internal sealed class CommandBarFlyoutHandler : IDecoratorElementHandler<Command
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, CommandBarFlyoutElement? element, UIElement control)
     {
-        // Detach the flyout so a pooled/reused target can't keep showing the previous
-        // component's command bar. ElementPool.CleanElement already nulls Button.Flyout,
-        // but nothing clears the attached-flyout slot a non-button target uses.
-        if (control is FrameworkElement targetFe
-            && Reconciler.GetFlyoutOnControl(targetFe) is WinUI.CommandBarFlyout)
-        {
-            Reconciler.ClearFlyoutOnControl(targetFe);
-        }
+        if (control is FrameworkElement targetFe)
+            OverlayLifecycle.ReleaseFlyout(ctx.Reconciler, targetFe, element);
         return V1UnmountDisposition.ContinueDefaultTraversal;
     }
 

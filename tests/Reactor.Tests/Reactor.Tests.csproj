@@ -57,6 +57,7 @@
 
   <ItemGroup>
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+    <Compile Include="..\_shared\EtwPrivateCapture.cs" Link="EtwPrivateCapture.cs" />
   </ItemGroup>
 
   <!--

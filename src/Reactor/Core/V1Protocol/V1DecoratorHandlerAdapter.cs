@@ -29,9 +29,12 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
     public V1DecoratorHandlerAdapter(IDecoratorElementHandler<TElement> handler)
     {
         _handler = handler;
+        PreservesTargetTag = handler is Handlers.FlyoutHandler
+            or Handlers.MenuFlyoutHandler or Handlers.CommandBarFlyoutHandler;
     }
 
     public bool HasUnmount => true;
+    public bool PreservesTargetTag { get; }
 
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
     {
@@ -40,10 +43,10 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         var control = _handler.Mount(ctx, typedEl);
 
         // Anchor element identity on the returned control via the
-        // attached state DP so event trampolines + the unmount
-        // disposition path can re-fetch the live element on each fire.
+        // attached state DP. Target-wrapping flyouts use a separate slot so
+        // their target's events and the decorator's teardown resolve their own identities.
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTag(fe, typedEl);
+            TagControl(fe, typedEl);
 
         return control;
     }
@@ -53,15 +56,45 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         var typedOld = (TElement)oldEl;
         var typedNew = (TElement)newEl;
         var ctx = new UpdateContext(reconciler, requestRerender);
+        if (PreservesTargetTag && control is FrameworkElement target)
+        {
+            var state = Reconciler.GetOrCreateReactorState(target);
+            var previousFlyout = reconciler.UpdatingFlyout;
+            state.ActiveFlyoutUpdates++;
+            try
+            {
+                // Memo can reconstruct old/new from one factory call. Diff the outer flyout
+                // against the configuration actually installed on the control.
+                if (state.ActiveFlyoutUpdates == 1)
+                {
+                    if (state.DecoratorElement is TElement mounted) typedOld = mounted;
+                    reconciler.UpdatingFlyout = (target, typedNew);
+                }
+                return _handler.Update(ctx, typedOld, typedNew, control);
+            }
+            finally
+            {
+                reconciler.UpdatingFlyout = previousFlyout;
+                state.ActiveFlyoutUpdates--;
+            }
+        }
         var next = _handler.Update(ctx, typedOld, typedNew, control);
 
         // Re-tag whichever control is going to live in the slot — `next`
         // may equal `control` (in-place update) or be a different
         // instance (decorator target swap).
         if (next is FrameworkElement nextFe)
-            Reconciler.SetElementTag(nextFe, typedNew);
+            TagControl(nextFe, typedNew);
 
         return next;
+    }
+
+    private void TagControl(FrameworkElement control, TElement element)
+    {
+        if (PreservesTargetTag) return; // The flyout handler publishes only the active layer.
+        var state = Reconciler.GetOrCreateReactorState(control);
+        state.Element = element;
+        if (state.ActiveFlyoutUpdates == 0) state.DecoratorElement = null;
     }
 
     public V1UnmountDisposition Unmount(UIElement control, Reconciler reconciler)
@@ -70,7 +103,7 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         // the tag was already detached (defensive). Decorator handlers
         // are expected to tolerate the null case.
         TElement? typedEl = null;
-        if (control is FrameworkElement fe && Reconciler.GetElementTag(fe) is TElement attached)
+        if (control is FrameworkElement fe && Reconciler.GetMountedElement(fe) is TElement attached)
             typedEl = attached;
 
         var ctx = new UnmountContext(reconciler);

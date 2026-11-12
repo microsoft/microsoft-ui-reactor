@@ -392,7 +392,7 @@ internal static class TemplatedListLifecycle
             if (oldHasControl && ci < fv.Items.Count && fv.Items[ci] is UIElement existingCtrl
                 && reconciler.CanUpdate(oldItemElement, newView))
             {
-                var priorKey = existingCtrl is FrameworkElement priorFe ? Reconciler.GetElementTag(priorFe)?.Key : null;
+                var priorKey = existingCtrl is FrameworkElement priorFe ? Reconciler.GetMountedElement(priorFe)?.Key : null;
                 var replacement = reconciler.UpdateHostedChild(oldItemElement, newItemElement, existingCtrl, requestRerender);
                 if (replacement is not null && replacement != existingCtrl)
                     fv.Items[ci] = replacement;

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
@@ -421,11 +422,91 @@ internal static class OverlayLifecycle
 
     // ── Flyout ──────────────────────────────────────────────────────────
 
+    // A retained native flyout must not keep its old target or callbacks alive.
+    private static DependencyProperty? s_flyoutOwnerProperty;
+    private static DependencyProperty FlyoutOwnerProperty => s_flyoutOwnerProperty ??=
+        DependencyProperty.RegisterAttached("FlyoutOwner", typeof(object), typeof(OverlayLifecycle), new PropertyMetadata(null));
+
+    private static FrameworkElement? FlyoutTarget(WinPrim.FlyoutBase? flyout) =>
+        s_flyoutOwnerProperty is { } property && flyout?.GetValue(property) is WeakReference<FrameworkElement> reference
+        && reference.TryGetTarget(out var target) ? target : null;
+
+    /// <summary>Clears the installed flyout's owner when its target releases its identity.</summary>
+    internal static void ForgetFlyoutOwner(FrameworkElement target)
+    {
+        if (s_flyoutOwnerProperty is { } property && Reconciler.GetFlyoutOnControl(target) is { } flyout)
+            flyout.ClearValue(property);
+    }
+
+    // A fresh target takes over a descendant's flyout, including one mounted through Memo.
+    // On an existing target only the outermost update may patch the installed flyout.
+    private static bool PrepareFlyout(Reconciler reconciler, FrameworkElement target,
+        Element? oldElement, out WinPrim.FlyoutBase? existing)
+    {
+        existing = null;
+        if (oldElement is not null && (!Reconciler.TryGetReactorState(target, out var state)
+            || state.ActiveFlyoutUpdates != 1)) return false;
+
+        existing = Reconciler.GetFlyoutOnControl(target);
+        if (existing is null || !ReferenceEquals(FlyoutTarget(existing), target))
+        {
+            existing = null;
+            return true;
+        }
+        if (oldElement is not null) return true;
+
+        ReleaseFlyout(reconciler, target, existing);
+        if (DiagnosticLog.IsWarningEnabled)
+            DiagnosticLog.Warning(LogCategory.Reactor, "Flyout.NestedTarget",
+                "Nested flyout decorators share a target; only the outermost flyout is attached.");
+        existing = null;
+        return true;
+    }
+
+    private static void InstallFlyout(Reconciler reconciler, FrameworkElement target, WinPrim.FlyoutBase flyout)
+    {
+        flyout.SetValue(FlyoutOwnerProperty, new WeakReference<FrameworkElement>(target));
+        if (flyout is WinUI.Flyout contentFlyout)
+        {
+            contentFlyout.Opened += static (sender, _) => LiveFlyoutElement(sender)?.OnOpened?.Invoke();
+            contentFlyout.Closed += static (sender, _) => LiveFlyoutElement(sender)?.OnClosed?.Invoke();
+        }
+        reconciler.SetFlyoutOnControl(target, flyout);
+    }
+
+    /// <summary>Unmounts the native flyout attached to this decorator's target.</summary>
+    internal static void ReleaseFlyout(Reconciler reconciler, FrameworkElement target, Element? element)
+    {
+        if (element is not null && ReferenceEquals(element, Reconciler.GetMountedElement(target))
+            && Reconciler.GetFlyoutOnControl(target) is { } flyout && ReferenceEquals(FlyoutTarget(flyout), target))
+            ReleaseFlyout(reconciler, target, flyout);
+    }
+
+    private static void ReleaseFlyout(Reconciler reconciler, FrameworkElement target, WinPrim.FlyoutBase flyout)
+    {
+        flyout.ClearValue(FlyoutOwnerProperty);
+        if (flyout is WinUI.Flyout contentFlyout)
+        {
+            if (contentFlyout.Content is UIElement content) reconciler.UnmountChild(content);
+            contentFlyout.Content = null;
+            if (contentFlyout.OverlayInputPassThroughElement is UIElement passThrough) reconciler.UnmountChild(passThrough);
+            contentFlyout.OverlayInputPassThroughElement = null;
+        }
+        if (ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout))
+            Reconciler.ClearFlyoutOnControl(target);
+    }
+
+    private static FlyoutElement? LiveFlyoutElement(object? sender) =>
+        sender is WinUI.Flyout flyout && FlyoutTarget(flyout) is { } target
+        && ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout)
+            ? Reconciler.GetMountedElement(target) as FlyoutElement : null;
+
     public static UIElement? MountFlyout(Reconciler reconciler, FlyoutElement flyEl, Action requestRerender)
     {
         var target = reconciler.Mount(flyEl.Target, requestRerender);
         if (target is FrameworkElement targetFe)
         {
+            PrepareFlyout(reconciler, targetFe, null, out _);
             var flyoutContent = reconciler.Mount(flyEl.FlyoutContent, requestRerender);
             var flyout = new WinUI.Flyout
             {
@@ -437,18 +518,11 @@ internal static class OverlayLifecycle
             if (flyEl.OverlayInputPassThroughElement is not null
                 && reconciler.Mount(flyEl.OverlayInputPassThroughElement, requestRerender) is DependencyObject pt)
                 flyout.OverlayInputPassThroughElement = pt;
-            Reconciler.SetElementTag(targetFe, flyEl);
-            // Route handlers through the target's Tag so Update() refreshing the tag to the
-            // new FlyoutElement causes subsequent Opened/Closed to fire the current delegates —
-            // capturing flyEl directly would freeze handlers to the mount-time element.
-            if (flyEl.OnOpened is not null)
-                flyout.Opened += (_, _) => (Reconciler.GetElementTag(targetFe) as FlyoutElement)?.OnOpened?.Invoke();
-            if (flyEl.OnClosed is not null)
-                flyout.Closed += (_, _) => (Reconciler.GetElementTag(targetFe) as FlyoutElement)?.OnClosed?.Invoke();
+            Reconciler.SetDecoratorElementTag(targetFe, flyEl);
             // SetFlyoutOnControl wires .Flyout on Button/SplitButton targets so
             // clicking opens the flyout natively; non-button targets fall back
             // to SetAttachedFlyout metadata (opened only by an explicit show).
-            reconciler.SetFlyoutOnControl(targetFe, flyout);
+            InstallFlyout(reconciler, targetFe, flyout);
             Reconciler.ApplySetters(flyEl.Setters, flyout);
             if (flyEl.IsOpen) ShowFlyoutWhenReady(targetFe, flyout, IsFlyoutStillRequestingOpen);
         }
@@ -471,9 +545,9 @@ internal static class OverlayLifecycle
 
         if (updated is FrameworkElement targetFe)
         {
-            Reconciler.SetElementTag(targetFe, n);
-            // Read back from whichever slot SetFlyoutOnControl wrote to.
-            var existingFlyout = Reconciler.GetFlyoutOnControl(targetFe);
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, out var existingFlyout))
+                return updated == targetControl ? null : updated;
+            Reconciler.SetDecoratorElementTag(targetFe, n);
 
             if (existingFlyout is WinUI.Flyout flyout)
             {
@@ -491,16 +565,6 @@ internal static class OverlayLifecycle
                 if (flyout.ShowMode != n.ShowMode) flyout.ShowMode = n.ShowMode;
                 if (flyout.AreOpenCloseAnimationsEnabled != n.AreOpenCloseAnimationsEnabled)
                     flyout.AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled;
-                if (o.OnOpened is null && n.OnOpened is not null)
-                {
-                    var openedTarget = targetFe;
-                    flyout.Opened += (_, _) => (Reconciler.GetElementTag(openedTarget) as FlyoutElement)?.OnOpened?.Invoke();
-                }
-                if (o.OnClosed is null && n.OnClosed is not null)
-                {
-                    var closedTarget = targetFe;
-                    flyout.Closed += (_, _) => (Reconciler.GetElementTag(closedTarget) as FlyoutElement)?.OnClosed?.Invoke();
-                }
                 Reconciler.ApplySetters(n.Setters, flyout);
             }
             else
@@ -514,13 +578,7 @@ internal static class OverlayLifecycle
                     AreOpenCloseAnimationsEnabled = n.AreOpenCloseAnimationsEnabled,
                 };
                 FlyoutPlacement.Apply(newFlyout, n.Placement);
-                // Route handlers through the target's Tag (already set to n above) so future
-                // Update() calls that refresh the tag keep Opened/Closed pointing at the
-                // current FlyoutElement's delegates.
-                var handlerTarget = targetFe;
-                newFlyout.Opened += (_, _) => (Reconciler.GetElementTag(handlerTarget) as FlyoutElement)?.OnOpened?.Invoke();
-                newFlyout.Closed += (_, _) => (Reconciler.GetElementTag(handlerTarget) as FlyoutElement)?.OnClosed?.Invoke();
-                reconciler.SetFlyoutOnControl(targetFe, newFlyout);
+                InstallFlyout(reconciler, targetFe, newFlyout);
                 Reconciler.ApplySetters(n.Setters, newFlyout);
             }
             // Open through the installed flyout itself (ShowAt), never ShowAttachedFlyout:
@@ -627,13 +685,14 @@ internal static class OverlayLifecycle
         var target = reconciler.Mount(mfEl.Target, requestRerender);
         if (target is FrameworkElement targetFe)
         {
+            PrepareFlyout(reconciler, targetFe, null, out _);
             var menuFlyout = new WinUI.MenuFlyout();
             foreach (var item in mfEl.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
-            Reconciler.SetElementTag(targetFe, mfEl);
+            Reconciler.SetDecoratorElementTag(targetFe, mfEl);
             // Use SetFlyoutOnControl so clicking a Button/SplitButton target opens
             // the flyout via .Flyout; non-button targets fall back to attached-flyout
             // metadata (still requires explicit ShowAttachedFlyout to open).
-            reconciler.SetFlyoutOnControl(targetFe, menuFlyout);
+            InstallFlyout(reconciler, targetFe, menuFlyout);
             Reconciler.ApplySetters(mfEl.Setters, menuFlyout);
         }
         return target;
@@ -655,10 +714,9 @@ internal static class OverlayLifecycle
 
         if (updated is FrameworkElement targetFe)
         {
-            Reconciler.SetElementTag(targetFe, n);
-            // Retrieve the existing MenuFlyout (from whichever slot SetFlyoutOnControl
-            // wrote to) and update items in place.
-            var existingFlyout = Reconciler.GetFlyoutOnControl(targetFe);
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, out var existingFlyout))
+                return updated == targetControl ? null : updated;
+            Reconciler.SetDecoratorElementTag(targetFe, n);
             if (existingFlyout is WinUI.MenuFlyout mf)
             {
                 MenuCommandFactory.UpdateMenuFlyoutItems(mf.Items, o.Items, n.Items, reconciler);
@@ -669,7 +727,7 @@ internal static class OverlayLifecycle
                 // Flyout type changed or was missing — create fresh.
                 var menuFlyout = new WinUI.MenuFlyout();
                 foreach (var item in n.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item, reconciler));
-                reconciler.SetFlyoutOnControl(targetFe, menuFlyout);
+                InstallFlyout(reconciler, targetFe, menuFlyout);
                 Reconciler.ApplySetters(n.Setters, menuFlyout);
             }
         }
@@ -739,19 +797,20 @@ internal static class OverlayLifecycle
         var target = reconciler.Mount(cbf.Target, requestRerender);
         if (target is FrameworkElement targetFe)
         {
+            PrepareFlyout(reconciler, targetFe, null, out _);
             var flyout = new WinUI.CommandBarFlyout();
             FlyoutPlacement.Apply(flyout, cbf.Placement);
             if (cbf.PrimaryCommands is not null)
                 foreach (var cmd in cbf.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
             if (cbf.SecondaryCommands is not null)
                 foreach (var cmd in cbf.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
-            Reconciler.SetElementTag(targetFe, cbf);
+            Reconciler.SetDecoratorElementTag(targetFe, cbf);
             // SetFlyoutOnControl (not SetAttachedFlyout) so clicking a Button/SplitButton
             // target opens the flyout natively, matching Flyout and MenuFlyout. WinUI's
             // own AttachedFlyout docs say the same: "To attach a flyout to a Button, use
             // Button.Flyout instead." An attached flyout only ever opens via an explicit
             // ShowAttachedFlyout call, which nothing here makes.
-            reconciler.SetFlyoutOnControl(targetFe, flyout);
+            InstallFlyout(reconciler, targetFe, flyout);
             Reconciler.ApplySetters(cbf.Setters, flyout);
             if (cbf.IsOpen) ShowFlyoutWhenReady(targetFe, flyout, IsStillRequestingOpen);
         }
@@ -777,11 +836,13 @@ internal static class OverlayLifecycle
 
         if (updated is FrameworkElement targetFe)
         {
-            Reconciler.SetElementTag(targetFe, n);
+            if (!PrepareFlyout(reconciler, targetFe, updated == targetControl ? o : null, out var installed))
+                return updated == targetControl ? null : updated;
+            Reconciler.SetDecoratorElementTag(targetFe, n);
             // Must read from the same slot mount wrote to — an attached-only lookup
             // returns null for a Button target and this would create a duplicate
             // flyout the user can never see while the live one keeps stale commands.
-            var existing = Reconciler.GetFlyoutOnControl(targetFe) as WinUI.CommandBarFlyout;
+            var existing = installed as WinUI.CommandBarFlyout;
             var commandsChanged =
                 !ReferenceEquals(o.PrimaryCommands, n.PrimaryCommands) ||
                 !ReferenceEquals(o.SecondaryCommands, n.SecondaryCommands);
@@ -794,7 +855,7 @@ internal static class OverlayLifecycle
                     foreach (var cmd in n.PrimaryCommands) flyout.PrimaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
                 if (n.SecondaryCommands is not null)
                     foreach (var cmd in n.SecondaryCommands) flyout.SecondaryCommands.Add(MenuCommandFactory.CreateAppBarItem(cmd, reconciler));
-                reconciler.SetFlyoutOnControl(targetFe, flyout);
+                InstallFlyout(reconciler, targetFe, flyout);
                 Reconciler.ApplySetters(n.Setters, flyout);
                 existing = flyout;
             }
@@ -856,7 +917,7 @@ internal static class OverlayLifecycle
             // target AND the target's current element still asks to be open — otherwise a
             // re-render that cleared IsOpen (or a recycled control) would pop a stale flyout.
             if (ReferenceEquals(Reconciler.GetFlyoutOnControl(target), flyout)
-                && stillRequestingOpen(Reconciler.GetElementTag(target)))
+                && stillRequestingOpen(Reconciler.GetMountedElement(target)))
             {
                 flyout.ShowAt(target);
             }

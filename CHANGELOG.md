@@ -28,6 +28,31 @@ Conventions for contributors:
 
 ### Added
 
+- Element-valued content overloads for `HyperlinkButton`, `RepeatButton`,
+  `ToggleButton` / `ThreeStateToggleButton`, `DropDownButton`, `SplitButton`,
+  `ToggleSplitButton`, `CheckBox` / `ThreeStateCheckBox`, and `RadioButton`
+  (issue #1482).
+- Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
+  `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
+  A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
+  (`0902a96c-4e92-5b91-4d2b-5a8058055c78`), writes a `RenderPass` span per host render pass,
+  an inclusive `ComponentRender` span per component render (mount, update, the host root, and
+  rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
+  spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
+  setter ran, and `KeyedListDiagnostic`. With no session listening each emit site is one enabled
+  check. Schema: `docs/reference/perf-trace-events.md` (issue #1484).
+
+- `Microsoft-UI-Reactor-Perf` schema revision 2, with fields appended so decoders for the first
+  revision keep working (event versions stay 0). `RenderPass` Start names the component whose
+  re-render request scheduled the pass (`requesterId`, `requesterName`, `requestCount`), with
+  no need for the verbose `State` keyword. `ComponentRender` Start carries the C# call site that
+  created the component from the source map (`callSiteFile` (the file name only),
+  `callSiteLine`, `callSiteColumn`). `Reconcile` Stop counts the panel child edits made during
+  the entry at the default level (`inserted`, `removed`, `moved`, `replaced`). Function and memo
+  components are named by their render function, as DevTools names them
+  (`RenderEachTime in MainPage.Render`), instead of all reporting `FuncElement` / `MemoElement`
+  (issue #1489).
+
 - `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
   before the title bar's title, using the same child lifecycle as `RightHeader`
   (issue #1478).
@@ -43,6 +68,11 @@ Conventions for contributors:
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
 
+- `ControlDescriptor.HandCodedControlled` takes `armOnMount`. With `valueDiffEcho`, it arms
+  the Mount write's echo as well as Update's, for a control whose change event arrives
+  after the trampoline is wired, as `RichEditBox`'s `Document.SetText` does
+  (spec 047 §8.3).
+
 ### Changed
 
 - **`AsyncValue<T>` and `LoadState` are now C# 15 `closed` records (breaking for
@@ -53,7 +83,20 @@ Conventions for contributors:
   with C# 15 can `switch` over the cases exhaustively without a `_` arm, and a missing case
   is warning CS8509. Reactor still targets `net10.0` and stays consumable from the .NET 10
   SDK; building Reactor from source now requires the .NET 11 SDK (spec 020 §5).
-
+- Public `SingleContent` strategies leave native setter-supplied content intact
+  when no Element child is declared (on mount or on both sides of an update).
+  Declare `Empty()` to clear the slot explicitly; this also applies to
+  third-party control handlers (issue #1482).
+- `Button` and the button family share content reconciliation that preserves
+  descendant state and cleans up replaced content. Declared `ContentElement`
+  takes precedence over fallback text, including for the caption-derived
+  accessible name; icon-only content should supply `.AutomationName(...)`
+  (issue #1482).
+- The button content helper owns its declared subtree's mount, reconciliation,
+  and teardown, including transitions to native setter-supplied content.
+- `CheckBox(value, callback, null)` and `ThreeStateCheckBox(value, callback, null)`
+  are now ambiguous between string and Element content overloads. Use `label: null`
+  or cast to `(string?)null` to select the existing text overload (issue #1482).
 - **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
   `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
   child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
@@ -74,12 +117,41 @@ Conventions for contributors:
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
+- **The guide, README, agent kit and `bootstrap.ps1` now describe Windows App SDK template pack
+  `0.0.8-alpha`** (microsoft/WindowsAppSDK#6845; spec 022). That pack adds `reactor-singlefile`, a
+  one-file app with no `.csproj`, and a `--packaging Packaged|Unpackaged` option on the four project
+  templates, so the unpackaged shape no longer needs a hand edit after scaffolding. Its scaffolds no
+  longer reference the `Microsoft.WindowsAppSDK` metapackage and the `--wasdk-version` option is
+  gone: the Windows App SDK arrives through `Microsoft.UI.Reactor` at the version Reactor depends on.
+  Add the metapackage yourself for a self-contained app or a newer WinUI. An older installed pack
+  rejects `--packaging` and lacks `reactor-singlefile`; update it with
+  `winapp new --list --template-version latest`.
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
+  after mount, update and pool reuse. Decorator identity is stored separately so
+  flyout callbacks and teardown still use the current decorator. Exit transitions
+  and connected-animation keys use the first configured value from the outermost
+  decorator inward. Animated modifiers select the current render's `.Animate()`
+  curve when a flyout target or decorator updates, with ambient curves taking
+  precedence. Unmount also releases refs and animation state on intermediate
+  decorators. Nested decorators attach only
+  the outermost native flyout, including through transparent Memo or RegisterType
+  targets. They clean up displaced content and keep inner updates
+  from changing the outer flyout or duplicating its callbacks. For these
+  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  tag instead of the decorator element (spec 047 §14 Phase 1; #942).
+
+- A controlled `RichEditBox` or `AutoSuggestBox` no longer drops the user's first edit after
+  a state write (#1455). Both now suppress their asynchronous echo with the value-diff arm
+  instead of the suppress counter, which kept a token after every write. A `RichEditBox`
+  state change that only adds a trailing line break (`"text"` to `"text\n"`) is written
+  again, and `onTextChanged` keeps a trailing break the user types (spec 047 §8.3).
 
 - `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
   `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids

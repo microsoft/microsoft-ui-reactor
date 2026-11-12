@@ -108,14 +108,12 @@ public sealed partial class Reconciler
             && !ShouldDeclineSkip(control))
         {
             DebugElementsSkipped++;
-            // Refresh Tag so the event trampoline dispatches into the new element's
-            // closure on next click/value-change. Gated on HasCallbacks so we skip
-            // the DependencyProperty write entirely for leaves with no handlers
-            // (TextBlock, Image, Border, etc.) — which is most of them.
-            if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
-                SetElementTag(tagFeSE, newEl);
+            // Refresh live callbacks and native flyout ownership. Inert display
+            // leaves (TextBlock, Image, Border, etc.) still avoid the DP write.
+            if ((newEl.HasCallbacks || IsFlyoutDecorator(newEl)) && control is FrameworkElement tagFeSE)
+                RefreshElementTagOnSkip(tagFeSE, oldEl, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
-                RefreshCallSiteTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
+                RefreshElementTagOnSkip(srcFeSE, oldEl, newEl);   // spec 010 — keep the reported line live
             if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);
@@ -346,7 +344,7 @@ public sealed partial class Reconciler
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never
         // set an explicit name. No-ops when the author did.
-        if (target is FrameworkElement captionFe)
+        if (target is FrameworkElement captionFe && modifiers?.AutomationName is null)
             UpdateDefaultAutomationName(
                 captionFe,
                 ResolveCaptionForElement(oldEl),
@@ -1318,7 +1316,7 @@ public sealed partial class Reconciler
             }
             if (index >= viewSource.ItemCount) continue;
 
-            var oldItemElement = GetElementTag(cc);
+            var oldItemElement = GetMountedElement(cc);
             var newItemElement = BuildKeyedItemView(viewSource, index);
 
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
@@ -1326,7 +1324,7 @@ public sealed partial class Reconciler
             // during a resource refresh), so the old item's effects and refs are cleaned up.
             // Untagged content was already unmounted by an orphan or parked-container sweep: replace it,
             // never unmount it again.
-            var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
+            var priorKey = cc.Content is FrameworkElement priorFe ? GetMountedElement(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
             EnsureItemIdentity(next, newItemElement, priorKey, updated: true);
@@ -1486,7 +1484,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
     {
-        if (GetElementTag(cc) is null) return;
+        if (GetMountedElement(cc) is null) return;
         if (container.Content is ReactorRow row)
         {
             bool inList = GetListState(listViewBase) is { } state

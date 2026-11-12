@@ -252,7 +252,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
             case SingleContent<TElement, TControl> single:
             {
                 var child = single.GetChild(element);
-                var mounted = child is null ? null : ctx.MountChild(child);
+                // No declared child: leave setter-supplied native content alone.
+                // Empty() is non-null and still clears the slot intentionally.
+                if (child is null) return;
+                var mounted = ctx.MountChild(child);
                 single.SetChild(control, mounted);
                 return;
             }
@@ -338,6 +341,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                 // but discards descendant state.
                 var oldChild = single.GetChild(oldEl);
                 var newChild = single.GetChild(newEl);
+                if (oldChild is null && newChild is null) return;
                 if (single.GetCurrentChild is { } getCur)
                 {
                     var existing = getCur(control);
