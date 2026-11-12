@@ -524,11 +524,11 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry, IV
                 ItemsHostReconciliation.Unbind(ih, control, reconciler);
                 return;
 
-            case Imperative<TElement, TControl>:
-                // The handler owns reconciliation and child identity for
-                // an Imperative strategy; its own Unmount body is
-                // responsible for teardown (no generic walk possible
-                // because the engine has no view onto the slots).
+            case Imperative<TElement, TControl> imp:
+                // The handler owns reconciliation and child identity for an
+                // Imperative strategy, so it also owns teardown: the engine has
+                // no view onto the slots and runs the strategy's Unmount, if any.
+                imp.Unmount?.Invoke(new UnmountContext(reconciler), control);
                 return;
         }
     }

@@ -498,7 +498,7 @@ public sealed record Panel<TElement, TControl>(
 | `TreeChildren` | Hierarchical `TreeViewNode` tree, optional per-node `ContentElement` | `TreeView` |
 | `TabItemsHost` | Heterogeneous items (`TabViewItem` / `PivotItem`) with in-place positional reconcile | `TabView`, `Pivot` |
 | `PreMountedItems` | Pre-mounted items against a flat sink with no `ContainerContentChanging` | Templated `FlipView` |
-| `Imperative` | Escape hatch — handler reconciles children itself | Custom containers that span multiple WinUI properties |
+| `Imperative` | Escape hatch — handler reconciles children itself, with an optional `Unmount` for the children it owns | Custom containers that span multiple WinUI properties |
 
 The strategy switch is the engine's seam between the handler protocol
 and the rest of the reconciler — `SingleContent` and `NamedSlots`
