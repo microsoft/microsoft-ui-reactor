@@ -65,7 +65,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          # .NET 11 SDK builds (global.json); .NET 10 runtime runs the net10.0 tests/apps.
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       # Cheap guard: unit-test the pure renderer + orchestrator helpers before
       # spending minutes packing.

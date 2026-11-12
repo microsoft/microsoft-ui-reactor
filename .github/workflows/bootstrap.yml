@@ -76,9 +76,9 @@ jobs:
 
       # NOTE: deliberately *not* running actions/setup-dotnet here. We want
       # bootstrap.ps1 to detect the SDK situation on the runner and, if
-      # necessary, winget-install .NET 10 itself. If the runner image
-      # already has 10.x the install branch is a silent no-op and we
-      # still exercise the rest of the pipeline.
+      # necessary, winget-install the .NET 11 SDK and .NET 10 runtime itself.
+      # If the runner image already has them the install branches are silent
+      # no-ops and we still exercise the rest of the pipeline.
 
       - name: Pre-flight — show toolchain baseline
         shell: pwsh

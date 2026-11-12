@@ -1,5 +1,19 @@
 <Project>
 
+  <!-- Pin the Windows SDK projection (Microsoft.Windows.SDK.NET.Ref) independently
+       of the .NET SDK that builds the repo. Each .NET SDK bundles its own default
+       projection: the 11.0.100 SDK picks 10.0.22621.87 (Microsoft.Windows.SDK.NET
+       10.0.22621.86, WinRT.Runtime 2.3.1) where the 10.0 SDKs pick .57
+       (10.0.22621.38, WinRT.Runtime 2.2.0). A library compiled against the newer
+       projection cannot be referenced from an app on the .NET 10 SDK (NETSDK1148),
+       so moving our build SDK would silently raise the SDK floor for every Reactor
+       consumer. .57 is what 0.1.0-preview.16/.17 shipped against.
+       BuiltLibrariesProjectionTests guards the shipped assemblies' references.
+       Only bump this deliberately, as a consumer-facing change (CHANGELOG). -->
+  <PropertyGroup Condition="'$(WindowsSdkPackageVersion)' == '' And '$(TargetPlatformIdentifier)' == 'Windows' And '$(TargetPlatformVersion)' == '10.0.22621.0'">
+    <WindowsSdkPackageVersion>10.0.22621.57</WindowsSdkPackageVersion>
+  </PropertyGroup>
+
   <!-- Enable AOT compatibility analysis on all projects except Roslyn
        analyzers / source-generators (netstandard2.0). Placed in .targets
        so that TargetFramework from the project file is already resolved.

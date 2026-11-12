@@ -116,6 +116,11 @@ still available). Omitting the `reloading` arm makes it fall through to the
 visible while revalidating (stale-while-revalidate), pass a `reloading:` handler
 explicitly.
 
+`AsyncValue<T>` is a `closed` hierarchy, so with C# 15 (the default for `net11.0`
+apps, or `<LangVersion>15</LangVersion>` on `net10.0`) a plain `switch` over the four
+cases is exhaustive without a `_` arm, and forgetting a case is warning CS8509. Older
+compilers still work; they just need the `_` arm. `LoadState` below is closed the same way.
+
 ## Infinite Scroll with UseInfiniteResource
 
 `UseInfiniteResource` models a cursor-paginated read. Drive fetches from

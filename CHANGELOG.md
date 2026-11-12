@@ -78,6 +78,14 @@ Conventions for contributors:
 
 ### Changed
 
+- **`AsyncValue<T>` and `LoadState` are now C# 15 `closed` records (breaking for
+  subclasses).** They were abstract records whose `private protected` constructor was meant
+  to keep the case set closed, but a subclass in another assembly could still chain to the
+  compiler-generated `protected` copy constructor (`: base(other)`); such subclasses now fail
+  with CS9382. The built-in cases and pattern matching are unchanged. Consumers compiling
+  with C# 15 can `switch` over the cases exhaustively without a `_` arm, and a missing case
+  is warning CS8509. Reactor still targets `net10.0` and stays consumable from the .NET 10
+  SDK; building Reactor from source now requires the .NET 11 SDK (spec 020 §5).
 - Public `SingleContent` strategies leave native setter-supplied content intact
   when no Element child is declared (on mount or on both sides of an update).
   Declare `Empty()` to clear the slot explicitly; this also applies to
