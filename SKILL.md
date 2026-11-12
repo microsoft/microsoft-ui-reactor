@@ -219,9 +219,11 @@ with whatever Microsoft.UI.Reactor version you depend on.
 
 **After `dotnet new reactor -n <Name>`, the entry point is `App.cs`**
 (entry point + initial component), next to `<Name>.csproj`. The template
-also emits packaging scaffolding you normally don't touch:
-`Package.appxmanifest`, `app.manifest`, `Assets/`, and
-`Properties/launchSettings.json` + `Properties/PublishProfiles/`. There is no
+also emits packaging scaffolding you normally don't touch: `app.manifest`,
+`Assets/`, `Properties/launchSettings.json` + `Properties/PublishProfiles/`,
+`.vscode/`, and — for a packaged app — `Package.appxmanifest`. It also writes
+an `AGENTS.md` with WinApp CLI workflow notes (`winapp ui …`,
+`winapp find-ui --source reactor`), which complements this guide. There is no
 `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. `App.cs` has
 its own `using` directives at the top — the canonical set (System + Reactor +
 Reactor.Core + Reactor.Layout + Xaml + Xaml.Controls + static
@@ -231,10 +233,14 @@ scaffolding unless you're adding a `PackageReference` or changing a
 property — `Restore succeeded.` in the scaffold stdout is the only
 confirmation you need.
 
-Apps from `dotnet new reactor` are **packaged** (single-project MSIX), so
-`dotnet run` launches them with package identity and needs Developer Mode on.
-The other short names are `reactor-mvu`, `reactor-navview`, and
-`reactor-tabview`.
+Apps from `dotnet new reactor` are **packaged** (single-project MSIX) by
+default, so `dotnet run` launches them with package identity and needs
+Developer Mode on; `--packaging Unpackaged` scaffolds an unpackaged app instead.
+The other short names are `reactor-mvu`, `reactor-navview`, `reactor-tabview`,
+and `reactor-singlefile` (one `.cs` file, no `.csproj` — see *Single-file apps
+with `dotnet run`* below). If `dotnet new` rejects `--packaging` or can't find
+`reactor-singlefile`, the installed pack predates them;
+`winapp new --list --template-version latest` updates it.
 
 **Verify your edits with `mur check`** before declaring done. From the
 project directory: `mur check` (no arguments) runs `dotnet build` and
@@ -266,9 +272,9 @@ already configures the feed.
 
 For a **hand-authored** csproj like the one above, `WindowsPackageType` MUST be
 `None` (unpackaged, no App.xaml) and `UseWinUI` MUST be `true`. Apps scaffolded
-by `dotnet new reactor` are packaged instead and omit `WindowsPackageType`
-entirely — leave their packaging properties alone. Either way: no XAML files of
-any kind.
+by `dotnet new reactor` are packaged by default and omit `WindowsPackageType`
+(a `--packaging Unpackaged` scaffold sets it to `None`) — leave their packaging
+properties alone. Either way: no XAML files of any kind.
 
 ### Required imports
 
@@ -537,7 +543,9 @@ dotnet test Reactor.slnx
 
 ## Single-file apps with `dotnet run`
 
-For lightweight demos, skip the `.csproj` entirely. Add a file-level header:
+For lightweight demos, skip the `.csproj` entirely. `dotnet new reactor-singlefile -n MyApp`
+scaffolds `MyApp/MyApp.cs` with the header already in place (add
+`--reactor-version 0.0.0-local` in selfhost), or add a file-level header yourself:
 
 ```csharp
 #:package Microsoft.UI.Reactor@0.0.0-local

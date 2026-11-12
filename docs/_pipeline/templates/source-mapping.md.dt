@@ -75,6 +75,7 @@ components, which have no type of their own, report `FuncElement` and
 | `StateChange` | Hook kind + value type | ETW `State` keyword |
 | `RenderError` | Component name + exception type only (message redacted); emitted when a component's `Render()` or effect flush throws — on mount, update and at the host root — including errors an `ErrorBoundary` catches (named at the throw site, once) | ETW `Errors` keyword |
 | Per-element file:line:column | Element call site | `Element.CallSite` / `ReactorSourceMap.GetSource` (when source mapping is enabled at build time) |
+| Per-component file name:line:column | Component call site (file name only, never its directories) | `Microsoft-UI-Reactor-Perf` `ComponentRender` Start `callSiteFile` / `callSiteLine` / `callSiteColumn` (when source mapping is on; see the [perf trace events reference](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/perf-trace-events.md)) |
 
 The reconcile pass also emits a counter summary on stop:
 
@@ -422,7 +423,10 @@ WinUI cannot show you: until the target mounts, the property itself
 purpose-named components — `<UserCard>`, `<RegisterForm>`,
 `<NotificationBadge>` — and the ETW events will identify them.
 Inline anonymous `Func`-component lambdas show up as
-`FuncElement` in traces, which is almost never what you want.
+`FuncElement` in the `Microsoft-UI-Reactor` EventSource's events, which
+is almost never what you want. (The `Microsoft-UI-Reactor-Perf` spans
+name them by their render function instead, `RenderEachTime in
+MainPage.Render`, but every lambda in one method still shares a name.)
 
 **`RenderError` redacts the message on purpose.** TASK-064 strips
 `ex.Message` from the ETW payload because exception messages can

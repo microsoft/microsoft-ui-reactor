@@ -1756,14 +1756,15 @@ public static partial class ElementExtensions
     public static InfoBarElement Content(this InfoBarElement el, Element content) =>
         el with { Content = content };
 
-    // ── Expander extra sugar (HeaderTemplate, ContentTransitions) ───
+    // ── Expander extra sugar (HeaderContent, ContentTransitions) ───
 
     /// <summary>
     /// Sets an Element header (overrides the string <c>Header</c> from the
-    /// factory). Mirrors WinUI's <c>HeaderTemplate</c> slot.
+    /// factory). The mounted child is assigned to WinUI's <c>Header</c> property,
+    /// not its <c>HeaderTemplate</c> DataTemplate property.
     /// </summary>
-    public static ExpanderElement HeaderTemplate(this ExpanderElement el, Element header) =>
-        el with { HeaderTemplate = header };
+    public static ExpanderElement HeaderContent(this ExpanderElement el, Element header) =>
+        el with { HeaderContent = header };
 
     /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
     public static ExpanderElement ContentTransitions(this ExpanderElement el, Microsoft.UI.Xaml.Media.Animation.TransitionCollection transitions) =>
@@ -2109,6 +2110,10 @@ public static partial class ElementExtensions
     /// <summary>Sets the centered content slot of the title bar (typically a search box).</summary>
     public static TitleBarElement Content(this TitleBarElement el, Element content) =>
         el with { Content = content };
+
+    /// <summary>Sets the leading-edge header slot (typically navigation or contextual controls).</summary>
+    public static TitleBarElement LeftHeader(this TitleBarElement el, Element leftHeader) =>
+        el with { LeftHeader = leftHeader };
 
     /// <summary>Sets the trailing-edge content slot (typically a profile / settings element).</summary>
     public static TitleBarElement RightHeader(this TitleBarElement el, Element rightHeader) =>

@@ -303,6 +303,76 @@ try {
         Assert-Equal 0 @($ansiErrors).Count `
             "$(Split-Path $f -Leaf): loads under Windows PowerShell 5.1 (BOM-less UTF-8 decoded as CP1252)"
     }
+
+    # -- 9. The closing reactor-singlefile probe cannot abort a finished run. --
+    # With no match, `dotnet new list` writes to stderr and exits 103. Windows
+    # PowerShell 5.1 turns redirected native stderr into error records, and
+    # bootstrap's script-wide 'Stop' makes the first one terminating: on every
+    # machine whose template pack predates reactor-singlefile, bootstrap printed
+    # "Bootstrap complete." and then died with exit 1. pwsh does no such
+    # wrapping, so only the 5.1 leg can see the bug, and there the pre-fix line
+    # is the positive control. The probe's own statements are lifted from the
+    # AST and run against a dotnet.cmd shim. The match shim makes this a
+    # differential check on both legs: a probe that never ran the shim, or
+    # never names the template, fails it.
+    $probeInit = @($bootstrapAst.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                $n.Left.Extent.Text -eq '$otherTemplates' -and
+                $n.Operator -eq [System.Management.Automation.Language.TokenKind]::Equals
+            }, $true))
+    $probeCall = @($bootstrapAst.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                $n.Left.Extent.Text -eq '$singleFileListing'
+            }, $true))
+    $probeIf = @($bootstrapAst.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.IfStatementAst] -and
+                $n.Clauses[0].Item1.Extent.Text -match '\$singleFileListing'
+            }, $true))
+    $probeFound = ($probeInit.Count -eq 1 -and $probeCall.Count -eq 1 -and $probeIf.Count -eq 1)
+    Assert-True $probeFound `
+        "bootstrap.ps1: found the reactor-singlefile probe (init=$($probeInit.Count), call=$($probeCall.Count), if=$($probeIf.Count))"
+
+    if ($probeFound) {
+        $shims = @{
+            'nomatch' = "@>&2 echo No templates found matching: 'reactor-singlefile'.`r`n@exit /b 103`r`n"
+            'match'   = "@echo Reactor Single-File App  reactor-singlefile,winui-reactor-singlefile  [C#]  WinUI/Reactor`r`n@exit /b 0`r`n"
+        }
+        foreach ($s in $shims.Keys) {
+            $shimDir = Join-Path $tmp "shim-$s"
+            New-Item -ItemType Directory -Path $shimDir | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $shimDir 'dotnet.cmd'), $shims[$s], $noBom)
+        }
+
+        $probes = @{
+            'fixed-nomatch'  = @('nomatch', $probeCall[0].Extent.Text)
+            'fixed-match'    = @('match', $probeCall[0].Extent.Text)
+            'prefix-nomatch' = @('nomatch', '$singleFileListing = (& dotnet new list reactor-singlefile 2>&1 | Out-String)')
+        }
+        $probeResult = @{}
+        foreach ($name in $probes.Keys) {
+            $body = "`$ErrorActionPreference = 'Stop'`n" +
+            "`$env:PATH = '$(Join-Path $tmp "shim-$($probes[$name][0])");' + `$env:PATH`n" +
+            "try {`n" + $probeInit[0].Extent.Text + "`n" + $probes[$name][1] + "`n" + $probeIf[0].Extent.Text + "`n" +
+            "    Write-Output ('templates=' + (`$otherTemplates -join ','))`n" +
+            "} catch { Write-Output ('threw=' + `$_.FullyQualifiedErrorId) }`n"
+            $path = Join-Path $tmp "probe-$name.ps1"
+            [System.IO.File]::WriteAllText($path, $body, $noBom)
+            $probeResult[$name] = @(& $hostPath -NoLogo -NoProfile -File $path) -join ' '
+        }
+
+        $omitted = $probeResult['fixed-nomatch']
+        Assert-True ($omitted -like 'templates=*' -and $omitted -notmatch 'reactor-singlefile') `
+            "bootstrap.ps1: the reactor-singlefile probe survives a no-match under 'Stop' and omits the template (got: $omitted)"
+        Assert-Equal "$omitted,reactor-singlefile" $probeResult['fixed-match'] `
+            'bootstrap.ps1: the reactor-singlefile probe names the template when the pack lists it'
+        if ($PSVersionTable.PSVersion.Major -lt 6) {
+            Assert-Equal 'threw=NativeCommandError' $probeResult['prefix-nomatch'] `
+                'positive control (Windows PowerShell 5.1): the pre-fix probe aborts on a no-match under Stop'
+        }
+    }
 }
 finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
