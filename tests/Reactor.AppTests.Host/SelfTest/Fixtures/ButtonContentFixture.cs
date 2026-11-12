@@ -91,8 +91,19 @@ internal static class ButtonContentFixture
 
         public override async Task RunAsync()
         {
-            await CheckUntaggedControls();
-            CheckUntaggedPooledTeardown();
+            // Source mapping stamps a call site that legitimately tags every control, and an
+            // earlier fixture in the same process may have left it on.
+            var mapped = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = false;
+            try
+            {
+                await CheckUntaggedControls();
+                CheckUntaggedPooledTeardown();
+            }
+            finally
+            {
+                Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = mapped;
+            }
             await CheckUncaptionedControls();
             foreach (var scenario in Scenarios)
             {
