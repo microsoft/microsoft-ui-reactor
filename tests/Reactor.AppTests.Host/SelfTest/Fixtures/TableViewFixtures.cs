@@ -87,7 +87,7 @@ internal static partial class TableViewFixtures
             // (no phase marker visible), which is what the render-error fallback does.
             host.RenderErrorHandler = e =>
             {
-                renderErrors.Add($"{e.Source}: {e.Exception.GetType().Name} 0x{e.Exception.HResult:X8}: {e.Exception.Message} @ {e.Exception.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
+                renderErrors.Add($"{e.Source}: {e.Exception.GetType().Name} 0x{e.Exception.HResult:X8}: {e.Exception.Message} @ {string.Join(" <- ", (e.Exception.StackTrace ?? "").Split('\n').Select(f => f.Trim()).Where(f => f.Length > 0).Take(10))}");
                 return null;
             };
             host.Mount(ctx =>
@@ -132,6 +132,91 @@ internal static partial class TableViewFixtures
             H.Check("TableView_Update_NoRenderError", renderErrors.Count == 0, string.Join(" | ", renderErrors));
             host.Mount(_ => TextBlock("TableView unmounted"));
             await Harness.Render();
+        }
+    }
+
+    /// <summary>
+    /// A cell shell the table released can be finalized while the template's weak table still
+    /// yields it; touching it then throws ObjectDisposedException from inside the reconcile
+    /// (the CI-only TableView_UpdatesColumnsInPlace failure). Disposing one realized shell's
+    /// WinRT reference reproduces that state deterministically.
+    /// </summary>
+    internal class SkipsFinalizedCellShell(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rows = Rows();
+            var renderErrors = new List<string>();
+            Action<int>? bump = null;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = e =>
+            {
+                renderErrors.Add($"{e.Source}: {e.Exception.GetType().Name}: {e.Exception.Message} @ {string.Join(" <- ", (e.Exception.StackTrace ?? "").Split('\n').Select(f => f.Trim()).Where(f => f.Length > 0).Take(12))}");
+                return null;
+            };
+            host.Mount(ctx =>
+            {
+                var (version, setVersion) = ctx.UseState(0);
+                bump = setVersion;
+                return TableView(rows, TemplateColumn<Row>("Score", r => TextBlock($"v{version}:{r.Score}")))
+                    .Width(480).Height(240);
+            });
+
+            await Harness.WaitFor(() => H.FindText("v0:99") is not null, maxPasses: 40, perPassMs: 25);
+            // Resolve everything before the disposal: a tree walk would marshal the dead shell.
+            var kept = H.FindText("v0:42");
+            var victim = H.FindText("v0:17");
+            var shell = victim is null ? null : FindShell(victim);
+            var disposed = shell is null ? 0 : DisposeProjection(shell);
+            H.Check("TableView_FinalizedShell_Setup", kept is not null && bump is not null && disposed > 0,
+                $"kept={kept is not null} shell={shell is not null} disposedRefs={disposed}");
+            if (kept is null || bump is null || disposed == 0) return;
+
+            bump(1);
+            await Harness.WaitFor(() => kept.Text == "v1:42", maxPasses: 40, perPassMs: 25);
+
+            H.Check("TableView_FinalizedShell_NoRenderError", renderErrors.Count == 0, string.Join(" | ", renderErrors));
+            H.Check("TableView_FinalizedShell_LiveCellsRerendered", kept.Text == "v1:42", $"kept={kept.Text}");
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+            H.Check("TableView_FinalizedShell_UnmountClean", renderErrors.Count == 0, string.Join(" | ", renderErrors));
+        }
+
+        private static ContentControl? FindShell(DependencyObject cell)
+        {
+            for (var node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(cell); node is not null;
+                 node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            {
+                if (node is ContentControl { Content: var content } shell && ReferenceEquals(content, cell))
+                    return shell;
+            }
+            return null;
+        }
+
+        // What the finalizer does to a collected projection: every cached interface reference
+        // (DataContext goes through IFrameworkElement's, not NativeObject) is disposed.
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(ContentControl))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(Control))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(FrameworkElement))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(UIElement))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(DependencyObject))]
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Fields preserved by the DynamicDependency attributes above.")]
+        private static int DisposeProjection(ContentControl shell)
+        {
+            var count = 0;
+            for (var type = shell.GetType(); type is not null; type = type.BaseType)
+            {
+                foreach (var field in type.GetFields(global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly))
+                {
+                    if (field.GetValue(shell) is WinRT.IObjectReference reference)
+                    {
+                        reference.Dispose();
+                        count++;
+                    }
+                }
+            }
+            return count;
         }
     }
 

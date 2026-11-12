@@ -55,8 +55,15 @@ internal sealed class ReactorDataTemplate
         if (ReferenceEquals(_renderIdentity, renderIdentity)) return;
         _render = render;
         _renderIdentity = renderIdentity;
+        List<ContentControl>? dead = null;
         foreach (var (shell, slot) in _slots)
-            Render(shell, slot, shell.DataContext);
+        {
+            if (TryGetDataContext(shell, out var item))
+                Render(shell, slot, item);
+            else
+                (dead ??= []).Add(shell);
+        }
+        Forget(dead);
     }
 
     /// <summary>
@@ -67,16 +74,51 @@ internal sealed class ReactorDataTemplate
     internal void UnmountAll()
     {
         _detached = true;
+        List<ContentControl>? dead = null;
         foreach (var (shell, slot) in _slots)
         {
             if (slot.Control is not null)
             {
-                shell.Content = null;
-                _reconciler.UnmountChild(slot.Control);
+                if (TryGetDataContext(shell, out _))
+                {
+                    shell.Content = null;
+                    _reconciler.UnmountChild(slot.Control);
+                }
+                else
+                {
+                    (dead ??= []).Add(shell);
+                    try { _reconciler.UnmountChild(slot.Control); }
+                    catch (ObjectDisposedException) { /* the subtree was finalized with its shell */ }
+                }
             }
             slot.Element = null;
             slot.Control = null;
         }
+        Forget(dead);
+    }
+
+    // A shell the control has released can be finalized while the weak table still yields it
+    // (its entries are cleared only after finalization), leaving a projection whose WinRT
+    // reference is disposed. Such a shell is gone from the table's tree: skip and forget it.
+    private static bool TryGetDataContext(ContentControl shell, out object? item)
+    {
+        try
+        {
+            item = shell.DataContext;
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            item = null;
+            return false;
+        }
+    }
+
+    private void Forget(List<ContentControl>? dead)
+    {
+        if (dead is null) return;
+        foreach (var shell in dead)
+            _slots.Remove(shell);
     }
 
     private UIElement CreateShell()

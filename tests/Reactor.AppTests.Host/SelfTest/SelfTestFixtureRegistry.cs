@@ -505,6 +505,7 @@ internal static class SelfTestFixtureRegistry
         // Reactor.Advanced TableView / Chart (Windows App SDK experimental controls).
         "TableView_MountsRowsAndColumns",
         "TableView_UpdatesColumnsInPlace",
+        "TableView_SkipsFinalizedCellShell",
         "TableView_ControlledSelection",
         "TableView_FilterGroupAndEmpty",
         "TableView_ImmutableSnapshotsDiffInPlace",
@@ -2559,6 +2560,7 @@ internal static class SelfTestFixtureRegistry
 
         "TableView_MountsRowsAndColumns" => new TableViewFixtures.MountsRowsAndColumns(harness),
         "TableView_UpdatesColumnsInPlace" => new TableViewFixtures.UpdatesColumnsInPlace(harness),
+        "TableView_SkipsFinalizedCellShell" => new TableViewFixtures.SkipsFinalizedCellShell(harness),
         "TableView_ControlledSelection" => new TableViewFixtures.ControlledSelection(harness),
         "TableView_FilterGroupAndEmpty" => new TableViewFixtures.FilterGroupAndEmpty(harness),
         "TableView_ImmutableSnapshotsDiffInPlace" => new TableViewFixtures.ImmutableSnapshotsDiffInPlace(harness),

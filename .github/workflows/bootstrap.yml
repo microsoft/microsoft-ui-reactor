@@ -294,18 +294,29 @@ jobs:
               # restore after pinning is the real check.
               if ($newExit -ne 0 -and -not $prereleaseSdk) { throw "dotnet new reactor exited $newExit" }
 
-              # The template floats Microsoft.WindowsAppSDK at Version="*", which never
-              # resolves a prerelease. When the repo is pinned to a prerelease SDK channel
-              # (e.g. 2.5.4-experimental), the local Reactor package requires that runtime
-              # and the float resolves the latest stable instead (NU1107). Pin the scaffold
-              # to the repo's version, as a consumer of this Reactor build must.
+              # Template packs up to 0.0.7-alpha float Microsoft.WindowsAppSDK at
+              # Version="*", which never resolves a prerelease. When the repo is pinned to a
+              # prerelease SDK channel (e.g. 2.6.6-experimental), the local Reactor package
+              # requires that runtime and the float resolves the latest stable instead
+              # (NU1107). Pin the scaffold to the repo's version, as a consumer of this
+              # Reactor build must. Pack 0.0.8-alpha dropped the direct reference (WinUI
+              # flows transitively from Microsoft.UI.Reactor's nuspec), so there is
+              # nothing to pin and the restore below resolves the prerelease on its own.
               if ($prereleaseSdk) {
                   $csproj = 'TestApp/TestApp.csproj'
                   $text = Get-Content $csproj -Raw
-                  $pinned = $text -replace '(<PackageReference\s+Include="Microsoft\.WindowsAppSDK"\s+Version=")[^"]*(")', "`${1}$sdk`${2}"
-                  if ($pinned -eq $text) { throw "Could not pin Microsoft.WindowsAppSDK to $sdk in $csproj" }
-                  Set-Content -Path $csproj -Value $pinned -NoNewline
-                  Write-Host "Pinned the scaffold's Microsoft.WindowsAppSDK to the repo's prerelease $sdk."
+                  $sdkRef = '(<PackageReference\s+Include="Microsoft\.WindowsAppSDK"\s+Version=")[^"]*(")'
+                  if ($text -match $sdkRef) {
+                      $pinned = $text -replace $sdkRef, "`${1}$sdk`${2}"
+                      if ($pinned -ne $text) {
+                          Set-Content -Path $csproj -Value $pinned -NoNewline
+                          Write-Host "Pinned the scaffold's Microsoft.WindowsAppSDK to the repo's prerelease $sdk."
+                      }
+                  } elseif ($text -match 'Include="Microsoft\.WindowsAppSDK"') {
+                      throw "Could not pin Microsoft.WindowsAppSDK to $sdk in $csproj (unrecognized PackageReference shape)"
+                  } else {
+                      Write-Host "Scaffold has no direct Microsoft.WindowsAppSDK reference; relying on Microsoft.UI.Reactor's transitive WinUI $sdk."
+                  }
               }
 
               dotnet restore TestApp/TestApp.csproj --nologo -v:m
