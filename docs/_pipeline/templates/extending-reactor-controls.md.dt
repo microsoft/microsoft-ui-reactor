@@ -415,7 +415,9 @@ strategy's `Unmount` to tear down the children `Reconcile` mounted.
 A control without an element tag skips that callback and is torn down
 by the engine's generic child walk instead, so keep owned children
 where that walk finds them (a `ContentControl`'s `Content`, a panel's
-`Children`).
+`Children`). That walk also tears down and pools anything else in those
+slots, so when a slot can hold UI the handler does not own, tag the
+control with `Reconciler.SetElementTag` to keep the callback in charge.
 
 ## Step 6 — Wrap the constructor in a factory holder, then use it
 

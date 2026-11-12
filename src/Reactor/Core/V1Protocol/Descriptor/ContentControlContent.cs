@@ -28,7 +28,14 @@ internal static class ContentControlContent
         // the generic ContentControl walk reaches the owned child, which is always Content.
         descriptor.Children = new Imperative<TElement, TControl>((ctx, oldElement, newElement, control) =>
         {
-            if (getChild(newElement) is not { } newChild) return;
+            if (getChild(newElement) is not { } newChild)
+            {
+                // Setter-supplied UI is not ours: the generic walk would tear it down and
+                // pool it, so tag the control to route its teardown through Unmount.
+                if (control.Content is UIElement && !Reconciler.TryGetReactorState(control, out _))
+                    Reconciler.SetElementTag(control, newElement);
+                return;
+            }
             var hadContent = OwnedContent.TryGetValue(control, out var state);
             state ??= OwnedContent.GetValue(control, static _ => new ContentState());
             state.Child = ctx.ReconcileChild(hadContent ? getChild(oldElement) : null, newChild, state.Child);

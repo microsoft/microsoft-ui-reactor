@@ -92,6 +92,7 @@ internal static class ButtonContentFixture
         public override async Task RunAsync()
         {
             await CheckUntaggedControls();
+            CheckUntaggedPooledTeardown();
             await CheckUncaptionedControls();
             foreach (var scenario in Scenarios)
             {
@@ -181,6 +182,26 @@ internal static class ButtonContentFixture
         }
 
         private WinUI.Button? FindUntaggedTarget() => H.FindControl<WinUI.Button>(b => b.Content is UIElement);
+
+        // The pooling teardown is the path a removed untagged control takes.
+        private void CheckUntaggedPooledTeardown()
+        {
+            var reconciler = new Reconciler();
+            var native = new WinUI.StackPanel();
+            native.Children.Add(new WinUI.TextBlock { Text = "native" });
+            var setterControl = (FrameworkElement)reconciler.Mount(
+                DropDownButton("BC_SetterNative").Set(c => c.Content = native), Noop)!;
+            var boundaryControl = (FrameworkElement)reconciler.Mount(
+                Button(ErrorBoundary(TextBlock("guarded"), TextBlock("fallback"))), Noop)!;
+            var boundaries = reconciler.ErrorBoundaryNodeCount;
+
+            reconciler.UnmountAndPool(setterControl);
+            reconciler.UnmountAndPool(boundaryControl);
+            H.Check("Untagged_SetterContentSurvivesPooledRemoval", native.Children.Count == 1
+                && (native.Children[0] as WinUI.TextBlock)?.Text == "native");
+            H.Check("Untagged_PooledRemovalDropsErrorBoundary", boundaries == 1
+                && reconciler.ErrorBoundaryNodeCount == 0);
+        }
 
         private async Task CheckUncaptionedControls()
         {

@@ -127,6 +127,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- Removing a subtree through the pooled teardown path now unregisters the
+  `ErrorBoundary` nodes inside it, as the non-pooled path already did, so a
+  recycled wrapper control no longer keeps a stale boundary record (issue #1482).
 - Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
   after mount, update and pool reuse. Decorator identity is stored separately so
   flyout callbacks and teardown still use the current decorator. Exit transitions

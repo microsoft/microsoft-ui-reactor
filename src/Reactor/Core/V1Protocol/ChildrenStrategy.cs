@@ -313,7 +313,9 @@ public sealed record Imperative<TElement, TControl>(
     /// the handler it calls this instead of walking them. Unmount each owned child
     /// while it is still parented, then detach it. Declaring it does not tag every
     /// control: a control without an element tag is torn down by the engine's
-    /// generic child walk, which must therefore be able to reach the owned children.</summary>
+    /// generic child walk, which must therefore be able to reach the owned children.
+    /// That walk also tears down what the handler does not own, so tag the control
+    /// (<see cref="Reconciler.SetElementTag"/>) when a slot can hold such UI.</summary>
     public Action<UnmountContext, TControl>? Unmount { get; init; }
 }
 
