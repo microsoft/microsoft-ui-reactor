@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -554,6 +555,7 @@ public abstract record Element
 
             (HyperlinkButtonElement ha, HyperlinkButtonElement hb) =>
                 ha.Content == hb.Content
+                && ha.ContentElement is null && hb.ContentElement is null
                 && ha.NavigateUri == hb.NavigateUri
                 && CommandBindings.CommandsEqual(ha.Command, hb.Command)
                 && SettersEqual(ha.Setters, hb.Setters),
@@ -561,6 +563,7 @@ public abstract record Element
             (RepeatButtonElement ra, RepeatButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.Delay == rb.Delay
+                && ra.ContentElement is null && rb.ContentElement is null
                 && ra.Interval == rb.Interval
                 && CommandBindings.CommandsEqual(ra.Command, rb.Command)
                 && SettersEqual(ra.Setters, rb.Setters),
@@ -568,6 +571,7 @@ public abstract record Element
             (ToggleButtonElement ta, ToggleButtonElement tb) =>
                 ta.Label == tb.Label
                 && ta.IsChecked == tb.IsChecked
+                && ta.ContentElement is null && tb.ContentElement is null
                 && CommandBindings.CommandsEqual(ta.Command, tb.Command)
                 && SettersEqual(ta.Setters, tb.Setters),
 
@@ -577,12 +581,14 @@ public abstract record Element
             // buttons fast-path too.
             (SplitButtonElement sa, SplitButtonElement sb) =>
                 sa.Label == sb.Label
+                && sa.ContentElement is null && sb.ContentElement is null
                 && ReferenceEquals(sa.Flyout, sb.Flyout)
                 && CommandBindings.CommandsEqual(sa.Command, sb.Command)
                 && SettersEqual(sa.Setters, sb.Setters),
 
             (ToggleSplitButtonElement tsa, ToggleSplitButtonElement tsb) =>
                 tsa.Label == tsb.Label
+                && tsa.ContentElement is null && tsb.ContentElement is null
                 && tsa.IsChecked == tsb.IsChecked
                 && ReferenceEquals(tsa.Flyout, tsb.Flyout)
                 && CommandBindings.CommandsEqual(tsa.Command, tsb.Command)
@@ -606,6 +612,7 @@ public abstract record Element
             (CheckBoxElement ca, CheckBoxElement cb) =>
                 ca.IsChecked == cb.IsChecked
                 && ca.Label == cb.Label
+                && ca.ContentElement is null && cb.ContentElement is null
                 && ca.IsThreeState == cb.IsThreeState
                 && ca.CheckedState == cb.CheckedState
                 && SettersEqual(ca.Setters, cb.Setters),
@@ -613,6 +620,7 @@ public abstract record Element
             (RadioButtonElement ra, RadioButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.IsChecked == rb.IsChecked
+                && ra.ContentElement is null && rb.ContentElement is null
                 && ra.GroupName == rb.GroupName
                 && SettersEqual(ra.Setters, rb.Setters),
 
@@ -3181,9 +3189,8 @@ public record RichTextInlineUIContainer : RichTextInline
 //  Button elements
 // ════════════════════════════════════════════════════════════════════════
 
-// Spec 058 §15 (P5.22) — fully bespoke (everything in Customize). Polymorphic content: a guarded
-// SingleContent over ContentElement (overwrites the auto unguarded one so a Label string isn't
-// clobbered) + Label OneWayConditional gated on ContentElement is null. IsEnabled gated on
+// Spec 058 §15 (P5.22) — polymorphic content is shared with the button family.
+// ContentElement is reconciled as a child subtree; Label remains the text fallback. IsEnabled gated on
 // !IsDisabledFocusable; IsDisabledFocusable coerces IsEnabled=true + Opacity. Click suppresses when
 // IsDisabledFocusable (Excluded so it isn't auto-surfaced). Replaces ButtonDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Button), Exclude = new[] { "Click" })]
@@ -3251,19 +3258,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> d)
     {
-        // Guarded polymorphic content: SetChild only writes a non-null mounted child, so the
-        // string Label written by the gated OneWayConditional below is never clobbered.
-        d.Children = new global::Microsoft.UI.Reactor.Core.V1Protocol.SingleContent<ButtonElement, WinUI.Button>(
-            GetChild: static e => e.ContentElement,
-            SetChild: static (c, ui) => { if (ui is not null) c.Content = ui; })
-        {
-            GetCurrentChild = static c => c.Content as global::Microsoft.UI.Xaml.UIElement,
-        };
-        return d
-            .OneWayConditional(
-                get:         static e => e.Label,
-                set:         static (c, v) => c.Content = v,
-                shouldWrite: static e => e.ContentElement is null)
+        return d.WithContent(static e => e.ContentElement, static e => e.Label)
             .OneWayConditional(
                 get:         static e => e.EffectiveIsEnabled,
                 set:         static (c, v) => c.IsEnabled = v,
@@ -3301,7 +3296,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
 // typed Command property still dispatches: the trampoline invokes OnClick when present, else the
 // command. (Was an auto-surfaced Click→OnClick before #637.)
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.HyperlinkButton), Exclude = new[] { "Click" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Content", "Content")]  // Content as value (not child slot)
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
 public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = null, Action? OnClick = null) : Element
 {
@@ -3309,6 +3304,8 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
     /// <c>new HyperlinkButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch + apply IsEnabled identically. See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.HyperlinkButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
@@ -3323,7 +3320,8 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<HyperlinkButtonElement, WinUI.HyperlinkButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<HyperlinkButtonElement, WinUI.HyperlinkButton> d)
-        => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.HyperlinkButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Content)
+            .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.HyperlinkButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
                 callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
@@ -3334,7 +3332,7 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
 
 // Spec 058 §15 (P5.4). Click Excluded + hand-coded (issue #637) — see HyperlinkButtonElement.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinPrim.RepeatButton), Exclude = new[] { "Click" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
 public partial record RepeatButtonElement(string Label, Action? OnClick = null) : Element
 {
@@ -3344,6 +3342,8 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
     /// <c>new RepeatButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch + apply IsEnabled identically. See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinPrim.RepeatButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
@@ -3358,7 +3358,8 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RepeatButtonElement, WinPrim.RepeatButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RepeatButtonElement, WinPrim.RepeatButton> d)
-        => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.RepeatButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.RepeatButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
                 callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
@@ -3372,7 +3373,7 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
 // IsChecked's source is CheckedState in 3-state mode else IsChecked, and Click reads back the
 // control value firing both callbacks. No event auto-surfaces (no OnClick). Replaces ToggleButtonDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinPrim.ToggleButton))]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsThreeState")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("CheckedState")]
@@ -3395,6 +3396,8 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
     /// issue #637). All paths fire the command on each toggle + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinPrim.ToggleButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnCheckedStateChanged, Command) is not null;
 
@@ -3415,7 +3418,8 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleButtonElement, WinPrim.ToggleButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleButtonElement, WinPrim.ToggleButton> d)
-        => d.OneWay(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .OneWay(
                 get: static e => e.IsThreeState,
                 set: static (c, v) => c.IsThreeState = v)
             .OneWay<bool?>(
@@ -3430,30 +3434,31 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
             .OneWayCommand(static e => e.Command);  // issue #153 — command metadata + IsEnabled applied field-aware
 }
 
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias], which also suppresses the auto content slot
-// so Flyout isn't mis-mapped to Content). Flyout is a [WrapManual] OneWayBridged (CreateFlyoutForDescriptor
-// + reference-identity comparer). Children stay None. Replaces DropDownButtonDescriptor.
+// Text/Element content uses the shared ContentControl strategy. Flyout remains
+// a separate OneWayBridged slot with a reference-identity comparer.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.DropDownButton))]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Flyout")]
 public partial record DropDownButtonElement(string Label, Element? Flyout = null) : Element
 {
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.DropDownButton>[] Setters { get; init; } = [];
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<DropDownButtonElement, WinUI.DropDownButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<DropDownButtonElement, WinUI.DropDownButton> d)
-        => d.OneWayBridged<Element?>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .OneWayBridged<Element?>(
             get:         static e => e.Flyout,
             set:         static (c, v, rec, rr) => c.Flyout = rec.CreateFlyoutForDescriptor(v, rr),
             shouldWrite: static e => e.Flyout is not null,
             comparer:    global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors.ElementReferenceComparer.Instance);
 }
 
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias], suppresses the auto content slot). Click
-// (HandCodedEvent, Excluded so it isn't auto-surfaced) + Flyout (OneWayBridged) in Customize.
-// Children stay None. Replaces SplitButtonDescriptor.
+// Text/Element content uses the shared strategy. Click and Flyout retain their
+// hand-coded event and OneWayBridged paths.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.SplitButton), Exclude = new[] { "Click" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Flyout")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
 public partial record SplitButtonElement(string Label, Action? OnClick = null, Element? Flyout = null) : Element
@@ -3463,6 +3468,8 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
     /// issue #637). All paths dispatch the primary action + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.SplitButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
@@ -3477,7 +3484,8 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SplitButtonElement, WinUI.SplitButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SplitButtonElement, WinUI.SplitButton> d)
-        => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitButtonEventPayload, global::Windows.Foundation.TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs>>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitButtonEventPayload, global::Windows.Foundation.TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs>>(
                 subscribe:        static (c, h) => c.Click += h,
                 callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
@@ -3491,11 +3499,10 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
             .OneWayCommand(static e => e.Command);  // issue #153 — command metadata + IsEnabled applied field-aware
 }
 
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias], suppresses the auto content slot). IsChecked
-// (controlled via IsCheckedChanged — Excluded + handled in Customize) + Flyout (OneWayBridged).
-// Children stay None. Replaces ToggleSplitButtonDescriptor.
+// Text/Element content uses the shared strategy. IsChecked remains controlled
+// via IsCheckedChanged, with Flyout in its separate OneWayBridged slot.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.ToggleSplitButton), Exclude = new[] { "IsCheckedChanged" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Flyout")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
@@ -3506,6 +3513,8 @@ public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsCh
     /// issue #637). All paths fire the command on each toggle + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.ToggleSplitButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(Command) is not null;
 
@@ -3537,7 +3546,8 @@ public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsCh
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> d)
-        => d.HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ToggleSplitButtonEventPayload, bool, global::Windows.Foundation.TypedEventHandler<WinUI.ToggleSplitButton, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs>>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ToggleSplitButtonEventPayload, bool, global::Windows.Foundation.TypedEventHandler<WinUI.ToggleSplitButton, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs>>(
                 get:         static e => e.IsChecked,
                 set:         static (c, v) => c.IsChecked = v,
                 readBack:    static c => c.IsChecked,
@@ -3923,12 +3933,12 @@ public partial record AutoSuggestBoxElement(
 }
 
 /// <summary>Check box element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its checked state until explicitly set.</summary>
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias]), IsThreeState auto. IsChecked is the
+// Spec 058 §15 (P5.22) — text/Element content is shared; IsThreeState auto. IsChecked is the
 // multi-event controlled value (Checked/Unchecked/Indeterminate) with a dual callback
 // (OnCheckedStateChanged bool? OR OnIsCheckedChanged bool when HasValue); CheckedState folds
 // into that callback. Both bespoke → Customize (RadioButton precedent). Replaces CheckBoxDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.CheckBox))]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("CheckedState")]
 public partial record CheckBoxElement(
@@ -3940,12 +3950,15 @@ public partial record CheckBoxElement(
     public bool IsThreeState { get; init; }
     public bool? CheckedState { get; init; }
     public Action<bool?>? OnCheckedStateChanged { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.CheckBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || OnCheckedStateChanged is not null;
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<CheckBoxElement, WinUI.CheckBox> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<CheckBoxElement, WinUI.CheckBox> d)
-        => d.Controlled<bool?, global::Microsoft.UI.Xaml.RoutedEventArgs>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .Controlled<bool?, global::Microsoft.UI.Xaml.RoutedEventArgs>(
             get:         static e => e.IsChecked,
             set:         static (c, v) => c.IsChecked = v,
             subscribe:   static (fe, h) =>
@@ -3975,7 +3988,7 @@ public partial record CheckBoxElement(
 
 /// <summary>Radio button element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its checked state until explicitly set.</summary>
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.RadioButton))]  // spec 058 §15 (P5.4)
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]  // record bool vs control bool? — needs readBack ?? false
 public partial record RadioButtonElement(
     string Label,
@@ -3984,13 +3997,16 @@ public partial record RadioButtonElement(
     string? GroupName = null
 ) : Element
 {
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.RadioButton>[] Setters { get; init; } = [];
 
     // IsChecked is controlled via Checked + Unchecked; the record models it as a
     // non-nullable bool, the control as bool? — so readBack bridges null → false.
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RadioButtonElement, WinUI.RadioButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RadioButtonElement, WinUI.RadioButton> d)
-        => d.Controlled<bool, global::Microsoft.UI.Xaml.RoutedEventArgs>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .Controlled<bool, global::Microsoft.UI.Xaml.RoutedEventArgs>(
             get:         static e => e.IsChecked,
             set:         static (c, v) => c.IsChecked = v,
             subscribe:   static (fe, h) =>
