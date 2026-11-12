@@ -127,6 +127,57 @@ internal static class ElementFactoryRecyclingFixtures
         }
     }
 
+    internal class Factory_MenuFlyoutRecycle_UsesCurrentRowCallbacks(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var items = new[] { new Item("a", "A"), new Item("b", "B") };
+            var calls = new List<string>();
+            MenuFlyoutElement? currentDecorator = null;
+            var reconciler = new Reconciler();
+            IElementFactory factory = new ElementFactory<Item>(items, (item, _) =>
+                currentDecorator = MenuFlyout(
+                    // Same label: only the captured row changes, so the button takes the shallow-skip path.
+                    Button("Select customer", () => calls.Add(item.Id)),
+                    MenuItem("Details")), reconciler, requestRerender: static () => { }, pool: null);
+            var first = factory.GetElement(MakeGetArgs(0));
+            var current = first;
+            try
+            {
+                H.SetContent(first);
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_InitialTarget", currentDecorator is not null
+                    && ReferenceEquals(Reconciler.GetElementTag((FrameworkElement)first), currentDecorator.Target));
+                H.Check("EFR_FlyoutRow_InitialDecorator", ReferenceEquals(Reconciler.GetMountedElement(first), currentDecorator));
+                H.ClickButton("Select customer");
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_InitialClosure", calls.SequenceEqual(new[] { "a" }), $"calls: {string.Join(", ", calls)}");
+                (first as Button)?.Flyout?.Hide();
+                await Harness.Render();
+
+                factory.RecycleElement(MakeRecycleArgs(first));
+                current = factory.GetElement(MakeGetArgs(1));
+                H.Check("EFR_FlyoutRow_SameControlReused", ReferenceEquals(first, current));
+                H.Check("EFR_FlyoutRow_ButtonSkipped", reconciler.DebugElementsSkipped > 0,
+                    $"skipped: {reconciler.DebugElementsSkipped}");
+                H.SetContent(current);
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_CurrentTarget", currentDecorator is not null
+                    && ReferenceEquals(Reconciler.GetElementTag((FrameworkElement)current), currentDecorator.Target));
+                H.Check("EFR_FlyoutRow_CurrentDecorator", ReferenceEquals(Reconciler.GetMountedElement(current), currentDecorator));
+                H.ClickButton("Select customer");
+                await Harness.Render();
+                H.Check("EFR_FlyoutRow_CurrentClosure", calls.SequenceEqual(new[] { "a", "b" }),
+                    $"calls: {string.Join(", ", calls)}");
+            }
+            finally
+            {
+                reconciler.UnmountChild(current);
+                H.SetContent(null);
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────
     //  Internal-bookkeeping invariants. These complement the external
     //  distinct-count check above by catching a class of bug where the
@@ -1207,7 +1258,7 @@ internal static class ElementFactoryRecyclingFixtures
             // flyout's Opened/Closed handlers dereference at click time. A silent
             // adopt leaves the pre-flip element here.
             var realizedAfter = repeater.TryGetElement(0);
-            var tag = realizedAfter is null ? null : Reconciler.GetElementTag(realizedAfter);
+            var tag = realizedAfter is null ? null : Reconciler.GetMountedElement(realizedAfter);
             var targetType = (tag as FlyoutElement)?.Target as ComponentElement;
             H.Check($"EFR919_Decorator_RealizedCarriesCurrentTag_target={targetType?.ComponentType?.Name ?? "<null>"}",
                 targetType is not null && targetType.ComponentType == typeof(FlyoutRowB));
@@ -1416,7 +1467,7 @@ internal static class ElementFactoryRecyclingFixtures
             var ifactory = (IElementFactory)factory;
 
             var firstControl = ifactory.GetElement(MakeRowGetArgs(0, "dk0"));
-            var tagBefore = Reconciler.GetElementTag(firstControl) as FlyoutElement;
+            var tagBefore = Reconciler.GetMountedElement(firstControl) as FlyoutElement;
             H.Check($"EFR919_PoolDecorator_InitialTargetIsA_target={(tagBefore?.Target as ComponentElement)?.ComponentType?.Name ?? "<null>"}",
                 (tagBefore?.Target as ComponentElement)?.ComponentType == typeof(FlyoutRowA));
 
@@ -1451,7 +1502,7 @@ internal static class ElementFactoryRecyclingFixtures
             // The oracle. Whatever control ends up in the slot must carry the
             // CURRENT FlyoutElement as its tag. A silent adopt returns the
             // pooled container, whose tag still names FlyoutRowA.
-            var tagAfter = Reconciler.GetElementTag(secondControl) as FlyoutElement;
+            var tagAfter = Reconciler.GetMountedElement(secondControl) as FlyoutElement;
             var afterTarget = (tagAfter?.Target as ComponentElement)?.ComponentType;
             H.Check($"EFR919_PoolDecorator_SlotCarriesCurrentTag_target={afterTarget?.Name ?? "<null>"}",
                 afterTarget == typeof(FlyoutRowB));

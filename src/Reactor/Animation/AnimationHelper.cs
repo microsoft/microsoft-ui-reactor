@@ -17,13 +17,12 @@ internal static class AnimationHelper
     /// Sets a scalar property on a UIElement, animating via the compositor if
     /// <see cref="AnimationScope.Current"/> is non-null.
     /// </summary>
-    internal static void SetOrAnimate(UIElement element, string property, float value)
+    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null)
     {
         // Resolve animation curve: prefer ambient WithAnimation scope,
         // fall back to element's .Animate() config curve.
         var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= (element is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagEl)
-            ? tagEl.AnimationConfig?.Curve : null;
+        curve ??= Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig, source)?.Curve;
 
         if (curve is null)
         {
@@ -237,11 +236,10 @@ internal static class AnimationHelper
     /// Sets a Vector3 property on a UIElement, animating via the compositor if
     /// <see cref="AnimationScope.Current"/> is non-null.
     /// </summary>
-    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value)
+    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null)
     {
         var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= (element is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagEl)
-            ? tagEl.AnimationConfig?.Curve : null;
+        curve ??= Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig, source)?.Curve;
 
         if (curve is null)
         {

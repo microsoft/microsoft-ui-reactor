@@ -107,6 +107,20 @@ Conventions for contributors:
 
 ### Fixed
 
+- Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
+  after mount, update and pool reuse. Decorator identity is stored separately so
+  flyout callbacks and teardown still use the current decorator. Exit transitions
+  and connected-animation keys use the first configured value from the outermost
+  decorator inward. Animated modifiers select the current render's `.Animate()`
+  curve when a flyout target or decorator updates, with ambient curves taking
+  precedence. Unmount also releases refs and animation state on intermediate
+  decorators. Nested decorators attach only
+  the outermost native flyout, including through transparent Memo or RegisterType
+  targets. They clean up displaced content and keep inner updates
+  from changing the outer flyout or duplicating its callbacks. For these
+  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  tag instead of the decorator element (spec 047 §14 Phase 1; #942).
+
 - A controlled `RichEditBox` or `AutoSuggestBox` no longer drops the user's first edit after
   a state write (#1455). Both now suppress their asynchronous echo with the value-diff arm
   instead of the suppress counter, which kept a token after every write. A `RichEditBox`
