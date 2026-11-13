@@ -38,7 +38,7 @@ how often you need them.
 | `AccessibilityScanner.Scan(root)` | static | Post-render runtime diagnostic — 8 WCAG checks with fix suggestions. |
 | `REACTOR_A11Y_001` | analyzer | Icon-only `Button(icon, action)` without `.AutomationName()`. |
 | `REACTOR_A11Y_002` | analyzer | `Image()` without `.AutomationName()` or `.AccessibilityHidden()`. |
-| `REACTOR_A11Y_003` | analyzer | Form field without `header:` or label modifier. |
+| `REACTOR_A11Y_003` | analyzer | Form field (`TextBox`/`NumberBox`/`PasswordBox`/`AutoSuggestBox`/`ComboBox`/`ToggleSwitch`) without a header, `.AutomationName()`, or `.LabeledBy()`. |
 | `REACTOR_A11Y_004` | analyzer | Clickable container (`Border`/`Grid`/`Canvas`/`Rectangle`/`Ellipse`/`VStack`/`HStack`) with `.OnTapped` but no enabling `.IsTabStop(true)`. |
 
 ## Tier 1 Modifiers
@@ -487,7 +487,7 @@ as you type in your IDE:
 |--------------|------|
 | `REACTOR_A11Y_001` | Icon-only `Button(icon, action)` calls without `.AutomationName()` |
 | `REACTOR_A11Y_002` | `Image()` without `.AutomationName()` or `.AccessibilityHidden()` |
-| `REACTOR_A11Y_003` | `TextBox`/`NumberBox`/`PasswordBox` without `header:` arg or label modifier |
+| `REACTOR_A11Y_003` | `TextBox`/`NumberBox`/`PasswordBox`/`AutoSuggestBox`/`ComboBox`/`ToggleSwitch` with no label: no header (`header:` arg, `.Header()`, or `with { Header = ... }`), `.AutomationName()`, or `.LabeledBy()`. A `ToggleSwitch` is also named by its on/off content, and a field passed to `FormField(field, label: ...)` or to a helper that applies one of those modifiers counts as labeled. A `PlaceholderText` does not, since WinUI never uses it as the name. |
 | `REACTOR_A11Y_004` | Clickable `Border`/`Grid`/`Canvas`/`Rectangle`/`Ellipse`/`VStack`/`HStack` (`.OnTapped`) without an enabling `.IsTabStop(true)` |
 
 These analyzers run automatically when you reference the `Reactor.Analyzers`

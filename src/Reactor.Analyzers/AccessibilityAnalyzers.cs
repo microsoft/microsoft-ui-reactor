@@ -187,8 +187,13 @@ public sealed class ImageAccessibilityAnalyzer : DiagnosticAnalyzer
 /// <summary>
 /// REACTOR_A11Y_003: Form fields need a label for screen readers.
 /// Detects <c>TextBox(...)</c>, <c>NumberBox(...)</c>, <c>PasswordBox(...)</c>,
-/// and <c>AutoSuggestBox(...)</c> factory calls without a <c>header:</c> named argument,
-/// <c>.AutomationName()</c>, or <c>.LabeledBy()</c> in the fluent chain.
+/// <c>AutoSuggestBox(...)</c>, <c>ComboBox(...)</c>, and <c>ToggleSwitch(...)</c> factory calls
+/// without a header (argument, <c>.Header()</c>, or <c>with { Header = ... }</c>),
+/// <c>.AutomationName()</c>, or <c>.LabeledBy()</c>. A <c>ToggleSwitch</c> is also labeled by its
+/// on/off content, which WinUI's peer and Reactor's caption mirror both use as its name. A field
+/// passed into a call that names it at runtime — <c>FormField(field, label: ...)</c>, a Community
+/// Toolkit <c>SettingsCard(header: ..., content: field)</c>, or a source helper that applies a
+/// label modifier to that parameter — is labeled too.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
@@ -201,7 +206,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         "Form fields need a header, .AutomationName(), or .LabeledBy() for screen readers";
     private static readonly LocalizableString Description =
         "Form input fields must be labeled so screen readers can announce their purpose. " +
-        "Use a header: argument, .AutomationName(), or .LabeledBy() to associate a label.";
+        "Use a header (header: argument or .Header()), .AutomationName(), or .LabeledBy() to " +
+        "associate a label. A ToggleSwitch is also labeled by its on/off content.";
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
@@ -212,8 +218,19 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: Description);
 
+    // ComboBox and ToggleSwitch were added for issue #1007. A ComboBox's UIA Name comes only from
+    // an explicit name or its Header — PlaceholderText feeds HelpText, not Name — so a placeholder
+    // does not satisfy the rule for it (nor for any other field).
     private static readonly ImmutableHashSet<string> FormFieldMethods =
-        ImmutableHashSet.Create("TextBox", "NumberBox", "PasswordBox", "AutoSuggestBox");
+        ImmutableHashSet.Create(
+            "TextBox", "NumberBox", "PasswordBox", "AutoSuggestBox", "ComboBox", "ToggleSwitch");
+
+    private static readonly ImmutableHashSet<string> HeaderLabels =
+        ImmutableHashSet.Create("header", "Header");
+
+    // ToggleSwitchAutomationPeer names the switch from Header, then OnContent, then OffContent.
+    private static readonly ImmutableHashSet<string> ToggleSwitchLabels =
+        ImmutableHashSet.Create("header", "Header", "onContent", "OnContent", "offContent", "OffContent");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Rule);
@@ -231,20 +248,17 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
 
         if (invocation.Expression is not IdentifierNameSyntax identifier)
             return;
-        if (!FormFieldMethods.Contains(identifier.Identifier.Text))
+        var factory = identifier.Identifier.Text;
+        if (!FormFieldMethods.Contains(factory))
             return;
 
-        // Check for a named argument "header" or "Header"
-        var args = invocation.ArgumentList.Arguments;
-        foreach (var arg in args)
-        {
-            if (arg.NameColon is not null)
-            {
-                var name = arg.NameColon.Name.Identifier.Text;
-                if (name == "header" || name == "Header")
-                    return;
-            }
-        }
+        var labels = factory == "ToggleSwitch" ? ToggleSwitchLabels : HeaderLabels;
+
+        if (HasLabelArgument(context, invocation, factory, labels))
+            return;
+
+        if (HasLabelInWithExpression(invocation, labels))
+            return;
 
         // Check the fluent chain for a label-bearing modifier.
         //
@@ -254,13 +268,296 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         // redundant `.AutomationName("Password")` next to a `.Header("Password")` that was doing
         // the job, which is worse guidance than the rule was written to give. The match is on the
         // exact identifier, so `PaneHeader` / `TabStripHeader` / `RightHeader` do not satisfy it.
-        if (HasModifierInChain(invocation, "Header", "AutomationName", "LabeledBy"))
+        if (HasModifierInChain(invocation, LabelModifiers))
+            return;
+
+        if (IsLabeledByEnclosingCall(context, invocation))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(
             Rule,
             invocation.GetLocation()));
     }
+
+    private static readonly string[] LabelModifiers = { "Header", "AutomationName", "LabeledBy" };
+
+    /// <summary>
+    /// True when a label-bearing parameter (<paramref name="labels"/>) receives a non-null argument,
+    /// whether named or positional. Positional arguments are mapped through the bound method so
+    /// <c>TextBox(v, set, "placeholder", "Header")</c> counts; when binding fails (dynamic
+    /// arguments, mid-edit code) the Reactor factory layout is assumed instead.
+    /// </summary>
+    private static bool HasLabelArgument(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation,
+        string factory,
+        ImmutableHashSet<string> labels)
+    {
+        var args = invocation.ArgumentList.Arguments;
+        if (args.Count == 0)
+            return false;
+
+        IMethodSymbol? method = null;
+        var resolved = false;
+        for (var i = 0; i < args.Count; i++)
+        {
+            var arg = args[i];
+            if (IsNullLiteral(arg.Expression))
+                continue;
+
+            if (arg.NameColon is null && !resolved)
+            {
+                method = ResolveMethod(context, invocation);
+                resolved = true;
+            }
+
+            var parameterName = ParameterName(arg, i, method)
+                ?? (method is null ? ReactorPositionalParameter(factory, i) : null);
+            if (parameterName is not null && labels.Contains(parameterName))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True when the field (with any fluent chain) is passed straight into a call that labels it:
+    /// <list type="bullet">
+    /// <item>a known labeling container (<see cref="KnownContainerLabelParameter"/>) such as
+    /// Reactor's <c>FormField(content, label: "...")</c>, given a non-null label;</item>
+    /// <item>a helper declared in source whose body applies <c>.AutomationName</c>,
+    /// <c>.Header</c>, or <c>.LabeledBy</c> to the very parameter the field is bound to — e.g. a
+    /// <c>SettingsRow(string label, Element control) =&gt; HStack(TextBlock(label),
+    /// control.AutomationName(label))</c>.</item>
+    /// </list>
+    /// A plain container (<c>VStack</c>, <c>HStack</c>, …) is neither, so a field merely sitting
+    /// next to a caption <c>TextBlock</c> is still reported.
+    /// </summary>
+    private static bool IsLabeledByEnclosingCall(
+        SyntaxNodeAnalysisContext context, InvocationExpressionSyntax field)
+    {
+        SyntaxNode node = field;
+        while (true)
+        {
+            var parent = node.Parent;
+            if (parent is MemberAccessExpressionSyntax ma && ma.Expression == node
+                && parent.Parent is InvocationExpressionSyntax chained && chained.Expression == ma)
+            {
+                node = chained;
+                continue;
+            }
+            if (parent is ParenthesizedExpressionSyntax or CastExpressionSyntax
+                || parent is WithExpressionSyntax withExpr && withExpr.Expression == node)
+            {
+                node = parent;
+                continue;
+            }
+            break;
+        }
+
+        if (node.Parent is not ArgumentSyntax
+            {
+                Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax call } list,
+            } argument)
+            return false;
+
+        var method = ResolveMethod(context, call);
+        if (method is null)
+            return false;
+
+        var parameterName = ParameterName(argument, list.Arguments.IndexOf(argument), method);
+        if (parameterName is null)
+            return false;
+
+        if (KnownContainerLabelParameter(method) is { } labelParameter)
+        {
+            if (parameterName != "content")
+                return false;
+            var args = list.Arguments;
+            for (var i = 0; i < args.Count; i++)
+            {
+                if (ParameterName(args[i], i, method) == labelParameter && !IsNullLiteral(args[i].Expression))
+                    return true;
+            }
+            return false;
+        }
+
+        return ForwardsLabel(method.ReducedFrom ?? method.OriginalDefinition, parameterName, depth: 0, context.CancellationToken);
+    }
+
+    /// <summary>
+    /// True when <paramref name="method"/>'s source body applies a label modifier to
+    /// <paramref name="parameterName"/>, directly or by handing it to another helper on the same
+    /// type that does (e.g. <c>OptionPanel(params Element[] options)</c> →
+    /// <c>NameOptionsFromCaptions(options)</c> → <c>options[i].AutomationName(...)</c>). Inner
+    /// helpers are found by name on the containing type rather than through a semantic model, and
+    /// the walk is bounded so a recursive helper cannot loop.
+    /// </summary>
+    private static bool ForwardsLabel(
+        IMethodSymbol method, string parameterName, int depth, System.Threading.CancellationToken ct)
+    {
+        foreach (var reference in method.DeclaringSyntaxReferences)
+        {
+            var body = reference.GetSyntax(ct) switch
+            {
+                MethodDeclarationSyntax m => (SyntaxNode?)m.Body ?? m.ExpressionBody,
+                LocalFunctionStatementSyntax l => (SyntaxNode?)l.Body ?? l.ExpressionBody,
+                _ => null,
+            };
+            if (body is null)
+                continue;
+
+            foreach (var inner in body.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                if (inner.Expression is MemberAccessExpressionSyntax labelCall
+                    && LabelModifiers.Contains(labelCall.Name.Identifier.Text)
+                    && ReceiverRoot(labelCall.Expression) is IdentifierNameSyntax receiver
+                    && receiver.Identifier.Text == parameterName)
+                    return true;
+
+                if (depth < MaxForwardingDepth
+                    && inner.Expression is IdentifierNameSyntax helperName
+                    && method.ContainingType is { } type)
+                {
+                    var args = inner.ArgumentList.Arguments;
+                    for (var i = 0; i < args.Count; i++)
+                    {
+                        if (args[i].Expression is not IdentifierNameSyntax passed
+                            || passed.Identifier.Text != parameterName)
+                            continue;
+
+                        foreach (var helper in type.GetMembers(helperName.Identifier.Text).OfType<IMethodSymbol>())
+                        {
+                            if (ParameterName(args[i], i, helper) is { } next
+                                && ForwardsLabel(helper, next, depth + 1, ct))
+                                return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private const int MaxForwardingDepth = 3;
+
+    /// <summary>
+    /// For a container that names its <c>content</c> from one of its own arguments at runtime,
+    /// the name of that argument's parameter; otherwise null.
+    /// <list type="bullet">
+    /// <item>Reactor's <c>FormField(content, label)</c> — <c>ApplyFormFieldAutomation</c> sets the
+    /// content's <c>AutomationProperties.Name</c> from the label.</item>
+    /// <item>A <c>[GenerateReactorWrapper]</c> factory for the Community Toolkit
+    /// <c>SettingsCard</c> — its <c>SetAccessibleContentName</c> names the content from a string
+    /// <c>Header</c>.</item>
+    /// </list>
+    /// </summary>
+    private static string? KnownContainerLabelParameter(IMethodSymbol method)
+    {
+        if (method.Name == "FormField"
+            && CommandDebounceAnalyzer.IsReactorNamespace(method.ContainingNamespace?.ToDisplayString()))
+            return "label";
+
+        if (method.Name == "SettingsCard" && method.ContainingType is { } type)
+        {
+            foreach (var attribute in type.GetAttributes())
+            {
+                if (attribute.AttributeClass?.Name == "GenerateReactorWrapperAttribute"
+                    && attribute.ConstructorArguments.Length > 0
+                    && attribute.ConstructorArguments[0].Value is ITypeSymbol wrapped
+                    && wrapped.ToDisplayString() == "CommunityToolkit.WinUI.Controls.SettingsCard")
+                    return "header";
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The identifier a label call is ultimately made on: <c>control</c> for
+    /// <c>control.AutomationName(...)</c>, <c>options</c> for <c>options[i].AutomationName(...)</c>.
+    /// </summary>
+    private static ExpressionSyntax ReceiverRoot(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax p: expression = p.Expression; break;
+                case CastExpressionSyntax c: expression = c.Expression; break;
+                case ElementAccessExpressionSyntax e: expression = e.Expression; break;
+                case PostfixUnaryExpressionSyntax u when u.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = u.Operand; break;
+                default: return expression;
+            }
+        }
+    }
+
+    private static IMethodSymbol? ResolveMethod(
+        SyntaxNodeAnalysisContext context, InvocationExpressionSyntax invocation)
+    {
+        var info = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+        return info.Symbol as IMethodSymbol
+            ?? (info.CandidateSymbols.Length == 1 ? info.CandidateSymbols[0] as IMethodSymbol : null);
+    }
+
+    /// <summary>The parameter an argument binds to: by name if named, else by position.</summary>
+    private static string? ParameterName(ArgumentSyntax argument, int index, IMethodSymbol? method)
+    {
+        if (argument.NameColon is not null)
+            return argument.NameColon.Name.Identifier.Text;
+        if (method is null || method.Parameters.Length == 0)
+            return null;
+        if (index < method.Parameters.Length)
+            return method.Parameters[index].Name;
+        var last = method.Parameters[method.Parameters.Length - 1];
+        return last.IsParams ? last.Name : null;
+    }
+
+    /// <summary>Label-bearing positional slots of the Reactor factories (Dsl.cs).</summary>
+    private static string? ReactorPositionalParameter(string factory, int index) => (factory, index) switch
+    {
+        ("TextBox", 3) => "header",
+        ("NumberBox", 2) => "header",
+        ("ToggleSwitch", 2) => "onContent",
+        ("ToggleSwitch", 3) => "offContent",
+        ("ToggleSwitch", 4) => "header",
+        _ => null,
+    };
+
+    /// <summary>
+    /// True for <c>(Field(...) with { Header = "..." })</c> — the record-initializer spelling of a
+    /// header, which the docs use for controls without a fluent <c>.Header()</c>.
+    /// </summary>
+    private static bool HasLabelInWithExpression(SyntaxNode node, ImmutableHashSet<string> labels)
+    {
+        var current = node.Parent;
+        while (current is not null)
+        {
+            if (current is WithExpressionSyntax withExpr && withExpr.Expression.Span.Contains(node.Span))
+            {
+                foreach (var expression in withExpr.Initializer.Expressions)
+                {
+                    if (expression is AssignmentExpressionSyntax
+                        {
+                            Left: IdentifierNameSyntax property,
+                        } assignment
+                        && labels.Contains(property.Identifier.Text)
+                        && !IsNullLiteral(assignment.Right))
+                        return true;
+                }
+            }
+
+            if (current is StatementSyntax or MemberDeclarationSyntax)
+                break;
+
+            current = current.Parent;
+        }
+        return false;
+    }
+
+    private static bool IsNullLiteral(ExpressionSyntax expression) =>
+        expression.IsKind(SyntaxKind.NullLiteralExpression)
+        || expression.IsKind(SyntaxKind.DefaultLiteralExpression)
+        || expression.IsKind(SyntaxKind.DefaultExpression);
 
     private static bool HasModifierInChain(SyntaxNode node, params string[] modifierNames)
     {

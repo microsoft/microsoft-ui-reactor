@@ -774,7 +774,7 @@ class StaleReadDontDemo : Component
         {
             setSizeFitIdx(i);
             Apply(sizeFitIdx); // reads the PREVIOUS index
-        });
+        }).Header("Size to fit");
 
         void Apply(int index) { }
     }
@@ -800,7 +800,7 @@ class StaleReadDoDemo : Component
         {
             setSizeFitIdx(i);
             Apply(i); // use the new value directly
-        });
+        }).Header("Size to fit");
 
         void Apply(int index) { }
     }
