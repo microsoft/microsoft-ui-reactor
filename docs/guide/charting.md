@@ -239,7 +239,7 @@ class CombinedChartDemo : Component
 
         return VStack(12,
             SubHeading("Interactive Chart"),
-            ComboBox(Years, year, setYear),
+            ComboBox(Years, year, setYear).AutomationName("Year"),
             AreaChart(data, d => d.Month, d => d.Revenue)
                 .Title("Revenue by Year")
                 .SeriesName("Revenue")
@@ -615,7 +615,7 @@ class ChartSwitchDemo : Component
 
         return VStack(8,
             SubHeading("Switch chart type"),
-            ComboBox(kinds, kind, setKind),
+            ComboBox(kinds, kind, setKind).AutomationName("Chart type"),
             chart
                 .Title("Revenue")
                 .SeriesName("Revenue")
