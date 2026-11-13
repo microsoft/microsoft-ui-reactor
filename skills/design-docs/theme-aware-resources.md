@@ -144,7 +144,7 @@ Border(content)
 
 ## High Contrast
 
-In High Contrast mode, WinUI maps theme resources to one of 8 system color brushes. When you use `Theme.*` tokens, HC resolution happens automatically.
+In High Contrast mode, WinUI maps theme resources to one of 8 system color brushes. When you use `Theme.*` tokens, HC resolution happens automatically. This covers `Theme.Ref(...)`, `.Resources(...)` overrides and `ThemeRef.Resolve(key, isDark)` too: while a contrast theme is on they resolve from the `HighContrast` dictionary, and `isDark` only picks the fallback for keys it does not define.
 
 **Allowed HC brushes:**
 

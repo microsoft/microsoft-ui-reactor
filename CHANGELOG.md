@@ -36,6 +36,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- Theme references follow Windows contrast themes. While a contrast theme is on,
+  `.Resources(...)` theme overrides, `ThemeRef.Resolve(...)` and Reactor's own resolved
+  brushes (validation styling) now resolve from the `HighContrast` theme dictionary, as a
+  `{ThemeResource}` does; `ThemeRef.Resolve(key, isDark)` uses `isDark` only for keys that
+  dictionary does not define. Turning a contrast theme on or off while the app runs refreshes
+  them in every Reactor window, including memoized subtrees. `Theme.*` modifiers such as
+  `.Background(Theme.CardBackground)` already followed contrast themes (issue #1506).
+
 ### Security
 
 ## [0.1.0-preview.18] — 2026-11-12

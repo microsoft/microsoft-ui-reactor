@@ -1583,7 +1583,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _forcedColorsTheme = _isForcedColors ? s_chartingBridge?.CaptureForcedColorsTheme() : null;
         }
         // Issue #660 (#86): a palette / high-contrast change can alter the brush
-        // a (key,theme) pair resolves to — drop the cache so it re-resolves.
+        // a (key,theme) pair resolves to — drop the cache so it re-resolves. A
+        // contrast-theme switch also needs memoized subtrees refreshed (issue #1506).
+        Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }

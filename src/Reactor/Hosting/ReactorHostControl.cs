@@ -1439,6 +1439,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
+        // A contrast-theme switch also needs memoized subtrees refreshed (issue #1506).
+        Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }

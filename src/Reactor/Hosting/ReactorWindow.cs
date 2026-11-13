@@ -1466,6 +1466,15 @@ public sealed partial class ReactorWindow : IDisposable
             case WindowMessageMonitor.WM_WINDOWPOSCHANGED:
                 DispatchZOrderChanged(args);
                 break;
+            case WindowMessageMonitor.WM_SETTINGCHANGE:
+                // A contrast theme was turned on or off. {ThemeResource} values follow on their
+                // own; brushes Reactor resolved itself (resource overrides, ThemeRef.Resolve) are
+                // refreshed here, because the host only hears UISettings.ColorValuesChanged once
+                // a chart has started (issue #1506). Every window gets the broadcast; only the
+                // first one that sees the setting move triggers the refresh.
+                if (args.WParam == Core.HighContrastState.SPI_SETHIGHCONTRAST)
+                    Core.HighContrastState.OnSystemSettingChanged();
+                break;
             case WindowMessageMonitor.WM_SHOWWINDOW:
                 if (args.WParam != 0)
                 {
