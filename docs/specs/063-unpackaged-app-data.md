@@ -294,6 +294,14 @@ is live, so Arm B's "absent" is a measurement rather than a silent miss. Both ar
 runtime, so the machine's 2.5.1 SbS package is excluded in both directions. Arm A also independently
 reproduces §3.1 from a separate worktree.
 
+> **Trigger fired (2.5.4-experimental bump).** Moving the pin to metapackage 2.5.4-experimental
+> (`Foundation` 2.3.13-experimental, bundled by the self-contained test host) tripped the positive
+> control: `LocalSettings` now lands in the machine-local hive only (measured: machine-local
+> present, roaming absent). D1's durable reason — the retirement test — is unchanged, so the store
+> keeps `LocalPath`. The guard was made hive-agnostic: its control must find the `LocalSettings`
+> write in *either* hive (otherwise the probe is broken), and the store must create a key in
+> *neither*. Revisiting D1/D2 on the strength of the fix remains an open follow-up.
+
 **The boundary is a `Foundation` version, not a metapackage version** — and the pairing between them
 is neither stable nor even monotonic in appearance (verified against the metapackage nuspecs):
 
@@ -422,7 +430,7 @@ about the adoption. Every assertion pins the **storage location** instead.
 | `Persists_Under_The_Sdk_Provided_AppData_Root_Not_The_Process_Name_Root` | `store.Path` is under `GetForUnpackaged().LocalPath` and *not* under `JsonFileStore`'s process-name root. Guarded by a positive control that the SDK root actually contains the requested publisher/product, so the comparison cannot degenerate into a tautology. |
 | `Written_Bytes_Land_In_A_File_Beneath_The_Sdk_AppData_Root` | Bytes reach the filesystem at an **independently recomputed** SDK path — not at `store.Path`, which a store that reported one location and wrote to another would satisfy self-consistently. |
 | `A_Second_Store_Over_The_Same_Publisher_Product_Sees_The_Same_Data` | The root derives from publisher/product, not per-instance state — the property that makes this identity survive an executable rename. Paired with a different-`product` negative control, because the shared read on its own would also pass for any deterministic singleton path. |
-| `Does_Not_Route_Window_Placement_Through_The_Roaming_Registry_Hive` | D1, as a regression guard. Carries its own positive control: it first drives `LocalSettings` directly and asserts the roaming key **does** appear, proving the probe can see it, before asserting the store did not create one. |
+| `Does_Not_Route_Window_Placement_Through_The_Roaming_Registry_Hive` | D1, as a regression guard. Carries its own positive control: it first drives `LocalSettings` directly and asserts the value **does** appear in one of the two hives (roaming before the #6559 fix, machine-local after it), proving the probe can see it, before asserting the store created a key in neither. |
 | `Rejects_Empty_Publisher_Or_Product`, `Rejects_A_Publisher_The_Sdk_Considers_Invalid`, `Rejects_A_Product_The_Sdk_Considers_Invalid` | D5 — Reactor's non-emptiness check and the SDK's own rejection, pinned for **both** segments. `product` reaches `Path.Combine` exactly as `publisher` does, so testing only the latter would leave half the documented validation claim unverified. |
 | `Auto_Detection_Still_Picks_JsonFileStore_When_Unpackaged` | D2. Reddens if the default is flipped. |
 | `PersistenceEtwBridgeTests.UnpackagedAppDataStore_Write_emits_its_own_storeKind_not_json_file` | The `unpackaged-appdata` trace label, plus the spec 044 §6.2.1 rule that no path reaches the payload. Distinguishability on the trace was the stated justification for the `JsonFileStore` `_storeKind` refactor, so it needs an assertion — otherwise the composed store could silently report as `json-file` and the refactor would be paying for nothing. |

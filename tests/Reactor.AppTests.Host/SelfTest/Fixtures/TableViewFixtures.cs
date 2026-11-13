@@ -1,0 +1,472 @@
+using Microsoft.UI.Reactor.Advanced.Tabular;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Tabular;
+using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Advanced.Factories;
+using WinUITableView = Microsoft.UI.Xaml.Controls.Tabular.TableView;
+
+namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
+
+/// <summary>
+/// Reactor.Advanced TableView (Microsoft.UI.Xaml.Controls.Tabular, Windows App SDK
+/// experimental channel) against the live control: rows realize with both column kinds,
+/// columns update in place, controlled selection does not echo, filter/group/empty
+/// templates render Reactor content, and unmount tears down hosted cell subtrees.
+/// </summary>
+internal static partial class TableViewFixtures
+{
+    // A text column resolves its path through a classic {Binding}; the generated
+    // ICustomPropertyProvider keeps that working under NativeAOT.
+    [WinRT.GeneratedBindableCustomProperty]
+    internal sealed partial class Row(int id, string name, string group, int score)
+    {
+        public int Id { get; } = id;
+        public string Name { get; set; } = name;
+        public string Group { get; } = group;
+        public int Score { get; } = score;
+    }
+
+    private static Row[] Rows() =>
+    [
+        new(1, "Alice", "A", 42),
+        new(2, "Bob", "B", 17),
+        new(3, "Carol", "A", 99),
+    ];
+
+    private static WinUITableView? FindTable(Harness h) => h.FindControl<WinUITableView>(_ => true);
+
+    // Column widths are layout doubles; compare within a sub-pixel tolerance.
+    private static bool Near(double actual, double expected) => Math.Abs(actual - expected) < 0.01;
+
+    internal class MountsRowsAndColumns(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rows = Rows();
+            var host = H.CreateHost();
+            host.Mount(_ => TableView(rows,
+                    BoundColumn("Name", nameof(Row.Name), width: 140),
+                    TemplateColumn<Row>("Score", r => TextBlock($"score:{r.Score}")))
+                .Width(480).Height(240));
+
+            H.Check("TableView_Mount_TemplateCellsRealized",
+                await Harness.WaitFor(() => H.FindText("score:42") is not null && H.FindText("score:99") is not null,
+                    maxPasses: 40, perPassMs: 25),
+                // A mount failure renders an error panel instead of the table; carry its text.
+                string.Join(" | ", H.FindAllControls<TextBlock>(_ => true).Select(t => t.Text).Take(3)));
+            H.Check("TableView_Mount_TextColumnBindingRealized",
+                await Harness.WaitFor(() => H.FindText("Alice") is not null, maxPasses: 20, perPassMs: 25));
+
+            var table = FindTable(H);
+            H.Check("TableView_Mount_NativeColumns", table is not null
+                && table.Columns.Count == 2
+                && table.Columns[0] is TableViewTextColumn { Header: "Name" } text
+                && Near(text.Width.Value, 140)
+                && table.Columns[1] is TableViewTemplateColumn { Header: "Score" },
+                $"columns={table?.Columns.Count}");
+            H.Check("TableView_Mount_DefaultStyleApplied",
+                table is not null && Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(table) > 0);
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
+
+    internal class UpdatesColumnsInPlace(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var first = Rows();
+            var second = new Row[] { new(4, "Dave", "B", 7) };
+            var clicks = new List<int>();
+            var renderErrors = new List<string>();
+            var host = H.CreateHost();
+            // Recorded for the failure detail: a CI miss showed the whole subtree replaced
+            // (no phase marker visible), which is what the render-error fallback does.
+            host.RenderErrorHandler = e =>
+            {
+                renderErrors.Add($"{e.Source}: {e.Exception.GetType().Name} 0x{e.Exception.HResult:X8}: {e.Exception.Message} @ {string.Join(" <- ", (e.Exception.StackTrace ?? "").Split('\n').Select(f => f.Trim()).Where(f => f.Length > 0).Take(10))}");
+                return null;
+            };
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var columns = new List<TableColumn>
+                {
+                    BoundColumn(phase == 0 ? "Name" : "Full name", nameof(Row.Name), width: phase == 0 ? 120 : 200),
+                    TemplateColumn<Row>("Score", r => TextBlock($"p{phase}:{r.Score}")),
+                };
+                if (phase == 2)
+                    columns.Add(TemplateColumn<Row>("Group", r => TextBlock($"group:{r.Group}")));
+                return VStack(8,
+                    Button("Next phase", () => { clicks.Add(phase); setPhase(phase + 1); }),
+                    TextBlock($"phase:{phase}"),
+                    TableView(phase == 0 ? first : second, [.. columns]).Width(480).Height(240));
+            });
+
+            await Harness.WaitFor(() => H.FindText("p0:42") is not null, maxPasses: 40, perPassMs: 25);
+            var table = FindTable(H);
+            var nameColumn = table?.Columns[0];
+            var scoreColumn = table?.Columns[1];
+
+            H.ClickButton("Next phase");
+            H.Check("TableView_Update_TemplateCellsRerenderForNewItems",
+                await Harness.WaitFor(() => H.FindText("p1:7") is not null && H.FindText("p0:42") is null,
+                    maxPasses: 40, perPassMs: 25));
+            H.Check("TableView_Update_ColumnInstancesPreserved",
+                table is not null && ReferenceEquals(table.Columns[0], nameColumn) && ReferenceEquals(table.Columns[1], scoreColumn));
+            H.Check("TableView_Update_ColumnPropsWritten",
+                nameColumn is { Header: "Full name" } && Near(nameColumn.Width.Value, 200),
+                $"header={nameColumn?.Header} width={nameColumn?.Width.Value}");
+
+            H.ClickButton("Next phase");
+            // A type/count change rebuilds the native column list; allow for a slow CI dispatcher
+            // and say which half is missing if it still times out.
+            H.Check("TableView_Update_ColumnAddedStructurally",
+                await Harness.WaitFor(() => table!.Columns.Count == 3 && H.FindText("group:B") is not null,
+                    maxPasses: 80, perPassMs: 25),
+                $"columns={table?.Columns.Count} groupCell={H.FindText("group:B") is not null} phase2Rendered={H.FindText("p2:7") is not null} shownPhase={(H.FindText("phase:2") is not null ? 2 : H.FindText("phase:1") is not null ? 1 : H.FindText("phase:0") is not null ? 0 : -1)} clicksSeenAtPhase=[{string.Join(",", clicks)}] renderErrors=[{string.Join(" | ", renderErrors)}]");
+
+            H.Check("TableView_Update_NoRenderError", renderErrors.Count == 0, string.Join(" | ", renderErrors));
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
+    /// A cell shell the table released can be finalized while the template's weak table still
+    /// yields it; touching it then throws ObjectDisposedException from inside the reconcile
+    /// (the CI-only TableView_UpdatesColumnsInPlace failure). Disposing one realized shell's
+    /// WinRT reference reproduces that state deterministically.
+    /// </summary>
+    internal class SkipsFinalizedCellShell(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rows = Rows();
+            var renderErrors = new List<string>();
+            Action<int>? bump = null;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = e =>
+            {
+                renderErrors.Add($"{e.Source}: {e.Exception.GetType().Name}: {e.Exception.Message} @ {string.Join(" <- ", (e.Exception.StackTrace ?? "").Split('\n').Select(f => f.Trim()).Where(f => f.Length > 0).Take(12))}");
+                return null;
+            };
+            host.Mount(ctx =>
+            {
+                var (version, setVersion) = ctx.UseState(0);
+                bump = setVersion;
+                return TableView(rows, TemplateColumn<Row>("Score", r => TextBlock($"v{version}:{r.Score}")))
+                    .Width(480).Height(240);
+            });
+
+            await Harness.WaitFor(() => H.FindText("v0:99") is not null, maxPasses: 40, perPassMs: 25);
+            // Resolve everything before the disposal: a tree walk would marshal the dead shell.
+            var kept = H.FindText("v0:42");
+            var victim = H.FindText("v0:17");
+            var shell = victim is null ? null : FindShell(victim);
+            var disposed = shell is null ? 0 : DisposeProjection(shell);
+            H.Check("TableView_FinalizedShell_Setup", kept is not null && bump is not null && disposed > 0,
+                $"kept={kept is not null} shell={shell is not null} disposedRefs={disposed}");
+            if (kept is null || bump is null || disposed == 0) return;
+
+            bump(1);
+            await Harness.WaitFor(() => kept.Text == "v1:42", maxPasses: 40, perPassMs: 25);
+
+            H.Check("TableView_FinalizedShell_NoRenderError", renderErrors.Count == 0, string.Join(" | ", renderErrors));
+            H.Check("TableView_FinalizedShell_LiveCellsRerendered", kept.Text == "v1:42", $"kept={kept.Text}");
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+            H.Check("TableView_FinalizedShell_UnmountClean", renderErrors.Count == 0, string.Join(" | ", renderErrors));
+        }
+
+        private static ContentControl? FindShell(DependencyObject cell)
+        {
+            for (var node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(cell); node is not null;
+                 node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            {
+                if (node is ContentControl { Content: var content } shell && ReferenceEquals(content, cell))
+                    return shell;
+            }
+            return null;
+        }
+
+        // What the finalizer does to a collected projection: every cached interface reference
+        // (DataContext goes through IFrameworkElement's, not NativeObject) is disposed.
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(ContentControl))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(Control))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(FrameworkElement))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(UIElement))]
+        [global::System.Diagnostics.CodeAnalysis.DynamicDependency(global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields, typeof(DependencyObject))]
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Fields preserved by the DynamicDependency attributes above.")]
+        private static int DisposeProjection(ContentControl shell)
+        {
+            var count = 0;
+            for (var type = shell.GetType(); type is not null; type = type.BaseType)
+            {
+                foreach (var field in type.GetFields(global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly))
+                {
+                    if (field.GetValue(shell) is WinRT.IObjectReference reference)
+                    {
+                        reference.Dispose();
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+    }
+
+    internal class ControlledSelection(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rows = Rows();
+            var callbacks = new List<int>();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (selected, setSelected) = ctx.UseState(1);
+                return VStack(8,
+                    Button("Select first", () => setSelected(0)),
+                    TableView(rows, TemplateColumn<Row>("Name", r => TextBlock($"sel:{r.Name}")))
+                        .SelectionMode(TableViewSelectionMode.Single)
+                        .SelectedIndex(selected)
+                        .SelectionChanged((index, _) =>
+                        {
+                            callbacks.Add(index);
+                            setSelected(index);
+                        })
+                        .Width(400).Height(200));
+            });
+
+            await Harness.WaitFor(() => H.FindText("sel:Alice") is not null, maxPasses: 40, perPassMs: 25);
+            var table = FindTable(H);
+            H.Check("TableView_Selection_ControlledMountApplied",
+                await Harness.WaitFor(() => table?.SelectedIndex == 1, maxPasses: 20, perPassMs: 25),
+                $"selected={table?.SelectedIndex}");
+
+            H.ClickButton("Select first");
+            H.Check("TableView_Selection_ControlledUpdateApplied",
+                await Harness.WaitFor(() => table?.SelectedIndex == 0, maxPasses: 20, perPassMs: 25),
+                $"selected={table?.SelectedIndex}");
+            H.Check("TableView_Selection_ControlledWritesDoNotEcho", callbacks.Count == 0,
+                $"callbacks=[{string.Join(",", callbacks)}]");
+
+            // A selection the element did not ask for (user input) reaches the callback.
+            table!.Select(2);
+            H.Check("TableView_Selection_UserSelectionReported",
+                await Harness.WaitFor(() => callbacks.Contains(2), maxPasses: 20, perPassMs: 25),
+                $"callbacks=[{string.Join(",", callbacks)}]");
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
+
+    internal class FilterGroupAndEmpty(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rows = Rows();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (mode, setMode) = ctx.UseState(0);
+                var table = TableView(mode == 2 ? Array.Empty<Row>() : rows,
+                        TemplateColumn<Row>("Name", r => TextBlock($"fg:{r.Name}")))
+                    with
+                {
+                    GroupHeader = info => TextBlock($"group-header:{info.Key}"),
+                    EmptyContent = TextBlock("nothing to show"),
+                };
+                if (mode == 1)
+                    table = table.FilterRows<Row>(r => r.Group == "A").GroupRows<Row>(r => r.Group);
+                return VStack(8,
+                    Button("Next mode", () => setMode(mode + 1)),
+                    table.Width(400).Height(240));
+            });
+
+            H.Check("TableView_Filter_UnfilteredRowsRealized",
+                await Harness.WaitFor(() => H.FindText("fg:Bob") is not null, maxPasses: 40, perPassMs: 25));
+
+            H.ClickButton("Next mode");
+            H.Check("TableView_Filter_PredicateHidesRows",
+                await Harness.WaitFor(() => H.FindText("fg:Bob") is null && H.FindText("fg:Alice") is not null,
+                    maxPasses: 40, perPassMs: 25));
+            H.Check("TableView_Group_HeaderRendersReactorContent",
+                await Harness.WaitFor(() => H.FindText("group-header:A") is not null, maxPasses: 40, perPassMs: 25));
+
+            H.ClickButton("Next mode");
+            // The empty template realizes only after the cleared rows unrealize; allow for a
+            // slow CI dispatcher, and say which half is missing if it still times out.
+            H.Check("TableView_Empty_ContentRendered",
+                await Harness.WaitFor(() => H.FindText("nothing to show") is not null && H.FindText("fg:Alice") is null,
+                    maxPasses: 80, perPassMs: 25),
+                $"empty={H.FindText("nothing to show") is not null} alice={H.FindText("fg:Alice") is not null}");
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
+
+    // An immutable row, as an MVU app holds it in state: no INPC, no bindable attribute.
+    internal sealed record Contact(int Id, string Name, int Score);
+
+    internal class ImmutableSnapshotsDiffInPlace(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Contact[] initial = [new(1, "Ada", 3), new(2, "Grace", 1), new(3, "Alan", 2)];
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (rows, setRows) = ctx.UseState(initial);
+                return VStack(8,
+                    Button("Rename and add", () => setRows(
+                        [.. rows.Select(c => c.Id == 2 ? c with { Name = "Grace H." } : c), new(4, "Barbara", 4)])),
+                    Button("Drop first", () => setRows(rows[1..])),
+                    TableView(rows,
+                            TextColumn<Contact>("Name", c => $"mvu:{c.Name}",
+                                (c, name) => setRows([.. rows.Select(r => r.Id == c.Id ? r with { Name = name } : r)])),
+                            TextColumn<Contact>("Score", c => c.Score.ToString()).SortBy<Contact>((a, b) => a.Score.CompareTo(b.Score)))
+                        .KeyRows<Contact>(c => c.Id)
+                        .SelectionMode(TableViewSelectionMode.Single)
+                        .Width(400).Height(260));
+            });
+
+            H.Check("TableView_Immutable_TextCellsRealized",
+                await Harness.WaitFor(() => H.FindText("mvu:Grace") is not null, maxPasses: 40, perPassMs: 25));
+            var table = FindTable(H)!;
+            var boundSource = table.ItemsSource;
+            H.Check("TableView_Immutable_ReadOnlyOnlyWithoutEditor",
+                !table.IsReadOnly
+                && table.Columns[0] is TableViewTextColumn { IsReadOnly: false }
+                && table.Columns[1] is TableViewTextColumn { IsReadOnly: true });
+
+            table.Select(0);
+            await Harness.Render();
+
+            H.ClickButton("Rename and add");
+            H.Check("TableView_Immutable_ChangedRowReplaced",
+                await Harness.WaitFor(() => H.FindText("mvu:Grace H.") is not null && H.FindText("mvu:Grace") is null
+                    && H.FindText("mvu:Barbara") is not null, maxPasses: 40, perPassMs: 25));
+            // The snapshot changed, the bound collection did not: the table kept its rows,
+            // which is what preserves selection, scroll and an active edit.
+            H.Check("TableView_Immutable_BoundCollectionStable", ReferenceEquals(table.ItemsSource, boundSource),
+                $"before={boundSource?.GetType().Name} after={table.ItemsSource?.GetType().Name}");
+            H.Check("TableView_Immutable_SelectionPreserved", table.SelectedIndex == 0 && table.SelectedItem is Contact { Id: 1 },
+                $"selected={table.SelectedIndex}");
+
+            H.ClickButton("Drop first");
+            H.Check("TableView_Immutable_RemovedRowGone",
+                await Harness.WaitFor(() => H.FindText("mvu:Ada") is null && H.FindText("mvu:Alan") is not null,
+                    maxPasses: 40, perPassMs: 25));
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
+    /// A committed edit of a <see cref="TableTextColumn"/> reaches its onEdit callback, driven
+    /// through the platform's own cell automation peer (UIA SetValue: BeginEdit, type into the
+    /// column's TextBox editor, CommitEdit) — the path assistive technology uses.
+    /// </summary>
+    internal class TextColumnEditViaAutomation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Contact[] initial = [new(1, "Ada", 3), new(2, "Alan", 2)];
+            var edits = new List<string>();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (rows, setRows) = ctx.UseState(initial);
+                return TableView(rows,
+                        TextColumn<Contact>("Name", c => c.Name, (c, name) =>
+                        {
+                            edits.Add(name);
+                            setRows([.. rows.Select(r => r.Id == c.Id ? r with { Name = name } : r)]);
+                        }))
+                    .KeyRows<Contact>(c => c.Id)
+                    .Width(400).Height(200);
+            });
+
+            await Harness.WaitFor(() => H.FindText("Alan") is not null, maxPasses: 40, perPassMs: 25);
+            var table = FindTable(H)!;
+            var boundSource = table.ItemsSource;
+
+            // Ask the platform for the row's automation peer and take its cell child — the
+            // same walk a screen reader performs.
+            DependencyObject? rowElement = H.FindText("Alan");
+            while (rowElement is not null and not TableViewRow) rowElement = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(rowElement);
+            var rowPeer = rowElement is null
+                ? null
+                : Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement((TableViewRow)rowElement);
+            var peer = rowPeer?.GetChildren()?.OfType<TableViewCellAutomationPeer>().FirstOrDefault();
+            H.Check("TableView_EditViaUia_CellPeerReadsText", peer is { Value: "Alan", IsReadOnly: false },
+                $"rowPeer={rowPeer?.GetType().Name ?? "null"} peer={peer?.GetType().Name ?? "null"} value={peer?.Value} readOnly={peer?.IsReadOnly}");
+            if (peer is null) return;
+
+            peer.SetValue("Alan T.");
+            H.Check("TableView_EditViaUia_CommitReachesCallback",
+                await Harness.WaitFor(() => H.FindText("Alan T.") is not null && H.FindText("Alan") is null,
+                    maxPasses: 40, perPassMs: 25),
+                $"edits=[{string.Join(",", edits)}]");
+            H.Check("TableView_EditViaUia_CallbackCalledOnce", edits.Count == 1 && edits[0] == "Alan T.",
+                $"edits=[{string.Join(",", edits)}]");
+            H.Check("TableView_EditViaUia_BoundCollectionStable", ReferenceEquals(table.ItemsSource, boundSource));
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            await Harness.Render();
+        }
+    }
+    internal class UnmountTearsDownCells(Harness h) : SelfTestFixtureBase(h)
+    {
+        // Owned by one fixture run and handed to each cell through its props.
+        private sealed class EffectCounts
+        {
+            public int Mounted;
+            public int CleanedUp;
+        }
+
+        private sealed record CellProps(int Id, EffectCounts Counts);
+
+        private sealed class Cell : Component<CellProps>
+        {
+            public override Element Render()
+            {
+                var counts = Props.Counts;
+                UseEffect(() =>
+                {
+                    Interlocked.Increment(ref counts.Mounted);
+                    return () => Interlocked.Increment(ref counts.CleanedUp);
+                }, Array.Empty<object>());
+                return TextBlock($"cell:{Props.Id}");
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            var counts = new EffectCounts();
+            var rows = Rows();
+            var host = H.CreateHost();
+            host.Mount(_ => TableView(rows, TemplateColumn<Row>("Id", r => Component<Cell, CellProps>(new CellProps(r.Id, counts))))
+                .Width(400).Height(200));
+
+            H.Check("TableView_Unmount_CellComponentsMounted",
+                await Harness.WaitFor(() => Volatile.Read(ref counts.Mounted) >= rows.Length, maxPasses: 40, perPassMs: 25),
+                $"mounted={counts.Mounted}");
+
+            host.Mount(_ => TextBlock("TableView unmounted"));
+            H.Check("TableView_Unmount_CellEffectsCleanedUp",
+                await Harness.WaitFor(() => Volatile.Read(ref counts.CleanedUp) == Volatile.Read(ref counts.Mounted),
+                    maxPasses: 20, perPassMs: 25),
+                $"mounted={counts.Mounted} cleanedUp={counts.CleanedUp}");
+        }
+    }
+}

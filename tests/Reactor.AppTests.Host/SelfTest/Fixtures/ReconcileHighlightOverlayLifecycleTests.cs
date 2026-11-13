@@ -124,10 +124,14 @@ internal static class ReconcileHighlightOverlayLifecycleTests
                 H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
                     overlay.LiveSpriteCount == 1);
 
-                // Wait past the new window — should expire.
+                // Wait past the new window — should expire. Poll after the wait: the reset itself
+                // is proven by AliveAfterRefresh above, and a single sample 100ms past the hold
+                // is the margin that misses when the expiry timer ticks late under load.
                 await Task.Delay(500);
+                var expired = await Harness.WaitFor(() => overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0,
+                    maxPasses: 40, perPassMs: 25);
                 H.Check("OverlayLifecycle_Refresh_ExpiresAfterFinalWindow",
-                    overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
+                    expired, $"live={overlay.LiveSpriteCount} active={overlay.ActiveTargetCount}");
             }
             finally { Teardown(overlay); }
         }
@@ -145,11 +149,16 @@ internal static class ReconcileHighlightOverlayLifecycleTests
                 H.Check("OverlayLifecycle_Expire_AliveImmediately",
                     overlay.LiveSpriteCount == 1);
 
+                // The sprite must expire on its own (no refresh). Poll rather than sample once at
+                // a fixed 180ms: an 80ms margin over the 100ms hold missed under load on the
+                // coverage-instrumented and MSIX CI hosts, while "never expires" still fails.
                 await Task.Delay(180);
+                var expired = await Harness.WaitFor(() => overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0,
+                    maxPasses: 40, perPassMs: 25);
                 H.Check("OverlayLifecycle_Expire_GoneAfterHold",
-                    overlay.LiveSpriteCount == 0);
+                    overlay.LiveSpriteCount == 0, $"expired={expired} live={overlay.LiveSpriteCount}");
                 H.Check("OverlayLifecycle_Expire_DictDrained",
-                    overlay.ActiveTargetCount == 0);
+                    overlay.ActiveTargetCount == 0, $"active={overlay.ActiveTargetCount}");
             }
             finally { Teardown(overlay); }
         }
