@@ -69,6 +69,7 @@ public static class SampleRegistry
         // ── Interactive ───────────────────────────────────────
         new DonutMixerSample(),
         new CurveExplorerSample(),
+        new ResponsiveChartsSample(),
 
         // ── Animation ─────────────────────────────────────────
         new BarChartRaceSample(),
