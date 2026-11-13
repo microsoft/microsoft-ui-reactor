@@ -87,6 +87,7 @@ public static partial class Charts
     public static Element FitParent(this ForceGraphElement chart, FitParentOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(chart);
+        chart.RecenterOnResize = true;
         return Factories.FitParent((w, h) => (Element)chart.Width(w).Height(h), options);
     }
 }

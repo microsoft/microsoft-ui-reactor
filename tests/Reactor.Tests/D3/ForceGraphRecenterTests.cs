@@ -76,4 +76,43 @@ public class ForceGraphRecenterTests
         Assert.Equal(5, fixedX.X, Tol);
         Assert.Equal(26, fixedX.Y, Tol);
     }
+
+    private static List<ForceNode> SixNodes() =>
+        Enumerable.Range(0, 6).Select(i => new ForceNode { Label = $"n{i}" }).ToList();
+
+    private static List<ForceLink> Ring() =>
+        [new(0, 1), new(1, 2), new(2, 3), new(3, 4), new(4, 5), new(5, 0)];
+
+    [Fact]
+    public void StableBuilder_WithoutFitParent_ResizeLeavesNodesAndCentre()
+    {
+        var chart = Charts.ForceGraph(SixNodes(), Ring()).Width(400).Height(300);
+        var sim = chart.EnsureSimulation();
+        sim.Center(123, 45); // a centre configured by the caller through the handle
+        var before = sim.Nodes.Select(n => (n.X, n.Y)).ToList();
+
+        chart.Width(600).Height(450);
+        var after = chart.EnsureSimulation();
+
+        Assert.Same(sim, after);
+        Assert.Equal(before, after.Nodes.Select(n => (n.X, n.Y)).ToList());
+        Assert.Equal((123.0, 45.0), after.CenterPoint);
+    }
+
+    [Fact]
+    public void StableBuilder_UnderFitParent_ResizeRecentres()
+    {
+        var chart = Charts.ForceGraph(SixNodes(), Ring()).Width(400).Height(300);
+        _ = chart.FitParent();
+        var sim = chart.EnsureSimulation();
+        double mx0 = sim.Nodes.Average(n => n.X), my0 = sim.Nodes.Average(n => n.Y);
+
+        chart.Width(600).Height(450);
+        var after = chart.EnsureSimulation();
+
+        Assert.Same(sim, after);
+        Assert.Equal(100, after.Nodes.Average(n => n.X) - mx0, Tol);
+        Assert.Equal(75, after.Nodes.Average(n => n.Y) - my0, Tol);
+        Assert.Equal((300.0, 225.0), after.CenterPoint);
+    }
 }
