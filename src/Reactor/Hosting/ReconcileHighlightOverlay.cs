@@ -71,13 +71,15 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
     private readonly ContainerVisual _container;
     private readonly Dictionary<UIElement, ActiveHighlight> _active = new();
     private readonly int _holdDurationMs;
+    private readonly Func<TimeSpan, Action, Action> _scheduleExpiry;
     private CompositionBrush? _mountedBrush;
     private CompositionBrush? _modifiedBrush;
 
     private sealed class ActiveHighlight
     {
         public SpriteVisual Sprite = default!;
-        public DispatcherQueueTimer Timer = default!;
+        public object? ExpiryToken;
+        public Action? CancelExpiry;
     }
 
     /// <summary>
@@ -88,7 +90,15 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
     /// every dev overlay can paint into the same Canvas without fighting
     /// for the single <c>SetElementChildVisual</c> slot.
     /// </summary>
-    public ReconcileHighlightOverlay(Canvas overlayCanvas, ContainerVisual parentContainer)
+    /// <param name="overlayCanvas">Canvas hosting the overlay.</param>
+    /// <param name="parentContainer">Shared parent for the overlay's container.</param>
+    /// <param name="scheduleExpiry">
+    /// Optional one-shot scheduler returning a cancellation callback. Expiry callbacks
+    /// must run later on the UI thread; cancellation may leave an already queued
+    /// callback pending. Tests capture these callbacks to drive the real expiry path.
+    /// </param>
+    public ReconcileHighlightOverlay(Canvas overlayCanvas, ContainerVisual parentContainer,
+        Func<TimeSpan, Action, Action>? scheduleExpiry = null)
     {
         _overlayCanvas = overlayCanvas;
         _parentContainer = parentContainer;
@@ -99,6 +109,7 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         _container = _compositor.CreateContainerVisual();
         _parentContainer.Children.InsertAtTop(_container);
         _holdDurationMs = TestHoldDurationOverrideMs ?? DefaultHoldDurationMs;
+        _scheduleExpiry = scheduleExpiry ?? ScheduleExpiryOnDispatcher;
     }
 
     /// <summary>
@@ -152,17 +163,11 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
             existing.Sprite.Opacity = opacity;
             existing.Sprite.Size = size;
             existing.Sprite.Offset = offset;
-            // Dispatcher-queue contract: DispatcherQueueTimer.Stop() does NOT
-            // dequeue a Tick that was already enqueued before the call. If the
-            // original interval elapsed concurrently with this refresh, the old
-            // Tick can fire AFTER Start() and tear down a sprite that the user
-            // still expects to see. Swap in a fresh timer with its own Tick
-            // lambda so the old tick — if it fires — finds the active entry
-            // no longer owns it, and bails (see the identity check below).
-            try { existing.Timer.Stop(); } catch { }
-            var refreshedTimer = CreateExpiryTimer(target, existing);
-            existing.Timer = refreshedTimer;
-            refreshedTimer.Start();
+            // A cancelled timer may still deliver an already queued callback.
+            // Each new schedule gets its own identity so a stale callback cannot
+            // tear down the refreshed sprite (see the identity check below).
+            try { existing.CancelExpiry?.Invoke(); } catch { }
+            ArmExpiry(target, existing);
             return;
         }
 
@@ -301,41 +306,44 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         _container.Children.InsertAtTop(sprite);
 
         var entry = new ActiveHighlight { Sprite = sprite };
-        var timer = CreateExpiryTimer(target, entry);
-        entry.Timer = timer;
         _active[target] = entry;
-        timer.Start();
+        ArmExpiry(target, entry);
     }
 
-    private DispatcherQueueTimer CreateExpiryTimer(UIElement capturedTarget, ActiveHighlight owner)
+    private void ArmExpiry(UIElement capturedTarget, ActiveHighlight owner)
+    {
+        var token = new object();
+        owner.ExpiryToken = token;
+        owner.CancelExpiry = _scheduleExpiry(TimeSpan.FromMilliseconds(_holdDurationMs), () =>
+        {
+            if (_active.TryGetValue(capturedTarget, out var ah)
+                && ReferenceEquals(ah, owner)
+                && ReferenceEquals(ah.ExpiryToken, token))
+            {
+                try { _container.Children.Remove(ah.Sprite); } catch { }
+                try { ah.Sprite.Dispose(); } catch { }
+                _active.Remove(capturedTarget);
+                TestExpiryCompleted?.Invoke();
+            }
+        });
+    }
+
+    private Action ScheduleExpiryOnDispatcher(TimeSpan delay, Action onExpire)
     {
         var timer = _dispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(_holdDurationMs);
+        timer.Interval = delay;
         timer.IsRepeating = false;
 
-        var container = _container;
-        timer.Tick += (s, _) =>
+        timer.Tick += (_, _) =>
         {
-            try
-            {
-                // Identity guard: a Refresh between this tick's enqueue and its
-                // dispatch will have swapped in a new timer; the stale tick must
-                // not tear down the sprite that the new timer still owns.
-                if (_active.TryGetValue(capturedTarget, out var ah)
-                    && ReferenceEquals(ah, owner)
-                    && ReferenceEquals(ah.Timer, s))
-                {
-                    try { container.Children.Remove(ah.Sprite); } catch { }
-                    try { ah.Sprite.Dispose(); } catch { }
-                    _active.Remove(capturedTarget);
-                }
-            }
+            try { onExpire(); }
             finally
             {
-                try { ((DispatcherQueueTimer)s).Stop(); } catch { }
+                try { timer.Stop(); } catch { }
             }
         };
-        return timer;
+        timer.Start();
+        return timer.Stop;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -347,6 +355,9 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
 
     /// <summary>Test-only: number of distinct targets currently tracked.</summary>
     internal int ActiveTargetCount => _active.Count;
+
+    /// <summary>Test-only: notified on the UI thread after a current expiry completes.</summary>
+    internal Action? TestExpiryCompleted { get; set; }
 
     /// <summary>Test-only: snapshot of the current sprites for inspection.</summary>
     internal IReadOnlyList<SpriteVisual> TestActiveSprites()
@@ -366,7 +377,7 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         var snapshot = new List<KeyValuePair<UIElement, ActiveHighlight>>(_active);
         foreach (var kv in snapshot)
         {
-            try { kv.Value.Timer.Stop(); } catch { }
+            try { kv.Value.CancelExpiry?.Invoke(); } catch { }
             try { _container.Children.Remove(kv.Value.Sprite); } catch { }
             try { kv.Value.Sprite.Dispose(); } catch { }
             _active.Remove(kv.Key);
@@ -377,7 +388,7 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
     {
         foreach (var ah in _active.Values)
         {
-            try { ah.Timer.Stop(); } catch { }
+            try { ah.CancelExpiry?.Invoke(); } catch { }
             try { _container.Children.Remove(ah.Sprite); } catch { }
             try { ah.Sprite.Dispose(); } catch { }
         }

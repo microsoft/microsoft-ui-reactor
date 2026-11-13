@@ -36,6 +36,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- Reconcile-highlight overlay lifecycle selftests wait for actual expiry completion
+  and use controlled schedules to verify refresh lifetimes, removing fixed-delay
+  assertion races on contended runners. Coverage includes stale callbacks after
+  refresh and disposal (issue #995; [testing guide](TESTING.md#timer-lifetime-tests)).
+
 ### Security
 
 ## [0.1.0-preview.18] — 2026-11-12
