@@ -98,6 +98,23 @@ same display scale. The [capture runbook](065/capture-runbook.md) lists the samp
 and steps.
 
 <!-- side-by-side:begin -->
+
+#### Whole page, 540-pixel window
+
+The current capture display is 540 DIPs wide at 200% scale, so these are whole-page captures of
+both pages in a 540-DIP window, where every card is narrower than 476 px and uses the wrapped
+layout. Each page and theme is captured from a fresh app instance (§3.3, last row), with
+`winapp ui screenshot PART_ScrollPresenter` at the top and the bottom of the page. The per-sample
+set in the [runbook](065/capture-runbook.md) (wide, narrow and extra-narrow windows, hover and
+keyboard focus) needs a screen at least 1000 DIPs wide and is captured separately.
+
+| | Toolkit | Reactor port | Pixels that differ |
+| --- | --- | --- | --- |
+| Light, top | <img src="065/page/toolkit-light-top.png" width="320" alt="Toolkit, light theme, top of the page"> | <img src="065/page/reactor-light-top.png" width="320" alt="Reactor port, light theme, top of the page"> | 15,395 of 1,276,236: the page title and description text, which differ on purpose, and the scroll indicator. Below the header, 17 anti-aliasing pixels. |
+| Light, bottom | <img src="065/page/toolkit-light-bottom.png" width="320" alt="Toolkit, light theme, bottom of the page"> | <img src="065/page/reactor-light-bottom.png" width="320" alt="Reactor port, light theme, bottom of the page"> | 11 of 1,388,988, by at most one color step. |
+| Dark, top | <img src="065/page/toolkit-dark-top.png" width="320" alt="Toolkit, dark theme, top of the page"> | <img src="065/page/reactor-dark-top.png" width="320" alt="Reactor port, dark theme, top of the page"> | 15,378 of 1,276,236: the page title and description, and the scroll indicator. |
+| Dark, bottom | <img src="065/page/toolkit-dark-bottom.png" width="320" alt="Toolkit, dark theme, bottom of the page"> | <img src="065/page/reactor-dark-bottom.png" width="320" alt="Reactor port, dark theme, bottom of the page"> | 22 of 1,388,988, by at most one color step. |
+
 <!-- side-by-side:end -->
 
 ### 3.2 UI Automation tree
@@ -138,6 +155,7 @@ ref-expander-expanded Group "Display"
 | UI Automation Invoke on a clickable card (`winapp ui invoke`) | Fails: "does not support any invoke pattern" (§6). | Runs `onClick`. |
 | `ContentAlignment.Left` or `Vertical` in a card narrower than 476 px | The narrow layout wins: content below a visible header. | The same. |
 | The new samples at 540 px (`ref-card-left`, `ref-card-actionicon`, `ref-expander-items`), whole viewport | — | 2,110 of 1,388,988 pixels differ: the overlay scroll indicator and a few anti-aliased pixels around the slider thumbs. |
+| Theme switch while a card is disabled | The disabled toggle switch keeps the outline color of the theme it was disabled in (the template's color animations hold their value). | The same, from the same template. This is why every capture starts a fresh app instance. |
 
 ## 4. Behavior
 

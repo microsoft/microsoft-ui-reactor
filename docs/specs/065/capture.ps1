@@ -36,7 +36,10 @@ param(
     [string]$NavItem = 'Settings reference',
     [ValidateSet('All', 'Static', 'Interactive')]
     [string]$Set = 'All',
-    [int]$Pad = 8
+    [int]$Pad = 8,
+    # Outer window height in DIPs. Lower it when the screen's work area is shorter, or the
+    # viewport capture is clipped; samples below the fold are scrolled into view.
+    [int]$WindowHeight = 1060
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,16 +48,20 @@ Add-Type -Namespace Spec065 -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 '@
+# Per-monitor DPI aware, so SetWindowPos takes the physical sizes computed below. A DPI-unaware
+# PowerShell would have them scaled a second time by Windows on any display above 100%.
+[void][Spec065.Win32]::SetProcessDpiAwarenessContext([IntPtr]-4)
 
 # Outer window sizes. The page column is capped at 656 px (640 px cards plus an
 # 8 px frame), so "wide" gives 640 px cards. "narrow" gives cards between the
 # Toolkit's two wrap thresholds (286 <= width < 476: content moves below the
 # header); "xnarrow" goes below 286 px, where the header icon is also hidden.
 $Sizes = [ordered]@{
-    wide    = @(1000, 1060)
-    narrow  = @(480, 1060)
-    xnarrow = @(360, 1060)
+    wide    = @(1000, $WindowHeight)
+    narrow  = @(480, $WindowHeight)
+    xnarrow = @(360, $WindowHeight)
 }
 
 $Viewport = 'PART_ScrollPresenter'
@@ -117,7 +124,13 @@ function Start-App([string]$Theme) {
     Write-Host "  window DPI $dpi (scale $script:Scale)"
     Start-Sleep -Seconds 2
     Set-WindowSize wide
-    Invoke-Ui invoke $NavItem | Out-Null
+    try { Invoke-Ui invoke $NavItem | Out-Null }
+    catch {
+        # A window narrower than the NavigationView's compact threshold hides the pane.
+        Invoke-Ui invoke 'Open Navigation' | Out-Null
+        Start-Sleep -Milliseconds 800
+        Invoke-Ui invoke $NavItem | Out-Null
+    }
     Start-Sleep -Milliseconds 1500
     Invoke-Ui invoke "$Theme theme" --type Button | Out-Null
     Start-Sleep -Milliseconds 1000
@@ -134,12 +147,25 @@ function Reset-Pointer {
     Invoke-Ui hover --at "$($vp.x + 4),$($vp.y + 4)" --dwell-time 400 | Out-Null
 }
 
+function Test-InViewport($El, $Vp) {
+    # An element scrolled out of view reports empty UI Automation bounds.
+    $p = $Pad * $script:Scale
+    $El.width -gt 0 -and $El.height -gt 0 -and ($El.y - $p) -ge $Vp.y -and ($El.y + $El.height + $p) -le ($Vp.y + $Vp.height)
+}
+
 function Save-Sample([string]$Id, [string]$File, [string]$State, [switch]$KeepScroll, [string]$Path) {
     if (-not $KeepScroll) { Move-Viewport top }
     $vp = Get-Bounds $Viewport
     $el = Get-Bounds $Id
-    if (-not $KeepScroll -and ($el.y + $el.height + $Pad * $script:Scale) -gt ($vp.y + $vp.height)) {
+    if (-not $KeepScroll -and -not (Test-InViewport $el $vp)) {
         Move-Viewport bottom
+        $vp = Get-Bounds $Viewport
+        $el = Get-Bounds $Id
+    }
+    if (-not $KeepScroll -and -not (Test-InViewport $el $vp)) {
+        # A page taller than two viewports: bring the sample into view.
+        Invoke-Ui scroll-into-view $Id | Out-Null
+        Start-Sleep -Milliseconds 300
         $vp = Get-Bounds $Viewport
         $el = Get-Bounds $Id
     }

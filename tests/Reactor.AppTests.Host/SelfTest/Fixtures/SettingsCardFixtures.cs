@@ -124,6 +124,40 @@ internal sealed class SettingsCardMountFixture(Harness h) : SelfTestFixtureBase(
                 && SettingsCardTestKit.ColorOf(card.Foreground) == expectedForeground,
                 $"background={SettingsCardTestKit.ColorOf(card.Background)} expected={expectedBackground} theme={card.ActualTheme}");
 
+            // The ported toggle template animates its outline color per state. Each state must
+            // reach its theme color: a disabled card shows a disabled toggle with an outline.
+            var outline = toggle is null ? null : SettingsCardTestKit.Part<Microsoft.UI.Xaml.Shapes.Rectangle>(toggle, "OuterBorder");
+            VisualStateManager.GoToState(toggle!, "PointerOver", false);
+            await Task.Delay(300);
+            var hoverStroke = SettingsCardTestKit.ColorOf(outline?.Stroke);
+            var expectedHoverStroke = await SettingsCardTestKit.ProbeAsync(host, "ToggleSwitchStrokeOffPointerOver");
+            VisualStateManager.GoToState(toggle!, "Normal", false);
+            await Update(current.IsEnabled(false));
+            await Task.Delay(300);
+            var disabledStroke = SettingsCardTestKit.ColorOf(outline?.Stroke);
+            var expectedDisabledStroke = await SettingsCardTestKit.ProbeAsync(host, "ToggleSwitchStrokeOffDisabled");
+            await Update(current.IsEnabled(true));
+            H.Check("SettingsCard_Mount_ToggleStateColors",
+                expectedHoverStroke is { A: > 0 } && hoverStroke == expectedHoverStroke
+                && expectedDisabledStroke is { A: > 0 } && disabledStroke == expectedDisabledStroke,
+                $"hover={hoverStroke} expected={expectedHoverStroke} disabled={disabledStroke} expected={expectedDisabledStroke}");
+
+            // The reference scenario: a card disabled from mount, with its toggle off.
+            var disabledElement = SettingsCard("Bluetooth", description: "Discoverable", icon: FontIcon("\uE702"),
+                content: ToggleSwitch(false)).IsEnabled(false);
+            var disabledCard = (SettingsCardControl)reconciler.Mount(disabledElement, SettingsCardTestKit.Noop)!;
+            host.Children.Add(disabledCard);
+            await Harness.Render();
+            await Task.Delay(300);
+            var disabledToggle = disabledCard.Content as WinUI.ToggleSwitch;
+            var disabledOutline = disabledToggle is null ? null : SettingsCardTestKit.Part<Microsoft.UI.Xaml.Shapes.Rectangle>(disabledToggle, "OuterBorder");
+            H.Check("SettingsCard_Mount_DisabledFromMountToggleOutline",
+                disabledToggle is { IsEnabled: false } && disabledOutline is { Opacity: 1, Visibility: Visibility.Visible }
+                && SettingsCardTestKit.ColorOf(disabledOutline.Stroke) == expectedDisabledStroke,
+                $"stroke={SettingsCardTestKit.ColorOf(disabledOutline?.Stroke)} expected={expectedDisabledStroke} opacity={disabledOutline?.Opacity}");
+            reconciler.UnmountChild(disabledCard);
+            host.Children.Remove(disabledCard);
+
             var peer = SettingsCardTestKit.Peer(card);
             H.Check("SettingsCard_Mount_PeerIsUnnamedGroup",
                 peer.GetAutomationControlType() == AutomationControlType.Group && string.IsNullOrEmpty(peer.GetName())

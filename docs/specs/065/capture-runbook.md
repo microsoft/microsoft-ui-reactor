@@ -46,12 +46,16 @@ dotnet build samples/apps/wct-controls -p:Platform=x64 -p:RuntimeIdentifier=win-
 ```
 
 Capture both sets in one session, one after the other, so they share the display scale,
-accent color and Windows build.
+accent color and Windows build. The script is per-monitor DPI aware and scales the window
+sizes and the crop margin by the display scale. `-WindowHeight` (default 1060) shortens the
+window when the screen's work area is not tall enough for it.
 
 Hover and keyboard focus use real input (SendInput). The Windows session must be
 unlocked and the app window visible. In a Remote Desktop session, do not minimize
 the RDP window. The script checks that every hover and focus capture differs from
-the rest state, and stops with an error if it does not.
+the rest state, and stops with an error if it does not. The one exception is
+`card-{light,dark}-hover.png`: a card without a click action has no hover look, so that
+capture is saved as it is, to be compared with `card-{light,dark}-rest.png`.
 
 What [`capture.ps1`](capture.ps1) does for each theme (light, then dark):
 
@@ -112,6 +116,18 @@ on each side.
 | `expander-{light,dark}-narrow.png` | `ref-expander-expanded` | expanded | narrow | 368 × 264 | 384 × 280 |
 | `card-{light,dark}-xnarrow.png` | `ref-card` | rest | xnarrow | 248 × 113 | 264 × 129 |
 
+The three samples added for the full v1 API, and the hover over a card without a click action,
+are captured by the script but are not in the committed `toolkit/` set yet (it was taken before
+they existed); their sizes are filled in when both sets are captured together:
+
+| File (light and dark) | Sample | State | Window |
+| --- | --- | --- | --- |
+| `card-left-{light,dark}-rest.png` | `ref-card-left` | rest | wide |
+| `card-actionicon-{light,dark}-rest.png` | `ref-card-actionicon` | rest | wide |
+| `expander-items-{light,dark}-expanded.png` | `ref-expander-items` | expanded | wide |
+| `card-left-{light,dark}-narrow.png` | `ref-card-left` | rest | narrow |
+| `card-{light,dark}-hover.png` | `ref-card` | hover (no click action) | wide |
+
 Center pixel of a card, measured on the page background:
 
 | State | Light | Dark |
@@ -137,3 +153,30 @@ Center pixel of a card, measured on the page background:
 | Repository | `main` at `4cd63979` plus the Settings reference page |
 
 The `toolkit/` and `reactor/` file names match one to one, so a set is compared file by file.
+
+## Whole-page comparison (`page/`)
+
+The [spec](../065-settings-card.md#31-how-the-screenshots-are-taken) also compares the two pages
+as a whole. These captures need no wide screen, so they were taken on the 540 × 1118-DIP, 200%
+display that could not show the wide window. For each page ("Settings reference", "Settings
+port") and theme, a fresh app instance is started with the pointer at (0, 0), the page and the
+theme are selected, and the scroll viewport is captured at the top and at the bottom:
+
+```powershell
+winapp ui invoke "Open Navigation" -w $hwnd     # the pane is hidden at this width
+winapp ui invoke "Settings port" -w $hwnd
+winapp ui invoke "Dark theme" --type Button -w $hwnd
+winapp ui scroll PART_ScrollPresenter --to top -w $hwnd
+winapp ui screenshot PART_ScrollPresenter -w $hwnd -o docs/specs/065/page/reactor-dark-top.png
+```
+
+A fresh instance per page and theme matters: after a theme switch, a disabled toggle switch
+keeps the outline color of the theme it was disabled in, in both controls.
+
+| | |
+| --- | --- |
+| Display | 1080 × 2236 pixels at 200% (540 × 1118 DIPs), Remote Desktop session |
+| Windows | build 26300.9911 |
+| Toolkit package | `CommunityToolkit.WinUI.Controls.SettingsControls` 8.3.260402-preview2 |
+| winapp CLI | 0.8.0 |
+| Repository | `niels9001-settings-card` at `925c3828` |
