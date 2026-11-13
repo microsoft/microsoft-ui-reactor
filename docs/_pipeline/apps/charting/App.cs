@@ -457,7 +457,7 @@ class FitParentD3Demo : Component
     public override Element Render() =>
         // <snippet:fit-parent-d3>
         FitParent((w, h) => D3Canvas(w, h,
-            D3Circle(w / 2, h / 2, Math.Min(w, h) / 2 - 8)));
+            D3Circle(w / 2, h / 2, Math.Max(0, Math.Min(w, h) / 2 - 8))));
         // </snippet:fit-parent-d3>
 }
 

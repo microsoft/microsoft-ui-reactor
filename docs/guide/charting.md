@@ -278,7 +278,7 @@ directly (`D3Canvas` and the `D3*` shapes come from
 
 ```csharp
 FitParent((w, h) => D3Canvas(w, h,
-    D3Circle(w / 2, h / 2, Math.Min(w, h) / 2 - 8)));
+    D3Circle(w / 2, h / 2, Math.Max(0, Math.Min(w, h) / 2 - 8))));
 ```
 
 ## Binding Data to State
