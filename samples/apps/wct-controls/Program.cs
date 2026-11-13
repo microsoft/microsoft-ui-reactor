@@ -43,6 +43,7 @@ internal sealed class App : Component
     public override Element Render()
     {
         var (tag, setTag) = UseState("cards");
+        var (theme, setTheme) = UseState(Microsoft.UI.Xaml.ElementTheme.Default);
 
         var menu = new[]
         {
@@ -55,6 +56,7 @@ internal sealed class App : Component
             NavItemHeader("Layout"),
             NavItem("Settings card",        "Setting",   "cards"),
             NavItem("Settings expander",    "AllApps",   "expander"),
+            NavItem("Settings reference",   "Pictures",  "settings-ref"),
             NavItem("Headered content",     "GroupList", "hcc"),
             NavItem("Headered items",       "List",      "hic"),
             NavItem("Headered tree",        "Library",   "htv"),
@@ -91,6 +93,7 @@ internal sealed class App : Component
         Element page = tag switch
         {
             "expander"  => Component<ExpanderPage>(),
+            "settings-ref" => Component<SettingsReferencePage, ThemeProps>(new(theme, setTheme)),
             "segmented" => Component<SegmentedPage>(),
             "range"     => Component<RangeSelectorPage>(),
             "gauge"     => Component<GaugePage>(),
@@ -117,13 +120,15 @@ internal sealed class App : Component
             _           => Component<CardsPage>(),
         };
 
-        return NavigationView(menu, content: page) with
+        // The theme is set on the root (not the Windows theme) so the Settings
+        // reference page can switch light/dark for its screenshots.
+        return (NavigationView(menu, content: page) with
         {
             SelectedTag = tag,
             OnSelectedTagChanged = t => { if (t is not null) setTag(t); },
             PaneTitle = "Controls",
             IsSettingsVisible = false,
-        };
+        }).RequestedTheme(theme);
     }
 }
 
