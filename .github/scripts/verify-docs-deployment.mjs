@@ -3,12 +3,13 @@
 //
 // Why this exists (issue #1268). A release PR always edits docs/guide/**, which
 // matches the `push: branches: [main]` path filter in docs.yml, and the release
-// tag then points at that same merge commit. Both runs hand
-// `actions/deploy-pages` the same `pages_build_version` — it is `github.sha`,
-// and the action exposes no input to override it — so the two deployments
-// collide under one identity and one of them is silently stranded. Every job
-// goes green, the deployment reports success, and `gh-pages` is byte-correct;
-// the only symptom is that the live site keeps showing the previous release.
+// tag then points at that same merge commit. When the tag run deployed it too,
+// GitHub Pages accepted that tag-ref deployment of a commit it was already
+// serving, reported success (the Deployments API even marked it active), and
+// kept serving the previous artifact (actions/deploy-pages#383). Every job went
+// green and `gh-pages` was byte-correct; the only symptom was that the live
+// site kept showing the previous release. docs.yml now hands a tag run's
+// deployment to a `main` run instead, and this gate verifies that run.
 //
 // Nothing else in the pipeline ever looks at the live site, so no amount of
 // green CI could catch that. This gate is cause-agnostic: it fails whenever the
@@ -539,7 +540,7 @@ export function report(verdict, { baseUrl, expectedRunId, expectedRunAttempt, lo
       ? `Could not read ${baseUrl} at all, so the deployment is unverified. ` +
         "Not one probe returned known-good content, so this says nothing about the deployment itself — treat it as a broken check, not a stranded deploy."
       : `${baseUrl} is not serving the artifact this run published (issue #1268). ` +
-        "Re-serve it by dispatching the Publish docs workflow on main — the artifact is the whole gh-pages branch, so any allowed ref republishes every version.";
+        "Re-serve it by dispatching the Publish docs workflow on main — the artifact is the whole gh-pages branch, so a run on main republishes every version.";
 
   // Everything on one stream, so the annotation and the observations it rests
   // on cannot interleave out of order in the run log.
