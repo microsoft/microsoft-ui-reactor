@@ -59,7 +59,7 @@
          `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
          19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
