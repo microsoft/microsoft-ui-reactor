@@ -116,6 +116,21 @@ public sealed class DocsDeployWiringTests
     }
 
     [Fact]
+    public void The_handoff_fails_when_the_dispatched_run_never_got_its_turn()
+    {
+        var run = Code(Scalar(Steps("handoff").Single(), "run")!);
+
+        // `queue: max` still cancels a run that arrives at a full queue (100
+        // pending), and the dispatch API's 2xx says nothing about that. This
+        // run holds `pages`, so a healthy dispatched run cannot have finished
+        // yet; one that has never got in. Without this check the release sits
+        // on gh-pages unserved while the tag run is green.
+        Assert.Contains(".workflow_run_id", run, StringComparison.Ordinal);
+        Assert.Contains("actions/runs/$run_id", run, StringComparison.Ordinal);
+        Assert.Matches(@"=\s*completed\s*\];\s*then\s*\n(?:[^\n]*\n){0,3}?\s*exit 1\b", run);
+    }
+
+    [Fact]
     public void A_run_handed_a_deployment_verifies_the_handed_off_versions()
     {
         var steps = Steps("publish").ToList();

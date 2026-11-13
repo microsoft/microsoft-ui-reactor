@@ -167,7 +167,7 @@ After pushing the tag:
 1. Confirm the GitHub `Package` workflow runs for the tag and creates a GitHub Release.
 2. Confirm the OneBranch official pipeline starts for the tag.
 3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). The tag run publishes the version to `gh-pages` but does not deploy it: its `handoff` job dispatches `Publish docs` on `main`, and that run deploys and verifies (see [Why a release tag hands its deployment to main](#why-a-release-tag-hands-its-deployment-to-main)). Follow the link in the tag run's `handoff` summary and check the dispatched run's jobs:
-   - a red `handoff` on the tag run means the dispatch was refused. `gh-pages` is already correct, so dispatch `Publish docs` on `main` by hand;
+   - a red `handoff` on the tag run means the dispatch was refused, or the dispatched run ended before it could deploy (the annotation says which). `gh-pages` is already correct, so dispatch `Publish docs` on `main` by hand with **handoff_versions** set to the release version, so `verify` also probes its directory;
    - a green `publish` beside a red `deploy` means the environment refused the ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy);
    - a green `deploy` beside a red `verify` means the deployment reported success but the live site did not confirm it. Read the annotation before concluding anything: `…is not serving the artifact this run published` means the deployment was stranded, while `Could not read … at all` means no probe reached known-good content and the run says nothing either way. The two call for different responses — see [Why a release tag hands its deployment to main](#why-a-release-tag-hands-its-deployment-to-main).
 4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
@@ -274,8 +274,11 @@ What is established and what is inferred:
   reports success and is not served; a deployment of the same commit from `main` is.
 - **Established**: `actions/deploy-pages` sends `pages_build_version = github.sha` with no
   input to override it, and the Pages deployment ID it gets back *is* that SHA, so all three
-  deployments of a release commit share one ID. The Pages API rejects a non-SHA build version
-  with a 404, so making the version unique per run is not an available fix.
+  deployments of a release commit share one ID.
+- **Reported upstream, not reproduced here**: the Pages API answers a non-SHA build version
+  with a 404 ([community discussion 170184](https://github.com/orgs/community/discussions/170184),
+  and a comment on actions/deploy-pages#383), so making the version unique per run does not
+  look like an available fix.
 - **Inferred**: that the ref type is the discriminator, rather than the triggering event.
   Every failing case, here and upstream, had a tag ref; every working one had a branch ref.
   Whether a tag-ref deployment of a commit Pages has *never* served would land is unknown,
