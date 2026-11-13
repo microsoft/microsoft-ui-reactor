@@ -1,4 +1,5 @@
 using System.Numerics;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
@@ -628,6 +629,73 @@ internal static class AnimationCombinationTests
             H.Check("AnimRemove_ImplicitCleared",
                 target is not null
                 && ElementCompositionPreview.GetElementVisual(target).ImplicitAnimations is null);
+
+            var layout = new LayoutAnimationConfig { AnimateSize = true, Duration = TimeSpan.FromSeconds(5) };
+            foreach (var scenario in new (string Name, bool Setter, bool Layout, bool Transition)[]
+            {
+                ("Modifier", false, false, false),
+                ("Setter", true, false, false),
+                ("LayoutSetter", true, true, false),
+                ("Transition", true, false, true),
+            })
+            {
+                using var reconciler = new Reconciler();
+                var name = "AnimRemove_" + scenario.Name;
+                var transition = scenario.Transition
+                    ? new Vector3Transition { Duration = TimeSpan.FromMilliseconds(170) } : null;
+                var first = Button("Go").Animate(Curve.Ease(3000));
+                if (scenario.Layout) first = first.LayoutAnimation(layout);
+                if (transition is not null)
+                    // Exercise the existing compositor fallback for an independent transition.
+                    first = first.Set(c => { _ = ElementCompositionPreview.GetElementVisual(c); }).ScaleTransition(transition);
+                var button = (Button)reconciler.Mount(first, static () => { })!;
+                H.SetContent(button);
+                try
+                {
+                    await Harness.Render();
+                    var visual = ElementCompositionPreview.GetElementVisual(button);
+                    H.Check(name + "_StartsWithOpacityChannel", visual.ImplicitAnimations?.ContainsKey("Opacity") == true);
+                    // No explicit Opacity value on mount, and no StopAnimation: any
+                    // controller observed after Update must come from that update.
+                    H.Check(name + "_NoInitialOpacityAnimation", visual.TryGetAnimationController("Opacity") is null);
+
+                    var next = Button("Go");
+                    if (scenario.Setter)
+                        next = next.Set(c =>
+                        {
+                            if (scenario.Layout)
+                                H.Check(name + "_OffsetPresentInsideSetter", visual.ImplicitAnimations?["Offset"]
+                                    is Vector3KeyFrameAnimation offset && offset.Duration == layout.Duration);
+                            ElementCompositionPreview.GetElementVisual(c).Opacity = 0.5f;
+                        });
+                    else
+                        next = next.Opacity(0.5);
+                    if (scenario.Layout) next = next.LayoutAnimation(layout);
+                    if (transition is not null) next = next.ScaleTransition(transition);
+                    H.Check(name + "_SameButton", reconciler.Update(first, next, button, static () => { }) is null);
+                    await Harness.Render();
+
+                    H.Check(name + "_NoOpacityAnimation", visual.TryGetAnimationController("Opacity") is null);
+                    H.Check(name + "_OpacityIsImmediate", (scenario.Setter || button.Opacity == 0.5)
+                        && Math.Abs(visual.Opacity - 0.5f) < 0.001f);
+                    H.Check(name + "_DroppedOpacityChannel", visual.ImplicitAnimations?.ContainsKey("Opacity") != true);
+                    if (scenario.Layout)
+                    {
+                        H.Check(name + "_KeepsLayoutOffset", visual.ImplicitAnimations?["Offset"]
+                            is Vector3KeyFrameAnimation offset && offset.Duration == layout.Duration);
+                        H.Check(name + "_KeepsLayoutSize", visual.ImplicitAnimations?["Size"]
+                            is Vector2KeyFrameAnimation size && size.Duration == layout.Duration);
+                    }
+                    if (transition is not null)
+                        H.Check(name + "_KeepsIndependentTransition", visual.ImplicitAnimations?["Scale"]
+                            is Vector3KeyFrameAnimation scale && scale.Duration == transition.Duration);
+                }
+                finally
+                {
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+            }
         }
     }
 

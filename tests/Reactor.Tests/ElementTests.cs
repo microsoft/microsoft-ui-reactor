@@ -1,3 +1,4 @@
+using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -1193,6 +1194,39 @@ public class ElementTests
         var a = TextBlock("Hello").Resources(r => r.Set("ControlCornerRadius", 8.0));
         var b = TextBlock("Hello").Resources(r => r.Set("ControlCornerRadius", 8.0));
         Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    [Fact]
+    public void ShallowEquals_AnimationConfig_Changes_DeclineSkip()
+    {
+        var plain = Button("Go");
+        var animated = plain.Animate(Curve.Ease(300), AnimateProperty.Opacity);
+        var changed = new[]
+        {
+            plain,
+            plain.Animate(Curve.Ease(600), AnimateProperty.Opacity),
+            plain.Animate(Curve.Ease(300), AnimateProperty.Opacity | AnimateProperty.Scale),
+        };
+
+        foreach (var other in changed)
+        {
+            Assert.False(Element.ShallowEquals(animated, other));
+            Assert.False(Element.ShallowEquals(other, animated));
+            Assert.False(Element.CanSkipUpdate(animated, other));
+            Assert.False(Element.CanSkipUpdate(other, animated));
+        }
+    }
+
+    [Fact]
+    public void ShallowEquals_Equal_AnimationConfig_Still_CanSkip()
+    {
+        var first = Button("Go").Animate(Curve.Ease(300), AnimateProperty.Opacity);
+        var second = Button("Go").Animate(Curve.Ease(300), AnimateProperty.Opacity);
+
+        Assert.NotSame(first.AnimationConfig, second.AnimationConfig);
+        Assert.NotSame(first.AnimationConfig!.Curve, second.AnimationConfig!.Curve);
+        Assert.True(Element.ShallowEquals(first, second));
+        Assert.True(Element.CanSkipUpdate(first, second));
     }
 
     // ── Test component stubs ────────────────────────────────────────

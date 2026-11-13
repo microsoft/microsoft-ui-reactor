@@ -36,6 +36,15 @@ Conventions for contributors:
 
 ### Fixed
 
+- Shallow comparison now detects changes to an element's `.Animate()` curve or
+  property flags, including parent child-skip checks. Equivalent configurations
+  remain eligible for skipping (spec 014, Feature 3).
+
+- Removing `.Animate()` releases its implicit channels before handlers and
+  modifiers run, preventing setters from retriggering the outgoing animation.
+  Retained layout Offset and transitions reapplied during the update are
+  preserved (spec 014, Feature 3).
+
 ### Security
 
 ## [0.1.0-preview.18] — 2026-11-12
