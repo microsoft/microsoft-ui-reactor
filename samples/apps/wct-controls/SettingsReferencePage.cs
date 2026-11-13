@@ -52,7 +52,31 @@ internal sealed class SettingsReferencePage : Component<ThemeProps>
                     headerIcon: Icon(FontIcon("\uE702")),
                     content: ToggleSwitch(isOn: false)).IsEnabled(false).AutomationId("ref-card-disabled")),
                 Frame(Display(isExpanded: false).AutomationId("ref-expander")),
-                Frame(Display(isExpanded: true).AutomationId("ref-expander-expanded")))
+                Frame(Display(isExpanded: true).AutomationId("ref-expander-expanded")),
+                Frame(WctCard.SettingsCard(
+                    header: "Sync",
+                    contentAlignment: ContentAlignment.Left,
+                    content: CheckBox(true, label: "Sync settings across devices")).AutomationId("ref-card-left")),
+                Frame(WctCard.SettingsCard(
+                    header: "Microsoft Store",
+                    description: "Get more apps",
+                    headerIcon: Icon(FontIcon("\uE719")),
+                    isClickEnabled: true,
+                    onClick: () => { })
+                    .Set(c => c.ActionIcon = new Microsoft.UI.Xaml.Controls.FontIcon { Glyph = "\uE8A7" })
+                    .AutomationId("ref-card-actionicon")),
+                Frame(WctExpander.SettingsExpander(
+                    header: "Sound",
+                    description: "Volume and system sounds",
+                    headerIcon: Icon(FontIcon("\uE767")),
+                    isExpanded: true,
+                    itemsHeader: ItemsNote("Some sounds are muted while Focus is on."),
+                    itemsFooter: ItemsNote("Changes apply to every output device."),
+                    items: new object[]
+                    {
+                        WctCard.SettingsCard(header: "Volume", content: Slider(60, 0, 100)),
+                        WctCard.SettingsCard(header: "More sound settings", isClickEnabled: true, onClick: () => { }),
+                    }).AutomationId("ref-expander-items")))
                 .Background(Theme.SolidBackground)
                 .MaxWidth(656)
                 // Keeps the overlay scroll indicator (right edge of the viewport) out of the crops.
@@ -71,4 +95,7 @@ internal sealed class SettingsReferencePage : Component<ThemeProps>
         });
 
     private static Element Frame(Element sample) => Border(sample).Padding(8);
+
+    // Plain content for the expander's ItemsHeader / ItemsFooter, identical on both pages.
+    internal static Element ItemsNote(string text) => Border(TextBlock(text).Opacity(0.7)).Padding(58, 12, 16, 12);
 }

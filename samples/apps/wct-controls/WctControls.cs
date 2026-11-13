@@ -31,11 +31,14 @@ namespace WctControls;
 public partial record SettingsCardElement;
 
 // A settings group that expands to reveal child SettingsCards (its Items).
-// Items is the primary slot, so HeaderIcon and the object-typed Content (shown on
-// the header row) become secondary element slots, as SettingsCard.HeaderIcon does.
+// Items is the primary slot, so HeaderIcon, the object-typed Content (shown on the
+// header row) and the ItemsHeader / ItemsFooter UIElements become secondary element
+// slots, as SettingsCard.HeaderIcon does.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsExpander))]
 [WrapElementSlot("HeaderIcon")]
 [WrapElementSlot("Content")]
+[WrapElementSlot("ItemsHeader")]
+[WrapElementSlot("ItemsFooter")]
 public partial record SettingsExpanderElement;
 
 // A circular gauge — pure value props (Value/Minimum/Maximum/Unit/…) plus a

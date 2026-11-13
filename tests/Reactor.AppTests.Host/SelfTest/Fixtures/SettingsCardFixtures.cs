@@ -243,7 +243,7 @@ internal sealed class SettingsCardClickableFixture(Harness h) : SelfTestFixtureB
                 actionHolder?.Visibility == Visibility.Collapsed && card.IsTabStop
                 && actionPresenter?.Content is WinUI.FontIcon { Glyph: "\uE974" });
 
-            await Update(current.Disabled());
+            await Update(current.IsEnabled(false));
             var disabledInvoke = SettingsCardTestKit.Peer(card).GetPattern(PatternInterface.Invoke) as IInvokeProvider;
             var threw = false;
             try { disabledInvoke?.Invoke(); }

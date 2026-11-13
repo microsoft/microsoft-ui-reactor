@@ -211,7 +211,10 @@ $Static = @(
     @('ref-card-vertical',     'card-vertical-{0}-rest.png',   'rest'),
     @('ref-card-disabled',     'card-disabled-{0}-rest.png',   'disabled'),
     @('ref-expander',          'expander-{0}-collapsed.png',   'collapsed'),
-    @('ref-expander-expanded', 'expander-{0}-expanded.png',    'expanded')
+    @('ref-expander-expanded', 'expander-{0}-expanded.png',    'expanded'),
+    @('ref-card-left',         'card-left-{0}-rest.png',       'rest'),
+    @('ref-card-actionicon',   'card-actionicon-{0}-rest.png', 'rest'),
+    @('ref-expander-items',    'expander-items-{0}-expanded.png', 'expanded')
 )
 
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
@@ -226,6 +229,7 @@ foreach ($theme in 'Light', 'Dark') {
             Set-WindowSize narrow
             Save-Sample 'ref-card' "card-$t-narrow.png" 'rest'
             Save-Sample 'ref-card-vertical' "card-vertical-$t-narrow.png" 'rest'
+            Save-Sample 'ref-card-left' "card-left-$t-narrow.png" 'rest'
             Save-Sample 'ref-expander-expanded' "expander-$t-narrow.png" 'expanded'
             Set-WindowSize xnarrow
             Save-Sample 'ref-card' "card-$t-xnarrow.png" 'rest'
@@ -261,6 +265,13 @@ foreach ($theme in 'Light', 'Dark') {
             Save-InteractiveSample 'ref-expander' "expander-$t-hover.png" 'hover' {
                 Invoke-Ui hover ref-expander | Out-Null
             }
+            Reset-Pointer
+
+            # A card without a click action shows no pointer-over visual; this capture
+            # records that (compare it with card-<theme>-rest.png), so no change is expected.
+            Move-Viewport top
+            Invoke-Ui hover ref-card | Out-Null
+            Save-Sample 'ref-card' "card-$t-hover.png" 'hover (not clickable)' -KeepScroll
             Reset-Pointer
         }
     } finally {

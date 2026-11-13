@@ -37,7 +37,29 @@ internal sealed class SettingsPortReferencePage : Component<ThemeProps>
                     icon: FontIcon("\uE702"),
                     content: ToggleSwitch(isOn: false)).IsEnabled(false).AutomationId("ref-card-disabled")),
                 Frame(Display(isExpanded: false).AutomationId("ref-expander")),
-                Frame(Display(isExpanded: true).AutomationId("ref-expander-expanded")))
+                Frame(Display(isExpanded: true).AutomationId("ref-expander-expanded")),
+                Frame(SettingsCard("Sync",
+                    content: CheckBox(true, label: "Sync settings across devices"))
+                    .ContentAlignment(SettingsCardContentAlignment.Left)
+                    .AutomationId("ref-card-left")),
+                Frame(SettingsCard("Microsoft Store",
+                    description: "Get more apps",
+                    icon: FontIcon("\uE719"),
+                    onClick: () => { })
+                    .ActionIcon(FontIcon("\uE8A7"))
+                    .AutomationId("ref-card-actionicon")),
+                Frame(SettingsExpander("Sound",
+                    description: "Volume and system sounds",
+                    icon: FontIcon("\uE767"),
+                    isExpanded: true,
+                    items:
+                    [
+                        SettingsCard("Volume", content: Slider(60, 0, 100)),
+                        SettingsCard("More sound settings", onClick: () => { }),
+                    ])
+                    .ItemsHeader(SettingsReferencePage.ItemsNote("Some sounds are muted while Focus is on."))
+                    .ItemsFooter(SettingsReferencePage.ItemsNote("Changes apply to every output device."))
+                    .AutomationId("ref-expander-items")))
                 .Background(Theme.SolidBackground)
                 .MaxWidth(656)
                 // Keeps the overlay scroll indicator (right edge of the viewport) out of the crops.

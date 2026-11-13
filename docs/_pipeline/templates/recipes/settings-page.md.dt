@@ -4,9 +4,10 @@ app: recipe-settings-page
 order: 22.3
 audience: intermediate
 goal: |
-  Settings page recipe: one UsePersisted call per preference, a shared
-  row helper for label-control alignment, and Window-scoped persistence
-  so prefs survive a re-mount of the page within the host.
+  Settings page recipe: one UsePersisted call per preference, one
+  SettingsCard per row for the Windows Settings look and accessible
+  names, and Window-scoped persistence so prefs survive a re-mount of
+  the page within the host.
 tier: solid
 ---
 
@@ -15,7 +16,7 @@ tier: solid
 A settings page is many small persisted prefs side-by-side. Each
 preference is its own `UsePersisted` call with its own key — there's
 no central settings object that needs migration when one preference
-moves. The row layout is a single helper.
+moves. Each row is a [`SettingsCard`](../settings-cards.md).
 
 ## Primitives
 
@@ -26,7 +27,8 @@ moves. The row layout is a single helper.
 | Toggle | `ToggleSwitch(isOn, setOn)` |
 | Choice | `ComboBox(items, index, setIndex)` |
 | Range | `Slider(value, min, max, setValue)` |
-| Row layout helper | `static Element SettingsRow(...)` |
+| Row layout | `SettingsCard(header, description, icon, content)` |
+| Action row | `SettingsCard(header, description, icon, onClick: ...)` |
 
 ### Persisted state
 
@@ -47,20 +49,22 @@ process-wide preferences (auth, locale, theme) per the
 
 ![Settings page](screenshot://recipe-settings-page/settings)
 
-A `VStack` of `SettingsRow`s; each row is a label + control. The page
-re-renders from the changed hook state, and the reconciler patches the
-existing controls in place — the slider doesn't re-mount when you toggle
-notifications.
+A `VStack` of `SettingsCard`s; each card is a header, an optional
+description and icon, and the control. The card styles the control the
+way Windows Settings does, lines the controls up on the right, and gives
+each control the header as its automation name. The page re-renders from
+the changed hook state, and the reconciler patches the existing controls
+in place — the slider doesn't re-mount when you toggle notifications.
 
-### Row helper
+### Reset card
 
-```csharp snippet="recipe-settings-page/row-helper"
+```csharp snippet="recipe-settings-page/reset-card"
 ```
 
-A fixed-width label keeps the controls aligned across rows, and the
-control receives the same text as its automation name. The helper is a
-private static method, not a `Component` — it has no state, so a function
-returning an `Element` is the right shape.
+A card with `onClick` and no control is a button: it shows a chevron,
+takes keyboard focus, and Narrator reads it as a button named after the
+header. Resetting calls each setter with its default, and each pref
+saves under its own key as usual.
 
 ## Tips
 
@@ -69,6 +73,11 @@ avoids the [versioned-shape migration](../persistence.md) story for
 the common case of adding a pref. If two prefs are genuinely
 correlated (e.g. `theme` + `accentColor`), keep them in one record;
 otherwise let them live alone.
+
+**Group related prefs in a `SettingsExpander`.** When a page grows,
+put the details of one area (display, sound) in the expander's `items`
+and keep the most-used control in its header row; see
+[Settings Cards](../settings-cards.md#settings-expanders).
 
 **Don't reach for `UseReducer` here.** The Redux-style reducer is the
 right shape for state with cross-field invariants; a settings page is

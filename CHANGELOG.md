@@ -28,6 +28,18 @@ Conventions for contributors:
 
 ### Added
 
+- `SettingsCard` and `SettingsExpander`, native ports of the Windows Community Toolkit's
+  settings controls with the same look in light, dark and contrast themes, the same narrow
+  layout, and the same keyboard and Narrator behavior, without a Toolkit dependency.
+  `SettingsCard(header, description, icon, content, onClick)` has an `Element` overload for
+  rich header and description content and a `SettingsCard(Command)` overload;
+  `SettingsExpander(header, description, icon, content, isExpanded, onIsExpandedChanged,
+  items)` keeps `content` for the control in the header row and takes its expanding body
+  through `items`. New modifiers: `.ContentAlignment(...)`, `.ActionIcon(...)`,
+  `.ActionIconToolTip(...)`, `.ActionIconVisible(...)`, `.ItemsHeader(...)` and
+  `.ItemsFooter(...)`, plus the `.Click(...)` and `.IsExpandedChanged(...)` callback fluents.
+  A clickable card is a button that UI Automation can invoke (spec 065, issue #1505).
+
 ### Changed
 
 ### Deprecated
