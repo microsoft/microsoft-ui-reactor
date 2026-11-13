@@ -765,6 +765,87 @@ internal static partial class MarkdownSelectionFixtures
                 && unkeyed.Document.SelectedText == "",
                 $"ready={replacementReady}; sameScope={ReferenceEquals(unkeyed, replacementScope)}; " +
                 $"text={unkeyed.Document.Text}; anchor={unkeyed.Document.Anchor}; caret={unkeyed.Document.Caret}");
+
+            async Task CheckNestedDragScroll(bool modernInner)
+            {
+                string kind = modernInner ? "ScrollView" : "ScrollViewer";
+                string scopeId = $"NestedDragScope{kind}";
+                Element message = MarkdownTextSelection.Scope(options, Md(longMessage,
+                    new MarkdownOptions { TextSelection = options })).Width(340).AutomationId(scopeId);
+                Element nested = modernInner
+                    ? ScrollView(message).AutomationId("NestedDragScroller")
+                    : ScrollViewer(message).AutomationId("NestedDragScroller");
+                host.Mount(_ => ItemsView(new[] { "message" }, row => row,
+                    (_, _) => ItemContainer(nested)).Height(180).Width(400).WithKey(kind));
+                MarkdownSelectionHost? FindDragScope() => H.FindControl<MarkdownSelectionHost>(scope =>
+                    scope.IsLoaded && Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(scope) == scopeId);
+                bool ready = await Harness.WaitFor(() => FindDragScope() is { ActualHeight: > 180 } scope &&
+                    scope.Document.Entries.Count == 35);
+                H.Check($"MdSelection_{kind}NestedDragRealized", ready);
+                var dragScope = FindDragScope()
+                    ?? throw new InvalidOperationException("The nested drag proof requires a realized selection scope.");
+                var scrollAncestors = new List<Microsoft.UI.Xaml.FrameworkElement>();
+                ItemsView? owner = null;
+                for (Microsoft.UI.Xaml.DependencyObject? parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(dragScope);
+                    parent is not null; parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+                {
+                    // The surrounding host may have additional scrollers outside the tested ItemsView.
+                    if (parent is ItemsView itemsOwner)
+                    {
+                        owner = itemsOwner;
+                        break;
+                    }
+                    if (parent is Microsoft.UI.Xaml.Controls.ScrollView or Microsoft.UI.Xaml.Controls.ScrollViewer)
+                        scrollAncestors.Add((Microsoft.UI.Xaml.FrameworkElement)parent);
+                }
+                string ancestorDetails = string.Join(" -> ", scrollAncestors.Select(ancestor =>
+                    $"{ancestor.GetType().Name}[id={Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(ancestor)}, height={ancestor.ActualHeight}]"));
+                Console.WriteLine($"# {kind} nested drag scroll ancestors: {ancestorDetails}");
+                if (owner is null || scrollAncestors.Count != 2 ||
+                    !ReferenceEquals(scrollAncestors[1], owner.ScrollView))
+                    throw new InvalidOperationException($"The nested drag proof requires an inner scroller and the ItemsView ScrollView; got {ancestorDetails}.");
+                var innerScroller = scrollAncestors[0];
+                var timeline = owner.ScrollView;
+                double innerExtent = innerScroller is ScrollView innerView ? innerView.ScrollableHeight
+                    : ((ScrollViewer)innerScroller).ScrollableHeight;
+                string extentDetails = $"ancestors={scrollAncestors.Count}; innerExtent={innerExtent}; outerExtent={timeline.ScrollableHeight}; offset={timeline.VerticalOffset}";
+                Console.WriteLine($"# {kind} nested drag extents: {extentDetails}");
+                H.Check($"MdSelection_{kind}NestedDragPositiveControl",
+                    (modernInner ? innerScroller is ScrollView : innerScroller is ScrollViewer) &&
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(innerScroller) == "NestedDragScroller" &&
+                    innerExtent == 0 && timeline.ScrollableHeight > 100 &&
+                    timeline.VerticalOffset == 0,
+                    extentDetails);
+                var viewport = dragScope.Viewport();
+                var fixedRootPoint = dragScope.RootPoint(new Point(viewport.X + viewport.Width / 2, viewport.Bottom + 8));
+                dragScope.Select(0, 0);
+                int previousLength = 0;
+                for (int step = 1; step <= 3; step++)
+                {
+                    double before = timeline.VerticalOffset;
+                    bool accepted = false, advanced = false;
+                    int ticks = 0;
+                    // A 24-DIP tick can remain on one line; observe distinct selection advances
+                    // across repeated timer steps, allowing asynchronous scroll completion.
+                    for (; ticks < 8 && !advanced; ticks++)
+                    {
+                        accepted |= dragScope.ScrollDragAt(fixedRootPoint);
+                        await Harness.Render(40);
+                        advanced = timeline.VerticalOffset > before &&
+                            dragScope.Document.SelectedText.Length > previousLength;
+                    }
+                    int length = dragScope.Document.SelectedText.Length;
+                    string advanceDetails = $"ticks={ticks}; accepted={accepted}; before={before}; after={timeline.VerticalOffset}; selectedBefore={previousLength}; selectedAfter={length}; rootPoint={fixedRootPoint}";
+                    Console.WriteLine($"# {kind} nested drag advance {step}: {advanceDetails}");
+                    H.Check($"MdSelection_{kind}NestedDragAdvance{step}",
+                        accepted && advanced && length > previousLength,
+                        advanceDetails);
+                    previousLength = length;
+                }
+            }
+
+            await CheckNestedDragScroll(modernInner: false);
+            await CheckNestedDragScroll(modernInner: true);
         }
     }
 }
