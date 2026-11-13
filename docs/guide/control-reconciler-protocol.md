@@ -321,8 +321,10 @@ public TControl Mount(MountContext ctx, TElement el)
     else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
         binder.Bind(feBinder, oldElement: null, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
 
-    // Phase 1: all bare initial writes (no echo possible — subscriptions
-    // not yet live). §14 Phase 3-final: dispatch through the
+    // Phase 1: all initial writes, bare (a synchronous echo has no live
+    // subscription to reach). A deferred echo lands after phase 2, so
+    // entries for such controls arm their write (HandCodedControlled
+    // armOnMount). §14 Phase 3-final: dispatch through the
     // context-carrying overload so OneWayBridged entries can reach the
     // reconciler/rerender helpers; existing entries forward to the
     // parameterless overload via the virtual default on PropEntry.
@@ -408,6 +410,10 @@ public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TCo
 /// engine mounts <paramref name="GetChild"/>'s result and assigns it via
 /// <paramref name="SetChild"/>.
 ///
+/// <para>A null child on mount, or null on both sides of an update, leaves
+/// native content supplied through setters alone. Declare an Empty element
+/// to intentionally clear content without rendering a child.</para>
+///
 /// <para><b>Structural reconcile:</b> set <see cref="GetCurrentChild"/> so
 /// the engine can read the existing slot value during <c>Update</c> and
 /// route through <c>Reconciler.ReconcileV1Child</c> — that preserves
@@ -492,7 +498,7 @@ public sealed record Panel<TElement, TControl>(
 | `TreeChildren` | Hierarchical `TreeViewNode` tree, optional per-node `ContentElement` | `TreeView` |
 | `TabItemsHost` | Heterogeneous items (`TabViewItem` / `PivotItem`) with in-place positional reconcile | `TabView`, `Pivot` |
 | `PreMountedItems` | Pre-mounted items against a flat sink with no `ContainerContentChanging` | Templated `FlipView` |
-| `Imperative` | Escape hatch — handler reconciles children itself | Custom containers that span multiple WinUI properties |
+| `Imperative` | Escape hatch — handler reconciles children itself, with an optional `Unmount` for the children it owns | Custom containers that span multiple WinUI properties |
 
 The strategy switch is the engine's seam between the handler protocol
 and the rest of the reconciler — `SingleContent` and `NamedSlots`
@@ -647,6 +653,28 @@ Hand-authored trampolines
 that need to read the tag (e.g. `ButtonElement`'s static
 `__ClickTrampoline`) call `GetElementTag` and pattern-match
 on the expected element type.
+
+The built-in `Flyout`, `MenuFlyout`, and `CommandBarFlyout` decorators share
+their target's native control. They keep their current element separately in
+`ReactorState.DecoratorElement`, leaving the target's `Element` available to
+its own event trampolines. For these decorators,
+`Reconciler.GetElementTag(control)` reads the target's tag.
+Decorator lifecycle callbacks resolve the current decorator separately.
+Exit transitions and connected-animation keys use the first configured value
+from the outermost decorator inward to the target. For a modifier update, a
+non-null ambient animation curve takes precedence. The current render's element
+is checked next for its own `.Animate()` curve; the current flyout chain is
+used only as a fallback.
+Unmount clears refs and animation state throughout the decorator chain and runs the
+decorator's teardown before the target's own handler. Pool return clears both
+identities. Other decorators retain their existing tag behavior.
+
+When these decorators share a target, only the outermost native flyout is
+attached, including when a Memo or forwarding RegisterType returns the target
+control. Replacing an inner flyout releases its Reactor content and input
+pass-through subtrees. Inner updates still reconcile their target, but leave
+the outer flyout's content and lifecycle callbacks untouched. Such nesting
+emits a `Flyout.NestedTarget` diagnostic warning.
 
 ## Descriptors — declarative handlers
 

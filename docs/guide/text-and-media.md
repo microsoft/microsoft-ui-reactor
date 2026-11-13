@@ -224,6 +224,16 @@ formatted output you read `RichEditBox.Document` through `.Set(...)` and
 serialize the text range yourself. Single-line text input belongs in
 [`TextBox`](forms.md), not here.
 
+The document stores every line break as `\r`, so the text the handler
+reports uses `\r` between paragraphs: `"a\nb"` written from state comes
+back as `"a\rb"` after the first edit. Reactor treats `\r\n`, `\n` and
+`\r` as the same break when it compares state with the document, so
+storing the reported text back into state doesn't rewrite the document.
+Trailing breaks are part of the text: `"abc\n"` and `"abc"` are different
+values, and pressing Enter at the end reports `"abc\r"`. Only the
+document's own final paragraph mark, which `Document.GetText` always
+appends, is left out.
+
 | Fluent | Effect |
 |---|---|
 | `.AcceptsReturn(bool)` | Enter starts a new paragraph instead of submitting. |
@@ -244,7 +254,7 @@ Markdown(string markdown, MarkdownOptions options)
 
 > **Package note.** `Markdown(...)` ships in the optional
 > `Microsoft.UI.Reactor.Advanced` package (spec 062 §7). Add a
-> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.17" />` and import
+> `<PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="0.1.0-preview.18" />` and import
 > its factories alongside the core ones:
 > `using static Microsoft.UI.Reactor.Advanced.Factories;`. Both overloads
 > return the base `Element`, and `MarkdownOptions` stays in

@@ -62,7 +62,16 @@ steps:
     displayName: 'Setup .NET SDK'
     inputs:
       packageType: 'sdk'
-      useGlobalJson: true # honor global.json (.NET 10 SDK); no-op if the image already ships it
+      useGlobalJson: true # honor global.json (.NET 11 SDK); no-op if the image already ships it
+      performMultiLevelLookup: true
+
+  # The .NET 11 SDK carries only the .NET 11 runtime; Reactor targets net10.0, so the
+  # `dotnet test` step below needs the .NET 10 runtime alongside it.
+  - task: UseDotNet@2
+    displayName: 'Setup .NET 10 runtime'
+    inputs:
+      packageType: 'runtime'
+      version: '10.x'
       performMultiLevelLookup: true
 
   - task: onebranch.pipeline.version@1 # https://aka.ms/obpipelines/versioning

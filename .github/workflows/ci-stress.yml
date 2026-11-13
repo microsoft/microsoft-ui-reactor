@@ -86,7 +86,10 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          # .NET 11 SDK builds (global.json); .NET 10 runtime runs the net10.0 tests/apps.
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
@@ -139,7 +142,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore tests/Reactor.SelfTests/Reactor.SelfTests.csproj -p:Platform=x64
@@ -192,7 +197,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore Reactor.slnx
@@ -245,7 +252,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       # Publish the NativeAOT selftest host once per shard (same knobs as ci.yml).
       - name: Publish AOT host (once)
@@ -322,7 +331,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       # winapp ui drives the cross-process UIA automation. The action adds winapp to PATH,
       # which WinAppUi.ResolveWinAppExe() picks up via its PATH fallback (mirrors ci.yml).

@@ -248,7 +248,7 @@ public sealed partial class Reconciler
 
             using var realizationTheme = EnterRealizationTheme(container);
             var newView = n.BuildView(data);
-            if (cc.Content is UIElement existing && GetElementTag(cc) is Element oldView && CanUpdate(oldView, newView))
+            if (cc.Content is UIElement existing && GetMountedElement(cc) is Element oldView && CanUpdate(oldView, newView))
             {
                 var replacement = UpdateHostedChild(oldView, newView, existing, requestRerender);
                 if (replacement is not null && !ReferenceEquals(cc.Content, replacement))

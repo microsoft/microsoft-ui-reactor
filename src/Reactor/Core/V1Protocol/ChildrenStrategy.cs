@@ -27,6 +27,10 @@ public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TCo
 /// engine mounts <paramref name="GetChild"/>'s result and assigns it via
 /// <paramref name="SetChild"/>.
 ///
+/// <para>A null child on mount, or null on both sides of an update, leaves
+/// native content supplied through setters alone. Declare an Empty element
+/// to intentionally clear content without rendering a child.</para>
+///
 /// <para><b>Structural reconcile:</b> set <see cref="GetCurrentChild"/> so
 /// the engine can read the existing slot value during <c>Update</c> and
 /// route through <c>Reconciler.ReconcileV1Child</c> — that preserves
@@ -302,7 +306,18 @@ public sealed record TemplatedItems<TItem, TElement, TControl>(
 public sealed record Imperative<TElement, TControl>(
     Action<MountContext, TElement, TElement, TControl> Reconcile) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
-    where TControl : UIElement;
+    where TControl : UIElement
+{
+    /// <summary>Optional teardown for the children <see cref="Reconcile"/> mounted.
+    /// The engine has no view onto imperative slots, so when unmount dispatches to
+    /// the handler it calls this instead of walking them. Unmount each owned child
+    /// while it is still parented, then detach it. Declaring it does not tag every
+    /// control: a control without an element tag is torn down by the engine's
+    /// generic child walk, which must therefore be able to reach the owned children.
+    /// That walk also tears down what the handler does not own, so tag the control
+    /// (<see cref="Reconciler.SetElementTag"/>) when a slot can hold such UI.</summary>
+    public Action<UnmountContext, TControl>? Unmount { get; init; }
+}
 
 // ════════════════════════════════════════════════════════════════════════
 //  §14 Phase 3 finish — G3 children strategies (TreeView, TabView, Pivot)

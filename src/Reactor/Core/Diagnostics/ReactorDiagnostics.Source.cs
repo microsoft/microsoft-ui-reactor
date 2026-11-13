@@ -54,11 +54,13 @@ public static partial class ReactorDiagnostics
     private static DependencyProperty? s_itemSiteProperty;
 
     // A menu or command-bar item control (built from an item record, so it has no element tag)
-    // records its exact call site for GetSource. It is held as a string id, not as a managed
-    // object: a string value is a native HSTRING, while a managed value on a control that sits
-    // outside the live tree (a closed CommandBarFlyout's commands) can be collected while the
-    // control still refers to it, after which reading the property throws. The id maps back to
-    // the SourceLocation through a table bounded by the app's call sites.
+    // records its exact call site for GetSource. It is held as a string id from s_itemSiteIds, not
+    // as a managed object: CsWinRT boxes any managed value written to a DependencyProperty
+    // (strings included) as a CCW, and a control that sits outside the live tree (a closed
+    // CommandBarFlyout's commands) does not keep that CCW's object alive, so a value nothing else
+    // references can be collected while the control still refers to it, after which reading the
+    // property throws. The ids live for the process. The id maps back to the SourceLocation
+    // through a table bounded by the app's call sites.
     private static DependencyProperty ItemSiteProperty => s_itemSiteProperty ??= DependencyProperty.RegisterAttached(
         "ReactorItemSite",
         typeof(string),
