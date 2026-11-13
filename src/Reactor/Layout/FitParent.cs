@@ -102,7 +102,10 @@ public static partial class Factories
         box.Host = hostRef;
 
         ctx.UseEffect(box.MountEffect);
-        ctx.UseEffect(box.AfterCommitAction, committed.W, committed.H);
+        // The options are deps too: an options-only render must reconcile a pending resize (a new
+        // debounce reschedules or commits it, ScaleDuringResize = false drops the transient).
+        ctx.UseEffect(box.AfterCommitAction, committed,
+            FitParentMath.EffectiveDebounce(opts.Debounce), opts.ScaleDuringResize);
 
         Element? child = null;
         if (FitParentMath.IsUsableSize(committed.W, committed.H) && render(committed.W, committed.H) is { } content)
@@ -328,9 +331,9 @@ internal sealed class FitParentBox
         timer.Start();
     }
 
-    // Runs as an effect on every pass where the committed size changed. Effects flush before the
-    // child is reconciled, but in the same dispatcher work item as the reconcile, layout and
-    // paint, so clearing here never shows a frame of old content unscaled or new content scaled.
+    // Runs as an effect on every pass where the committed size or an option changed. Effects flush
+    // before the child is reconciled, but in the same dispatcher work item as the reconcile, layout
+    // and paint, so clearing here never shows a frame of old content unscaled or new content scaled.
     private void AfterCommit()
     {
         if (Disposed)

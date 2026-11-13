@@ -2259,6 +2259,8 @@ internal static class SelfTestFixtureRegistry
         "FitParent_InsignificantCommitStopsTimer",
         "FitParent_DebounceZeroCommitsImmediately",
         "FitParent_DebounceNegativeCommitsImmediately",
+        "FitParent_OptionsOnlyDebounceZeroCommits",
+        "FitParent_OptionsOnlyScaleOffClearsTransient",
     ];
 
     // ════════════════════════════════════════════════════════════════════
@@ -4576,6 +4578,8 @@ internal static class SelfTestFixtureRegistry
         "FitParent_InsignificantCommitStopsTimer" => new FitParentFixtures.InsignificantCommitStopsTimer(harness),
         "FitParent_DebounceZeroCommitsImmediately" => new FitParentFixtures.ImmediateDebounceCommits(harness, TimeSpan.Zero, "Zero"),
         "FitParent_DebounceNegativeCommitsImmediately" => new FitParentFixtures.ImmediateDebounceCommits(harness, TimeSpan.FromMilliseconds(-250), "Negative"),
+        "FitParent_OptionsOnlyDebounceZeroCommits" => new FitParentFixtures.OptionsOnlyDebounceZeroCommits(harness),
+        "FitParent_OptionsOnlyScaleOffClearsTransient" => new FitParentFixtures.OptionsOnlyScaleOffClearsTransient(harness),
 
         _ => null,
     };

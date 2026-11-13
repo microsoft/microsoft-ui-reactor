@@ -1286,4 +1286,85 @@ internal static class FitParentFixtures
             finally { await TearDown(H, rig); }
         }
     }
+
+    // ── Review of #1476: options-only renders reconcile a pending resize ──
+
+    /// <summary>
+    /// A resize is pending behind a 10 s debounce; a render that changes only the options to
+    /// Debounce = 0 commits the pending size within a few passes instead of waiting out the old
+    /// timer, and leaves no timer, transient or clip behind.
+    /// </summary>
+    internal sealed class OptionsOnlyDebounceZeroCommits(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var p = new Probe();
+            var current = p.Options(TimeSpan.FromSeconds(10));
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, current));
+            try
+            {
+                H.Check("FitParent_OptionsDebounceZero_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                var box = p.Box!;
+                int before = p.Renders;
+
+                Resize(rig.Box, 600, 450);
+                await Harness.Render();
+                H.Check("FitParent_OptionsDebounceZero_PositiveControl_PendingWithTransient",
+                    box.IsTimerRunning && HasTransient(p.Host) && p.Renders == before && ProbeIs(rig.Box, 400, 300),
+                    $"{DescribeTransform(p.Host)} {Describe(rig.Box, p)}");
+
+                current = p.Options(TimeSpan.Zero);
+                rig.Host.RequestRender();
+                var ok = await CommitAt(rig, p, 600, 450, maxPasses: 5);
+                H.Check("FitParent_OptionsDebounceZero_CommitsWithinFivePasses",
+                    ok && p.Sizes.Skip(before).Distinct().SequenceEqual([(400.0, 300.0), (600.0, 450.0)]),
+                    Describe(rig.Box, p));
+                H.Check("FitParent_OptionsDebounceZero_NoTimerNoTransformNoClip",
+                    !box.IsTimerRunning && IsCleared(p.Host) && p.Host is { Clip: null },
+                    $"timer={box.IsTimerRunning} {DescribeTransform(p.Host)} {DescribeClip(p.Host)}");
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
+
+    /// <summary>
+    /// A resize is pending with a transient scale; a render that changes only the options to
+    /// ScaleDuringResize = false drops the transient straight away (the old content is shown
+    /// unscaled, clipped to the host, as if scaling had been off from the start). The rebuild
+    /// itself still waits for the debounce.
+    /// </summary>
+    internal sealed class OptionsOnlyScaleOffClearsTransient(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var p = new Probe();
+            var current = p.Options(TimeSpan.FromSeconds(10));
+            var render = p.Render();
+            var rig = Mount(H, _ => FitParent(render, current));
+            try
+            {
+                H.Check("FitParent_OptionsScaleOff_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
+                var box = p.Box!;
+                int before = p.Renders;
+
+                Resize(rig.Box, 600, 450);
+                await Harness.Render();
+                H.Check("FitParent_OptionsScaleOff_PositiveControl_PendingWithTransient",
+                    box.IsTimerRunning && HasTransient(p.Host), $"{DescribeTransform(p.Host)} {Describe(rig.Box, p)}");
+
+                current = p.Options(TimeSpan.FromSeconds(10), scale: false);
+                rig.Host.RequestRender();
+                await Harness.Render();
+                await Harness.Render();
+                H.Check("FitParent_OptionsScaleOff_TransientCleared", IsCleared(p.Host), DescribeTransform(p.Host));
+                H.Check("FitParent_OptionsScaleOff_ClippedToHost", ClipIsHostBounds(p.Host), DescribeClip(p.Host));
+                // The options-only render re-runs render at the committed 400×300; nothing at 600×450 yet.
+                H.Check("FitParent_OptionsScaleOff_StillPendingNotRebuilt",
+                    box.IsTimerRunning && p.Sizes.Skip(before).All(s => s == (400, 300)) && ProbeIs(rig.Box, 400, 300),
+                    Describe(rig.Box, p));
+            }
+            finally { await TearDown(H, rig); }
+        }
+    }
 }
