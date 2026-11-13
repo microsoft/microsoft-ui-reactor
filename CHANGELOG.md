@@ -36,6 +36,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- Panel interaction-state borders restore a null normal brush and the latest normal
+  brush after it changes between hover interactions (issue #1039).
+
 ### Security
 
 ## [0.1.0-preview.18] — 2026-11-12

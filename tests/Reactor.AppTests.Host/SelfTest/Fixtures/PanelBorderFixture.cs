@@ -39,9 +39,12 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                         0 => panel.BorderThickness(physical).BorderBrush("#FF3366CC")
                             .InteractionStates(states => states.PointerOver(borderBrush: hoverBrush)),
                         1 => panel.BorderThickness(physical).BorderBrush("#FFCC6633")
-                            .BorderInlineStart(new Thickness(9)),
+                            .BorderInlineStart(new Thickness(9))
+                            .InteractionStates(states => states.PointerOver(borderBrush: hoverBrush)),
                         3 => panel.BorderInlineStart(new Thickness(9)),
                         5 => panel.BorderBrush(new ThemeRef(themeKey)).RequestedTheme(ElementTheme.Light),
+                        7 => panel.BorderThickness(physical)
+                            .InteractionStates(states => states.PointerOver(borderBrush: hoverBrush)),
                         _ => panel,
                     };
                 }
@@ -68,9 +71,9 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
             {
                 WinUI.Grid.BorderBrushProperty, StackPanel.BorderBrushProperty, WinUI.RelativePanel.BorderBrushProperty,
             };
-            string[] phases = ["Mount", "UpdateRtl", "Unset", "InlineNativeBase", "UnsetInline", "Theme", "UnsetTheme"];
+            string[] phases = ["Mount", "UpdateRtl", "Unset", "InlineNativeBase", "UnsetInline", "Theme", "UnsetTheme", "NullNormal"];
 
-            for (int phase = 0; phase <= 6; phase++)
+            for (int phase = 0; phase < phases.Length; phase++)
             {
                 if (phase != 0)
                 {
@@ -88,6 +91,9 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                 for (int i = 0; i < panels.Length; i++)
                 {
                     var panel = panels[i]!;
+                    if (phase is 1 or 7)
+                        H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_ReusesControl",
+                            ReferenceEquals(panel, H.FindControl<FrameworkElement>(p => AP.GetAutomationId(p) == AP.GetAutomationId(panel))));
                     var thickness = (Thickness)panel.GetValue(thicknessProperties[i]);
                     var brush = panel.GetValue(brushProperties[i]) as SolidColorBrush;
                     bool cleared = panel.ReadLocalValue(thicknessProperties[i]) == DependencyProperty.UnsetValue
@@ -100,18 +106,23 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                         2 or 4 => cleared,
                         3 => thickness == new Thickness(9, 3, 4, 5),
                         5 => brush?.Color == themeBrush.Color && panel.Style is not null,
+                        7 => thickness == physical && brush is null
+                            && panel.ReadLocalValue(brushProperties[i]) == DependencyProperty.UnsetValue,
                         _ => brush is null && panel.Style is null,
                     };
                     H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}", correct);
 
-                    if (phase == 0)
+                    if (phase is 0 or 1 or 7)
                     {
                         Reconciler.SimulatePointerOverForTests(panel, isOver: true);
-                        H.Check($"PanelBorder_{panel.GetType().Name}_HoverBrush",
+                        H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_HoverBrush",
                             ReferenceEquals(panel.GetValue(brushProperties[i]), hoverBrush));
                         Reconciler.SimulatePointerOverForTests(panel, isOver: false);
-                        H.Check($"PanelBorder_{panel.GetType().Name}_NormalBrushRestored",
+                        H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_NormalBrushRestored",
                             ReferenceEquals(panel.GetValue(brushProperties[i]), brush));
+                        if (phase == 7)
+                            H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}_LocalBrushReleased",
+                                panel.ReadLocalValue(brushProperties[i]) == DependencyProperty.UnsetValue);
                     }
                 }
 
