@@ -7,7 +7,7 @@
     `winapp ui` and saves one cropped PNG per sample, theme and state.
 
     * Each theme gets a fresh app instance: the window is placed at (0,0), sized
-      with SetWindowPos (outer size, 96 DPI), and the theme is set with the page's
+      with SetWindowPos (outer size in DIPs, scaled by the window DPI), and the theme is set with the page's
       "Light theme" / "Dark theme" buttons, which set RequestedTheme on the app
       root. The Windows theme is not touched.
     * Each PNG is the sample's UI Automation bounds plus -Pad px on every side, cut
@@ -62,6 +62,9 @@ $script:Proc = $null
 $script:Hwnd = $null
 $script:Window = $null
 $script:Log = [System.Collections.Generic.List[object]]::new()
+# Window DPI / 96. Window sizes and the crop padding are in DIPs and scaled by it, so every
+# display scale gives the same layout (and the PNGs are that many times larger).
+$script:Scale = 1.0
 
 function Invoke-Ui {
     # UIA occasionally reports a just-found element as gone while the page settles;
@@ -92,7 +95,8 @@ function Get-Bounds([string]$AutomationId) {
 
 function Set-WindowSize([string]$Name) {
     $w, $h = $Sizes[$Name]
-    [void][Spec065.Win32]::SetWindowPos($script:Hwnd, [IntPtr]::Zero, 0, 0, $w, $h, 0x14) # NOZORDER | NOACTIVATE
+    $pw = [int][Math]::Round($w * $script:Scale); $ph = [int][Math]::Round($h * $script:Scale)
+    [void][Spec065.Win32]::SetWindowPos($script:Hwnd, [IntPtr]::Zero, 0, 0, $pw, $ph, 0x14) # NOZORDER | NOACTIVATE
     Start-Sleep -Milliseconds 1500
     $script:Window = "$Name ${w}x$h"
 }
@@ -101,14 +105,16 @@ function Set-WindowSize([string]$Name) {
 # expander's animated chevron keeps a different color after a hover), so rest
 # captures must come from an instance nobody has interacted with yet.
 function Start-App([string]$Theme) {
-    # Keep the pointer off the window so nothing starts in a hover state.
-    [void][Spec065.Win32]::SetCursorPos(2000, 1000)
+    # Keep the pointer off the samples so nothing starts in a hover state: the window opens
+    # at the screen's top-left corner, where its title bar is.
+    [void][Spec065.Win32]::SetCursorPos(0, 0)
     $script:Proc = Start-Process -FilePath (Resolve-Path $Exe) -PassThru
     for ($i = 0; $i -lt 40 -and $script:Proc.MainWindowHandle -eq 0; $i++) { Start-Sleep -Milliseconds 250; $script:Proc.Refresh() }
     if ($script:Proc.MainWindowHandle -eq 0) { throw 'The app window did not appear.' }
     $script:Hwnd = $script:Proc.MainWindowHandle
     $dpi = [Spec065.Win32]::GetDpiForWindow($script:Hwnd)
-    if ($dpi -ne 96) { Write-Warning "Window DPI is $dpi; the reference set was captured at 96 DPI (100% scale)." }
+    $script:Scale = $dpi / 96.0
+    Write-Host "  window DPI $dpi (scale $script:Scale)"
     Start-Sleep -Seconds 2
     Set-WindowSize wide
     Invoke-Ui invoke $NavItem | Out-Null
@@ -132,15 +138,16 @@ function Save-Sample([string]$Id, [string]$File, [string]$State, [switch]$KeepSc
     if (-not $KeepScroll) { Move-Viewport top }
     $vp = Get-Bounds $Viewport
     $el = Get-Bounds $Id
-    if (-not $KeepScroll -and ($el.y + $el.height + $Pad) -gt ($vp.y + $vp.height)) {
+    if (-not $KeepScroll -and ($el.y + $el.height + $Pad * $script:Scale) -gt ($vp.y + $vp.height)) {
         Move-Viewport bottom
         $vp = Get-Bounds $Viewport
         $el = Get-Bounds $Id
     }
-    $x = $el.x - $Pad - $vp.x; $y = $el.y - $Pad - $vp.y
-    $w = $el.width + 2 * $Pad; $h = $el.height + 2 * $Pad
+    $pad = [int][Math]::Round($Pad * $script:Scale)
+    $x = $el.x - $pad - $vp.x; $y = $el.y - $pad - $vp.y
+    $w = $el.width + 2 * $pad; $h = $el.height + 2 * $pad
     if ($x -lt 0 -or $y -lt 0 -or ($x + $w) -gt $vp.width -or ($y + $h) -gt $vp.height) {
-        throw "'$Id' plus ${Pad}px is not fully inside the viewport ($x,$y ${w}x$h in $($vp.width)x$($vp.height))."
+        throw "'$Id' plus ${pad}px is not fully inside the viewport ($x,$y ${w}x$h in $($vp.width)x$($vp.height))."
     }
 
     $target = if ($Path) { $Path } else { Join-Path $OutDir $File }

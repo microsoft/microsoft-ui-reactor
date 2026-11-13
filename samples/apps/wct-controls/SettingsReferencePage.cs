@@ -3,9 +3,9 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using WctControls;
 using static Microsoft.UI.Reactor.Factories;
-using static WctControls.SettingsCardElement;
-using static WctControls.SettingsExpanderElement;
 using ContentAlignment = CommunityToolkit.WinUI.Controls.ContentAlignment;
+using WctCard = WctControls.SettingsCardElement;          // the Toolkit wrappers; the bare names are Reactor's port
+using WctExpander = WctControls.SettingsExpanderElement;
 
 // Fixed SettingsCard / SettingsExpander content for the spec 065 reference
 // screenshots (docs/specs/065/toolkit/). The native Reactor port renders this
@@ -29,24 +29,24 @@ internal sealed class SettingsReferencePage : Component<ThemeProps>
                 Button("Light theme", () => Props.SetTheme(ElementTheme.Light)),
                 Button("Dark theme", () => Props.SetTheme(ElementTheme.Dark))),
             VStack(0,
-                Frame(SettingsCard(
+                Frame(WctCard.SettingsCard(
                     header: "Notifications",
                     description: "Alerts from apps and the system",
                     headerIcon: Icon(FontIcon("\uE7E7")),
                     content: ToggleSwitch(isOn: true)).AutomationId("ref-card")),
-                Frame(SettingsCard(
+                Frame(WctCard.SettingsCard(
                     header: "Storage",
                     description: "Free up space",
                     headerIcon: Icon(FontIcon("\uEDA2")),
                     isClickEnabled: true,
                     onClick: () => { }).AutomationId("ref-card-clickable")),
-                Frame(SettingsCard(
+                Frame(WctCard.SettingsCard(
                     header: "Theme",
                     description: "Select which app theme to display",
                     headerIcon: Icon(FontIcon("\uE790")),
                     contentAlignment: ContentAlignment.Vertical,
                     content: ComboBox(["Light", "Dark", "Use system setting"], 2)).AutomationId("ref-card-vertical")),
-                Frame(SettingsCard(
+                Frame(WctCard.SettingsCard(
                     header: "Bluetooth",
                     description: "Discoverable as \"CONTOSO-PC\"",
                     headerIcon: Icon(FontIcon("\uE702")),
@@ -58,7 +58,7 @@ internal sealed class SettingsReferencePage : Component<ThemeProps>
                 // Keeps the overlay scroll indicator (right edge of the viewport) out of the crops.
                 .Margin(0, 0, 24, 0)));
 
-    private static SettingsExpanderElement Display(bool isExpanded) => SettingsExpander(
+    private static WctExpander Display(bool isExpanded) => WctExpander.SettingsExpander(
         header: "Display",
         description: "Brightness, night light and scale",
         headerIcon: Icon(FontIcon("\uE7F4")),
@@ -66,8 +66,8 @@ internal sealed class SettingsReferencePage : Component<ThemeProps>
         isExpanded: isExpanded,
         items: new object[]
         {
-            SettingsCard(header: "Brightness", content: Slider(70, 0, 100)),
-            SettingsCard(header: "Night light", content: ToggleSwitch(isOn: false)),
+            WctCard.SettingsCard(header: "Brightness", content: Slider(70, 0, 100)),
+            WctCard.SettingsCard(header: "Night light", content: ToggleSwitch(isOn: false)),
         });
 
     private static Element Frame(Element sample) => Border(sample).Padding(8);
