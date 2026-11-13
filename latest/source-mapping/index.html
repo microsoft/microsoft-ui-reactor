@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/source-mapping/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/source-mapping/">
       
       
         <link rel="prev" href="../threading-and-dispatch/">
@@ -3619,6 +3619,11 @@ components, which have no type of their own, report <code>FuncElement</code> and
 <td>Element call site</td>
 <td><code>Element.CallSite</code> / <code>ReactorSourceMap.GetSource</code> (when source mapping is enabled at build time)</td>
 </tr>
+<tr>
+<td>Per-component file name:line:column</td>
+<td>Component call site (file name only, never its directories)</td>
+<td><code>Microsoft-UI-Reactor-Perf</code> <code>ComponentRender</code> Start <code>callSiteFile</code> / <code>callSiteLine</code> / <code>callSiteColumn</code> (when source mapping is on; see the <a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/reference/perf-trace-events.md">perf trace events reference</a>)</td>
+</tr>
 </tbody>
 </table>
 <p>The reconcile pass also emits a counter summary on stop:</p>
@@ -4024,7 +4029,10 @@ WinUI cannot show you: until the target mounts, the property itself
 purpose-named components — <code>&lt;UserCard&gt;</code>, <code>&lt;RegisterForm&gt;</code>,
 <code>&lt;NotificationBadge&gt;</code> — and the ETW events will identify them.
 Inline anonymous <code>Func</code>-component lambdas show up as
-<code>FuncElement</code> in traces, which is almost never what you want.</p>
+<code>FuncElement</code> in the <code>Microsoft-UI-Reactor</code> EventSource's events, which
+is almost never what you want. (The <code>Microsoft-UI-Reactor-Perf</code> spans
+name them by their render function instead, <code>RenderEachTime in
+MainPage.Render</code>, but every lambda in one method still shares a name.)</p>
 <p><strong><code>RenderError</code> redacts the message on purpose.</strong> TASK-064 strips
 <code>ex.Message</code> from the ETW payload because exception messages can
 carry absolute paths, env values, and form values. Apps that want

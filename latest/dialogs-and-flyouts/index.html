@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/dialogs-and-flyouts/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/dialogs-and-flyouts/">
       
       
         <link rel="prev" href="../status-and-info/">
@@ -1490,6 +1490,17 @@
     <span class="md-ellipsis">
       
         Dialog theme
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dialog-style-and-entrance-animation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialog style and entrance animation
       
     </span>
   </a>
@@ -3491,6 +3502,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#dialog-style-and-entrance-animation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dialog style and entrance animation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#three-button-dialogs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3905,6 +3927,17 @@ real dialog's theme explicitly. Changing that declaration updates the open dialo
 in place; removing it or explicitly requesting <code>ElementTheme.Default</code> resumes
 following the owner, consistent with theme inheritance elsewhere in Reactor.
 Native <code>.Set(dialog =&gt; ...)</code> callbacks run last and can override the theme.</p>
+<h3 id="dialog-style-and-entrance-animation">Dialog style and entrance animation<a class="headerlink" href="#dialog-style-and-entrance-animation" title="Permanent link">&para;</a></h3>
+<p>Reactor resolves the dialog style before mounting its content and calling
+<code>ShowAsync</code>. An application-level implicit <code>ContentDialog</code> style, including one
+in a merged resource dictionary, takes priority over <code>DefaultContentDialogStyle</code>.
+Resolving the style before the first template realization restores WinUI's native
+entrance animation
+(<a href="https://github.com/microsoft/microsoft-ui-xaml/issues/8476">WinUI #8476</a>).
+Native <code>.Set(dialog =&gt; dialog.Style = customStyle)</code> callbacks run afterward,
+so an explicitly supplied style takes priority when opening or updating a dialog.
+The order is: caller <code>.Set(...)</code> style, application implicit style, then
+<code>DefaultContentDialogStyle</code>.</p>
 <h3 id="three-button-dialogs">Three-button dialogs<a class="headerlink" href="#three-button-dialogs" title="Permanent link">&para;</a></h3>
 <p>The three-button shape (<code>Primary</code> + <code>Secondary</code> + <code>Close</code>) is the
 default for destructive confirmations. The convention from

@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/getting-started/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/getting-started/">
       
       
         <link rel="prev" href="..">
@@ -3897,7 +3897,7 @@ the rest of the docset elaborates.</p>
 
 <blockquote>
 <p><strong>Public preview package available.</strong> Reactor ships <code>Microsoft.UI.Reactor</code>
-<code>0.1.0-preview.17</code> on NuGet.org, and the project templates ship in the
+<code>0.1.0-preview.18</code> on NuGet.org, and the project templates ship in the
 official Windows App SDK <code>dotnet new</code> pack
 (<code>Microsoft.WindowsAppSDK.WinUI.CSharp.Templates</code>) — so <code>dotnet new reactor</code>
 works from a plain .NET SDK install, no source checkout required.
@@ -3928,10 +3928,11 @@ clone this repo:</p>
 <p><code>winapp</code> is the Windows App SDK CLI. <code>winapp new</code> installs the template pack on
 demand (and offers to update a stale one), so there is no separate install step
 and no version to pin.</p>
-<p>That gives you four starting points — <code>reactor</code> (blank), <code>reactor-mvu</code>
-(Model-View-Update via <code>UseReducer</code>), <code>reactor-navview</code> (<code>NavigationView</code> shell)
-and <code>reactor-tabview</code> (<code>TabView</code> shell). <code>winapp new --list</code> prints them all, and
-omitting <code>-t</code> picks one interactively.</p>
+<p>That gives you five starting points — <code>reactor</code> (blank), <code>reactor-mvu</code>
+(Model-View-Update via <code>UseReducer</code>), <code>reactor-navview</code> (<code>NavigationView</code> shell),
+<code>reactor-tabview</code> (<code>TabView</code> shell), and <code>reactor-singlefile</code>, a single <code>.cs</code> file
+with no project (see <a href="#one-file-no-project">One file, no project</a>).
+<code>winapp new --list</code> prints them all, and omitting <code>-t</code> picks one interactively.</p>
 <p>Prefer plain .NET tooling? Install the pack yourself, then scaffold with
 <code>dotnet new</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">dotnet</span> <span class="n">new</span> <span class="n">install</span> <span class="n">Microsoft</span><span class="p">.</span><span class="n">WindowsAppSDK</span><span class="p">.</span><span class="n">WinUI</span><span class="p">.</span><span class="n">CSharp</span><span class="p">.</span><span class="n">Templates</span><span class="p">::&lt;</span><span class="n">version</span><span class="p">&gt;</span>
@@ -3939,16 +3940,21 @@ omitting <code>-t</code> picks one interactively.</p>
 </code></pre></div>
 <p>The pack is prerelease-only today, and <code>dotnet new install</code> resolves stable
 versions unless you pin one explicitly — which is the step <code>winapp new</code> removes.</p>
-<p>Scaffolded apps are <strong>packaged</strong> (single-project MSIX), so <code>dotnet run</code>
+<p>Scaffolded apps are <strong>packaged</strong> (single-project MSIX) by default, so <code>dotnet run</code>
 registers a loose-layout package and launches the app with full package
 identity — the same thing F5 does in Visual Studio. That requires <strong>Developer
-Mode</strong> (Settings → System → For developers). See <a href="../packaging/">Packaging</a> for
-the unpackaged alternative.</p>
+Mode</strong> (Settings → System → For developers). For a plain unpackaged <code>.exe</code>
+instead, add <code>--packaging Unpackaged</code> to any of the four project templates:
+<code>dotnet new reactor -n MyApp --packaging Unpackaged</code> (<code>winapp new</code> has no
+equivalent switch). See <a href="../packaging/">Packaging</a> for how the two shapes differ.</p>
+<p>If <code>dotnet new</code> rejects <code>--packaging</code> or can't find <code>reactor-singlefile</code>, the
+installed pack predates them; <code>winapp new --list --template-version latest</code>
+updates it.</p>
 <h2 id="one-file-no-project">One file, no project<a class="headerlink" href="#one-file-no-project" title="Permanent link">&para;</a></h2>
 <p>A Reactor app does not need a <code>.csproj</code>. .NET 10 runs a single <code>.cs</code> file
 directly, and file-level <code>#:</code> directives supply the configuration a project file
 otherwise would:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="err">#</span><span class="p">:</span><span class="n">package</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="err">@</span><span class="mf">0.1.0</span><span class="o">-</span><span class="n">preview</span><span class="mf">.17</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="err">#</span><span class="p">:</span><span class="n">package</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="err">@</span><span class="mf">0.1.0</span><span class="o">-</span><span class="n">preview</span><span class="mf">.18</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="err">#</span><span class="p">:</span><span class="n">package</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">Windows</span><span class="p">.</span><span class="n">SDK</span><span class="p">.</span><span class="n">BuildTools</span><span class="p">.</span><span class="n">WinApp</span><span class="err">@</span><span class="mf">0.7.0</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="err">#</span><span class="p">:</span><span class="n">property</span><span class="w"> </span><span class="n">OutputType</span><span class="o">=</span><span class="n">WinExe</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="err">#</span><span class="p">:</span><span class="n">property</span><span class="w"> </span><span class="n">TargetFramework</span><span class="o">=</span><span class="n">net10</span><span class="mf">.0</span><span class="o">-</span><span class="n">windows10</span><span class="mf">.0.22621.0</span>
@@ -4015,6 +4021,12 @@ the <a href="../#minimal-project-setup">minimal <code>.csproj</code></a>. The re
 </tr>
 </tbody>
 </table>
+<p>You don't have to type the header: <code>dotnet new reactor-singlefile -n Counter</code>
+scaffolds <code>Counter/Counter.cs</code> with the same five directives and a starter
+component, and <code>dotnet run Counter.cs</code> from that folder launches it. The
+template's pins differ from the block above — it targets a newer Windows SDK
+(<code>windows10.0.26100.0</code>) and lets the <code>Microsoft.Windows.SDK.BuildTools.WinApp</code>
+version float (<code>@*</code>) — and both headers work.</p>
 <h3 id="running-it-unpackaged">Running it unpackaged<a class="headerlink" href="#running-it-unpackaged" title="Permanent link">&para;</a></h3>
 <p><code>WindowsPackageType</code> decides whether the app runs packaged, and <code>dotnet run</code> and
 <code>winapp run</code> both obey it. Declare the app unpackaged to run it as a plain <code>.exe</code>:</p>
@@ -4241,7 +4253,8 @@ the pack is prerelease-only today, so the explicit version pin is required.</p>
 <a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="n">dotnet</span> <span class="n">run</span>
 </code></pre></div>
 <p>The template wires up the <code>Microsoft.UI.Reactor</code> package reference, the
-WinUI 3 target framework, MSIX packaging, and a working <code>App.cs</code> that mounts a
+WinUI 3 target framework, MSIX packaging (unless you pass
+<code>--packaging Unpackaged</code>), and a working <code>App.cs</code> that mounts a
 single Reactor component. No <code>App.xaml</code>, no <code>MainWindow.xaml.cs</code> — just one C#
 file. Swap <code>reactor</code> for <code>reactor-mvu</code>, <code>reactor-navview</code> or <code>reactor-tabview</code>
 to start from a richer shell.</p>
@@ -4691,16 +4704,20 @@ configurations along with the <code>Microsoft.UI.Reactor.Devtools</code> package
 session opt-in on the command line:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="n">dotnet</span> <span class="n">run</span> <span class="p">--</span> <span class="p">-</span><span class="n">-devtools</span> <span class="n">app</span>
 </code></pre></div>
-<p>The scaffolded <code>Properties/launchSettings.json</code> ships a second
-<code>"&lt;AppName&gt; Devtools"</code> profile that passes that flag for you, so pick that
-profile in Visual Studio or use
-<code>dotnet run --launch-profile "&lt;AppName&gt; Devtools"</code>. The default profile
-deliberately passes no arguments — a plain <code>dotnet run -c Debug</code> starts the app
-with <strong>no</strong> dev menu.</p>
+<p><code>dotnet run</code> hands everything after <code>--</code> to the app, and a packaged scaffold
+still receives it when it launches with package identity. The default profile in
+the scaffolded <code>Properties/launchSettings.json</code> deliberately passes no
+arguments — a plain <code>dotnet run -c Debug</code> starts the app with <strong>no</strong> dev menu.
+Keep the <code>app</code>, too: a bare <code>--devtools</code>, whether typed or passed by a launch
+profile, is read as <code>--devtools run</code>, the heavier session behind
+<a href="../dev-tooling/#mcp-server"><code>mur devtools</code></a> that also starts an MCP endpoint.</p>
 <p><code>UseDevtools()</code> returns <code>true</code> only when both signals are present, which is what
-gates the reconcile-highlight overlay and the rest of the menu. Release builds
-drop the package and the switch, so the devtools code trims away entirely. The
-<a href="../dev-tooling/">dev tooling</a> page covers the full menu.</p>
+gates the reconcile-highlight overlay and the rest of the menu. The signals
+don't draw anything themselves: the menu is the <code>DevtoolsMenu(...)</code> element, so
+it appears only if your tree renders one. If yours doesn't yet, add it to the
+title bar as shown in <a href="../dev-tooling/#in-app-dev-menu">In-App Dev Menu</a>. Release
+builds drop the package and the switch, so the devtools code trims away
+entirely. The <a href="../dev-tooling/">dev tooling</a> page covers the full menu.</p>
 <h2 id="common-mistakes">Common Mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
 <h3 id="editing-bin-artifacts-to-see-your-change">Editing <code>bin/</code> artifacts to "see your change"<a class="headerlink" href="#editing-bin-artifacts-to-see-your-change" title="Permanent link">&para;</a></h3>
 <p>Reactor doesn't watch the build output. Edit the source files under

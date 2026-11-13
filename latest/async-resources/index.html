@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/async-resources/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/async-resources/">
       
       
         <link rel="prev" href="../docking/">
@@ -3509,6 +3509,10 @@ still available). Omitting the <code>reloading</code> arm makes it fall through 
 <code>loading</code> arm, so a refresh shows the loading UI. To keep the last-known value
 visible while revalidating (stale-while-revalidate), pass a <code>reloading:</code> handler
 explicitly.</p>
+<p><code>AsyncValue&lt;T&gt;</code> is a <code>closed</code> hierarchy, so with C# 15 (the default for <code>net11.0</code>
+apps, or <code>&lt;LangVersion&gt;15&lt;/LangVersion&gt;</code> on <code>net10.0</code>) a plain <code>switch</code> over the four
+cases is exhaustive without a <code>_</code> arm, and forgetting a case is warning CS8509. Older
+compilers still work; they just need the <code>_</code> arm. <code>LoadState</code> below is closed the same way.</p>
 <h2 id="infinite-scroll-with-useinfiniteresource">Infinite Scroll with UseInfiniteResource<a class="headerlink" href="#infinite-scroll-with-useinfiniteresource" title="Permanent link">&para;</a></h2>
 <p><code>UseInfiniteResource</code> models a cursor-paginated read. Drive fetches from
 <code>ItemAt(i)</code> inside a <code>VirtualList</code> <code>renderItem</code> — that's the pull model:
@@ -3553,6 +3557,8 @@ prefetching, call <code>commits.EnsureRange(first, last)</code> from the
 <p>Pull-to-refresh is <code>commits.Refresh()</code>: it cancels in-flight fetches,
 clears the page table, and refetches page 0. Retry after error is
 <code>commits.Retry()</code> — only the failed page is re-requested.</p>
+<p>Hooks sharing a <code>CacheKeyPrefix</code> can reuse cached pages when their dependencies
+and initial <code>PageSize</code> match. Different page sizes use separate cache entries.</p>
 <h2 id="migrating-from-a-datapagecache-style-cache">Migrating from a DataPageCache-Style Cache<a class="headerlink" href="#migrating-from-a-datapagecache-style-cache" title="Permanent link">&para;</a></h2>
 <p>If you've rolled a block-cache over <code>IDataSource&lt;T&gt;</code> — the pre-Phase-3
 <code>DataPageCache&lt;T&gt;</code> is the canonical example — the replacement path is five
@@ -3563,7 +3569,12 @@ mechanical steps:</p>
    <code>UseDataSource</code> bridges any <code>IDataSource&lt;T&gt;</code> onto <code>UseInfiniteResource</code>
    using <code>request.ContinuationToken</code> as the cursor. On the initial call,
    <code>options.PageSize</code> takes precedence over <code>request.PageSize</code>; the size is
-   clamped to at least 1 and used for requests, cursors, and row positions.</li>
+   clamped to at least 1 and used for requests, cursors, and row positions.
+   This initial size is retained for the hook's lifetime, including query
+   restarts. To use a different size, remount the calling component by changing
+   its key from the parent, e.g. <code>.WithKey($"tasks:{pageSize}")</code>.
+   Alternatively, increment a parent-owned reset version used by
+   <code>.WithKey($"tasks:{resetVersion}")</code>.</li>
 <li><strong>Read from <code>resource.Items[i]</code>.</strong> The sparse <code>IReadOnlyList&lt;T?&gt;</code> has
    null placeholders for in-flight slots. This replaces <code>cache.PeekItem(i)</code>
    plus the <code>LoadingBlock</code> sentinel.</li>

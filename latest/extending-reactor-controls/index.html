@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/extending-reactor-controls/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/extending-reactor-controls/">
       
       
         <link rel="prev" href="../control-reconciler-protocol/">
@@ -4170,7 +4170,14 @@ where none of them fit — for example, a control whose children live
 on three different non-collection properties that must reconcile
 together. Reach for it last; you give up the engine's keyed reconcile
 and lose descendant component state across re-renders that touch the
-imperative slot.</p>
+imperative slot. The engine cannot see imperative slots, so set the
+strategy's <code>Unmount</code> to tear down the children <code>Reconcile</code> mounted.
+A control without an element tag skips that callback and is torn down
+by the engine's generic child walk instead, so keep owned children
+where that walk finds them (a <code>ContentControl</code>'s <code>Content</code>, a panel's
+<code>Children</code>). That walk also tears down and pools anything else in those
+slots, so when a slot can hold UI the handler does not own, tag the
+control with <code>Reconciler.SetElementTag</code> to keep the callback in charge.</p>
 <h2 id="step-6-wrap-the-constructor-in-a-factory-holder-then-use-it">Step 6 — Wrap the constructor in a factory holder, then use it<a class="headerlink" href="#step-6-wrap-the-constructor-in-a-factory-holder-then-use-it" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1">// Spec 048 §6 Pattern A — the factory holder *is* the registration trigger.</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1">// The static cctor runs the first time any member of `StarMeter` is touched</span>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 580" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-shipped { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-planned { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .group { stroke: #6e7681; }
+      .group-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-shipped { fill: #033a16; stroke: #3fb950; }
+      .box-planned { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- WPF group -->
+  <rect class="group" x="20" y="20" width="480" height="320" rx="8"/>
+  <text class="group-label" x="40" y="42">WPF host (roadmap)</text>
+
+  <rect class="box-planned" x="80" y="70" width="340" height="60" rx="6"/>
+  <text class="label" x="250" y="94" text-anchor="middle">System.Windows.Application</text>
+  <text class="sub" x="250" y="112" text-anchor="middle">WPF process / dispatcher</text>
+
+  <rect class="box-planned" x="80" y="170" width="340" height="60" rx="6"/>
+  <text class="label" x="250" y="194" text-anchor="middle">System.Windows.Window</text>
+  <text class="sub" x="250" y="212" text-anchor="middle">WPF window with content</text>
+
+  <rect class="box-planned" x="80" y="270" width="340" height="60" rx="6"/>
+  <text class="label" x="250" y="294" text-anchor="middle">WpfXamlIslandControl</text>
+  <text class="sub" x="250" y="312" text-anchor="middle">FrameworkElement wrapper (not yet shipped)</text>
+
+  <path class="edge" d="M250 130 L250 170" marker-end="url(#arr)"/>
+  <path class="edge" d="M250 230 L250 270" marker-end="url(#arr)"/>
+
+  <!-- WinForms group -->
+  <rect class="group" x="540" y="20" width="480" height="320" rx="8"/>
+  <text class="group-label" x="560" y="42">WinForms host (shipped)</text>
+
+  <rect class="box-shipped" x="600" y="70" width="340" height="60" rx="6"/>
+  <text class="label" x="770" y="94" text-anchor="middle">System.Windows.Forms.Application</text>
+  <text class="sub" x="770" y="112" text-anchor="middle">WinForms message loop</text>
+
+  <rect class="box-shipped" x="600" y="170" width="340" height="60" rx="6"/>
+  <text class="label" x="770" y="194" text-anchor="middle">System.Windows.Forms.Form</text>
+  <text class="sub" x="770" y="212" text-anchor="middle">native HWND container</text>
+
+  <rect class="box-shipped" x="600" y="270" width="340" height="60" rx="6"/>
+  <text class="label" x="770" y="294" text-anchor="middle">XamlIslandControl</text>
+  <text class="sub" x="770" y="312" text-anchor="middle">Reactor.Interop.WinForms (ships today)</text>
+
+  <path class="edge" d="M770 130 L770 170" marker-end="url(#arr)"/>
+  <path class="edge" d="M770 230 L770 270" marker-end="url(#arr)"/>
+
+  <!-- DWXS -->
+  <rect class="box-accent" x="300" y="380" width="440" height="60" rx="6"/>
+  <text class="label" x="520" y="404" text-anchor="middle">DesktopWindowXamlSource</text>
+  <text class="sub" x="520" y="422" text-anchor="middle">WinAppSDK primitive — both hosts stand on this</text>
+
+  <!-- Host -->
+  <rect class="box-accent" x="300" y="450" width="440" height="50" rx="6"/>
+  <text class="label" x="520" y="472" text-anchor="middle">ReactorHostControl</text>
+  <text class="sub" x="520" y="490" text-anchor="middle">WinUI UserControl</text>
+
+  <!-- Reactor -->
+  <rect class="box-accent" x="300" y="510" width="440" height="56" rx="6"/>
+  <text class="label" x="520" y="534" text-anchor="middle">Reactor element tree</text>
+  <text class="sub" x="520" y="552" text-anchor="middle">hooks · reconciler · effects</text>
+
+  <path class="edge" d="M250 330 L520 380" marker-end="url(#arr)"/>
+  <path class="edge" d="M770 330 L520 380" marker-end="url(#arr)"/>
+  <path class="edge" d="M520 440 L520 450" marker-end="url(#arr)"/>
+  <path class="edge" d="M520 500 L520 510" marker-end="url(#arr)"/>
+</svg>

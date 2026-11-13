@@ -1,775 +1,775 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/accessibility/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/accessibility/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/advanced/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/advanced/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/analyzer-architecture/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/analyzer-architecture/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/animation-pipeline/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/animation-pipeline/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/animation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/animation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/architecture-overview/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/architecture-overview/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/async-resources/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/async-resources/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/charting/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/charting/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/cheat-sheet/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/cheat-sheet/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/collections/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/collections/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/commanding/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/commanding/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/components/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/components/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/context/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/context/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/control-reconciler-protocol/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/control-reconciler-protocol/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/controls/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/controls/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/data-system/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/data-system/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/dev-tooling/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/dev-tooling/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/devtools-internals/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/devtools-internals/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/diagnostics/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/diagnostics/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/dialogs-and-flyouts/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/dialogs-and-flyouts/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/docking/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/docking/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/effects-scheduling/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/effects-scheduling/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/effects/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/effects/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/element-pool/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/element-pool/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/extending-reactor-controls/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/extending-reactor-controls/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/flex-layout/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/flex-layout/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/focus-and-input-internals/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/focus-and-input-internals/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/forms/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/forms/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/getting-started/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/getting-started/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/hooks-internals/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/hooks-internals/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/hooks/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/hooks/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/input-and-gestures/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/input-and-gestures/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/layout/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/layout/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/localization/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/localization/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/modifier-system/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/modifier-system/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/navigation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/navigation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/packaging/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/packaging/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/perf-instrumentation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/perf-instrumentation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/performance/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/performance/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/persistence/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/persistence/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reactivity-model/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reactivity-model/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reactor-vs-xaml/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reactor-vs-xaml/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reconciliation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reconciliation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/rules-of-reactor/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/rules-of-reactor/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/source-mapping/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/source-mapping/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/status-and-info/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/status-and-info/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/styling/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/styling/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/testing/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/testing/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/text-and-media/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/text-and-media/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/theming-tokens/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/theming-tokens/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/thinking-in-reactor/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/thinking-in-reactor/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/threading-and-dispatch/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/threading-and-dispatch/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/vs-extension/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/vs-extension/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/win2d-canvas/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/win2d-canvas/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/windowing-advanced/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/windowing-advanced/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/windows/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/windows/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/winforms-interop/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/winforms-interop/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/wpf-interop/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/wpf-interop/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/xaml-developers/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/xaml-developers/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/migration/050-optional-t/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/migration/050-optional-t/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/migration/054-windowing-evolution/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/migration/054-windowing-evolution/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/command-palette/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/command-palette/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/drag-reorder/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/drag-reorder/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/login/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/login/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/master-detail/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/master-detail/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/modal-dialog/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/modal-dialog/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/multi-step-form/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/multi-step-form/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/paginated-list/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/paginated-list/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/search-with-suggestions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/search-with-suggestions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/recipes/settings-page/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/recipes/settings-page/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Announce/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Announce/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/AnnounceHandle/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/AnnounceHandle/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/AnnounceRegionElement/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/AnnounceRegionElement/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/AnyLoading/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/AnyLoading/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/CacheKey/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/CacheKey/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/CacheTime/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/CacheTime/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Changed/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Changed/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Clear/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Clear/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/ComponentUseMemoCellsExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/ComponentUseMemoCellsExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Count/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Count/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/CursorFromPageIndex/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/CursorFromPageIndex/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Customize/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Customize/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Descriptor/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Descriptor/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Error/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Error/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Fields/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Fields/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Focus/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Focus/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusAttached/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusAttached/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusField/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusField/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusFirst/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusFirst/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusManager/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusManager/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusMeta/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusMeta/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusNext/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusNext/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusPrevious/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusPrevious/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusTrap/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusTrap/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusTrapElementExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusTrapElementExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/FocusTrapHandle/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/FocusTrapHandle/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/GetFocus/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/GetFocus/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/IHookDispatcher/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/IHookDispatcher/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/InfiniteHookState/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/InfiniteHookState/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/IsActive/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/IsActive/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/IsFirstField/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/IsFirstField/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/IsLastField/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/IsLastField/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/IsPending/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/IsPending/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/LastResult/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/LastResult/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Mutation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Mutation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/MutationHookState/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/MutationHookState/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/MutationOptions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/MutationOptions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/NotifyPending/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/NotifyPending/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Pending/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Pending/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/PendingComponent/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/PendingComponent/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/PendingFactory/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/PendingFactory/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/PendingProps/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/PendingProps/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/PendingScope/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/PendingScope/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Post/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Post/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/RefetchOnMount/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/RefetchOnMount/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/RefetchOnWindowFocus/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/RefetchOnWindowFocus/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Region/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Region/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Register/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Register/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Reset/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Reset/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/ResourceHookState/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/ResourceHookState/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/ResourceOptions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/ResourceOptions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/RetryCount/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/RetryCount/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/RunAsync/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/RunAsync/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/SetControl/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/SetControl/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/SetLoading/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/SetLoading/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/SetSubmitHandler/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/SetSubmitHandler/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/StaleTime/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/StaleTime/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/Unregister/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/Unregister/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseAnnounce/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseAnnounce/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseAnnounceExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseAnnounceExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseBreakpoint/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseBreakpoint/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseCallback/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseCallback/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseClosingGuard/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseClosingGuard/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseCollection/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseCollection/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseColorScheme/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseColorScheme/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseCommand/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseCommand/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseCommandState/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseCommandState/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseContext/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseContext/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseDevtools/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseDevtools/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseDisplays/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseDisplays/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseDpi/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseDpi/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseEffect/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseEffect/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseElementFocus/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseElementFocus/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseElementFocusExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseElementFocusExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseElementRef/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseElementRef/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseElementRefExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseElementRefExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseExternalStore/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseExternalStore/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseFocus/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseFocus/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseFocusExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseFocusExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseFocusTrap/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseFocusTrap/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseFocusTrapExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseFocusTrapExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseHighContrast/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseHighContrast/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseHighContrastScheme/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseHighContrastScheme/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseInfiniteResource/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseInfiniteResource/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseInfiniteResourceExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseInfiniteResourceExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseIntl/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseIntl/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseIsActive/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseIsActive/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseIsCovered/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseIsCovered/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseIsDarkTheme/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseIsDarkTheme/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMemo/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMemo/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMemoCells/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMemoCells/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMemoCellsByIndex/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMemoCellsByIndex/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMemoCellsByKey/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMemoCellsByKey/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMemoCellsExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMemoCellsExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMutation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMutation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseMutationExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseMutationExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseNavigation/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseNavigation/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseNavigationLifecycle/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseNavigationLifecycle/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseObservable/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseObservable/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseObservableProperty/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseObservableProperty/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseObservableTree/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseObservableTree/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseOpenWindow/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseOpenWindow/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UsePersisted/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UsePersisted/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseReducedMotion/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseReducedMotion/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseReducer/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseReducer/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseRef/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseRef/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseResource/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseResource/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseResourceExtensions/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseResourceExtensions/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseState/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseState/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseStateSetterByIndex/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseStateSetterByIndex/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseSystemBackButton/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseSystemBackButton/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseTrayIcon/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseTrayIcon/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseWindow/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseWindow/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseWindowAspectRatio/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseWindowAspectRatio/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseWindowDragMove/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseWindowDragMove/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseWindowPosition/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseWindowPosition/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseWindowSize/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseWindowSize/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/UseWindowState/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/UseWindowState/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
     <url>
-         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/reference/hooks/WindowsDispatcherHookDispatcher/</loc>
-         <lastmod>2026-11-04</lastmod>
+         <loc>https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/reference/hooks/WindowsDispatcherHookDispatcher/</loc>
+         <lastmod>2026-11-13</lastmod>
     </url>
 </urlset>

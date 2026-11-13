@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.17/status-and-info/">
+        <link rel="canonical" href="https://microsoft.github.io/microsoft-ui-reactor/0.1.0-preview.18/status-and-info/">
       
       
         <link rel="prev" href="../text-and-media/">
@@ -3788,8 +3788,8 @@ typically) where the standard <code>Pager</code> chrome would be heavy:</p>
 <h2 id="personpicture">PersonPicture<a class="headerlink" href="#personpicture" title="Permanent link">&para;</a></h2>
 <p><code>PersonPicture</code> is the contact avatar. It accepts a display name (uses
 the first letter of each word as initials), explicit initials, or a
-profile image through <code>.Set(p =&gt; p.ProfilePicture = ...)</code>. Without any
-of those, it falls back to a generic person glyph:</p>
+profile image through <code>.ProfilePicture(uri)</code>. Without any of those, it
+falls back to a generic person glyph:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">PersonPictureDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">VStack</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span>
@@ -3824,8 +3824,8 @@ of those, it falls back to a generic person glyph:</p>
 <td>Override the derived initials.</td>
 </tr>
 <tr>
-<td><code>.Set(p =&gt; p.ProfilePicture = ...)</code></td>
-<td>Provide a <code>BitmapImage</code>.</td>
+<td><code>.ProfilePicture(string?)</code></td>
+<td>Load a photo from an absolute URI (<code>https://…</code>, <code>ms-appx:///…</code>). <code>null</code>, empty, relative, or malformed values show no photo, so the initials or glyph appear instead.</td>
 </tr>
 </tbody>
 </table>

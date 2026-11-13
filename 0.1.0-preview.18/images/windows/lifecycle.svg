@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Reactor window lifecycle</title>
+  <desc id="desc">WindowSpec opens a ReactorWindow host, applies native chrome and display integration, then close disposes resources.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .box{fill:#eef6ff;stroke:#2563eb;stroke-width:2;rx:14}
+      .accent{fill:#fff7ed;stroke:#f97316;stroke-width:2;rx:14}
+      .text{font:600 20px Segoe UI,Arial,sans-serif;fill:#111827}
+      .small{font:14px Segoe UI,Arial,sans-serif;fill:#374151}
+      .line{stroke:#2563eb;stroke-width:3;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="960" height="360" fill="#ffffff"/>
+  <rect class="box" x="40" y="90" width="170" height="120"/>
+  <text class="text" x="125" y="135" text-anchor="middle">WindowSpec</text>
+  <text class="small" x="125" y="166" text-anchor="middle">size • chrome</text>
+  <text class="small" x="125" y="188" text-anchor="middle">placement • keys</text>
+  <line class="line" x1="210" y1="150" x2="285" y2="150"/>
+  <rect class="box" x="300" y="90" width="180" height="120"/>
+  <text class="text" x="390" y="135" text-anchor="middle">ReactorWindow</text>
+  <text class="small" x="390" y="166" text-anchor="middle">host + hooks</text>
+  <text class="small" x="390" y="188" text-anchor="middle">lifecycle events</text>
+  <line class="line" x1="480" y1="150" x2="555" y2="150"/>
+  <rect class="box" x="570" y="90" width="170" height="120"/>
+  <text class="text" x="655" y="135" text-anchor="middle">Native shell</text>
+  <text class="small" x="655" y="166" text-anchor="middle">AppWindow</text>
+  <text class="small" x="655" y="188" text-anchor="middle">DPI • taskbar</text>
+  <line class="line" x1="740" y1="150" x2="815" y2="150"/>
+  <rect class="accent" x="830" y="90" width="90" height="120"/>
+  <text class="text" x="875" y="142" text-anchor="middle">Close</text>
+  <text class="small" x="875" y="174" text-anchor="middle">dispose</text>
+  <path d="M390 210 C390 285 125 285 125 214" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+  <text class="small" x="258" y="306" text-anchor="middle">state updates re-render content until close</text>
+</svg>

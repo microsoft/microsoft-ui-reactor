@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 380" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-xaml { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; }
+    .box-reactor { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .group { stroke: #6e7681; }
+      .group-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-xaml { fill: #3c0d0d; stroke: #f85149; }
+      .box-reactor { fill: #0c2d6b; stroke: #58a6ff; }
+      .edge { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- XAML group -->
+  <rect class="group" x="20" y="40" width="1060" height="130" rx="8"/>
+  <text class="group-label" x="40" y="62">XAML — pull-based binding</text>
+
+  <rect class="box-xaml" x="40" y="80" width="140" height="56" rx="6"/>
+  <text class="label" x="110" y="103" text-anchor="middle">VM property</text>
+  <text class="sub" x="110" y="121" text-anchor="middle">setter</text>
+
+  <rect class="box-xaml" x="220" y="80" width="160" height="56" rx="6"/>
+  <text class="label" x="300" y="103" text-anchor="middle">PropertyChanged</text>
+  <text class="sub" x="300" y="121" text-anchor="middle">INotifyPropertyChanged</text>
+
+  <rect class="box-xaml" x="420" y="80" width="160" height="56" rx="6"/>
+  <text class="label" x="500" y="103" text-anchor="middle">BindingExpression</text>
+  <text class="sub" x="500" y="121" text-anchor="middle">subscribes to INPC</text>
+
+  <rect class="box-xaml" x="620" y="80" width="160" height="56" rx="6"/>
+  <text class="label" x="700" y="103" text-anchor="middle">read VM getter</text>
+  <text class="sub" x="700" y="121" text-anchor="middle">via reflection / Convert</text>
+
+  <rect class="box-xaml" x="820" y="80" width="220" height="56" rx="6"/>
+  <text class="label" x="930" y="103" text-anchor="middle">Control DependencyProperty</text>
+  <text class="sub" x="930" y="121" text-anchor="middle">SetValue → render</text>
+
+  <path class="edge" d="M180 108 L220 108" marker-end="url(#arr)"/>
+  <path class="edge" d="M380 108 L420 108" marker-end="url(#arr)"/>
+  <path class="edge" d="M580 108 L620 108" marker-end="url(#arr)"/>
+  <path class="edge" d="M780 108 L820 108" marker-end="url(#arr)"/>
+
+  <!-- Reactor group -->
+  <rect class="group" x="20" y="210" width="1060" height="140" rx="8"/>
+  <text class="group-label" x="40" y="232">Reactor — push from state</text>
+
+  <rect class="box-reactor" x="40" y="250" width="140" height="56" rx="6"/>
+  <text class="label" x="110" y="273" text-anchor="middle">UseState setter</text>
+  <text class="sub" x="110" y="291" text-anchor="middle">setX(value)</text>
+
+  <rect class="box-reactor" x="220" y="250" width="160" height="56" rx="6"/>
+  <text class="label" x="300" y="273" text-anchor="middle">Hook slot</text>
+  <text class="sub" x="300" y="291" text-anchor="middle">RenderContext</text>
+
+  <rect class="box-reactor" x="420" y="250" width="160" height="56" rx="6"/>
+  <text class="label" x="500" y="273" text-anchor="middle">Component.Render</text>
+  <text class="sub" x="500" y="291" text-anchor="middle">runs top-down</text>
+
+  <rect class="box-reactor" x="620" y="250" width="160" height="56" rx="6"/>
+  <text class="label" x="700" y="273" text-anchor="middle">Element tree</text>
+  <text class="sub" x="700" y="291" text-anchor="middle">immutable records</text>
+
+  <rect class="box-reactor" x="820" y="250" width="220" height="56" rx="6"/>
+  <text class="label" x="930" y="273" text-anchor="middle">Reconciler · property write</text>
+  <text class="sub" x="930" y="291" text-anchor="middle">→ WinUI control</text>
+
+  <path class="edge" d="M180 278 L220 278" marker-end="url(#arr)"/>
+  <path class="edge" d="M380 278 L420 278" marker-end="url(#arr)"/>
+  <path class="edge" d="M580 278 L620 278" marker-end="url(#arr)"/>
+  <path class="edge" d="M780 278 L820 278" marker-end="url(#arr)"/>
+</svg>
