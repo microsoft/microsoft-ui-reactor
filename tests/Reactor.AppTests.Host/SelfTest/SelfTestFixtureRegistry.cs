@@ -357,6 +357,9 @@ internal static class SelfTestFixtureRegistry
         "Issue950Panel_MountUpdateUnsetReturnsToStyle",
         "Issue950Panel_ValuesDoNotLeakAcrossPoolReuse",
         "Issue950Panel_GridCornerRadiusPaintsRoundedPixels",
+        // Issue #965 — inline Margin/Padding/Border edges must not read the previous
+        // render's overlay back as their base.
+        "Issue965_InlineEdgesDoNotReadBackPreviousOverlay",
         // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
         // Reactor subtrees (Flyout content, Popup child) the generic recursion
         // cannot reach.
@@ -2700,6 +2703,7 @@ internal static class SelfTestFixtureRegistry
         "Issue950Panel_MountUpdateUnsetReturnsToStyle" => new Issue950PanelBorderBoxFixture.MountUpdateUnsetReturnsToStyle(harness),
         "Issue950Panel_ValuesDoNotLeakAcrossPoolReuse" => new Issue950PanelBorderBoxFixture.ValuesDoNotLeakAcrossPoolReuse(harness),
         "Issue950Panel_GridCornerRadiusPaintsRoundedPixels" => new Issue950PanelBorderBoxFixture.GridCornerRadiusPaintsRoundedPixels(harness),
+        "Issue965_InlineEdgesDoNotReadBackPreviousOverlay" => new Issue965InlineEdgeFixture.InlineEdgesDoNotReadBackPreviousOverlay(harness),
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
