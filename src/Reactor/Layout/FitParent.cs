@@ -280,6 +280,11 @@ internal sealed class FitParentBox
     {
         if (Disposed || IsCommitted)
             return;
+        // An uncommitted box never applies a transient, so any RenderTransform on this host is a
+        // previous box's, left behind by a hooks reset during a pending resize (the host Border is
+        // retained, not pooled, so CleanElement never ran). The stale Clip needs no counterpart:
+        // SyncClip replaces or removes whatever clip the host carries.
+        fe.ClearValue(UIElement.RenderTransformProperty);
         HandleSize(fe.ActualWidth, fe.ActualHeight);
     }
 

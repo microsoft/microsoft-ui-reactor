@@ -793,16 +793,20 @@ internal static class FitParentFixtures
 
     /// <summary>
     /// D-4 (R2-2) — a hot-reload hook reset updates (not mounts) the host Border; the
-    /// OnHostUpdated fallback must commit again at the same size within ≤ 5 passes.
+    /// OnHostUpdated fallback must commit again at the same size within ≤ 5 passes. A second
+    /// reset while a resize transient is active must not leave the old transform on the
+    /// retained host.
     /// </summary>
     internal sealed class HotReloadResetCommits(Harness h) : SelfTestFixtureBase(h)
     {
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(45);
+
         public override async Task RunAsync()
         {
             var p = new Probe();
-            var opts = p.Options(Debounce60);
+            var current = p.Options(Debounce60);
             var render = p.Render();
-            var rig = Mount(H, _ => FitParent(render, opts));
+            var rig = Mount(H, _ => FitParent(render, current));
             try
             {
                 H.Check("FitParent_HotReload_InitialCommit", await CommitAt(rig, p, 400, 300), Describe(rig.Box, p));
@@ -823,6 +827,31 @@ internal static class FitParentFixtures
                 H.Check("FitParent_HotReload_CommitsWithinFivePasses", ok, Describe(rig.Box, p));
                 H.Check("FitParent_HotReload_RenderedOnceAtSameSize",
                     p.Renders == renders + 1 && p.Sizes[^1] == (400, 300), Describe(rig.Box, p));
+
+                // Reset while a transient is active: the old box is disposed with its transform
+                // still on the retained host, and the new box never knew about it.
+                current = p.Options(TimeSpan.FromSeconds(10));
+                rig.Host.RequestRender();
+                await Harness.Render();
+                Resize(rig.Box, 600, 450);
+                await Harness.Render();
+                var pendingBox = p.Box;
+                H.Check("FitParent_HotReload_Transient_PositiveControl_PendingWithTransient",
+                    pendingBox is { IsTimerRunning: true } && HasTransient(p.Host) && ProbeIs(rig.Box, 400, 300),
+                    $"{DescribeTransform(p.Host)} {Describe(rig.Box, p)}");
+
+                int boxes = p.Boxes.Count;
+                rig.Host.Reconciler.ForEachLiveContext(c => c.ResetForHotReload());
+                rig.Host.RequestRender(force: true);
+                var rebuilt = await Harness.WaitFor(
+                    () => p.Boxes.Count > boxes && ProbeIs(rig.Box, 600, 450), maxPasses: 5, PerPassMs);
+                H.Check("FitParent_HotReload_Transient_HooksResetHostKept",
+                    p.Boxes.Count > boxes && pendingBox is { Disposed: true } && ReferenceEquals(oldHost, p.Host),
+                    $"boxes={boxes}->{p.Boxes.Count}");
+                H.Check("FitParent_HotReload_Transient_CommitsAtHostSize", rebuilt, Describe(rig.Box, p));
+                H.Check("FitParent_HotReload_Transient_TransformCleared", IsCleared(p.Host), DescribeTransform(p.Host));
+                H.Check("FitParent_HotReload_Transient_NoClipNoTimer",
+                    p.Host is { Clip: null } && p.Box is { IsTimerRunning: false }, DescribeClip(p.Host));
             }
             finally { await TearDown(H, rig); }
         }
