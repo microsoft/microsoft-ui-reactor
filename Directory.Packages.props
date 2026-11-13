@@ -84,7 +84,7 @@
          behaviours CI depended on, via the MTP report-trx / hangdump options. Version
          tracks the MTP that xunit.v3 4.x / MSTest 4.x resolve. -->
     <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.5.2" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.5.2" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.5.3" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
     <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.0" />
   </ItemGroup>
