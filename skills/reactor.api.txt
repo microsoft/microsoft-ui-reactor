@@ -6907,10 +6907,14 @@ ToString() → string
 ### static class Charts
 AreaChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) → ChartElement<T>
 BarChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) → ChartElement<T>
+ChartElement<T>.FitParent<T>(FitParentOptions options = null) → Element
 ForceGraph(IReadOnlyList<ForceNode> nodes, IReadOnlyList<ForceLink> links) → ForceGraphElement
+ForceGraphElement.FitParent(FitParentOptions options = null) → Element
 LineChart<T>(IReadOnlyList<T> data, Func<T, double> x, Func<T, double> y) → ChartElement<T>
 PieChart<T>(IReadOnlyList<T> data, Func<T, double> value, Func<T, string> label = null) → PieChartElement<T>
+PieChartElement<T>.FitParent<T>(FitParentOptions options = null) → Element
 TreeChart<T>(T root, Func<T, IEnumerable<T>> children, Func<T, string> label = null) → TreeChartElement<T>
+TreeChartElement<T>.FitParent<T>(FitParentOptions options = null) → Element
 WithAlternateView(Element chartElement, Element alternateView) → Element
 
 ### struct ChordArc
