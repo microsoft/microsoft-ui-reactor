@@ -82,6 +82,29 @@ public sealed class SettingsCardTests
         Assert.NotNull(named.HeaderContent);
     }
 
+    [Theory]
+    [InlineData("MaxLines")]
+    [InlineData("IsTextSelectionEnabled")]
+    [InlineData("TextWrapping")]
+    [InlineData("TextDecorations")]
+    public void ElementOverload_StyledTextIsRichContent(string styling)
+    {
+        // Styling that ShallowEquals does not compare must still keep the text an element, or
+        // it would be dropped when the text is shown as a plain header.
+        var text = styling switch
+        {
+            "MaxLines" => TextBlock("Version 1.2.3") with { MaxLines = 1 },
+            "IsTextSelectionEnabled" => TextBlock("Version 1.2.3") with { IsTextSelectionEnabled = true },
+            "TextWrapping" => TextBlock("Version 1.2.3") with { TextWrapping = global::Microsoft.UI.Xaml.TextWrapping.NoWrap },
+            _ => TextBlock("Version 1.2.3") with { TextDecorations = global::Windows.UI.Text.TextDecorations.Underline },
+        };
+
+        var card = SettingsCard("About", description: text);
+
+        Assert.Null(card.Description);
+        Assert.Same(text, card.DescriptionContent);
+    }
+
     [Fact]
     public void CommandOverload_MapsLabelDescriptionIconActionAndEnabledState()
     {

@@ -71,7 +71,8 @@ class SettingsCardPage : Component
                             content: ComboBox(["Light", "Dark", "Use system setting"], theme, setTheme))
                             .ContentAlignment(SettingsCardContentAlignment.Vertical),
                         SettingsCard("Sync",
-                            content: CheckBox(sync, setSync, "Sync settings across devices"))
+                            content: CheckBox(sync, setSync, "Sync settings across devices")
+                                .AutomationName("Sync settings across devices"))
                             .ContentAlignment(SettingsCardContentAlignment.Left)
                     ),
                     """
@@ -81,8 +82,10 @@ class SettingsCardPage : Component
                         content: ComboBox(["Light", "Dark", "Use system setting"], theme, setTheme))
                         .ContentAlignment(SettingsCardContentAlignment.Vertical)
 
+                    // Name the check box yourself: content otherwise takes the hidden header as its name.
                     SettingsCard("Sync",
-                        content: CheckBox(sync, setSync, "Sync settings across devices"))
+                        content: CheckBox(sync, setSync, "Sync settings across devices")
+                            .AutomationName("Sync settings across devices"))
                         .ContentAlignment(SettingsCardContentAlignment.Left)
                     """)
             ).Margin(36, 24, 36, 36)

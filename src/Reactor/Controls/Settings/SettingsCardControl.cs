@@ -71,6 +71,8 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
     private bool _isExpanderItem;
     private SettingsCardResources.Variant _variant;
     private Style _baseStyle;
+    private string _baseStyleKey;
+    private bool _commandBlocked;
 
     private FrameworkElement? _rootGrid;
     private FrameworkElement? _headerIconHolder;
@@ -99,6 +101,7 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
         // from Reconciler.ApplyThemeBindings, or an author's) never re-templates it.
         _variant = SettingsCardResources.Current;
         _baseStyle = _variant.CardStyle;
+        _baseStyleKey = _variant.CardStyleKey;
         Style = _baseStyle;
         Template = _variant.CardTemplate;
 
@@ -114,6 +117,7 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewKeyUp += OnPreviewKeyUp;
         RegisterPropertyChangedCallback(ContentProperty, OnContentChanged);
+        RegisterPropertyChangedCallback(IsEnabledProperty, OnIsEnabledPropertyChanged);
     }
 
     /// <summary>The header shown: the element header when set, else the header text.</summary>
@@ -249,12 +253,26 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
 
     Style IReactorBaseStyleHost.BaseStyle => _baseStyle;
 
-    string IReactorBaseStyleHost.BaseStyleKey
-        => !_isExpanderItem ? _variant.CardStyleKey
-            : _isClickEnabled ? _variant.ExpanderClickableItemStyleKey
-            : _variant.ExpanderItemStyleKey;
+    string IReactorBaseStyleHost.BaseStyleKey => _baseStyleKey;
 
     string IReactorBaseStyleHost.BaseStyleTargetType => "ButtonBase";
+
+    /// <summary>
+    /// Set while the card's command cannot run. The card then stays disabled whatever an
+    /// <c>.IsEnabled(...)</c> modifier writes, as <c>Button(Command)</c> folds the command's
+    /// enabled state into its own. The card holds the block because the reconciler applies
+    /// modifiers after the handler.
+    /// </summary>
+    internal bool CommandBlocked
+    {
+        get => _commandBlocked;
+        set
+        {
+            if (_commandBlocked == value) return;
+            _commandBlocked = value;
+            if (value) IsEnabled = false;
+        }
+    }
 
     /// <summary>Whether the card uses the contrast-theme markup.</summary>
     internal bool IsHighContrast => _variant.IsHighContrast;
@@ -428,6 +446,12 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
         CheckHeaderIconState();
     }
 
+    private static void OnIsEnabledPropertyChanged(DependencyObject sender, DependencyProperty dp)
+    {
+        var card = (SettingsCardControl)sender;
+        if (card._commandBlocked && card.IsEnabled) card.IsEnabled = false;
+    }
+
     private void CheckInitialVisualState()
     {
         VisualStateManager.GoToState(this, IsEnabled ? NormalState : DisabledState, true);
@@ -515,12 +539,13 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
 
     private void UpdateBaseStyle()
     {
-        var next = !_isExpanderItem ? _variant.CardStyle
-            : _isClickEnabled ? _variant.ExpanderClickableItemStyle
-            : _variant.ExpanderItemStyle;
+        var (next, nextKey) = !_isExpanderItem ? (_variant.CardStyle, _variant.CardStyleKey)
+            : _isClickEnabled ? (_variant.ExpanderClickableItemStyle, _variant.ExpanderClickableItemStyleKey)
+            : (_variant.ExpanderItemStyle, _variant.ExpanderItemStyleKey);
         if (ReferenceEquals(next, _baseStyle)) return;
         var previous = _baseStyle;
         _baseStyle = next;
+        _baseStyleKey = nextKey;
         // Swap only our own base style. A themed style built on the previous base is rebuilt on
         // the new one by the same reconcile pass; an author's own style is left alone.
         if (ReferenceEquals(Style, previous)) Style = next;
@@ -528,9 +553,9 @@ internal sealed partial class SettingsCardControl : ButtonBase, IReactorBaseStyl
 
     /// <summary>
     /// Names content that has no UI Automation name after the header, as the Toolkit does, so
-    /// Narrator reads "Notifications, toggle switch, on" rather than an unnamed switch. Content
-    /// derived directly from <see cref="ButtonBase"/> (it is named by its own content) and text
-    /// blocks are left alone, as in the Toolkit.
+    /// a screen reader announces the setting rather than an unnamed switch. Content derived
+    /// directly from <see cref="ButtonBase"/> (it is named by its own content) and text blocks
+    /// are left alone, as in the Toolkit.
     /// </summary>
     private void UpdateAccessibleContentName()
     {

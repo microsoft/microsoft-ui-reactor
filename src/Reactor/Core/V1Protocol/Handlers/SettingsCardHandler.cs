@@ -58,14 +58,20 @@ internal sealed class SettingsCardHandler : IElementHandler<SettingsCardElement,
         card.IsActionIconVisible = el.IsActionIconVisible;
         card.ContentAlignment = el.ContentAlignment;
 
-        // A command's enabled state drives the card; modifiers (applied after) still win.
-        if (el.Command is { } command)
+        // A command that cannot run disables the card, as Button(Command) folds the command's
+        // enabled state into its own; an .IsEnabled(...) modifier still disables a card whose
+        // command can run. The card holds the block (ApplyModifiers runs after this handler and
+        // re-writes only a changed modifier), so nothing here overwrites an unchanged modifier.
+        var blocked = el.Command is { IsEnabled: false };
+        if (blocked != card.CommandBlocked)
         {
-            if (card.IsEnabled != command.IsEnabled) card.IsEnabled = command.IsEnabled;
-        }
-        else if (oldEl?.Command is not null)
-        {
-            card.ClearValue(Control.IsEnabledProperty);
+            card.CommandBlocked = blocked;
+            if (!blocked)
+            {
+                // Hand IsEnabled back to the modifier, or to the default.
+                if (el.Modifiers?.IsEnabled is { } enabled) card.IsEnabled = enabled;
+                else card.ClearValue(Control.IsEnabledProperty);
+            }
         }
     }
 

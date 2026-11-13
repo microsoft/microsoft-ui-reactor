@@ -62,9 +62,11 @@ class ContentAlignmentDemo : Component
                 content: ComboBox(["Light", "Dark", "Use system setting"], theme, setTheme))
                 .ContentAlignment(SettingsCardContentAlignment.Vertical),
             // The control is left-aligned and the header is hidden: for content
-            // that carries its own label, like a check box.
+            // that carries its own label, like a check box. The check box would
+            // otherwise take the (hidden) header as its accessible name.
             SettingsCard("Sync",
-                content: CheckBox(sync, setSync, "Sync settings across devices"))
+                content: CheckBox(sync, setSync, "Sync settings across devices")
+                    .AutomationName("Sync settings across devices"))
                 .ContentAlignment(SettingsCardContentAlignment.Left)
         ).Padding(24);
     }

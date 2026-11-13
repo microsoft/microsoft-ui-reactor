@@ -221,8 +221,8 @@ New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 foreach ($theme in 'Light', 'Dark') {
     $t = $theme.ToLowerInvariant()
     Write-Host "$theme theme"
-    Start-App $theme
     try {
+        Start-App $theme
         if ($Set -ne 'Interactive') {
             foreach ($s in $Static) { Save-Sample $s[0] ($s[1] -f $t) $s[2] }
 

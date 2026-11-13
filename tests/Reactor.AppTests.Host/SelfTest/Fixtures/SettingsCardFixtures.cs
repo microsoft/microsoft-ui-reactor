@@ -141,6 +141,12 @@ internal sealed class SettingsCardMountFixture(Harness h) : SelfTestFixtureBase(
             H.Check("SettingsCard_Update_AuthoredContentNameWins",
                 ReferenceEquals(card.Content, toggle) && AutomationProperties.GetName(toggle!) == "Custom name");
 
+            // A header change re-runs the naming; it must leave the author's name alone.
+            await Update(current with { Header = "Alerts 2" });
+            H.Check("SettingsCard_Update_AuthoredContentNameSurvivesHeaderChange",
+                ReferenceEquals(card.Content, toggle) && AutomationProperties.GetName(toggle!) == "Custom name",
+                $"name='{AutomationProperties.GetName(toggle!)}'");
+
             await Update(current with { Header = "Alerts", Description = null });
             H.Check("SettingsCard_Update_DescriptionCollapses", description?.Visibility == Visibility.Collapsed);
 
@@ -233,6 +239,17 @@ internal sealed class SettingsCardClickableFixture(Harness h) : SelfTestFixtureB
             (SettingsCardTestKit.Peer(card).GetPattern(PatternInterface.Invoke) as IInvokeProvider)?.Invoke();
             H.Check("SettingsCard_Clickable_InvokeUsesLatestCallback", clicks == 1 && laterClicks == 1);
 
+            // An authored name wins over the header, and the header comes back when it goes.
+            var named = current.AutomationName("Open storage settings");
+            reconciler.Reconcile(current, named, card, SettingsCardTestKit.Noop);
+            await Harness.Render();
+            var namedPeerName = SettingsCardTestKit.Peer(card).GetName();
+            reconciler.Reconcile(named, current, card, SettingsCardTestKit.Noop);
+            await Harness.Render();
+            H.Check("SettingsCard_Clickable_AuthoredNameWinsOverHeader",
+                namedPeerName == "Open storage settings" && SettingsCardTestKit.Peer(card).GetName() == "Storage",
+                $"named='{namedPeerName}' after='{SettingsCardTestKit.Peer(card).GetName()}'");
+
             await Update(current.ActionIcon(FontIcon("\uE8A7")).ActionIconToolTip("Open"));
             H.Check("SettingsCard_Clickable_CustomActionIcon",
                 actionPresenter?.Content is WinUI.FontIcon { Glyph: "\uE8A7" }
@@ -251,8 +268,21 @@ internal sealed class SettingsCardClickableFixture(Harness h) : SelfTestFixtureB
             H.Check("SettingsCard_Clickable_DisabledInvokeRefused",
                 !card.IsEnabled && threw && laterClicks == 1
                 && SettingsCardTestKit.CurrentState(card, "CommonStates") == "Disabled");
+            // The Disabled state dims the header and leaves the background (the root grid the
+            // pointer states animate) alone: the Toolkit's disabled background key is unused.
+            var rootGrid = SettingsCardTestKit.Part<WinUI.Grid>(card, "PART_RootGrid");
+            var headerPresenter = SettingsCardTestKit.Part<WinUI.ContentPresenter>(card, "PART_HeaderPresenter");
+            var restBackground = await SettingsCardTestKit.ProbeAsync(host, "CardBackgroundFillColorDefaultBrush");
+            var disabledForeground = await SettingsCardTestKit.ProbeAsync(host, "TextFillColorDisabledBrush");
             H.Check("SettingsCard_Clickable_DisabledKeepsBackground",
-                SettingsCardTestKit.ColorOf(card.Background) == await SettingsCardTestKit.ProbeAsync(host, "CardBackgroundFillColorDefaultBrush"));
+                restBackground is not null && SettingsCardTestKit.ColorOf(rootGrid?.Background) == restBackground
+                && disabledForeground is not null && SettingsCardTestKit.ColorOf(headerPresenter?.Foreground) == disabledForeground,
+                $"root={SettingsCardTestKit.ColorOf(rootGrid?.Background)} expected={restBackground} header={SettingsCardTestKit.ColorOf(headerPresenter?.Foreground)} expected={disabledForeground}");
+
+            // A card that stops being clickable drops a hover look it had.
+            await Update(current.IsEnabled(true));
+            VisualStateManager.GoToState(card, "PointerOver", false);
+            var hovered = SettingsCardTestKit.CurrentState(card, "CommonStates");
 
             await Update(current with { OnClick = null });
             var groupPeer = SettingsCardTestKit.Peer(card);
@@ -260,6 +290,9 @@ internal sealed class SettingsCardClickableFixture(Harness h) : SelfTestFixtureB
                 !card.IsTabStop && actionHolder?.Visibility == Visibility.Collapsed
                 && groupPeer.GetAutomationControlType() == AutomationControlType.Group
                 && groupPeer.GetPattern(PatternInterface.Invoke) is null && string.IsNullOrEmpty(groupPeer.GetName()));
+            H.Check("SettingsCard_Clickable_RemovingOnClickDropsHover",
+                card.IsEnabled && hovered == "PointerOver" && SettingsCardTestKit.CurrentState(card, "CommonStates") == "Normal",
+                $"hovered={hovered} now={SettingsCardTestKit.CurrentState(card, "CommonStates")}");
         }
         finally
         {
@@ -339,11 +372,17 @@ internal sealed class SettingsCardLayoutFixture(Harness h) : SelfTestFixtureBase
             H.Check("SettingsCard_Layout_NoHeaderNoSpacing",
                 SettingsCardTestKit.CurrentState(card, "ContentSpacingStates") == "NoContentSpacing" && root.RowSpacing == 0);
 
-            card.FlowDirection = FlowDirection.RightToLeft;
             await Update(SettingsCard("Storage", onClick: () => { }));
+            var chevronHolder = SettingsCardTestKit.Part<FrameworkElement>(card, "PART_ActionIconPresenterHolder")!;
+            static double CenterX(FrameworkElement e)
+                => e.TransformToVisual(null).TransformPoint(new global::Windows.Foundation.Point(e.ActualWidth / 2, 0)).X;
+            var ltrChevronRight = CenterX(chevronHolder) > CenterX(header);
+            card.FlowDirection = FlowDirection.RightToLeft;
+            await Harness.Render();
             var chevron = SettingsCardTestKit.Part<WinUI.ContentPresenter>(card, "PART_ActionIconPresenter")?.Content as WinUI.FontIcon;
-            H.Check("SettingsCard_Layout_RightToLeftMirrorsChevron",
-                chevron is { MirroredWhenRightToLeft: true } && card.FlowDirection == FlowDirection.RightToLeft);
+            H.Check("SettingsCard_Layout_RightToLeftMirrors",
+                ltrChevronRight && CenterX(chevronHolder) < CenterX(header) && chevron is { MirroredWhenRightToLeft: true },
+                $"ltrChevronRight={ltrChevronRight} chevron={CenterX(chevronHolder)} header={CenterX(header)}");
         }
         finally
         {
@@ -395,12 +434,44 @@ internal sealed class SettingsCardCommandFixture(Harness h) : SelfTestFixtureBas
             await Update(SettingsCard(command with { CanExecute = false }));
             H.Check("SettingsCard_Command_CannotRunDisables", !card.IsEnabled);
             await Update(SettingsCard(command));
-            H.Check("SettingsCard_Command_CanRunAgainEnables", card.IsEnabled);
+            H.Check("SettingsCard_Command_CanRunAgainEnables",
+                card.IsEnabled && card.ReadLocalValue(WinUI.Control.IsEnabledProperty) == DependencyProperty.UnsetValue);
+
+            // .IsEnabled(false) disables a card whose command can run, and keeps it disabled on
+            // later renders: the reconciler re-writes an unchanged modifier only once, at mount.
+            await Update(SettingsCard(command).IsEnabled(false));
+            await Update(SettingsCard(command with { Description = "Last synced just now" }).IsEnabled(false));
+            var refused = false;
+            try { (SettingsCardTestKit.Peer(card).GetPattern(PatternInterface.Invoke) as IInvokeProvider)?.Invoke(); }
+            catch (Exception) { refused = true; }
+            H.Check("SettingsCard_Command_IsEnabledFalseModifierHolds", !card.IsEnabled && refused && runs == 1,
+                $"enabled={card.IsEnabled} refused={refused} runs={runs}");
+
+            // A command that cannot run wins over .IsEnabled(true), which is written after the handler.
+            await Update(SettingsCard(command with { CanExecute = false }).IsEnabled(true));
+            H.Check("SettingsCard_Command_CannotRunWinsOverIsEnabledTrue", !card.IsEnabled);
+            await Update(SettingsCard(command).IsEnabled(true));
+            H.Check("SettingsCard_Command_CanRunHandsBackToModifier", card.IsEnabled);
+
+            var onClicks = 0;
+            await Update(SettingsCard(command) with { OnClick = () => onClicks++ });
+            (SettingsCardTestKit.Peer(card).GetPattern(PatternInterface.Invoke) as IInvokeProvider)?.Invoke();
+            H.Check("SettingsCard_Command_OnClickWinsOverCommand", onClicks == 1 && runs == 1);
+
             await Update(SettingsCard(command with { Execute = null }));
             H.Check("SettingsCard_Command_NoActionIsNotClickable",
                 !card.IsTabStop && SettingsCardTestKit.Peer(card).GetAutomationControlType() == AutomationControlType.Group);
+
+            // Dropping a command that could not run hands IsEnabled back: to the default...
+            await Update(SettingsCard(command with { CanExecute = false }));
+            var blockedBeforeDrop = !card.IsEnabled;
             await Update(SettingsCard("Plain", content: ToggleSwitch(false)));
-            H.Check("SettingsCard_Command_DroppingCommandRestoresEnabled", card.IsEnabled);
+            H.Check("SettingsCard_Command_DroppingCommandRestoresEnabled",
+                blockedBeforeDrop && card.IsEnabled && card.ReadLocalValue(WinUI.Control.IsEnabledProperty) == DependencyProperty.UnsetValue);
+            // ...or to an .IsEnabled(false) modifier that stays.
+            await Update(SettingsCard(command with { CanExecute = false }).IsEnabled(false));
+            await Update(SettingsCard("Plain", content: ToggleSwitch(false)).IsEnabled(false));
+            H.Check("SettingsCard_Command_DroppingCommandKeepsModifier", !card.IsEnabled);
 
             await Update(SettingsCard(TextBlock("Plain text header"),
                 description: HyperlinkButton("Learn more", new Uri("https://learn.microsoft.com/windows/apps/")),
@@ -465,15 +536,58 @@ internal sealed class SettingsCardThemeFixture(Harness h) : SelfTestFixtureBase(
                 && solidExpected is not null && SettingsCardTestKit.ColorOf(card.Background) == solidExpected,
                 $"basedOn={card.Style?.BasedOn is not null} padding={card.Padding} background={SettingsCardTestKit.ColorOf(card.Background)} expected={solidExpected}");
 
+            // The themed style follows the card onto the contrast base, and back.
+            HighContrastState.ReaderForTest = static () => true;
+            HighContrastState.Invalidate();
+            await Update((plain with { Description = "Token in a contrast theme" }).Background(Theme.SolidBackground));
+            var contrastBasedOn = card.Style?.BasedOn;
+            HighContrastState.ReaderForTest = null;
+            HighContrastState.Invalidate();
+            await Update(plain.Background(Theme.SolidBackground));
+            H.Check("SettingsCard_Theme_TokenFollowsContrastBase",
+                contrastBasedOn == SettingsCardResources.Contrast.CardStyle
+                && card.Style?.BasedOn == SettingsCardResources.Standard.CardStyle
+                && ReferenceEquals(card.Template, SettingsCardResources.Standard.CardTemplate),
+                $"contrastBasedOn={(contrastBasedOn == SettingsCardResources.Contrast.CardStyle)} basedOn={(card.Style?.BasedOn == SettingsCardResources.Standard.CardStyle)}");
+
+            // An expander-item card keeps its own base style (padding, divider) under a token.
+            var itemElement = SettingsCard("Item", content: ToggleSwitch(false)) with { IsExpanderItem = true };
+            var tokenItem = itemElement.Background(Theme.SolidBackground);
+            var item = (SettingsCardControl)reconciler.Mount(tokenItem, SettingsCardTestKit.Noop)!;
+            host.Children.Add(item);
+            await Harness.Render();
+            var itemThemed = item.Style?.BasedOn == SettingsCardResources.Standard.ExpanderItemStyle
+                && item.Padding == new Thickness(58, 8, 44, 8) && item.BorderThickness == new Thickness(0, 1, 0, 0);
+            reconciler.Reconcile(tokenItem, itemElement, item, SettingsCardTestKit.Noop);
+            await Harness.Render();
+            H.Check("SettingsCard_Theme_TokenOnExpanderItemKeepsItemStyle",
+                itemThemed && ReferenceEquals(item.Style, SettingsCardResources.Standard.ExpanderItemStyle),
+                $"themed={itemThemed} padding={item.Padding}");
+            reconciler.UnmountChild(item);
+            host.Children.Remove(item);
+
             await Update(plain);
             H.Check("SettingsCard_Theme_DroppingTokenRestoresBaseStyle",
                 ReferenceEquals(card.Style, SettingsCardResources.Standard.CardStyle) && dark == SettingsCardTestKit.ColorOf(card.Background));
 
             // A contrast theme switches the card to the contrast markup on the next reconcile
             // (a contrast change triggers a full one), with the Toolkit's contrast brushes.
+            // A rich card next to it must carry its element header, description, icon and
+            // chevron over to the new template.
+            var rich = SettingsCard(TextBlock("Rich header").Bold(),
+                description: HyperlinkButton("Learn more", new Uri("https://learn.microsoft.com/windows/apps/")),
+                icon: FontIcon("\uE7E7"), onClick: () => { });
+            var richCard = (SettingsCardControl)reconciler.Mount(rich, SettingsCardTestKit.Noop)!;
+            host.Children.Add(richCard);
+            await Harness.Render();
+            var richHeader = richCard.HeaderChild;
+            var richDescription = richCard.DescriptionChild;
+            var richIcon = richCard.HeaderIcon;
             HighContrastState.ReaderForTest = static () => true;
             HighContrastState.Invalidate();
             await Update(plain with { Description = "In a contrast theme" });
+            reconciler.Reconcile(rich, rich with { }, richCard, SettingsCardTestKit.Noop);
+            await Harness.Render();
             var contrastBackground = await SettingsCardTestKit.ProbeAsync(host, "SystemColorButtonFaceColorBrush");
             var contrastBorder = await SettingsCardTestKit.ProbeAsync(host, "SystemColorButtonTextColorBrush");
             H.Check("SettingsCard_Theme_ContrastSwitchesMarkup",
@@ -486,6 +600,16 @@ internal sealed class SettingsCardThemeFixture(Harness h) : SelfTestFixtureBase(
                 && SettingsCardTestKit.Part<WinUI.ContentPresenter>(card, "PART_HeaderPresenter")?.Content as string == "Notifications"
                 && card.Content is WinUI.ToggleSwitch { ActualWidth: > 0 },
                 $"contrast={card.IsHighContrast} background={SettingsCardTestKit.ColorOf(card.Background)} expected={contrastBackground}");
+            H.Check("SettingsCard_Theme_ContrastKeepsRichParts",
+                richCard.IsHighContrast && richHeader is FrameworkElement { ActualWidth: > 0 }
+                && ReferenceEquals(SettingsCardTestKit.Part<WinUI.ContentPresenter>(richCard, "PART_HeaderPresenter")?.Content, richHeader)
+                && ReferenceEquals(SettingsCardTestKit.Part<WinUI.ContentPresenter>(richCard, "PART_DescriptionPresenter")?.Content, richDescription)
+                && ReferenceEquals(SettingsCardTestKit.Part<WinUI.ContentPresenter>(richCard, "PART_HeaderIconPresenter")?.Content, richIcon)
+                && richIcon is { ActualWidth: > 0 }
+                && SettingsCardTestKit.Part<WinUI.ContentPresenter>(richCard, "PART_ActionIconPresenter")?.Content is WinUI.FontIcon { Glyph: "\uE974", ActualWidth: > 0 },
+                $"contrast={richCard.IsHighContrast} header={(richHeader as FrameworkElement)?.ActualWidth}");
+            reconciler.UnmountChild(richCard);
+            host.Children.Remove(richCard);
 
             HighContrastState.ReaderForTest = null;
             HighContrastState.Invalidate();
@@ -553,12 +677,35 @@ internal sealed class SettingsExpanderFixture(Harness h) : SelfTestFixtureBase(h
                 && inner is not null && AutomationProperties.GetName(inner) == "Display");
             var toggle = inner is null ? null : SettingsCardTestKit.Peer(inner).GetPattern(PatternInterface.ExpandCollapse) as IExpandCollapseProvider;
             H.Check("SettingsExpander_Mount_InnerExpanderExpandCollapse", toggle?.ExpandCollapseState == ExpandCollapseState.Collapsed);
+            var chevron = inner is null ? null : SettingsCardTestKit.Part<WinUI.AnimatedIcon>(inner, "ExpandCollapseChevron");
+            H.Check("SettingsExpander_Chevron_CollapsedState",
+                chevron is not null && WinUI.AnimatedIcon.GetState(chevron) == "NormalOff",
+                $"state='{(chevron is null ? "no chevron" : WinUI.AnimatedIcon.GetState(chevron))}'");
+
+            // Authored size, corners and name reach the inner expander, the body and the peer,
+            // and fall back when they are removed.
+            var styled = current.AutomationName("Display settings").CornerRadius(8).MinWidth(300);
+            reconciler.Reconcile(current, styled, expander, SettingsCardTestKit.Noop);
+            await Harness.Render();
+            var body = inner?.Content as WinUI.Grid;
+            var mirrored = inner is not null && inner.CornerRadius == new CornerRadius(8) && inner.MinWidth == 300
+                && body?.CornerRadius == new CornerRadius(0, 0, 8, 8)
+                && AutomationProperties.GetName(inner) == "Display settings" && SettingsCardTestKit.Peer(expander).GetName() == "Display settings";
+            reconciler.Reconcile(styled, current, expander, SettingsCardTestKit.Noop);
+            await Harness.Render();
+            H.Check("SettingsExpander_Mount_AuthoredPropertiesMirrored",
+                mirrored && inner is not null && inner.MinWidth == 148 && AutomationProperties.GetName(inner) == "Display"
+                && SettingsCardTestKit.Peer(expander).GetName() == "Display",
+                $"mirrored={mirrored} minWidth={inner?.MinWidth} body={body?.CornerRadius}");
 
             await Update(current with { IsExpanded = true });
             var items = H.FindAllControls<SettingsCardControl>(c => !ReferenceEquals(c, headerCard));
             H.Check("SettingsExpander_Controlled_ExpandFromState",
                 inner?.IsExpanded == true && changes.Count == 0 && items.Count == 2,
                 $"expanded={inner?.IsExpanded} changes={changes.Count} items={items.Count}");
+            H.Check("SettingsExpander_Chevron_ExpandedState",
+                chevron is not null && WinUI.AnimatedIcon.GetState(chevron) == "NormalOn",
+                $"state='{(chevron is null ? "no chevron" : WinUI.AnimatedIcon.GetState(chevron))}'");
             H.Check("SettingsExpander_Items_TakeItemStyle",
                 items.Count == 2 && items.All(c => c.IsExpanderItem
                     && ReferenceEquals(c.Style, SettingsCardResources.Standard.ExpanderItemStyle)
@@ -587,6 +734,11 @@ internal sealed class SettingsExpanderFixture(Harness h) : SelfTestFixtureBase(h
                 advanced is not null && ReferenceEquals(advanced.Style, SettingsCardResources.Standard.ExpanderClickableItemStyle)
                 && advanced.Padding == new Thickness(58, 8, 16, 8) && advanced.IsTabStop);
 
+            // Collapsing from state is not reported back as a user change.
+            await Update(current with { IsExpanded = false });
+            H.Check("SettingsExpander_Controlled_CollapseFromStateNotReported",
+                inner?.IsExpanded == false && changes.Count == 1, string.Join(",", changes));
+
             await Update((current with { IsExpanded = true, Items = Items("Brightness") })
                 .ItemsHeader(TextBlock("Items header")).ItemsFooter(TextBlock("Items footer")));
             H.Check("SettingsExpander_Items_HeaderFooterAndRemoval",
@@ -597,11 +749,21 @@ internal sealed class SettingsExpanderFixture(Harness h) : SelfTestFixtureBase(h
             HighContrastState.ReaderForTest = static () => true;
             HighContrastState.Invalidate();
             await Update(current with { IsExpanded = true });
+            var contrastItems = H.FindAllControls<SettingsCardControl>(c => !ReferenceEquals(c, headerCard));
+            var contrastChevron = inner is null ? null : SettingsCardTestKit.Part<WinUI.AnimatedIcon>(inner, "ExpandCollapseChevron");
             H.Check("SettingsExpander_Contrast_SwitchesMarkup",
                 inner is not null && ReferenceEquals(inner.Style, SettingsCardResources.Contrast.ExpanderExpanderStyle)
                 && expander.HeaderCard.IsHighContrast && inner.IsExpanded
-                && H.FindAllControls<SettingsCardControl>(c => !ReferenceEquals(c, headerCard)).All(c => c.IsHighContrast
-                    && ReferenceEquals(c.Style, SettingsCardResources.Contrast.ExpanderItemStyle)));
+                && contrastItems.Count == 1 && contrastItems.All(c => c.IsHighContrast
+                    && ReferenceEquals(c.Style, SettingsCardResources.Contrast.ExpanderItemStyle))
+                && headerCard.HeaderIcon is { ActualWidth: > 0 }
+                && ReferenceEquals(SettingsCardTestKit.Part<WinUI.ContentPresenter>(headerCard, "PART_HeaderIconPresenter")?.Content, headerCard.HeaderIcon)
+                && combo is { ActualWidth: > 0 } && ReferenceEquals(headerCard.Content, combo),
+                $"items={contrastItems.Count} icon={headerCard.HeaderIcon?.ActualWidth} combo={combo?.ActualWidth}");
+            H.Check("SettingsExpander_Contrast_ChevronRehooked",
+                contrastChevron is not null && !ReferenceEquals(contrastChevron, chevron)
+                && WinUI.AnimatedIcon.GetState(contrastChevron) == "NormalOn",
+                $"new={!ReferenceEquals(contrastChevron, chevron)} state='{(contrastChevron is null ? "no chevron" : WinUI.AnimatedIcon.GetState(contrastChevron))}'");
             HighContrastState.ReaderForTest = null;
             HighContrastState.Invalidate();
             // A fresh element: the contrast refresh pass bypasses the identical-element skip,
@@ -648,6 +810,47 @@ internal sealed class SettingsExpanderFixture(Harness h) : SelfTestFixtureBase(h
         H.SetContent(null);
         H.Check("SettingsExpander_Unmount_UntaggedElementSlots", bare.Extensions is null && !bare.HasCallbacks && footerMounted && footerCleanups == 1,
             $"extensions={bare.Extensions is not null} mounted={footerMounted} cleanups={footerCleanups}");
+
+        // Without isExpanded the expander keeps its own state: a re-render after the user
+        // expanded it does not collapse it, and the change is still reported.
+        var uncontrolledChanges = new List<bool>();
+        var uncontrolled = SettingsExpander("Sound", description: "Volume", onIsExpandedChanged: uncontrolledChanges.Add,
+            items: [SettingsCard("Volume", content: ToggleSwitch(false))]);
+        var uncontrolledExpander = (SettingsExpanderControl)reconciler.Mount(uncontrolled, SettingsCardTestKit.Noop)!;
+        var uncontrolledHost = new WinUI.Grid { Width = 640 };
+        uncontrolledHost.Children.Add(uncontrolledExpander);
+        H.SetContent(uncontrolledHost);
+        await Harness.Render();
+        var uncontrolledInner = (WinUI.Expander)uncontrolledExpander.Content;
+        uncontrolledInner.IsExpanded = true;
+        await Harness.Render();
+        reconciler.Reconcile(uncontrolled, uncontrolled with { Description = "Volume and system sounds" }, uncontrolledExpander, SettingsCardTestKit.Noop);
+        await Harness.Render();
+        H.Check("SettingsExpander_Uncontrolled_KeepsUserState",
+            uncontrolledInner.IsExpanded && uncontrolledChanges.SequenceEqual([true]), string.Join(",", uncontrolledChanges));
+        reconciler.UnmountChild(uncontrolledExpander);
+        H.SetContent(null);
+
+        // An expander mounted while hidden has no template at Loaded; its chevron must still be
+        // hooked once the expander is shown and laid out.
+        var hidden = SettingsExpander("Hidden", items: [SettingsCard("Item", content: ToggleSwitch(false))]);
+        var hiddenExpander = (SettingsExpanderControl)reconciler.Mount(hidden, SettingsCardTestKit.Noop)!;
+        var hiddenHost = new WinUI.Grid { Width = 640, Visibility = Visibility.Collapsed };
+        hiddenHost.Children.Add(hiddenExpander);
+        H.SetContent(hiddenHost);
+        await Harness.Render();
+        var hiddenInner = (WinUI.Expander)hiddenExpander.Content;
+        var templatedWhileHidden = SettingsCardTestKit.Part<WinUI.AnimatedIcon>(hiddenInner, "ExpandCollapseChevron") is not null;
+        hiddenHost.Visibility = Visibility.Visible;
+        await Harness.Render();
+        hiddenInner.IsExpanded = true;
+        await Harness.Render();
+        var shownChevron = SettingsCardTestKit.Part<WinUI.AnimatedIcon>(hiddenInner, "ExpandCollapseChevron");
+        H.Check("SettingsExpander_Chevron_HookedWhenShown",
+            !templatedWhileHidden && shownChevron is not null && WinUI.AnimatedIcon.GetState(shownChevron) == "NormalOn",
+            $"templatedWhileHidden={templatedWhileHidden} state='{(shownChevron is null ? "no chevron" : WinUI.AnimatedIcon.GetState(shownChevron))}'");
+        reconciler.UnmountChild(hiddenExpander);
+        H.SetContent(null);
 
         async Task Update(SettingsExpanderElement next)
         {

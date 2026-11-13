@@ -2682,7 +2682,7 @@
         {
           "header": "Control below the header or on the left",
           "language": "csharp",
-          "code": "SettingsCard(\"Theme\",\n    description: \"Select which app theme to display\",\n    icon: FontIcon(\"\\uE790\"),\n    content: ComboBox([\"Light\", \"Dark\", \"Use system setting\"], theme, setTheme))\n    .ContentAlignment(SettingsCardContentAlignment.Vertical)\n\nSettingsCard(\"Sync\",\n    content: CheckBox(sync, setSync, \"Sync settings across devices\"))\n    .ContentAlignment(SettingsCardContentAlignment.Left)"
+          "code": "SettingsCard(\"Theme\",\n    description: \"Select which app theme to display\",\n    icon: FontIcon(\"\\uE790\"),\n    content: ComboBox([\"Light\", \"Dark\", \"Use system setting\"], theme, setTheme))\n    .ContentAlignment(SettingsCardContentAlignment.Vertical)\n\n// Name the check box yourself: content otherwise takes the hidden header as its name.\nSettingsCard(\"Sync\",\n    content: CheckBox(sync, setSync, \"Sync settings across devices\")\n        .AutomationName(\"Sync settings across devices\"))\n    .ContentAlignment(SettingsCardContentAlignment.Left)"
         }
       ]
     },

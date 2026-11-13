@@ -31,7 +31,9 @@ public enum SettingsCardContentAlignment
 /// <param name="Icon">The icon on the left of the header.</param>
 /// <param name="Content">The control on the right of the card, or below the header in a narrow
 /// card and with <see cref="SettingsCardContentAlignment.Vertical"/>. Content without its own
-/// UI Automation name gets the header text as its name.</param>
+/// UI Automation name gets the header text as its name, as in the Toolkit: that includes a check
+/// box, radio button or hyperlink button that shows its own text, so give those
+/// <c>.AutomationName(...)</c> when the header is not the right name.</param>
 /// <param name="OnClick">Makes the card clickable. A clickable card is a button: it shows a
 /// chevron and hover and pressed states, takes keyboard focus, and runs this callback on a
 /// click, on Enter or Space, and on a UI Automation Invoke.</param>

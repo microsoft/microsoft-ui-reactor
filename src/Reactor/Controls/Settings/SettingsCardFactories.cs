@@ -17,7 +17,9 @@ public static partial class Factories
     /// <param name="icon">The icon on the left, for example <c>FontIcon("\uE7E7")</c>.</param>
     /// <param name="content">The control on the right, for example a <c>ToggleSwitch</c>. When the
     /// card is narrower than 476 pixels it moves below the header. Content without its own UI
-    /// Automation name gets the header as its name.</param>
+    /// Automation name gets the header as its name, as in the Toolkit: that includes a check box,
+    /// radio button or hyperlink button that shows its own text, so give those
+    /// <c>.AutomationName(...)</c> when the header is not the right name.</param>
     /// <param name="onClick">Makes the card clickable. A clickable card is a button: it shows a
     /// chevron and hover and pressed states, can be focused with Tab, and runs
     /// <paramref name="onClick"/> on a click, on Enter or Space, and on a UI Automation Invoke.
@@ -42,6 +44,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a settings card whose header and description are elements, for rich content
     /// such as text with a link. A plain text element renders exactly like the string overload.
+    /// An element header does not name the card or its content for UI Automation: give a
+    /// clickable card, and the content, <c>.AutomationName(...)</c>.
     /// See <see cref="SettingsCard(string, string?, IconData?, Element?, Action?)"/>.
     /// </summary>
     public static SettingsCardElement SettingsCard(
@@ -64,7 +68,9 @@ public static partial class Factories
     /// <summary>
     /// Creates a clickable settings card driven by a <see cref="Command"/>: the command's
     /// label, description and icon fill the header, description and icon, a click runs the
-    /// command, and the card is disabled while the command cannot run.
+    /// command, and the card is disabled while the command cannot run. The command's
+    /// accelerator and access key are not applied to the card; bind the command to a button,
+    /// a menu item or the window for its shortcut.
     /// </summary>
     public static SettingsCardElement SettingsCard(Command command)
     {
@@ -117,6 +123,8 @@ public static partial class Factories
     /// <summary>
     /// Creates a settings expander whose header and description are elements, for rich content
     /// such as text with a link. A plain text element renders exactly like the string overload.
+    /// An element header does not name the expander or its header-row content for UI
+    /// Automation: give them <c>.AutomationName(...)</c>.
     /// See <see cref="SettingsExpander(string, string, IconData, Element, Optional{bool}, Action{bool}, Element[])"/>.
     /// </summary>
     public static SettingsExpanderElement SettingsExpander(
@@ -140,10 +148,12 @@ public static partial class Factories
 
     // A plain text element (what a string converts to) is rendered as text, exactly like the
     // string overload, so SettingsCard("Header", description: HyperlinkButton(...)) keeps a
-    // wrapping header that names the content and the clickable card.
+    // wrapping header that names the content and the clickable card. Any styling, setter or
+    // modifier makes it rich content, rendered as given.
     internal static (string? Text, Element? Content) SplitSettingsText(Element? element)
         => element is TextBlockElement { Modifiers: null } text
-            && Element.ShallowEquals(text, new TextBlockElement(text.Content))
+            && !Element.HasBehavioralExtras(text)
+            && TextBlockElement.DiffProps(new TextBlockElement(text.Content), text) == TextPropChanged.None
             ? (text.Content, null)
             : (null, element);
 }

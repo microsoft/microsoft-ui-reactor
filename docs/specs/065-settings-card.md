@@ -56,7 +56,7 @@ SettingsExpander("Display", description: "Brightness, night light and scale", ic
 | --- | --- |
 | `SettingsCard(string header, string? description, IconData? icon, Element? content, Action? onClick)` | `onClick` makes the card clickable. |
 | `SettingsCard(Element header, Element? description, …)` | Rich header or description. A plain text element renders exactly like the string overload. |
-| `SettingsCard(Command command)` | Label, description and icon fill the card. A click runs the command. The card is disabled while the command cannot run (`Command.IsEnabled`). A command without an action gives a plain card. |
+| `SettingsCard(Command command)` | Label, description and icon fill the card. A click runs the command. The card is disabled while the command cannot run (`Command.IsEnabled`), whatever an `.IsEnabled(...)` modifier says; `.IsEnabled(false)` still disables a card whose command can run, as with `Button(Command)`. A command without an action gives a plain card. The command's accelerator and access key are not applied to the card. |
 | `SettingsExpander(string header, string? description, IconData? icon, Element? content, Optional<bool> isExpanded, Action<bool>? onIsExpandedChanged, Element[]? items)` | `content` is the control in the header row, next to the expand button. `items` is the body. |
 | `SettingsExpander(Element header, Element? description, …)` | Rich header or description. |
 
@@ -77,9 +77,11 @@ Other choices from #1505:
 - Items that are `SettingsCard`s get the Toolkit's expander-item style: no outer border, a
   divider line and indented padding (less on the right for a clickable item). Other elements are
   shown as they are. Items are elements; there is no `ItemsSource` or `ItemTemplate`.
-- Apps restyle the cards with Reactor theme tokens and modifiers, for example
+- Apps restyle a card with Reactor theme tokens and modifiers, for example
   `.Background(Theme.SolidBackground)`. The Toolkit's resource keys (`SettingsCardBackground` and
-  others) are not an API in Reactor (§5.5).
+  others) are not an API in Reactor (§5.5). As in the Toolkit, an expander does not pass
+  `Background`, `BorderBrush` or `Padding` to its header row and body; apps restyle the cards in
+  its items.
 
 The user guide page is [Settings Cards](../guide/settings-cards.md). The
 [settings page recipe](../guide/recipes/settings-page.md) now uses the cards.
@@ -192,7 +194,11 @@ Notes:
   and the screen reader reaches their content directly. The content is named after the header
   instead, so a toggle switch in a "Notifications" card is called "Notifications".
 - Content keeps its own name when it has one, when it is a direct `ButtonBase` subclass such as
-  `Button` (named by its text) or when it is a `TextBlock`. Only a text header names content.
+  `Button` (named by its text) or when it is a `TextBlock`. A check box, radio button or
+  hyperlink button is not a direct `ButtonBase` subclass, so it takes the header as its name
+  even though it shows its own text, as in the Toolkit; the docs tell authors to name it.
+- Only a text header names anything. With an element header, the clickable card, the expander
+  and the content need `.AutomationName(...)`.
 - Invoke on a disabled clickable card fails with `UIA_E_ELEMENTNOTENABLED`, as UI Automation
   requires.
 - The expander's ExpandCollapseState change events are raised as in the Toolkit. The Toolkit
@@ -279,11 +285,20 @@ any, so every card and expander switches while the app runs.
 which would replace the card's own style, and with it the template, the visual states and the
 defaults. A new internal interface, `IReactorBaseStyleHost`
 ([`IReactorBaseStyleHost.cs`](../../src/Reactor/Core/IReactorBaseStyleHost.cs)), lets a control
-name the style that themed styles must be based on. `Reconciler.ApplyThemeBindings` and
-`ClearThemeBindings` use it. The card's template is a local value, so setting a style never
-re-templates the card.
+name the style that themed styles must be based on, and the key that style is cached under.
+`Reconciler.ApplyThemeBindings` and `ClearThemeBindings` use it. The card's template is a local
+value, so setting a style never re-templates the card.
 
-### 5.6 Attribution
+### 5.6 Commands and the enabled state
+
+A command that cannot run must disable the card even when an `.IsEnabled(...)` modifier says
+otherwise, but the reconciler applies modifiers after the handler, and only when they change.
+So the handler does not write the command's state over `IsEnabled`. It sets
+`SettingsCardControl.CommandBlocked`, and the card keeps itself disabled while that flag is set,
+whatever is written to `IsEnabled` later in the same pass. When the command can run again, the
+handler hands `IsEnabled` back to the modifier or to its default.
+
+### 5.7 Attribution
 
 The markup and parts of the code are ported from the Toolkit (MIT) at commit
 [`a2fa47ad`](https://github.com/CommunityToolkit/Windows/tree/a2fa47ad72cb95ed81f3ff0885da627a5fd6c14e/components/SettingsControls/src).

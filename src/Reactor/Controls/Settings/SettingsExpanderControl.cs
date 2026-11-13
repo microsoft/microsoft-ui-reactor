@@ -39,6 +39,8 @@ internal sealed partial class SettingsExpanderControl : UserControl, IReactorBas
     private bool _writingIsExpanded;
     private AnimatedIcon? _chevron;
     private long _chevronTagToken;
+    // True until the chevron of the current template is hooked.
+    private bool _chevronStale = true;
 
     /// <summary>Raised when the user expands (<c>true</c>) or collapses (<c>false</c>) the
     /// expander; not raised for writes through <see cref="IsExpanded"/>.</summary>
@@ -79,6 +81,7 @@ internal sealed partial class SettingsExpanderControl : UserControl, IReactorBas
         _expander.Expanding += OnExpanding;
         _expander.Collapsed += OnCollapsed;
         _expander.Loaded += OnExpanderLoaded;
+        _expander.SizeChanged += OnExpanderSizeChanged;
         Content = _expander;
 
         RegisterPropertyChangedCallback(CornerRadiusProperty, OnMirroredPropertyChanged);
@@ -147,6 +150,7 @@ internal sealed partial class SettingsExpanderControl : UserControl, IReactorBas
         if (ReferenceEquals(_expander.Style, style)) return;
         _expander.Style = style;
         // The new template brings a new chevron; find it after the next layout.
+        _chevronStale = true;
         _expander.LayoutUpdated += OnLayoutUpdatedAfterRestyle;
     }
 
@@ -171,16 +175,22 @@ internal sealed partial class SettingsExpanderControl : UserControl, IReactorBas
     private void OnMirroredPropertyChanged(DependencyObject sender, DependencyProperty dp) => SyncMirroredProperties();
 
     // The header template's visual states set the chevron's Tag (XamlReader cannot resolve the
-    // attached AnimatedIcon.State the Toolkit sets); forward it to the chevron's state.
+    // attached AnimatedIcon.State the Toolkit sets); forward it to the chevron's state. WinUI
+    // applies a template on the first measure, which a collapsed or hidden expander has not had
+    // at Loaded (or after a contrast restyle), so a size change retries until the chevron exists.
     private void OnExpanderLoaded(object sender, RoutedEventArgs e) => HookChevron();
+
+    private void OnExpanderSizeChanged(object sender, SizeChangedEventArgs e) => HookChevron();
 
     private void HookChevron()
     {
+        if (!_chevronStale) return;
         var chevron = FindDescendant<AnimatedIcon>(_expander, "ExpandCollapseChevron");
-        if (ReferenceEquals(chevron, _chevron)) return;
+        // Not templated yet, or the previous template is still in place: retry later.
+        if (chevron is null || ReferenceEquals(chevron, _chevron)) return;
         _chevron?.UnregisterPropertyChangedCallback(TagProperty, _chevronTagToken);
         _chevron = chevron;
-        if (chevron is null) return;
+        _chevronStale = false;
         _chevronTagToken = chevron.RegisterPropertyChangedCallback(TagProperty, OnChevronTagChanged);
         ForwardChevronState(chevron);
     }

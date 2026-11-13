@@ -190,7 +190,8 @@ public static partial class ElementExtensions
         el with { OnIsExpandedChanged = handler };
 
     /// <summary>Wires the click handler (sets <see cref="SettingsCardElement.OnClick"/>), which makes
-    /// the card clickable. Passing <c>null</c> clears it and makes the card a plain card again.</summary>
+    /// the card clickable. Passing <c>null</c> clears it; a card made from a <see cref="Core.Command"/>
+    /// stays clickable through its command.</summary>
     public static SettingsCardElement Click(this SettingsCardElement el, Action? handler) =>
         el with { OnClick = handler };
 

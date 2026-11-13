@@ -42,6 +42,13 @@ Conventions for contributors:
 
 ### Changed
 
+- Apps that wrap the Toolkit's `SettingsCard` or `SettingsExpander` with
+  `[GenerateReactorWrapper]` and import both factory classes now get the built-in
+  `SettingsCard(...)` / `SettingsExpander(...)` for calls with a string header: `string` beats the
+  wrapper's `Optional<object>` parameters, so those calls compile and render the native port.
+  Move to the native controls, or call the wrapper through an alias or its full name, as
+  `samples/apps/wct-controls` does (spec 065).
+
 ### Deprecated
 
 ### Removed

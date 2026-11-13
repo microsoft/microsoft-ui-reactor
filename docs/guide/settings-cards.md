@@ -125,9 +125,11 @@ class ContentAlignmentDemo : Component
                 content: ComboBox(["Light", "Dark", "Use system setting"], theme, setTheme))
                 .ContentAlignment(SettingsCardContentAlignment.Vertical),
             // The control is left-aligned and the header is hidden: for content
-            // that carries its own label, like a check box.
+            // that carries its own label, like a check box. The check box would
+            // otherwise take the (hidden) header as its accessible name.
             SettingsCard("Sync",
-                content: CheckBox(sync, setSync, "Sync settings across devices"))
+                content: CheckBox(sync, setSync, "Sync settings across devices")
+                    .AutomationName("Sync settings across devices"))
                 .ContentAlignment(SettingsCardContentAlignment.Left)
         ).Padding(24);
     }
@@ -139,7 +141,7 @@ class ContentAlignmentDemo : Component
 Cards also adapt to their own width, as in the Toolkit. Below 476 pixels
 the control moves below the header and aligns left; below 286 pixels the
 icon is hidden too. A narrow width wins over `Vertical` and `Left`, so a
-narrow card always wraps.
+narrow card always wraps, and a narrow `Left` card shows its header again.
 
 ## Settings expanders
 
@@ -196,7 +198,9 @@ pass your state with `onIsExpandedChanged` to control it.
 header, description and icon, a click runs the command, and the card is
 disabled while the command cannot run (`CanExecute` is false, or an async
 command is still running). A command without an action makes a plain,
-non-clickable card.
+non-clickable card. The command's `Accelerator` and `AccessKey` are not
+applied to the card; bind the command to a button, a menu item or the
+window for its shortcut.
 
 ```csharp
 class CommandCardDemo : Component
@@ -273,19 +277,28 @@ The cards report the same UI Automation tree as the Toolkit controls:
 
 A non-clickable card stays unnamed because Narrator reaches its content
 directly, and the content takes the header as its name: the toggle switch
-in a "Notifications" card is named "Notifications". Only a text header
-names the content, and a `Button` or a text block keeps its own name, as
-does content you name yourself with `.AutomationName(...)`.
+in a "Notifications" card is named "Notifications". A `Button` or a text
+block keeps its own name, as does content you name yourself with
+`.AutomationName(...)`. As in the Toolkit, a check box, radio button or
+hyperlink button takes the header as its name even though it shows its
+own text, so name it yourself when the header is not the right name, as
+the `Left` example above does.
+
+Only a text header names anything. With an element header, give a
+clickable card, an expander and their content `.AutomationName(...)`.
 
 ## Theming
 
 The cards use the Windows theme resources that the Toolkit uses, so they
 follow light, dark, an ancestor's `.RequestedTheme(...)`, and Windows
 contrast themes, including turning a contrast theme on or off while the
-app runs. Restyle them with [theme tokens](theming-tokens.md) and
-modifiers, as any other element: for example,
-`.Background(Theme.SolidBackground)` or `.Padding(...)`. The cards keep
-their template, states and remaining defaults. The Toolkit's resource keys
+app runs. Restyle a `SettingsCard` with [theme tokens](theming-tokens.md)
+and modifiers, as any other element: for example,
+`.Background(Theme.SolidBackground)` or `.Padding(...)`. The card keeps
+its template, states and remaining defaults. As in the Toolkit, a
+`SettingsExpander` does not pass `.Background(...)`, `.BorderBrush(...)` or
+`.Padding(...)` to its header row and body, which keep the card look;
+restyle the cards in its `items` instead. The Toolkit's resource keys
 (`SettingsCardBackground` and so on) are not a styling API in Reactor.
 
 ## Moving from the Toolkit
