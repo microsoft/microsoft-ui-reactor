@@ -92,7 +92,7 @@
   <ItemGroup>
     <!-- Visual Studio extension SDK -->
     <PackageVersion Include="Microsoft.VisualStudio.SDK" Version="17.14.40265" />
-    <PackageVersion Include="Microsoft.VisualStudio.Interop" Version="17.14.40260" />
+    <PackageVersion Include="Microsoft.VisualStudio.Interop" Version="18.12.1603" />
     <PackageVersion Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" />
     <PackageVersion Include="Microsoft.VisualStudio.Utilities" Version="17.14.40264" />
     <PackageVersion Include="Microsoft.VisualStudio.Composition" Version="17.13.41" />
