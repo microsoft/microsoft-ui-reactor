@@ -300,7 +300,10 @@ internal sealed class FitParentBox
         if (!FitParentMath.IsUsableSize(w, h))
         {
             // Nothing can be committed at this size. Drop any pending rebuild (the host no longer
-            // has that size) and the transient; SyncClip then hides the stale content.
+            // has that size) and the transient; SyncClip then hides the stale content. Invalidating
+            // _pending matters when a commit is already queued: otherwise AfterCommitCore would
+            // see the last usable size as "the resize continued" and re-arm the timer for it.
+            _pending = default;
             if (IsCommitted)
             {
                 StopTimer();

@@ -1209,6 +1209,24 @@ internal static class FitParentFixtures
                 H.Check("FitParent_ShrinkToZero_RegrowUnclipped",
                     p.Host is { Clip: null } && IsCleared(p.Host) && p.Renders == before + 1,
                     $"{DescribeClip(p.Host)} {Describe(rig.Box, p)}");
+
+                // Queued commit, then a further usable size, then zero, all before the commit
+                // renders (driven through the box seam so the interleaving is deterministic).
+                // The unusable size must invalidate the pending 700×500: the landing 600×450
+                // commit is final, with no timer re-armed for an obsolete size.
+                var box = p.Box;
+                box.InvokeSizeChangedForTest(600, 450);
+                box.InvokeTickForTest();
+                box.InvokeSizeChangedForTest(700, 500);
+                box.InvokeSizeChangedForTest(0, 500);
+                H.Check("FitParent_ShrinkToZero_Queued_PositiveControl_CommitQueuedTimerStopped",
+                    box.Committed == (500, 400) && !box.IsTimerRunning,
+                    $"committed={box.Committed} timer={box.IsTimerRunning}");
+                var landed = await Harness.WaitFor(() => box.Committed == (600, 450), 5, PerPassMs);
+                H.Check("FitParent_ShrinkToZero_Queued_CommitLanded", landed, Describe(rig.Box, p));
+                H.Check("FitParent_ShrinkToZero_Queued_NoTimerNoTransientForObsoleteSize",
+                    !box.IsTimerRunning && IsCleared(p.Host),
+                    $"timer={box.IsTimerRunning} {DescribeTransform(p.Host)}");
             }
             finally { await TearDown(H, rig); }
         }
