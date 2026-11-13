@@ -28,9 +28,11 @@ internal static partial class HighContrastState
     private static int s_version;
     private static Snapshot? s_snapshot;
 
-    // The value last handed to a resolve (-1: never read), so a change notification can tell
-    // whether anything on screen was resolved under the other setting.
-    private static int s_lastServed = -1;
+    // The setting the hosts were last fully refreshed for (-1: not known yet). Kept apart from
+    // the cached value on purpose: a partial re-render (ActualThemeChanged, a palette change)
+    // may already resolve with the new setting before the WM_SETTINGCHANGE arrives, and must
+    // not stop the full refresh that memoized subtrees still need.
+    private static int s_refreshedFor = -1;
 
     /// <summary>Test seam: replaces the system read; <c>null</c> restores it.</summary>
     internal static Func<bool>? ReaderForTest { get; set; }
@@ -42,22 +44,15 @@ internal static partial class HighContrastState
         {
             var version = Volatile.Read(ref s_version);
             var snapshot = Volatile.Read(ref s_snapshot);
-            bool value;
             if (snapshot is not null && snapshot.Version == version)
-            {
-                value = snapshot.Value;
-            }
-            else
-            {
-                value = Read();
-                // Published under the version read above: an Invalidate that lands meanwhile
-                // makes the next caller read again instead of serving this value.
-                Interlocked.CompareExchange(ref s_snapshot, new Snapshot(version, value), snapshot);
-            }
+                return snapshot.Value;
 
-            var served = value ? 1 : 0;
-            if (Volatile.Read(ref s_lastServed) != served)
-                Volatile.Write(ref s_lastServed, served);
+            var value = ReaderForTest is { } reader ? reader() : TryReadSystem(out var on) && on;
+            // Published under the version read above: an Invalidate that lands meanwhile makes
+            // the next caller read again instead of serving this value.
+            Interlocked.CompareExchange(ref s_snapshot, new Snapshot(version, value), snapshot);
+            // The first value ever used is what the hosts rendered with.
+            Interlocked.CompareExchange(ref s_refreshedFor, value ? 1 : 0, -1);
             return value;
         }
     }
@@ -66,33 +61,38 @@ internal static partial class HighContrastState
     internal static void Invalidate() => Interlocked.Increment(ref s_version);
 
     /// <summary>
-    /// Handles a system notification that the contrast setting may have changed. When it did,
-    /// theme brushes resolve again and every live host fully re-renders, so resolved
-    /// <see cref="ThemeRef"/> values (<c>.Resources(...)</c> overrides, <c>ThemeRef.Resolve</c>
-    /// in a render) follow, as <c>{ThemeResource}</c> values already do. Safe on any thread.
+    /// Handles a system notification that the contrast setting may have changed. When it moved
+    /// since the last full refresh, theme brushes resolve again and every live host fully
+    /// re-renders, so resolved <see cref="ThemeRef"/> values (<c>.Resources(...)</c> overrides,
+    /// <c>ThemeRef.Resolve</c> in a render) follow, as <c>{ThemeResource}</c> values already do.
+    /// Every window receives the broadcast; only the first call for a change refreshes.
+    /// Safe on any thread.
     /// </summary>
     internal static void OnSystemSettingChanged()
     {
-        var previous = Volatile.Read(ref s_lastServed);
         Invalidate();
         var current = IsActive ? 1 : 0;
-        if (previous != current)
+        if (Interlocked.Exchange(ref s_refreshedFor, current) != current)
             Theme.NotifyResourcesChanged();
     }
 
-    /// <summary>Test seam: forgets the cached and the last served value.</summary>
+    /// <summary>
+    /// Reads the system setting. False when the call fails, which the caller treats as no
+    /// contrast theme; internal so a test can tell a failing call from "off".
+    /// </summary>
+    internal static bool TryReadSystem(out bool on)
+    {
+        var info = new HIGHCONTRASTW { cbSize = (uint)Unsafe.SizeOf<HIGHCONTRASTW>() };
+        var ok = SystemParametersInfoW(SPI_GETHIGHCONTRAST, info.cbSize, ref info, 0);
+        on = ok && (info.dwFlags & HCF_HIGHCONTRASTON) != 0;
+        return ok;
+    }
+
+    /// <summary>Test seam: forgets the cached value and the last refreshed setting.</summary>
     internal static void ResetForTest()
     {
         Invalidate();
-        Volatile.Write(ref s_lastServed, -1);
-    }
-
-    private static bool Read()
-    {
-        if (ReaderForTest is { } reader) return reader();
-        var info = new HIGHCONTRASTW { cbSize = (uint)Unsafe.SizeOf<HIGHCONTRASTW>() };
-        return SystemParametersInfoW(SPI_GETHIGHCONTRAST, info.cbSize, ref info, 0)
-            && (info.dwFlags & HCF_HIGHCONTRASTON) != 0;
+        Volatile.Write(ref s_refreshedFor, -1);
     }
 
     [StructLayout(LayoutKind.Sequential)]

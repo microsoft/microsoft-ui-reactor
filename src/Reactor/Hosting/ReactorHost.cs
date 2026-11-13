@@ -84,6 +84,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private FrameworkElement? _themeListenerElement;
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
+    // Contrast-theme switches for a host over a raw Window, which has no ReactorWindow
+    // message monitor to report them (issue #1506). UI thread only.
+    private Messaging.WindowMessageMonitor? _settingChangeMonitor;
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal bool HasSettingChangeMonitorForTest => _settingChangeMonitor is not null;
     private volatile bool _disposed;
 
     // Set at the start of Dispose(), before component cleanups run.
@@ -368,6 +373,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _window = window;
         _reconciler.HostWindow = window;
+        // A contrast theme may have been switched while no window was listening: read the
+        // setting again rather than trusting a value cached for an earlier window (#1506).
+        Microsoft.UI.Reactor.Core.HighContrastState.Invalidate();
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _reconciler.OwningDispatcher = _dispatcherQueue;
@@ -1539,6 +1547,12 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (_themeListenerElement is not null)
             _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
 
+        // ActualThemeChanged does not fire for a contrast-theme switch. A ReactorWindow
+        // reports those from its own message monitor; a host over a raw Window (a tray
+        // flyout, an app-built Window) watches WM_SETTINGCHANGE itself (issue #1506).
+        if (OwningWindow is null && _settingChangeMonitor is null && !_disposed)
+            AttachSettingChangeMonitor();
+
         if (control is not FrameworkElement fe)
         {
             _themeListenerElement = null;
@@ -1547,6 +1561,28 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
         _themeListenerElement = fe;
         fe.ActualThemeChanged += OnActualThemeChanged;
+    }
+
+    private void AttachSettingChangeMonitor()
+    {
+        try
+        {
+            var monitor = Messaging.WindowMessageMonitor.ForWindow(_window);
+            monitor.MessageReceived += OnSettingChangeMessage;
+            _settingChangeMonitor = monitor;
+        }
+        catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or ArgumentException or ObjectDisposedException)
+        {
+            // The window is already gone or has no HWND yet: nothing to watch.
+            Core.Diagnostics.DiagnosticLog.SwallowedError(Core.Diagnostics.LogCategory.Hosting, "ReactorHost.AttachSettingChangeMonitor", ex);
+        }
+    }
+
+    private static void OnSettingChangeMessage(object? sender, Messaging.WindowMessageEventArgs args)
+    {
+        if (args.Msg == Messaging.WindowMessageMonitor.WM_SETTINGCHANGE
+            && args.WParam == Microsoft.UI.Reactor.Core.HighContrastState.SPI_SETHIGHCONTRAST)
+            Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -1654,6 +1690,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             if (_themeListenerElement is not null)
                 _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
             _themeListenerElement = null;
+            // RemoveWindowSubclass must run on the window's thread.
+            _settingChangeMonitor?.Dispose();
+            _settingChangeMonitor = null;
         });
 
         // Accessibility listener cleanup

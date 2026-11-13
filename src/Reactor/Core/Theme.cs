@@ -17,7 +17,6 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// Walks the ThemeDictionaries in Application.Resources and MergedDictionaries
     /// to find the brush matching the element's effective theme (which respects
     /// per-element RequestedTheme overrides, not just the app-level theme).
-    /// While a contrast theme is on, the <c>HighContrast</c> dictionary is tried first.
     /// </summary>
     internal static Brush? Resolve(string resourceKey, FrameworkElement fe)
     {

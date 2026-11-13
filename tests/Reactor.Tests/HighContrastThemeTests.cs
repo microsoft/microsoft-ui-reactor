@@ -78,4 +78,36 @@ public sealed class HighContrastThemeTests
             Restore();
         }
     }
+
+    [Fact]
+    public void SettingChange_StillRefreshesAfterAPartialRerenderSawTheNewSetting()
+    {
+        var listener = new FakeListener();
+        var contrastOn = false;
+        HighContrastState.ReaderForTest = () => contrastOn;
+        HighContrastState.ResetForTest();
+        using var isolation = ThemeResourceListeners.IsolateForTest(listener);
+        try
+        {
+            _ = HighContrastState.IsActive;               // the app rendered with contrast off
+
+            contrastOn = true;
+            ThemeRef.InvalidateResolutionCache();         // e.g. ActualThemeChanged arrived first
+            Assert.True(HighContrastState.IsActive);      // and a partial re-render resolved with it
+
+            HighContrastState.OnSystemSettingChanged();   // memoized subtrees still need the refresh
+            Assert.Equal(1, listener.Notified);
+        }
+        finally
+        {
+            Restore();
+        }
+    }
+
+    [Fact]
+    public void SystemRead_SucceedsAndAgreesWithAccessibilitySettings()
+    {
+        Assert.True(HighContrastState.TryReadSystem(out var on));
+        Assert.Equal(new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast, on);
+    }
 }
