@@ -45,6 +45,14 @@ Conventions for contributors:
   has just deployed. A tag run now publishes its version to `gh-pages` and hands the
   deployment to a `Publish docs` run it dispatches on `main`, whose `verify` job also probes
   the handed-off release directories.
+- **Inline margin, padding and border edges no longer keep the previous render's value
+  (issue #965).** With no physical value declared, `.MarginInlineStart`/`End`,
+  `.PaddingInlineStart`/`End` and `.BorderInlineStart` took the edges they do not set from
+  the control, which on an update still held the previous render's inline edge. Swapping
+  `.PaddingInlineStart(8)` for `.PaddingInlineEnd(4)` gave `8,0,4,0` instead of `0,0,4,0`,
+  and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
+  instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
+  also skip the write and leave the right-to-left value on the control.
 
 ### Security
 
