@@ -395,28 +395,58 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void OnDragTick(object? sender, object e)
     {
         if (_pointer is null) return;
-        _dragPoint = LocalPoint(_rootDragPoint);
+        ScrollDragAt(_rootDragPoint);
+    }
+
+    internal bool ScrollDragAt(Point rootPoint)
+    {
+        _dragPoint = LocalPoint(rootPoint);
         var viewport = Viewport();
         double delta = _dragPoint.Y < viewport.Top ? -24 : _dragPoint.Y > viewport.Bottom ? 24 : 0;
-        if (delta == 0) return;
-        for (DependencyObject? parent = VisualTreeHelper.GetParent(this); parent is not null;
-            parent = VisualTreeHelper.GetParent(parent))
-        {
-            if (parent is ScrollView modern)
+        if (delta == 0 || viewport.Width <= 0 || viewport.Height <= 0) return false;
+        bool requested = TryScrollAncestor(ScrollAncestors(), delta,
+            static owner => owner switch
             {
-                modern.ScrollBy(0, delta, new ScrollingScrollOptions(
-                    ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
-                break;
-            }
-            if (parent is ScrollViewer legacy)
+                ScrollView modern => (modern.VerticalOffset, modern.ScrollableHeight),
+                ScrollViewer legacy => (legacy.VerticalOffset, legacy.ScrollableHeight),
+                _ => throw new InvalidOperationException("Expected a scroll host.")
+            },
+            static (owner, amount) => owner switch
             {
-                legacy.ChangeView(null, legacy.VerticalOffset + delta, null, true);
-                break;
-            }
-        }
-        _dragPoint = LocalPoint(_rootDragPoint);
+                ScrollView modern => modern.ScrollBy(0, amount, new ScrollingScrollOptions(
+                    ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore)) != -1,
+                ScrollViewer legacy => legacy.ChangeView(null, legacy.VerticalOffset + amount, null, true),
+                _ => throw new InvalidOperationException("Expected a scroll host.")
+            });
+        _dragPoint = LocalPoint(rootPoint);
         Document.Select(Document.Anchor, HitTest(_dragPoint));
         DrawSelection();
+        return requested;
+    }
+
+    private IEnumerable<FrameworkElement> ScrollAncestors()
+    {
+        for (DependencyObject? parent = VisualTreeHelper.GetParent(this); parent is not null;
+            parent = VisualTreeHelper.GetParent(parent))
+            if (parent is ScrollView or ScrollViewer)
+                yield return (FrameworkElement)parent;
+    }
+
+    internal static bool TryScrollAncestor<T>(IEnumerable<T> ancestors, double delta,
+        Func<T, (double Offset, double ScrollableHeight)> read,
+        Func<T, double, bool> scrollBy)
+    {
+        if (delta == 0) return false;
+        foreach (var owner in ancestors)
+        {
+            var (offset, scrollableHeight) = read(owner);
+            if (scrollableHeight <= 0 || (delta < 0 ? offset <= 0 : offset >= scrollableHeight)) continue;
+            double amount = delta < 0 ? Math.Max(delta, -offset) : Math.Min(delta, scrollableHeight - offset);
+            // A nested horizontal-only/exhausted host must not swallow the outer
+            // timeline's request. Accepted requests complete asynchronously.
+            if (scrollBy(owner, amount)) return true;
+        }
+        return false;
     }
 
     private static bool IsDown(VirtualKey key) =>

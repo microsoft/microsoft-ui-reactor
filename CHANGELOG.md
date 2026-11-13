@@ -36,6 +36,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Markdown edge-drag autoscroll continues past nested scroll hosts with no
+  vertical range, an exhausted directional extent, or a declined scroll request,
+  so they do not swallow an enclosing timeline's scroll (PR #1475 follow-up).
+
 ### Security
 
 ## [0.1.0-preview.18] — 2026-11-12

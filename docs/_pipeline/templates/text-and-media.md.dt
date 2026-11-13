@@ -279,7 +279,10 @@ The scope supports mouse drag (touch/pen remain available for native panning),
 Shift+arrow/PageUp/PageDown, Ctrl+A and
 Ctrl+C; keyboard navigation includes fully clipped blocks. Modern `ScrollView`
 (including the internal one in `ItemsView`) and legacy `ScrollViewer` provide
-clipping, bring-into-view and drag autoscroll. Offsets are UTF-16; horizontal
+clipping, bring-into-view and drag autoscroll. Drag autoscroll skips nested
+scroll hosts with no remaining vertical range in
+the requested direction, trying the next ancestor when a request is declined.
+Offsets are UTF-16; horizontal
 caret movement follows grapheme boundaries. Streaming updates preserve
 selection endpoints against surviving surface identities where possible.
 The scope exposes UIA TextPattern with range-scoped embedded-control children.

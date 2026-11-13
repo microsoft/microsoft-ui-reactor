@@ -9,6 +9,74 @@ namespace Microsoft.UI.Reactor.Tests;
 
 public class MarkdownTextSelectionTests
 {
+    private sealed record ScrollOwner(double Offset, double ScrollableHeight, bool Accepts = true);
+
+    [Theory]
+    [InlineData(0, 0, 24)]
+    [InlineData(50, 50, 24)]
+    [InlineData(0, 50, -24)]
+    public void EdgeDrag_SkipsAncestorsThatCannotScrollInTheRequestedDirection(
+        double innerOffset, double innerHeight, double delta)
+    {
+        var inner = new ScrollOwner(innerOffset, innerHeight);
+        var timeline = new ScrollOwner(100, 500);
+        var requests = new List<(ScrollOwner Owner, double Amount)>();
+        Assert.True(MarkdownSelectionHost.TryScrollAncestor(new[] { inner, timeline }, delta,
+            owner => (owner.Offset, owner.ScrollableHeight),
+            (owner, amount) => { requests.Add((owner, amount)); return owner.Accepts; }));
+        var request = Assert.Single(requests);
+        Assert.Same(timeline, request.Owner);
+        Assert.Equal(delta, request.Amount);
+    }
+
+    [Fact]
+    public void EdgeDrag_ContinuesAfterRejectedRequest_AndStopsAtFirstAcceptance()
+    {
+        var inner = new ScrollOwner(0, 100, Accepts: false);
+        var timeline = new ScrollOwner(0, 500);
+        var outer = new ScrollOwner(0, 1000);
+        var requested = new List<ScrollOwner>();
+        Assert.True(MarkdownSelectionHost.TryScrollAncestor(new[] { inner, timeline, outer }, 24,
+            owner => (owner.Offset, owner.ScrollableHeight),
+            (owner, _) => { requested.Add(owner); return owner.Accepts; }));
+        Assert.Equal(new[] { inner, timeline }, requested);
+    }
+
+    [Theory]
+    [InlineData(95, 100, 24, 5)]
+    [InlineData(5, 100, -24, -5)]
+    public void EdgeDrag_UsesNearestScrollableOwner_ClampingTheStep(double offset, double height, double delta, double expected)
+    {
+        var inner = new ScrollOwner(offset, height);
+        var outer = new ScrollOwner(50, 500);
+        var requests = new List<(ScrollOwner Owner, double Amount)>();
+        Assert.True(MarkdownSelectionHost.TryScrollAncestor(new[] { inner, outer }, delta,
+            owner => (owner.Offset, owner.ScrollableHeight),
+            (owner, amount) => { requests.Add((owner, amount)); return true; }));
+        var request = Assert.Single(requests);
+        Assert.Same(inner, request.Owner);
+        Assert.Equal(expected, request.Amount);
+    }
+
+    [Theory]
+    [InlineData(24)]
+    [InlineData(-24)]
+    public void EdgeDrag_AllAncestorsExhausted_DoesNotRequestScrolling(double delta)
+    {
+        int requests = 0;
+        Assert.False(MarkdownSelectionHost.TryScrollAncestor(new[] { new ScrollOwner(0, 0) }, delta,
+            owner => (owner.Offset, owner.ScrollableHeight), (_, _) => { requests++; return true; }));
+        Assert.Equal(0, requests);
+    }
+
+    [Fact]
+    public void EdgeDrag_InViewport_DoesNotReadOrScrollAncestors()
+    {
+        Assert.False(MarkdownSelectionHost.TryScrollAncestor(new[] { new ScrollOwner(50, 100) }, 0,
+            _ => throw new InvalidOperationException("Should not inspect scroll owners."),
+            (_, _) => throw new InvalidOperationException("Should not issue a scroll.")));
+    }
+
     [Theory]
     [InlineData(global::Windows.System.VirtualKeyModifiers.None, 7)]
     [InlineData(global::Windows.System.VirtualKeyModifiers.Shift, 2)]
