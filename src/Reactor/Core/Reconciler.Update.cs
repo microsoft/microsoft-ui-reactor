@@ -207,6 +207,18 @@ public sealed partial class Reconciler
         // ResourceOverrides against it.
         _ambientRequestedTheme = effectiveTheme;
 
+        // Setters and nested targets run inside handlers, before ApplyModifiers.
+        // Release outgoing implicit channels before any of them can write a value.
+        if (oldEl.AnimationConfig is { } previousAnimation)
+        {
+            var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
+            // Offset belongs to layout when both renders retain that declaration.
+            if (oldEl.LayoutAnimation?.AnimateOffset == true && newEl.LayoutAnimation?.AnimateOffset == true)
+                properties &= ~AnimateProperty.Offset;
+            if (properties != default)
+                ClearPropertyAnimation(control, properties);
+        }
+
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
         //   (3) global `ControlRegistry`, (4) composition-primitive switch.
@@ -368,11 +380,9 @@ public sealed partial class Reconciler
         else if (oldEl.LayoutAnimation is not null)
             ClearLayoutAnimation(target);
 
-        // Apply or clear compositor property animation (.Animate() modifier)
+        // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, newEl.LayoutAnimation);
-        else if (oldEl.AnimationConfig is not null)
-            ClearPropertyAnimation(target, newEl.LayoutAnimation);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)

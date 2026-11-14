@@ -870,6 +870,8 @@ internal static class SelfTestFixtureRegistry
         "Animate_ImplicitAnimationsCreated",
         "Animate_TargetedProperties",
         "Animate_MergesWithLayoutAnimation",
+        "Animate_ConfigurationAcrossUpdates",
+        "Animate_ConfigurationChildSkip",
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions",
         "InterState_PressedInheritsPointerOver",
@@ -3199,6 +3201,8 @@ internal static class SelfTestFixtureRegistry
         // Animation system — .Animate() modifier
         "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
+        "Animate_ConfigurationAcrossUpdates" => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: false),
+        "Animate_ConfigurationChildSkip" => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: true),
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions" => new InteractionStatesTests.StateMachineTransitions(harness),
         "InterState_PressedInheritsPointerOver" => new InteractionStatesTests.PressedInheritsFromPointerOver(harness),

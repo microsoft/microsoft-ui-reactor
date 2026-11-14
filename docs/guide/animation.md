@@ -537,11 +537,16 @@ class AnimateDemo : Component
 Pass a `Curve.Spring()` for a bouncy feel or `Curve.Ease(ms)` for a timed
 ease. You can restrict which properties animate with the `AnimateProperty`
 flags: `.Animate(Curve.Spring(), AnimateProperty.Opacity | AnimateProperty.Scale)`.
+
 The compositor ceiling is `Opacity | Offset | Scale | Rotation |
 CenterPoint` — anything outside that flag set (`Width`, `Height`, layout
 slot, brush) is *not* covered by `.Animate()`. Use `.LayoutAnimation()`
 for size changes driven by layout, or fall through to a WinUI
 `Storyboard` via `.Set(...)` for the unusual property.
+
+Changing the curve takes effect on the next render. Removing `.Animate()`
+makes subsequent property changes immediate, unless another animation is
+configured.
 
 ## Interaction States
 
