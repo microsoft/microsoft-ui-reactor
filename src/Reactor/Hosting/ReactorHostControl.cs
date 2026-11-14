@@ -315,6 +315,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
         ThemeResourceListeners.Register(this);
+        // A contrast theme may have been switched while nothing was listening: read the
+        // setting again rather than trusting a value cached earlier (issue #1506).
+        HighContrastState.Invalidate();
 
         if (component is not null)
             MountRoot(component, mountSite: null);
@@ -1439,9 +1442,15 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
+        // A contrast-theme switch also needs memoized subtrees refreshed (issue #1506).
+        Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
+
+    // Test seam (InternalsVisibleTo Reactor.AppTests.Host): what a UISettings.ColorValuesChanged
+    // notification does. The handler does not read its arguments.
+    internal void RaiseColorValuesChangedForTest() => OnColorValuesChanged(null!, null!);
 
     private void ShowErrorFallback(Exception ex, RenderErrorSource source, string? componentName = null)
     {

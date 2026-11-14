@@ -28,6 +28,9 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// <summary>
     /// Resolves a theme resource using an explicit isDark flag.
     /// Useful for resolving during Render() before controls are in the tree.
+    /// While a Windows contrast theme is on, the resource comes from the <c>HighContrast</c>
+    /// theme dictionary, as a <c>{ThemeResource}</c> does, and <paramref name="isDark"/> only
+    /// picks the fallback for keys that dictionary does not define.
     /// </summary>
     public static Brush? Resolve(string resourceKey, bool isDark)
     {
@@ -48,22 +51,25 @@ public readonly record struct ThemeRef(string ResourceKey)
     // Each entry is stamped with the invalidation generation it was resolved under. A resolve
     // that started before InvalidateResolutionCache and publishes after it carries an older
     // generation, so it is never served: Clear() alone is not a barrier for in-flight resolves.
-    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme), (int Generation, Brush? Brush)> s_resolutionCache = new();
+    // Issue #1506: the key also records whether a contrast theme was on, so a brush resolved
+    // from the HighContrast dictionary is never served once it is off, and vice versa.
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme, bool HighContrast), (int Generation, Brush? Brush)> s_resolutionCache = new();
     private static int s_resolutionGeneration;
 
     /// <summary>
     /// Drops every cached <see cref="ResolveForTheme"/> result. Called by the host
     /// when the effective theme or the system palette changes, and by
     /// <see cref="Theme.NotifyResourcesChanged"/>, so the next resolve re-reads the
-    /// (now-updated) dictionaries. Thread-safe.
+    /// (now-updated) dictionaries and the contrast setting. Thread-safe.
     /// </summary>
     internal static void InvalidateResolutionCache()
     {
         Interlocked.Increment(ref s_resolutionGeneration);
+        HighContrastState.Invalidate();
         s_resolutionCache.Clear();
     }
 
-    private static bool TryGetCurrentResolution((string Key, string Theme) cacheKey, int generation, out Brush? brush)
+    private static bool TryGetCurrentResolution((string Key, string Theme, bool HighContrast) cacheKey, int generation, out Brush? brush)
     {
         // Also re-check the live generation: an invalidation that has incremented it but not yet
         // cleared the dictionary must not serve the entry it is about to drop.
@@ -88,16 +94,16 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// the current one). Headless tests cannot construct a <see cref="Brush"/>, so this is the
     /// only way to prove an invalidation empties the cache and that a late publish is ignored.
     /// </summary>
-    internal static void SeedResolutionCacheForTest(string resourceKey, string themeName, int? generation = null)
-        => s_resolutionCache[(resourceKey, themeName)] = (generation ?? ResolutionGenerationForTest, null);
+    internal static void SeedResolutionCacheForTest(string resourceKey, string themeName, int? generation = null, bool highContrast = false)
+        => s_resolutionCache[(resourceKey, themeName, highContrast)] = (generation ?? ResolutionGenerationForTest, null);
 
     /// <summary>Test seam: whether a lookup would be served from the cache.</summary>
-    internal static bool IsResolutionCachedForTest(string resourceKey, string themeName)
-        => TryGetCurrentResolution((resourceKey, themeName), ResolutionGenerationForTest, out _);
+    internal static bool IsResolutionCachedForTest(string resourceKey, string themeName, bool highContrast = false)
+        => TryGetCurrentResolution((resourceKey, themeName, highContrast), ResolutionGenerationForTest, out _);
 
     /// <summary>Test seam: whether a lookup that captured <paramref name="capturedGeneration"/> would be served.</summary>
     internal static bool IsResolutionCachedForTest(string resourceKey, string themeName, int capturedGeneration)
-        => TryGetCurrentResolution((resourceKey, themeName), capturedGeneration, out _);
+        => TryGetCurrentResolution((resourceKey, themeName, false), capturedGeneration, out _);
 
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {
@@ -108,12 +114,15 @@ public readonly record struct ThemeRef(string ResourceKey)
         // anyway, but this avoids a poisoned entry in the first place.
         if (resources is null) return null;
 
-        var cacheKey = (resourceKey, themeName);
+        // Read the generation before the contrast setting: an invalidation in between then
+        // stamps this resolve as stale instead of caching a result for the old setting.
         int generation = Volatile.Read(ref s_resolutionGeneration);
+        bool highContrast = HighContrastState.IsActive;
+        var cacheKey = (resourceKey, themeName, highContrast);
         if (TryGetCurrentResolution(cacheKey, generation, out var cached))
             return cached;
 
-        var resolved = ResolveForThemeUncached(resources, resourceKey, themeName);
+        var resolved = ResolveForThemeUncached(resources, resourceKey, themeName, highContrast);
         // Issue #660 review: cache ONLY a successful (non-null) resolution. A null
         // means "key not found right now" — caching it would go stale if a
         // ResourceDictionary defining that key is merged in after this first
@@ -125,13 +134,19 @@ public readonly record struct ThemeRef(string ResourceKey)
         return resolved;
     }
 
-    private static Brush? ResolveForThemeUncached(ResourceDictionary resources, string resourceKey, string themeName)
+    private static Brush? ResolveForThemeUncached(ResourceDictionary resources, string resourceKey, string themeName, bool highContrast)
     {
         // WinUI's XamlControlsResources ThemeDictionary keys vary by app configuration:
         //   Keys observed: "Default", "Light", "HighContrast" (no "Dark")
         // "Default" contains the base/dark brushes; "Light" contains light overrides.
-        // Try the exact theme name first, then "Default" as the universal fallback.
-        if (TryResolveFromThemeDictionaries(resources, resourceKey, themeName, out var brush))
+        // While a contrast theme is on, {ThemeResource} resolves from "HighContrast" whatever
+        // the Light/Dark theme is, so try it first (issue #1506). Then the exact theme name,
+        // then "Default" as the universal fallback — which also covers app keys that a
+        // HighContrast dictionary does not define.
+        Brush? brush;
+        if (highContrast && TryResolveFromThemeDictionaries(resources, resourceKey, HighContrastThemeName, out brush))
+            return brush;
+        if (TryResolveFromThemeDictionaries(resources, resourceKey, themeName, out brush))
             return brush;
         if (TryResolveFromThemeDictionaries(resources, resourceKey, "Default", out brush))
             return brush;
@@ -142,6 +157,9 @@ public readonly record struct ThemeRef(string ResourceKey)
 
         return null;
     }
+
+    /// <summary>The theme dictionary key WinUI uses while a contrast theme is on.</summary>
+    internal const string HighContrastThemeName = "HighContrast";
 
     /// <summary>
     /// Determines the effective theme by walking up the visual tree looking for
@@ -200,7 +218,7 @@ public readonly record struct ThemeRef(string ResourceKey)
 /// <summary>
 /// Provides semantic theme tokens and custom resource references.
 /// All tokens resolve from WinUI's resource system and automatically
-/// adapt when the theme changes (Light ↔ Dark).
+/// adapt when the theme changes (Light, Dark and Windows contrast themes).
 /// <para>
 /// Usage: <c>Button("Go").Background(Theme.Accent)</c>
 /// </para>
