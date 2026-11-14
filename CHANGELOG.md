@@ -36,8 +36,9 @@ Conventions for contributors:
 
 ### Fixed
 
-- Panel interaction-state borders restore a null normal brush and the latest normal
-  brush after it changes between hover interactions (issue #1039).
+- Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
+  restore null normal brushes and the latest normal value, including border modifier
+  changes during an active interaction (issue #1501).
 
 ### Security
 

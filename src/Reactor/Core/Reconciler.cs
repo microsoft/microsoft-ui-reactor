@@ -6760,7 +6760,16 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // BorderBrush / BorderThickness (Control, Border, and concrete panels)
-        if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
+        if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
+            && _reconcilingElement?.InteractionStates is not null
+            && _interactionTrackers.TryGetValue(fe, out var borderTracker)
+            && borderTracker.BorderBrushOverrideApplied)
+        {
+            // Keep the active interaction brush while updating what hover-out restores.
+            borderTracker.NormalBorderBrush = m.BorderBrush;
+            borderTracker.NormalBorderBrushHasLocalValue = m.BorderBrush is not null;
+        }
+        else if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.BorderBrush = m.BorderBrush;
             else if (fe is WinUI.Border bbBdr) bbBdr.BorderBrush = m.BorderBrush;
