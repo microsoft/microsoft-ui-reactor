@@ -40,10 +40,10 @@ Conventions for contributors:
   property flags, including parent child-skip checks. Equivalent configurations
   remain eligible for skipping (spec 014, Feature 3).
 
-- Removing `.Animate()` releases its implicit channels before handlers and
-  modifiers run, preventing setters from retriggering the outgoing animation.
-  Retained layout Offset and transitions reapplied during the update are
-  preserved (spec 014, Feature 3).
+- Removing `.Animate()` or narrowing its property flags releases the dropped
+  implicit channels before handlers and modifiers run, preventing setters from
+  retriggering outgoing animations. Retained layout Offset and transitions
+  reapplied during the update are preserved (spec 014, Feature 3).
 
 ### Security
 

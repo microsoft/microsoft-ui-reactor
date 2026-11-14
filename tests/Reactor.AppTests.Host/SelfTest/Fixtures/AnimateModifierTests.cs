@@ -137,6 +137,9 @@ internal static class AnimateModifierTests
 
                 Update(Button("Go").Animate(Curve.Ease(600), AnimateProperty.Opacity | AnimateProperty.Scale), "_Expand");
                 H.Check(name + "_ChangedProperties", visual.ImplicitAnimations?.ContainsKey("Scale") == true);
+                Update(Button("Go").Animate(Curve.Ease(600), AnimateProperty.Opacity), "_Narrow");
+                H.Check(name + "_DroppedScale", visual.ImplicitAnimations?.ContainsKey("Scale") != true);
+                H.Check(name + "_KeptOpacity", HasOpacityDuration(600));
                 Update(Button("Go"), "_Remove");
                 H.Check(name + "_RemovedCurve", visual.ImplicitAnimations is null);
                 Update(Button("Go").Animate(Curve.Ease(900), AnimateProperty.Opacity), "_Add");

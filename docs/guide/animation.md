@@ -538,22 +538,15 @@ Pass a `Curve.Spring()` for a bouncy feel or `Curve.Ease(ms)` for a timed
 ease. You can restrict which properties animate with the `AnimateProperty`
 flags: `.Animate(Curve.Spring(), AnimateProperty.Opacity | AnimateProperty.Scale)`.
 
-Changing only `.Animate()`'s curve or property flags prevents an otherwise
-shallow-equal element from being skipped. Equivalent configurations are compared
-by value and remain eligible for normal update skipping. See the
-[configuration comparison](../../src/Reactor/Core/Element.cs#L519).
-
-When `.Animate()` is removed, its old implicit channels are released before
-handlers, `.Set(...)` callbacks, and modifiers write values. A retained
-layout-owned Offset stays installed, and transitions reapplied during the update
-are not cleared afterward. See the
-[removal ordering](../../src/Reactor/Core/Reconciler.Update.cs#L210).
-
 The compositor ceiling is `Opacity | Offset | Scale | Rotation |
 CenterPoint` — anything outside that flag set (`Width`, `Height`, layout
 slot, brush) is *not* covered by `.Animate()`. Use `.LayoutAnimation()`
 for size changes driven by layout, or fall through to a WinUI
 `Storyboard` via `.Set(...)` for the unusual property.
+
+Changing the curve takes effect on the next render. Removing `.Animate()`
+makes subsequent property changes immediate, unless another animation is
+configured.
 
 ## Interaction States
 
