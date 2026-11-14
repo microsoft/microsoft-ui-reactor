@@ -182,6 +182,11 @@ ScrollViewer(Element child) → ScrollViewerElement
 SelectorBar(SelectorBarItemData[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
+SettingsCard(Command command) → SettingsCardElement
+SettingsCard(Element header, Element description = null, IconData icon = null, Element content = null, Action onClick = null) → SettingsCardElement
+SettingsCard(string header, string description = null, IconData icon = null, Element content = null, Action onClick = null) → SettingsCardElement
+SettingsExpander(Element header, Element description = null, IconData icon = null, Element content = null, Optional<bool> isExpanded = default, Action<bool> onIsExpandedChanged = null, Element[] items = null) → SettingsExpanderElement
+SettingsExpander(string header, string description = null, IconData icon = null, Element content = null, Optional<bool> isExpanded = default, Action<bool> onIsExpandedChanged = null, Element[] items = null) → SettingsExpanderElement
 Slider(Optional<double> value = default, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 SplitButton(Command command, Element flyout = null) → SplitButtonElement
 SplitButton(Element content, Action onClick = null, Element flyout = null) → SplitButtonElement
@@ -556,6 +561,14 @@ ScrollViewerElement.ZoomMode(ZoomMode mode) → ScrollViewerElement
 SelectorBarElement.SelectedIndexChanged(Action<int> handler) → SelectorBarElement
 SelectorBarElement.Set(Action<SelectorBar> configure) → SelectorBarElement
 SemanticZoomElement.Set(Action<SemanticZoom> configure) → SemanticZoomElement
+SettingsCardElement.ActionIcon(IconData icon) → SettingsCardElement
+SettingsCardElement.ActionIconToolTip(string toolTip) → SettingsCardElement
+SettingsCardElement.ActionIconVisible(bool visible) → SettingsCardElement
+SettingsCardElement.Click(Action handler) → SettingsCardElement
+SettingsCardElement.ContentAlignment(SettingsCardContentAlignment alignment) → SettingsCardElement
+SettingsExpanderElement.IsExpandedChanged(Action<bool> handler) → SettingsExpanderElement
+SettingsExpanderElement.ItemsFooter(Element footer) → SettingsExpanderElement
+SettingsExpanderElement.ItemsHeader(Element header) → SettingsExpanderElement
 SliderElement.Header(string header) → SliderElement
 SliderElement.Orientation(Orientation orientation) → SliderElement
 SliderElement.Set(Action<Slider> configure) → SliderElement
@@ -1034,6 +1047,7 @@ ReactorHostKind { WindowHost, HostControl }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 RenderErrorSource { RootRender, ComponentRender, Reconcile, Effects, Cleanup }
+SettingsCardContentAlignment { Right, Left, Vertical }
 TemplatedControlKind { ListView, GridView, FlipView }
 V1UnmountDisposition { CollectSelf, ContinueDefaultTraversal, SkipPool }
 BlockStatus { Loading, Loaded, Failed }
@@ -5428,6 +5442,47 @@ Element ZoomedOutView { get; init; }
 Deconstruct(ref Element ZoomedInView, ref Element ZoomedOutView) → void
 Equals(Element other) → bool
 Equals(SemanticZoomElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record SettingsCardElement
+new(string Header, string Description = null, IconData Icon = null, Element Content = null, Action OnClick = null)
+Action OnClick { get; init; }
+Command Command { get; init; }
+Element Content { get; init; }
+Element DescriptionContent { get; init; }
+Element HeaderContent { get; init; }
+IconData ActionIcon { get; init; }
+IconData Icon { get; init; }
+SettingsCardContentAlignment ContentAlignment { get; init; }
+bool IsActionIconVisible { get; init; }
+string ActionIconToolTip { get; init; }
+string Description { get; init; }
+string Header { get; init; }
+Deconstruct(ref string Header, ref string Description, ref IconData Icon, ref Element Content, ref Action OnClick) → void
+Equals(Element other) → bool
+Equals(SettingsCardElement other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record SettingsExpanderElement
+new(string Header, string Description = null, IconData Icon = null, Element Content = null, Optional<bool> IsExpanded = default, Action<bool> OnIsExpandedChanged = null, Element[] Items = null)
+Action<bool> OnIsExpandedChanged { get; init; }
+Element Content { get; init; }
+Element DescriptionContent { get; init; }
+Element HeaderContent { get; init; }
+Element ItemsFooter { get; init; }
+Element ItemsHeader { get; init; }
+Element[] Items { get; init; }
+IconData Icon { get; init; }
+Optional<bool> IsExpanded { get; init; }
+string Description { get; init; }
+string Header { get; init; }
+Deconstruct(ref string Header, ref string Description, ref IconData Icon, ref Element Content, ref Optional<bool> IsExpanded, ref Action<bool> OnIsExpandedChanged, ref Element[] Items) → void
+Equals(Element other) → bool
+Equals(SettingsExpanderElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string

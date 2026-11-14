@@ -4,8 +4,8 @@ using WctControls;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;   // IBuffer.AsStream() for the ImageCropper sample bitmap
 using static Microsoft.UI.Reactor.Factories;
-using static WctControls.SettingsCardElement;      // generated SettingsCard(...) factory
-using static WctControls.SettingsExpanderElement;  // generated SettingsExpander(...) factory
+using WctCard = WctControls.SettingsCardElement;          // the generated Toolkit SettingsCard(...) wrapper; the bare name is Reactor's native port (spec 065)
+using WctExpander = WctControls.SettingsExpanderElement;  // the generated Toolkit SettingsExpander(...) wrapper
 using static WctControls.RadialGaugeElement;       // generated RadialGauge(...) factory
 using static WctControls.SegmentedElement;         // generated Segmented(...) factory
 using static WctControls.CameraPreviewElement;     // generated CameraPreview(...) factory
@@ -43,6 +43,7 @@ internal sealed class App : Component
     public override Element Render()
     {
         var (tag, setTag) = UseState("cards");
+        var (theme, setTheme) = UseState(Microsoft.UI.Xaml.ElementTheme.Default);
 
         var menu = new[]
         {
@@ -55,6 +56,8 @@ internal sealed class App : Component
             NavItemHeader("Layout"),
             NavItem("Settings card",        "Setting",   "cards"),
             NavItem("Settings expander",    "AllApps",   "expander"),
+            NavItem("Settings reference",   "Pictures",  "settings-ref"),
+            NavItem("Settings port",        "Pictures",  "settings-ref-reactor"),
             NavItem("Headered content",     "GroupList", "hcc"),
             NavItem("Headered items",       "List",      "hic"),
             NavItem("Headered tree",        "Library",   "htv"),
@@ -91,6 +94,8 @@ internal sealed class App : Component
         Element page = tag switch
         {
             "expander"  => Component<ExpanderPage>(),
+            "settings-ref" => Component<SettingsReferencePage, ThemeProps>(new(theme, setTheme)),
+            "settings-ref-reactor" => Component<SettingsPortReferencePage, ThemeProps>(new(theme, setTheme)),
             "segmented" => Component<SegmentedPage>(),
             "range"     => Component<RangeSelectorPage>(),
             "gauge"     => Component<GaugePage>(),
@@ -117,13 +122,15 @@ internal sealed class App : Component
             _           => Component<CardsPage>(),
         };
 
-        return NavigationView(menu, content: page) with
+        // The theme is set on the root (not the Windows theme) so the Settings
+        // reference page can switch light/dark for its screenshots.
+        return (NavigationView(menu, content: page) with
         {
             SelectedTag = tag,
             OnSelectedTagChanged = t => { if (t is not null) setTag(t); },
             PaneTitle = "Controls",
             IsSettingsVisible = false,
-        };
+        }).RequestedTheme(theme);
     }
 }
 
@@ -154,12 +161,12 @@ internal sealed class CardsPage : Component
             "SettingsCard",
             "A settings row: header + description, content on the right, and an optional whole-card click.",
             VStack(12,
-                SettingsCard(
+                WctCard.SettingsCard(
                     header: "Wi-Fi",
                     description: wifiOn ? "Connected to CONTOSO-5G" : "Disconnected",
                     content: ToggleSwitch(isOn: wifiOn, onIsOnChanged: setWifiOn),
                     headerIcon: Icon(FontIcon("\uE701"))),   // secondary element slot, a generated factory param via [WrapElementSlot]
-                SettingsCard(
+                WctCard.SettingsCard(
                     header: "About",
                     description: $"Tapped {clicks} time(s) — click anywhere on this card",
                     isClickEnabled: true,
@@ -178,16 +185,16 @@ internal sealed class ExpanderPage : Component
         return Gallery.Page(
             "SettingsExpander",
             "A settings group that expands to reveal child cards (populated through the generated items slot).",
-            SettingsExpander(
+            WctExpander.SettingsExpander(
                 header: "Notifications",
                 description: notifications ? "On" : "Off",
                 isExpanded: true,
                 items: new object[]
                 {
-                    SettingsCard(
+                    WctCard.SettingsCard(
                         header: "Show notifications",
                         content: ToggleSwitch(isOn: notifications, onIsOnChanged: setNotifications)),
-                    SettingsCard(
+                    WctCard.SettingsCard(
                         header: "Play sounds",
                         content: ToggleSwitch(isOn: sounds, onIsOnChanged: setSounds)),
                 }));
@@ -224,7 +231,7 @@ internal sealed class GaugePage : Component
         return Gallery.Page(
             "RadialGauge",
             "A circular gauge whose Value is a two-way controlled prop, driven live by a Reactor Slider.",
-            SettingsCard(
+            WctCard.SettingsCard(
                 header: "Volume",
                 description: $"{volume:0} %",
                 content: HStack(16,
@@ -245,7 +252,7 @@ internal sealed class CameraPage : Component
         return Gallery.Page(
             "CameraPreview",
             "An imperative WCT control — its StartAsync-on-mount / Stop-on-unmount lifecycle is declared once via [WrapLifecycle], so the call site is a plain declarative element. PreviewFailed surfaces via OnPreviewFailed.",
-            SettingsCard(
+            WctCard.SettingsCard(
                 header: "Live camera",
                 description: camError is null ? "Streaming (or starting…)" : $"Unavailable — {camError}",
                 content: CameraPreview(
@@ -266,7 +273,7 @@ internal sealed class ColorPickerPage : Component
             "ColorPicker",
             "A full color picker. Color ↔ ColorChanged follows the {Prop}Changed convention, so Color is a two-way controlled prop.",
             VStack(12,
-                SettingsCard(header: "Selected", description: hex),
+                WctCard.SettingsCard(header: "Selected", description: hex),
                 ColorPicker(
                     color: color,
                     onColorChanged: setColor,

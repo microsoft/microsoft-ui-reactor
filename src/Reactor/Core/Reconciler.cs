@@ -7827,10 +7827,15 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
-        var targetType = GetStyleTargetType(fe);
+        // Spec 065 — a control whose look is an explicit base Style keeps it: the themed
+        // style is built BasedOn that base rather than replacing it.
+        var baseStyleHost = fe as IReactorBaseStyleHost;
+        var targetType = baseStyleHost?.BaseStyleTargetType ?? GetStyleTargetType(fe);
         if (targetType is null) return;
 
         var cacheKey = BuildCacheKey(targetType, bindings);
+        if (baseStyleHost is not null)
+            cacheKey = baseStyleHost.BaseStyleKey + "|" + cacheKey;
 
         // Cache hit: reuse the previously compiled Style
         if (_styleCache.TryGetValue(cacheKey, out var cachedStyle))
@@ -7858,6 +7863,8 @@ public sealed partial class Reconciler : IDisposable
                 setters.ToString() +
                 "</Style>";
             var style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+            if (baseStyleHost is not null)
+                style.BasedOn = baseStyleHost.BaseStyle;
             _styleCache.TryAdd(cacheKey, style);
             ApplyStyleToElement(fe, style);
         }
@@ -7896,7 +7903,12 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAppliedThemeStyleProperty) is not Style ownedStyle)
             return;
         if (ReferenceEquals(fe.Style, ownedStyle))
-            fe.ClearValue(FrameworkElement.StyleProperty);
+        {
+            if (fe is IReactorBaseStyleHost baseStyleHost)
+                fe.Style = baseStyleHost.BaseStyle;
+            else
+                fe.ClearValue(FrameworkElement.StyleProperty);
+        }
         fe.ClearValue(ReactorAppliedThemeStyleProperty);
     }
 

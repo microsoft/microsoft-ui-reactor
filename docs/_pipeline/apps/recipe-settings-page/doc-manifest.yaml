@@ -1,10 +1,10 @@
 app:
-  width: 460
-  height: 420
+  width: 640
+  height: 520
   startup-delay: 1200
 
 screenshots:
   - id: settings
-    description: "Settings page with a Toggle, ComboBox, and Slider, each persisted by key."
+    description: "Settings page of three settings cards (toggle switch, combo box, slider), each persisted by key, and a clickable reset card."
     component: SettingsRecipeApp
     format: png

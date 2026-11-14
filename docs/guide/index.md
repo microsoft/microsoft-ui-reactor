@@ -139,6 +139,7 @@ first; everyone else can follow the order.
 - **[Collections](collections.md)** — ListView, LazyVStack, VirtualList for large datasets
 - **[Text and Media](text-and-media.md)** — TextBlock, MarkdownTextBlock, Image, MediaPlayerElement, WebView2, InkCanvas
 - **[Status and Info](status-and-info.md)** — InfoBar, InfoBadge, ProgressBar, TeachingTip, PipsPager
+- **[Settings Cards](settings-cards.md)** — SettingsCard and SettingsExpander for Windows 11 settings pages
 - **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — ContentDialog, MenuFlyout, CommandBarFlyout, Popup
 - **[Data System](data-system.md)** — DataGrid with sort, filter, search, inline editing
 - **[Charting](charting.md)** — Line, bar, area, pie charts with the ReactorCharting library

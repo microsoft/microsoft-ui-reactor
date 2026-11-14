@@ -96,6 +96,8 @@ All factories live on `Microsoft.UI.Reactor.Factories` — use
 | `Border(child)` | `Element` | Bordered container — raw |
 | `Card(child)` | `Element → BorderElement` | Preset card: `Theme.CardBackground` + 1px `Theme.CardStroke` + 8px corner radius + 16px padding |
 | `Expander(header, content, isExpanded?, onExpandedChanged?)` | See type | Collapsible |
+| `SettingsCard(header, description?, icon?, content?, onClick?)` | `(string, string?, IconData?, Element?, Action?)`; `Element` header/description overload; `SettingsCard(Command)` | Windows 11 settings row; `onClick` makes it a button with a chevron |
+| `SettingsExpander(header, description?, icon?, content?, isExpanded?, onIsExpandedChanged?, items?)` | `(string, string?, IconData?, Element?, Optional<bool>, Action<bool>?, Element[]?)`; `Element` overload | Settings card that expands. **`content` = control in the header row; the body is `items`** (unlike `Expander`) |
 | `SplitView(pane?, content?)` | `(Element?, Element?)` | Side pane |
 | `Viewbox(child)` | `Element` | Scales child to fit |
 | `Canvas(children...)` | `params CanvasChild[]` | Absolute positioning |
@@ -405,6 +407,9 @@ InfoBar("T", "M").Severity(InfoBarSeverity.Warning).IsClosable(false)
 NavigationView(items, c).PaneDisplayMode(...).PaneTitle("...")
 TitleBar("App").Subtitle("Home")
 Expander("Hdr", body).Direction(ExpandDirection.Up)
+SettingsCard("Theme", content: c).ContentAlignment(SettingsCardContentAlignment.Vertical)   // Right (default) / Left / Vertical
+SettingsCard("Store", onClick: fn).ActionIcon(FontIcon("\uE8A7")).ActionIconToolTip("...") // .ActionIconVisible(false)
+SettingsExpander("Sound", items: cards).ItemsHeader(note).ItemsFooter(note)
 PersonPicture().DisplayName("John Doe").Initials("JD")
 PersonPicture().ProfilePicture("https://example.com/avatar.png")
 ListView(items).SelectionMode(ListViewSelectionMode.Multiple)
@@ -450,6 +455,7 @@ using Microsoft.UI.Xaml.Controls;  // InfoBarSeverity, ExpandDirection, ...
 | `Microsoft.UI.Xaml.Controls.Primitives` | `FlyoutPlacementMode` |
 | `Microsoft.UI.Text` | `FontWeights.Bold`, `.SemiBold`, `.Normal` |
 | `Reactor.Flex` | `FlexDirection`, `FlexJustify`, `FlexAlign`, `FlexWrap`, `FlexPositionType` |
+| `Microsoft.UI.Reactor.Core` | `SettingsCardContentAlignment` (`Right`, `Left`, `Vertical`) |
 
 ## Colors
 

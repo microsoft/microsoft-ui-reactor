@@ -199,6 +199,17 @@
       },
       "Path": "src/Reactor.Advanced/Charting/D3/Voronoi/",
       "DevelopmentDependency": false
+    },
+    {
+      "Component": {
+        "Type": "git",
+        "Git": {
+          "RepositoryUrl": "https://github.com/CommunityToolkit/Windows",
+          "CommitHash": "a2fa47ad72cb95ed81f3ff0885da627a5fd6c14e"
+        }
+      },
+      "Path": "src/Reactor/Controls/Settings/",
+      "DevelopmentDependency": false
     }
   ]
 }

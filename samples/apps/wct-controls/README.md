@@ -30,3 +30,5 @@ See the comments in [`WctControls.cs`](WctControls.cs) for the full rationale on
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).
 - `Program.cs` — the `NavigationView` gallery shell plus one demo page per control.
+- `SettingsReferencePage.cs` — the "Settings reference" page: fixed `SettingsCard` / `SettingsExpander` content for the spec 065 reference screenshots, with a light/dark switch that sets `RequestedTheme` on the app root. See [`docs/specs/065/capture-runbook.md`](../../../docs/specs/065/capture-runbook.md).
+- `SettingsPortReferencePage.cs` — the "Settings port" page: the same content rendered by Reactor's native `SettingsCard` / `SettingsExpander` (spec 065), for the side-by-side captures. In this app the bare `SettingsCard(...)` / `SettingsExpander(...)` names are Reactor's port; the Toolkit wrappers are called through the `WctCard` / `WctExpander` aliases.

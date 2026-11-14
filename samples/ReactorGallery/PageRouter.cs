@@ -66,6 +66,8 @@ static class PageRouter
         "grid" => Component<GridPage>(),
         "relative-panel" => Component<RelativePanelPage>(),
         "scroll-view" => Component<ScrollViewPage>(),
+        "settings-card" => Component<SettingsCardPage>(),
+        "settings-expander" => Component<SettingsExpanderPage>(),
         "split-view" => Component<SplitViewPage>(),
         "stack-panel" => Component<StackPanelPage>(),
         "viewbox" => Component<ViewboxPage>(),

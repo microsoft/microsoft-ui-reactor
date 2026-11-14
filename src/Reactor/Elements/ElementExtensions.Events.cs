@@ -189,6 +189,16 @@ public static partial class ElementExtensions
     public static ExpanderElement IsExpandedChanged(this ExpanderElement el, Action<bool>? handler) =>
         el with { OnIsExpandedChanged = handler };
 
+    /// <summary>Wires the click handler (sets <see cref="SettingsCardElement.OnClick"/>), which makes
+    /// the card clickable. Passing <c>null</c> clears it; a card made from a <see cref="Core.Command"/>
+    /// stays clickable through its command.</summary>
+    public static SettingsCardElement Click(this SettingsCardElement el, Action? handler) =>
+        el with { OnClick = handler };
+
+    /// <summary>Wires the expand-state-changed handler of a settings expander. Passing <c>null</c> clears.</summary>
+    public static SettingsExpanderElement IsExpandedChanged(this SettingsExpanderElement el, Action<bool>? handler) =>
+        el with { OnIsExpandedChanged = handler };
+
     /// <summary>Wires the pane-open-state-changed handler. Passing <c>null</c> clears.</summary>
     public static SplitViewElement PaneOpenChanged(this SplitViewElement el, Action<bool>? handler) =>
         el with { OnPaneOpenChanged = handler };
