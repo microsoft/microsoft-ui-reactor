@@ -166,9 +166,10 @@ After pushing the tag:
 
 1. Confirm the GitHub `Package` workflow runs for the tag and creates a GitHub Release.
 2. Confirm the OneBranch official pipeline starts for the tag.
-3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). Check **all three** of its jobs:
-   - a green `publish` beside a red `deploy` means the environment refused the tag ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy);
-   - a green `deploy` beside a red `verify` means the deployment reported success but the live site did not confirm it. Read the annotation before concluding anything: `…is not serving the artifact this run published` means the deployment was stranded, while `Could not read … at all` means no probe reached known-good content and the run says nothing either way. The two call for different responses — see [Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
+3. Confirm the `Publish docs` workflow runs for the tag and that the new version is selectable at <https://microsoft.github.io/microsoft-ui-reactor/> (see [Versioned documentation site](#versioned-documentation-site)). The tag run publishes the version to `gh-pages` but does not deploy it: its `handoff` job dispatches `Publish docs` on `main`, and that run deploys and verifies (see [Why a release tag hands its deployment to main](#why-a-release-tag-hands-its-deployment-to-main)). Follow the link in the tag run's `handoff` summary and check the dispatched run's jobs:
+   - a red `handoff` on the tag run means the dispatch was refused, or the dispatched run ended before it could deploy (the annotation says which). `gh-pages` is already correct, so dispatch `Publish docs` on `main` by hand with **handoff_versions** set to the release version, so `verify` also probes its directory;
+   - a green `publish` beside a red `deploy` means the environment refused the ref, and the site stays stale even though `gh-pages` is already correct — see [Which refs may deploy](#which-refs-may-deploy);
+   - a green `deploy` beside a red `verify` means the deployment reported success but the live site did not confirm it. Read the annotation before concluding anything: `…is not serving the artifact this run published` means the deployment was stranded, while `Could not read … at all` means no probe reached known-good content and the run says nothing either way. The two call for different responses — see [Why a release tag hands its deployment to main](#why-a-release-tag-hands-its-deployment-to-main).
 4. Approve the `Production_PublishNuGet` stage when ready to publish to NuGet.org.
 5. Verify the packages appear on NuGet.org.
 6. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
@@ -188,10 +189,10 @@ Nothing about this is manual on the happy path. `.github/workflows/docs.yml` han
 | Trigger | Result |
 | --- | --- |
 | Push to `main` touching the docs | Republishes the `main (development)` version |
-| Push of a `v*` tag | Publishes `<version>`, moves the `latest` alias to it, and repoints the site root |
+| Push of a `v*` tag | Publishes `<version>`, moves the `latest` alias to it, repoints the site root, and hands the deployment to a `main` run |
 
-A release commit triggers both, and both deploy — see
-[Why a release commit deploys twice](#why-a-release-commit-deploys-twice).
+A release commit triggers both, but only the `main` runs deploy — see
+[Why a release tag hands its deployment to main](#why-a-release-tag-hands-its-deployment-to-main).
 
 The site root redirects to whichever version holds the `latest` alias, so readers landing
 on the bare URL always get the newest release rather than unreleased `main`. Every version
@@ -205,10 +206,11 @@ backwards.
 ### Which refs may deploy
 
 The workflow's `deploy` job targets the `github-pages` environment, and that environment
-carries a deployment-branch policy naming the refs allowed to deploy from it. Because a
-release tag publishes the docs, the policy must admit **both** `main` (a branch) and `v*`
-(a tag). A policy listing only `main` — which was correct while `main` was the sole
-publisher — rejects every release tag.
+carries a deployment-branch policy naming the refs allowed to deploy from it. Every
+deployment is now made from `main` — a tag run hands its deployment off rather than
+deploying from the tag — so the policy must admit `main`. It also admits `v*` (a tag),
+which tag runs needed while they deployed themselves; nothing deploys from a tag any more,
+so that entry is unused but harmless.
 
 That policy lives in repository settings, not in this repo, so nothing in `docs.yml` hints
 at it. Read it with:
@@ -218,52 +220,88 @@ gh api repos/microsoft/microsoft-ui-reactor/environments/github-pages/deployment
   --jq '.branch_policies[] | "\(.type): \(.name)"'
 ```
 
-It should print `branch: main` and `tag: v*`. Adding a missing entry needs repository
-**admin** — `maintain` gets `HTTP 403: Must have admin rights to Repository`:
+It should print `branch: main`. Adding a missing entry needs repository **admin** —
+`maintain` gets `HTTP 403: Must have admin rights to Repository`:
 
 ```powershell
 gh api -X POST repos/microsoft/microsoft-ui-reactor/environments/github-pages/deployment-branch-policies `
-  -f name='v*' -f type='tag'
+  -f name='main' -f type='branch'
 ```
 
 The failure is worth recognising on sight, because the run half-succeeds: `publish` goes
-green and `deploy` goes red with
+green and `deploy` goes red with a message such as
 
 ```text
 Tag "v0.1.0-preview.15" is not allowed to deploy to github-pages due to environment protection rules.
 ```
+
+(that one is from preview.15, when tag runs still deployed and the policy did not yet admit
+`v*`).
 
 Nothing is lost when that happens. `publish` is the job that writes to `gh-pages`, so the
 new version *is* rendered there — and the `latest` alias has already moved to it if the tag
 qualifies under the version-sort rule above. Only the serving step was refused, which is
 why the live site keeps showing the previous release while the branch is already correct.
 Once the policy admits the ref, dispatch `Publish docs` on `main` to serve the stranded
-release: the artifact is the whole `gh-pages` branch, so a deploy from any allowed ref
-publishes every version already committed to it.
+release: the artifact is the whole `gh-pages` branch, so a deploy from `main` publishes
+every version already committed to it.
 
-### Why a release commit deploys twice
+### Why a release tag hands its deployment to main
 
 A release PR always edits `docs/guide/**` — the `{{reactorVersion}}` substitutions — so the
 push that merges it matches the workflow's path filter, and the release tag then points at
-that same merge commit. Left alone, that produces **two** `Publish docs` runs with an
-identical `github.sha`.
+that same merge commit. That produces **two** `Publish docs` runs with an identical
+`github.sha`: the `main` run publishes `main` and deploys, and the tag run publishes the
+release version.
 
-That is a problem because `actions/deploy-pages` sends `pages_build_version = github.sha`
-and exposes no input to override it, so both runs create a Pages deployment under one
-identity. One wins and the other is silently stranded: every job green, the deployment
-reporting `success`, `gh-pages` byte-correct — and the live site still showing the previous
-release. That is exactly what happened cutting 0.1.0-preview.16, and it went unnoticed for
-2h25m (issue #1268).
+**The tag run used to deploy too, and GitHub Pages silently dropped it every time.** On
+0.1.0-preview.16, .17 and .18 the tag run's deployment was accepted, `actions/deploy-pages`
+read `success` on its first status poll, and the GitHub Deployments API even marked it the
+active `github-pages` deployment — yet the live site kept serving the artifact the `main`
+run had deployed minutes earlier. It was not a race: on preview.18 the tag run deployed 14
+minutes after the `main` run and was dropped all the same. A `Publish docs` dispatch on
+`main` for the very same commit then went live within seconds, every time. The same
+behaviour is reported upstream in
+[actions/deploy-pages#383](https://github.com/actions/deploy-pages/issues/383), reproduced
+there with `release` events (also a tag ref): tag-ref deployments of an already-deployed
+commit were never served, while `push` and `workflow_dispatch` deployments of the same
+commit from a branch were.
 
-What prevents it now:
+What is established and what is inferred:
 
-- The `verify` job polls the live site after every deployment and asserts that the artifact
-  being served is the one **that run** produced. This is the part that carries correctness,
-  and it is the only thing in the pipeline that looks at the live site at all.
+- **Established** (from this repo's runs and deployment records, and independently
+  upstream): a deployment made from a tag ref, for a commit Pages is already serving,
+  reports success and is not served; a deployment of the same commit from `main` is.
+- **Established**: `actions/deploy-pages` sends `pages_build_version = github.sha` with no
+  input to override it, and the Pages deployment ID it gets back *is* that SHA, so all three
+  deployments of a release commit share one ID.
+- **Reported upstream, not reproduced here**: the Pages API answers a non-SHA build version
+  with a 404 ([community discussion 170184](https://github.com/orgs/community/discussions/170184),
+  and a comment on actions/deploy-pages#383), so making the version unique per run does not
+  look like an available fix.
+- **Inferred**: that the ref type is the discriminator, rather than the triggering event.
+  Every failing case, here and upstream, had a tag ref; every working one had a branch ref.
+  Whether a tag-ref deployment of a commit Pages has *never* served would land is unknown,
+  so tag runs do not deploy at all rather than relying on it.
+- **Not knowable from outside**: why Pages behaves this way. It is server-side.
 
-**The duplicate deployment is tolerated, not avoided.** Standing one of the two runs down
-sounds obvious, and it was tried; every form of it requires *predicting* that the other run
-will deploy, and each way that prediction can fail is silent in the direction that matters:
+**What happens now.** The tag run's `publish` job writes the release version to `gh-pages`
+exactly as before. Its `deploy` and `verify` jobs are skipped, and a `handoff` job dispatches
+`Publish docs` on `main` with `handoff_versions` set to what the tag run published. That
+dispatched run republishes `main`, assembles its artifact from the whole `gh-pages` branch
+(which already holds the release), deploys from `main`, and its `verify` job probes the
+handed-off release directories as well as `main`. The tag run's `handoff` summary links the
+dispatched run.
+
+The tag run cannot wait for the dispatched run and mirror its result: both are in the
+`pages` concurrency group, the tag run holds it until its last job finishes, and the
+dispatched run queues behind it. So the release's verdict lives on the dispatched `main`
+run, which is why step 3 of [Monitor and publish](#monitor-and-publish) sends you there.
+
+**Why this does not reintroduce the old silent failures.** An earlier attempt avoided the
+duplicate deployment by having the `main` run skip deploying when a release tag pointed at
+the same commit. Every form of that *predicted* that another run would deploy, and each way
+the prediction could fail was silent:
 
 - a still-pending tag run can be cancelled by a later docs push, so the run deferred to
   never happens;
@@ -273,17 +311,23 @@ will deploy, and each way that prediction can fail is silent in the direction th
 - the two runs are not guaranteed to enter the concurrency group in the order their events
   fired, so the tag run can deploy an artifact that predates the branch run's `main`.
 
-Each of those skips the deployment **and** its verification together, leaving the site stale
-with every job green — strictly worse than a duplicate deployment that `verify` catches and
-reports. So both runs deploy, and a stranded one turns red.
+The handoff predicts nothing. Every `main` run still deploys and is verified. Every tag run
+hands off unconditionally, after its own publish has already written the version to
+`gh-pages`. The dispatched run is created by the tag run itself, so it enters the
+concurrency group behind it and always finds the version there, whatever order the other
+runs arrive in; it reads no tag state from `origin`. A refused dispatch fails the tag run's
+`handoff` job, and so does a dispatched run that ends before its turn — `queue: max` still
+cancels a run that arrives once 100 are pending, so `handoff` checks the dispatched run was
+admitted rather than trusting the API's acceptance.
 
 **The concurrency queue still matters.** The workflow's concurrency block sets `queue: max`.
 Under the Actions default (`queue: single`) only one run may be *pending* per group, and a
 newly queued run cancels the previous pending one. During a release that is reachable: the
 merge's `main` run holds the group, the tag run waits behind it, and any further docs push
-to `main` evicts the tag run before it ever starts — so the release version never reaches
-`gh-pages` at all, with nothing failing. `queue: max` makes runs wait in FIFO order instead.
-Removing it silently re-arms that failure, which is why `DocsDeployWiringTests` asserts it.
+to `main` evicts the tag run (or later the dispatched run) before it ever starts — so the
+release version is never written to `gh-pages`, or never served, with nothing failing.
+`queue: max` makes runs wait in FIFO order instead. Removing it silently re-arms that
+failure, which is why `DocsDeployWiringTests` asserts it.
 
 `verify` distinguishes two failures, and they call for different responses:
 
@@ -305,11 +349,13 @@ and still forwards to the expected default. The list of versions a run published
 recorded by the publishing steps and cross-checked against mike's own `versions.json`
 before the artifact is uploaded, so the two cannot drift apart unnoticed.
 
-**The remedy, verified.** Dispatch `Publish docs` on `main`. The `publish` job assembles the
-artifact from the whole `gh-pages` branch, so any allowed ref re-serves every published
-version. With no `backfill_tags` the release step is skipped, and `mike set-default` runs
-only `if ! mike list latest` — `latest` already exists — so it **cannot drag `latest`
-backwards**. This is what restored preview.16.
+**The remedy, verified.** Dispatch `Publish docs` on `main`, and set **handoff_versions** to
+the release version (e.g. `0.1.0-preview.18`) so `verify` probes that directory too. The
+`publish` job assembles the artifact from the whole `gh-pages` branch, so a run on `main`
+re-serves every published version. With no `backfill_tags` the release step is skipped, and
+`mike set-default` runs only `if ! mike list latest` — `latest` already exists — so it
+**cannot drag `latest` backwards**. A plain dispatch on `main` is what restored preview.16,
+.17 and .18. Do not dispatch from a tag: that run would hand off to `main` anyway.
 
 The gate's own oracle is `deploy-stamp.json` at the site root: `publish` writes it into the
 artifact with the run id that built it, and `verify` asserts the live copy matches. It is
