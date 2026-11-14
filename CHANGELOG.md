@@ -36,6 +36,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
+  restore null normal brushes and the latest normal value, including border modifier
+  changes during an active interaction (issue #1501).
 - **Release docs go live without a manual re-run (issue #1268).** On 0.1.0-preview.16,
   .17 and .18 the release tag's `Publish docs` deployment reported success but was never
   served, so the new version's docs stayed missing until someone dispatched the workflow on

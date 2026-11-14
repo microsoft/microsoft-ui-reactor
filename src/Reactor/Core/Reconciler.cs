@@ -5913,6 +5913,8 @@ public sealed partial class Reconciler : IDisposable
         public Brush? NormalBackground;
         public Brush? NormalForeground;
         public Brush? NormalBorderBrush;
+        public bool NormalBorderBrushHasLocalValue;
+        public bool BorderBrushOverrideApplied;
     }
 
     private enum InteractionState { Normal, PointerOver, Pressed, Focused }
@@ -5943,15 +5945,6 @@ public sealed partial class Reconciler : IDisposable
                 {
                     WinUI.Control c => c.Foreground,
                     TextBlock tb => tb.Foreground,
-                    _ => null,
-                };
-                tracker.NormalBorderBrush = fe switch
-                {
-                    WinUI.Control c => c.BorderBrush,
-                    WinUI.Border b => b.BorderBrush,
-                    WinUI.Grid g => g.BorderBrush,
-                    WinUI.StackPanel s => s.BorderBrush,
-                    WinUI.RelativePanel r => r.BorderBrush,
                     _ => null,
                 };
             }
@@ -6098,14 +6091,36 @@ public sealed partial class Reconciler : IDisposable
                 else if (fe is TextBlock tb) tb.Foreground = fg;
             }
 
-            var bb = values?.BorderBrush ?? tracker.NormalBorderBrush;
-            if (bb is not null)
+            var borderProperty = fe switch
             {
-                if (fe is WinUI.Control c) c.BorderBrush = bb;
-                else if (fe is WinUI.Border b) b.BorderBrush = bb;
-                else if (fe is WinUI.Grid g) g.BorderBrush = bb;
-                else if (fe is WinUI.StackPanel s) s.BorderBrush = bb;
-                else if (fe is WinUI.RelativePanel r) r.BorderBrush = bb;
+                WinUI.Control => WinUI.Control.BorderBrushProperty,
+                WinUI.Border => WinUI.Border.BorderBrushProperty,
+                WinUI.Grid => WinUI.Grid.BorderBrushProperty,
+                WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
+                WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
+                _ => null,
+            };
+            if (borderProperty is not null)
+            {
+                if (values?.BorderBrush is { } borderBrush)
+                {
+                    if (!tracker.BorderBrushOverrideApplied)
+                    {
+                        // Capture the latest normal value before applying an override.
+                        tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
+                        tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
+                        tracker.BorderBrushOverrideApplied = true;
+                    }
+                    fe.SetValue(borderProperty, borderBrush);
+                }
+                else if (tracker.BorderBrushOverrideApplied)
+                {
+                    if (tracker.NormalBorderBrushHasLocalValue)
+                        fe.SetValue(borderProperty, tracker.NormalBorderBrush);
+                    else
+                        fe.ClearValue(borderProperty);
+                    tracker.BorderBrushOverrideApplied = false;
+                }
             }
         }
     }
@@ -6745,7 +6760,16 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // BorderBrush / BorderThickness (Control, Border, and concrete panels)
-        if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
+        if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
+            && _reconcilingElement?.InteractionStates is not null
+            && _interactionTrackers.TryGetValue(fe, out var borderTracker)
+            && borderTracker.BorderBrushOverrideApplied)
+        {
+            // Keep the active interaction brush while updating what hover-out restores.
+            borderTracker.NormalBorderBrush = m.BorderBrush;
+            borderTracker.NormalBorderBrushHasLocalValue = m.BorderBrush is not null;
+        }
+        else if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
         {
             if (fe is WinUI.Control bbCtrl) bbCtrl.BorderBrush = m.BorderBrush;
             else if (fe is WinUI.Border bbBdr) bbBdr.BorderBrush = m.BorderBrush;
