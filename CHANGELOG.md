@@ -44,6 +44,15 @@ Conventions for contributors:
   implicit channels before handlers and modifiers run, preventing setters from
   retriggering outgoing animations. Retained layout Offset and transitions
   reapplied during the update are preserved (spec 014, Feature 3).
+- **Release docs go live without a manual re-run (issue #1268).** On 0.1.0-preview.16,
+  .17 and .18 the release tag's `Publish docs` deployment reported success but was never
+  served, so the new version's docs stayed missing until someone dispatched the workflow on
+  `main`. GitHub Pages accepts a deployment made from a tag ref for a commit it is already
+  serving and keeps serving the previous artifact (also reported upstream in
+  actions/deploy-pages#383); a release tag always points at the merge commit the `main` push
+  has just deployed. A tag run now publishes its version to `gh-pages` and hands the
+  deployment to a `Publish docs` run it dispatches on `main`, whose `verify` job also probes
+  the handed-off release directories.
 
 ### Security
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Xunit;
 using YamlDotNet.RepresentationModel;
 
@@ -9,18 +10,25 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
 /// Structural assertions on <c>.github/workflows/docs.yml</c>, covering the
-/// wiring that turns a stranded Pages deployment from silent into red
+/// wiring that keeps release docs from being silently stranded on Pages
 /// (issue #1268).
+///
+/// Two halves. First, a release tag must never deploy: Pages accepts a tag-ref
+/// deployment of a commit it already serves, reports success, and keeps
+/// serving the previous artifact, so a tag run hands its deployment to a run it
+/// dispatches on <c>main</c>. Second, every deployment that does happen is
+/// verified against the live site.
 ///
 /// The bug these guard against is not "the gate reports the wrong answer" — the
 /// node suite in <see cref="DocsDeploymentVerifierTests"/> covers that — it is
 /// "the gate is still present but no longer connected to anything". Each seam
 /// below fails open if it is quietly removed: without the stamp the verifier
 /// compares a version list that a <c>main</c> push never changes; without
-/// <c>needs: deploy</c> the verifier reads the site before the deployment; and
+/// <c>needs: deploy</c> the verifier reads the site before the deployment;
 /// without <c>github.run_id</c> as the expected value, the comparison it makes
-/// is a tautology. A workflow file is not covered by any compiler, so these are
-/// asserted here rather than assumed.
+/// is a tautology; and without the handoff, a release is published to
+/// <c>gh-pages</c> and never served. A workflow file is not covered by any
+/// compiler, so these are asserted here rather than assumed.
 /// </summary>
 public sealed class DocsDeployWiringTests
 {
@@ -38,17 +46,115 @@ public sealed class DocsDeployWiringTests
     }
 
     [Fact]
-    public void Every_deployment_is_verified()
+    public void A_tag_run_hands_its_deployment_off_and_every_other_run_deploys()
     {
         var deploy = Map(Jobs, "deploy");
+        var handoff = Map(Jobs, "handoff");
 
-        // The duplicate deployment a release commit produces is tolerated on
-        // purpose. Every way of standing one run down requires predicting that
-        // the other will deploy, and each form of that prediction fails
-        // silently — skipping the verification below along with the
-        // deployment, which is worse than a duplicate `verify` can catch.
-        Assert.Null(Scalar(deploy, "if"));
+        // A tag-ref deployment of a commit Pages already serves is accepted,
+        // reported successful, and never served — on every release from
+        // preview.16 to preview.18. So a tag run must not deploy...
+        Assert.Equal("github.ref_type != 'tag'", Scalar(deploy, "if"));
+
+        // ...and must hand off instead. Exact complements, so every run either
+        // deploys (and is verified) or hands off. Narrowing either side leaves
+        // some ref publishing to gh-pages with nothing serving it.
+        Assert.Equal("github.ref_type == 'tag'", Scalar(handoff, "if"));
+
+        // After publish, so the version is already on gh-pages when the
+        // dispatched run assembles its artifact from the whole branch.
+        Assert.Equal("publish", Scalar(handoff, "needs"));
+        Assert.Equal("write", Scalar(Map(handoff, "permissions"), "actions"));
+
         Assert.Equal("${{ steps.deployment.outputs.page_url }}", Scalar(Map(deploy, "outputs"), "page_url"));
+    }
+
+    [Fact]
+    public void The_handoff_dispatches_this_workflow_on_a_branch_with_what_the_tag_run_published()
+    {
+        // A tag here would hand the deployment to another tag-ref run: the very
+        // deployment Pages drops. It must be a branch this workflow publishes.
+        var deployRef = Scalar(Map(Workflow, "env"), "PAGES_DEPLOY_REF");
+        var on = Map(Workflow, "on");
+        var branches = ((YamlSequenceNode)Map(on, "push").Children["branches"]).Children
+            .Select(n => ((YamlScalarNode)n).Value)
+            .ToArray();
+        Assert.Contains(deployRef, branches);
+
+        var step = Steps("handoff").Single();
+        var run = Code(Scalar(step, "run")!);
+
+        Assert.Equal("${{ needs.publish.outputs.published }}", Scalar(Map(step, "env"), "PUBLISHED"));
+        Assert.Contains("/dispatches", run, StringComparison.Ordinal);
+        Assert.Matches(@"--arg ref ""\$PAGES_DEPLOY_REF""", run);
+
+        // The versions themselves, not just the input's name: a request that
+        // sent `handoff_versions: ""` would keep every name check green while
+        // the dispatched run verified only `main`.
+        Assert.Contains(@"<<< ""${PUBLISHED:-null}""", run, StringComparison.Ordinal);
+        Assert.Matches(@"--arg versions ""\$versions""", run);
+        Assert.Matches(@"handoff_versions:\s*\$versions\b", run);
+
+        // The dispatched run's workflow must declare every input the request
+        // names. The API rejects an undeclared one with a 422, which fails the
+        // job loudly — but only on release day. Read from the jq request rather
+        // than hard-coded, so renaming an input on one side alone goes red here.
+        var request = Regex.Match(run, @"inputs:\s*\{(?<body>[^}]*)\}");
+        Assert.True(request.Success, "The handoff request names no workflow_dispatch inputs.");
+        var sent = Regex.Matches(request.Groups["body"].Value, @"(?<name>\w+)\s*:")
+            .Select(m => m.Groups["name"].Value)
+            .ToArray();
+        Assert.Contains("handoff_versions", sent);
+
+        var declared = Map(Map(on, "workflow_dispatch"), "inputs");
+        foreach (var name in sent)
+        {
+            Assert.True(
+                declared.Children.ContainsKey(new YamlScalarNode(name)),
+                $"The handoff dispatches input '{name}', which workflow_dispatch does not declare.");
+        }
+    }
+
+    [Fact]
+    public void The_handoff_fails_when_the_dispatched_run_never_got_its_turn()
+    {
+        var run = Code(Scalar(Steps("handoff").Single(), "run")!);
+
+        // `queue: max` still cancels a run that arrives at a full queue (100
+        // pending), and the dispatch API's 2xx says nothing about that. This
+        // run holds `pages`, so a healthy dispatched run cannot have finished
+        // yet; one that has never got in. Without this check the release sits
+        // on gh-pages unserved while the tag run is green.
+        Assert.Contains(".workflow_run_id", run, StringComparison.Ordinal);
+        Assert.Contains("actions/runs/$run_id", run, StringComparison.Ordinal);
+        Assert.Matches(@"=\s*completed\s*\];\s*then\s*\n(?:[^\n]*\n){0,3}?\s*exit 1\b", run);
+    }
+
+    [Fact]
+    public void A_run_handed_a_deployment_verifies_the_handed_off_versions()
+    {
+        var steps = Steps("publish").ToList();
+        var adopt = steps.FindIndex(s => Scalar(s, "if") == "inputs.handoff_versions");
+        var artifact = steps.FindIndex(s => Scalar(s, "id") == "artifact");
+
+        // Without this the dispatched run proves only `main`, and the release
+        // directory it was handed would pass on its versions.json entry alone.
+        Assert.True(adopt >= 0, "No publish step adopts the versions a release-tag run hands off.");
+        Assert.Equal("${{ inputs.handoff_versions }}", Scalar(Map(steps[adopt], "env"), "HANDOFF_VERSIONS"));
+
+        // The parsed list is what gets appended. Matching the destination alone
+        // stays green if the parse is removed and an empty array is appended.
+        var code = Code(Scalar(steps[adopt], "run")!);
+        var parse = Regex.Match(code, @"read -r -a (?<list>\w+) <<< ""\$HANDOFF_VERSIONS""");
+        Assert.True(parse.Success, "The adopt step no longer parses HANDOFF_VERSIONS into a list.");
+        Assert.Contains(
+            $"\"${{{parse.Groups["list"].Value}[@]}}\" >> \"$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE\"",
+            code,
+            StringComparison.Ordinal);
+
+        // Recorded before the artifact step turns the list into the `published`
+        // output, and cross-checks it against gh-pages' versions.json.
+        Assert.True(adopt < artifact, "Handed-off versions are recorded after the artifact step has already read the list.");
     }
 
     [Fact]
@@ -116,11 +222,7 @@ public sealed class DocsDeployWiringTests
         // Comments stripped first: these steps explain themselves in prose that
         // names the very commands being located, and a comment mentioning
         // `mike deploy` after the write would invert the ordering check.
-        var run = string.Join(
-            "\n",
-            Scalar(step, "run")!
-                .Split('\n')
-                .Where(line => !line.TrimStart().StartsWith("#", StringComparison.Ordinal)));
+        var run = Code(Scalar(step, "run")!);
 
         // The artifact step hard-fails on an empty list, so a step that stops
         // recording turns into a red run rather than a quieter gate — but only
@@ -181,6 +283,15 @@ public sealed class DocsDeployWiringTests
 
     private static IEnumerable<YamlMappingNode> Steps(string job) =>
         ((YamlSequenceNode)Map(Jobs, job).Children["steps"]).Children.Cast<YamlMappingNode>();
+
+    /// <summary>
+    /// A run block without its comment lines, so prose naming a command or a
+    /// path cannot satisfy an assertion the code itself no longer does.
+    /// </summary>
+    private static string Code(string run) =>
+        string.Join(
+            "\n",
+            run.Split('\n').Where(line => !line.TrimStart().StartsWith("#", StringComparison.Ordinal)));
 
     private static string StepRun(string job, string stepId)
     {
