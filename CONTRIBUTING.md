@@ -104,6 +104,11 @@ dotnet test  tests/Reactor.Tests -p:Platform=x64
 
 See [`TESTING.md`](TESTING.md) for the full guide — four suites (unit / selftest / packaged selftest / E2E), how to pick a tier, NativeAOT runs, and the code-coverage workflow.
 
+For timing-sensitive selftests, distinguish eventual completion from survival across
+a timer window. See [timer lifetime tests](TESTING.md#timer-lifetime-tests) for completion
+callbacks with bounded timeouts, controlled expiry schedules, and mutation checks
+that preserve the original assertion's meaning.
+
 Quick reference:
 
 ```bash

@@ -431,12 +431,14 @@ reference. Its amber is the healthy result — don't "fix" it, and don't copy it
 
 ### Selftest waiting patterns — `Render` vs `WaitFor` vs `WaitForIdleAsync`
 
-Selftests run against a real WinUI dispatcher: most user-visible work (template realization, layout, content-presenter materialization, control intrinsic `Loaded` handlers) lands on *later* dispatcher waves, not synchronously with the mount call. Always wait on a concrete idle signal — never `Task.Delay(<n>)` — and pick the right primitive for the host you're driving:
+Selftests run against a real WinUI dispatcher: most user-visible work (template realization, layout, content-presenter materialization, control intrinsic `Loaded` handlers) lands on *later* dispatcher waves, not synchronously with the mount call. Wait for a concrete state or completion signal instead of guessing with `Task.Delay(<n>)`, and pick the right primitive for the host you're driving:
 
 | You want to… | Use | Why |
 |---|---|---|
 | Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains the **shared harness host** (`ReactorApp.PrimaryWindow?.Host`) to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but only knows about the harness window. |
 | Wait until a probe predicate against the live visual tree holds | `await Harness.WaitFor(() => H.FindText("Foo") is not null)` | Re-queries the predicate each pass against the current tree. The contention-proof alternative to a one-shot snapshot. Pass `maxPasses`/`perPassMs` to tune. **The predicate must re-query** — capturing a value from before the loop defeats it. |
+| Wait for a timer's cleanup to finish | A completion callback awaited with `Task.WaitAsync(timeout)` | Register before triggering the operation, signal after cleanup, and assert the actual state afterward. Report a timeout through `H.Check` rather than letting it escape. |
+| Check survival through a hold period or a refreshed deadline | An injected scheduler with captured callbacks; see [timer lifetime tests](#timer-lifetime-tests) | Elapsed time is the stimulus. Advance controlled schedules instead of waiting on a predicate that is already true. |
 | Drain an **isolated** `ReactorHost` (one you constructed with `new ReactorHost(myWindow)`, not `H.CreateHost()`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** your isolated one. Drive the isolated host directly. Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
 
 **Anti-pattern — blind delays:**
@@ -473,14 +475,73 @@ Rules of thumb:
 - **`Render` only when you literally need an event-queue pump.** Anything that may be delayed (layout, control realization, template part materialization, `Loaded` cascades, lazy content presenters) needs `WaitFor` (predicate-based) or a bounded `WaitForIdleAsync` loop — not `Render` alone.
 - **`WaitFor` over a single `Render` + snapshot probe.** A one-shot probe right after `Render()` is the classic flake source on contended/AOT runners. `WaitFor` re-queries; `Render` is a single wave.
 - **But NOT for negative or exact-count assertions — `WaitFor` short-circuits.** `WaitFor` evaluates the predicate *before* its first `Render`, so it returns immediately when the predicate is already true. That makes it the wrong primitive whenever the delay is itself the observation window:
-  - *"X did not happen"* / *"fired exactly once"* / *"state is unchanged"* — e.g. `count == 0`, `CycleCountForTests == 1`, `IsExpanded` still true. Converting these to `WaitFor` makes them **vacuous**: they pass at t=0 without ever giving a violation time to appear. Keep an explicit `Render(N)` window and assert after it.
+  - *"X did not happen"* / *"fired exactly once"* / *"state is unchanged"* — e.g. `count == 0`, `CycleCountForTests == 1`, `IsExpanded` still true. Converting these to `WaitFor` makes them **vacuous**: they pass at t=0 without ever giving a violation time to appear. Keep an explicit `Render(N)` window for dispatcher observations; use [controlled scheduling](#timer-lifetime-tests) when elapsed time itself is under test.
   - Conversely, `WaitFor` is correct for *positive eventual* conditions — a control appears, a bit flips, a callback lands — because the predicate is false until the transition completes.
-  - The test: **can the predicate be true before the action you are testing?** If yes, either keep the fixed window or strengthen the predicate so it cannot (e.g. gate on `sv.VerticalOffset < 1` as well as the row text, so a still-realized row can't satisfy it while scrolled away).
+  - The test: **can the predicate be true before the action you are testing?** If yes, preserve the appropriate observation window, use controlled scheduling, or strengthen the predicate so it cannot (e.g. gate on `sv.VerticalOffset < 1` as well as the row text, so a still-realized row can't satisfy it while scrolled away).
 - **Converting a fixed delay to `WaitFor` is not a safe default — the remediation can itself be the vacuous one.** Because `WaitFor` establishes its predicate *at the moment it returns* and nothing more, the conversion is correct for an *eventual* assertion (false at t=0, converges) and silently vacuous for a *survival* assertion — "still visible", "still expanded" — which is true at t=0 and short-circuits at zero elapsed time. Before converting, ask: **if the predicate is true the instant `WaitFor` is called, does the next assertion still mean what I think it means?**
 - **Ask the same of a precondition `throw`.** Report-and-return when the fixture's other checks remain meaningful; throw loudly when the fixture is structurally invalid (a renamed reflection target) and they do not.
 - **Converting a gate can strip a settle a *later* assertion relied on.** If a following `H.Check` depended on the removed `Render(N)` rather than on its own wait, it will start failing. Give each check its own `WaitFor` instead of letting it inherit someone else's delay.
 - **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
 - **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
+
+### Timer lifetime tests
+
+[ReconcileHighlightOverlayLifecycleTests](tests/Reactor.AppTests.Host/SelfTest/Fixtures/ReconcileHighlightOverlayLifecycleTests.cs)
+is the worked example for [issue #995](https://github.com/microsoft/microsoft-ui-reactor/issues/995).
+It combines a real-timer completion check with controlled scheduling for lifetime assertions.
+
+For **eventual expiry**, register the completion callback before `Show`, then await it with a
+bounded timeout. Keep the initial creation check and inspect the real sprite and tracking counts
+afterward: a notification alone does not prove that cleanup succeeded. The fixture uses this pattern:
+
+```csharp
+var expired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+overlay.TestExpiryCompleted = () => expired.TrySetResult();
+overlay.Show(canvas, targets, Array.Empty<UIElement>());
+H.Check("Expiry_Created", overlay.LiveSpriteCount == 1);
+
+bool completed;
+try
+{
+    await expired.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    completed = true;
+}
+catch (TimeoutException) { completed = false; }
+H.Check("Expiry_Completed", completed);
+H.Check("Expiry_Cleared", overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
+```
+
+For **survival and refresh**, the overlay accepts an instance-level
+`scheduleExpiry(delay, onExpire)` callback that returns a cancellation callback. Production uses
+a one-shot UI dispatcher timer; the fixture captures schedules and advances their due callbacks
+on the UI thread. Both execute the same expiry handler in
+[ReconcileHighlightOverlay](src/Reactor/Hosting/ReconcileHighlightOverlay.cs), rather than calling
+`TestForceExpire()`, which performs cleanup directly.
+
+With an 800ms hold, the refresh fixture checks this timeline without wall-clock delays:
+
+| Controlled time | Action / expected state |
+|---|---|
+| 0ms | Show; original deadline is 800ms. |
+| 500ms | Still alive; refresh cancels the old schedule and sets a new deadline at 1300ms. |
+| 900ms | Still alive beyond the original deadline. |
+| 1299ms | Still alive immediately before the refreshed deadline. |
+| 1300ms | Current callback removes both the sprite and tracking entry. |
+
+Cancellation must not make the test scheduler incapable of delivering an already queued callback.
+The queued-expiry fixture makes the original callback due without dispatching it, refreshes, then
+delivers that old callback after cancellation and checks that the refreshed sprite survives.
+The disposal fixture also delivers captured callbacks after cleanup to verify they are harmless.
+
+Verify these oracles by disabling cleanup, sprite creation, refresh re-arming, and the stale-schedule
+identity guard individually. The corresponding checks must fail while their positive controls and
+the TAP trailer remain present. Restore and rebuild the product assembly between mutations and
+the final passing run; see [mutation checks](#mutation-checks-must-prove-the-mutation-ran).
+
+```powershell
+dotnet build tests/Reactor.AppTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter OverlayLifecycle
+```
 
 ### Suite duration budget — and why a single arbitrary fixture failure may not be about that fixture
 

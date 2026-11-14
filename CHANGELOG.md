@@ -36,6 +36,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Reconcile-highlight overlay lifecycle selftests wait for actual expiry completion
+  and use controlled schedules to verify refresh lifetimes, removing fixed-delay
+  assertion races on contended runners. Coverage includes stale callbacks after
+  refresh and disposal (issue #995; [testing guide](TESTING.md#timer-lifetime-tests)).
 - **Release docs go live without a manual re-run (issue #1268).** On 0.1.0-preview.16,
   .17 and .18 the release tag's `Publish docs` deployment reported success but was never
   served, so the new version's docs stayed missing until someone dispatched the workflow on
