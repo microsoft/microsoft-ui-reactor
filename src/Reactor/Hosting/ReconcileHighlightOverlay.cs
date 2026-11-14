@@ -163,6 +163,8 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
             existing.Sprite.Opacity = opacity;
             existing.Sprite.Size = size;
             existing.Sprite.Offset = offset;
+            // Cancellation is a best-effort optimization to avoid redundant ticks.
+            // Correctness relies on ArmExpiry's entry/token checks even if cancellation is a no-op.
             // A cancelled timer may still deliver an already queued callback.
             // Each new schedule gets its own identity so a stale callback cannot
             // tear down the refreshed sprite (see the identity check below).
