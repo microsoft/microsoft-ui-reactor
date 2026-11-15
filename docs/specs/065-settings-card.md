@@ -99,14 +99,92 @@ and steps.
 
 <!-- side-by-side:begin -->
 
-#### Whole page, 540-pixel window
+#### Per sample, 150% scale
 
-The current capture display is 540 DIPs wide at 200% scale, so these are whole-page captures of
-both pages in a 540-DIP window, where every card is narrower than 476 px and uses the wrapped
+Both sets were captured in one run, on a 2496 × 1664-pixel display at 150% scale, in three
+windows: wide (1000 × 1060 DIPs, so the cards are 640 DIPs wide), narrow (480 DIPs, below the
+Toolkit's 476-px wrap threshold, so the content moves below the header) and extra narrow (360
+DIPs, below 286 px, so the header icon is hidden too). Each image is the sample plus 8 DIPs on
+every side, at 1.5 pixels per DIP. Each theme starts from a fresh app instance, and hover and
+keyboard focus use real input. The pressed state is not captured: `winapp ui` has no
+press-and-hold action.
+
+Of the 38 pairs, 10 are identical, pixel for pixel. In the other 28, between 1 and 699 pixels
+differ, by at most 6 of 255 in any color channel, and no pixel differs by more than 16. Every
+sample has the same size in both sets. The differences are in two places:
+
+- **Next to the left and right borders.** At 150% a 1-DIP border is 1.5 pixels wide, so the
+  pixel just inside it is sometimes drawn as a blend of the border and the fill: light `#F7F7F7`
+  instead of `#FBFBFB`, dark `#292929` instead of `#2B2B2B`. Whether it is drawn varies by
+  sample, and even by theme, in both controls: in some samples both draw it, in some neither,
+  and in others only the Toolkit or only the port. The top and bottom borders match.
+- **Anti-aliasing** of some text, such as the combo box's "125%", and of the outlines of the
+  toggle switch and the slider thumb.
+
+We did not trace which element property decides the border pixel. It is not a layout or color
+difference: the samples have the same sizes, and the fills, focus rectangles, hover colors and
+icons match. At 200%, where a 1-DIP border is exactly 2 pixels, the two pages scrolled to the
+bottom differ in only 11 (light) and 22 (dark) pixels (whole-page comparison below).
+
+##### Wide window (1000 × 1060 DIPs), rest
+
+| | Toolkit | Reactor port | Pixels that differ |
+| --- | --- | --- | --- |
+| Card, light | <img src="065/toolkit/card-light-rest.png" width="364" alt="Toolkit: Card, light theme"> | <img src="065/reactor/card-light-rest.png" width="364" alt="Reactor port: Card, light theme"> | 411, by at most 5 of 255 |
+| Clickable card, light | <img src="065/toolkit/card-clickable-light-rest.png" width="364" alt="Toolkit: Clickable card, light theme"> | <img src="065/reactor/card-clickable-light-rest.png" width="364" alt="Reactor port: Clickable card, light theme"> | None |
+| `Vertical`, light | <img src="065/toolkit/card-vertical-light-rest.png" width="364" alt="Toolkit: Vertical, light theme"> | <img src="065/reactor/card-vertical-light-rest.png" width="364" alt="Reactor port: Vertical, light theme"> | None |
+| Disabled card, light | <img src="065/toolkit/card-disabled-light-rest.png" width="364" alt="Toolkit: Disabled card, light theme"> | <img src="065/reactor/card-disabled-light-rest.png" width="364" alt="Reactor port: Disabled card, light theme"> | 285, by at most 5 of 255 |
+| `Left`, light | <img src="065/toolkit/card-left-light-rest.png" width="364" alt="Toolkit: Left, light theme"> | <img src="065/reactor/card-left-light-rest.png" width="364" alt="Reactor port: Left, light theme"> | 320, by at most 5 of 255 |
+| Action icon, light | <img src="065/toolkit/card-actionicon-light-rest.png" width="364" alt="Toolkit: Action icon, light theme"> | <img src="065/reactor/card-actionicon-light-rest.png" width="364" alt="Reactor port: Action icon, light theme"> | None |
+| Expander, collapsed, light | <img src="065/toolkit/expander-light-collapsed.png" width="364" alt="Toolkit: Expander, collapsed, light theme"> | <img src="065/reactor/expander-light-collapsed.png" width="364" alt="Reactor port: Expander, collapsed, light theme"> | 262, by at most 5 of 255 |
+| Expander, expanded, light | <img src="065/toolkit/expander-light-expanded.png" width="364" alt="Toolkit: Expander, expanded, light theme"> | <img src="065/reactor/expander-light-expanded.png" width="364" alt="Reactor port: Expander, expanded, light theme"> | 642, by at most 5 of 255 |
+| Items header and footer, light | <img src="065/toolkit/expander-items-light-expanded.png" width="364" alt="Toolkit: Items header and footer, light theme"> | <img src="065/reactor/expander-items-light-expanded.png" width="364" alt="Reactor port: Items header and footer, light theme"> | 605, by at most 3 of 255 |
+| Card, dark | <img src="065/toolkit/card-dark-rest.png" width="364" alt="Toolkit: Card, dark theme"> | <img src="065/reactor/card-dark-rest.png" width="364" alt="Reactor port: Card, dark theme"> | 387, by at most 3 of 255 |
+| Clickable card, dark | <img src="065/toolkit/card-clickable-dark-rest.png" width="364" alt="Toolkit: Clickable card, dark theme"> | <img src="065/reactor/card-clickable-dark-rest.png" width="364" alt="Reactor port: Clickable card, dark theme"> | None |
+| `Vertical`, dark | <img src="065/toolkit/card-vertical-dark-rest.png" width="364" alt="Toolkit: Vertical, dark theme"> | <img src="065/reactor/card-vertical-dark-rest.png" width="364" alt="Reactor port: Vertical, dark theme"> | None |
+| Disabled card, dark | <img src="065/toolkit/card-disabled-dark-rest.png" width="364" alt="Toolkit: Disabled card, dark theme"> | <img src="065/reactor/card-disabled-dark-rest.png" width="364" alt="Reactor port: Disabled card, dark theme"> | 231, by at most 3 of 255 |
+| `Left`, dark | <img src="065/toolkit/card-left-dark-rest.png" width="364" alt="Toolkit: Left, dark theme"> | <img src="065/reactor/card-left-dark-rest.png" width="364" alt="Reactor port: Left, dark theme"> | 282, by at most 3 of 255 |
+| Action icon, dark | <img src="065/toolkit/card-actionicon-dark-rest.png" width="364" alt="Toolkit: Action icon, dark theme"> | <img src="065/reactor/card-actionicon-dark-rest.png" width="364" alt="Reactor port: Action icon, dark theme"> | None |
+| Expander, collapsed, dark | <img src="065/toolkit/expander-dark-collapsed.png" width="364" alt="Toolkit: Expander, collapsed, dark theme"> | <img src="065/reactor/expander-dark-collapsed.png" width="364" alt="Reactor port: Expander, collapsed, dark theme"> | 331, by at most 3 of 255 |
+| Expander, expanded, dark | <img src="065/toolkit/expander-dark-expanded.png" width="364" alt="Toolkit: Expander, expanded, dark theme"> | <img src="065/reactor/expander-dark-expanded.png" width="364" alt="Reactor port: Expander, expanded, dark theme"> | 699, by at most 4 of 255 |
+| Items header and footer, dark | <img src="065/toolkit/expander-items-dark-expanded.png" width="364" alt="Toolkit: Items header and footer, dark theme"> | <img src="065/reactor/expander-items-dark-expanded.png" width="364" alt="Reactor port: Items header and footer, dark theme"> | 573, by at most 1 of 255 |
+
+##### Wide window, hover and keyboard focus
+
+| | Toolkit | Reactor port | Pixels that differ |
+| --- | --- | --- | --- |
+| Clickable card, hover, light | <img src="065/toolkit/card-clickable-light-hover.png" width="364" alt="Toolkit: Clickable card, hover, light theme"> | <img src="065/reactor/card-clickable-light-hover.png" width="364" alt="Reactor port: Clickable card, hover, light theme"> | None |
+| Clickable card, keyboard focus, light | <img src="065/toolkit/card-clickable-light-focus.png" width="364" alt="Toolkit: Clickable card, keyboard focus, light theme"> | <img src="065/reactor/card-clickable-light-focus.png" width="364" alt="Reactor port: Clickable card, keyboard focus, light theme"> | None |
+| Expander header, hover, light | <img src="065/toolkit/expander-light-hover.png" width="364" alt="Toolkit: Expander header, hover, light theme"> | <img src="065/reactor/expander-light-hover.png" width="364" alt="Reactor port: Expander header, hover, light theme"> | 260, by at most 6 of 255 |
+| Expander header, keyboard focus, light | <img src="065/toolkit/expander-light-focus.png" width="364" alt="Toolkit: Expander header, keyboard focus, light theme"> | <img src="065/reactor/expander-light-focus.png" width="364" alt="Reactor port: Expander header, keyboard focus, light theme"> | 250, by at most 5 of 255 |
+| Card without a click action, hover, light | <img src="065/toolkit/card-light-hover.png" width="364" alt="Toolkit: Card without a click action, hover, light theme"> | <img src="065/reactor/card-light-hover.png" width="364" alt="Reactor port: Card without a click action, hover, light theme"> | 430, by at most 5 of 255 |
+| Clickable card, hover, dark | <img src="065/toolkit/card-clickable-dark-hover.png" width="364" alt="Toolkit: Clickable card, hover, dark theme"> | <img src="065/reactor/card-clickable-dark-hover.png" width="364" alt="Reactor port: Clickable card, hover, dark theme"> | None |
+| Clickable card, keyboard focus, dark | <img src="065/toolkit/card-clickable-dark-focus.png" width="364" alt="Toolkit: Clickable card, keyboard focus, dark theme"> | <img src="065/reactor/card-clickable-dark-focus.png" width="364" alt="Reactor port: Clickable card, keyboard focus, dark theme"> | None |
+| Expander header, hover, dark | <img src="065/toolkit/expander-dark-hover.png" width="364" alt="Toolkit: Expander header, hover, dark theme"> | <img src="065/reactor/expander-dark-hover.png" width="364" alt="Reactor port: Expander header, hover, dark theme"> | 332, by at most 3 of 255 |
+| Expander header, keyboard focus, dark | <img src="065/toolkit/expander-dark-focus.png" width="364" alt="Toolkit: Expander header, keyboard focus, dark theme"> | <img src="065/reactor/expander-dark-focus.png" width="364" alt="Reactor port: Expander header, keyboard focus, dark theme"> | 326, by at most 3 of 255 |
+| Card without a click action, hover, dark | <img src="065/toolkit/card-dark-hover.png" width="364" alt="Toolkit: Card without a click action, hover, dark theme"> | <img src="065/reactor/card-dark-hover.png" width="364" alt="Reactor port: Card without a click action, hover, dark theme"> | 406, by at most 3 of 255 |
+
+##### Narrow windows
+
+| | Toolkit | Reactor port | Pixels that differ |
+| --- | --- | --- | --- |
+| Card, 480-DIP window, light | <img src="065/toolkit/card-light-narrow.png" width="213" alt="Toolkit: Card, 480-DIP window, light theme"> | <img src="065/reactor/card-light-narrow.png" width="213" alt="Reactor port: Card, 480-DIP window, light theme"> | 393, by at most 5 of 255 |
+| `Vertical`, 480-DIP window, light | <img src="065/toolkit/card-vertical-light-narrow.png" width="213" alt="Toolkit: Vertical, 480-DIP window, light theme"> | <img src="065/reactor/card-vertical-light-narrow.png" width="213" alt="Reactor port: Vertical, 480-DIP window, light theme"> | 378, by at most 6 of 255 |
+| `Left`, 480-DIP window, light | <img src="065/toolkit/card-left-light-narrow.png" width="213" alt="Toolkit: Left, 480-DIP window, light theme"> | <img src="065/reactor/card-left-light-narrow.png" width="213" alt="Reactor port: Left, 480-DIP window, light theme"> | 426, by at most 5 of 255 |
+| Expander, 480-DIP window, light | <img src="065/toolkit/expander-light-narrow.png" width="213" alt="Toolkit: Expander, 480-DIP window, light theme"> | <img src="065/reactor/expander-light-narrow.png" width="213" alt="Reactor port: Expander, 480-DIP window, light theme"> | 423, by at most 4 of 255 |
+| Card, 360-DIP window, light | <img src="065/toolkit/card-light-xnarrow.png" width="147" alt="Toolkit: Card, 360-DIP window, light theme"> | <img src="065/reactor/card-light-xnarrow.png" width="147" alt="Reactor port: Card, 360-DIP window, light theme"> | 8, by at most 2 of 255 |
+| Card, 480-DIP window, dark | <img src="065/toolkit/card-dark-narrow.png" width="213" alt="Toolkit: Card, 480-DIP window, dark theme"> | <img src="065/reactor/card-dark-narrow.png" width="213" alt="Reactor port: Card, 480-DIP window, dark theme"> | 449, by at most 2 of 255 |
+| `Vertical`, 480-DIP window, dark | <img src="065/toolkit/card-vertical-dark-narrow.png" width="213" alt="Toolkit: Vertical, 480-DIP window, dark theme"> | <img src="065/reactor/card-vertical-dark-narrow.png" width="213" alt="Reactor port: Vertical, 480-DIP window, dark theme"> | 342, by at most 3 of 255 |
+| `Left`, 480-DIP window, dark | <img src="065/toolkit/card-left-dark-narrow.png" width="213" alt="Toolkit: Left, 480-DIP window, dark theme"> | <img src="065/reactor/card-left-dark-narrow.png" width="213" alt="Reactor port: Left, 480-DIP window, dark theme"> | 391, by at most 3 of 255 |
+| Expander, 480-DIP window, dark | <img src="065/toolkit/expander-dark-narrow.png" width="213" alt="Toolkit: Expander, 480-DIP window, dark theme"> | <img src="065/reactor/expander-dark-narrow.png" width="213" alt="Reactor port: Expander, 480-DIP window, dark theme"> | 554, by at most 1 of 255 |
+| Card, 360-DIP window, dark | <img src="065/toolkit/card-dark-xnarrow.png" width="147" alt="Toolkit: Card, 360-DIP window, dark theme"> | <img src="065/reactor/card-dark-xnarrow.png" width="147" alt="Reactor port: Card, 360-DIP window, dark theme"> | 1, by at most 1 of 255 |
+
+#### Whole page, 540-DIP window (200% scale)
+
+These captures were taken earlier, on a display 540 DIPs wide at 200% scale. They show both
+pages in a 540-DIP window, where every card is narrower than 476 px and uses the wrapped
 layout. Each page and theme is captured from a fresh app instance (§3.3, last row), with
-`winapp ui screenshot PART_ScrollPresenter` at the top and the bottom of the page. The per-sample
-set in the [runbook](065/capture-runbook.md) (wide, narrow and extra-narrow windows, hover and
-keyboard focus) needs a screen at least 1000 DIPs wide and is captured separately.
+`winapp ui screenshot PART_ScrollPresenter` at the top and the bottom of the page.
 
 | | Toolkit | Reactor port | Pixels that differ |
 | --- | --- | --- | --- |
@@ -151,7 +229,7 @@ ref-expander-expanded Group "Display"
 
 | Check | Toolkit | Port |
 | --- | --- | --- |
-| Hover on a card without a click action | No change. | No change. |
+| Hover on a card without a click action | No change: `card-{light,dark}-hover.png` matches the rest capture to within 25 pixels, by at most 2 of 255. | No change: `card-{light,dark}-hover.png` is identical to the rest capture. |
 | UI Automation Invoke on a clickable card (`winapp ui invoke`) | Fails: "does not support any invoke pattern" (§6). | Runs `onClick`. |
 | `ContentAlignment.Left` or `Vertical` in a card narrower than 476 px | The narrow layout wins: content below a visible header. | The same. |
 | The new samples at 540 px (`ref-card-left`, `ref-card-actionicon`, `ref-expander-items`), whole viewport | — | 2,110 of 1,388,988 pixels differ: the overlay scroll indicator and a few anti-aliased pixels around the slider thumbs. |
@@ -344,7 +422,8 @@ element then also rendered `#80F9F9F9` for that key.
 
 The port does not read theme dictionaries from code, and its selftests check theme colors with
 probe elements instead. `ThemeRef.Resolve` with a theme other than the app's theme has the
-problem today; it needs its own issue.
+problem today; it is tracked in
+[#1534](https://github.com/microsoft/microsoft-ui-reactor/issues/1534).
 
 ## 8. Tests
 

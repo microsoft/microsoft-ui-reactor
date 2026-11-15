@@ -36,6 +36,9 @@ param(
     [string]$NavItem = 'Settings reference',
     [ValidateSet('All', 'Static', 'Interactive')]
     [string]$Set = 'All',
+    # Capture only these themes, e.g. to redo one theme of a set.
+    [ValidateSet('Light', 'Dark')]
+    [string[]]$Themes = @('Light', 'Dark'),
     [int]$Pad = 8,
     # Outer window height in DIPs. Lower it when the screen's work area is shorter, or the
     # viewport capture is clipped; samples below the fold are scrolled into view.
@@ -49,6 +52,8 @@ Add-Type -Namespace Spec065 -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
 [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+public struct RECT { public int Left, Top, Right, Bottom; }
+[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
 '@
 # Per-monitor DPI aware, so SetWindowPos takes the physical sizes computed below. A DPI-unaware
 # PowerShell would have them scaled a second time by Windows on any display above 100%.
@@ -85,9 +90,13 @@ function Invoke-Ui {
 }
 
 # Scrolls the page viewport; a page that fits without scrolling is already in place.
-function Move-Viewport([ValidateSet('top', 'bottom')][string]$To) {
-    $out = & winapp ui scroll $Viewport --to $To -w $script:Hwnd 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -and $out -notmatch 'cannot scroll') { throw "winapp ui scroll --to $To failed:`n$out" }
+# Prefer 'down' (one step) over 'bottom': near the end of the page the ScrollPresenter's
+# UI Automation bounds can grow upward past the viewport (in the narrow window, past the
+# window's top edge), and the viewport capture then comes back clipped.
+function Move-Viewport([ValidateSet('top', 'down', 'bottom')][string]$To) {
+    $how = if ($To -eq 'down') { @('--direction', 'down') } else { @('--to', $To) }
+    $out = & winapp ui scroll $Viewport @how -w $script:Hwnd 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -and $out -notmatch 'cannot scroll') { throw "winapp ui scroll $($how -join ' ') failed:`n$out" }
     Start-Sleep -Milliseconds 300
 }
 
@@ -100,11 +109,30 @@ function Get-Bounds([string]$AutomationId) {
     $found[0]
 }
 
+# Bounds of an element after a scroll has finished: two reads in a row agree.
+function Wait-Bounds([string]$AutomationId) {
+    $last = Get-Bounds $AutomationId
+    for ($i = 0; $i -lt 10; $i++) {
+        Start-Sleep -Milliseconds 250
+        $now = Get-Bounds $AutomationId
+        if ($now.x -eq $last.x -and $now.y -eq $last.y -and $now.width -eq $last.width -and $now.height -eq $last.height) { return $now }
+        $last = $now
+    }
+    throw "'$AutomationId' kept moving after the scroll."
+}
+
 function Set-WindowSize([string]$Name) {
     $w, $h = $Sizes[$Name]
     $pw = [int][Math]::Round($w * $script:Scale); $ph = [int][Math]::Round($h * $script:Scale)
     [void][Spec065.Win32]::SetWindowPos($script:Hwnd, [IntPtr]::Zero, 0, 0, $pw, $ph, 0x14) # NOZORDER | NOACTIVATE
     Start-Sleep -Milliseconds 1500
+    # Windows makes a window smaller than asked when it does not fit on the screen, and a
+    # smaller window changes the layout.
+    $r = New-Object Spec065.Win32+RECT
+    [void][Spec065.Win32]::GetWindowRect($script:Hwnd, [ref]$r)
+    if (($r.Right - $r.Left) -ne $pw -or ($r.Bottom - $r.Top) -ne $ph) {
+        throw "The $Name window is $($r.Right - $r.Left)x$($r.Bottom - $r.Top) px, not ${pw}x$ph px. Is the screen large enough?"
+    }
     $script:Window = "$Name ${w}x$h"
 }
 
@@ -155,20 +183,25 @@ function Test-InViewport($El, $Vp) {
 
 function Save-Sample([string]$Id, [string]$File, [string]$State, [switch]$KeepScroll, [string]$Path) {
     if (-not $KeepScroll) { Move-Viewport top }
-    $vp = Get-Bounds $Viewport
+    # Where the viewport is on screen. Scrolling does not move it, and these bounds are
+    # read before any scroll near the end of the page can distort them.
+    $view = Get-Bounds $Viewport
     $el = Get-Bounds $Id
-    if (-not $KeepScroll -and -not (Test-InViewport $el $vp)) {
-        Move-Viewport bottom
-        $vp = Get-Bounds $Viewport
-        $el = Get-Bounds $Id
-    }
-    if (-not $KeepScroll -and -not (Test-InViewport $el $vp)) {
-        # A page taller than two viewports: bring the sample into view.
+    if (-not $KeepScroll -and -not (Test-InViewport $el $view)) {
+        # Brings the sample in from below, so its bottom edge lands on the viewport's
+        # bottom edge, then scrolls one step further so the frame below it shows too.
         Invoke-Ui scroll-into-view $Id | Out-Null
-        Start-Sleep -Milliseconds 300
-        $vp = Get-Bounds $Viewport
-        $el = Get-Bounds $Id
+        Move-Viewport down
+        $el = Wait-Bounds $Id
+        if (-not (Test-InViewport $el $view)) {
+            # The last sample on the page: the step can stop short of the end.
+            Move-Viewport bottom
+            $el = Wait-Bounds $Id
+        }
     }
+    if (-not (Test-InViewport $el $view)) { throw "'$Id' plus its frame is not fully visible in the viewport." }
+    # The crop below is relative to the viewport capture, which uses the current bounds.
+    $vp = Get-Bounds $Viewport
     $pad = [int][Math]::Round($Pad * $script:Scale)
     $x = $el.x - $pad - $vp.x; $y = $el.y - $pad - $vp.y
     $w = $el.width + 2 * $pad; $h = $el.height + 2 * $pad
@@ -185,7 +218,15 @@ function Save-Sample([string]$Id, [string]$File, [string]$State, [switch]$KeepSc
             throw "Viewport capture is $($img.Width)x$($img.Height), expected $($vp.width)x$($vp.height)."
         }
         $crop = $img.Clone([System.Drawing.Rectangle]::new($x, $y, $w, $h), $img.PixelFormat)
-        try { $crop.Save($target, [System.Drawing.Imaging.ImageFormat]::Png) }
+        try {
+            # A row through the middle of a sample crosses the page background, the card's
+            # border and its fill. Windows renders nothing while a Remote Desktop session is
+            # disconnected, and the capture is then a single color.
+            $colors = @{}
+            for ($i = 0; $i -lt $crop.Width; $i++) { $colors[$crop.GetPixel($i, [int]($crop.Height / 2)).ToArgb()] = $true }
+            if ($colors.Count -lt 2) { throw "The capture of '$Id' is blank. Is the Remote Desktop session connected, and its window not minimized?" }
+            $crop.Save($target, [System.Drawing.Imaging.ImageFormat]::Png)
+        }
         finally { $crop.Dispose() }
     } finally {
         $img.Dispose()
@@ -244,7 +285,7 @@ $Static = @(
 )
 
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
-foreach ($theme in 'Light', 'Dark') {
+foreach ($theme in $Themes) {
     $t = $theme.ToLowerInvariant()
     Write-Host "$theme theme"
     try {
