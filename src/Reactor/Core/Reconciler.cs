@@ -5716,19 +5716,18 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Clears property animation entries from an element's Visual's ImplicitAnimationCollection.
-    /// Preserves layout animation entries if they exist.
+    /// Removes the specified implicit property animation channels.
     /// </summary>
-    internal static void ClearPropertyAnimation(UIElement uie, LayoutAnimationConfig? layoutConfig)
+    internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties)
     {
-        if (layoutConfig is null)
-        {
-            // No layout animation either — clear everything
-            var visual = ElementCompositionPreview.GetElementVisual(uie);
-            visual.ImplicitAnimations = null;
-        }
-        // If layout animation exists, ApplyLayoutAnimation will recreate the collection
-        // with just layout entries on next update
+        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        if (visual.ImplicitAnimations is not { } animations) return;
+        if (properties.HasFlag(AnimateProperty.Opacity)) animations.Remove("Opacity");
+        if (properties.HasFlag(AnimateProperty.Offset)) animations.Remove("Offset");
+        if (properties.HasFlag(AnimateProperty.Scale)) animations.Remove("Scale");
+        if (properties.HasFlag(AnimateProperty.Rotation)) animations.Remove("RotationAngle");
+        if (properties.HasFlag(AnimateProperty.CenterPoint)) animations.Remove("CenterPoint");
+        visual.ImplicitAnimations = animations.Count == 0 ? null : animations;
     }
 
     // ════════════════════════════════════════════════════════════════
