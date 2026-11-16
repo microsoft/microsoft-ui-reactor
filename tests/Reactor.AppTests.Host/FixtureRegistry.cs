@@ -91,6 +91,9 @@ internal static class FixtureRegistry
         // re-render rebuild-clobber that collapsed expanded categories)
         "NavigationView_Hierarchical",
 
+        // SettingsCard / SettingsExpander under real input (spec 065)
+        "SettingsCard_E2E",
+
         // Observable
         "Observable_UseObservable_Rerender",
         "Observable_UseObservable_ExternalMutation",
@@ -258,6 +261,9 @@ internal static class FixtureRegistry
 
         // NavigationView hierarchical expand/collapse
         "NavigationView_Hierarchical" => NavigationViewE2EFixtures.HierarchicalNav(ctx),
+
+        // SettingsCard / SettingsExpander under real input (spec 065)
+        "SettingsCard_E2E" => SettingsCardE2EFixtures.Scene(ctx),
 
         // Observable
         "Observable_UseObservable_Rerender" => ObservableFixtures.UseObservable_Rerender(ctx),

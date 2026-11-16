@@ -106,7 +106,7 @@ These are facts about the shipped framework. Each was verified during the 2026-0
 | Consuming-app process integrity | Host EXE memory | Same process, same user | Same as any in-process library defect — code execution at host's trust level |
 | Dev-time loopback ports (preview / devtools) | Localhost, kernel-owned port table | Same-user processes that can read the lockfile or stdout banner | Read of preview frames; remote-control of the developer's running app window (focus steal, component switch, MCP tool invocation) |
 | Per-launch bearer tokens | Process memory + per-user tempdir lockfile + dev stdout | Same-user, same-machine | Same as above — token *is* the dev surface's auth |
-| Source-ported OSS (Yoga, md4c, D3) | Repo source, compiled into Reactor.dll | Anyone who can submit a PR | Smuggled defect in a parser — runs at consuming-app trust level |
+| Source-ported OSS (Yoga, md4c, D3, Windows Community Toolkit SettingsControls) | Repo source, compiled into Reactor.dll | Anyone who can submit a PR | Smuggled defect in a parser — runs at consuming-app trust level |
 
 **There are no cross-user assets, no remote credentials, no Azure resources, and no end-user PII handled by the framework.**
 
@@ -289,7 +289,7 @@ The Microsoft-internal security-review intake form gave succinct answers about R
 | "CLI/debug tooling runs as developer-invoked user-mode process" | Manifest review of `mur.exe`, install script behavior | No elevation, no scheduled-task install. |
 | "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" | `PreviewCaptureServer.cs`, `DevtoolsMcpServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
 | "No outbound network communication beyond the above" | Repo-wide grep | Only `System.Net.*` usage in `src/Reactor/` is the two `HttpListener` servers above and an `HttpClient` *in CLI Docs subsystem* that targets `127.0.0.1:<port>` of a preview server `mur` itself spawned. |
-| "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; three source-ported MIT/ISC OSS components (Yoga, md4c, D3); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
+| "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; four source-ported MIT/ISC OSS components (Yoga, md4c, D3, the Windows Community Toolkit SettingsControls markup in `src/Reactor/Controls/Settings/`); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
 | "No prior threat models / security reviews" | Repo audit | This document is the first formal one. README references a 275-finding internal code review — engineering review, not a threat model. |
 
 ## 9. Out-of-scope non-surfaces (with rationale)
@@ -310,7 +310,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 | Channel | Risk | Mitigation |
 |---|---|---|
 | `nuget.org` for direct & transitive deps | Compromise of upstream feed → poisoned dep gets pulled at restore | `nuget.config` clears inherited feeds and pins to `nuget.org` + `local-nupkgs/`. Dependabot enabled (`.github/dependabot.yml`). CI `vulnerable-packages` job runs [`dotnet list package --vulnerable`](https://learn.microsoft.com/dotnet/core/tools/dotnet-list-package) on every PR and fails on High/Critical findings. |
-| Source-ported OSS (Yoga / md4c / D3) | Upstream defect ported in by hand without notice | `ThirdPartyNoticeText.txt` lists each; `cgmanifest.json` registers them with Component Governance so upstream advisories surface internally. |
+| Source-ported OSS (Yoga / md4c / D3 / Toolkit SettingsControls) | Upstream defect ported in by hand without notice | `ThirdPartyNoticeText.txt` lists each; `cgmanifest.json` registers them with Component Governance so upstream advisories surface internally. |
 | GitHub repo → NuGet publish | Compromised CI builds malicious package | `.github/workflows/release.yml` builds in `windows-latest` runner; BinSkim (PR #365) and CodeQL provide additional verification before publish. |
 | `GitHub.Copilot.SDK 1.0.22` transitive | Ships a third-party native `copilot.exe` runtime bundle (`runtimes/<rid>/native/`), downloaded at build time from the github/copilot-cli GitHub releases and SHA-256-verified against the release's `SHA256SUMS.txt`, without Control Flow Guard | Known; tracked under the BinSkim follow-up. Not Reactor-authored. The binary is only present in the `mur` CLI publish artifact, not in the framework NuGet. |
 | Developer-downloaded skill-kit zip | Tampering between Microsoft and developer | Authenticode signing of the zip is a known compliance gap; tracked under the SDL signing workstream. |
@@ -328,7 +328,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 - [`README.md`](../../README.md) — high-level framing, experimental status note
 - [`AGENTS.md`](../../AGENTS.md) — repo conventions, test tiers, AOT posture
 - [`SECURITY.md`](../../SECURITY.md) — Microsoft vulnerability reporting policy
-- [`ThirdPartyNoticeText.txt`](../../ThirdPartyNoticeText.txt) — OSS attributions for Yoga / md4c / D3 and NuGet deps
+- [`ThirdPartyNoticeText.txt`](../../ThirdPartyNoticeText.txt) — OSS attributions for Yoga / md4c / D3 / Toolkit SettingsControls and NuGet deps
 - [`src/Reactor/Hosting/PreviewCaptureServer.cs`](../../src/Reactor/Hosting/PreviewCaptureServer.cs) — dev preview server
 - [`src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`](../../src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs) — devtools MCP server
 - [`src/Reactor.Advanced/Markdown/MarkdownBuilder.cs`](../../src/Reactor.Advanced/Markdown/MarkdownBuilder.cs) — native `Markdown()` renderer + URL allow-list (`IsSafeUri`)

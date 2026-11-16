@@ -61,6 +61,8 @@ public static class ControlRegistry
         new("Grid", "A layout panel that arranges children in rows and columns.", "Layout", "\uE8A1", "grid", "Grid.png"),
         new("RelativePanel", "A panel that positions children relative to each other.", "Layout", "\uE8A1", "relative-panel", "RelativePanel.png"),
         new("ScrollView", "A scrollable container for content that exceeds available space.", "Layout", "\uE8A1", "scroll-view", "ScrollView.png"),
+        new("SettingsCard", "A Windows 11 settings row with an icon, a header, a description and a control.", "Layout", "\uE8A1", "settings-card", "Border.png"),
+        new("SettingsExpander", "A settings card that expands to show more settings.", "Layout", "\uE8A1", "settings-expander", "Expander.png"),
         new("SplitView", "A container with a collapsible pane and a content area.", "Layout", "\uE8A1", "split-view", "SplitView.png"),
         new("StackPanel", "A panel that arranges children in a single horizontal or vertical line.", "Layout", "\uE8A1", "stack-panel", "StackPanel.png"),
         new("Viewbox", "A container that scales its child to fill available space.", "Layout", "\uE8A1", "viewbox", "Viewbox.png"),

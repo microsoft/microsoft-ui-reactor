@@ -132,6 +132,8 @@ public static partial class ReactorApp
         RuntimeHelpers.RunClassConstructor(typeof(DropDownButtonElement).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(EllipseElement).TypeHandle);
         _ = V1.RegDecorator<ExpanderElement, V1.Handlers.ExpanderHandler>.Done;
+        _ = V1.Reg<SettingsCardElement, Controls.SettingsCardControl, V1.Handlers.SettingsCardHandler>.Done;
+        _ = V1.Reg<SettingsExpanderElement, Controls.SettingsExpanderControl, V1.Handlers.SettingsExpanderHandler>.Done;
         RuntimeHelpers.RunClassConstructor(typeof(FlexElement).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(FlipViewElement).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(FrameElement).TypeHandle);

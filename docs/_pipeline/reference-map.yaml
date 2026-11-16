@@ -33,3 +33,5 @@ overrides:
     guide-pages: [advanced]
   - match: "Microsoft.UI.Reactor.Factories.*Chart*"
     guide-pages: [charting]
+  - match: "Microsoft.UI.Reactor.Factories.Settings*"
+    guide-pages: [settings-cards]

@@ -26,25 +26,31 @@ using Microsoft.UI.Reactor.Wrappers;   // the [Wrap*] authoring attributes
 namespace MyApp;
 
 // 1. Declare an empty partial record, annotated with the control to wrap.
-[GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsCard))]
-public partial record SettingsCardElement;
+[GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.HeaderedContentControl))]
+public partial record HeaderedContentControlElement;
 ```
 
 ```csharp
 // 2. Consume the generated factory via `using static` (named after the control).
-using static MyApp.SettingsCardElement;
+using static MyApp.HeaderedContentControlElement;
 
-SettingsCard(
+HeaderedContentControl(
     header: "Wi-Fi",
-    description: wifiOn ? "Connected" : "Disconnected",
     content: ToggleSwitch(isOn: wifiOn, onIsOnChanged: setWifiOn))  // a Reactor child INSIDE a WCT control
 ```
 
 The generator fills the rest of that partial: one init-property per surfaced
 control property, the single-content/children slot, `On{Event}` callbacks, the
 `ControlDescriptor`, the trim-rooting `static` cctor registration, and the
-`SettingsCard(...)` factory. `Setters` is always emitted as an escape hatch
+`HeaderedContentControl(...)` factory. `Setters` is always emitted as an escape hatch
 (`.Set(c => c.Foo = …)`) for anything not surfaced.
+
+> **Check for a built-in first.** Reactor ships native ports of some Toolkit
+> controls — `SettingsCard` and `SettingsExpander` (spec 065) — so don't wrap
+> those. A generated factory named like a built-in one also competes with it in
+> overload resolution: `SettingsCard("Wi-Fi", …)` binds to the built-in `string`
+> overload, not to a wrapper's `Optional<object> header`. If you must wrap such a control,
+> call its factory through an alias, as `samples/apps/wct-controls` does.
 
 The generator emits `ReactorApp.TryRegisterControlAssembly(typeof(X).Assembly)`
 in the element's static constructor to discover a control library's metadata
@@ -145,7 +151,7 @@ member you declare. Example — treat `Header` as templated Reactor content inst
 of plain text:
 
 ```csharp
-public partial record SettingsCardElement
+public partial record HeaderedContentControlElement
 {
     public Element? Header { get; init; }
 }

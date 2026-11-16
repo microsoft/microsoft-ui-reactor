@@ -240,6 +240,8 @@ public sealed class UnregisteredHandlerAndRegisterAllBuiltInsTests
         typeof(ScrollViewElement),
         typeof(ScrollViewerElement),
         typeof(SemanticElement),
+        typeof(SettingsCardElement),
+        typeof(SettingsExpanderElement),
         typeof(SplitButtonElement),
         typeof(SplitViewElement),
         typeof(StackElement),

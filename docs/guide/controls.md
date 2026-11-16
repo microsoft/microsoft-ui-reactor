@@ -310,6 +310,7 @@ class LayoutGroup : Component
 | `AnnotatedScrollBar` | Scroll bar with labelled tick marks. |
 | `SplitView` | Collapsible side pane plus content. |
 | `Expander` | Collapsible header + content section. |
+| `SettingsCard` / `SettingsExpander` | Windows 11 settings rows, and a row that expands to show more ([settings-cards](settings-cards.md)). |
 | `RefreshContainer` | Pull-to-refresh wrapper. |
 | `SwipeControl` | Swipe-revealed commands on an item. |
 | `SemanticZoom` | Paired zoomed-in / zoomed-out views. |

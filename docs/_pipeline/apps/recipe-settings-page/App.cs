@@ -26,26 +26,38 @@ class SettingsPage : Component
             PersistedScope.Window);
         // </snippet:persisted-state>
 
+        // <snippet:reset-card>
+        // A clickable card runs an action instead of holding a control: it
+        // shows a chevron and is a button for the keyboard and Narrator.
+        var reset = SettingsCard("Reset to defaults",
+            description: "Restore every preference on this page",
+            icon: FontIcon("\uE7A7"),
+            onClick: () =>
+            {
+                setNotify(true);
+                setTheme(0);
+                setVolume(60.0);
+            });
+        // </snippet:reset-card>
+
         // <snippet:render>
-        return VStack(16,
-            Heading("Settings"),
-            SettingsRow("Notifications",
-                ToggleSwitch(notify, setNotify)),
-            SettingsRow("Theme",
-                ComboBox(["System", "Light", "Dark"], theme, setTheme)),
-            SettingsRow("Volume",
-                Slider(volume, 0, 100, setVolume).Width(200))
+        // One SettingsCard per preference. Each card gives its control the
+        // header as its automation name, so Narrator announces "Theme".
+        return VStack(4,
+            Heading("Settings").Margin(0, 0, 0, 12),
+            SettingsCard("Notifications",
+                description: "Show an alert when a task finishes",
+                icon: FontIcon("\uE7E7"),
+                content: ToggleSwitch(notify, setNotify)),
+            SettingsCard("Theme",
+                description: "Choose the app's colors",
+                icon: FontIcon("\uE790"),
+                content: ComboBox(["System", "Light", "Dark"], theme, setTheme)),
+            SettingsCard("Volume",
+                icon: FontIcon("\uE767"),
+                content: Slider(volume, 0, 100, setVolume).Width(200)),
+            reset
         ).Padding(20);
         // </snippet:render>
     }
-
-    // <snippet:row-helper>
-    // A `SettingsRow` is a label + control — two slots in an HStack with a
-    // fixed-width label so the controls line up across rows.
-    private static Element SettingsRow(string label, Element control) =>
-        HStack(16,
-            TextBlock(label).Width(120),
-            control.AutomationName(label)
-        );
-    // </snippet:row-helper>
 }

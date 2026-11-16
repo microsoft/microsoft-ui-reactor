@@ -353,6 +353,22 @@
     "keywords": ["zoom in out", "grouped view", "jump list", "overview detail", "pinch zoom"],
     "relatedControls": ["GridView", "ListView"]
   },
+  "settings-card": {
+    "keywords": ["settings row", "preferences page", "options page", "windows settings", "toggle row", "community toolkit"],
+    "relatedControls": ["SettingsExpander", "ToggleSwitch", "Card"],
+    "usings": ["Microsoft.UI.Reactor.Core"],
+    "docs": [
+      { "title": "Settings cards guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/settings-cards.md" },
+      { "title": "Settings page recipe", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/recipes/settings-page.md" }
+    ]
+  },
+  "settings-expander": {
+    "keywords": ["expandable settings", "settings group", "nested settings", "preferences page", "windows settings", "community toolkit"],
+    "relatedControls": ["SettingsCard", "Expander"],
+    "docs": [
+      { "title": "Settings cards guide", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/settings-cards.md#settings-expanders" }
+    ]
+  },
   "shapes": {
     "keywords": ["rectangle ellipse line path", "vector shapes", "drawing", "primitives", "geometry shapes"],
     "relatedControls": ["Icons"]

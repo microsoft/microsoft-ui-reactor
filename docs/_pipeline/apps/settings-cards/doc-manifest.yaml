@@ -1,0 +1,26 @@
+app:
+  width: 720
+  height: 1000
+  startup-delay: 1500
+
+screenshots:
+  - id: basic-card
+    description: "Two settings cards with an icon, a header, a description and a toggle switch."
+    component: BasicCardDemo
+    format: png
+  - id: clickable-card
+    description: "A clickable settings card with the chevron on the right."
+    component: ClickableCardDemo
+    format: png
+  - id: content-alignment
+    description: "A card with vertical content alignment and a card with left content alignment."
+    component: ContentAlignmentDemo
+    format: png
+  - id: expander
+    description: "An expanded settings expander with a combo box in the header row and two item cards."
+    component: ExpanderDemo
+    format: png
+  - id: command-card
+    description: "Two command-driven settings cards; the second is disabled because its command cannot run."
+    component: CommandCardDemo
+    format: png

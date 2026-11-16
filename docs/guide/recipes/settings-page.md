@@ -4,7 +4,7 @@
 A settings page is many small persisted prefs side-by-side. Each
 preference is its own `UsePersisted` call with its own key — there's
 no central settings object that needs migration when one preference
-moves. The row layout is a single helper.
+moves. Each row is a [`SettingsCard`](../settings-cards.md).
 
 ## Primitives
 
@@ -15,7 +15,8 @@ moves. The row layout is a single helper.
 | Toggle | `ToggleSwitch(isOn, setOn)` |
 | Choice | `ComboBox(items, index, setIndex)` |
 | Range | `Slider(value, min, max, setValue)` |
-| Row layout helper | `static Element SettingsRow(...)` |
+| Row layout | `SettingsCard(header, description, icon, content)` |
+| Action row | `SettingsCard(header, description, icon, onClick: ...)` |
 
 ### Persisted state
 
@@ -42,40 +43,54 @@ process-wide preferences (auth, locale, theme) per the
 ### Render
 
 ```csharp
-return VStack(16,
-    Heading("Settings"),
-    SettingsRow("Notifications",
-        ToggleSwitch(notify, setNotify)),
-    SettingsRow("Theme",
-        ComboBox(["System", "Light", "Dark"], theme, setTheme)),
-    SettingsRow("Volume",
-        Slider(volume, 0, 100, setVolume).Width(200))
+// One SettingsCard per preference. Each card gives its control the
+// header as its automation name, so Narrator announces "Theme".
+return VStack(4,
+    Heading("Settings").Margin(0, 0, 0, 12),
+    SettingsCard("Notifications",
+        description: "Show an alert when a task finishes",
+        icon: FontIcon("\uE7E7"),
+        content: ToggleSwitch(notify, setNotify)),
+    SettingsCard("Theme",
+        description: "Choose the app's colors",
+        icon: FontIcon("\uE790"),
+        content: ComboBox(["System", "Light", "Dark"], theme, setTheme)),
+    SettingsCard("Volume",
+        icon: FontIcon("\uE767"),
+        content: Slider(volume, 0, 100, setVolume).Width(200)),
+    reset
 ).Padding(20);
 ```
 
 ![Settings page](../images/recipe-settings-page/settings.png)
 
-A `VStack` of `SettingsRow`s; each row is a label + control. The page
-re-renders from the changed hook state, and the reconciler patches the
-existing controls in place — the slider doesn't re-mount when you toggle
-notifications.
+A `VStack` of `SettingsCard`s; each card is a header, an optional
+description and icon, and the control. The card styles the control the
+way Windows Settings does, lines the controls up on the right, and gives
+each control the header as its automation name. The page re-renders from
+the changed hook state, and the reconciler patches the existing controls
+in place — the slider doesn't re-mount when you toggle notifications.
 
-### Row helper
+### Reset card
 
 ```csharp
-// A `SettingsRow` is a label + control — two slots in an HStack with a
-// fixed-width label so the controls line up across rows.
-private static Element SettingsRow(string label, Element control) =>
-    HStack(16,
-        TextBlock(label).Width(120),
-        control.AutomationName(label)
-    );
+// A clickable card runs an action instead of holding a control: it
+// shows a chevron and is a button for the keyboard and Narrator.
+var reset = SettingsCard("Reset to defaults",
+    description: "Restore every preference on this page",
+    icon: FontIcon("\uE7A7"),
+    onClick: () =>
+    {
+        setNotify(true);
+        setTheme(0);
+        setVolume(60.0);
+    });
 ```
 
-A fixed-width label keeps the controls aligned across rows, and the
-control receives the same text as its automation name. The helper is a
-private static method, not a `Component` — it has no state, so a function
-returning an `Element` is the right shape.
+A card with `onClick` and no control is a button: it shows a chevron,
+takes keyboard focus, and Narrator reads it as a button named after the
+header. Resetting calls each setter with its default, and each pref
+saves under its own key as usual.
 
 ## Tips
 
@@ -84,6 +99,11 @@ avoids the [versioned-shape migration](../persistence.md) story for
 the common case of adding a pref. If two prefs are genuinely
 correlated (e.g. `theme` + `accentColor`), keep them in one record;
 otherwise let them live alone.
+
+**Group related prefs in a `SettingsExpander`.** When a page grows,
+put the details of one area (display, sound) in the expander's `items`
+and keep the most-used control in its header row; see
+[Settings Cards](../settings-cards.md#settings-expanders).
 
 **Don't reach for `UseReducer` here.** The Redux-style reducer is the
 right shape for state with cross-field invariants; a settings page is

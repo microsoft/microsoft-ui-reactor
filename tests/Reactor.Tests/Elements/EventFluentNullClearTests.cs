@@ -457,6 +457,25 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void SettingsCard_Click_NullClears()
+    {
+        var el = SettingsCard("h").Click(Sentinel);
+        Assert.Same(Sentinel, el.OnClick);
+        Assert.True(el.IsClickable);
+        var cleared = el.Click(null);
+        Assert.Null(cleared.OnClick);
+        Assert.False(cleared.IsClickable);
+    }
+
+    [Fact]
+    public void SettingsExpander_IsExpandedChanged_NullClears()
+    {
+        var el = SettingsExpander("h").IsExpandedChanged(SentinelBool);
+        Assert.Same(SentinelBool, el.OnIsExpandedChanged);
+        Assert.Null(el.IsExpandedChanged(null).OnIsExpandedChanged);
+    }
+
+    [Fact]
     public void SplitView_PaneOpenChanged_NullClears()
     {
         var el = SplitView(TextBlock("p"), TextBlock("c")).PaneOpenChanged(SentinelBool);
