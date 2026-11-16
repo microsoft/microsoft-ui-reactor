@@ -442,8 +442,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     /// call, or a call to a value-returning helper, whose result is discarded as a statement does
     /// not count: element records are immutable, so <c>control.AutomationName("x");</c> or
     /// <c>Name(control);</c> leaves <c>control</c> unnamed. A <c>void</c> helper can still label
-    /// through an array it was handed, so its call statement is followed. The walk is bounded so a
-    /// recursive helper cannot loop.
+    /// through an array or <c>ref</c>/<c>out</c> parameter it was handed, so its call statement is
+    /// followed in that case. The walk is bounded so a recursive helper cannot loop.
     /// </summary>
     private static bool ForwardsLabel(
         SyntaxNodeAnalysisContext context, IMethodSymbol method, string parameterName, int depth)
@@ -484,8 +484,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                             continue;
 
                         if (ResolveHelper(context, inner, type, helperName.Identifier.Text) is { } helper
-                            && (helper.ReturnsVoid || !IsDiscarded(inner))
                             && ParameterName(args[i], i, helper) is { } next
+                            && (!IsDiscarded(inner) || helper.ReturnsVoid && WritesBackToCaller(helper, next))
                             && ForwardsLabel(context, helper.ReducedFrom ?? helper.OriginalDefinition, next, depth + 1))
                             return true;
                     }
@@ -494,6 +494,15 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         }
         return false;
     }
+
+    /// <summary>
+    /// Whether a <c>void</c> helper can hand a labeled copy back through
+    /// <paramref name="parameterName"/>: only by writing into an array it was given, or through a
+    /// <c>ref</c>/<c>out</c> parameter. Reassigning a by-value <c>Element</c> parameter is local.
+    /// </summary>
+    private static bool WritesBackToCaller(IMethodSymbol helper, string parameterName) =>
+        helper.Parameters.FirstOrDefault(p => p.Name == parameterName) is { } parameter
+        && (parameter.Type is IArrayTypeSymbol || parameter.RefKind is RefKind.Ref or RefKind.Out);
 
     /// <summary>True when a call's value (with any fluent chain on it) is thrown away as a statement.</summary>
     private static bool IsDiscarded(InvocationExpressionSyntax call) =>
@@ -514,10 +523,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             return ResolveMethod(context, call);
 
         IMethodSymbol? single = null;
-        foreach (var member in type.GetMembers(name))
+        foreach (var candidate in type.GetMembers(name).OfType<IMethodSymbol>())
         {
-            if (member is not IMethodSymbol candidate)
-                continue;
             if (single is not null)
                 return null;
             single = candidate;

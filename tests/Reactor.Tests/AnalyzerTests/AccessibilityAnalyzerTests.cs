@@ -674,6 +674,33 @@ class C
 }");
 
     /// <summary>
+    /// A <c>void</c> helper's local reassignment of a by-value parameter never reaches the caller;
+    /// a write through <c>ref</c> does.
+    /// </summary>
+    [Fact]
+    public Task Void_Helper_Labels_Only_Through_Caller_Visible_Writes() => VerifyAsync(@"
+class C
+{
+    static void Name(Element c) { c = c.AutomationName(""Email""); }
+    static Element Row(Element c)
+    {
+        Name(c);
+        return HStack(c);
+    }
+
+    static void NameRef(ref Element c) { c = c.AutomationName(""Email""); }
+    static Element RefRow(Element c)
+    {
+        NameRef(ref c);
+        return HStack(c);
+    }
+
+    Element M(string[] options) => VStack(
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}),
+        RefRow(ComboBox(options)));
+}");
+
+    /// <summary>
     /// Only type-preserving modifiers are walked through. A call that wraps the field in another
     /// element puts the name on the wrapper.
     /// </summary>
