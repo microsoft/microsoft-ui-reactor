@@ -110,10 +110,13 @@ updates:
         update-types: ["version-update:semver-major"]
       # The extension must compile against the oldest VS it supports (VS 2022 17.14,
       # the lower bound in source.extension.vsixmanifest). VS 2026 runs extensions
-      # built against the 17.x API, so the 17.x SDK covers both. An 18.x SDK would
-      # make VS 2026 the real minimum while the manifest still promises 17.14, and
-      # VS 2022 would fail at load time. Move these to 18.x only together with
-      # dropping VS 2022 support. Also held back via IGNORE_PACKAGES in
+      # built against the 17.x API, so the 17.x SDK covers both. An 18.x SDK raises
+      # the assembly versions the extension binds to past what VS 2022 ships, and
+      # VS binding redirects only unify upward, so it can fail to load on VS 2022
+      # while the manifest still promises 17.14 (the same ceiling the System.Text.Json
+      # override in Reactor.VsExtension.csproj documents). Move these to 18.x only
+      # together with dropping VS 2022 support. The SDK test framework follows the
+      # same VS version line. Also held back via IGNORE_PACKAGES in
       # .github/workflows/windows-nuget-updates.yml.
       # https://learn.microsoft.com/visualstudio/extensibility/migration/extension-compatibility
       - dependency-name: "Microsoft.VisualStudio.SDK"
@@ -125,6 +128,8 @@ updates:
       - dependency-name: "Microsoft.VisualStudio.Utilities"
         update-types: ["version-update:semver-major"]
       - dependency-name: "Microsoft.VisualStudio.Composition"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
