@@ -702,7 +702,8 @@ class C
 
     /// <summary>
     /// Only type-preserving modifiers are walked through. A call that wraps the field in another
-    /// element puts the name on the wrapper.
+    /// element puts the name on the wrapper, whether the label sits on the field's own chain, comes
+    /// from a labeling container, or is applied by a helper.
     /// </summary>
     [Fact]
     public Task Name_Applied_To_A_Wrapper_Does_Not_Satisfy_Rule() => VerifyAsync(@"
@@ -710,7 +711,55 @@ class C
 {
     static Element Row(Element c) => HStack(c.ShowErrors().AutomationName(""Email""));
 
-    Element M(string[] options) => Row({|REACTOR_A11Y_003:ComboBox(options)|});
+    Element M(string[] options) => VStack(
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}),
+        {|REACTOR_A11Y_003:ComboBox(options)|}.ShowErrors().AutomationName(""Role""),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField(
+            {|REACTOR_A11Y_003:ComboBox(options)|}.ShowErrors(), label: ""Role""),
+        ComboBox(options).AutomationName(""Role"").ShowErrors(),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField(
+            ComboBox(options).Width(120), label: ""Role""));
+}");
+
+    /// <summary>
+    /// A field inside an explicit array or collection expression is traced to its argument, so an
+    /// array-labeling helper names it the same way it names a <c>params</c> element.
+    /// </summary>
+    [Fact]
+    public Task Fields_In_Explicit_Arrays_Reach_The_Labeling_Helper() => VerifyAsync(@"
+class C
+{
+    static Element Panel(Element[] items) => VStack(Name(items));
+    static Element[] Name(Element[] items)
+    {
+        for (var i = 0; i < items.Length; i++)
+            items[i] = items[i].AutomationName(""caption"");
+        return items;
+    }
+
+    Element M(string[] options) => VStack(
+        Panel(new Element[] { ComboBox(options) }),
+        Panel(new[] { ComboBox(options) }),
+        Panel([ComboBox(options)]),
+        VStack(new Element[] { {|REACTOR_A11Y_003:ComboBox(options)|} }));
+}");
+
+    /// <summary>
+    /// Replacing an array parameter with a new array is a local write; only element writes reach
+    /// the caller's array.
+    /// </summary>
+    [Fact]
+    public Task Void_Helper_Reassigning_Its_Array_Does_Not_Satisfy_Rule() => VerifyAsync(@"
+class C
+{
+    static void Name(Element[] xs) { xs = new[] { xs[0].AutomationName(""Email"") }; }
+    static Element Panel(params Element[] xs)
+    {
+        Name(xs);
+        return VStack(xs);
+    }
+
+    Element M(string[] options) => Panel({|REACTOR_A11Y_003:ComboBox(options)|});
 }");
 
     /// <summary>

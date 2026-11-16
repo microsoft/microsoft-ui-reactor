@@ -155,6 +155,20 @@ public class AccessibilityScannerTests
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_003");
     }
 
+    // Matches Reconciler.ResolveCaptionForElement's `Header ?? OnContent ?? OffContent`: a set but
+    // empty header (or on-content) resolves to an empty caption, so the switch stays unnamed.
+    [Fact]
+    public void A11Y_003_ToggleSwitch_With_Empty_Higher_Precedence_Caption_Flagged()
+    {
+        var tree = VStack(
+            ToggleSwitch(false, null, onContent: "Working", header: ""),
+            ToggleSwitch(false, null, onContent: "", offContent: "Off")
+        );
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.Equal(2, findings.Count(f => f.Id == "A11Y_003" && f.ElementType == nameof(ToggleSwitchElement)));
+    }
+
     [Fact]
     public void A11Y_003_TextBox_With_LabeledBy_Passes()
     {

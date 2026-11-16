@@ -265,11 +265,13 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         // redundant `.AutomationName("Password")` next to a `.Header("Password")` that was doing
         // the job, which is worse guidance than the rule was written to give. The match is on the
         // exact identifier, so `PaneHeader` / `TabStripHeader` / `RightHeader` do not satisfy it.
-        var outermost = ScanOwnChain(invocation, labels, out var labeled);
+        var outermost = ScanOwnChain(
+            invocation, labels, out var labeled, out var wrapped, context.SemanticModel, context.CancellationToken);
         if (labeled)
             return;
 
-        if (IsLabeledByEnclosingCall(context, outermost))
+        // Once the field is wrapped (`.ShowErrors()`), anything outside labels the wrapper.
+        if (!wrapped && IsLabeledByEnclosingCall(context, outermost))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(
@@ -286,11 +288,22 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     /// <c>with</c> initializer assigning a label property. The walk stops at the first node that
     /// is not part of the field's own value, so a label on an enclosing container
     /// (<c>Expander(ComboBox(items)).Header("Advanced")</c>) does not count for the field.
+    /// With a <paramref name="model"/>, it also stops before a fluent call that returns a
+    /// different element (<c>.ShowErrors()</c> wraps the field in a
+    /// <c>ValidationVisualizerElement</c>) and sets <paramref name="wrapped"/>: past that point a
+    /// label names the wrapper. Without one, the whole value expression is walked, which is what
+    /// discarded-result detection needs.
     /// </summary>
     private static ExpressionSyntax ScanOwnChain(
-        InvocationExpressionSyntax field, ImmutableHashSet<string> labels, out bool labeled)
+        InvocationExpressionSyntax field,
+        ImmutableHashSet<string> labels,
+        out bool labeled,
+        out bool wrapped,
+        SemanticModel? model = null,
+        System.Threading.CancellationToken ct = default)
     {
         labeled = false;
+        wrapped = false;
         ExpressionSyntax node = field;
         while (true)
         {
@@ -301,7 +314,14 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                         && ma.Parent is InvocationExpressionSyntax chained
                         && chained.Expression == ma:
                     if (LabelModifiers.Contains(ma.Name.Identifier.ValueText))
+                    {
                         labeled = true;
+                    }
+                    else if (model is not null && IsWrappingCall(model, node, chained, ct))
+                    {
+                        wrapped = true;
+                        return node;
+                    }
                     node = chained;
                     continue;
                 case WithExpressionSyntax withExpr when withExpr.Expression == node:
@@ -326,6 +346,36 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             }
             return node;
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="call"/> (a fluent call on <paramref name="receiver"/>) binds to a
+    /// method that returns a different element than it was given. Unbound calls (dynamic,
+    /// mid-edit) are not treated as wrapping.
+    /// </summary>
+    private static bool IsWrappingCall(
+        SemanticModel model, ExpressionSyntax receiver, InvocationExpressionSyntax call,
+        System.Threading.CancellationToken ct)
+    {
+        if (model.GetSymbolInfo(call, ct).Symbol is not IMethodSymbol method
+            || model.GetTypeInfo(receiver, ct).Type is not { TypeKind: not TypeKind.Error } receiverType)
+            return false;
+        return !PreservesReceiver(method, receiverType);
+    }
+
+    /// <summary>
+    /// True for Reactor's <c>T M&lt;T&gt;(this T)</c> modifier shape, or any method returning
+    /// exactly its receiver's type.
+    /// </summary>
+    private static bool PreservesReceiver(IMethodSymbol method, ITypeSymbol receiverType)
+    {
+        var original = method.ReducedFrom ?? method;
+        if (original.IsExtensionMethod
+            && original.Parameters.Length > 0
+            && original.Parameters[0].Type is ITypeParameterSymbol
+            && SymbolEqualityComparer.Default.Equals(original.ReturnType, original.Parameters[0].Type))
+            return true;
+        return SymbolEqualityComparer.Default.Equals(method.ReturnType, receiverType);
     }
 
     /// <summary>
@@ -394,11 +444,26 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     /// control.AutomationName(label))</c>.</item>
     /// </list>
     /// A plain container (<c>VStack</c>, <c>HStack</c>, …) is neither, so a field merely sitting
-    /// next to a caption <c>TextBlock</c> is still reported.
+    /// next to a caption <c>TextBlock</c> is still reported. A field inside an explicit array or
+    /// collection expression (<c>Panel(new Element[] { field })</c>, <c>Panel([field])</c>) is
+    /// traced to that argument, the same as a <c>params</c> element.
     /// </summary>
     private static bool IsLabeledByEnclosingCall(
         SyntaxNodeAnalysisContext context, ExpressionSyntax node)
     {
+        switch (node.Parent)
+        {
+            case InitializerExpressionSyntax
+            {
+                Parent: ExpressionSyntax creation and (ArrayCreationExpressionSyntax or ImplicitArrayCreationExpressionSyntax),
+            }:
+                node = creation;
+                break;
+            case ExpressionElementSyntax { Parent: CollectionExpressionSyntax collection }:
+                node = collection;
+                break;
+        }
+
         if (node.Parent is not ArgumentSyntax
             {
                 Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax call } list,
@@ -441,12 +506,15 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     /// <c>NameOptionsFromCaptions(options)</c> → <c>options[i].AutomationName(...)</c>). A label
     /// call, or a call to a value-returning helper, whose result is discarded as a statement does
     /// not count: element records are immutable, so <c>control.AutomationName("x");</c> or
-    /// <c>Name(control);</c> leaves <c>control</c> unnamed. A <c>void</c> helper can still label
-    /// through an array or <c>ref</c>/<c>out</c> parameter it was handed, so its call statement is
-    /// followed in that case. The walk is bounded so a recursive helper cannot loop.
+    /// <c>Name(control);</c> leaves <c>control</c> unnamed. A <c>void</c> helper called as a
+    /// statement is followed with <paramref name="writeBackOnly"/>: there a label counts only when
+    /// it is assigned into the caller's array (<c>items[i] = items[i].AutomationName(...)</c>) or
+    /// through a <c>ref</c>/<c>out</c> parameter, since reassigning a local or a by-value
+    /// parameter never reaches the caller. The walk is bounded so a recursive helper cannot loop.
     /// </summary>
     private static bool ForwardsLabel(
-        SyntaxNodeAnalysisContext context, IMethodSymbol method, string parameterName, int depth)
+        SyntaxNodeAnalysisContext context, IMethodSymbol method, string parameterName, int depth,
+        bool writeBackOnly = false)
     {
         var parameter = method.Parameters.FirstOrDefault(p => p.Name == parameterName);
         if (parameter is null)
@@ -459,20 +527,18 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             LocalFunctionStatementSyntax l => (SyntaxNode?)l.Body ?? l.ExpressionBody,
             _ => null,
         });
-        foreach (var body in bodies)
+        foreach (var body in bodies.OfType<SyntaxNode>())
         {
-            if (body is null)
-                continue;
-
             foreach (var inner in body.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
                 if (inner.Expression is MemberAccessExpressionSyntax labelCall
                     && LabelModifiers.Contains(labelCall.Name.Identifier.Text)
                     && IsParameterReceiver(context, labelCall.Expression, parameter)
-                    && !IsDiscarded(inner))
+                    && (writeBackOnly ? WritesBackToCaller(inner, parameter) : !IsDiscarded(inner)))
                     return true;
 
-                if (depth < MaxForwardingDepth
+                if (!writeBackOnly
+                    && depth < MaxForwardingDepth
                     && inner.Expression is IdentifierNameSyntax helperName
                     && method.ContainingType is { } type)
                 {
@@ -483,10 +549,14 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                             || passed.Identifier.Text != parameterName)
                             continue;
 
-                        if (ResolveHelper(context, inner, type, helperName.Identifier.Text) is { } helper
-                            && ParameterName(args[i], i, helper) is { } next
-                            && (!IsDiscarded(inner) || helper.ReturnsVoid && WritesBackToCaller(helper, next))
-                            && ForwardsLabel(context, helper.ReducedFrom ?? helper.OriginalDefinition, next, depth + 1))
+                        if (ResolveHelper(context, inner, type, helperName.Identifier.Text) is not { } helper
+                            || ParameterName(args[i], i, helper) is not { } next)
+                            continue;
+
+                        var discarded = IsDiscarded(inner);
+                        if ((!discarded || helper.ReturnsVoid)
+                            && ForwardsLabel(context, helper.ReducedFrom ?? helper.OriginalDefinition, next, depth + 1,
+                                writeBackOnly: discarded))
                             return true;
                     }
                 }
@@ -496,17 +566,29 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// Whether a <c>void</c> helper can hand a labeled copy back through
-    /// <paramref name="parameterName"/>: only by writing into an array it was given, or through a
-    /// <c>ref</c>/<c>out</c> parameter. Reassigning a by-value <c>Element</c> parameter is local.
+    /// True when a label call's result is assigned somewhere the caller can see:
+    /// an element of the array <paramref name="parameter"/>, or <paramref name="parameter"/>
+    /// itself when it is <c>ref</c>/<c>out</c>.
     /// </summary>
-    private static bool WritesBackToCaller(IMethodSymbol helper, string parameterName) =>
-        helper.Parameters.FirstOrDefault(p => p.Name == parameterName) is { } parameter
-        && (parameter.Type is IArrayTypeSymbol || parameter.RefKind is RefKind.Ref or RefKind.Out);
+    private static bool WritesBackToCaller(InvocationExpressionSyntax labelCall, IParameterSymbol parameter)
+    {
+        var value = ScanOwnChain(labelCall, HeaderLabels, out _, out _);
+        if (value.Parent is not AssignmentExpressionSyntax assignment || assignment.Right != value)
+            return false;
+
+        return assignment.Left switch
+        {
+            ElementAccessExpressionSyntax { Expression: IdentifierNameSyntax array } =>
+                array.Identifier.ValueText == parameter.Name && parameter.Type is IArrayTypeSymbol,
+            IdentifierNameSyntax target =>
+                target.Identifier.ValueText == parameter.Name && parameter.RefKind is RefKind.Ref or RefKind.Out,
+            _ => false,
+        };
+    }
 
     /// <summary>True when a call's value (with any fluent chain on it) is thrown away as a statement.</summary>
     private static bool IsDiscarded(InvocationExpressionSyntax call) =>
-        ScanOwnChain(call, HeaderLabels, out _).Parent is ExpressionStatementSyntax;
+        ScanOwnChain(call, HeaderLabels, out _, out _).Parent is ExpressionStatementSyntax;
 
     private const int MaxForwardingDepth = 3;
 
@@ -625,12 +707,7 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             if (symbol is not IMethodSymbol method)
                 return false;
             found = true;
-            var original = method.ReducedFrom ?? method;
-            var genericSelf = original.IsExtensionMethod
-                && original.Parameters.Length > 0
-                && original.Parameters[0].Type is ITypeParameterSymbol
-                && SymbolEqualityComparer.Default.Equals(original.ReturnType, original.Parameters[0].Type);
-            if (!genericSelf && !SymbolEqualityComparer.Default.Equals(method.ReturnType, receiverType))
+            if (!PreservesReceiver(method, receiverType))
                 return false;
         }
         return found;

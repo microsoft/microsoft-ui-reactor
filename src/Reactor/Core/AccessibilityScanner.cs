@@ -356,11 +356,10 @@ public static partial class AccessibilityScanner
                 header = cb.Header;
                 placeholder = cb.PlaceholderText;
                 break;
-            // ToggleSwitchAutomationPeer names the switch from Header, then OnContent, then OffContent.
+            // Same precedence as Reconciler.ResolveCaptionForElement, which mirrors
+            // `Header ?? OnContent ?? OffContent` into the name: an empty header yields no caption.
             case ToggleSwitchElement ts:
-                header = !string.IsNullOrEmpty(ts.Header) ? ts.Header
-                    : !string.IsNullOrEmpty(ts.OnContent) ? ts.OnContent
-                    : ts.OffContent;
+                header = ts.Header ?? ts.OnContent ?? ts.OffContent;
                 break;
             default:
                 return;
