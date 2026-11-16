@@ -69,6 +69,8 @@ public sealed partial class Reconciler
             ? ownTheme : prevAmbientTheme;
 
         UIElement? control;
+        // Issue #965 — only a standard handler's own control records inline overlays.
+        bool ownsControl = false;
         // A per-host RegisterType callback may return the control it mounted for a child
         // element; that control already describes the child (see ForwardsAnotherElement).
         bool registeredType = false;
@@ -100,6 +102,7 @@ public sealed partial class Reconciler
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl;
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
@@ -110,6 +113,7 @@ public sealed partial class Reconciler
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl;
         }
         else
         {
@@ -166,7 +170,7 @@ public sealed partial class Reconciler
 
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
-            ApplyModifiers(fe, modifiers, requestRerender);
+            ApplyModifiers(fe, modifiers, requestRerender, ownsControl);
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
         // Issue #1262 — bind a `.Validate(field, value, …)` verdict to the control's
