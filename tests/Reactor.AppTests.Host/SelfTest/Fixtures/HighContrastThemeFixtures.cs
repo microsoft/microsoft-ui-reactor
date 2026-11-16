@@ -149,15 +149,39 @@ internal static class HighContrastThemeFixtures
     /// <summary>
     /// A host merges a <see cref="ThemeProbe"/> into its content root, and WinUI itself updates it
     /// when it applies a theme. A real contrast switch changes the desktop, so a Light/Dark switch
-    /// stands in: WinUI applies both the same way. The probe follows a new root, counts only while
-    /// it is in the live tree (WinUI does not update it anywhere else), goes with empty content,
-    /// and leaves with the host. Other fixtures' probes come and go on later turns, so the checks
-    /// read this probe's own state; <c>HighContrastThemeTests</c> pins what the count does.
+    /// stands in: WinUI applies both the same way. A probe that replaces a live one counts at
+    /// once; the probe follows a new root, counts only while it is in the live tree (WinUI does
+    /// not update it anywhere else), goes with empty content, and leaves with the host. Other
+    /// fixtures' probes come and go on later turns, so the checks read each probe's own state;
+    /// <c>HighContrastThemeTests</c> pins what the count does.
     /// </summary>
     internal class ProbeFollowsWinUITheme(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            // A probe that replaces a live one counts at once, so a root swap never leaves a moment
+            // without a counted probe, where the system setting would stand in. One that replaces
+            // nothing waits for its tree check.
+            var first = new Border();
+            var second = new Border();
+            var third = new Border();
+            H.SetContent(new StackPanel { Children = { first, second, third } });
+            await Harness.Render();
+            var replaced = ThemeProbe.TryAttach(first);
+            for (var i = 0; i < 40 && replaced is { IsLive: false }; i++)
+                await Task.Delay(50);
+            var replacedWasLive = replaced?.IsLive == true;
+            var replacing = ThemeProbe.TryAttach(second, replaced);
+            var fresh = ThemeProbe.TryAttach(third);
+            var atOnce = replacing is { IsLive: true } && fresh is { IsLive: false };
+            replaced?.Dispose();
+            var afterHandOver = replacing?.IsLive == true;
+            replacing?.Dispose();
+            fresh?.Dispose();
+            H.SetContent(null);
+            H.Check("HC_Probe_ReplacementCountsAtOnce", replacedWasLive && atOnce && afterHandOver,
+                $"replacedWasLive={replacedWasLive} atOnce={atOnce} afterHandOver={afterHandOver}");
+
             var host = new ReactorHostControl();
             Action<int>? setRoot = null;
             host.Mount(ctx =>
