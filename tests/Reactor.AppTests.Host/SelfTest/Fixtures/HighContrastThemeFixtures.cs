@@ -76,12 +76,20 @@ internal static class HighContrastThemeFixtures
 
     private static string Describe(Brush? brush) => brush is SolidColorBrush s ? s.Color.ToString() : brush?.GetType().Name ?? "null";
 
+    // A probe's tree check runs on a later Low-priority turn, which a slow machine may not reach
+    // within one render: poll for the state instead of reading it once.
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, int timeoutMs = 3000)
+    {
+        for (var waited = 0; !condition() && waited < timeoutMs; waited += 50)
+            await Task.Delay(50);
+        return condition();
+    }
+
     // Lets a probe report that was queued at Low priority run, then waits for the refresh it causes.
     // A probe reports only while its root is in the live tree, so first wait for it to load.
     private static async Task ReportAsync(ThemeProbe probe, Func<Task> waitForIdle)
     {
-        for (var i = 0; i < 40 && !probe.IsLive; i++)
-            await Task.Delay(50);
+        await WaitUntilAsync(() => probe.IsLive);
         probe.SimulateChangeForTest();
         var queue = DispatcherQueue.GetForCurrentThread();
         var yielded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -168,8 +176,8 @@ internal static class HighContrastThemeFixtures
             H.SetContent(new StackPanel { Children = { first, second, third } });
             await Harness.Render();
             var replaced = ThemeProbe.TryAttach(first);
-            for (var i = 0; i < 40 && replaced is { IsLive: false }; i++)
-                await Task.Delay(50);
+            if (replaced is not null)
+                await WaitUntilAsync(() => replaced.IsLive);
             var replacedWasLive = replaced?.IsLive == true;
             var replacing = ThemeProbe.TryAttach(second, replaced);
             var fresh = ThemeProbe.TryAttach(third);
@@ -204,8 +212,9 @@ internal static class HighContrastThemeFixtures
                 await Harness.Render();
                 var probe = host.ThemeProbeForTest;
                 var root = host.ThemeListenerElement;
+                var attachedLive = probe is not null && await WaitUntilAsync(() => probe.IsLive);
                 H.Check("HC_Probe_AttachedToContentRoot",
-                    probe is not null && root is not null && ReferenceEquals(probe.Owner, root) && probe.IsLive,
+                    probe is not null && root is not null && ReferenceEquals(probe.Owner, root) && attachedLive,
                     $"probe={probe is not null} owner={ReferenceEquals(probe?.Owner, root)} live={probe?.IsLive}");
                 if (probe is null || root is null) return;
 
@@ -229,9 +238,10 @@ internal static class HighContrastThemeFixtures
                 await Harness.Render();
                 var newProbe = host.ThemeProbeForTest;
                 var newRoot = host.ThemeListenerElement;
+                var newLive = newProbe is not null && await WaitUntilAsync(() => newProbe.IsLive);
                 H.Check("HC_Probe_FollowsANewRoot",
                     newProbe is not null && !ReferenceEquals(newProbe, probe) && newRoot is not null && !ReferenceEquals(newRoot, root)
-                    && ReferenceEquals(newProbe.Owner, newRoot) && newProbe.IsLive && !probe.IsLive
+                    && ReferenceEquals(newProbe.Owner, newRoot) && newLive && !probe.IsLive
                     && root.Resources.MergedDictionaries.Count == 0,
                     $"new={newProbe is not null && !ReferenceEquals(newProbe, probe)} live={newProbe?.IsLive} oldLive={probe.IsLive} oldRootDictionaries={root.Resources.MergedDictionaries.Count}");
                 if (newProbe is null || newRoot is null) return;
@@ -239,11 +249,11 @@ internal static class HighContrastThemeFixtures
                 // Off the tree WinUI no longer updates the probe, so a report from it could be stale.
                 H.SetContent(null);
                 await Harness.Render();
-                var liveOffTree = newProbe.IsLive;
+                var withdrawn = await WaitUntilAsync(() => !newProbe.IsLive);
                 H.SetContent(container);
                 await Harness.Render();
-                H.Check("HC_Probe_CountsOnlyInTheLiveTree", !liveOffTree && newProbe.IsLive,
-                    $"liveOffTree={liveOffTree} liveBack={newProbe.IsLive}");
+                var back = await WaitUntilAsync(() => newProbe.IsLive);
+                H.Check("HC_Probe_CountsOnlyInTheLiveTree", withdrawn && back, $"withdrawnOffTree={withdrawn} liveBack={back}");
 
                 setRoot!(2);
                 await host.WaitForIdleAsync();
@@ -370,6 +380,9 @@ internal static class HighContrastThemeFixtures
                 H.Check("HC_RawHost_HasAProbe",
                     host.OwningWindow is null && probe is not null && ReferenceEquals(probe.Owner, host.ThemeListenerElement));
                 if (probe is null) return;
+                // The probe must not keep WinUI from loading the root: subscribing to the root's
+                // Loaded while it entered the tree during a render did, for a root like this one.
+                H.Check("HC_RawHost_RootStillLoads", probe.Owner.IsLoaded);
                 await ReportAsync(probe, () => host.WaitForIdleAsync());
                 H.Check("HC_RawHost_InitialOff", OverrideColor(target.Child) == Colors.Red, $"color={OverrideColor(target.Child)}");
 

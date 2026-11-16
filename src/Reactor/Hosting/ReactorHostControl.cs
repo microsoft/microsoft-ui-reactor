@@ -683,6 +683,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // The theme probe counts only while the content is in the live tree (issue #1506).
+        _themeProbe?.RecheckLiveness();
+
         // A tree rendered while detached resolved ThemeRef resource overrides without the
         // theme this control inherits from its new ancestors. Re-resolve every one of them.
         if (_currentControl is not null && _reconciler.HostThemeChanged)
@@ -816,6 +819,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // the hosting app calls Dispose when it's truly done with the
         // control. Until then we keep _rootComponent / _reconciler /
         // Content alive so the tree survives reparenting.
+        //
+        // The theme probe stops counting while the content is off the live tree, where WinUI
+        // does not update it, and counts again once it is back (issue #1506).
+        _themeProbe?.RecheckLiveness();
     }
 
     /// <summary>
@@ -1555,6 +1562,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
                 AttachThemeListener(errorPanel);
             else
                 DetachThemeListener();
+        }
+        else
+        {
+            // The built-in panel took the content's place: the probe on the old root is off the
+            // tree now, so it stops counting (issue #1506).
+            _themeProbe?.RecheckLiveness();
         }
     }
 

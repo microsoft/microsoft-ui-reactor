@@ -1849,5 +1849,11 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             AttachThemeListener(errorPanel);
             OwningWindow?.OnHostContentRendered(errorPanel);
         }
+        else
+        {
+            // The built-in panel took the content's place: the probe on the old root is off the
+            // tree now, so it stops counting (issue #1506).
+            _themeProbe?.RecheckLiveness();
+        }
     }
 }
