@@ -36,6 +36,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
+  restore null normal brushes and the latest normal value, including border modifier
+  changes during an active interaction (issue #1501).
+
 - Shallow comparison now detects changes to an element's `.Animate()` curve or
   property flags, including parent child-skip checks. Equivalent configurations
   remain eligible for skipping (spec 014, Feature 3).
