@@ -45,6 +45,15 @@ internal static class Issue965InlineEdgeFixture
                     Flyout(
                         Button("Issue965_flyoutTarget", () => { }).MarginInlineStart(phase == 0 ? 8 : 6),
                         TextBlock("Issue965_flyoutMenu")).MarginInlineEnd(4),
+                    // Matching inline values alone can't tell the layers apart: here the
+                    // decorator's previous values equal the target's.
+                    phase == 0
+                        ? Flyout(
+                            Button("Issue965_flyoutCollide", () => { }).Margin(0).MarginInlineEnd(4),
+                            TextBlock("Issue965_flyoutCollideMenu")).MarginInlineEnd(4)
+                        : Flyout(
+                            Button("Issue965_flyoutCollide", () => { }).Margin(9).MarginInlineEnd(4),
+                            TextBlock("Issue965_flyoutCollideMenu")).MarginInlineStart(8),
                     // Same inline edge, FlowDirection flipped LTR → RTL → LTR.
                     TextBlock("Issue965_flipPad")
                         .Set(tb => tb.FlowDirection = dir)
@@ -83,13 +92,15 @@ internal static class Issue965InlineEdgeFixture
             var setterBase = H.FindText("Issue965_setterBase");
             var flipDeclared = H.FindText("Issue965_flipDeclared");
             var flyoutTarget = H.FindButton("Issue965_flyoutTarget");
+            var flyoutCollide = H.FindButton("Issue965_flyoutCollide");
             H.Check("Issue965_Mounted",
                 padSwap is not null && marginSwap is not null && buttonSwap is not null
                 && flipPad is not null && flipMargin is not null && flipBorder is not null
-                && setterBase is not null && flipDeclared is not null && flyoutTarget is not null);
+                && setterBase is not null && flipDeclared is not null && flyoutTarget is not null
+                && flyoutCollide is not null);
             if (padSwap is null || marginSwap is null || buttonSwap is null || flipPad is null
                 || flipMargin is null || flipBorder is null || setterBase is null
-                || flipDeclared is null || flyoutTarget is null) return;
+                || flipDeclared is null || flyoutTarget is null || flyoutCollide is null) return;
 
             // Phase 0 has to put the inline edge on the control, or phase 1 proves nothing.
             H.Check("Issue965_Phase0_PadSwapApplied", padSwap.Padding == new Thickness(8, 0, 0, 0));
@@ -102,6 +113,7 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase0_SetterBaseOverlaid", setterBase.Padding == new Thickness(1, 6, 7, 8));
             H.Check("Issue965_Phase0_FlipDeclaredLtr", flipDeclared.Padding == new Thickness(5, 0, 9, 0));
             H.Check("Issue965_Phase0_FlyoutLayersCombined", flyoutTarget.Margin == new Thickness(8, 0, 4, 0));
+            H.Check("Issue965_Phase0_FlyoutCollideCombined", flyoutCollide.Margin == new Thickness(0, 0, 4, 0));
 
             H.ClickButton("Issue965_Next");
             await Harness.Render();
@@ -114,7 +126,8 @@ internal static class Issue965InlineEdgeFixture
                 && ReferenceEquals(flipMargin, H.FindText("Issue965_flipMargin"))
                 && ReferenceEquals(flipBorder, FindBorder("Issue965_flipBorder"))
                 && ReferenceEquals(setterBase, H.FindText("Issue965_setterBase"))
-                && ReferenceEquals(flyoutTarget, H.FindButton("Issue965_flyoutTarget")));
+                && ReferenceEquals(flyoutTarget, H.FindButton("Issue965_flyoutTarget"))
+                && ReferenceEquals(flyoutCollide, H.FindButton("Issue965_flyoutCollide")));
 
             // The stale value was 8,0,4,0: the old inline-start edge read back as the base.
             H.Check("Issue965_Phase1_PadSwapDropsOldEdge", padSwap.Padding == new Thickness(0, 0, 4, 0));
@@ -130,6 +143,9 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase1_FlipDeclaredRtl", flipDeclared.Padding == new Thickness(5, 0, 5, 0));
             // Sharing one record, the decorator re-adopted the target's old 8 as its base.
             H.Check("Issue965_Phase1_FlyoutTargetEdgeUpdated", flyoutTarget.Margin == new Thickness(6, 0, 4, 0));
+            // Taking the target's record as its own, the decorator lost the target's right edge
+            // (8,9,9,9).
+            H.Check("Issue965_Phase1_FlyoutCollideKeepsTargetEdge", flyoutCollide.Margin == new Thickness(8, 9, 4, 9));
 
             H.ClickButton("Issue965_Next");
             await Harness.Render();
