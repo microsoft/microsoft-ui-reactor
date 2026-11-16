@@ -64,6 +64,28 @@ updates:
       roslyn-testing:
         patterns:
           - "Microsoft.CodeAnalysis*Testing"
+
+      # The VS SDK packages the extension compiles against. Microsoft.VisualStudio.SDK
+      # raises its floors on the others every release (18.12.1606 requires
+      # Microsoft.VisualStudio.Composition >= 18.9.89 and Interop/Shell.15.0 >=
+      # 18.12.1603), so ungrouped, Dependabot opens one overlapping PR per package
+      # that each drags in the rest (#1526, #1528, #1529). Majors are ignored below.
+      visual-studio-sdk:
+        patterns:
+          - "Microsoft.VisualStudio.SDK"
+          - "Microsoft.VisualStudio.Interop"
+          - "Microsoft.VisualStudio.Shell.15.0"
+          - "Microsoft.VisualStudio.Utilities"
+          - "Microsoft.VisualStudio.Composition"
+
+      # Build-time only. Microsoft.VSSDK.BuildTools raises its floor on
+      # Microsoft.VisualStudio.SDK.Analyzers (18.12.1606 requires >= 17.7.179), the
+      # pair #1530 had to bump together. Neither ships in the VSIX, so they follow
+      # the newest release, majors included.
+      visual-studio-build-tools:
+        patterns:
+          - "Microsoft.VSSDK.BuildTools"
+          - "Microsoft.VisualStudio.SDK.Analyzers"
     ignore:
       # Windows App SDK and Win2D are pinned via Directory.Build.props
       # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion / Win2DVersion) and bumped
@@ -85,6 +107,24 @@ updates:
       # additions (upstream PR #2269) that v2.5.301 omitted. Block breaking
       # major (3.x) bumps; 2.x security patches are still allowed.
       - dependency-name: "MessagePack"
+        update-types: ["version-update:semver-major"]
+      # The extension must compile against the oldest VS it supports (VS 2022 17.14,
+      # the lower bound in source.extension.vsixmanifest). VS 2026 runs extensions
+      # built against the 17.x API, so the 17.x SDK covers both. An 18.x SDK would
+      # make VS 2026 the real minimum while the manifest still promises 17.14, and
+      # VS 2022 would fail at load time. Move these to 18.x only together with
+      # dropping VS 2022 support. Also held back via IGNORE_PACKAGES in
+      # .github/workflows/windows-nuget-updates.yml.
+      # https://learn.microsoft.com/visualstudio/extensibility/migration/extension-compatibility
+      - dependency-name: "Microsoft.VisualStudio.SDK"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Interop"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Shell.15.0"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Utilities"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Composition"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
