@@ -1754,10 +1754,18 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal sealed class InlineOverlayRecord
     {
-        public (Thickness Base, Thickness Written)? Margin;
-        public (Thickness Base, Thickness Written)? Padding;
-        public (Thickness Base, Thickness Written)? Border;
+        public InlineOverlay? Margin;
+        public InlineOverlay? Padding;
+        public InlineOverlay? Border;
     }
+
+    /// <summary>
+    /// One inline overlay: its base, the value it wrote, and the inline modifier values that
+    /// produced it. A flyout decorator applies its own modifiers to its target's control in the
+    /// same pass, so two layers can share one control; the inline values tell an update whether
+    /// the record is its own layer's.
+    /// </summary>
+    internal readonly record struct InlineOverlay(Thickness Base, Thickness Written, double? Start, double? End);
 
     internal static class ReactorAttached
     {
@@ -1785,11 +1793,19 @@ public sealed partial class Reconciler : IDisposable
         => GetOrCreateReactorState(fe).InlineOverlays ??= new InlineOverlayRecord();
 
     /// <summary>
+    /// Issue #965 — the previous render's overlay for this layer, or null when the record was
+    /// written by another layer (its inline values differ from the ones this layer declared
+    /// last render).
+    /// </summary>
+    private static InlineOverlay? OwnPreviousOverlay(InlineOverlay? recorded, double? oldStart, double? oldEnd)
+        => recorded is { } r && r.Start == oldStart && r.End == oldEnd ? r : null;
+
+    /// <summary>
     /// Issue #965 — the base for the edges an inline overlay does not own, given the control's
     /// live value. If the control still holds exactly what the previous overlay wrote, that is
     /// our own output, not a base, so the previous overlay's base is used instead.
     /// </summary>
-    internal static Thickness UnoverlaidBase(Thickness live, (Thickness Base, Thickness Written)? previous)
+    internal static Thickness UnoverlaidBase(Thickness live, InlineOverlay? previous)
         => previous is { } p && p.Written == live ? p.Base : live;
 
     /// <summary>
@@ -6584,18 +6600,19 @@ public sealed partial class Reconciler : IDisposable
         // arm below unreachable and meant `.Margin(x)` → no margin reset nothing (#952).
         var resolvedMargin = m.Margin;
         // Issue #965: the previous overlay, consulted only when the previous render wrote one.
-        (Thickness Base, Thickness Written)? prevMarginOverlay = null;
+        InlineOverlay? prevMarginOverlay = null;
         if (m.MarginInlineStart.HasValue || m.MarginInlineEnd.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
             if (oldM?.MarginInlineStart.HasValue == true || oldM?.MarginInlineEnd.HasValue == true)
-                prevMarginOverlay = GetInlineOverlays(fe)?.Margin;
+                prevMarginOverlay = OwnPreviousOverlay(GetInlineOverlays(fe)?.Margin, oldM.MarginInlineStart, oldM.MarginInlineEnd);
             var baseMargin = resolvedMargin ?? oldM?.Margin ?? UnoverlaidBase(fe.Margin, prevMarginOverlay);
             var left = isRtl ? (m.MarginInlineEnd ?? baseMargin.Left) : (m.MarginInlineStart ?? baseMargin.Left);
             var right = isRtl ? (m.MarginInlineStart ?? baseMargin.Right) : (m.MarginInlineEnd ?? baseMargin.Right);
             resolvedMargin = new Thickness(left, baseMargin.Top, right, baseMargin.Bottom);
-            if (prevMarginOverlay != (baseMargin, resolvedMargin.Value))
-                GetOrCreateInlineOverlays(fe).Margin = (baseMargin, resolvedMargin.Value);
+            var marginOverlay = new InlineOverlay(baseMargin, resolvedMargin.Value, m.MarginInlineStart, m.MarginInlineEnd);
+            if (prevMarginOverlay != marginOverlay)
+                GetOrCreateInlineOverlays(fe).Margin = marginOverlay;
         }
         // Unset goes through ClearValue, never through "write the DP default". A local
         // value outranks every Style setter in WinUI's precedence order, so assigning the
@@ -6627,12 +6644,12 @@ public sealed partial class Reconciler : IDisposable
         var wantsPadding = m.Padding.HasValue || m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue;
         var hadPadding = oldM is not null && (oldM.Padding.HasValue || oldM.PaddingInlineStart.HasValue || oldM.PaddingInlineEnd.HasValue);
         var resolvedPadding = m.Padding ?? oldM?.Padding;
-        (Thickness Base, Thickness Written)? prevPadOverlay = null;
+        InlineOverlay? prevPadOverlay = null;
         if (m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
             if (oldM?.PaddingInlineStart.HasValue == true || oldM?.PaddingInlineEnd.HasValue == true)
-                prevPadOverlay = GetInlineOverlays(fe)?.Padding;
+                prevPadOverlay = OwnPreviousOverlay(GetInlineOverlays(fe)?.Padding, oldM.PaddingInlineStart, oldM.PaddingInlineEnd);
             var basePad = resolvedPadding ?? UnoverlaidBase(fe switch
             {
                 WinUI.Control pc => pc.Padding,
@@ -6646,8 +6663,9 @@ public sealed partial class Reconciler : IDisposable
             var left = isRtl ? (m.PaddingInlineEnd ?? basePad.Left) : (m.PaddingInlineStart ?? basePad.Left);
             var right = isRtl ? (m.PaddingInlineStart ?? basePad.Right) : (m.PaddingInlineEnd ?? basePad.Right);
             resolvedPadding = new Thickness(left, basePad.Top, right, basePad.Bottom);
-            if (prevPadOverlay != (basePad, resolvedPadding.Value))
-                GetOrCreateInlineOverlays(fe).Padding = (basePad, resolvedPadding.Value);
+            var padOverlay = new InlineOverlay(basePad, resolvedPadding.Value, m.PaddingInlineStart, m.PaddingInlineEnd);
+            if (prevPadOverlay != padOverlay)
+                GetOrCreateInlineOverlays(fe).Padding = padOverlay;
         }
         // Same inline-delta rule as Margin above.
         var paddingInlineChanged = m.PaddingInlineStart != oldM?.PaddingInlineStart
@@ -6812,12 +6830,12 @@ public sealed partial class Reconciler : IDisposable
         }
         // Apply physical border thickness, then overlay logical (BiDi-aware) inline border
         var resolvedBorder = m.BorderThickness;
-        (Thickness Base, Thickness Written)? prevBorderOverlay = null;
+        InlineOverlay? prevBorderOverlay = null;
         if (m.BorderInlineStart.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
-            if (oldM?.BorderInlineStart.HasValue == true)
-                prevBorderOverlay = GetInlineOverlays(fe)?.Border;
+            if (oldM?.BorderInlineStart is { } oldBorderInline)
+                prevBorderOverlay = OwnPreviousOverlay(GetInlineOverlays(fe)?.Border, oldBorderInline.Left, null);
             // Same base rule as Margin/Padding: the previous render's physical thickness, else the
             // control's value minus the previous inline overlay (issue #965).
             var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? UnoverlaidBase(fe switch
@@ -6834,8 +6852,9 @@ public sealed partial class Reconciler : IDisposable
                 resolvedBorder = new Thickness(baseBorder.Left, baseBorder.Top, inlineStartThickness.Left, baseBorder.Bottom);
             else
                 resolvedBorder = new Thickness(inlineStartThickness.Left, baseBorder.Top, baseBorder.Right, baseBorder.Bottom);
-            if (prevBorderOverlay != (baseBorder, resolvedBorder.Value))
-                GetOrCreateInlineOverlays(fe).Border = (baseBorder, resolvedBorder.Value);
+            var borderOverlay = new InlineOverlay(baseBorder, resolvedBorder.Value, inlineStartThickness.Left, null);
+            if (prevBorderOverlay != borderOverlay)
+                GetOrCreateInlineOverlays(fe).Border = borderOverlay;
         }
         // Same inline-delta rule as Margin/Padding above; the reset arm likewise has to fire
         // when the old bag carried only an inline border, or that edge is never released.

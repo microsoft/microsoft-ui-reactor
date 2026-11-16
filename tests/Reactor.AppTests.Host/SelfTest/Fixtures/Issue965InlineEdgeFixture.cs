@@ -39,6 +39,12 @@ internal static class Issue965InlineEdgeFixture
                     phase == 0
                         ? Button("Issue965_buttonSwap", () => { }).PaddingInlineStart(8)
                         : Button("Issue965_buttonSwap", () => { }).PaddingInlineEnd(4),
+                    // A flyout decorator applies its modifiers to its target's control in the
+                    // same pass, so both layers overlay one Margin. Each must base its edges on
+                    // its own previous overlay, not on the other layer's.
+                    Flyout(
+                        Button("Issue965_flyoutTarget", () => { }).MarginInlineStart(phase == 0 ? 8 : 6),
+                        TextBlock("Issue965_flyoutMenu")).MarginInlineEnd(4),
                     // Same inline edge, FlowDirection flipped LTR → RTL → LTR.
                     TextBlock("Issue965_flipPad")
                         .Set(tb => tb.FlowDirection = dir)
@@ -76,24 +82,26 @@ internal static class Issue965InlineEdgeFixture
             var flipBorder = FindBorder("Issue965_flipBorder");
             var setterBase = H.FindText("Issue965_setterBase");
             var flipDeclared = H.FindText("Issue965_flipDeclared");
+            var flyoutTarget = H.FindButton("Issue965_flyoutTarget");
             H.Check("Issue965_Mounted",
                 padSwap is not null && marginSwap is not null && buttonSwap is not null
                 && flipPad is not null && flipMargin is not null && flipBorder is not null
-                && setterBase is not null && flipDeclared is not null);
+                && setterBase is not null && flipDeclared is not null && flyoutTarget is not null);
             if (padSwap is null || marginSwap is null || buttonSwap is null || flipPad is null
                 || flipMargin is null || flipBorder is null || setterBase is null
-                || flipDeclared is null) return;
+                || flipDeclared is null || flyoutTarget is null) return;
 
             // Phase 0 has to put the inline edge on the control, or phase 1 proves nothing.
             H.Check("Issue965_Phase0_PadSwapApplied", padSwap.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase0_MarginSwapApplied", marginSwap.Margin == new Thickness(8, 0, 0, 0));
-            var buttonMount = buttonSwap.Padding;
-            H.Check("Issue965_Phase0_ButtonSwapApplied", buttonMount.Left == 8);
+            // The overlay runs before the Button's style is applied, so its mount base is zero.
+            H.Check("Issue965_Phase0_ButtonSwapApplied", buttonSwap.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase0_FlipPadLtr", flipPad.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase0_FlipMarginLtr", flipMargin.Margin == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase0_FlipBorderLtr", flipBorder.BorderThickness == new Thickness(9, 0, 0, 0));
             H.Check("Issue965_Phase0_SetterBaseOverlaid", setterBase.Padding == new Thickness(1, 6, 7, 8));
             H.Check("Issue965_Phase0_FlipDeclaredLtr", flipDeclared.Padding == new Thickness(5, 0, 9, 0));
+            H.Check("Issue965_Phase0_FlyoutLayersCombined", flyoutTarget.Margin == new Thickness(8, 0, 4, 0));
 
             H.ClickButton("Issue965_Next");
             await Harness.Render();
@@ -105,22 +113,23 @@ internal static class Issue965InlineEdgeFixture
                 && ReferenceEquals(flipPad, H.FindText("Issue965_flipPad"))
                 && ReferenceEquals(flipMargin, H.FindText("Issue965_flipMargin"))
                 && ReferenceEquals(flipBorder, FindBorder("Issue965_flipBorder"))
-                && ReferenceEquals(setterBase, H.FindText("Issue965_setterBase")));
+                && ReferenceEquals(setterBase, H.FindText("Issue965_setterBase"))
+                && ReferenceEquals(flyoutTarget, H.FindButton("Issue965_flyoutTarget")));
 
             // The stale value was 8,0,4,0: the old inline-start edge read back as the base.
             H.Check("Issue965_Phase1_PadSwapDropsOldEdge", padSwap.Padding == new Thickness(0, 0, 4, 0));
             H.Check("Issue965_Phase1_MarginSwapDropsOldEdge", marginSwap.Margin == new Thickness(0, 0, 4, 0));
-            // The Button's mount base is whatever its unowned edges read at mount (0, or its
-            // styled padding — symmetric either way), so its left edge returns to the right
-            // edge it had at mount instead of keeping the 8.
+            // The stale value kept the old 8 on the left.
             H.Check("Issue965_Phase1_ButtonSwapDropsOldEdge",
-                buttonSwap.Padding == new Thickness(buttonMount.Right, buttonMount.Top, 4, buttonMount.Bottom));
+                buttonSwap.Padding == new Thickness(0, 0, 4, 0));
             // The stale value was 8,0,8,0: the LTR overlay read back as the RTL base.
             H.Check("Issue965_Phase1_FlipPadRtl", flipPad.Padding == new Thickness(0, 0, 8, 0));
             H.Check("Issue965_Phase1_FlipMarginRtl", flipMargin.Margin == new Thickness(0, 0, 8, 0));
             H.Check("Issue965_Phase1_FlipBorderRtl", flipBorder.BorderThickness == new Thickness(0, 0, 9, 0));
             H.Check("Issue965_Phase1_SetterBaseFollowsSetter", setterBase.Padding == new Thickness(1, 9, 9, 9));
             H.Check("Issue965_Phase1_FlipDeclaredRtl", flipDeclared.Padding == new Thickness(5, 0, 5, 0));
+            // Sharing one record, the decorator re-adopted the target's old 8 as its base.
+            H.Check("Issue965_Phase1_FlyoutTargetEdgeUpdated", flyoutTarget.Margin == new Thickness(6, 0, 4, 0));
 
             H.ClickButton("Issue965_Next");
             await Harness.Render();
