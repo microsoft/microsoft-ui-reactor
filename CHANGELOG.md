@@ -49,10 +49,16 @@ Conventions for contributors:
 - Theme references follow Windows contrast themes. While a contrast theme is on,
   `.Resources(...)` theme overrides, `ThemeRef.Resolve(...)` and Reactor's own resolved
   brushes (validation styling) now resolve from the `HighContrast` theme dictionary, as a
-  `{ThemeResource}` does; `ThemeRef.Resolve(key, isDark)` uses `isDark` only for keys that
-  dictionary does not define. Turning a contrast theme on or off while the app runs refreshes
-  them in every Reactor window, including memoized subtrees. `Theme.*` modifiers such as
-  `.Background(Theme.CardBackground)` already followed contrast themes (issue #1506).
+  `{ThemeResource}` does, whatever `isDark` asks for. Before, they kept their light or dark
+  brushes. In an app started with a contrast theme on, they were red (`#FF0000`) and stayed
+  red after the contrast theme was turned off, and so did WinUI's own uses of the same keys:
+  reading the light or dark dictionary during a contrast theme gives its entries contrast
+  values for the whole app. So during a contrast theme, Reactor no longer reads those
+  dictionaries: a key that the `HighContrast` dictionary does not define resolves to nothing,
+  and the control keeps its own contrast colors. Turning a contrast theme on or off while the
+  app runs refreshes every Reactor window, memoized subtrees included, once WinUI has applied
+  the switch. `Theme.*` modifiers such as `.Background(Theme.CardBackground)` already followed
+  contrast themes (issue #1506).
 
 ### Security
 

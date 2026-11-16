@@ -1,4 +1,5 @@
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
@@ -9,13 +10,16 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Issue #1506: resolved theme brushes follow Windows contrast themes. The contrast setting
-/// is replaced through <see cref="HighContrastState.ReaderForTest"/>, because turning on a
-/// real contrast theme changes the whole desktop. The headless halves (re-read on
-/// invalidation, one refresh per change, the real system read) are pinned in
-/// <c>Reactor.Tests/HighContrastThemeTests</c>.
+/// Issue #1506: resolved theme brushes follow Windows contrast themes, once WinUI has applied
+/// them. A real contrast theme changes the whole desktop, so these fixtures play it:
+/// <see cref="HighContrastState.ReaderForTest"/> stands in for the contrast state,
+/// <see cref="HighContrastState.SystemReaderForTest"/> for the setting Windows announces, and
+/// <see cref="HighContrastState.ProbeReaderForTest"/> for what a host's
+/// <see cref="ThemeProbe"/> reads from WinUI. <see cref="ProbeFollowsWinUITheme"/> shows, with a
+/// real Light/Dark switch, that WinUI itself updates the probe. The headless halves are pinned
+/// in <c>Reactor.Tests/HighContrastThemeTests</c>.
 /// </summary>
-internal static partial class HighContrastThemeFixtures
+internal static class HighContrastThemeFixtures
 {
     private const string Key = "ReactorSelfTestContrastBrush";
     private const string LightOnlyKey = "ReactorSelfTestNoContrastValueBrush";
@@ -48,30 +52,47 @@ internal static partial class HighContrastThemeFixtures
         return dict;
     }
 
-    private static void RestoreSystemSetting()
+    private static void RestoreState()
     {
         HighContrastState.ReaderForTest = null;
+        HighContrastState.SystemReaderForTest = null;
+        HighContrastState.ProbeReaderForTest = null;
         HighContrastState.ResetForTest();
         ThemeRef.InvalidateResolutionCache();
     }
 
-    // The ThemeRef override under test; ProbeColor finds it anywhere in the rendered tree.
-    private static Element Probe(string text) =>
-        Border(TextBlock(text)).Resources(r => r.Set("ProbeBrush", Theme.Ref(OverrideKey)));
+    // A border whose .Resources(...) override, under `slot`, uses the test's theme key.
+    private static Element Overridden(string text, string slot = "ProbeBrush") =>
+        Border(TextBlock(text)).Resources(r => r.Set(slot, Theme.Ref(OverrideKey)));
 
-    private static global::Windows.UI.Color? ProbeColor(object? root) => root switch
+    private static global::Windows.UI.Color? OverrideColor(object? root, string slot = "ProbeBrush") => root switch
     {
-        Border b when b.Resources is { } res && res.TryGetValue("ProbeBrush", out var v) && v is SolidColorBrush s => s.Color,
-        Border b => ProbeColor(b.Child),
-        Panel p => p.Children.Select(ProbeColor).FirstOrDefault(c => c is not null),
-        ContentControl c => ProbeColor(c.Content),
+        Border b when b.Resources is { } res && res.TryGetValue(slot, out var v) && v is SolidColorBrush s => s.Color,
+        Border b => OverrideColor(b.Child, slot),
+        Panel p => p.Children.Select(c => OverrideColor(c, slot)).FirstOrDefault(c => c is not null),
+        ContentControl c => OverrideColor(c.Content, slot),
         _ => null,
     };
 
+    private static string Describe(Brush? brush) => brush is SolidColorBrush s ? s.Color.ToString() : brush?.GetType().Name ?? "null";
+
+    // Lets a probe report that was queued at Low priority run, then waits for the refresh it causes.
+    private static async Task ReportAsync(ThemeProbe probe, Func<Task> waitForIdle)
+    {
+        probe.SimulateChangeForTest();
+        var queue = DispatcherQueue.GetForCurrentThread();
+        var yielded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!queue.TryEnqueue(DispatcherQueuePriority.Low, () => yielded.TrySetResult()))
+            yielded.TrySetResult();
+        await yielded.Task;
+        await waitForIdle();
+    }
+
     /// <summary>
-    /// <see cref="ThemeRef.Resolve(string, bool)"/> uses the <c>HighContrast</c> dictionary while a
-    /// contrast theme is on, whatever Light/Dark is requested, and falls back for keys that
-    /// dictionary does not define.
+    /// While WinUI is in a contrast theme, <see cref="ThemeRef.Resolve(string, bool)"/> reads only
+    /// the <c>HighContrast</c> dictionary, whatever Light/Dark is requested. A key without a
+    /// contrast value resolves to nothing: reading the light or dark entry instead would create
+    /// it with contrast values for the whole app.
     /// </summary>
     internal class ResolveUsesHighContrastDictionary(Harness h) : SelfTestFixtureBase(h)
     {
@@ -89,11 +110,20 @@ internal static partial class HighContrastThemeFixtures
                 H.Check("HC_Off_DarkRequestUsesDefault", ReferenceEquals(ThemeRef.Resolve(Key, isDark: true), DefaultBrush));
                 var fluentLight = ThemeRef.Resolve("CardBackgroundFillColorDefaultBrush", isDark: false);
 
+                // WinUI's plain lookup also reads the theme dictionaries of the theme it uses.
+                // That is why the resolver skips it during a contrast theme: for a key without a
+                // contrast value it would read WinUI's fallback dictionary.
+                H.Check("HC_PlainLookupReadsTheThemeDictionaries",
+                    Application.Current.Resources.TryGetValue(LightOnlyKey, out var plain) && ReferenceEquals(plain, LightOnlyBrush),
+                    $"found={plain}");
+
                 contrastOn = true;
                 ThemeRef.InvalidateResolutionCache();
                 H.Check("HC_On_LightRequestUsesContrast", ReferenceEquals(ThemeRef.Resolve(Key, isDark: false), ContrastBrush));
                 H.Check("HC_On_DarkRequestUsesContrast", ReferenceEquals(ThemeRef.Resolve(Key, isDark: true), ContrastBrush));
-                H.Check("HC_On_KeyWithoutContrastValueFallsBack", ReferenceEquals(ThemeRef.Resolve(LightOnlyKey, isDark: false), LightOnlyBrush));
+                var withoutContrastValue = ThemeRef.Resolve(LightOnlyKey, isDark: false);
+                H.Check("HC_On_KeyWithoutContrastValueResolvesNothing", withoutContrastValue is null,
+                    $"resolved={Describe(withoutContrastValue)}");
 
                 // The Fluent tokens themselves: XamlControlsResources ships a HighContrast dictionary.
                 var fluentContrast = ThemeRef.Resolve("CardBackgroundFillColorDefaultBrush", isDark: false);
@@ -108,20 +138,85 @@ internal static partial class HighContrastThemeFixtures
             finally
             {
                 Application.Current.Resources.MergedDictionaries.Remove(dict);
-                RestoreSystemSetting();
+                RestoreState();
             }
         }
-
-        private static string Describe(Brush? brush) => brush is SolidColorBrush s ? s.Color.ToString() : brush?.GetType().Name ?? "null";
     }
 
     /// <summary>
-    /// A <c>.Resources(...)</c> theme override follows a contrast switch once a
-    /// <see cref="ReactorWindow"/> gets the <c>WM_SETTINGCHANGE</c> Windows broadcasts for it. The
-    /// "stale" check is the negative control: an ordinary re-render does not pick the switch up,
-    /// so the following checks measure the window message rather than any re-render.
+    /// A host merges a <see cref="ThemeProbe"/> into its content root, and WinUI itself updates it
+    /// when it applies a theme. A real contrast switch changes the desktop, so a Light/Dark switch
+    /// stands in: WinUI applies both the same way. The probe follows a new root and leaves with
+    /// the host.
     /// </summary>
-    internal class ResourceOverrideFollowsSettingChange(Harness h) : SelfTestFixtureBase(h)
+    internal class ProbeFollowsWinUITheme(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var probesBefore = HighContrastState.ProbeCountForTest;
+            var host = new ReactorHostControl();
+            Action<bool>? setSwapped = null;
+            host.Mount(ctx =>
+            {
+                var (swapped, set) = ctx.UseState(false);
+                setSwapped = set;
+                return swapped ? VStack(TextBlock("swapped")) : Border(TextBlock("probe"));
+            });
+            H.SetContent(new Border { Child = host });
+            try
+            {
+                await host.WaitForIdleAsync();
+                await Harness.Render();
+                var probe = host.ThemeProbeForTest;
+                var root = host.ThemeListenerElement;
+                H.Check("HC_Probe_AttachedToContentRoot",
+                    probe is not null && root is not null && ReferenceEquals(probe.Owner, root)
+                    && HighContrastState.ProbeCountForTest == probesBefore + 1,
+                    $"probe={probe is not null} owner={ReferenceEquals(probe?.Owner, root)} count={HighContrastState.ProbeCountForTest - probesBefore}");
+                if (probe is null || root is null) return;
+
+                var expected = root.ActualTheme == ElementTheme.Dark ? ThemeProbe.DefaultColor : ThemeProbe.LightColor;
+                H.Check("HC_Probe_ReadsTheAppliedTheme", probe.ColorForTest == expected && !probe.IsHighContrast,
+                    $"color={probe.ColorForTest} expected={expected}");
+
+                var changes = probe.ChangeCountForTest;
+                var flipTo = root.ActualTheme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+                host.RequestedTheme = flipTo;
+                await Harness.Render();
+                var flipped = flipTo == ElementTheme.Dark ? ThemeProbe.DefaultColor : ThemeProbe.LightColor;
+                H.Check("HC_Probe_WinUIUpdatesItOnAThemeSwitch",
+                    probe.ChangeCountForTest > changes && probe.ColorForTest == flipped && !probe.IsHighContrast,
+                    $"changes={probe.ChangeCountForTest - changes} color={probe.ColorForTest} expected={flipped}");
+                host.RequestedTheme = ElementTheme.Default;
+                await Harness.Render();
+
+                setSwapped!(true);
+                await host.WaitForIdleAsync();
+                await Harness.Render();
+                var newProbe = host.ThemeProbeForTest;
+                var newRoot = host.ThemeListenerElement;
+                H.Check("HC_Probe_FollowsANewRoot",
+                    newProbe is not null && !ReferenceEquals(newProbe, probe) && newRoot is not null && !ReferenceEquals(newRoot, root)
+                    && ReferenceEquals(newProbe.Owner, newRoot) && root.Resources.MergedDictionaries.Count == 0
+                    && HighContrastState.ProbeCountForTest == probesBefore + 1,
+                    $"new={newProbe is not null && !ReferenceEquals(newProbe, probe)} oldRootDictionaries={root.Resources.MergedDictionaries.Count} count={HighContrastState.ProbeCountForTest - probesBefore}");
+            }
+            finally
+            {
+                host.Dispose();
+                H.SetContent(null);
+            }
+            H.Check("HC_Probe_DetachedWithTheHost", HighContrastState.ProbeCountForTest == probesBefore,
+                $"count={HighContrastState.ProbeCountForTest - probesBefore}");
+        }
+    }
+
+    /// <summary>
+    /// A <c>.Resources(...)</c> theme override follows a contrast switch once WinUI has applied it,
+    /// reported by a <see cref="ReactorWindow"/>'s probe, and not when Windows announces it: a
+    /// re-render in between still resolves the theme WinUI is using.
+    /// </summary>
+    internal class WindowOverrideWaitsForWinUI(Harness h) : SelfTestFixtureBase(h)
     {
         private sealed class Blank : Component
         {
@@ -130,17 +225,20 @@ internal static partial class HighContrastThemeFixtures
 
         public override async Task RunAsync()
         {
-            // A real ReactorWindow, so the WM_SETTINGCHANGE goes through its message monitor.
             if (ReactorApp.UIDispatcher is null)
-                ReactorApp.UIDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                ReactorApp.UIDispatcher = DispatcherQueue.GetForCurrentThread();
             ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
             var window = ReactorApp.OpenWindow(new WindowSpec { Title = "Contrast", Width = 240, Height = 160 }, () => new Blank());
             await window.Host.WaitForIdleAsync();
+            await Harness.Render();
+            var probe = window.Host.ThemeProbeForTest;
 
             var dict = CreateOverrideDictionary();
             Application.Current.Resources.MergedDictionaries.Add(dict);
-            var contrastOn = false;
-            HighContrastState.ReaderForTest = () => contrastOn;
+            var announced = false;
+            var applied = false;
+            HighContrastState.SystemReaderForTest = () => announced;
+            HighContrastState.ProbeReaderForTest = () => applied;
             ThemeRef.InvalidateResolutionCache();
 
             using var host = new ReactorHostControl();
@@ -149,33 +247,41 @@ internal static partial class HighContrastThemeFixtures
             {
                 var (tick, set) = ctx.UseState(0);
                 setTick = set;
-                return Probe($"tick:{tick}");
+                return Overridden($"tick:{tick}");
             });
             H.SetContent(new Border { Child = host });
             using var isolation = ThemeResourceListeners.IsolateForTest(host);
             try
             {
-                await host.WaitForIdleAsync();
-                H.Check("HC_SettingChange_InitialOff", ProbeColor(host.Content) == Colors.Red, $"color={ProbeColor(host.Content)}");
+                H.Check("HC_Window_HasAProbe", probe is not null && ReferenceEquals(probe.Owner, window.Host.ThemeListenerElement));
+                if (probe is null) return;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_Window_InitialOff", OverrideColor(host.Content) == Colors.Red, $"color={OverrideColor(host.Content)}");
 
-                contrastOn = true;
+                announced = true;
+                ThemeRef.InvalidateResolutionCache();   // e.g. UISettings.ColorValuesChanged
                 setTick!(1);
                 await host.WaitForIdleAsync();
-                H.Check("HC_SettingChange_RerenderAloneIsStale", ProbeColor(host.Content) == Colors.Red, $"color={ProbeColor(host.Content)}");
+                H.Check("HC_Window_AnnouncedSwitchWaitsForWinUI", OverrideColor(host.Content) == Colors.Red, $"color={OverrideColor(host.Content)}");
 
-                SendSettingChange(window.Hwnd);
-                await host.WaitForIdleAsync();
-                H.Check("HC_SettingChange_OnUsesContrast", ProbeColor(host.Content) == Colors.Yellow, $"color={ProbeColor(host.Content)}");
+                applied = true;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_Window_AppliedSwitchUsesContrast", OverrideColor(host.Content) == Colors.Yellow, $"color={OverrideColor(host.Content)}");
 
-                contrastOn = false;
-                SendSettingChange(window.Hwnd);
+                announced = false;
+                ThemeRef.InvalidateResolutionCache();
+                setTick!(2);
                 await host.WaitForIdleAsync();
-                H.Check("HC_SettingChange_OffRestores", ProbeColor(host.Content) == Colors.Red, $"color={ProbeColor(host.Content)}");
+                H.Check("HC_Window_AnnouncedOffWaitsForWinUI", OverrideColor(host.Content) == Colors.Yellow, $"color={OverrideColor(host.Content)}");
+
+                applied = false;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_Window_AppliedOffRestores", OverrideColor(host.Content) == Colors.Red, $"color={OverrideColor(host.Content)}");
             }
             finally
             {
                 Application.Current.Resources.MergedDictionaries.Remove(dict);
-                RestoreSystemSetting();
+                RestoreState();
                 H.SetContent(null);
                 try { window.Close(); } catch (global::System.Runtime.InteropServices.COMException) { }
             }
@@ -184,16 +290,16 @@ internal static partial class HighContrastThemeFixtures
 
     /// <summary>
     /// A host built over a raw <see cref="Window"/> (no <see cref="ReactorWindow"/>, like a tray
-    /// flyout) watches <c>WM_SETTINGCHANGE</c> itself.
+    /// flyout) has its own probe.
     /// </summary>
-    internal class RawHostFollowsSettingChange(Harness h) : SelfTestFixtureBase(h)
+    internal class RawHostFollowsProbe(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var dict = CreateOverrideDictionary();
             Application.Current.Resources.MergedDictionaries.Add(dict);
-            var contrastOn = false;
-            HighContrastState.ReaderForTest = () => contrastOn;
+            var applied = false;
+            HighContrastState.ProbeReaderForTest = () => applied;
             ThemeRef.InvalidateResolutionCache();
             var target = new Border();
             H.SetContent(target);
@@ -201,40 +307,42 @@ internal static partial class HighContrastThemeFixtures
             {
                 using var host = new ReactorHost(H.Window) { ContentTarget = target };
                 using var isolation = ThemeResourceListeners.IsolateForTest(host);
-                host.Mount(_ => Probe("raw"));
+                host.Mount(_ => Overridden("raw"));
                 await host.WaitForIdleAsync();
-                H.Check("HC_RawHost_WatchesSettingChange", host.OwningWindow is null && host.HasSettingChangeMonitorForTest);
-                H.Check("HC_RawHost_InitialOff", ProbeColor(target.Child) == Colors.Red, $"color={ProbeColor(target.Child)}");
+                await Harness.Render();
+                var probe = host.ThemeProbeForTest;
+                H.Check("HC_RawHost_HasAProbe",
+                    host.OwningWindow is null && probe is not null && ReferenceEquals(probe.Owner, host.ThemeListenerElement));
+                if (probe is null) return;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_RawHost_InitialOff", OverrideColor(target.Child) == Colors.Red, $"color={OverrideColor(target.Child)}");
 
-                contrastOn = true;
-                SendSettingChange(WinRT.Interop.WindowNative.GetWindowHandle(H.Window));
-                await host.WaitForIdleAsync();
-                H.Check("HC_RawHost_OnUsesContrast", ProbeColor(target.Child) == Colors.Yellow, $"color={ProbeColor(target.Child)}");
+                applied = true;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_RawHost_AppliedSwitchUsesContrast", OverrideColor(target.Child) == Colors.Yellow, $"color={OverrideColor(target.Child)}");
             }
             finally
             {
                 Application.Current.Resources.MergedDictionaries.Remove(dict);
-                RestoreSystemSetting();
+                RestoreState();
                 H.SetContent(null);
             }
         }
     }
 
     /// <summary>
-    /// An embedded <see cref="ReactorHostControl"/> has no window message monitor; its
-    /// <c>UISettings.ColorValuesChanged</c> handler must fully refresh on a contrast switch,
-    /// memoized subtrees included. The "stale" check is the negative control: a re-render that
-    /// already resolves with the new setting does not reach the memoized override, and it must
-    /// not stop the full refresh either.
+    /// An embedded <see cref="ReactorHostControl"/>'s probe refreshes memoized subtrees too. The
+    /// "stale" check is the negative control: a re-render that already resolves the contrast
+    /// state does not reach the memoized override, so the refresh must bypass memoization.
     /// </summary>
-    internal class HostControlColorChangeRefreshesMemo(Harness h) : SelfTestFixtureBase(h)
+    internal class HostControlProbeRefreshesMemo(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var dict = CreateOverrideDictionary();
             Application.Current.Resources.MergedDictionaries.Add(dict);
-            var contrastOn = false;
-            HighContrastState.ReaderForTest = () => contrastOn;
+            var applied = false;
+            HighContrastState.ProbeReaderForTest = () => applied;
             ThemeRef.InvalidateResolutionCache();
 
             using var host = new ReactorHostControl();
@@ -243,41 +351,39 @@ internal static partial class HighContrastThemeFixtures
             {
                 var (tick, set) = ctx.UseState(0);
                 setTick = set;
-                return VStack(TextBlock($"tick:{tick}"), Memo(_ => Probe("memo")));
+                return VStack(Overridden($"tick:{tick}", "LiveBrush"), Memo(_ => Overridden("memo")));
             });
             H.SetContent(new Border { Child = host });
             using var isolation = ThemeResourceListeners.IsolateForTest(host);
             try
             {
                 await host.WaitForIdleAsync();
-                H.Check("HC_ColorChange_InitialOff", ProbeColor(host.Content) == Colors.Red, $"color={ProbeColor(host.Content)}");
+                await Harness.Render();
+                var probe = host.ThemeProbeForTest;
+                H.Check("HC_HostControl_HasAProbe", probe is not null && ReferenceEquals(probe.Owner, host.ThemeListenerElement));
+                if (probe is null) return;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_HostControl_InitialOff", OverrideColor(host.Content) == Colors.Red, $"color={OverrideColor(host.Content)}");
 
-                contrastOn = true;
-                ThemeRef.InvalidateResolutionCache();   // e.g. an ActualThemeChanged arriving first
+                HighContrastState.ReaderForTest = static () => true;
+                ThemeRef.InvalidateResolutionCache();
                 setTick!(1);
                 await host.WaitForIdleAsync();
-                H.Check("HC_ColorChange_MemoStaleAfterPartialRerender", ProbeColor(host.Content) == Colors.Red, $"color={ProbeColor(host.Content)}");
+                H.Check("HC_HostControl_MemoStaleAfterPartialRerender",
+                    OverrideColor(host.Content, "LiveBrush") == Colors.Yellow && OverrideColor(host.Content) == Colors.Red,
+                    $"live={OverrideColor(host.Content, "LiveBrush")} memo={OverrideColor(host.Content)}");
+                HighContrastState.ReaderForTest = null;
 
-                host.RaiseColorValuesChangedForTest();
-                await host.WaitForIdleAsync();
-                H.Check("HC_ColorChange_MemoUsesContrast", ProbeColor(host.Content) == Colors.Yellow, $"color={ProbeColor(host.Content)}");
+                applied = true;
+                await ReportAsync(probe, () => host.WaitForIdleAsync());
+                H.Check("HC_HostControl_MemoUsesContrast", OverrideColor(host.Content) == Colors.Yellow, $"color={OverrideColor(host.Content)}");
             }
             finally
             {
                 Application.Current.Resources.MergedDictionaries.Remove(dict);
-                RestoreSystemSetting();
+                RestoreState();
                 H.SetContent(null);
             }
         }
     }
-
-    // Literal values, not the product's constants, so a wrong constant is caught.
-    private const uint WM_SETTINGCHANGE = 0x001A;
-    private const nint SPI_SETHIGHCONTRAST = 0x0043;
-
-    private static void SendSettingChange(nint hwnd)
-        => _ = SendMessageW(hwnd, WM_SETTINGCHANGE, SPI_SETHIGHCONTRAST, 0);
-
-    [global::System.Runtime.InteropServices.LibraryImport("user32.dll")]
-    private static partial nint SendMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
 }

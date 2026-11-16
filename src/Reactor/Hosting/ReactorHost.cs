@@ -84,11 +84,12 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private FrameworkElement? _themeListenerElement;
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
-    // Contrast-theme switches for a host over a raw Window, which has no ReactorWindow
-    // message monitor to report them (issue #1506). UI thread only.
-    private Messaging.WindowMessageMonitor? _settingChangeMonitor;
+    // Reports what WinUI applies to the root element, so a contrast-theme switch is picked
+    // up after WinUI has made it (issue #1506). Follows the root like the listener above.
+    // UI thread only.
+    private ThemeProbe? _themeProbe;
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
-    internal bool HasSettingChangeMonitorForTest => _settingChangeMonitor is not null;
+    internal ThemeProbe? ThemeProbeForTest => _themeProbe;
     private volatile bool _disposed;
 
     // Set at the start of Dispose(), before component cleanups run.
@@ -374,7 +375,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _window = window;
         _reconciler.HostWindow = window;
         // A contrast theme may have been switched while no window was listening: read the
-        // setting again rather than trusting a value cached for an earlier window (#1506).
+        // system setting again, which stands in until this host's theme probe reports (#1506).
         Microsoft.UI.Reactor.Core.HighContrastState.Invalidate();
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -1547,11 +1548,12 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (_themeListenerElement is not null)
             _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
 
-        // ActualThemeChanged does not fire for a contrast-theme switch. A ReactorWindow
-        // reports those from its own message monitor; a host over a raw Window (a tray
-        // flyout, an app-built Window) watches WM_SETTINGCHANGE itself (issue #1506).
-        if (OwningWindow is null && _settingChangeMonitor is null && !_disposed)
-            AttachSettingChangeMonitor();
+        // ActualThemeChanged does not fire for a contrast-theme switch: the theme probe
+        // reports those, once WinUI has applied them (issue #1506). The new probe attaches
+        // before the old one goes, so the reported state never lapses to the system setting.
+        var previousProbe = _themeProbe;
+        _themeProbe = control is FrameworkElement probeOwner && !_disposed ? ThemeProbe.TryAttach(probeOwner) : null;
+        previousProbe?.Dispose();
 
         if (control is not FrameworkElement fe)
         {
@@ -1561,28 +1563,6 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
         _themeListenerElement = fe;
         fe.ActualThemeChanged += OnActualThemeChanged;
-    }
-
-    private void AttachSettingChangeMonitor()
-    {
-        try
-        {
-            var monitor = Messaging.WindowMessageMonitor.ForWindow(_window);
-            monitor.MessageReceived += OnSettingChangeMessage;
-            _settingChangeMonitor = monitor;
-        }
-        catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or ArgumentException or ObjectDisposedException)
-        {
-            // The window is already gone or has no HWND yet: nothing to watch.
-            Core.Diagnostics.DiagnosticLog.SwallowedError(Core.Diagnostics.LogCategory.Hosting, "ReactorHost.AttachSettingChangeMonitor", ex);
-        }
-    }
-
-    private static void OnSettingChangeMessage(object? sender, Messaging.WindowMessageEventArgs args)
-    {
-        if (args.Msg == Messaging.WindowMessageMonitor.WM_SETTINGCHANGE
-            && args.WParam == Microsoft.UI.Reactor.Core.HighContrastState.SPI_SETHIGHCONTRAST)
-            Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -1620,8 +1600,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         }
         // Issue #660 (#86): a palette / high-contrast change can alter the brush
         // a (key,theme) pair resolves to — drop the cache so it re-resolves. A
-        // contrast-theme switch also needs memoized subtrees refreshed (issue #1506).
-        Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
+        // contrast-theme switch is refreshed by the theme probe instead, once WinUI
+        // has applied it: Windows raises this event before that (issue #1506).
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
@@ -1690,9 +1670,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             if (_themeListenerElement is not null)
                 _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
             _themeListenerElement = null;
-            // RemoveWindowSubclass must run on the window's thread.
-            _settingChangeMonitor?.Dispose();
-            _settingChangeMonitor = null;
+            _themeProbe?.Dispose();
+            _themeProbe = null;
         });
 
         // Accessibility listener cleanup
