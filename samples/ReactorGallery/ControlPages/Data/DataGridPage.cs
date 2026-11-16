@@ -135,19 +135,19 @@ var (lastRowEdit, setLastRowEdit) = UseState(""(none yet)"");
 
 // `rowEditSource` and `Columns()` are the same list source and five columns
 // the card above uses — this card differs only in editMode.
-DataGrid(
-    source: rowEditSource,
-    columns: Columns(),
-    editable: true,
-    editMode: EditMode.Row,   // whole row edits and commits together
-    onRowChanged: (key, item) =>
-    {
-        setLastRowEdit($""row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}"");
-        return Task.CompletedTask;
-    },
-    rowHeight: 36)
-
-TextBlock($""Last committed row: {lastRowEdit}"")")
+VStack(8,
+    DataGrid(
+        source: rowEditSource,
+        columns: Columns(),
+        editable: true,
+        editMode: EditMode.Row,   // whole row edits and commits together
+        onRowChanged: (key, item) =>
+        {
+            setLastRowEdit($""row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}"");
+            return Task.CompletedTask;
+        },
+        rowHeight: 36),
+    TextBlock($""Last committed row: {lastRowEdit}""))")
         ).Margin(36, 24, 36, 36));
     }
 }
