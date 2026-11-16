@@ -28,9 +28,11 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// <summary>
     /// Resolves a theme resource using an explicit isDark flag.
     /// Useful for resolving during Render() before controls are in the tree.
-    /// While a Windows contrast theme is on, the resource comes from the <c>HighContrast</c>
-    /// theme dictionary, as a <c>{ThemeResource}</c> does, and <paramref name="isDark"/> only
-    /// picks the fallback for keys that dictionary does not define.
+    /// While WinUI is in a Windows contrast theme, the resource comes from the
+    /// <c>HighContrast</c> theme dictionary, as a <c>{ThemeResource}</c> does, and
+    /// <paramref name="isDark"/> is not used. A key that dictionary does not define then
+    /// resolves to <c>null</c>: reading the light or dark dictionary during a contrast theme
+    /// would create its entries with contrast values, for the whole app.
     /// </summary>
     public static Brush? Resolve(string resourceKey, bool isDark)
     {
@@ -139,23 +141,44 @@ public readonly record struct ThemeRef(string ResourceKey)
         // WinUI's XamlControlsResources ThemeDictionary keys vary by app configuration:
         //   Keys observed: "Default", "Light", "HighContrast" (no "Dark")
         // "Default" contains the base/dark brushes; "Light" contains light overrides.
-        // While a contrast theme is on, {ThemeResource} resolves from "HighContrast" whatever
-        // the Light/Dark theme is, so try it first (issue #1506). Then the exact theme name,
-        // then "Default" as the universal fallback — which also covers app keys that a
-        // HighContrast dictionary does not define.
-        Brush? brush;
-        if (highContrast && TryResolveFromThemeDictionaries(resources, resourceKey, HighContrastThemeName, out brush))
-            return brush;
-        if (TryResolveFromThemeDictionaries(resources, resourceKey, themeName, out brush))
-            return brush;
-        if (TryResolveFromThemeDictionaries(resources, resourceKey, "Default", out brush))
-            return brush;
+        foreach (var dictionaryName in ThemeDictionaryLookupOrder(themeName, highContrast))
+        {
+            if (TryResolveFromThemeDictionaries(resources, resourceKey, dictionaryName, out var brush))
+                return brush;
+        }
 
-        // Fallback: non-themed resource lookup (including MergedDictionaries)
-        if (ResourceLookup.TryFind<Brush>(resources, resourceKey, out var fb))
+        // Fallback: non-themed resource lookup (including MergedDictionaries). WinUI's lookup
+        // also reads the theme dictionaries of the theme it uses, and for a key without a
+        // HighContrast value its fallback dictionary, so it is skipped during a contrast theme
+        // for the reason ThemeDictionaryLookupOrder gives (issue #1506).
+        if (!highContrast && ResourceLookup.TryFind<Brush>(resources, resourceKey, out var fb))
             return fb;
 
         return null;
+    }
+
+    private static readonly string[] s_contrastLookupOrder = [HighContrastThemeName];
+    private static readonly string[] s_lightLookupOrder = ["Light", "Default"];
+    private static readonly string[] s_darkLookupOrder = ["Dark", "Default"];
+
+    /// <summary>
+    /// The theme dictionaries a resolve reads, in order. While WinUI is in a contrast theme,
+    /// <c>{ThemeResource}</c> resolves from <c>HighContrast</c> whatever the Light/Dark theme
+    /// is, and that is the only one read (issue #1506). WinUI creates a theme dictionary entry
+    /// on its first read and resolves the references in it for the theme WinUI uses at that
+    /// moment, then keeps it for every element: reading <c>Light</c>, <c>Dark</c> or
+    /// <c>Default</c> during a contrast theme would give those entries contrast values for the
+    /// whole app. Otherwise: the exact theme name, then <c>Default</c> as the universal fallback.
+    /// </summary>
+    internal static ReadOnlySpan<string> ThemeDictionaryLookupOrder(string themeName, bool highContrast)
+    {
+        if (highContrast) return s_contrastLookupOrder;
+        return themeName switch
+        {
+            "Light" => s_lightLookupOrder,
+            "Dark" => s_darkLookupOrder,
+            _ => new[] { themeName, "Default" },
+        };
     }
 
     /// <summary>The theme dictionary key WinUI uses while a contrast theme is on.</summary>

@@ -4,76 +4,128 @@ using System.Runtime.InteropServices;
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
-/// Whether a Windows contrast theme is on, for <see cref="ThemeRef"/> resolution (issue #1506).
+/// Whether WinUI is in a Windows contrast theme, for <see cref="ThemeRef"/> resolution
+/// (issue #1506).
 /// </summary>
 /// <remarks>
-/// Read with <c>SystemParametersInfo(SPI_GETHIGHCONTRAST)</c>: cheap, callable from any thread,
-/// and free of the WinRT activation that <c>AccessibilitySettings</c> costs (the hosts defer that
-/// one until the first chart). The value is cached until <see cref="Invalidate"/>, which
-/// <see cref="ThemeRef.InvalidateResolutionCache"/> calls on every theme or palette change.
+/// <para>The value is what WinUI has applied, as the hosts' theme probes report it
+/// (<see cref="Microsoft.UI.Reactor.Hosting.ThemeProbe"/>), not the system setting. Windows
+/// announces a contrast switch before WinUI applies it, and a theme dictionary that Reactor reads
+/// in that gap gets entries with the wrong theme's values, for the whole app. Following WinUI
+/// keeps every read in the theme WinUI is using.</para>
+/// <para>Until a probe has reported (no host has content yet), the system setting stands in:
+/// <c>SystemParametersInfo(SPI_GETHIGHCONTRAST)</c>, which is cheap, callable from any thread,
+/// and free of the WinRT activation that <c>AccessibilitySettings</c> costs. That value is cached
+/// until <see cref="Invalidate"/>, which <see cref="ThemeRef.InvalidateResolutionCache"/> calls on
+/// every theme or palette change.</para>
 /// </remarks>
 internal static partial class HighContrastState
 {
     private const uint SPI_GETHIGHCONTRAST = 0x0042;
     private const uint HCF_HIGHCONTRASTON = 0x00000001;
 
-    /// <summary>
-    /// <c>SPI_SETHIGHCONTRAST</c>: the <c>wParam</c> of the <c>WM_SETTINGCHANGE</c> that Windows
-    /// broadcasts when a contrast theme is turned on or off, or another one is chosen.
-    /// </summary>
-    internal const nuint SPI_SETHIGHCONTRAST = 0x0043;
-
     private sealed record Snapshot(int Version, bool Value);
 
     private static int s_version;
     private static Snapshot? s_snapshot;
 
-    // The setting the hosts were last fully refreshed for (-1: not known yet). Kept apart from
-    // the cached value on purpose: a partial re-render (ActualThemeChanged, a palette change)
-    // may already resolve with the new setting before the WM_SETTINGCHANGE arrives, and must
-    // not stop the full refresh that memoized subtrees still need.
-    private static int s_refreshedFor = -1;
+    // What WinUI has applied, as the probes last reported it (-1: no probe has reported).
+    private static int s_applied = -1;
+    private static int s_probes;
 
-    /// <summary>Test seam: replaces the system read; <c>null</c> restores it.</summary>
+    // The value resolved brushes were last refreshed for (-1: nothing was resolved yet).
+    private static int s_renderedWith = -1;
+
+    /// <summary>
+    /// Test seam: replaces the contrast state with this reader's value, cached like the system
+    /// setting until <see cref="Invalidate"/>. It wins over what the probes report, so a
+    /// selftest can render in a contrast theme without changing the desktop. <c>null</c>
+    /// restores the real state.
+    /// </summary>
     internal static Func<bool>? ReaderForTest { get; set; }
 
-    /// <summary>True when a contrast theme is on. Cached until <see cref="Invalidate"/>.</summary>
+    /// <summary>
+    /// Test seam: replaces only the system setting, which stands in until a probe reports, so a
+    /// test can play Windows announcing a switch that WinUI has not applied. <c>null</c>
+    /// restores the real read.
+    /// </summary>
+    internal static Func<bool>? SystemReaderForTest { get; set; }
+
+    /// <summary>
+    /// Test seam: replaces what a theme probe reads from WinUI, so a selftest can play WinUI
+    /// applying a contrast theme. <c>null</c> restores the real read.
+    /// </summary>
+    internal static Func<bool>? ProbeReaderForTest { get; set; }
+
+    /// <summary>True when WinUI is in a contrast theme.</summary>
     internal static bool IsActive
     {
         get
         {
-            var version = Volatile.Read(ref s_version);
-            var snapshot = Volatile.Read(ref s_snapshot);
-            if (snapshot is not null && snapshot.Version == version)
-                return snapshot.Value;
-
-            var value = ReaderForTest is { } reader ? reader() : TryReadSystem(out var on) && on;
-            // Published under the version read above: an Invalidate that lands meanwhile makes
-            // the next caller read again instead of serving this value.
-            Interlocked.CompareExchange(ref s_snapshot, new Snapshot(version, value), snapshot);
+            var value = Current();
             // The first value ever used is what the hosts rendered with.
-            Interlocked.CompareExchange(ref s_refreshedFor, value ? 1 : 0, -1);
+            Interlocked.CompareExchange(ref s_renderedWith, value ? 1 : 0, -1);
             return value;
         }
     }
 
-    /// <summary>Drops the cached value, so the next <see cref="IsActive"/> reads the system setting.</summary>
+    private static bool Current()
+    {
+        var applied = Volatile.Read(ref s_applied);
+        if (ReaderForTest is null && applied >= 0)
+            return applied == 1;
+
+        var version = Volatile.Read(ref s_version);
+        var snapshot = Volatile.Read(ref s_snapshot);
+        if (snapshot is not null && snapshot.Version == version)
+            return snapshot.Value;
+
+        var value = ReaderForTest is { } reader ? reader()
+            : SystemReaderForTest is { } system ? system()
+            : TryReadSystem(out var on) && on;
+        // Published under the version read above: an Invalidate that lands meanwhile makes
+        // the next caller read again instead of serving this value.
+        Interlocked.CompareExchange(ref s_snapshot, new Snapshot(version, value), snapshot);
+        return value;
+    }
+
+    /// <summary>Drops the cached system setting, so the next read without a probe gets it again.</summary>
     internal static void Invalidate() => Interlocked.Increment(ref s_version);
 
+    /// <summary>A host attached a theme probe.</summary>
+    internal static void ProbeAttached() => Interlocked.Increment(ref s_probes);
+
     /// <summary>
-    /// Handles a system notification that the contrast setting may have changed. When it moved
-    /// since the last full refresh, theme brushes resolve again and every live host fully
+    /// A host detached its theme probe. With none left, nothing reports what WinUI applies, and
+    /// the system setting stands in again until a new probe reports.
+    /// </summary>
+    internal static void ProbeDetached()
+    {
+        if (Interlocked.Decrement(ref s_probes) > 0) return;
+        Volatile.Write(ref s_applied, -1);
+        Invalidate();
+    }
+
+    /// <summary>
+    /// A theme probe reports what WinUI has applied. When that differs from what resolved
+    /// brushes were refreshed for, theme brushes resolve again and every live host fully
     /// re-renders, so resolved <see cref="ThemeRef"/> values (<c>.Resources(...)</c> overrides,
     /// <c>ThemeRef.Resolve</c> in a render) follow, as <c>{ThemeResource}</c> values already do.
-    /// Every window receives the broadcast; only the first call for a change refreshes.
-    /// Safe on any thread.
+    /// Every host reports the same switch; only the first report refreshes, and a first report
+    /// before anything was resolved refreshes nothing. Safe on any thread.
     /// </summary>
-    internal static void OnSystemSettingChanged()
+    internal static void OnApplied(bool highContrast)
     {
-        Invalidate();
-        var current = IsActive ? 1 : 0;
-        if (Interlocked.Exchange(ref s_refreshedFor, current) != current)
-            Theme.NotifyResourcesChanged();
+        Volatile.Write(ref s_applied, highContrast ? 1 : 0);
+        var value = Current() ? 1 : 0;
+        int previous;
+        do
+        {
+            previous = Volatile.Read(ref s_renderedWith);
+            if (previous == -1 || previous == value) return;
+        }
+        while (Interlocked.CompareExchange(ref s_renderedWith, value, previous) != previous);
+        Theme.NotifyResourcesChanged();
     }
 
     /// <summary>
@@ -88,12 +140,19 @@ internal static partial class HighContrastState
         return ok;
     }
 
-    /// <summary>Test seam: forgets the cached value and the last refreshed setting.</summary>
+    /// <summary>
+    /// Test seam: forgets the reported and cached values and what was rendered with. Live
+    /// probes report again on their next change.
+    /// </summary>
     internal static void ResetForTest()
     {
+        Volatile.Write(ref s_applied, -1);
+        Volatile.Write(ref s_renderedWith, -1);
         Invalidate();
-        Volatile.Write(ref s_refreshedFor, -1);
     }
+
+    /// <summary>Test seam: how many probes are attached.</summary>
+    internal static int ProbeCountForTest => Volatile.Read(ref s_probes);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct HIGHCONTRASTW

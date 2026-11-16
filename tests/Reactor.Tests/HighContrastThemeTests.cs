@@ -4,10 +4,10 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Issue #1506: the contrast setting that <see cref="ThemeRef"/> resolution uses is re-read on
-/// every cache invalidation, and a system change refreshes the hosts once, only when the
-/// setting really moved. Resolution against the <c>HighContrast</c> dictionary needs live
-/// WinUI resources and is covered by the <c>HighContrastThemeFixtures</c> selftests.
+/// Issue #1506: theme references follow the contrast theme that WinUI has applied, as the
+/// hosts' theme probes report it, not the setting Windows announces before WinUI applies it;
+/// and a switch refreshes the hosts once. The probes themselves, and resolution against live
+/// WinUI resources, are covered by the <c>HighContrastThemeFixtures</c> selftests.
 /// </summary>
 [Collection("ThemeResolutionCache")]
 public sealed class HighContrastThemeTests
@@ -21,15 +21,17 @@ public sealed class HighContrastThemeTests
     private static void Restore()
     {
         HighContrastState.ReaderForTest = null;
+        HighContrastState.SystemReaderForTest = null;
         HighContrastState.ResetForTest();
         ThemeRef.InvalidateResolutionCache();
     }
 
     [Fact]
-    public void ContrastSetting_IsReReadWhenTheResolutionCacheIsInvalidated()
+    public void SystemSetting_StandsInUntilAProbeReports_AndIsReReadOnInvalidation()
     {
         var contrastOn = false;
-        HighContrastState.ReaderForTest = () => contrastOn;
+        HighContrastState.SystemReaderForTest = () => contrastOn;
+        HighContrastState.ResetForTest();
         try
         {
             ThemeRef.InvalidateResolutionCache();
@@ -48,55 +50,105 @@ public sealed class HighContrastThemeTests
     }
 
     [Fact]
-    public void SettingChange_RefreshesHostsOnlyWhenContrastMoved()
+    public void AnnouncedSwitch_IsNotUsedUntilWinUIHasAppliedIt()
     {
-        var listener = new FakeListener();
-        var contrastOn = false;
-        HighContrastState.ReaderForTest = () => contrastOn;
+        var systemOn = false;
+        HighContrastState.SystemReaderForTest = () => systemOn;
         HighContrastState.ResetForTest();
-        using var isolation = ThemeResourceListeners.IsolateForTest(listener);
+        HighContrastState.ProbeAttached();
         try
         {
-            _ = HighContrastState.IsActive;               // a brush was resolved with contrast off
+            HighContrastState.OnApplied(false);         // WinUI renders the light theme
+            Assert.False(HighContrastState.IsActive);
 
-            HighContrastState.OnSystemSettingChanged();   // some other setting changed
-            Assert.Equal(0, listener.Notified);
+            systemOn = true;                            // Windows announces a contrast theme,
+            ThemeRef.InvalidateResolutionCache();       // and a palette change re-renders
+            Assert.False(HighContrastState.IsActive);   // before WinUI has applied it
 
-            contrastOn = true;
-            HighContrastState.OnSystemSettingChanged();   // a contrast theme was turned on
-            Assert.Equal(1, listener.Notified);
+            HighContrastState.OnApplied(true);          // the probe: now WinUI has
+            Assert.True(HighContrastState.IsActive);
 
-            HighContrastState.OnSystemSettingChanged();   // the same broadcast, seen by a second window
-            Assert.Equal(1, listener.Notified);
-
-            contrastOn = false;
-            HighContrastState.OnSystemSettingChanged();   // turned off again
-            Assert.Equal(2, listener.Notified);
+            systemOn = false;                           // the same on the way back
+            ThemeRef.InvalidateResolutionCache();
+            Assert.True(HighContrastState.IsActive);
+            HighContrastState.OnApplied(false);
+            Assert.False(HighContrastState.IsActive);
         }
         finally
         {
+            HighContrastState.ProbeDetached();
             Restore();
         }
     }
 
     [Fact]
-    public void SettingChange_StillRefreshesAfterAPartialRerenderSawTheNewSetting()
+    public void ProbeReports_RefreshTheHostsOncePerSwitch()
     {
         var listener = new FakeListener();
-        var contrastOn = false;
-        HighContrastState.ReaderForTest = () => contrastOn;
         HighContrastState.ResetForTest();
+        HighContrastState.ProbeAttached();
         using var isolation = ThemeResourceListeners.IsolateForTest(listener);
         try
         {
-            _ = HighContrastState.IsActive;               // the app rendered with contrast off
+            HighContrastState.OnApplied(false);
+            _ = HighContrastState.IsActive;             // a brush was resolved with contrast off
+            HighContrastState.OnApplied(false);         // another host's probe: nothing moved
+            Assert.Equal(0, listener.Notified);
 
-            contrastOn = true;
-            ThemeRef.InvalidateResolutionCache();         // e.g. ActualThemeChanged arrived first
-            Assert.True(HighContrastState.IsActive);      // and a partial re-render resolved with it
-
-            HighContrastState.OnSystemSettingChanged();   // memoized subtrees still need the refresh
+            HighContrastState.OnApplied(true);          // WinUI applied a contrast theme
             Assert.Equal(1, listener.Notified);
+
+            HighContrastState.OnApplied(true);          // the same switch, from a second host
+            Assert.Equal(1, listener.Notified);
+
+            HighContrastState.OnApplied(false);         // turned off again
+            Assert.Equal(2, listener.Notified);
+        }
+        finally
+        {
+            HighContrastState.ProbeDetached();
+            Restore();
+        }
+    }
+
+    [Fact]
+    public void FirstProbeReport_RefreshesNothingBeforeABrushWasResolved()
+    {
+        var listener = new FakeListener();
+        HighContrastState.ResetForTest();
+        HighContrastState.ProbeAttached();
+        using var isolation = ThemeResourceListeners.IsolateForTest(listener);
+        try
+        {
+            HighContrastState.OnApplied(true);          // a host's first report, at startup
+            Assert.Equal(0, listener.Notified);
+            Assert.True(HighContrastState.IsActive);    // and the first resolve uses it
+
+            HighContrastState.OnApplied(false);
+            Assert.Equal(1, listener.Notified);
+        }
+        finally
+        {
+            HighContrastState.ProbeDetached();
+            Restore();
+        }
+    }
+
+    [Fact]
+    public void LastProbeDetached_TheSystemSettingStandsInAgain()
+    {
+        HighContrastState.SystemReaderForTest = static () => false;
+        HighContrastState.ResetForTest();
+        HighContrastState.ProbeAttached();
+        HighContrastState.ProbeAttached();
+        try
+        {
+            HighContrastState.OnApplied(true);
+            HighContrastState.ProbeDetached();
+            Assert.True(HighContrastState.IsActive);    // one host still reports what WinUI applies
+
+            HighContrastState.ProbeDetached();
+            Assert.False(HighContrastState.IsActive);   // none does: back to the system setting
         }
         finally
         {

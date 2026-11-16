@@ -111,9 +111,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private volatile bool _needsRerender;     // only touched on UI thread
     private bool _themeListenerAttached;   // UISettings subscribed (once per control)
     private FrameworkElement? _themeListenerElement;   // current content root listened to
+    // Reports what WinUI applies to the content root, so a contrast-theme switch is picked up
+    // after WinUI has made it (issue #1506). Follows the root like the listener above.
+    private ThemeProbe? _themeProbe;
 
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal ThemeProbe? ThemeProbeForTest => _themeProbe;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -315,8 +320,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
         ThemeResourceListeners.Register(this);
-        // A contrast theme may have been switched while nothing was listening: read the
-        // setting again rather than trusting a value cached earlier (issue #1506).
+        // A contrast theme may have been switched while nothing was listening: read the system
+        // setting again, which stands in until this host's theme probe reports (issue #1506).
         HighContrastState.Invalidate();
 
         if (component is not null)
@@ -1416,6 +1421,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         _themeListenerElement = fe;
         fe.ActualThemeChanged += OnActualThemeChanged;
 
+        // ActualThemeChanged does not fire for a contrast-theme switch: the theme probe reports
+        // those, once WinUI has applied them (issue #1506). The new probe attaches before the
+        // old one goes, so the reported state never lapses to the system setting.
+        var previousProbe = _themeProbe;
+        _themeProbe = _disposed ? null : ThemeProbe.TryAttach(fe);
+        previousProbe?.Dispose();
+
         if (_themeListenerAttached) return;
         _themeListenerAttached = true;
 
@@ -1442,15 +1454,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
-        // A contrast-theme switch also needs memoized subtrees refreshed (issue #1506).
-        Microsoft.UI.Reactor.Core.HighContrastState.OnSystemSettingChanged();
+        // A contrast-theme switch is refreshed by the theme probe instead, once WinUI has
+        // applied it: Windows raises this event before that (issue #1506).
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
-
-    // Test seam (InternalsVisibleTo Reactor.AppTests.Host): what a UISettings.ColorValuesChanged
-    // notification does. The handler does not read its arguments.
-    internal void RaiseColorValuesChangedForTest() => OnColorValuesChanged(null!, null!);
 
     private void ShowErrorFallback(Exception ex, RenderErrorSource source, string? componentName = null)
     {
@@ -1539,6 +1547,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void DetachThemeListener()
     {
+        _themeProbe?.Dispose();
+        _themeProbe = null;
         if (_themeListenerElement is null) return;
         _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
         _themeListenerElement = null;

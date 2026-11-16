@@ -49,9 +49,6 @@ internal sealed class WindowMessageMonitor : IDisposable
     /// <summary>WM_DISPLAYCHANGE — sent when the display layout or resolution changes.</summary>
     public const uint WM_DISPLAYCHANGE = 0x007E;
 
-    /// <summary>WM_SETTINGCHANGE — broadcast when a system setting changes, such as a contrast theme.</summary>
-    public const uint WM_SETTINGCHANGE = 0x001A;
-
     private readonly nint _hwnd;
     private GCHandle _selfHandle;
     private bool _subclassed;
