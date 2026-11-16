@@ -59,7 +59,7 @@ internal sealed class ThemeProbe : IDisposable
     private bool _reportPending;
     private bool _disposed;
 
-    private ThemeProbe(FrameworkElement owner, ResourceDictionary dictionary, SolidColorBrush brush, DispatcherQueue? dispatcher)
+    private ThemeProbe(FrameworkElement owner, ResourceDictionary dictionary, SolidColorBrush brush, DispatcherQueue? dispatcher, bool takeOver)
     {
         _owner = owner;
         _dictionary = dictionary;
@@ -72,14 +72,19 @@ internal sealed class ThemeProbe : IDisposable
         // neither. So check the tree itself, on a later turn, after WinUI has taken the change.
         owner.Loaded += OnOwnerLoaded;
         owner.Unloaded += OnOwnerUnloaded;
+        // A probe that replaces a live one, on a new root in the same place, counts at once, so
+        // the count never passes through zero between the two and the system setting does not
+        // stand in for that moment. The check below withdraws it if its root is off the tree.
+        if (takeOver) GoLive();
         ScheduleLivenessCheck();
     }
 
     /// <summary>
     /// Merges a probe into <paramref name="owner"/>'s resources. Returns null, and leaves the
     /// element unchanged, when WinUI rejects it; the host then falls back to the system setting.
+    /// Pass the probe this one replaces, before disposing it, so a live one hands over.
     /// </summary>
-    internal static ThemeProbe? TryAttach(FrameworkElement owner)
+    internal static ThemeProbe? TryAttach(FrameworkElement owner, ThemeProbe? replacing = null)
     {
         ResourceDictionary? dictionary = null;
         ResourceDictionary? resources = null;
@@ -89,7 +94,7 @@ internal sealed class ThemeProbe : IDisposable
             resources = owner.Resources ??= new ResourceDictionary();
             resources.MergedDictionaries.Add(dictionary);
             var brush = (SolidColorBrush)dictionary[BrushKey];
-            return new ThemeProbe(owner, dictionary, brush, DispatcherQueue.GetForCurrentThread());
+            return new ThemeProbe(owner, dictionary, brush, DispatcherQueue.GetForCurrentThread(), takeOver: replacing?.IsLive == true);
         }
         catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or InvalidCastException or ArgumentException)
         {

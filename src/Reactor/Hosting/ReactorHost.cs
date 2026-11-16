@@ -1559,7 +1559,7 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         else if (!ReferenceEquals(_themeProbe?.Owner, probeOwner))
         {
             var previousProbe = _themeProbe;
-            _themeProbe = ThemeProbe.TryAttach(probeOwner);
+            _themeProbe = ThemeProbe.TryAttach(probeOwner, previousProbe);
             previousProbe?.Dispose();
         }
 

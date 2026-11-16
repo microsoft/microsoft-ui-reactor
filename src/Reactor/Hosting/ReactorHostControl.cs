@@ -1437,7 +1437,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         if (!ReferenceEquals(_themeProbe?.Owner, fe))
         {
             var previousProbe = _themeProbe;
-            _themeProbe = _disposed ? null : ThemeProbe.TryAttach(fe);
+            _themeProbe = _disposed ? null : ThemeProbe.TryAttach(fe, previousProbe);
             previousProbe?.Dispose();
         }
 
