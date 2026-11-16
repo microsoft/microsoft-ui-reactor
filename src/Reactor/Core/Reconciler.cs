@@ -1751,10 +1751,10 @@ public sealed partial class Reconciler : IDisposable
     /// <c>.PaddingInlineEnd(4)</c> gave <c>8,0,4,0</c>). While the control still holds exactly
     /// what was written, the recorded base is the right one; any other value was written by
     /// someone else (a setter, app code, an outer layer) and is used as is.
-    /// <para>Only the element that owns the control keeps a record. A decorator, component or
-    /// keyed memo applies its modifiers to another element's control after that element's own,
-    /// so the live value it sees may be a write from this pass that merely equals its previous
-    /// output; those layers read the live value.</para>
+    /// <para>Only the element that owns the control keeps a record. A flyout decorator or keyed
+    /// memo applies its modifiers to another element's control after that element's own, so the
+    /// live value it sees may be a write from this pass that merely equals its previous output;
+    /// those layers read the live value.</para>
     /// </summary>
     internal sealed class InlineOverlayRecord
     {
@@ -6572,9 +6572,9 @@ public sealed partial class Reconciler : IDisposable
         return _reconcilingElement is { } element && IsFlyoutDecorator(element) ? element : null;
     }
 
-    // ownsControl: true when `m` belongs to the element whose own handler created `fe`, as opposed
-    // to a decorator, component or keyed memo layered over another element's control. Only the
-    // owner's inline overlays are recorded (issue #965).
+    // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
+    // flyout decorator or keyed memo layered over another element's control. Only the owner's
+    // inline overlays are recorded (issue #965).
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
         bool keepRemovedBackground = false, bool ownsControl = false)
     {

@@ -35,7 +35,7 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
 
     public bool HasUnmount => true;
     public bool PreservesTargetTag { get; }
-    public bool OwnsControl => false;
+    public bool OwnsControl(Element element) => element is TElement typed && _handler.GetSourceTarget(typed) is null;
 
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
     {

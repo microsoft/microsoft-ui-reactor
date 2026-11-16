@@ -81,6 +81,15 @@ internal static class Issue965InlineEdgeFixture
                         .Set(tb => tb.FlowDirection = dir)
                         .Padding(5, 0, 9, 0)
                         .PaddingInlineStart(5),
+                    // Owners other than a plain control: a Memo's own Border wrapper, and an
+                    // Expander, whose decorator handler creates the control itself.
+                    phase == 0
+                        ? Memo(_ => TextBlock("Issue965_memoChild")).MarginInlineStart(8)
+                        : Memo(_ => TextBlock("Issue965_memoChild")).MarginInlineEnd(4),
+                    Expander("Issue965_expander", TextBlock("Issue965_expanderBody"))
+                        .Set(e => e.FlowDirection = dir)
+                        .Padding(5, 0, 9, 0)
+                        .PaddingInlineStart(5),
                     // A setter-written base is rewritten every render, so a changed setter
                     // value must still win over the base remembered from the last overlay.
                     TextBlock("Issue965_setterBase")
@@ -104,15 +113,22 @@ internal static class Issue965InlineEdgeFixture
             var flyoutTarget = H.FindButton("Issue965_flyoutTarget");
             var flyoutCollide = H.FindButton("Issue965_flyoutCollide");
             var flyoutEqual = H.FindButton("Issue965_flyoutEqual");
+            WinUI.Border? FindMemoWrapper() => H.FindControl<WinUI.Border>(
+                b => b.Child is WinUI.TextBlock tb && tb.Text == "Issue965_memoChild");
+            WinUI.Expander? FindExpander() => H.FindControl<WinUI.Expander>(
+                e => e.Header is string s && s == "Issue965_expander");
+            var memoWrapper = FindMemoWrapper();
+            var expander = FindExpander();
             H.Check("Issue965_Mounted",
                 padSwap is not null && marginSwap is not null && buttonSwap is not null
                 && flipPad is not null && flipMargin is not null && flipBorder is not null
                 && setterBase is not null && flipDeclared is not null && flyoutTarget is not null
-                && flyoutCollide is not null && flyoutEqual is not null);
+                && flyoutCollide is not null && flyoutEqual is not null
+                && memoWrapper is not null && expander is not null);
             if (padSwap is null || marginSwap is null || buttonSwap is null || flipPad is null
                 || flipMargin is null || flipBorder is null || setterBase is null
                 || flipDeclared is null || flyoutTarget is null || flyoutCollide is null
-                || flyoutEqual is null) return;
+                || flyoutEqual is null || memoWrapper is null || expander is null) return;
 
             // Phase 0 has to put the inline edge on the control, or phase 1 proves nothing.
             H.Check("Issue965_Phase0_PadSwapApplied", padSwap.Padding == new Thickness(8, 0, 0, 0));
@@ -127,6 +143,8 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase0_FlyoutLayersCombined", flyoutTarget.Margin == new Thickness(8, 0, 4, 0));
             H.Check("Issue965_Phase0_FlyoutCollideCombined", flyoutCollide.Margin == new Thickness(0, 0, 4, 0));
             H.Check("Issue965_Phase0_FlyoutEqualCombined", flyoutEqual.Margin == new Thickness(8, 0, 0, 0));
+            H.Check("Issue965_Phase0_MemoWrapperApplied", memoWrapper.Margin == new Thickness(8, 0, 0, 0));
+            H.Check("Issue965_Phase0_ExpanderLtr", expander.Padding == new Thickness(5, 0, 9, 0));
 
             H.ClickButton("Issue965_Next");
             await Harness.Render();
@@ -141,7 +159,9 @@ internal static class Issue965InlineEdgeFixture
                 && ReferenceEquals(setterBase, H.FindText("Issue965_setterBase"))
                 && ReferenceEquals(flyoutTarget, H.FindButton("Issue965_flyoutTarget"))
                 && ReferenceEquals(flyoutCollide, H.FindButton("Issue965_flyoutCollide"))
-                && ReferenceEquals(flyoutEqual, H.FindButton("Issue965_flyoutEqual")));
+                && ReferenceEquals(flyoutEqual, H.FindButton("Issue965_flyoutEqual"))
+                && ReferenceEquals(memoWrapper, FindMemoWrapper())
+                && ReferenceEquals(expander, FindExpander()));
 
             // The stale value was 8,0,4,0: the old inline-start edge read back as the base.
             H.Check("Issue965_Phase1_PadSwapDropsOldEdge", padSwap.Padding == new Thickness(0, 0, 4, 0));
@@ -162,6 +182,8 @@ internal static class Issue965InlineEdgeFixture
             H.Check("Issue965_Phase1_FlyoutCollideKeepsTargetEdge", flyoutCollide.Margin == new Thickness(8, 9, 4, 9));
             // Trusting its remembered base, the decorator dropped the target's new 8 (0,0,4,0).
             H.Check("Issue965_Phase1_FlyoutEqualKeepsTargetMargin", flyoutEqual.Margin == new Thickness(8, 0, 4, 0));
+            H.Check("Issue965_Phase1_MemoWrapperDropsOldEdge", memoWrapper.Margin == new Thickness(0, 0, 4, 0));
+            H.Check("Issue965_Phase1_ExpanderRtl", expander.Padding == new Thickness(5, 0, 5, 0));
 
             H.ClickButton("Issue965_Next");
             await Harness.Render();
@@ -170,11 +192,13 @@ internal static class Issue965InlineEdgeFixture
                 ReferenceEquals(flipPad, H.FindText("Issue965_flipPad"))
                 && ReferenceEquals(flipMargin, H.FindText("Issue965_flipMargin"))
                 && ReferenceEquals(flipBorder, FindBorder("Issue965_flipBorder"))
-                && ReferenceEquals(flipDeclared, H.FindText("Issue965_flipDeclared")));
+                && ReferenceEquals(flipDeclared, H.FindText("Issue965_flipDeclared"))
+                && ReferenceEquals(expander, FindExpander()));
             H.Check("Issue965_Phase2_FlipPadBackToLtr", flipPad.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipMarginBackToLtr", flipMargin.Margin == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipBorderBackToLtr", flipBorder.BorderThickness == new Thickness(9, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipDeclaredBackToLtr", flipDeclared.Padding == new Thickness(5, 0, 9, 0));
+            H.Check("Issue965_Phase2_ExpanderBackToLtr", expander.Padding == new Thickness(5, 0, 9, 0));
         }
     }
 }

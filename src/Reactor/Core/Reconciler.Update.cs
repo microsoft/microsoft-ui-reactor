@@ -198,7 +198,7 @@ public sealed partial class Reconciler
 
         UIElement? result;
         bool registeredType = false;
-        // Issue #965 — only a standard handler's own control records inline overlays.
+        // Issue #965 — whether the control was created for this element (see ApplyModifiers).
         bool ownsControl = false;
         try
         {
@@ -223,7 +223,7 @@ public sealed partial class Reconciler
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
-            ownsControl = v1Entry.OwnsControl;
+            ownsControl = v1Entry.OwnsControl(newEl);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
@@ -235,7 +235,7 @@ public sealed partial class Reconciler
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
-            ownsControl = v1Entry.OwnsControl;
+            ownsControl = v1Entry.OwnsControl(newEl);
         }
         else
         {
@@ -268,6 +268,8 @@ public sealed partial class Reconciler
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
+        // Composition primitives own their Border wrapper; a keyed memo is transparent.
+        ownsControl = newEl is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
 
         // A transparent layer (a keyed Memo, a flyout wrapping its target) shares its inner
