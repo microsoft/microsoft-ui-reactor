@@ -29,7 +29,8 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     /// and returns a ready-to-use overlay. Caller disposes via using-block.
     /// </summary>
     private static async Task<(Canvas canvas, Border[] targets, ContainerVisual root, ReconcileHighlightOverlay overlay)>
-        SetupAsync(Harness h, int targetCount = 1, int? holdMs = null)
+        SetupAsync(Harness h, int targetCount = 1, int? holdMs = null,
+            Func<TimeSpan, Action, Action>? scheduleExpiry = null)
     {
         var canvas = new Canvas { Width = 400, Height = 400 };
         var targets = new Border[targetCount];
@@ -49,7 +50,7 @@ internal static class ReconcileHighlightOverlayLifecycleTests
         ElementCompositionPreview.SetElementChildVisual(canvas, root);
 
         ReconcileHighlightOverlay.TestHoldDurationOverrideMs = holdMs;
-        var overlay = new ReconcileHighlightOverlay(canvas, root);
+        var overlay = new ReconcileHighlightOverlay(canvas, root, scheduleExpiry);
         return (canvas, targets, root, overlay);
     }
 
@@ -57,6 +58,45 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     {
         overlay.Dispose();
         ReconcileHighlightOverlay.TestHoldDurationOverrideMs = null;
+    }
+
+    // Only the scheduling boundary is simulated: each callback below is the
+    // overlay's actual expiry handler, including its stale-schedule guard.
+    private sealed class CapturedExpiry(TimeSpan dueAt, Action onExpire)
+    {
+        public TimeSpan DueAt { get; } = dueAt;
+        public bool Cancelled { get; set; }
+        public bool Delivered { get; private set; }
+
+        // Deliberately permits delivery after cancellation to model a tick
+        // already queued on the dispatcher when Refresh/Dispose cancels it.
+        public void Deliver()
+        {
+            Delivered = true;
+            onExpire();
+        }
+    }
+
+    private sealed class CapturedExpiryScheduler
+    {
+        public TimeSpan Elapsed { get; private set; }
+        public List<CapturedExpiry> Expiries { get; } = new();
+
+        public Action Schedule(TimeSpan delay, Action onExpire)
+        {
+            var expiry = new CapturedExpiry(Elapsed + delay, onExpire);
+            Expiries.Add(expiry);
+            return () => expiry.Cancelled = true;
+        }
+
+        public void AdvanceBy(int milliseconds, bool dispatch = true)
+        {
+            Elapsed += TimeSpan.FromMilliseconds(milliseconds);
+            if (!dispatch) return;
+            foreach (var expiry in Expiries.Where(e => !e.Cancelled && !e.Delivered
+                && e.DueAt <= Elapsed).ToArray())
+                expiry.Deliver();
+        }
     }
 
     // ── Baseline: 1 target → 1 sprite ──
@@ -102,32 +142,47 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     {
         public override async Task RunAsync()
         {
-            // holdMs=800, firstDelay=500, secondDelay=400, finalWait=500:
-            //   500 < 800            → alive before refresh (300ms margin)
-            //   500+400=900 > 800    → would have expired without timer reset
-            //   400 < 800            → still alive after refresh (400ms margin)
-            // Previous 500/350/250 had only 150–250ms margin and flaked under load.
-            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 800);
+            // Issue #995: advance captured schedules instead of waiting on the
+            // wall clock. A survival predicate cannot be replaced by WaitFor:
+            // it is already true before any time passes.
+            var scheduler = new CapturedExpiryScheduler();
+            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 800,
+                scheduleExpiry: scheduler.Schedule);
             try
             {
+                int completed = 0;
+                overlay.TestExpiryCompleted = () => completed++;
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(500);
+                H.Check("OverlayLifecycle_Refresh_InitialSchedule", scheduler.Expiries.Count == 1);
+                if (scheduler.Expiries.Count != 1) return;
+                var original = scheduler.Expiries[0];
+                H.Check("OverlayLifecycle_Refresh_InitialDeadline",
+                    original.DueAt == TimeSpan.FromMilliseconds(800));
+
+                scheduler.AdvanceBy(500);
                 H.Check("OverlayLifecycle_Refresh_AliveBeforeRefresh",
-                    overlay.LiveSpriteCount == 1);
+                    overlay.LiveSpriteCount == 1 && overlay.ActiveTargetCount == 1);
 
-                // Refresh — timer should restart from 0
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
-                await Task.Delay(400);
-                // ~900ms since first Show, ~400ms since refresh.
-                // Without the timer reset the sprite would have expired at 800ms;
-                // with the reset it should still be alive.
-                H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
-                    overlay.LiveSpriteCount == 1);
+                H.Check("OverlayLifecycle_Refresh_NewSchedule", scheduler.Expiries.Count == 2);
+                if (scheduler.Expiries.Count != 2) return;
+                H.Check("OverlayLifecycle_Refresh_PreviousScheduleCancelled", original.Cancelled);
+                H.Check("OverlayLifecycle_Refresh_FullHoldRescheduled",
+                    scheduler.Expiries[1].DueAt == TimeSpan.FromMilliseconds(1300));
 
-                // Wait past the new window — should expire.
-                await Task.Delay(500);
+                // 900ms since Show, past the original 800ms deadline.
+                scheduler.AdvanceBy(400);
+                H.Check("OverlayLifecycle_Refresh_AliveAfterRefresh",
+                    overlay.LiveSpriteCount == 1 && overlay.ActiveTargetCount == 1);
+
+                scheduler.AdvanceBy(399);
+                H.Check("OverlayLifecycle_Refresh_AliveUntilNewDeadline",
+                    overlay.LiveSpriteCount == 1 && completed == 0);
+
+                scheduler.AdvanceBy(1);
                 H.Check("OverlayLifecycle_Refresh_ExpiresAfterFinalWindow",
                     overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0);
+                H.Check("OverlayLifecycle_Refresh_CompletionOnce", completed == 1);
             }
             finally { Teardown(overlay); }
         }
@@ -141,15 +196,88 @@ internal static class ReconcileHighlightOverlayLifecycleTests
             var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 100);
             try
             {
+                var expired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                overlay.TestExpiryCompleted = () => expired.TrySetResult();
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
                 H.Check("OverlayLifecycle_Expire_AliveImmediately",
                     overlay.LiveSpriteCount == 1);
 
-                await Task.Delay(180);
+                // Real DispatcherQueueTimer integration: completion is signalled
+                // after the real handler runs; the delay is only a failure timeout.
+                bool completed;
+                try
+                {
+                    await expired.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    completed = true;
+                }
+                catch (TimeoutException) { completed = false; }
+                H.Check("OverlayLifecycle_Expire_CompletionObserved", completed);
                 H.Check("OverlayLifecycle_Expire_GoneAfterHold",
-                    overlay.LiveSpriteCount == 0);
+                    completed && overlay.LiveSpriteCount == 0);
                 H.Check("OverlayLifecycle_Expire_DictDrained",
                     overlay.ActiveTargetCount == 0);
+            }
+            finally { Teardown(overlay); }
+        }
+    }
+
+    internal class Show_NoRefresh_ExpiresAtScheduledDeadline(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var scheduler = new CapturedExpiryScheduler();
+            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 100,
+                scheduleExpiry: scheduler.Schedule);
+            try
+            {
+                int completed = 0;
+                overlay.TestExpiryCompleted = () => completed++;
+                overlay.Show(canvas, targets, Array.Empty<UIElement>());
+                H.Check("OverlayLifecycle_Deadline_Created",
+                    overlay.LiveSpriteCount == 1 && overlay.ActiveTargetCount == 1);
+                scheduler.AdvanceBy(99);
+                H.Check("OverlayLifecycle_Deadline_AliveBeforeHold",
+                    overlay.LiveSpriteCount == 1 && overlay.ActiveTargetCount == 1 && completed == 0);
+                scheduler.AdvanceBy(1);
+                H.Check("OverlayLifecycle_Deadline_ExpiredAtHold",
+                    overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0 && completed == 1);
+            }
+            finally { Teardown(overlay); }
+        }
+    }
+
+    internal class Show_QueuedExpiryBeforeRefresh_PreservesRefreshedSprite(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var scheduler = new CapturedExpiryScheduler();
+            var (canvas, targets, _, overlay) = await SetupAsync(H, holdMs: 800,
+                scheduleExpiry: scheduler.Schedule);
+            try
+            {
+                int completed = 0;
+                overlay.TestExpiryCompleted = () => completed++;
+                overlay.Show(canvas, targets, Array.Empty<UIElement>());
+                H.Check("OverlayLifecycle_QueuedExpiry_InitialSchedule", scheduler.Expiries.Count == 1);
+                if (scheduler.Expiries.Count != 1) return;
+                var original = scheduler.Expiries[0];
+
+                // The first tick is due, but dispatch has not happened yet.
+                scheduler.AdvanceBy(800, dispatch: false);
+                overlay.Show(canvas, targets, Array.Empty<UIElement>());
+                H.Check("OverlayLifecycle_QueuedExpiry_NewSchedule", scheduler.Expiries.Count == 2);
+                if (scheduler.Expiries.Count != 2) return;
+                H.Check("OverlayLifecycle_QueuedExpiry_OldCancelled", original.Cancelled);
+                original.Deliver();
+                H.Check("OverlayLifecycle_QueuedExpiry_StaleCallbackIgnored",
+                    overlay.LiveSpriteCount == 1 && overlay.ActiveTargetCount == 1 && completed == 0);
+
+                scheduler.AdvanceBy(799);
+                H.Check("OverlayLifecycle_QueuedExpiry_NewScheduleStillAlive",
+                    overlay.LiveSpriteCount == 1 && overlay.ActiveTargetCount == 1);
+                scheduler.AdvanceBy(1);
+                H.Check("OverlayLifecycle_QueuedExpiry_CurrentCallbackExpires",
+                    overlay.LiveSpriteCount == 0 && overlay.ActiveTargetCount == 0 && completed == 1);
             }
             finally { Teardown(overlay); }
         }
@@ -257,9 +385,13 @@ internal static class ReconcileHighlightOverlayLifecycleTests
     {
         public override async Task RunAsync()
         {
-            var (canvas, targets, _, overlay) = await SetupAsync(H, targetCount: 3);
+            var scheduler = new CapturedExpiryScheduler();
+            var (canvas, targets, _, overlay) = await SetupAsync(H, targetCount: 3,
+                scheduleExpiry: scheduler.Schedule);
             try
             {
+                int completed = 0;
+                overlay.TestExpiryCompleted = () => completed++;
                 overlay.Show(canvas, targets, Array.Empty<UIElement>());
                 H.Check("OverlayLifecycle_Dispose_PrePopulated",
                     overlay.LiveSpriteCount == 3);
@@ -271,6 +403,18 @@ internal static class ReconcileHighlightOverlayLifecycleTests
                 H.Check("OverlayLifecycle_Dispose_NoException", !threw);
                 H.Check("OverlayLifecycle_Dispose_DictCleared",
                     overlay.ActiveTargetCount == 0);
+                H.Check("OverlayLifecycle_Dispose_SchedulesCancelled",
+                    scheduler.Expiries.Count == 3 && scheduler.Expiries.All(e => e.Cancelled));
+
+                // Callbacks queued before disposal must be harmless afterward.
+                bool lateCallbackThrew = false;
+                try
+                {
+                    foreach (var expiry in scheduler.Expiries) expiry.Deliver();
+                }
+                catch { lateCallbackThrew = true; }
+                H.Check("OverlayLifecycle_Dispose_QueuedCallbacksIgnored",
+                    !lateCallbackThrew && overlay.ActiveTargetCount == 0 && completed == 0);
             }
             finally
             {
