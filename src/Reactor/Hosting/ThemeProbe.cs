@@ -67,11 +67,11 @@ internal sealed class ThemeProbe : IDisposable
         _dispatcher = dispatcher;
         _token = brush.RegisterPropertyChangedCallback(SolidColorBrush.ColorProperty, OnColorChanged);
         // Only a probe in the live tree hears WinUI apply a theme, so only such a probe reports
-        // and counts: one left on a root that is off the tree would keep a stale state. Loaded
-        // and IsLoaded do not tell: a raw host's root, put in the tree during a render, gets
-        // neither. So check the tree itself, on a later turn, after WinUI has taken the change.
-        owner.Loaded += OnOwnerLoaded;
-        owner.Unloaded += OnOwnerUnloaded;
+        // and counts: one left on a root that is off the tree would keep a stale state. The probe
+        // checks the tree itself, on a later turn: now, and when its host says the tree changed
+        // (RecheckLiveness). It never subscribes to the root's Loaded or Unloaded: subscribing
+        // while the root enters the tree stops WinUI from raising Loaded for it at all, which
+        // would starve the app's own handlers (a selftest pins the root's IsLoaded).
         // A probe that replaces a live one, on a new root in the same place, counts at once, so
         // the count never passes through zero between the two and the system setting does not
         // stand in for that moment. The check below withdraws it if its root is off the tree.
@@ -132,10 +132,12 @@ internal sealed class ThemeProbe : IDisposable
         ScheduleReport();
     }
 
-    private void OnOwnerLoaded(object sender, RoutedEventArgs e) => GoLive();
-
-    // WinUI can raise a moved element's Unloaded after its new Loaded: decide on a later turn.
-    private void OnOwnerUnloaded(object sender, RoutedEventArgs e) => ScheduleLivenessCheck();
+    /// <summary>
+    /// The host's tree may have changed (the host was loaded or unloaded, or its content was
+    /// swapped): check on a later turn, once WinUI has taken the change, whether the root is in
+    /// the live tree.
+    /// </summary>
+    internal void RecheckLiveness() => ScheduleLivenessCheck();
 
     private void ScheduleLivenessCheck()
     {
@@ -203,8 +205,6 @@ internal sealed class ThemeProbe : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _owner.Loaded -= OnOwnerLoaded;
-        _owner.Unloaded -= OnOwnerUnloaded;
         _brush.UnregisterPropertyChangedCallback(SolidColorBrush.ColorProperty, _token);
         try { _owner.Resources?.MergedDictionaries.Remove(_dictionary); }
         catch (global::System.Runtime.InteropServices.COMException) { }
