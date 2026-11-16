@@ -537,10 +537,10 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                     && (writeBackOnly ? WritesBackToCaller(inner, parameter) : !IsDiscarded(inner)))
                     return true;
 
-                if (!writeBackOnly
-                    && depth < MaxForwardingDepth
+                if (depth < MaxForwardingDepth
                     && inner.Expression is IdentifierNameSyntax helperName
-                    && method.ContainingType is { } type)
+                    && method.ContainingType is { } type
+                    && (!writeBackOnly || CanWriteBack(parameter)))
                 {
                     var args = inner.ArgumentList.Arguments;
                     for (var i = 0; i < args.Count; i++)
@@ -553,10 +553,12 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                             || ParameterName(args[i], i, helper) is not { } next)
                             continue;
 
+                        // In write-back mode only caller-visible writes matter, so any helper the
+                        // array or ref parameter is handed to is followed in the same mode.
                         var discarded = IsDiscarded(inner);
-                        if ((!discarded || helper.ReturnsVoid)
+                        if ((writeBackOnly || !discarded || helper.ReturnsVoid)
                             && ForwardsLabel(context, helper.ReducedFrom ?? helper.OriginalDefinition, next, depth + 1,
-                                writeBackOnly: discarded))
+                                writeBackOnly: writeBackOnly || discarded))
                             return true;
                     }
                 }
@@ -564,6 +566,13 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         }
         return false;
     }
+
+    /// <summary>
+    /// Whether writes made through <paramref name="parameter"/> can reach the method's caller: an
+    /// array shares its elements, and a <c>ref</c>/<c>out</c> parameter aliases the caller's variable.
+    /// </summary>
+    private static bool CanWriteBack(IParameterSymbol parameter) =>
+        parameter.Type is IArrayTypeSymbol || parameter.RefKind is RefKind.Ref or RefKind.Out;
 
     /// <summary>
     /// True when a label call's result is assigned somewhere the caller can see:

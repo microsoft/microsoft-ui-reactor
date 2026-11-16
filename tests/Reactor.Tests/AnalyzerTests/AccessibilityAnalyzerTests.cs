@@ -763,6 +763,40 @@ class C
 }");
 
     /// <summary>
+    /// Write-back forwarding crosses further helpers as long as each boundary can carry the write
+    /// to its caller: an array handed on is still the caller's array, but a by-value element
+    /// passed by <c>ref</c> to an inner helper only updates the middle helper's own copy.
+    /// </summary>
+    [Fact]
+    public Task Nested_Void_Helpers_Label_Only_Through_Caller_Visible_Parameters() => VerifyAsync(@"
+class C
+{
+    static void NameAll(Element[] xs) => NameEach(xs);
+    static void NameEach(Element[] xs)
+    {
+        for (var i = 0; i < xs.Length; i++)
+            xs[i] = xs[i].AutomationName(""caption"");
+    }
+    static Element Panel(params Element[] xs)
+    {
+        NameAll(xs);
+        return VStack(xs);
+    }
+
+    static void Middle(Element c) { Inner(ref c); }
+    static void Inner(ref Element c) { c = c.AutomationName(""Email""); }
+    static Element Row(Element c)
+    {
+        Middle(c);
+        return HStack(c);
+    }
+
+    Element M(string[] options) => VStack(
+        Panel(ComboBox(options)),
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}));
+}");
+
+    /// <summary>
     /// Only the overload the helper actually calls is followed. A sibling overload that labels its
     /// argument must not vouch for the layout-only one.
     /// </summary>
