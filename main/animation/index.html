@@ -4445,12 +4445,15 @@ it animates with the given curve — no scope needed:</p>
 <p><img alt="Animate modifier" src="../images/animation/animate-modifier.png" /></p>
 <p>Pass a <code>Curve.Spring()</code> for a bouncy feel or <code>Curve.Ease(ms)</code> for a timed
 ease. You can restrict which properties animate with the <code>AnimateProperty</code>
-flags: <code>.Animate(Curve.Spring(), AnimateProperty.Opacity | AnimateProperty.Scale)</code>.
-The compositor ceiling is <code>Opacity | Offset | Scale | Rotation |
+flags: <code>.Animate(Curve.Spring(), AnimateProperty.Opacity | AnimateProperty.Scale)</code>.</p>
+<p>The compositor ceiling is <code>Opacity | Offset | Scale | Rotation |
 CenterPoint</code> — anything outside that flag set (<code>Width</code>, <code>Height</code>, layout
 slot, brush) is <em>not</em> covered by <code>.Animate()</code>. Use <code>.LayoutAnimation()</code>
 for size changes driven by layout, or fall through to a WinUI
 <code>Storyboard</code> via <code>.Set(...)</code> for the unusual property.</p>
+<p>Changing the curve takes effect on the next render. Removing <code>.Animate()</code>
+makes subsequent property changes immediate, unless another animation is
+configured.</p>
 <h2 id="interaction-states">Interaction States<a class="headerlink" href="#interaction-states" title="Permanent link">&para;</a></h2>
 <p><code>.InteractionStates()</code> applies hover, press, and focus effects at the
 compositor layer with zero reconciles. The visual feedback runs entirely on
