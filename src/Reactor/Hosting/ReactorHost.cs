@@ -374,8 +374,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _window = window;
         _reconciler.HostWindow = window;
-        // A contrast theme may have been switched while no window was listening: read the
-        // system setting again, which stands in until this host's theme probe reports (#1506).
+        // While no theme probe is in the live tree, the system setting stands in: read it again,
+        // in case a contrast theme was switched while none was (#1506).
         Microsoft.UI.Reactor.Core.HighContrastState.Invalidate();
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -1550,10 +1550,18 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
         // ActualThemeChanged does not fire for a contrast-theme switch: the theme probe
         // reports those, once WinUI has applied them (issue #1506). The new probe attaches
-        // before the old one goes, so the reported state never lapses to the system setting.
-        var previousProbe = _themeProbe;
-        _themeProbe = control is FrameworkElement probeOwner && !_disposed ? ThemeProbe.TryAttach(probeOwner) : null;
-        previousProbe?.Dispose();
+        // before the old one goes, so the reported state does not lapse to the system setting.
+        if (control is not FrameworkElement probeOwner || _disposed)
+        {
+            _themeProbe?.Dispose();
+            _themeProbe = null;
+        }
+        else if (!ReferenceEquals(_themeProbe?.Owner, probeOwner))
+        {
+            var previousProbe = _themeProbe;
+            _themeProbe = ThemeProbe.TryAttach(probeOwner);
+            previousProbe?.Dispose();
+        }
 
         if (control is not FrameworkElement fe)
         {

@@ -320,8 +320,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
         ThemeResourceListeners.Register(this);
-        // A contrast theme may have been switched while nothing was listening: read the system
-        // setting again, which stands in until this host's theme probe reports (issue #1506).
+        // While no theme probe is in the live tree, the system setting stands in: read it again,
+        // in case a contrast theme was switched while none was (issue #1506).
         HighContrastState.Invalidate();
 
         if (component is not null)
@@ -1411,22 +1411,35 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     /// </summary>
     private void AttachThemeListener(UIElement? control)
     {
-        if (control is not FrameworkElement fe || ReferenceEquals(fe, _themeListenerElement)) return;
+        if (control is not FrameworkElement fe)
+        {
+            // Empty content: the theme probe goes with the old root (issue #1506). The listener
+            // stays on it, as before.
+            _themeProbe?.Dispose();
+            _themeProbe = null;
+            return;
+        }
 
-        // Follow the current content root (issue #1291): an app-supplied error fallback
-        // replaces the root after a successful render, and a listener left on the
-        // detached old root would never see ActualThemeChanged again.
-        if (_themeListenerElement is not null)
-            _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
-        _themeListenerElement = fe;
-        fe.ActualThemeChanged += OnActualThemeChanged;
+        if (!ReferenceEquals(fe, _themeListenerElement))
+        {
+            // Follow the current content root (issue #1291): an app-supplied error fallback
+            // replaces the root after a successful render, and a listener left on the
+            // detached old root would never see ActualThemeChanged again.
+            if (_themeListenerElement is not null)
+                _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+            _themeListenerElement = fe;
+            fe.ActualThemeChanged += OnActualThemeChanged;
+        }
 
         // ActualThemeChanged does not fire for a contrast-theme switch: the theme probe reports
         // those, once WinUI has applied them (issue #1506). The new probe attaches before the
-        // old one goes, so the reported state never lapses to the system setting.
-        var previousProbe = _themeProbe;
-        _themeProbe = _disposed ? null : ThemeProbe.TryAttach(fe);
-        previousProbe?.Dispose();
+        // old one goes, so the reported state does not lapse to the system setting.
+        if (!ReferenceEquals(_themeProbe?.Owner, fe))
+        {
+            var previousProbe = _themeProbe;
+            _themeProbe = _disposed ? null : ThemeProbe.TryAttach(fe);
+            previousProbe?.Dispose();
+        }
 
         if (_themeListenerAttached) return;
         _themeListenerAttached = true;

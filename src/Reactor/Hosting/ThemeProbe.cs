@@ -23,7 +23,9 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// is a <c>{ThemeResource}</c> reference to it. WinUI updates that reference itself when it
 /// applies a theme, which raises the brush's change callback. On a later dispatcher turn, after
 /// WinUI has finished, the probe reports what WinUI applied to
-/// <see cref="HighContrastState.OnApplied"/>, which refreshes the hosts when that changed.</para>
+/// <see cref="HighContrastState.OnApplied"/>, which refreshes the hosts when that changed. Only
+/// while its root is in the live tree: WinUI does not update a probe off the tree, so it neither
+/// reports nor counts there, and with no probe in the tree the system setting stands in.</para>
 /// <para>UI thread only: create, read and dispose it on the thread of its root element.</para>
 /// </remarks>
 internal sealed class ThemeProbe : IDisposable
@@ -53,6 +55,7 @@ internal sealed class ThemeProbe : IDisposable
     private readonly SolidColorBrush _brush;
     private readonly DispatcherQueue? _dispatcher;
     private readonly long _token;
+    private bool _live;
     private bool _reportPending;
     private bool _disposed;
 
@@ -63,9 +66,13 @@ internal sealed class ThemeProbe : IDisposable
         _brush = brush;
         _dispatcher = dispatcher;
         _token = brush.RegisterPropertyChangedCallback(SolidColorBrush.ColorProperty, OnColorChanged);
-        HighContrastState.ProbeAttached();
-        // The first report says what WinUI applies right now.
-        ScheduleReport();
+        // Only a probe in the live tree hears WinUI apply a theme, so only such a probe reports
+        // and counts: one left on a root that is off the tree would keep a stale state. Loaded
+        // and IsLoaded do not tell: a raw host's root, put in the tree during a render, gets
+        // neither. So check the tree itself, on a later turn, after WinUI has taken the change.
+        owner.Loaded += OnOwnerLoaded;
+        owner.Unloaded += OnOwnerUnloaded;
+        ScheduleLivenessCheck();
     }
 
     /// <summary>
@@ -99,6 +106,9 @@ internal sealed class ThemeProbe : IDisposable
     /// <summary>The element whose resources hold the probe.</summary>
     internal FrameworkElement Owner => _owner;
 
+    /// <summary>Whether the probe is in the live tree, where WinUI updates it.</summary>
+    internal bool IsLive => _live;
+
     /// <summary>Whether WinUI resolves the probe from its <c>HighContrast</c> theme dictionary.</summary>
     internal bool IsHighContrast => HighContrastState.ProbeReaderForTest is { } reader ? reader() : _brush.Color == ContrastColor;
 
@@ -117,9 +127,59 @@ internal sealed class ThemeProbe : IDisposable
         ScheduleReport();
     }
 
+    private void OnOwnerLoaded(object sender, RoutedEventArgs e) => GoLive();
+
+    // WinUI can raise a moved element's Unloaded after its new Loaded: decide on a later turn.
+    private void OnOwnerUnloaded(object sender, RoutedEventArgs e) => ScheduleLivenessCheck();
+
+    private void ScheduleLivenessCheck()
+    {
+        if (_dispatcher is null || !_dispatcher.TryEnqueue(DispatcherQueuePriority.Low, CheckLiveness))
+            CheckLiveness();
+    }
+
+    private void CheckLiveness()
+    {
+        if (_disposed) return;
+        if (IsInLiveTree(_owner)) GoLive();
+        else Withdraw();
+    }
+
+    // In the window's tree: its parents lead to the content of its XamlRoot. (A root in a popup
+    // does not count, and the system setting stands in for it.)
+    private static bool IsInLiveTree(FrameworkElement element)
+    {
+        var top = element.XamlRoot?.Content;
+        if (top is null) return false;
+        for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, top)) return true;
+        }
+        return false;
+    }
+
+    private void GoLive()
+    {
+        if (_disposed) return;
+        if (!_live)
+        {
+            _live = true;
+            HighContrastState.ProbeAttached();
+        }
+        // Say what WinUI applies now: it may have switched while the probe was off the tree.
+        ScheduleReport();
+    }
+
+    private void Withdraw()
+    {
+        if (!_live) return;
+        _live = false;
+        HighContrastState.ProbeDetached();
+    }
+
     private void ScheduleReport()
     {
-        if (_disposed || _reportPending) return;
+        if (_disposed || !_live || _reportPending) return;
         _reportPending = true;
         // WinUI raises the callback while it applies the theme: report on a later turn, once
         // it has finished. Low priority, so its own queued work for the switch runs first.
@@ -130,7 +190,7 @@ internal sealed class ThemeProbe : IDisposable
     private void Report()
     {
         _reportPending = false;
-        if (_disposed) return;
+        if (_disposed || !_live) return;
         HighContrastState.OnApplied(IsHighContrast);
     }
 
@@ -138,9 +198,15 @@ internal sealed class ThemeProbe : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _owner.Loaded -= OnOwnerLoaded;
+        _owner.Unloaded -= OnOwnerUnloaded;
         _brush.UnregisterPropertyChangedCallback(SolidColorBrush.ColorProperty, _token);
         try { _owner.Resources?.MergedDictionaries.Remove(_dictionary); }
         catch (global::System.Runtime.InteropServices.COMException) { }
-        HighContrastState.ProbeDetached();
+        if (_live)
+        {
+            _live = false;
+            HighContrastState.ProbeDetached();
+        }
     }
 }
