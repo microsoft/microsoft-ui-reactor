@@ -58,7 +58,7 @@
     <!-- Doc pipeline screenshot capture (tools/Reactor.DocPipeline): the library behind
          `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
          19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
-    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.8.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
   </ItemGroup>
 
