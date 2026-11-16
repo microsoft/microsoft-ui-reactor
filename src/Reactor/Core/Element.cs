@@ -511,11 +511,12 @@ public abstract record Element
 
         // Spec 047 §4.4 fast-path: when neither element carries an Extras bucket,
         // all 14 bucketed fields (Attached, ThemeBindings, ContextValues, …) are
-        // provably null on both sides, so the three structural compares below are
+        // provably null on both sides, so the structural comparisons below are
         // guaranteed to pass. Skip them (and their null-deref property GETs) for
         // the common no-extras leaf.
         if (!(a.Extensions is null && b.Extensions is null))
         {
+            if (!Equals(a.AnimationConfig, b.AnimationConfig)) return false;
             if (!AttachedEqual(a.Attached, b.Attached)) return false;
             if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
             // Issue #675 — compare ResourceOverrides for symmetry with ThemeBindings: a
