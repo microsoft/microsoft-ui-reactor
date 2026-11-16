@@ -19,6 +19,8 @@ internal static class Issue965InlineEdgeFixture
 {
     internal class InlineEdgesDoNotReadBackPreviousOverlay(Harness h) : SelfTestFixtureBase(h)
     {
+        private static bool SameInstance(object? a, object? b) => ReferenceEquals(a, b);
+
         public override async Task RunAsync()
         {
             using var host = H.CreateHost();
@@ -150,18 +152,18 @@ internal static class Issue965InlineEdgeFixture
             await Harness.Render();
 
             H.Check("Issue965_Phase1_SameInstances",
-                ReferenceEquals(padSwap, FindBorder("Issue965_padSwap"))
-                && ReferenceEquals(marginSwap, H.FindText("Issue965_marginSwap"))
-                && ReferenceEquals(buttonSwap, H.FindButton("Issue965_buttonSwap"))
-                && ReferenceEquals(flipPad, H.FindText("Issue965_flipPad"))
-                && ReferenceEquals(flipMargin, H.FindText("Issue965_flipMargin"))
-                && ReferenceEquals(flipBorder, FindBorder("Issue965_flipBorder"))
-                && ReferenceEquals(setterBase, H.FindText("Issue965_setterBase"))
-                && ReferenceEquals(flyoutTarget, H.FindButton("Issue965_flyoutTarget"))
-                && ReferenceEquals(flyoutCollide, H.FindButton("Issue965_flyoutCollide"))
-                && ReferenceEquals(flyoutEqual, H.FindButton("Issue965_flyoutEqual"))
-                && ReferenceEquals(memoWrapper, FindMemoWrapper())
-                && ReferenceEquals(expander, FindExpander()));
+                SameInstance(padSwap, FindBorder("Issue965_padSwap"))
+                && SameInstance(marginSwap, H.FindText("Issue965_marginSwap"))
+                && SameInstance(buttonSwap, H.FindButton("Issue965_buttonSwap"))
+                && SameInstance(flipPad, H.FindText("Issue965_flipPad"))
+                && SameInstance(flipMargin, H.FindText("Issue965_flipMargin"))
+                && SameInstance(flipBorder, FindBorder("Issue965_flipBorder"))
+                && SameInstance(setterBase, H.FindText("Issue965_setterBase"))
+                && SameInstance(flyoutTarget, H.FindButton("Issue965_flyoutTarget"))
+                && SameInstance(flyoutCollide, H.FindButton("Issue965_flyoutCollide"))
+                && SameInstance(flyoutEqual, H.FindButton("Issue965_flyoutEqual"))
+                && SameInstance(memoWrapper, FindMemoWrapper())
+                && SameInstance(expander, FindExpander()));
 
             // The stale value was 8,0,4,0: the old inline-start edge read back as the base.
             H.Check("Issue965_Phase1_PadSwapDropsOldEdge", padSwap.Padding == new Thickness(0, 0, 4, 0));
@@ -189,11 +191,11 @@ internal static class Issue965InlineEdgeFixture
             await Harness.Render();
 
             H.Check("Issue965_Phase2_SameInstances",
-                ReferenceEquals(flipPad, H.FindText("Issue965_flipPad"))
-                && ReferenceEquals(flipMargin, H.FindText("Issue965_flipMargin"))
-                && ReferenceEquals(flipBorder, FindBorder("Issue965_flipBorder"))
-                && ReferenceEquals(flipDeclared, H.FindText("Issue965_flipDeclared"))
-                && ReferenceEquals(expander, FindExpander()));
+                SameInstance(flipPad, H.FindText("Issue965_flipPad"))
+                && SameInstance(flipMargin, H.FindText("Issue965_flipMargin"))
+                && SameInstance(flipBorder, FindBorder("Issue965_flipBorder"))
+                && SameInstance(flipDeclared, H.FindText("Issue965_flipDeclared"))
+                && SameInstance(expander, FindExpander()));
             H.Check("Issue965_Phase2_FlipPadBackToLtr", flipPad.Padding == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipMarginBackToLtr", flipMargin.Margin == new Thickness(8, 0, 0, 0));
             H.Check("Issue965_Phase2_FlipBorderBackToLtr", flipBorder.BorderThickness == new Thickness(9, 0, 0, 0));
