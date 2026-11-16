@@ -785,7 +785,7 @@
         {
           "header": "Row edit mode",
           "language": "csharp",
-          "code": "// `rowEditSource` and `Columns()` are the same list source and five columns\n// the card above uses — this card differs only in editMode.\nvar (lastRowEdit, setLastRowEdit) = UseState(\"(none yet)\");\n\nDataGrid(\n    source: rowEditSource,\n    columns: Columns(),\n    editable: true,\n    editMode: EditMode.Row,   // whole row edits and commits together\n    onRowChanged: (key, item) =>\n    {\n        setLastRowEdit($\"row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}\");\n        return Task.CompletedTask;\n    },\n    rowHeight: 36)\n\nTextBlock($\"Last committed row: {lastRowEdit}\")"
+          "code": "var (lastRowEdit, setLastRowEdit) = UseState(\"(none yet)\");\n\n// `rowEditSource` and `Columns()` are the same list source and five columns\n// the card above uses — this card differs only in editMode.\nDataGrid(\n    source: rowEditSource,\n    columns: Columns(),\n    editable: true,\n    editMode: EditMode.Row,   // whole row edits and commits together\n    onRowChanged: (key, item) =>\n    {\n        setLastRowEdit($\"row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}\");\n        return Task.CompletedTask;\n    },\n    rowHeight: 36)\n\nTextBlock($\"Last committed row: {lastRowEdit}\")"
         }
       ]
     },
