@@ -439,13 +439,19 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     /// <paramref name="parameterName"/>, directly or by handing it to another helper on the same
     /// type that does (e.g. <c>OptionPanel(params Element[] options)</c> →
     /// <c>NameOptionsFromCaptions(options)</c> → <c>options[i].AutomationName(...)</c>). A label
-    /// call whose result is discarded as a statement does not count: element records are
-    /// immutable, so <c>control.AutomationName("x");</c> leaves <c>control</c> unnamed. The walk is
-    /// bounded so a recursive helper cannot loop.
+    /// call, or a call to a value-returning helper, whose result is discarded as a statement does
+    /// not count: element records are immutable, so <c>control.AutomationName("x");</c> or
+    /// <c>Name(control);</c> leaves <c>control</c> unnamed. A <c>void</c> helper can still label
+    /// through an array it was handed, so its call statement is followed. The walk is bounded so a
+    /// recursive helper cannot loop.
     /// </summary>
     private static bool ForwardsLabel(
         SyntaxNodeAnalysisContext context, IMethodSymbol method, string parameterName, int depth)
     {
+        var parameter = method.Parameters.FirstOrDefault(p => p.Name == parameterName);
+        if (parameter is null)
+            return false;
+
         var ct = context.CancellationToken;
         var bodies = method.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax(ct) switch
         {
@@ -462,9 +468,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             {
                 if (inner.Expression is MemberAccessExpressionSyntax labelCall
                     && LabelModifiers.Contains(labelCall.Name.Identifier.Text)
-                    && ReceiverRoot(labelCall.Expression) is IdentifierNameSyntax receiver
-                    && receiver.Identifier.Text == parameterName
-                    && ScanOwnChain(inner, HeaderLabels, out _).Parent is not ExpressionStatementSyntax)
+                    && IsParameterReceiver(context, labelCall.Expression, parameter)
+                    && !IsDiscarded(inner))
                     return true;
 
                 if (depth < MaxForwardingDepth
@@ -479,6 +484,7 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                             continue;
 
                         if (ResolveHelper(context, inner, type, helperName.Identifier.Text) is { } helper
+                            && (helper.ReturnsVoid || !IsDiscarded(inner))
                             && ParameterName(args[i], i, helper) is { } next
                             && ForwardsLabel(context, helper.ReducedFrom ?? helper.OriginalDefinition, next, depth + 1))
                             return true;
@@ -488,6 +494,10 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         }
         return false;
     }
+
+    /// <summary>True when a call's value (with any fluent chain on it) is thrown away as a statement.</summary>
+    private static bool IsDiscarded(InvocationExpressionSyntax call) =>
+        ScanOwnChain(call, HeaderLabels, out _).Parent is ExpressionStatementSyntax;
 
     private const int MaxForwardingDepth = 3;
 
@@ -547,26 +557,76 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// The identifier a label call is ultimately made on: <c>control</c> for
-    /// <c>control.AutomationName(...)</c> and <c>control.Width(120).AutomationName(...)</c>,
-    /// <c>options</c> for <c>options[i].AutomationName(...)</c>.
+    /// True when a label call's receiver is <paramref name="parameter"/> itself (or an element of
+    /// it, for <c>options[i]</c>), possibly passed through fluent modifiers first. Each modifier
+    /// must be <em>type-preserving</em>, as Reactor's <c>T Width&lt;T&gt;(this T)</c> family is: a
+    /// call that returns a different element, such as <c>.ShowErrors()</c> wrapping the field in a
+    /// <c>ValidationVisualizerElement</c>, would leave the name on the wrapper. Modifiers are
+    /// resolved with <c>LookupSymbols</c> at the field being analyzed, since no semantic model is
+    /// created for the helper's own file; an unresolvable modifier counts as not preserving.
     /// </summary>
-    private static ExpressionSyntax ReceiverRoot(ExpressionSyntax expression)
+    private static bool IsParameterReceiver(
+        SyntaxNodeAnalysisContext context, ExpressionSyntax receiver, IParameterSymbol parameter)
     {
+        var modifiers = new List<string>();
+        var indexed = false;
+        var expression = receiver;
         while (true)
         {
             switch (expression)
             {
-                case ParenthesizedExpressionSyntax p: expression = p.Expression; break;
-                case CastExpressionSyntax c: expression = c.Expression; break;
-                case ElementAccessExpressionSyntax e: expression = e.Expression; break;
-                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax fluent }:
-                    expression = fluent.Expression; break;
+                case ParenthesizedExpressionSyntax p: expression = p.Expression; continue;
+                case CastExpressionSyntax c: expression = c.Expression; continue;
                 case PostfixUnaryExpressionSyntax u when u.IsKind(SyntaxKind.SuppressNullableWarningExpression):
-                    expression = u.Operand; break;
-                default: return expression;
+                    expression = u.Operand; continue;
+                case ElementAccessExpressionSyntax e when !indexed:
+                    indexed = true;
+                    expression = e.Expression;
+                    continue;
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax fluent } when !indexed:
+                    modifiers.Add(fluent.Name.Identifier.ValueText);
+                    expression = fluent.Expression;
+                    continue;
             }
+            break;
         }
+
+        if (expression is not IdentifierNameSyntax root || root.Identifier.ValueText != parameter.Name)
+            return false;
+        if (modifiers.Count == 0)
+            return true;
+
+        var type = indexed ? (parameter.Type as IArrayTypeSymbol)?.ElementType : parameter.Type;
+        if (type is null)
+            return false;
+
+        // `modifiers` was collected outermost-first; apply them innermost-first.
+        for (var i = modifiers.Count - 1; i >= 0; i--)
+        {
+            if (!IsTypePreserving(context, type, modifiers[i]))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool IsTypePreserving(SyntaxNodeAnalysisContext context, ITypeSymbol receiverType, string name)
+    {
+        var found = false;
+        foreach (var symbol in context.SemanticModel.LookupSymbols(
+            context.Node.SpanStart, receiverType, name, includeReducedExtensionMethods: true))
+        {
+            if (symbol is not IMethodSymbol method)
+                return false;
+            found = true;
+            var original = method.ReducedFrom ?? method;
+            var genericSelf = original.IsExtensionMethod
+                && original.Parameters.Length > 0
+                && original.Parameters[0].Type is ITypeParameterSymbol
+                && SymbolEqualityComparer.Default.Equals(original.ReturnType, original.Parameters[0].Type);
+            if (!genericSelf && !SymbolEqualityComparer.Default.Equals(method.ReturnType, receiverType))
+                return false;
+        }
+        return found;
     }
 
     private static IMethodSymbol? ResolveMethod(

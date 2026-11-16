@@ -412,6 +412,8 @@ public record Element
     public string OnContent { get; init; }
 }
 
+public record WrapperElement : Element;
+
 public sealed class GenerateReactorWrapperAttribute : Attribute
 {
     public GenerateReactorWrapperAttribute(Type wrapped) { }
@@ -436,7 +438,8 @@ public static class F
     public static Element Header(this Element e, string header) => e;
     public static Element PlaceholderText(this Element e, string text) => e;
     public static Element AutomationName(this Element e, string name) => e;
-    public static Element Width(this Element e, double width) => e;
+    public static T Width<T>(this T e, double width) where T : Element => e;
+    public static WrapperElement ShowErrors(this Element e) => new();
 }
 ";
 
@@ -636,6 +639,51 @@ class C
     }
 
     Element M() => Row({|REACTOR_A11Y_003:TextBox(""v"")|});
+}");
+
+    /// <summary>
+    /// A helper's labeled copy has to be used, too: calling a value-returning labeling helper as a
+    /// statement leaves the field unnamed. A <c>void</c> helper that writes labeled copies back
+    /// into the array it was handed does label it.
+    /// </summary>
+    [Fact]
+    public Task Discarded_Helper_Result_Does_Not_Satisfy_Rule_But_Array_Writing_Helper_Does() => VerifyAsync(@"
+class C
+{
+    static Element Name(Element c) => c.AutomationName(""Email"");
+    static Element Row(Element c)
+    {
+        Name(c);
+        return HStack(c);
+    }
+
+    static void NameAll(Element[] items)
+    {
+        for (var i = 0; i < items.Length; i++)
+            items[i] = items[i].AutomationName(""caption"");
+    }
+    static Element Panel(params Element[] items)
+    {
+        NameAll(items);
+        return VStack(items);
+    }
+
+    Element M(string[] options) => VStack(
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}),
+        Panel(ComboBox(options)));
+}");
+
+    /// <summary>
+    /// Only type-preserving modifiers are walked through. A call that wraps the field in another
+    /// element puts the name on the wrapper.
+    /// </summary>
+    [Fact]
+    public Task Name_Applied_To_A_Wrapper_Does_Not_Satisfy_Rule() => VerifyAsync(@"
+class C
+{
+    static Element Row(Element c) => HStack(c.ShowErrors().AutomationName(""Email""));
+
+    Element M(string[] options) => Row({|REACTOR_A11Y_003:ComboBox(options)|});
 }");
 
     /// <summary>
