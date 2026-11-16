@@ -431,20 +431,22 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        return ForwardsLabel(method.ReducedFrom ?? method.OriginalDefinition, parameterName, depth: 0, context.CancellationToken);
+        return ForwardsLabel(context, method.ReducedFrom ?? method.OriginalDefinition, parameterName, depth: 0);
     }
 
     /// <summary>
     /// True when <paramref name="method"/>'s source body applies a label modifier to
     /// <paramref name="parameterName"/>, directly or by handing it to another helper on the same
     /// type that does (e.g. <c>OptionPanel(params Element[] options)</c> →
-    /// <c>NameOptionsFromCaptions(options)</c> → <c>options[i].AutomationName(...)</c>). Inner
-    /// helpers are found by name on the containing type rather than through a semantic model, and
-    /// the walk is bounded so a recursive helper cannot loop.
+    /// <c>NameOptionsFromCaptions(options)</c> → <c>options[i].AutomationName(...)</c>). A label
+    /// call whose result is discarded as a statement does not count: element records are
+    /// immutable, so <c>control.AutomationName("x");</c> leaves <c>control</c> unnamed. The walk is
+    /// bounded so a recursive helper cannot loop.
     /// </summary>
     private static bool ForwardsLabel(
-        IMethodSymbol method, string parameterName, int depth, System.Threading.CancellationToken ct)
+        SyntaxNodeAnalysisContext context, IMethodSymbol method, string parameterName, int depth)
     {
+        var ct = context.CancellationToken;
         var bodies = method.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax(ct) switch
         {
             MethodDeclarationSyntax m => (SyntaxNode?)m.Body ?? m.ExpressionBody,
@@ -461,7 +463,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                 if (inner.Expression is MemberAccessExpressionSyntax labelCall
                     && LabelModifiers.Contains(labelCall.Name.Identifier.Text)
                     && ReceiverRoot(labelCall.Expression) is IdentifierNameSyntax receiver
-                    && receiver.Identifier.Text == parameterName)
+                    && receiver.Identifier.Text == parameterName
+                    && ScanOwnChain(inner, HeaderLabels, out _).Parent is not ExpressionStatementSyntax)
                     return true;
 
                 if (depth < MaxForwardingDepth
@@ -475,12 +478,10 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                             || passed.Identifier.Text != parameterName)
                             continue;
 
-                        foreach (var helper in type.GetMembers(helperName.Identifier.Text).OfType<IMethodSymbol>())
-                        {
-                            if (ParameterName(args[i], i, helper) is { } next
-                                && ForwardsLabel(helper, next, depth + 1, ct))
-                                return true;
-                        }
+                        if (ResolveHelper(context, inner, type, helperName.Identifier.Text) is { } helper
+                            && ParameterName(args[i], i, helper) is { } next
+                            && ForwardsLabel(context, helper.ReducedFrom ?? helper.OriginalDefinition, next, depth + 1))
+                            return true;
                     }
                 }
             }
@@ -489,6 +490,30 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     }
 
     private const int MaxForwardingDepth = 3;
+
+    /// <summary>
+    /// The method a call inside a helper body binds to. In the tree being analyzed it is bound
+    /// through that tree's semantic model; elsewhere (no model is created for another tree) it is
+    /// accepted only when the containing type has exactly one method of that name, so an unbound
+    /// overload group can never stand in for the overload actually called.
+    /// </summary>
+    private static IMethodSymbol? ResolveHelper(
+        SyntaxNodeAnalysisContext context, InvocationExpressionSyntax call, INamedTypeSymbol type, string name)
+    {
+        if (call.SyntaxTree == context.SemanticModel.SyntaxTree)
+            return ResolveMethod(context, call);
+
+        IMethodSymbol? single = null;
+        foreach (var member in type.GetMembers(name))
+        {
+            if (member is not IMethodSymbol candidate)
+                continue;
+            if (single is not null)
+                return null;
+            single = candidate;
+        }
+        return single;
+    }
 
     /// <summary>
     /// For a container that names its <c>content</c> from one of its own arguments at runtime,
@@ -523,7 +548,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     /// The identifier a label call is ultimately made on: <c>control</c> for
-    /// <c>control.AutomationName(...)</c>, <c>options</c> for <c>options[i].AutomationName(...)</c>.
+    /// <c>control.AutomationName(...)</c> and <c>control.Width(120).AutomationName(...)</c>,
+    /// <c>options</c> for <c>options[i].AutomationName(...)</c>.
     /// </summary>
     private static ExpressionSyntax ReceiverRoot(ExpressionSyntax expression)
     {
@@ -534,6 +560,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
                 case ParenthesizedExpressionSyntax p: expression = p.Expression; break;
                 case CastExpressionSyntax c: expression = c.Expression; break;
                 case ElementAccessExpressionSyntax e: expression = e.Expression; break;
+                case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax fluent }:
+                    expression = fluent.Expression; break;
                 case PostfixUnaryExpressionSyntax u when u.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     expression = u.Operand; break;
                 default: return expression;

@@ -607,4 +607,86 @@ class C
         (flag ? ToggleSwitch() : ToggleSwitch(true)).Header(""Wi-Fi""),
         HStack(flag ? {|REACTOR_A11Y_003:ComboBox(a)|} : TextBlock(""none"")));
 }");
+
+    /// <summary>
+    /// A helper that sizes the field before naming it still names the very parameter it was given.
+    /// </summary>
+    [Fact]
+    public Task Helper_Naming_Through_A_Fluent_Chain_Satisfies_Rule() => VerifyAsync(@"
+class C
+{
+    static Element SettingsRow(string label, Element control) =>
+        HStack(TextBlock(label), control.Width(120).AutomationName(label));
+
+    Element M(string[] items) => SettingsRow(""Theme"", ComboBox(items));
+}");
+
+    /// <summary>
+    /// Element records are immutable, so a label call whose result is thrown away leaves the
+    /// parameter unnamed.
+    /// </summary>
+    [Fact]
+    public Task Helper_That_Discards_The_Labeled_Copy_Does_Not_Satisfy_Rule() => VerifyAsync(@"
+class C
+{
+    static Element Row(Element control)
+    {
+        control.AutomationName(""Email"");
+        return HStack(control);
+    }
+
+    Element M() => Row({|REACTOR_A11Y_003:TextBox(""v"")|});
+}");
+
+    /// <summary>
+    /// Only the overload the helper actually calls is followed. A sibling overload that labels its
+    /// argument must not vouch for the layout-only one.
+    /// </summary>
+    [Fact]
+    public Task Only_The_Bound_Helper_Overload_Is_Followed() => VerifyAsync(@"
+class C
+{
+    static Element Wrap(Element c) => HStack(c);
+    static Element Wrap(Element c, string label) => HStack(c.AutomationName(label));
+
+    static Element Row(Element c) => Wrap(c);
+    static Element NamedRow(Element c) => Wrap(c, ""Email"");
+
+    Element M() => VStack(
+        Row({|REACTOR_A11Y_003:TextBox(""v"")|}),
+        NamedRow(TextBox(""v"")));
+}");
+
+    /// <summary>
+    /// Helpers declared in another file are followed without a semantic model for that file, so an
+    /// inner call is trusted only when its name has a single overload.
+    /// </summary>
+    [Fact]
+    public Task Cross_File_Helpers_Follow_Only_Unambiguous_Inner_Calls()
+    {
+        var test = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
+        {
+            ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+        };
+        test.TestState.Sources.Add(Stubs + @"
+class C
+{
+    Element M() => VStack(
+        Helpers.OptionPanel(TextBox(""v"")),
+        Helpers.Row({|REACTOR_A11Y_003:TextBox(""v"")|}));
+}");
+        test.TestState.Sources.Add(@"
+using static F;
+
+static class Helpers
+{
+    public static Element OptionPanel(Element option) => VStack(Name(option));
+    static Element Name(Element option) => option.AutomationName(""caption"");
+
+    public static Element Row(Element c) => Wrap(c);
+    static Element Wrap(Element c) => HStack(c);
+    static Element Wrap(Element c, string label) => HStack(c.AutomationName(label));
+}");
+        return test.RunAsync(TestContext.Current.CancellationToken);
+    }
 }
