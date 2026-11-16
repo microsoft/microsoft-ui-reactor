@@ -126,6 +126,35 @@ public class AccessibilityScannerTests
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_003");
     }
 
+    // Issue #1007: the runtime check covers the same controls as REACTOR_A11Y_003.
+    [Fact]
+    public void A11Y_003_Unlabeled_ComboBox_And_ToggleSwitch_Flagged()
+    {
+        var tree = VStack(
+            ComboBox(["Red", "Green"], 0, null).PlaceholderText("Pick a color"),
+            ToggleSwitch(false, null)
+        );
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.Contains(findings, f => f.Id == "A11Y_003" && f.ElementType == nameof(ComboBoxElement));
+        Assert.Contains(findings, f => f.Id == "A11Y_003" && f.ElementType == nameof(ToggleSwitchElement));
+    }
+
+    [Fact]
+    public void A11Y_003_Labeled_ComboBox_And_ToggleSwitch_Pass()
+    {
+        var tree = VStack(
+            ComboBox(["Red", "Green"], 0, null).Header("Color"),
+            ComboBox(["Red", "Green"], 0, null).AutomationName("Color"),
+            ToggleSwitch(false, null).Header("Wi-Fi"),
+            ToggleSwitch(false, null, onContent: "On"),
+            ToggleSwitch(false, null, offContent: "Off")
+        );
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.DoesNotContain(findings, f => f.Id == "A11Y_003");
+    }
+
     [Fact]
     public void A11Y_003_TextBox_With_LabeledBy_Passes()
     {

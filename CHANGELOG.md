@@ -37,7 +37,9 @@ Conventions for contributors:
   its on/off content, which WinUI uses as its name. A `ComboBox` placeholder is not, because
   WinUI only exposes `PlaceholderText` as help text. Projects that build with warnings as errors
   may see new `REACTOR_A11Y_003` errors on unlabeled combo boxes and switches; add `.Header(...)`
-  or `.AutomationName(...)`.
+  or `.AutomationName(...)`. A label on an enclosing container (`Expander(field).Header(...)`)
+  no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
+  (devtools) covers the same two controls.
 
 ### Deprecated
 

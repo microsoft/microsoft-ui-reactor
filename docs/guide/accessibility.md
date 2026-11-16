@@ -487,7 +487,7 @@ as you type in your IDE:
 |--------------|------|
 | `REACTOR_A11Y_001` | Icon-only `Button(icon, action)` calls without `.AutomationName()` |
 | `REACTOR_A11Y_002` | `Image()` without `.AutomationName()` or `.AccessibilityHidden()` |
-| `REACTOR_A11Y_003` | `TextBox`/`NumberBox`/`PasswordBox`/`AutoSuggestBox`/`ComboBox`/`ToggleSwitch` with no label: no header (`header:` arg, `.Header()`, or `with { Header = ... }`), `.AutomationName()`, or `.LabeledBy()`. A `ToggleSwitch` is also named by its on/off content, and a field passed to `FormField(field, label: ...)` or to a helper that applies one of those modifiers counts as labeled. A `PlaceholderText` does not, since WinUI never uses it as the name. |
+| `REACTOR_A11Y_003` | `TextBox`/`NumberBox`/`PasswordBox`/`AutoSuggestBox`/`ComboBox`/`ToggleSwitch` with no label: no header (`header:` arg, `.Header()`, or `with { Header = ... }`), `.AutomationName()`, or `.LabeledBy()`. A `ToggleSwitch` is also named by its on/off content, and a field passed to `FormField(field, label: ...)`, to a Community Toolkit `SettingsCard` with a string `header:`, or to a helper that applies one of those modifiers counts as labeled. A `PlaceholderText` does not, since WinUI never uses it as the name, and neither does a label on an enclosing container such as `Expander(field).Header(...)`. |
 | `REACTOR_A11Y_004` | Clickable `Border`/`Grid`/`Canvas`/`Rectangle`/`Ellipse`/`VStack`/`HStack` (`.OnTapped`) without an enabling `.IsTabStop(true)` |
 
 These analyzers run automatically when you reference the `Reactor.Analyzers`

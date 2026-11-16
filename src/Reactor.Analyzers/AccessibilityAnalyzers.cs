@@ -257,10 +257,7 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         if (HasLabelArgument(context, invocation, factory, labels))
             return;
 
-        if (HasLabelInWithExpression(invocation, labels))
-            return;
-
-        // Check the fluent chain for a label-bearing modifier.
+        // Check the field's own fluent chain for a label-bearing modifier or `with` initializer.
         //
         // `.Header(...)` counts: TextBox/ComboBox/Slider/ToggleSwitch/PasswordBox/AutoSuggestBox
         // all expose it (ElementExtensions.cs), and it renders a *visible* label that WinUI already
@@ -268,10 +265,11 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         // redundant `.AutomationName("Password")` next to a `.Header("Password")` that was doing
         // the job, which is worse guidance than the rule was written to give. The match is on the
         // exact identifier, so `PaneHeader` / `TabStripHeader` / `RightHeader` do not satisfy it.
-        if (HasModifierInChain(invocation, LabelModifiers))
+        var outermost = ScanOwnChain(invocation, labels, out var labeled);
+        if (labeled)
             return;
 
-        if (IsLabeledByEnclosingCall(context, invocation))
+        if (IsLabeledByEnclosingCall(context, outermost))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(
@@ -280,6 +278,71 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     }
 
     private static readonly string[] LabelModifiers = { "Header", "AutomationName", "LabeledBy" };
+
+    /// <summary>
+    /// Walks outward through the field's own expression — fluent calls, <c>with</c>, parentheses,
+    /// casts, <c>!</c>, and <c>?:</c> branches — and returns the outermost node of it.
+    /// <paramref name="labeled"/> is set when a link of that chain is a label modifier or a
+    /// <c>with</c> initializer assigning a label property. The walk stops at the first node that
+    /// is not part of the field's own value, so a label on an enclosing container
+    /// (<c>Expander(ComboBox(items)).Header("Advanced")</c>) does not count for the field.
+    /// </summary>
+    private static ExpressionSyntax ScanOwnChain(
+        InvocationExpressionSyntax field, ImmutableHashSet<string> labels, out bool labeled)
+    {
+        labeled = false;
+        ExpressionSyntax node = field;
+        while (true)
+        {
+            switch (node.Parent)
+            {
+                case MemberAccessExpressionSyntax ma
+                    when ma.Expression == node
+                        && ma.Parent is InvocationExpressionSyntax chained
+                        && chained.Expression == ma:
+                    if (LabelModifiers.Contains(ma.Name.Identifier.ValueText))
+                        labeled = true;
+                    node = chained;
+                    continue;
+                case WithExpressionSyntax withExpr when withExpr.Expression == node:
+                    if (WithSetsLabel(withExpr, labels))
+                        labeled = true;
+                    node = withExpr;
+                    continue;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    node = parenthesized;
+                    continue;
+                case CastExpressionSyntax cast when cast.Expression == node:
+                    node = cast;
+                    continue;
+                case PostfixUnaryExpressionSyntax suppress
+                    when suppress.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    node = suppress;
+                    continue;
+                case ConditionalExpressionSyntax conditional
+                    when conditional.WhenTrue == node || conditional.WhenFalse == node:
+                    node = conditional;
+                    continue;
+            }
+            return node;
+        }
+    }
+
+    /// <summary>
+    /// True for <c>(Field(...) with { Header = "..." })</c> — the record-initializer spelling of a
+    /// header, which the docs use for controls without a fluent <c>.Header()</c>.
+    /// </summary>
+    private static bool WithSetsLabel(WithExpressionSyntax withExpr, ImmutableHashSet<string> labels)
+    {
+        foreach (var expression in withExpr.Initializer.Expressions)
+        {
+            if (expression is AssignmentExpressionSyntax { Left: IdentifierNameSyntax property } assignment
+                && labels.Contains(property.Identifier.ValueText)
+                && !IsNullLiteral(assignment.Right))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// True when a label-bearing parameter (<paramref name="labels"/>) receives a non-null argument,
@@ -320,10 +383,11 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// True when the field (with any fluent chain) is passed straight into a call that labels it:
+    /// True when the field's outermost expression (<see cref="ScanOwnChain"/>) is passed straight
+    /// into a call that labels it:
     /// <list type="bullet">
     /// <item>a known labeling container (<see cref="KnownContainerLabelParameter"/>) such as
-    /// Reactor's <c>FormField(content, label: "...")</c>, given a non-null label;</item>
+    /// Reactor's <c>FormField(content, label: "...")</c>, given a string-typed label;</item>
     /// <item>a helper declared in source whose body applies <c>.AutomationName</c>,
     /// <c>.Header</c>, or <c>.LabeledBy</c> to the very parameter the field is bound to — e.g. a
     /// <c>SettingsRow(string label, Element control) =&gt; HStack(TextBlock(label),
@@ -333,27 +397,8 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     /// next to a caption <c>TextBlock</c> is still reported.
     /// </summary>
     private static bool IsLabeledByEnclosingCall(
-        SyntaxNodeAnalysisContext context, InvocationExpressionSyntax field)
+        SyntaxNodeAnalysisContext context, ExpressionSyntax node)
     {
-        SyntaxNode node = field;
-        while (true)
-        {
-            var parent = node.Parent;
-            if (parent is MemberAccessExpressionSyntax ma && ma.Expression == node
-                && parent.Parent is InvocationExpressionSyntax chained && chained.Expression == ma)
-            {
-                node = chained;
-                continue;
-            }
-            if (parent is ParenthesizedExpressionSyntax or CastExpressionSyntax
-                || parent is WithExpressionSyntax withExpr && withExpr.Expression == node)
-            {
-                node = parent;
-                continue;
-            }
-            break;
-        }
-
         if (node.Parent is not ArgumentSyntax
             {
                 Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax call } list,
@@ -375,7 +420,12 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
             var args = list.Arguments;
             for (var i = 0; i < args.Count; i++)
             {
-                if (ParameterName(args[i], i, method) == labelParameter && !IsNullLiteral(args[i].Expression))
+                // String-typed only: WCT's SettingsCard names its content from `Header is string`,
+                // so an element header (an icon, a TextBlock) leaves the content unnamed.
+                if (ParameterName(args[i], i, method) == labelParameter
+                    && !IsNullLiteral(args[i].Expression)
+                    && context.SemanticModel.GetTypeInfo(args[i].Expression, context.CancellationToken)
+                        .Type?.SpecialType == SpecialType.System_String)
                     return true;
             }
             return false;
@@ -395,14 +445,14 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
     private static bool ForwardsLabel(
         IMethodSymbol method, string parameterName, int depth, System.Threading.CancellationToken ct)
     {
-        foreach (var reference in method.DeclaringSyntaxReferences)
+        var bodies = method.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax(ct) switch
         {
-            var body = reference.GetSyntax(ct) switch
-            {
-                MethodDeclarationSyntax m => (SyntaxNode?)m.Body ?? m.ExpressionBody,
-                LocalFunctionStatementSyntax l => (SyntaxNode?)l.Body ?? l.ExpressionBody,
-                _ => null,
-            };
+            MethodDeclarationSyntax m => (SyntaxNode?)m.Body ?? m.ExpressionBody,
+            LocalFunctionStatementSyntax l => (SyntaxNode?)l.Body ?? l.ExpressionBody,
+            _ => null,
+        });
+        foreach (var body in bodies)
+        {
             if (body is null)
                 continue;
 
@@ -523,59 +573,10 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         _ => null,
     };
 
-    /// <summary>
-    /// True for <c>(Field(...) with { Header = "..." })</c> — the record-initializer spelling of a
-    /// header, which the docs use for controls without a fluent <c>.Header()</c>.
-    /// </summary>
-    private static bool HasLabelInWithExpression(SyntaxNode node, ImmutableHashSet<string> labels)
-    {
-        var current = node.Parent;
-        while (current is not null)
-        {
-            if (current is WithExpressionSyntax withExpr && withExpr.Expression.Span.Contains(node.Span))
-            {
-                foreach (var expression in withExpr.Initializer.Expressions)
-                {
-                    if (expression is AssignmentExpressionSyntax
-                        {
-                            Left: IdentifierNameSyntax property,
-                        } assignment
-                        && labels.Contains(property.Identifier.Text)
-                        && !IsNullLiteral(assignment.Right))
-                        return true;
-                }
-            }
-
-            if (current is StatementSyntax or MemberDeclarationSyntax)
-                break;
-
-            current = current.Parent;
-        }
-        return false;
-    }
-
     private static bool IsNullLiteral(ExpressionSyntax expression) =>
         expression.IsKind(SyntaxKind.NullLiteralExpression)
         || expression.IsKind(SyntaxKind.DefaultLiteralExpression)
         || expression.IsKind(SyntaxKind.DefaultExpression);
-
-    private static bool HasModifierInChain(SyntaxNode node, params string[] modifierNames)
-    {
-        var current = node.Parent;
-        while (current is not null)
-        {
-            if (current is InvocationExpressionSyntax inv
-                && inv.Expression is MemberAccessExpressionSyntax ma
-                && modifierNames.Contains(ma.Name.Identifier.Text))
-                return true;
-
-            if (current is StatementSyntax or MemberDeclarationSyntax)
-                break;
-
-            current = current.Parent;
-        }
-        return false;
-    }
 }
 
 /// <summary>

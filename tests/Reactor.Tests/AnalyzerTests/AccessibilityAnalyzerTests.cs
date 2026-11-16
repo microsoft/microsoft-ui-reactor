@@ -420,7 +420,7 @@ public sealed class GenerateReactorWrapperAttribute : Attribute
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsCard))]
 public partial record SettingsCardElement : Element
 {
-    public static SettingsCardElement SettingsCard(string header = null, string description = null, Element content = null) => null;
+    public static SettingsCardElement SettingsCard(object header = null, string description = null, Element content = null) => null;
 }
 
 public static class F
@@ -432,6 +432,7 @@ public static class F
     public static Element TextBlock(string text) => new();
     public static Element VStack(params Element[] children) => new();
     public static Element HStack(params Element[] children) => new();
+    public static Element Expander(Element content) => new();
     public static Element Header(this Element e, string header) => e;
     public static Element PlaceholderText(this Element e, string text) => e;
     public static Element AutomationName(this Element e, string name) => e;
@@ -543,7 +544,8 @@ class C
 {
     Element M() => VStack(
         SettingsCardElement.SettingsCard(header: ""Wi-Fi"", content: ToggleSwitch()),
-        SettingsCardElement.SettingsCard(description: ""No header"", content: {|REACTOR_A11Y_003:ToggleSwitch()|}));
+        SettingsCardElement.SettingsCard(description: ""No header"", content: {|REACTOR_A11Y_003:ToggleSwitch()|}),
+        SettingsCardElement.SettingsCard(header: TextBlock(""Wi-Fi""), content: {|REACTOR_A11Y_003:ToggleSwitch()|}));
 }");
 
     /// <summary>
@@ -572,5 +574,37 @@ class C
         SettingsRow(""Theme"", ComboBox(items).Width(120)),
         OptionPanel(TextBlock(""Direction""), ComboBox(items), TextBlock(""Wrap""), ToggleSwitch()),
         Row(""Theme"", {|REACTOR_A11Y_003:ComboBox(items)|}));
+}");
+
+    /// <summary>
+    /// Only the field's own chain counts. A header or automation name on an enclosing container
+    /// labels the container, not the unlabeled field nested inside it.
+    /// </summary>
+    [Fact]
+    public Task Label_On_Enclosing_Container_Does_Not_Label_Nested_Field() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => VStack(
+        Expander({|REACTOR_A11Y_003:ComboBox(items)|}).Header(""Advanced""),
+        (Expander({|REACTOR_A11Y_003:ToggleSwitch()|}) with { Header = ""Advanced"" }),
+        VStack({|REACTOR_A11Y_003:TextBox(""v"")|}).AutomationName(""Form""));
+}");
+
+    /// <summary>
+    /// Both branches of a conditional, and a null-forgiven field, are still the value handed to
+    /// the label or the labeling helper.
+    /// </summary>
+    [Fact]
+    public Task Conditional_And_Null_Forgiving_Fields_Keep_Their_Label() => VerifyAsync(@"
+class C
+{
+    static Element SettingsRow(string label, Element control) =>
+        HStack(TextBlock(label), control.AutomationName(label));
+
+    Element M(bool flag, string[] a, string[] b) => VStack(
+        SettingsRow(""Model"", flag ? ComboBox(a) : ComboBox(b).Width(120)),
+        SettingsRow(""Model"", ComboBox(a)!),
+        (flag ? ToggleSwitch() : ToggleSwitch(true)).Header(""Wi-Fi""),
+        HStack(flag ? {|REACTOR_A11Y_003:ComboBox(a)|} : TextBlock(""none"")));
 }");
 }
