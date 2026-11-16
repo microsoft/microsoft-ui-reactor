@@ -51,7 +51,7 @@ class ButtonPage: Component
                         TextBlock("Need help?").Foreground(Theme.SecondaryText),
                         Button("Learn more").Click(() => setLinkOutput("Link clicked.")).TextLink()),
                     TextBlock(linkOutput).Foreground(Theme.SecondaryText)),
-                sourceCode: @"Button(""Learn more"").Click(...).TextLink()")
+                sourceCode: @"Button(""Learn more"").Click(() => setLinkOutput(""Link clicked."")).TextLink()")
         );
     }
 }
