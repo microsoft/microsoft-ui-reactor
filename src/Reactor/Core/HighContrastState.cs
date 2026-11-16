@@ -13,11 +13,11 @@ namespace Microsoft.UI.Reactor.Core;
 /// announces a contrast switch before WinUI applies it, and a theme dictionary that Reactor reads
 /// in that gap gets entries with the wrong theme's values, for the whole app. Following WinUI
 /// keeps every read in the theme WinUI is using.</para>
-/// <para>Until a probe has reported (no host has content yet), the system setting stands in:
-/// <c>SystemParametersInfo(SPI_GETHIGHCONTRAST)</c>, which is cheap, callable from any thread,
-/// and free of the WinRT activation that <c>AccessibilitySettings</c> costs. That value is cached
-/// until <see cref="Invalidate"/>, which <see cref="ThemeRef.InvalidateResolutionCache"/> calls on
-/// every theme or palette change.</para>
+/// <para>Until a probe in the live tree has reported (no host has content in the tree yet), the
+/// system setting stands in: <c>SystemParametersInfo(SPI_GETHIGHCONTRAST)</c>, which is cheap,
+/// callable from any thread, and free of the WinRT activation that <c>AccessibilitySettings</c>
+/// costs. That value is cached until <see cref="Invalidate"/>, which
+/// <see cref="ThemeRef.InvalidateResolutionCache"/> calls on every theme or palette change.</para>
 /// </remarks>
 internal static partial class HighContrastState
 {
@@ -92,12 +92,12 @@ internal static partial class HighContrastState
     /// <summary>Drops the cached system setting, so the next read without a probe gets it again.</summary>
     internal static void Invalidate() => Interlocked.Increment(ref s_version);
 
-    /// <summary>A host attached a theme probe.</summary>
+    /// <summary>A theme probe entered the live tree, where WinUI updates it.</summary>
     internal static void ProbeAttached() => Interlocked.Increment(ref s_probes);
 
     /// <summary>
-    /// A host detached its theme probe. With none left, nothing reports what WinUI applies, and
-    /// the system setting stands in again until a new probe reports.
+    /// A theme probe left the live tree, or was removed. With none left in the tree, nothing
+    /// reports what WinUI applies, and the system setting stands in again until a probe reports.
     /// </summary>
     internal static void ProbeDetached()
     {
@@ -150,9 +150,6 @@ internal static partial class HighContrastState
         Volatile.Write(ref s_renderedWith, -1);
         Invalidate();
     }
-
-    /// <summary>Test seam: how many probes are attached.</summary>
-    internal static int ProbeCountForTest => Volatile.Read(ref s_probes);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct HIGHCONTRASTW

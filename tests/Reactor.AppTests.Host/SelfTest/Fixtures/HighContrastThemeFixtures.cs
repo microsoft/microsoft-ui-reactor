@@ -77,8 +77,11 @@ internal static class HighContrastThemeFixtures
     private static string Describe(Brush? brush) => brush is SolidColorBrush s ? s.Color.ToString() : brush?.GetType().Name ?? "null";
 
     // Lets a probe report that was queued at Low priority run, then waits for the refresh it causes.
+    // A probe reports only while its root is in the live tree, so first wait for it to load.
     private static async Task ReportAsync(ThemeProbe probe, Func<Task> waitForIdle)
     {
+        for (var i = 0; i < 40 && !probe.IsLive; i++)
+            await Task.Delay(50);
         probe.SimulateChangeForTest();
         var queue = DispatcherQueue.GetForCurrentThread();
         var yielded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -146,23 +149,31 @@ internal static class HighContrastThemeFixtures
     /// <summary>
     /// A host merges a <see cref="ThemeProbe"/> into its content root, and WinUI itself updates it
     /// when it applies a theme. A real contrast switch changes the desktop, so a Light/Dark switch
-    /// stands in: WinUI applies both the same way. The probe follows a new root and leaves with
-    /// the host.
+    /// stands in: WinUI applies both the same way. The probe follows a new root, counts only while
+    /// it is in the live tree (WinUI does not update it anywhere else), goes with empty content,
+    /// and leaves with the host. Other fixtures' probes come and go on later turns, so the checks
+    /// read this probe's own state; <c>HighContrastThemeTests</c> pins what the count does.
     /// </summary>
     internal class ProbeFollowsWinUITheme(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
-            var probesBefore = HighContrastState.ProbeCountForTest;
             var host = new ReactorHostControl();
-            Action<bool>? setSwapped = null;
+            Action<int>? setRoot = null;
             host.Mount(ctx =>
             {
-                var (swapped, set) = ctx.UseState(false);
-                setSwapped = set;
-                return swapped ? VStack(TextBlock("swapped")) : Border(TextBlock("probe"));
+                var (root, set) = ctx.UseState(0);
+                setRoot = set;
+                return root switch
+                {
+                    0 => Border(TextBlock("probe")),
+                    1 => VStack(TextBlock("swapped")),
+                    _ => Empty(),
+                };
             });
-            H.SetContent(new Border { Child = host });
+            var container = new Border { Child = host };
+            H.SetContent(container);
+            ThemeProbe? last = null;
             try
             {
                 await host.WaitForIdleAsync();
@@ -170,9 +181,8 @@ internal static class HighContrastThemeFixtures
                 var probe = host.ThemeProbeForTest;
                 var root = host.ThemeListenerElement;
                 H.Check("HC_Probe_AttachedToContentRoot",
-                    probe is not null && root is not null && ReferenceEquals(probe.Owner, root)
-                    && HighContrastState.ProbeCountForTest == probesBefore + 1,
-                    $"probe={probe is not null} owner={ReferenceEquals(probe?.Owner, root)} count={HighContrastState.ProbeCountForTest - probesBefore}");
+                    probe is not null && root is not null && ReferenceEquals(probe.Owner, root) && probe.IsLive,
+                    $"probe={probe is not null} owner={ReferenceEquals(probe?.Owner, root)} live={probe?.IsLive}");
                 if (probe is null || root is null) return;
 
                 var expected = root.ActualTheme == ElementTheme.Dark ? ThemeProbe.DefaultColor : ThemeProbe.LightColor;
@@ -190,24 +200,46 @@ internal static class HighContrastThemeFixtures
                 host.RequestedTheme = ElementTheme.Default;
                 await Harness.Render();
 
-                setSwapped!(true);
+                setRoot!(1);
                 await host.WaitForIdleAsync();
                 await Harness.Render();
                 var newProbe = host.ThemeProbeForTest;
                 var newRoot = host.ThemeListenerElement;
                 H.Check("HC_Probe_FollowsANewRoot",
                     newProbe is not null && !ReferenceEquals(newProbe, probe) && newRoot is not null && !ReferenceEquals(newRoot, root)
-                    && ReferenceEquals(newProbe.Owner, newRoot) && root.Resources.MergedDictionaries.Count == 0
-                    && HighContrastState.ProbeCountForTest == probesBefore + 1,
-                    $"new={newProbe is not null && !ReferenceEquals(newProbe, probe)} oldRootDictionaries={root.Resources.MergedDictionaries.Count} count={HighContrastState.ProbeCountForTest - probesBefore}");
+                    && ReferenceEquals(newProbe.Owner, newRoot) && newProbe.IsLive && !probe.IsLive
+                    && root.Resources.MergedDictionaries.Count == 0,
+                    $"new={newProbe is not null && !ReferenceEquals(newProbe, probe)} live={newProbe?.IsLive} oldLive={probe.IsLive} oldRootDictionaries={root.Resources.MergedDictionaries.Count}");
+                if (newProbe is null || newRoot is null) return;
+
+                // Off the tree WinUI no longer updates the probe, so a report from it could be stale.
+                H.SetContent(null);
+                await Harness.Render();
+                var liveOffTree = newProbe.IsLive;
+                H.SetContent(container);
+                await Harness.Render();
+                H.Check("HC_Probe_CountsOnlyInTheLiveTree", !liveOffTree && newProbe.IsLive,
+                    $"liveOffTree={liveOffTree} liveBack={newProbe.IsLive}");
+
+                setRoot!(2);
+                await host.WaitForIdleAsync();
+                await Harness.Render();
+                H.Check("HC_Probe_GoesWithEmptyContent",
+                    host.ThemeProbeForTest is null && !newProbe.IsLive && newRoot.Resources.MergedDictionaries.Count == 0,
+                    $"probe={host.ThemeProbeForTest is not null} live={newProbe.IsLive} dictionaries={newRoot.Resources.MergedDictionaries.Count}");
+
+                setRoot!(0);
+                await host.WaitForIdleAsync();
+                await Harness.Render();
+                last = host.ThemeProbeForTest;
             }
             finally
             {
                 host.Dispose();
                 H.SetContent(null);
             }
-            H.Check("HC_Probe_DetachedWithTheHost", HighContrastState.ProbeCountForTest == probesBefore,
-                $"count={HighContrastState.ProbeCountForTest - probesBefore}");
+            H.Check("HC_Probe_DetachedWithTheHost", last is not null && !last.IsLive && last.Owner.Resources.MergedDictionaries.Count == 0,
+                $"probe={last is not null} live={last?.IsLive}");
         }
     }
 
@@ -319,7 +351,8 @@ internal static class HighContrastThemeFixtures
 
                 applied = true;
                 await ReportAsync(probe, () => host.WaitForIdleAsync());
-                H.Check("HC_RawHost_AppliedSwitchUsesContrast", OverrideColor(target.Child) == Colors.Yellow, $"color={OverrideColor(target.Child)}");
+                H.Check("HC_RawHost_AppliedSwitchUsesContrast", OverrideColor(target.Child) == Colors.Yellow,
+                    $"color={OverrideColor(target.Child)} live={probe.IsLive}");
             }
             finally
             {
