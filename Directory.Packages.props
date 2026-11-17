@@ -62,6 +62,19 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <!-- The Roslyn floor for the analyzers and source generators shipped inside the
+         Microsoft.UI.Reactor package (Reactor.Analyzers, Reactor.Localization.Generator,
+         Reactor.Wrappers.Generator, Reactor.SourceMap.Generator). They load into the
+         consumer's compiler, which refuses (CS8032) an analyzer built against a newer
+         Roslyn than its own, so raising this raises the minimum Visual Studio / .NET SDK
+         for every Reactor app. 5.0.0 = Visual Studio 2026 18.0 and the .NET 10.0.100 SDK.
+         Those projects pin it with VersionOverride; everything else (CLI, tests, tools)
+         follows the Microsoft.CodeAnalysis.* versions below.
+         Guarded by tests/Reactor.Tests/Tooling/ShippedAnalyzersRoslynFloorTests.cs. -->
+    <ReactorAnalyzerRoslynVersion>5.0.0</ReactorAnalyzerRoslynVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Roslyn (analyzers, source generators, CLI) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />

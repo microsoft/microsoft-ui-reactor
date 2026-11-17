@@ -36,6 +36,12 @@ Conventions for contributors:
 
 ### Fixed
 
+- The analyzers and source generators in the `Microsoft.UI.Reactor` package are
+  now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
+  the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
+  failed with CS8032 on anything older than VS 18.9 / SDK 10.0.400, which also
+  broke generator-dependent code. Visual Studio 2022 remains unsupported (#1543).
+
 - Shallow comparison now detects changes to an element's `.Animate()` curve or
   property flags, including parent child-skip checks. Equivalent configurations
   remain eligible for skipping (spec 014, Feature 3).

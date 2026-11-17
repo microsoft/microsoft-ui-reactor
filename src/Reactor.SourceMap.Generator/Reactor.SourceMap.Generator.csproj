@@ -28,7 +28,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="$(ReactorAnalyzerRoslynVersion)" PrivateAssets="all" />
   </ItemGroup>
 
   <PropertyGroup>

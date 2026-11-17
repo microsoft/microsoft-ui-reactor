@@ -46,6 +46,10 @@ updates:
       # has already happened twice: #814 merged with CSharp.Workspaces stranded
       # a version behind, and #1113 repeated it. Group them so a Roslyn bump
       # always moves the whole set in a single PR.
+      # This group does not move the analyzers/generators shipped in the
+      # Microsoft.UI.Reactor package. They pin VersionOverride=
+      # "$(ReactorAnalyzerRoslynVersion)" (Directory.Packages.props) because
+      # their Roslyn is the consumer's minimum VS / .NET SDK. Raise that by hand.
       roslyn:
         patterns:
           - "Microsoft.CodeAnalysis*"

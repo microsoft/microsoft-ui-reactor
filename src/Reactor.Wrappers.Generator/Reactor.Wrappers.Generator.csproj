@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="$(ReactorAnalyzerRoslynVersion)" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Spec 010: this generator intercepts calls to the factories it emits (the source-map
