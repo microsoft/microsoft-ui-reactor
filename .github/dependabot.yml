@@ -96,6 +96,14 @@ updates:
       - dependency-name: "Microsoft.WindowsAppSDK.WinUI"
       - dependency-name: "Microsoft.WindowsAppSDK.Runtime"
       - dependency-name: "Microsoft.Graphics.Win2D"
+      # The Roslyn the shipped analyzers/generators compile against is the minimum
+      # VS / .NET SDK for every Reactor app (see Directory.Packages.props). Patches stay
+      # allowed. Also held back via IGNORE_PACKAGES in
+      # .github/workflows/windows-nuget-updates.yml.
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
       # A floor Microsoft.UI.Reactor ships to its consumers; it moves by hand with the
       # Windows App SDK (src/Reactor/Reactor.csproj). Also held back via IGNORE_PACKAGES
       # in .github/workflows/windows-nuget-updates.yml.

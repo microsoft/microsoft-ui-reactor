@@ -63,9 +63,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Roslyn (analyzers, source generators, CLI) -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <!-- Roslyn (analyzers, source generators, CLI).
+         CSharp / CSharp.Workspaces are a consumer-facing floor, not a regular dependency:
+         the analyzers and generators packed into Microsoft.UI.Reactor load into the app's
+         compiler, which rejects (CS8032) one built against a newer Roslyn than its own.
+         5.0.0 = Visual Studio 2026 18.0 / .NET 10.0.100 SDK. Raise it by hand, only when
+         dropping those hosts; Dependabot ignores its minor/major updates.
+         Guarded by tests/Reactor.Tests/Tooling/ShippedAnalyzersRoslynFloorTests.cs. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
@@ -98,8 +104,8 @@
     <PackageVersion Include="Microsoft.VisualStudio.Composition" Version="17.13.41" />
     <PackageVersion Include="Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3" Version="17.11.66" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1" />
-    <PackageVersion Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" />
-    <PackageVersion Include="Microsoft.VSSDK.BuildTools" Version="18.6.38345" />
+    <PackageVersion Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.179" />
+    <PackageVersion Include="Microsoft.VSSDK.BuildTools" Version="18.12.1606" />
   </ItemGroup>
 
   <ItemGroup>
