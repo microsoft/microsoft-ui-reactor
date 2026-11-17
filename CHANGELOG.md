@@ -47,8 +47,9 @@ Conventions for contributors:
 
 - **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
   2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
-  toolchain CI builds it with. `Build-Vsix.ps1`, `Reinstall-Vsix.ps1` and `bootstrap.ps1` skip
-  Visual Studio 2022 instances. The build's fallback to the `Microsoft.VSSDK.BuildTools`
+  toolchain CI builds it with. `Build-Vsix.ps1` and `Reinstall-Vsix.ps1` only use Visual
+  Studio 2026 instances, and `bootstrap.ps1` skips the extension when the newest instance is
+  Visual Studio 2022. The build's fallback to the `Microsoft.VSSDK.BuildTools`
   package targets now follows the restored package instead of a hardcoded version.
 
 ### Fixed

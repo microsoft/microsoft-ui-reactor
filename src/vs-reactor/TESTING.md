@@ -14,7 +14,7 @@
 
 2. Install the VSIX into the Experimental hive:
    - Open `src\vs-reactor\Reactor.VsExtension\bin\Debug\Reactor.VsExtension.vsix`.
-   - Choose **Visual Studio Community 2022 — Experimental Instance**.
+   - Choose **Visual Studio 2026 — Experimental Instance**.
    - Complete installation and restart the Experimental Instance if prompted.
 
 3. Launch the Experimental hive:
