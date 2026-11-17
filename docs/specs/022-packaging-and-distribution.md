@@ -155,8 +155,18 @@ Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
 │   └── Microsoft.UI.Reactor.targets       # default props
 ├── README.md
 ├── LICENSE
+├── ThirdPartyNoticeText.txt               # notices for ported code (Yoga), issue #1535
 └── Microsoft.UI.Reactor.nuspec
 ```
+
+### Third-party notices
+
+`Microsoft.UI.Reactor` (Yoga) and `Microsoft.UI.Reactor.Advanced` (md4c, D3, WinUI.Dock) contain
+code ported from other open-source projects whose licenses require their notices to travel with
+the code. Both pack the repo-root `ThirdPartyNoticeText.txt` at the package root. The
+"Check third-party notices are packed" step in `release.yml` and its mirror in
+`reactor-build-steps.yml` fail when either package is missing or lacks an identical copy of the
+file. A new package that ships ported code must pack the file and be added to that list.
 
 ### Exactly one `lib/` folder
 

@@ -47,6 +47,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- **The `Microsoft.UI.Reactor` and `Microsoft.UI.Reactor.Advanced` packages now include
+  `ThirdPartyNoticeText.txt` (issue #1535).** Both packages contain code ported from other
+  open-source projects (Yoga, md4c, D3, WinUI.Dock), but only shipped Reactor's own license.
+  The notice file is now at the package root, and the package workflows fail if it is missing.
+
 - **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
   accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
   `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
