@@ -80,11 +80,13 @@ env:
   # remove it here to let this workflow propose that major again.
   # Microsoft.Windows.SDK.BuildTools.MSIX is a floor Microsoft.UI.Reactor ships to
   # its consumers; it moves by hand with the Windows App SDK (src/Reactor/Reactor.csproj).
+  # Microsoft.CodeAnalysis.CSharp(.Workspaces) is the Roslyn floor the shipped analyzers
+  # impose on consumers (VS / .NET SDK minimum); it moves by hand (Directory.Packages.props).
   # The Microsoft.VisualStudio.* runtime SDK packages (and the SDK test framework)
   # stay on the VS 2022 (17.x) line that src/vs-reactor's manifest supports. This
   # list holds every version, so their 17.x updates come from Dependabot, which
   # ignores only their majors (see the rationale in .github/dependabot.yml).
-  IGNORE_PACKAGES: 'MessagePack,Microsoft.Windows.SDK.BuildTools.MSIX,Microsoft.VisualStudio.SDK,Microsoft.VisualStudio.Interop,Microsoft.VisualStudio.Shell.15.0,Microsoft.VisualStudio.Utilities,Microsoft.VisualStudio.Composition,Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3'
+  IGNORE_PACKAGES: 'MessagePack,Microsoft.Windows.SDK.BuildTools.MSIX,Microsoft.CodeAnalysis.CSharp,Microsoft.CodeAnalysis.CSharp.Workspaces,Microsoft.VisualStudio.SDK,Microsoft.VisualStudio.Interop,Microsoft.VisualStudio.Shell.15.0,Microsoft.VisualStudio.Utilities,Microsoft.VisualStudio.Composition,Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3'
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
