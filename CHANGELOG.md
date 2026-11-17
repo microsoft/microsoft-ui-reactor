@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Avoid redundant element copies when assigning keys in built-in component factories,
+  DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
+  supplied key is already the same string reference. Different key references still
+  produce a copy, and key values and formatting are unchanged (spec 042 §5).
+
 - **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
   `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
   unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
