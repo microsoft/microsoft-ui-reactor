@@ -882,6 +882,8 @@ internal static class SelfTestFixtureRegistry
         "Animate_ImplicitAnimationsCreated",
         "Animate_TargetedProperties",
         "Animate_MergesWithLayoutAnimation",
+        "Animate_ConfigurationAcrossUpdates",
+        "Animate_ConfigurationChildSkip",
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions",
         "InterState_PressedInheritsPointerOver",
@@ -1528,6 +1530,8 @@ internal static class SelfTestFixtureRegistry
         "OverlayLifecycle_Show_SameTargetTwice_DoesNotStack",
         "OverlayLifecycle_Show_RefreshExtendsLifetime",
         "OverlayLifecycle_Show_NoRefresh_ExpiresAfterHoldDuration",
+        "OverlayLifecycle_Show_NoRefresh_ExpiresAtScheduledDeadline",
+        "OverlayLifecycle_Show_QueuedExpiryBeforeRefresh_PreservesRefreshedSprite",
         "OverlayLifecycle_Show_RefreshUpdatesGeometry",
         "OverlayLifecycle_Show_MountThenModified_BrushSwapped",
         "OverlayLifecycle_Show_DistinctTargets_OneSpritePerTarget",
@@ -3224,6 +3228,8 @@ internal static class SelfTestFixtureRegistry
         // Animation system — .Animate() modifier
         "Animate_ImplicitAnimationsCreated" => new AnimateModifierTests.ImplicitAnimationsCreated(harness),        "Animate_TargetedProperties" => new AnimateModifierTests.TargetedProperties(harness),
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
+        "Animate_ConfigurationAcrossUpdates" => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: false),
+        "Animate_ConfigurationChildSkip" => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: true),
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions" => new InteractionStatesTests.StateMachineTransitions(harness),
         "InterState_PressedInheritsPointerOver" => new InteractionStatesTests.PressedInheritsFromPointerOver(harness),
@@ -3886,6 +3892,8 @@ internal static class SelfTestFixtureRegistry
         "OverlayLifecycle_Show_SameTargetTwice_DoesNotStack" => new ReconcileHighlightOverlayLifecycleTests.Show_SameTargetTwice_DoesNotStack(harness),
         "OverlayLifecycle_Show_RefreshExtendsLifetime" => new ReconcileHighlightOverlayLifecycleTests.Show_RefreshExtendsLifetime(harness),
         "OverlayLifecycle_Show_NoRefresh_ExpiresAfterHoldDuration" => new ReconcileHighlightOverlayLifecycleTests.Show_NoRefresh_ExpiresAfterHoldDuration(harness),
+        "OverlayLifecycle_Show_NoRefresh_ExpiresAtScheduledDeadline" => new ReconcileHighlightOverlayLifecycleTests.Show_NoRefresh_ExpiresAtScheduledDeadline(harness),
+        "OverlayLifecycle_Show_QueuedExpiryBeforeRefresh_PreservesRefreshedSprite" => new ReconcileHighlightOverlayLifecycleTests.Show_QueuedExpiryBeforeRefresh_PreservesRefreshedSprite(harness),
         "OverlayLifecycle_Show_RefreshUpdatesGeometry" => new ReconcileHighlightOverlayLifecycleTests.Show_RefreshUpdatesGeometry(harness),
         "OverlayLifecycle_Show_MountThenModified_BrushSwapped" => new ReconcileHighlightOverlayLifecycleTests.Show_MountThenModified_BrushSwapped(harness),
         "OverlayLifecycle_Show_DistinctTargets_OneSpritePerTarget" => new ReconcileHighlightOverlayLifecycleTests.Show_DistinctTargets_OneSpritePerTarget(harness),

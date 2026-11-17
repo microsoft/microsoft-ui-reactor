@@ -36,6 +36,23 @@ Conventions for contributors:
 
 ### Fixed
 
+- Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
+  restore null normal brushes and the latest normal value, including border modifier
+  changes during an active interaction (issue #1501).
+
+- Shallow comparison now detects changes to an element's `.Animate()` curve or
+  property flags, including parent child-skip checks. Equivalent configurations
+  remain eligible for skipping (spec 014, Feature 3).
+
+- Removing `.Animate()` or narrowing its property flags releases the dropped
+  implicit channels before handlers and modifiers run, preventing setters from
+  retriggering outgoing animations. Retained layout Offset and transitions
+  reapplied during the update are preserved (spec 014, Feature 3).
+
+- Reconcile-highlight overlay lifecycle selftests wait for actual expiry completion
+  and use controlled schedules to verify refresh lifetimes, removing fixed-delay
+  assertion races on contended runners. Coverage includes stale callbacks after
+  refresh and disposal (issue #995; [testing guide](TESTING.md#timer-lifetime-tests)).
 - **Release docs go live without a manual re-run (issue #1268).** On 0.1.0-preview.16,
   .17 and .18 the release tag's `Publish docs` deployment reported success but was never
   served, so the new version's docs stayed missing until someone dispatched the workflow on
