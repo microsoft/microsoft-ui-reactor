@@ -131,8 +131,8 @@ from a hung `/updateconfiguration`, and killing it is safe.
 
 VS 2026 uses new SKU product IDs (`Microsoft.VisualStudio.Product.{Community,Pro,Enterprise}`)
 and `arm64` ProductArchitecture on Windows 11 ARM64. The Reactor Preview VSIX
-manifest declares both the legacy `Microsoft.VisualStudio.{Community,Pro,Enterprise}`
-IDs (for VS 2022) and the new `.Product.*` IDs (for VS 2026), and both `amd64`
+manifest declares both the `Microsoft.VisualStudio.{Community,Pro,Enterprise}`
+IDs and the `.Product.*` IDs, and both `amd64`
 and `arm64` architectures. If you see `NoApplicableSKUsException` on a fresh
 install, your VSIX is older than 0.1.2 — rebuild with `Build-Vsix.ps1`.
 
