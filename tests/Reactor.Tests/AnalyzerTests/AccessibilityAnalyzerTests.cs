@@ -382,3 +382,469 @@ class C
         await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
     }
 }
+
+/// <summary>
+/// REACTOR_A11Y_003 coverage of <c>ComboBox</c> / <c>ToggleSwitch</c> (issue #1007), and the label
+/// sources that keep it from firing on fields that already have an accessible name. The stubs
+/// mirror the real Dsl.cs signatures and bind normally, so positional arguments are mapped through
+/// the semantic model exactly as in user code.
+/// </summary>
+public class FormFieldLabelCoverageAnalyzerTests
+{
+    private const string Stubs = @"
+using System;
+using System.Linq;
+using static F;
+
+namespace System.Runtime.CompilerServices { public static class IsExternalInit { } }
+namespace CommunityToolkit.WinUI.Controls { public class SettingsCard { } }
+namespace Microsoft.UI.Reactor.Controls.Validation
+{
+    public static class FormFieldDsl
+    {
+        public static Element FormField(Element content, string label = null, bool required = false) => content;
+    }
+}
+
+public record Element
+{
+    public string Header { get; init; }
+    public string OnContent { get; init; }
+}
+
+public record WrapperElement : Element;
+
+public sealed class GenerateReactorWrapperAttribute : Attribute
+{
+    public GenerateReactorWrapperAttribute(Type wrapped) { }
+}
+
+[GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsCard))]
+public partial record SettingsCardElement : Element
+{
+    public static SettingsCardElement SettingsCard(object header = null, string description = null, Element content = null) => null;
+}
+
+public static class F
+{
+    public static Element ComboBox(string[] items, int selectedIndex = 0, Action<int> onSelectedIndexChanged = null) => new();
+    public static Element ToggleSwitch(bool isOn = false, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) => new();
+    public static Element TextBox(string value = null, Action<string> onChanged = null, string placeholderText = null, string header = null) => new();
+    public static Element NumberBox(double value = 0, Action<double> onValueChanged = null, string header = null) => new();
+    public static Element TextBlock(string text) => new();
+    public static Element VStack(params Element[] children) => new();
+    public static Element HStack(params Element[] children) => new();
+    public static Element Expander(Element content) => new();
+    public static Element Header(this Element e, string header) => e;
+    public static Element PlaceholderText(this Element e, string text) => e;
+    public static Element AutomationName(this Element e, string name) => e;
+    public static T Width<T>(this T e, double width) where T : Element => e;
+    public static WrapperElement ShowErrors(this Element e) => new();
+}
+";
+
+    private static Task VerifyAsync(string body)
+    {
+        var test = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
+        {
+            TestCode = Stubs + body,
+            ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+        };
+        return test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public Task Bare_ComboBox_And_ToggleSwitch_Produce_Diagnostics() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => VStack(
+        {|REACTOR_A11Y_003:ComboBox(items, 0, _ => { })|},
+        {|REACTOR_A11Y_003:ToggleSwitch(false, _ => { })|});
+}");
+
+    [Fact]
+    public Task ComboBox_Header_Or_AutomationName_Satisfies_Rule() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => VStack(
+        ComboBox(items, 0, _ => { }).Header(""Colors""),
+        ComboBox(items).Width(120).AutomationName(""Colors""),
+        (ComboBox(items) with { Header = ""Colors"" }));
+}");
+
+    /// <summary>
+    /// WinUI's ComboBoxAutomationPeer reads PlaceholderText into HelpText, never Name, so a
+    /// placeholder alone leaves the combo unnamed.
+    /// </summary>
+    [Fact]
+    public Task ComboBox_With_Only_PlaceholderText_Produces_Diagnostic() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => {|REACTOR_A11Y_003:ComboBox(items)|}.PlaceholderText(""Pick a color"");
+}");
+
+    [Fact]
+    public Task ToggleSwitch_Header_Or_OnOff_Content_Satisfies_Rule() => VerifyAsync(@"
+class C
+{
+    Element M() => VStack(
+        ToggleSwitch(false, _ => { }).Header(""Wi-Fi""),
+        ToggleSwitch(false, _ => { }, header: ""Wi-Fi""),
+        ToggleSwitch(true, _ => { }, ""Working"", ""Not working""),
+        ToggleSwitch(false, _ => { }, offContent: ""Off only""),
+        (ToggleSwitch() with { OnContent = ""On"" }));
+}");
+
+    [Fact]
+    public Task ToggleSwitch_With_Null_Label_Arguments_Produces_Diagnostic() => VerifyAsync(@"
+class C
+{
+    Element M() => VStack(
+        {|REACTOR_A11Y_003:ToggleSwitch(false, null, null, null, null)|},
+        {|REACTOR_A11Y_003:ToggleSwitch(header: null)|});
+}");
+
+    /// <summary>A positional header binds to the <c>header</c> parameter just like a named one.</summary>
+    [Fact]
+    public Task Positional_Header_Satisfies_Rule() => VerifyAsync(@"
+class C
+{
+    Element M() => VStack(
+        TextBox(""v"", _ => { }, ""you@example.com"", ""Email""),
+        NumberBox(1, _ => { }, ""Quantity""),
+        {|REACTOR_A11Y_003:TextBox(""v"", _ => { }, ""Placeholder only"")|});
+}");
+
+    /// <summary>
+    /// A caption TextBlock beside a field is not associated with it; only a call that actually
+    /// names the field counts.
+    /// </summary>
+    [Fact]
+    public Task Caption_Sibling_In_Plain_Container_Still_Produces_Diagnostic() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => HStack(
+        TextBlock(""Theme""),
+        {|REACTOR_A11Y_003:ComboBox(items)|},
+        TextBlock(""Notifications""),
+        {|REACTOR_A11Y_003:ToggleSwitch()|});
+}");
+
+    [Fact]
+    public Task FormField_With_Label_Satisfies_Rule_But_Not_Without() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => VStack(
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField(TextBox(""v"").Width(200), label: ""Email"", required: true),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField(ComboBox(items), ""Role""),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField({|REACTOR_A11Y_003:ToggleSwitch()|}),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField({|REACTOR_A11Y_003:ComboBox(items)|}, label: null));
+}");
+
+    [Fact]
+    public Task Toolkit_SettingsCard_Header_Names_Its_Content() => VerifyAsync(@"
+class C
+{
+    Element M() => VStack(
+        SettingsCardElement.SettingsCard(header: ""Wi-Fi"", content: ToggleSwitch()),
+        SettingsCardElement.SettingsCard(description: ""No header"", content: {|REACTOR_A11Y_003:ToggleSwitch()|}),
+        SettingsCardElement.SettingsCard(header: TextBlock(""Wi-Fi""), content: {|REACTOR_A11Y_003:ToggleSwitch()|}));
+}");
+
+    /// <summary>
+    /// A source helper that applies <c>.AutomationName</c> to the parameter the field is passed
+    /// into — directly, or via another helper on the same type, as the gallery's
+    /// <c>OptionPanel</c> does — labels it. A helper that only lays the field out does not.
+    /// </summary>
+    [Fact]
+    public Task Label_Forwarding_Helpers_Satisfy_Rule_But_Layout_Helpers_Do_Not() => VerifyAsync(@"
+class C
+{
+    static Element SettingsRow(string label, Element control) =>
+        HStack(TextBlock(label), control.AutomationName(label));
+
+    static Element OptionPanel(params Element[] options) => VStack(NameFromCaptions(options).ToArray());
+
+    static System.Collections.Generic.IEnumerable<Element> NameFromCaptions(Element[] items)
+    {
+        for (var i = 0; i < items.Length; i++)
+            yield return i > 0 ? items[i].AutomationName(""caption"") : items[i];
+    }
+
+    static Element Row(string label, Element control) => HStack(TextBlock(label), control);
+
+    Element M(string[] items) => VStack(
+        SettingsRow(""Theme"", ComboBox(items).Width(120)),
+        OptionPanel(TextBlock(""Direction""), ComboBox(items), TextBlock(""Wrap""), ToggleSwitch()),
+        Row(""Theme"", {|REACTOR_A11Y_003:ComboBox(items)|}));
+}");
+
+    /// <summary>
+    /// Only the field's own chain counts. A header or automation name on an enclosing container
+    /// labels the container, not the unlabeled field nested inside it.
+    /// </summary>
+    [Fact]
+    public Task Label_On_Enclosing_Container_Does_Not_Label_Nested_Field() => VerifyAsync(@"
+class C
+{
+    Element M(string[] items) => VStack(
+        Expander({|REACTOR_A11Y_003:ComboBox(items)|}).Header(""Advanced""),
+        (Expander({|REACTOR_A11Y_003:ToggleSwitch()|}) with { Header = ""Advanced"" }),
+        VStack({|REACTOR_A11Y_003:TextBox(""v"")|}).AutomationName(""Form""));
+}");
+
+    /// <summary>
+    /// Both branches of a conditional, and a null-forgiven field, are still the value handed to
+    /// the label or the labeling helper.
+    /// </summary>
+    [Fact]
+    public Task Conditional_And_Null_Forgiving_Fields_Keep_Their_Label() => VerifyAsync(@"
+class C
+{
+    static Element SettingsRow(string label, Element control) =>
+        HStack(TextBlock(label), control.AutomationName(label));
+
+    Element M(bool flag, string[] a, string[] b) => VStack(
+        SettingsRow(""Model"", flag ? ComboBox(a) : ComboBox(b).Width(120)),
+        SettingsRow(""Model"", ComboBox(a)!),
+        (flag ? ToggleSwitch() : ToggleSwitch(true)).Header(""Wi-Fi""),
+        HStack(flag ? {|REACTOR_A11Y_003:ComboBox(a)|} : TextBlock(""none"")));
+}");
+
+    /// <summary>
+    /// A helper that sizes the field before naming it still names the very parameter it was given.
+    /// </summary>
+    [Fact]
+    public Task Helper_Naming_Through_A_Fluent_Chain_Satisfies_Rule() => VerifyAsync(@"
+class C
+{
+    static Element SettingsRow(string label, Element control) =>
+        HStack(TextBlock(label), control.Width(120).AutomationName(label));
+
+    Element M(string[] items) => SettingsRow(""Theme"", ComboBox(items));
+}");
+
+    /// <summary>
+    /// Element records are immutable, so a label call whose result is thrown away leaves the
+    /// parameter unnamed.
+    /// </summary>
+    [Fact]
+    public Task Helper_That_Discards_The_Labeled_Copy_Does_Not_Satisfy_Rule() => VerifyAsync(@"
+class C
+{
+    static Element Row(Element control)
+    {
+        control.AutomationName(""Email"");
+        return HStack(control);
+    }
+
+    Element M() => Row({|REACTOR_A11Y_003:TextBox(""v"")|});
+}");
+
+    /// <summary>
+    /// A helper's labeled copy has to be used, too: calling a value-returning labeling helper as a
+    /// statement leaves the field unnamed. A <c>void</c> helper that writes labeled copies back
+    /// into the array it was handed does label it.
+    /// </summary>
+    [Fact]
+    public Task Discarded_Helper_Result_Does_Not_Satisfy_Rule_But_Array_Writing_Helper_Does() => VerifyAsync(@"
+class C
+{
+    static Element Name(Element c) => c.AutomationName(""Email"");
+    static Element Row(Element c)
+    {
+        Name(c);
+        return HStack(c);
+    }
+
+    static void NameAll(Element[] items)
+    {
+        for (var i = 0; i < items.Length; i++)
+            items[i] = items[i].AutomationName(""caption"");
+    }
+    static Element Panel(params Element[] items)
+    {
+        NameAll(items);
+        return VStack(items);
+    }
+
+    Element M(string[] options) => VStack(
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}),
+        Panel(ComboBox(options)));
+}");
+
+    /// <summary>
+    /// A <c>void</c> helper's local reassignment of a by-value parameter never reaches the caller;
+    /// a write through <c>ref</c> does.
+    /// </summary>
+    [Fact]
+    public Task Void_Helper_Labels_Only_Through_Caller_Visible_Writes() => VerifyAsync(@"
+class C
+{
+    static void Name(Element c) { c = c.AutomationName(""Email""); }
+    static Element Row(Element c)
+    {
+        Name(c);
+        return HStack(c);
+    }
+
+    static void NameRef(ref Element c) { c = c.AutomationName(""Email""); }
+    static Element RefRow(Element c)
+    {
+        NameRef(ref c);
+        return HStack(c);
+    }
+
+    Element M(string[] options) => VStack(
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}),
+        RefRow(ComboBox(options)));
+}");
+
+    /// <summary>
+    /// Only type-preserving modifiers are walked through. A call that wraps the field in another
+    /// element puts the name on the wrapper, whether the label sits on the field's own chain, comes
+    /// from a labeling container, or is applied by a helper.
+    /// </summary>
+    [Fact]
+    public Task Name_Applied_To_A_Wrapper_Does_Not_Satisfy_Rule() => VerifyAsync(@"
+class C
+{
+    static Element Row(Element c) => HStack(c.ShowErrors().AutomationName(""Email""));
+
+    Element M(string[] options) => VStack(
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}),
+        {|REACTOR_A11Y_003:ComboBox(options)|}.ShowErrors().AutomationName(""Role""),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField(
+            {|REACTOR_A11Y_003:ComboBox(options)|}.ShowErrors(), label: ""Role""),
+        ComboBox(options).AutomationName(""Role"").ShowErrors(),
+        Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl.FormField(
+            ComboBox(options).Width(120), label: ""Role""));
+}");
+
+    /// <summary>
+    /// A field inside an explicit array or collection expression is traced to its argument, so an
+    /// array-labeling helper names it the same way it names a <c>params</c> element.
+    /// </summary>
+    [Fact]
+    public Task Fields_In_Explicit_Arrays_Reach_The_Labeling_Helper() => VerifyAsync(@"
+class C
+{
+    static Element Panel(Element[] items) => VStack(Name(items));
+    static Element[] Name(Element[] items)
+    {
+        for (var i = 0; i < items.Length; i++)
+            items[i] = items[i].AutomationName(""caption"");
+        return items;
+    }
+
+    Element M(string[] options) => VStack(
+        Panel(new Element[] { ComboBox(options) }),
+        Panel(new[] { ComboBox(options) }),
+        Panel([ComboBox(options)]),
+        VStack(new Element[] { {|REACTOR_A11Y_003:ComboBox(options)|} }));
+}");
+
+    /// <summary>
+    /// Replacing an array parameter with a new array is a local write; only element writes reach
+    /// the caller's array.
+    /// </summary>
+    [Fact]
+    public Task Void_Helper_Reassigning_Its_Array_Does_Not_Satisfy_Rule() => VerifyAsync(@"
+class C
+{
+    static void Name(Element[] xs) { xs = new[] { xs[0].AutomationName(""Email"") }; }
+    static Element Panel(params Element[] xs)
+    {
+        Name(xs);
+        return VStack(xs);
+    }
+
+    Element M(string[] options) => Panel({|REACTOR_A11Y_003:ComboBox(options)|});
+}");
+
+    /// <summary>
+    /// Write-back forwarding crosses further helpers as long as each boundary can carry the write
+    /// to its caller: an array handed on is still the caller's array, but a by-value element
+    /// passed by <c>ref</c> to an inner helper only updates the middle helper's own copy.
+    /// </summary>
+    [Fact]
+    public Task Nested_Void_Helpers_Label_Only_Through_Caller_Visible_Parameters() => VerifyAsync(@"
+class C
+{
+    static void NameAll(Element[] xs) => NameEach(xs);
+    static void NameEach(Element[] xs)
+    {
+        for (var i = 0; i < xs.Length; i++)
+            xs[i] = xs[i].AutomationName(""caption"");
+    }
+    static Element Panel(params Element[] xs)
+    {
+        NameAll(xs);
+        return VStack(xs);
+    }
+
+    static void Middle(Element c) { Inner(ref c); }
+    static void Inner(ref Element c) { c = c.AutomationName(""Email""); }
+    static Element Row(Element c)
+    {
+        Middle(c);
+        return HStack(c);
+    }
+
+    Element M(string[] options) => VStack(
+        Panel(ComboBox(options)),
+        Row({|REACTOR_A11Y_003:ComboBox(options)|}));
+}");
+
+    /// <summary>
+    /// Only the overload the helper actually calls is followed. A sibling overload that labels its
+    /// argument must not vouch for the layout-only one.
+    /// </summary>
+    [Fact]
+    public Task Only_The_Bound_Helper_Overload_Is_Followed() => VerifyAsync(@"
+class C
+{
+    static Element Wrap(Element c) => HStack(c);
+    static Element Wrap(Element c, string label) => HStack(c.AutomationName(label));
+
+    static Element Row(Element c) => Wrap(c);
+    static Element NamedRow(Element c) => Wrap(c, ""Email"");
+
+    Element M() => VStack(
+        Row({|REACTOR_A11Y_003:TextBox(""v"")|}),
+        NamedRow(TextBox(""v"")));
+}");
+
+    /// <summary>
+    /// Helpers declared in another file are followed without a semantic model for that file, so an
+    /// inner call is trusted only when its name has a single overload.
+    /// </summary>
+    [Fact]
+    public Task Cross_File_Helpers_Follow_Only_Unambiguous_Inner_Calls()
+    {
+        var test = new CSharpAnalyzerTest<FormFieldLabelAnalyzer, DefaultVerifier>
+        {
+            ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+        };
+        test.TestState.Sources.Add(Stubs + @"
+class C
+{
+    Element M() => VStack(
+        Helpers.OptionPanel(TextBox(""v"")),
+        Helpers.Row({|REACTOR_A11Y_003:TextBox(""v"")|}));
+}");
+        test.TestState.Sources.Add(@"
+using static F;
+
+static class Helpers
+{
+    public static Element OptionPanel(Element option) => VStack(Name(option));
+    static Element Name(Element option) => option.AutomationName(""caption"");
+
+    public static Element Row(Element c) => Wrap(c);
+    static Element Wrap(Element c) => HStack(c);
+    static Element Wrap(Element c, string label) => HStack(c.AutomationName(label));
+}");
+        return test.RunAsync(TestContext.Current.CancellationToken);
+    }
+}

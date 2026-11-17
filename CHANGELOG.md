@@ -30,11 +30,30 @@ Conventions for contributors:
 
 ### Changed
 
+- **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
+  `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
+  unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
+  `PasswordBox` and `AutoSuggestBox`. Both are now checked. A `ToggleSwitch` is also labeled by
+  its on/off content, which WinUI uses as its name. A `ComboBox` placeholder is not, because
+  WinUI only exposes `PlaceholderText` as help text. Projects that build with warnings as errors
+  may see new `REACTOR_A11Y_003` errors on unlabeled combo boxes and switches; add `.Header(...)`
+  or `.AutomationName(...)`. A label on an enclosing container (`Expander(field).Header(...)`)
+  no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
+  (devtools) covers the same two controls.
+
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
+  accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
+  `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
+  own guidance recommends), a field passed as the `content` of a Community Toolkit
+  `SettingsCard` with a string header, and a field passed to a helper declared in the project that
+  applies `.AutomationName`, `.Header` or `.LabeledBy` to it, such as a
+  `SettingsRow(label, control)` row helper.
 
 - Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
   restore null normal brushes and the latest normal value, including border modifier
