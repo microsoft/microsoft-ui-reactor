@@ -36,6 +36,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Shallow comparison now checks all animation and transition declarations together,
+  so configuration-only changes reach direct updates and parent child-skip paths.
+  Equivalent configurations remain eligible for skipping (issue #1536; spec 014).
+
 - Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
   restore null normal brushes and the latest normal value, including border modifier
   changes during an active interaction (issue #1501).

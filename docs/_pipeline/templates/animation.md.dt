@@ -39,6 +39,10 @@ translation) and attach a transition modifier. When the value changes on the
 next render — driven by [hooks](hooks.md) and state — WinUI animates from
 the old value to the new one automatically.
 
+Animation and transition configuration changes are also checked on each render,
+even when the element's other properties stay the same. For example, changing
+only `.LayoutAnimation()`'s duration updates the layout animation on the next render.
+
 ## Reference
 
 | API | Animates | Trigger | Use when |
