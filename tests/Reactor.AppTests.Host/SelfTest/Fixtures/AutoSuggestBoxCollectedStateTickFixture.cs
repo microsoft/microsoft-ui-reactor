@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
@@ -63,9 +64,29 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
         private const string Name = "AutoSuggestBoxCollectedStateTick";
         private const int Attempts = 2;
 
+        // An attempt only counts once its box left the tree with the tick still pending. On a
+        // slow runner the tick can land before the box is dropped; that attempt is retried, up
+        // to this many tries per arm.
+        private const int MaxTries = Attempts * 4;
+
+        // Budgets for waiting on a tick that should come (about 150 ms after the text change,
+        // far longer on a contended runner), and the window in which a tick that must not come
+        // is watched for: at least MinNoTickWindowMs, and 4x what the in-tree control took.
+        private const int InTreeTickBudgetMs = 10_000;
+        private const int MinNoTickWindowMs = 2_000;
+        private const int MaxNoTickWindowMs = 10_000;
+
+        // The waits above stretch the fixture past the 30 s default on a slow runner.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
         // TextChanged ticks of any reason that reached managed code. The counting handler only
         // references this fixture, so subscribing it keeps no box alive.
         private int _ticks;
+
+        // Typed-arm ticks that reached Reactor's OnTextChanged callback.
+        private int _callbacks;
+
+        private readonly record struct OrphanResult(int Tries, int TickedInTree, int Orphaned, int Delivered, int CallbackReached);
 
         public override async Task RunAsync()
         {
@@ -90,16 +111,12 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 e.Handled = true;
             };
 
-            var delivered = new Dictionary<Arm, int>();
-            var typedCallbacks = 0;
+            var results = new Dictionary<Arm, OrphanResult>();
             Application.Current.UnhandledException += handler;
             try
             {
                 foreach (var arm in OrphanedArms)
-                {
-                    Action onTextChanged = arm == Arm.Typed ? () => typedCallbacks++ : static () => { };
-                    delivered[arm] = await OrphanAndCollectAsync(arm, onTextChanged, countTick);
-                }
+                    results[arm] = await OrphanAndCollectAsync(arm, countTick);
             }
             finally
             {
@@ -109,29 +126,35 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             H.Check(
                 $"{Name}_NoUnhandledException",
                 unhandled.Count == 0,
-                $"{unhandled.Count} of {OrphanedArms.Length * Attempts} attempt(s) threw into WinUI, first: {(unhandled.Count > 0 ? unhandled[0] : "")}");
+                $"{unhandled.Count} of {results.Values.Sum(r => r.Tries)} attempt(s) threw into WinUI, first: {(unhandled.Count > 0 ? unhandled[0] : "")}");
+            var typed = results[Arm.Typed];
             H.Check(
                 $"{Name}_TypedTickReachesCallback",
-                typedCallbacks == Attempts,
-                $"typed: callback reached in {typedCallbacks} of {Attempts} attempt(s)");
+                typed.Orphaned == Attempts && typed.CallbackReached == Attempts,
+                $"typed: callback reached in {typed.CallbackReached} of {typed.Orphaned} orphaned attempt(s), {Attempts} needed");
             foreach (var arm in OrphanedArms)
             {
+                var r = results[arm];
                 H.Check(
                     $"{Name}_{arm}_TickDelivered",
-                    delivered[arm] == Attempts,
-                    $"{arm}: tick delivered in {delivered[arm]} of {Attempts} attempt(s)");
+                    r.Orphaned == Attempts && r.Delivered == Attempts,
+                    $"{arm}: tick delivered in {r.Delivered} of {r.Orphaned} attempt(s) orphaned with the tick pending, {Attempts} needed " +
+                    $"({r.Tries} tried, {r.TickedInTree} ticked before the box was dropped)");
             }
 
             // The design relies on this: a Text change on a box that has left the tree arms no
             // timer, so no tick can be armed after Unloaded. The box stays referenced (by its
-            // host) so that a tick, were one armed, would be counted, and the same probe on a
-            // box in the tree shows that the window is long enough to count one.
-            var inTreeTicks = await CountTicksAfterTextSetAsync(Arm.TextSetInTree, countTick);
-            var afterLeavingTicks = await CountTicksAfterTextSetAsync(Arm.TextSetAfterLeaving, countTick);
+            // host) so that a tick, were one armed, would be counted. The same probe on a box in
+            // the tree waits for its tick, which shows the change does arm one there and how
+            // long it takes to land; the out-of-tree probe then watches several times as long.
+            var inTree = await CountTicksAfterTextSetAsync(Arm.TextSetInTree, InTreeTickBudgetMs, countTick);
+            var noTickWindowMs = (int)Math.Clamp(4 * inTree.ElapsedMs, MinNoTickWindowMs, MaxNoTickWindowMs);
+            var afterLeaving = await CountTicksAfterTextSetAsync(Arm.TextSetAfterLeaving, noTickWindowMs, countTick);
             H.Check(
                 $"{Name}_TextSetAfterLeavingArmsNoTick",
-                inTreeTicks > 0 && afterLeavingTicks == 0,
-                $"ticks after setting Text: {inTreeTicks} in the tree (control, expected > 0), {afterLeavingTicks} out of it (expected 0)");
+                inTree.Ticks > 0 && afterLeaving.Ticks == 0,
+                $"ticks after setting Text: {inTree.Ticks} in the tree within {inTree.ElapsedMs} ms (control, expected > 0), " +
+                $"{afterLeaving.Ticks} out of it within {afterLeaving.ElapsedMs} ms (expected 0)");
 
             // Every hold ends. A release that never ran would root every AutoSuggestBox with a
             // callback for good while every check above still passed. Mounting a box takes a
@@ -159,18 +182,23 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             return state;
         }
 
-        private async Task<int> CountTicksAfterTextSetAsync(
+        // Ends at the first tick, or once windowMs of wall-clock time has passed without one.
+        // For the out-of-tree probe that window is the claim that nothing happens, so it is
+        // timed rather than counted in passes.
+        private async Task<(int Ticks, long ElapsedMs)> CountTicksAfterTextSetAsync(
             Arm arm,
+            int windowMs,
             TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick)
         {
             var ticksBefore = Volatile.Read(ref _ticks);
             var host = await ArmAsync(H, arm, static () => { }, countTick, orphan: false);
-            // A fixed window rather than a wait, because one of the two claims is that nothing
-            // happens.
-            await Harness.Render(400);
+            var clock = Stopwatch.StartNew();
+            while (Volatile.Read(ref _ticks) == ticksBefore && clock.ElapsedMilliseconds < windowMs)
+                await Harness.Render(10);
+            var elapsedMs = clock.ElapsedMilliseconds;
             var ticks = Volatile.Read(ref _ticks) - ticksBefore;
             await DisposeHostAsync(host);
-            return ticks;
+            return (ticks, elapsedMs);
         }
 
         private async Task DisposeHostAsync(ReactorHost? host)
@@ -180,15 +208,29 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             await Harness.Render();
         }
 
-        private async Task<int> OrphanAndCollectAsync(
+        private async Task<OrphanResult> OrphanAndCollectAsync(
             Arm arm,
-            Action onTextChanged,
             TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs> countTick)
         {
-            var ticksBefore = Volatile.Read(ref _ticks);
-            for (var attempt = 0; attempt < Attempts; attempt++)
+            Action onTextChanged = arm == Arm.Typed
+                ? () => Interlocked.Increment(ref _callbacks)
+                : static () => { };
+            int tries = 0, tickedInTree = 0, orphaned = 0, delivered = 0, callbackReached = 0;
+            while (orphaned < Attempts && tries < MaxTries)
             {
+                tries++;
+                var ticksAtStart = Volatile.Read(ref _ticks);
                 await ArmAsync(H, arm, onTextChanged, countTick, orphan: true);
+                var ticksAtOrphan = Volatile.Read(ref _ticks);
+                var callbacksAtOrphan = Volatile.Read(ref _callbacks);
+                if (ticksAtOrphan != ticksAtStart)
+                {
+                    // The tick outran the Renders in ArmAsync and landed while the box was still
+                    // in the tree, so this try orphaned nothing.
+                    tickedInTree++;
+                    continue;
+                }
+                orphaned++;
 
                 GC.Collect();
                 await Harness.Render();
@@ -196,10 +238,13 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 await Harness.Render();
                 GC.Collect();
 
-                // Outlast the 150 ms timer.
-                await Harness.Render(250);
+                // Wait for the tick itself rather than a fixed time past the 150 ms timer.
+                if (await Harness.WaitFor(() => Volatile.Read(ref _ticks) != ticksAtOrphan, maxPasses: 30, perPassMs: 20))
+                    delivered++;
+                if (Volatile.Read(ref _callbacks) != callbacksAtOrphan)
+                    callbackReached++;
             }
-            return Volatile.Read(ref _ticks) - ticksBefore;
+            return new OrphanResult(tries, tickedInTree, orphaned, delivered, callbackReached);
         }
 
         // Kept out of RunAsync's state machine so nothing in the fixture still references
@@ -222,7 +267,16 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
             {
                 var (hasCallback, setHasCallback) = ctx.UseState(arm != Arm.CallbackAddedLate);
                 addCallback = () => setHasCallback(true);
-                return VStack(AutoSuggestBox(text, hasCallback ? _ => onTextChanged() : null));
+                // The counter is subscribed at mount, before the first layout can arm the timer,
+                // so no tick can land unseen; a tick that lands before the box is dropped is
+                // seen too, and the caller retries that attempt. Setters run again on every
+                // update, so the subscription is made idempotent.
+                return VStack(AutoSuggestBox(text, hasCallback ? _ => onTextChanged() : null)
+                    .Set(asb =>
+                    {
+                        asb.TextChanged -= countTick;
+                        asb.TextChanged += countTick;
+                    }));
             });
             // The first layout applies the template; with text, the box copies it into the
             // TextBox, which arms the timer.
@@ -230,7 +284,6 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
 
             var box = h.FindControl<WinUI.AutoSuggestBox>(_ => true)
                 ?? throw new InvalidOperationException("AutoSuggestBox was not mounted");
-            box.TextChanged += countTick;
 
             switch (arm)
             {

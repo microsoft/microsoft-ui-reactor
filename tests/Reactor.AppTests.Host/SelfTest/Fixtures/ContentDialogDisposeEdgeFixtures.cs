@@ -445,7 +445,19 @@ internal static class ContentDialogDisposeEdgeFixtures
 
             try
             {
+                // IsOpen=true at mount defers the dialog to the placeholder's Loaded event, and
+                // only then is the content (and the disposing setter) mounted. Loaded rides the
+                // next frame tick, which one Harness.Render() (it waits for the primary window's
+                // host, not this one) does not always reach — the three checks below then all
+                // read the pre-open state. Poll until the content mount has run its course,
+                // then settle one more render so a duplicate effect or cleanup still shows up
+                // in the exact counts.
+                var settled = await Harness.WaitFor(
+                    () => dialog is not null && probe.Effects >= 1 && probe.Cleanups >= 1,
+                    maxPasses: 40, perPassMs: 25);
                 await Harness.Render();
+                Console.WriteLine($"# MountSibling settled={settled} dialog={(dialog is null ? "null" : "set")} " +
+                                  $"effects={probe.Effects} cleanups={probe.Cleanups}");
                 H.Check("DialogDispose_MountSiblingMountedAfterDisposal", probe.Effects == 1);
                 H.Check("DialogDispose_MountSiblingCleanupAfterDisposal", probe.Cleanups == 1);
                 H.Check("DialogDispose_MountSiblingNotReattached", dialog is { Content: null });

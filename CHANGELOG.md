@@ -47,6 +47,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton` and the rest of the button family
+  remembered which child they owned by the control's managed wrapper. When a collection replaced
+  that wrapper between renders, the next update mounted a second copy of the content instead of
+  updating it, which dropped its state (an `AnimatedIcon`'s visual state, focus, caret) and leaked
+  the old copy without unmounting it. The record now lives on the native control. Found through
+  the intermittent `AnimIconInButton_*ContentUpdatedInPlace` selftest failures.
+
 - **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
   accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
   `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
