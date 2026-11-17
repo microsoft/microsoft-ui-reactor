@@ -25,7 +25,7 @@ public sealed class ShippedAnalyzersRoslynFloorTests
     [InlineData("Reactor.SourceMap.Generator.dll")]
     public void Shipped_analyzer_does_not_require_a_newer_Roslyn_than_the_floor(string fileName)
     {
-        var path = global::System.IO.Path.Combine(AppContext.BaseDirectory, fileName);
+        var path = global::System.IO.Path.Join(AppContext.BaseDirectory, fileName);
         Assert.True(global::System.IO.File.Exists(path), $"{fileName} was not copied next to the test assembly.");
 
         using var stream = global::System.IO.File.OpenRead(path);
