@@ -77,7 +77,7 @@
     <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.5.2" />
-    <PackageVersion Include="MSTest.TestFramework" Version="4.5.2" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.5.3" />
     <!-- Microsoft.Testing.Platform extensions. xunit.v3 v4 dropped the VSTest bridge, so
          the repo runs every suite under MTP (see global.json). MTP ships no TRX writer or
          hang detector in the box: these restore the VSTest "logger trx" and "blame hang"
