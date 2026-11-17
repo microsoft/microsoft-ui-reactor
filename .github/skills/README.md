@@ -68,7 +68,7 @@ baseline; repeated samples of one PR do not establish repository-wide defaults.
 | **Measured comparator** | `gpt-6-astra` | Found one known runtime bug in each repeat at substantially higher recorded cost than Sol. This case does not justify preferring it as a new default. It is not a different-family check after Sol. |
 | **Mechanical workflows** | Inherit the configured model; no override | Running the committed perf script, reading CI state, and lifecycle bookkeeping do not need a frontier-model fan-out. Nontrivial fixes still warrant deep reasoning. |
 
-The [PR review dimension table](pr-review/SKILL.md#4-review-the-dimensions)
+The [PR review dimension table](pr-review/SKILL.md#4-fan-out-the-primary-dimensions)
 maps these workloads to each review lens as hypotheses. The other skills
 reference this same policy; none needs its own aging model list.
 
