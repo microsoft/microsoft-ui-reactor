@@ -48,7 +48,8 @@ Conventions for contributors:
 ### Fixed
 
 - **A button whose content is an element no longer remounts that content after a garbage
-  collection.** `Button`, `ToggleButton`, `HyperlinkButton` and the rest of the button family
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the rest
+  of the button family
   remembered which child they owned by the control's managed wrapper. When a collection replaced
   that wrapper between renders, the next update mounted a second copy of the content instead of
   updating it, which dropped its state (an `AnimatedIcon`'s visual state, focus, caret) and leaked

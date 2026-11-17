@@ -443,14 +443,18 @@ internal static class AnimatedIconStateFixtures
     /// </summary>
     // Kept out of the async fixture, whose locals live on the state machine: a wrapper held
     // there would survive the collection.
+    // The forced GC is the stimulus, not cleanup: without it the fixture only hits the bug on
+    // runs where a collection happens to land between mount and update, which is the flake this
+    // replaces. CodeQL flags it as cs/call-to-gc, an acknowledged trade-off (as in
+    // Phase2WindowingFixtures.CollectWindowResources).
     [MethodImpl(MethodImplOptions.NoInlining)]
     static bool CollectContentButtonWrapper(Harness h)
     {
         var seen = new ConditionalWeakTable<XamlButton, object>();
         if (!MarkContentButton(h, seen)) return false;
-        GC.Collect();
+        GC.Collect(); // CodeQL[cs/call-to-gc]: intentional, see above.
         GC.WaitForPendingFinalizers();
-        GC.Collect();
+        GC.Collect(); // CodeQL[cs/call-to-gc]: intentional, see above.
         return FindContentButton(h) is { } current && !seen.TryGetValue(current, out _);
     }
 

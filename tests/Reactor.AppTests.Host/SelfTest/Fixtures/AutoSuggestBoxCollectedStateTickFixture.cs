@@ -236,9 +236,12 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 // change the outcome, and late in a full run each one costs ~1 s (every live,
                 // reference-tracked XAML object is walked), which put the fixture past its
                 // timeout on CI. The tick shares this thread, so it lands in a Render below.
+                // The collection is the stimulus the product hold must survive (disabling the
+                // hold fails 7 checks only because of it), so CodeQL's cs/call-to-gc is an
+                // acknowledged trade-off here.
                 for (var round = 0; round < 3 && Volatile.Read(ref _ticks) == ticksAtOrphan; round++)
                 {
-                    GC.Collect();
+                    GC.Collect(); // CodeQL[cs/call-to-gc]: intentional, see above.
                     await Harness.Render();
                 }
 
