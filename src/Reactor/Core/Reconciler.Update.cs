@@ -195,6 +195,10 @@ public sealed partial class Reconciler
 
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
+        var previousModifierUpdate = _modifierUpdate;
+        if (!ReferenceEquals(_modifierUpdate.Control, control))
+            _modifierUpdate = (control, ReferenceEquals(modifiers, newEl.Modifiers)
+                ? newEl : newEl with { Modifiers = modifiers });
 
         UIElement? result;
         bool registeredType = false;
@@ -218,6 +222,9 @@ public sealed partial class Reconciler
             if (properties != default)
                 ClearPropertyAnimation(control, properties);
         }
+
+        if (control is FrameworkElement departingModifiers)
+            ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -409,6 +416,7 @@ public sealed partial class Reconciler
         }
         finally
         {
+            _modifierUpdate = previousModifierUpdate;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();

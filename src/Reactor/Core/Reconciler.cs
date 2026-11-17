@@ -1590,6 +1590,9 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
+        // Properties written on the handed-out Visual by a modifier. Kept on native
+        // attached state so a replacement WinRT wrapper cannot lose cleanup ownership.
+        internal AnimateProperty CompositionModifierProperties;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -3011,6 +3014,9 @@ public sealed partial class Reconciler : IDisposable
     // (Flyout, MenuFlyout, …) or a transparent wrapper shares the host's control but
     // sits at a shallower depth, so only the owner's own Update/skip may re-snapshot.
     private Element? _reconcilingElement;
+    // The outermost current layer updating this same native control. Custom
+    // decorators share modifier priority just like the built-in flyout decorators.
+    private (UIElement? Control, Element? Root) _modifierUpdate;
     // Until the target update returns, its mounted decorator still describes the previous render.
     internal (FrameworkElement? Target, Element? Decorator) UpdatingFlyout;
 
@@ -6543,6 +6549,50 @@ public sealed partial class Reconciler : IDisposable
         return _reconcilingElement is { } element && IsFlyoutDecorator(element) ? element : null;
     }
 
+    private (Element Source, ElementModifiers Modifiers)? FindRemainingModifierOwner(Func<ElementModifiers, bool> declares)
+    {
+        // During target recursion the mounted decorator still describes the old tree.
+        // Resolve one property: outer decorators win; inner legacy declarations override outer ones.
+        var root = _modifierUpdate.Root;
+        for (var depth = 0; root is not null && depth <= ReactorSourceMap.MaxDecoratorDepth; depth++)
+        {
+            var modifiers = root is ModifiedElement ? root.Modifiers : null;
+            while (root is ModifiedElement wrapped && depth++ <= ReactorSourceMap.MaxDecoratorDepth)
+            {
+                if (declares(wrapped.WrappedModifiers)) modifiers = wrapped.WrappedModifiers;
+                root = wrapped.Inner;
+            }
+            if (root.Modifiers is { } inner && declares(inner)) return (root, inner);
+            if (modifiers is not null && declares(modifiers)) return (root, modifiers);
+            root = ReactorSourceMap.DecoratorTarget(root);
+        }
+        return null;
+    }
+
+    private Element? GetRetainedModifierAnimationSource(FrameworkElement control, Element owner)
+    {
+        if (FindMountedElementValue(control, static e => e.AnimationConfig, owner) is not null) return owner;
+        return GetModifierAnimationSource(control) ?? _modifierUpdate.Root;
+    }
+
+    private void ClearRemovedTransformModifiers(FrameworkElement control, ElementModifiers? old, ElementModifiers? current)
+    {
+        // Release departing facade values before setters or nested targets can
+        // start another animation. Remaining declarations keep their own values.
+        if (old?.Scale.HasValue == true && current?.Scale.HasValue != true
+            && FindRemainingModifierOwner(static m => m.Scale.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "Scale");
+        if (old?.Rotation.HasValue == true && current?.Rotation.HasValue != true
+            && FindRemainingModifierOwner(static m => m.Rotation.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "Rotation");
+        if (old?.Translation.HasValue == true && current?.Translation.HasValue != true
+            && FindRemainingModifierOwner(static m => m.Translation.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "Translation");
+        if (old?.CenterPoint.HasValue == true && current?.CenterPoint.HasValue != true
+            && FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "CenterPoint");
+    }
+
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
         bool keepRemovedBackground = false)
     {
@@ -6671,26 +6721,46 @@ public sealed partial class Reconciler : IDisposable
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
             AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe));
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
-            // Note: if the set arm started a compositor animation on Visual.Opacity,
-            // clearing the XAML DP does not cancel it — neither did the previous
-            // `fe.Opacity = 1.0`, so this is not a regression.
-            fe.ClearValue(UIElement.OpacityProperty);
-        // Transform family — Scale / Rotation / Translation / CenterPoint deliberately have
-        // NO unset arm yet (issue #1001). These are XAML facade properties whose live value
-        // lives on the element's composition visual: when a curve is ambient the set path
-        // above calls visual.StartAnimation, which outranks the DP and leaves no local value
-        // for ClearValue to release. Undoing that needs a StopAnimation companion and a
-        // selftest that exercises the animated path, so it is tracked separately rather than
-        // given the mechanical arm the plain-DP modifiers below get.
-        // ModifierUnsetClearValueTests.MissingUnsetArmExceptions records the same four names.
+        {
+            if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+            else
+            {
+                fe.ClearValue(UIElement.OpacityProperty);
+                AnimationHelper.ResetCompositionModifier(fe, "Opacity");
+            }
+        }
+        // These facade properties have no public dependency-property identifiers.
+        // Update already released final removals before handlers ran. Here only
+        // restore surviving declarations; a second reset would overwrite new setters.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
             AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe));
+        else if (!m.Scale.HasValue && oldM?.Scale.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.Scale.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
             AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe));
+        else if (!m.Rotation.HasValue && oldM?.Rotation.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.Rotation.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
             AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe));
+        else if (!m.Translation.HasValue && oldM?.Translation.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
             AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe));
+        else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
         else if (!m.IsVisible.HasValue && oldM?.IsVisible.HasValue == true)
