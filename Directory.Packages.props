@@ -74,7 +74,7 @@
 
   <ItemGroup>
     <!-- Test infrastructure -->
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.5.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.5.2" />
