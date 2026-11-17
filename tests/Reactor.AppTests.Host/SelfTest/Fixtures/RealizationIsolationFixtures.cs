@@ -488,8 +488,21 @@ internal static class RealizationIsolationFixtures
                     sv.ChangeView(null, 150 * 30, null, disableAnimation: true);
                     sv.UpdateLayout();
                     (sv.XamlRoot?.Content as UIElement)?.UpdateLayout();
-                    realizedInPass = H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
+                    int CountTargetRows() => H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
                         && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100).Count;
+                    realizedInPass = CountTargetRows();
+                    var path = "scroll";
+                    // ChangeView is asynchronous: the viewer sometimes applies the offset after
+                    // this layout, and then no target row is realized in the pass (~5% of AOT
+                    // runs on CI). Realize one directly instead; it goes through the same
+                    // element factory, so it resolves its theme the same way.
+                    if (realizedInPass == 0 && sv.Content is ItemsRepeater repeater)
+                    {
+                        repeater.GetOrCreateElement(150);
+                        realizedInPass = CountTargetRows();
+                        path = "direct";
+                    }
+                    Console.WriteLine($"# Iso_StablePass realized {realizedInPass} row(s) in the pass via {path}");
                 };
 
                 H.ClickButton("IsoStablePassGo");
