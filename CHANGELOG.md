@@ -51,7 +51,7 @@ Conventions for contributors:
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
   failed with CS8032 on anything older than VS 18.9 / SDK 10.0.400, which also
-  broke generator-dependent code. Visual Studio 2022 remains unsupported.
+  broke generator-dependent code. Visual Studio 2022 remains unsupported (#1558).
 
 - **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
   accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
