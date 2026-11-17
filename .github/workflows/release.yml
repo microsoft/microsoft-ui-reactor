@@ -297,9 +297,13 @@ jobs:
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $expected = [System.IO.File]::ReadAllBytes((Resolve-Path ThirdPartyNoticeText.txt))
+          $expectedFiles = @{
+            'Microsoft.UI.Reactor'          = 'src/Reactor/ThirdPartyNoticeText.txt'
+            'Microsoft.UI.Reactor.Advanced' = 'src/Reactor.Advanced/ThirdPartyNoticeText.txt'
+          }
           $problems = [System.Collections.Generic.List[string]]::new()
-          foreach ($id in 'Microsoft.UI.Reactor', 'Microsoft.UI.Reactor.Advanced') {
+          foreach ($id in $expectedFiles.Keys) {
+            $expected = [System.IO.File]::ReadAllBytes((Resolve-Path $expectedFiles[$id]))
             # A digit after the id keeps Microsoft.UI.Reactor from matching Microsoft.UI.Reactor.Advanced.
             $matched = @(Get-ChildItem artifacts/nupkg -Filter *.nupkg -File |
               Where-Object { $_.Name -match "^$([regex]::Escape($id))\.\d" -and $_.Name -notlike '*.symbols.nupkg' })
@@ -313,7 +317,7 @@ jobs:
               $stream = $entry.Open()
               try { $stream.CopyTo($bytes) } finally { $stream.Dispose() }
               if (-not [System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes.ToArray(), [byte[]]$expected)) {
-                $problems.Add("$path has a ThirdPartyNoticeText.txt that differs from the repo copy.")
+                $problems.Add("$path has a ThirdPartyNoticeText.txt that differs from $($expectedFiles[$id]).")
               }
             } finally { $zip.Dispose() }
           }
