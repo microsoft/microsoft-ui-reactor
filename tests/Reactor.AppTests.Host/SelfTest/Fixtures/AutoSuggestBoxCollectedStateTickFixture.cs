@@ -232,11 +232,15 @@ internal static class AutoSuggestBoxCollectedStateTickFixture
                 }
                 orphaned++;
 
-                GC.Collect();
-                await Harness.Render();
-                GC.Collect();
-                await Harness.Render();
-                GC.Collect();
+                // Collect while the tick is still pending: a collection after it landed cannot
+                // change the outcome, and late in a full run each one costs ~1 s (every live,
+                // reference-tracked XAML object is walked), which put the fixture past its
+                // timeout on CI. The tick shares this thread, so it lands in a Render below.
+                for (var round = 0; round < 3 && Volatile.Read(ref _ticks) == ticksAtOrphan; round++)
+                {
+                    GC.Collect();
+                    await Harness.Render();
+                }
 
                 // Wait for the tick itself rather than a fixed time past the 150 ms timer.
                 if (await Harness.WaitFor(() => Volatile.Read(ref _ticks) != ticksAtOrphan, maxPasses: 30, perPassMs: 20))
