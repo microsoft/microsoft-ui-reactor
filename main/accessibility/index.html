@@ -3843,7 +3843,7 @@ how often you need them.</p>
 <tr>
 <td><code>REACTOR_A11Y_003</code></td>
 <td>analyzer</td>
-<td>Form field without <code>header:</code> or label modifier.</td>
+<td>Form field (<code>TextBox</code>/<code>NumberBox</code>/<code>PasswordBox</code>/<code>AutoSuggestBox</code>/<code>ComboBox</code>/<code>ToggleSwitch</code>) without a header, <code>.AutomationName()</code>, or <code>.LabeledBy()</code>.</td>
 </tr>
 <tr>
 <td><code>REACTOR_A11Y_004</code></td>
@@ -4331,7 +4331,7 @@ as you type in your IDE:</p>
 </tr>
 <tr>
 <td><code>REACTOR_A11Y_003</code></td>
-<td><code>TextBox</code>/<code>NumberBox</code>/<code>PasswordBox</code> without <code>header:</code> arg or label modifier</td>
+<td><code>TextBox</code>/<code>NumberBox</code>/<code>PasswordBox</code>/<code>AutoSuggestBox</code>/<code>ComboBox</code>/<code>ToggleSwitch</code> with no label: no header (<code>header:</code> arg, <code>.Header()</code>, or <code>with { Header = ... }</code>), <code>.AutomationName()</code>, or <code>.LabeledBy()</code>. A <code>ToggleSwitch</code> is also named by its on/off content, and a field passed to <code>FormField(field, label: ...)</code>, to a Community Toolkit <code>SettingsCard</code> with a string <code>header:</code>, or to a helper that applies one of those modifiers counts as labeled. A <code>PlaceholderText</code> does not, since WinUI never uses it as the name, and neither does a label on an enclosing container such as <code>Expander(field).Header(...)</code>.</td>
 </tr>
 <tr>
 <td><code>REACTOR_A11Y_004</code></td>
