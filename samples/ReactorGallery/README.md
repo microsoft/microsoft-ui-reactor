@@ -105,6 +105,22 @@ branch (`GalleryProtocol.IsPackaged`), never a `#if`:
 which reports "unpackaged" by throwing — the normal case here, and not something worth
 a first-chance exception in every debugger session.
 
+## Editing sample snippets
+
+Keep each `SampleCard`'s displayed `sourceCode` consistent with its live sample.
+For a Private Use Area (PUA) icon in `TextBlock` or `Button` string content,
+include the icon font in both the live element chain and the displayed snippet:
+
+```csharp
+TextBlock("\uE930")
+    .FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")
+```
+
+The headless `GallerySampleLintTests` checks these fonts in live `ControlPages`
+code and compile-time snippets. See the [PUA lint guide](../../TESTING.md#pua-glyph-fonts-in-gallery-samples)
+for its scope, limitations, and focused test command. After editing a snippet,
+regenerate the search index as described below.
+
 ## Search index
 
 `reactor-search-index.json` is generated from this app's source and consumed by the
