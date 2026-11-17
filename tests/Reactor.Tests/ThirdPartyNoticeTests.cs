@@ -13,8 +13,8 @@ public class ThirdPartyNoticeTests
 {
     private static readonly string[] PackageNoticeFiles =
     [
-        Path.Combine("src", "Reactor", "ThirdPartyNoticeText.txt"),
-        Path.Combine("src", "Reactor.Advanced", "ThirdPartyNoticeText.txt"),
+        "src/Reactor/ThirdPartyNoticeText.txt",
+        "src/Reactor.Advanced/ThirdPartyNoticeText.txt",
     ];
 
     private static readonly Regex SectionStart = new(@"^(?=-{19} \S)", RegexOptions.Multiline);
@@ -52,7 +52,7 @@ public class ThirdPartyNoticeTests
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
-        return File.ReadAllText(Path.Combine(root, relativePath)).ReplaceLineEndings("\n");
+        return File.ReadAllText(Path.Join(root, relativePath)).ReplaceLineEndings("\n");
     }
 
     private static (string Header, Dictionary<string, string> Sections) Parse(string text)
