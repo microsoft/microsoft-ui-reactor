@@ -53,6 +53,10 @@ The shared native `Header` property has one lifecycle owner in `Customize`, usin
 the public mount/reconcile/unmount methods. It is intentionally not also a
 generated slot: a generated header slot and a separate string writer would race
 when switching from a rich header back to text.
+An unrelated update leaves a native/style/imperative header alone when both
+header inputs remain unset. Only a previous Reactor `Header` supplies a child to
+reconcile; removing a previously supplied rich or text header releases its value.
+Teardown also leaves native-owned headers alone.
 
 ## Controlled range scenario
 
