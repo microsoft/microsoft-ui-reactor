@@ -70,7 +70,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
             }
 
             // If Visual Studio itself is inside a job object that disallows nested jobs,
-            // older Windows can fail here with ERROR_ACCESS_DENIED. VS 2022 on Win11 is
+            // older Windows can fail here with ERROR_ACCESS_DENIED. Visual Studio on Win11 is
             // expected to allow the nested-job happy path used by this preview.
             if (!EmbedNativeMethods.AssignProcessToJobObject(_handle, process.Handle))
             {
