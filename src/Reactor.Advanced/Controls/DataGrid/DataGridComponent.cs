@@ -919,7 +919,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // cost identified by profiling. Construct it directly with the cached, shared
         // GridDefinition (FilterRowChildren mirrors the Grid(...) factory's child handling) so the
         // reconciler reuses the definition reference and skips rebuilding ColumnDefinitions.
-        Element row = new GridElement(gridDef, FilterRowChildren(cells));
+        var needsRowShell = el.RowDetailTemplate is not null
+            || el.Editable
+            || el.OnRowChanged is not null;
+        Element row = new GridElement(gridDef, FilterRowChildren(cells))
+        {
+            Key = needsRowShell ? "row" : null,
+        };
         row = row.Background(rowBg);
 
         // Click handler — always present (maintains element tree structure).
@@ -994,10 +1000,6 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // The decision reads ONLY element-level props — never per-row or placeholder state — so an
         // async-paging placeholder resolving into a loaded row can't flip the root type either.
         // Grids without these features keep the bare Grid root and pay nothing.
-        var needsRowShell = el.RowDetailTemplate is not null
-            || el.Editable
-            || el.OnRowChanged is not null;
-
         if (!needsRowShell)
             return row;
 
@@ -1017,7 +1019,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // discarding any state its component holds mid-edit.
         return VStack(
             spacing: 0,
-            row.WithKey("row"),
+            row,
             validationSummary,
             commitErrorBar,
             detailPane);
@@ -1511,11 +1513,10 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     // same render — no timing risk, no consumer call — and keeps the
                     // grip trimmable when the data grid is unreachable.
                     _ = ResizeGripRegistration.Done;
-                    var grip = new ResizeGripElement()
+                    var grip = new ResizeGripElement { Key = $"grip-{colName}" }
                         .Width(6)
                         .HAlign(HorizontalAlignment.Right)
                         .VAlign(VerticalAlignment.Stretch)
-                        .WithKey($"grip-{colName}")
                         .OnMount(fe => AttachResizeHandlers(fe, state, colName));
                     overlayChildren.Add(grip.Grid(row: 0, column: 0));
                 }

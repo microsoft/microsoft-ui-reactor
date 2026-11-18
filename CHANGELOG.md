@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Avoid redundant element copies when assigning keys in built-in component factories,
+  DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
+  supplied key is already the same string reference. Different key references still
+  produce a copy, and key values and formatting are unchanged (spec 042 §5).
+
 - **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
   `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
   unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
@@ -53,6 +58,15 @@ Conventions for contributors:
   package targets now follows the restored package instead of a hardcoded version.
 
 ### Fixed
+
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
+  rest of the button family remembered which child they owned by the control's managed wrapper.
+  When a collection replaced that wrapper between renders, the next update mounted a second copy
+  of the content instead of updating it, which dropped its state (an `AnimatedIcon`'s visual
+  state, focus, caret) and leaked the old copy without unmounting it. The record now lives on the
+  native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
+  selftest failures.
 
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with

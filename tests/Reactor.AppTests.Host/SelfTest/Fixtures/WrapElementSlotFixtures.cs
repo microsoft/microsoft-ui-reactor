@@ -42,8 +42,10 @@ internal static class WrapElementSlotFixtures
 
             var tabView = H.FindControl<TabView>(_ => true);
             H.Check("WrapElementSlot_TabViewMounted", tabView is not null);
+            // The check above already reports the miss; throwing would truncate the TAP
+            // stream and hide every later check (issue #998).
             if (tabView is null)
-                throw new InvalidOperationException("TabView control was not mounted.");
+                return;
 
             // Phase 0 — mount: the slot element is on the control property.
             var header0 = tabView.TabStripHeader as TextBlock;
