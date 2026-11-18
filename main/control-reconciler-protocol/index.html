@@ -4336,8 +4336,10 @@ wrappers supply this callback for public, writable <code>IList&lt;object&gt;</co
 properties. Read-only and concrete native <code>ItemCollection</code> properties
 keep their existing sink. The framework supplies the WinRT exposure for
 its observable list with <code>GeneratedWinRTExposedExternalType</code>, including indirect
-Native AOT collection boundaries. This does not root a toolkit's XAML metadata;
-code-only Native AOT apps may also need explicit provider registration (see
+Native AOT collection boundaries. XAML metadata is separate: full generated wrappers
+statically register a unique publicly constructible provider from the control's
+assembly, so code-only Native AOT apps can use templated Toolkit controls without
+app-side roots. Custom or undiscoverable providers still need explicit registration (see
 <a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/aot-support.md">AOT support</a>).</p>
 <h2 id="pool-integration">Pool integration<a class="headerlink" href="#pool-integration" title="Permanent link">&para;</a></h2>
 <p>The descriptor's <code>PoolPolicy</code> (and the corresponding parameter to
