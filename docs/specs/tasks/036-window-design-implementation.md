@@ -549,7 +549,8 @@ Behavior change phase. After this lands, `Run<TRoot>(width, height)` and
   `Hosting/Persistence/IWindowPersistenceStore.cs`.
 - [x] `PackagedSettingsStore` — routes through
   `ApplicationData.Current.LocalSettings` under a "Reactor" container,
-  key prefix `WindowPersistence_<id>` (matches WinUIEx wire shape).
+  key prefix `WindowPersistence_<id>` (WinUIEx uses its own container and
+  keys, so its saved placements are not read).
 - [x] `JsonFileStore` — writes to
   `%LOCALAPPDATA%/<SanitizedProcessName>/reactor-windows.json` with a
   hand-rolled flat string-map encoder so we stay AOT-safe (no
