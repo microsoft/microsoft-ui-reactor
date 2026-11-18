@@ -8,6 +8,10 @@ A gallery app (modelled on the Windows Community Toolkit sample app) that turns 
 dotnet run --project samples/apps/wct-controls -p:Platform=x64 -p:RuntimeIdentifier=win-x64
 ```
 
+Select a page directly with `-- --page range` (or any ID in
+`SamplePages.Routes`). Unknown routes fail rather than opening a different page.
+Each page root has the automation ID `Page.<ControlName>`.
+
 (Needs a desktop Windows session — it opens a real WinUI 3 window. `CameraPreview` degrades gracefully when no camera is available, reporting through `PreviewFailed`.)
 
 ## What it demonstrates
@@ -29,4 +33,8 @@ See the comments in [`WctControls.cs`](WctControls.cs) for the full rationale on
 ## Layout
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).
-- `Program.cs` — the `NavigationView` gallery shell plus one demo page per control.
+- `Program.cs` — launch options and application entry point.
+- `SamplePages.cs` — the unchanged gallery shell and pages, shared route inventory
+  (`Id`, `NativeTypeName`) and `SamplePages.CreatePage(route)` selector. Validation
+  hosts can link this file together with `WctControls.cs` instead of maintaining
+  test-only wrapper or page copies.
