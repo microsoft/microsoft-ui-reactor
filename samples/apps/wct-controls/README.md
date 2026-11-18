@@ -77,6 +77,17 @@ Selectors are `Toolkit.RangeSelector`, `Range.AcceptChanges`, `Range.Reset`,
 `Range.ParentUpdates`. Omitted endpoints remain uncontrolled (`Optional.Unset`);
 the example supplies both endpoints deliberately.
 
+## ContentSizer target
+
+The ContentSizer page keeps the Toolkit control and explicitly targets the colored
+sibling above the bar. The sibling's `.Ref(...)` is populated before the sizer's
+`.OnMount(...)` assigns `TargetControl`; reading the ref during `Render` would be too
+early. `.OnUnmount(...)` clears the target, and navigating back creates a fresh
+mapping. The horizontal bar changes the sibling's height, not the containing
+stack's explicit height (which remains automatic). The stack still measures to fit
+its resized content. No extra size limits or orientation switches are imposed by
+this sample.
+
 ## Layout
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).
