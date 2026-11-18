@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Wrappers;
 using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
+using System.Runtime.CompilerServices;
 
 namespace WctControls;
 
@@ -193,29 +194,110 @@ public partial record RadialGaugeElement;
 public partial record SegmentedElement;
 
 // A live camera preview. CameraPreview is an IMPERATIVE control — it must be
-// started with StartAsync(...) after mount and stopped on unmount. [WrapLifecycle]
-// declares that lifecycle ONCE here, so every call site is a plain, declarative
-// `CameraPreview(...)` with no Setters/UseRef/StartAsync boilerplate. PreviewFailed
-// (no camera, access denied, …) projects to OnPreviewFailed via [WrapEvent].
+// started with StartAsync(...) after Loaded and cleaned up on unmount. [WrapLifecycle]
+// owns that ordering here; the page's effect requests the same cleanup on host
+// disposal. PreviewFailed (no camera, access denied, …) projects to
+// OnPreviewFailed via [WrapEvent].
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.CameraPreview))]
 [WrapEvent("PreviewFailed", Arg = "Error")]
 [WrapLifecycle(nameof(StartPreview), OnUnmounted = nameof(StopPreview))]
 public partial record CameraPreviewElement
 {
-    // Runs once when the control mounts. The camera may be absent or access-denied
-    // in a given environment — that surfaces through PreviewFailed (→ OnPreviewFailed),
-    // so swallow the imperative StartAsync exception here.
-    private static async void StartPreview(CommunityToolkit.WinUI.Controls.CameraPreview cp)
+    private static readonly ConditionalWeakTable<CommunityToolkit.WinUI.Controls.CameraPreview, PreviewSession> Previews = new();
+    private static Task _pendingCleanup = Task.CompletedTask;
+
+    internal static CameraPreviewLifetime GetLifetime(CommunityToolkit.WinUI.Controls.CameraPreview control) =>
+        Previews.TryGetValue(control, out var session)
+            ? session.Lifetime
+            : throw new InvalidOperationException("The camera preview is not mounted.");
+
+    private static void StartPreview(CommunityToolkit.WinUI.Controls.CameraPreview control)
     {
-        try { await cp.StartAsync(cp.CameraHelper); }
-        catch { /* reported via PreviewFailed */ }
+        var session = new PreviewSession(control, _pendingCleanup);
+        Previews.Add(control, session);
+        session.Attach();
     }
 
-    // Runs once when the control unmounts — release the camera.
-    private static void StopPreview(CommunityToolkit.WinUI.Controls.CameraPreview cp)
+    internal static void StopPreview(CommunityToolkit.WinUI.Controls.CameraPreview control)
     {
-        try { cp.Stop(); }
-        catch { /* already torn down */ }
+        if (Previews.TryGetValue(control, out var session))
+        {
+            Previews.Remove(control);
+            _pendingCleanup = Task.WhenAll(_pendingCleanup, session.Detach());
+        }
+    }
+
+    private sealed class PreviewSession
+    {
+        private readonly CommunityToolkit.WinUI.Controls.CameraPreview _control;
+        private readonly CameraPreviewLifetime _lifetime;
+        private CommunityToolkit.WinUI.Helpers.CameraHelper? _helper;
+        private bool _unmounted;
+
+        public CameraPreviewLifetime Lifetime => _lifetime;
+
+        public PreviewSession(CommunityToolkit.WinUI.Controls.CameraPreview control, Task previousCleanup)
+        {
+            _control = control;
+            _lifetime = new(previousCleanup, StartAsync, control.Stop, CleanupAsync, Report);
+        }
+
+        public void Attach()
+        {
+            _control.PreviewFailed += OnPreviewFailed;
+            _control.Loaded += OnLoaded;
+            if (_control.IsLoaded)
+                StartLoadedPreview();
+        }
+
+        private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs args) => StartLoadedPreview();
+
+        private void StartLoadedPreview()
+        {
+            _control.Loaded -= OnLoaded;
+            _lifetime.Start();
+        }
+
+        private async Task StartAsync()
+        {
+            // Before Loaded, StartAsync can return before async-void OnApplyTemplate
+            // initializes capture. Apply the template before assigning our owned helper.
+            _control.ApplyTemplate();
+            _helper = new CommunityToolkit.WinUI.Helpers.CameraHelper();
+            await _control.StartAsync(_helper);
+        }
+
+        private Task CleanupAsync() => _helper?.CleanUpAsync() ?? Task.CompletedTask;
+
+        public Task Detach()
+        {
+            _unmounted = true;
+            _control.Loaded -= OnLoaded;
+            _control.PreviewFailed -= OnPreviewFailed;
+            return _lifetime.StopAsync();
+        }
+
+        private void OnPreviewFailed(object? sender, CommunityToolkit.WinUI.Controls.PreviewFailedEventArgs args)
+        {
+            Console.Error.WriteLine($"CameraPreview failed: {args.Error}");
+            _ = _lifetime.FailAsync();
+        }
+
+        private void Report(string operation, Exception error)
+        {
+            Console.Error.WriteLine($"CameraPreview {operation} failed: {error}");
+            if (!_unmounted && Reconciler.GetElementTag(_control) is CameraPreviewElement element)
+            {
+                try
+                {
+                    element.OnPreviewFailed?.Invoke($"{operation}: {error.Message}");
+                }
+                catch (Exception callbackError)
+                {
+                    Console.Error.WriteLine($"CameraPreview error callback failed: {callbackError}");
+                }
+            }
+        }
     }
 }
 

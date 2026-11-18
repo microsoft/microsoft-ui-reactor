@@ -197,16 +197,26 @@ internal sealed class CameraPage : Component
     public override Element Render()
     {
         var (camError, setCamError) = UseState<string?>(null);
+        var preview = UseRef<CommunityToolkit.WinUI.Controls.CameraPreview?>(null);
+        // Host disposal runs effect cleanup, but does not guarantee OnUnmount.
+        UseEffect(() => () =>
+        {
+            if (preview.Current is { } control)
+                CameraPreviewElement.StopPreview(control);
+            preview.Current = null;
+        }, Array.Empty<object>());
 
         return Gallery.Page(
             "CameraPreview",
-            "An imperative WCT control — its StartAsync-on-mount / Stop-on-unmount lifecycle is declared once via [WrapLifecycle], so the call site is a plain declarative element. PreviewFailed surfaces via OnPreviewFailed.",
+            "An imperative WCT control — [WrapLifecycle] starts after Loaded, then awaits startup before stopping playback and cleaning up capture on unmount. Failures surface via OnPreviewFailed and stderr.",
             SettingsCardElement.SettingsCard(
                 header: "Live camera",
                 description: camError is null ? "Streaming (or starting…)" : $"Unavailable — {camError}",
                 content: CameraPreviewElement.CameraPreview(
                     isFrameSourceGroupButtonVisible: true,
-                    onPreviewFailed: setCamError).Size(440, 280)));
+                    onPreviewFailed: setCamError)
+                    .OnMountAdd(control => preview.Current = (CommunityToolkit.WinUI.Controls.CameraPreview)control)
+                    .Size(440, 280)));
     }
 }
 

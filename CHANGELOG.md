@@ -134,6 +134,11 @@ Conventions for contributors:
   inserts the full name instead of the query text. The page shows the last chosen name
   and selection count while leaving token management to the Toolkit control.
 
+- The Toolkit `CameraPreview` sample now waits for startup before stopping playback
+  and awaiting capture/frame-reader cleanup on unmount. Rapid re-entry waits for
+  the preceding cleanup, and lifecycle failures are reported rather than swallowed
+  (issue #1571).
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
