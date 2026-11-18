@@ -610,7 +610,10 @@ public sealed class GallerySampleLintTests
         {
             // Only follow the receiver chain. Fonts on siblings or in arguments
             // (including callbacks) do not apply to this element.
-            current = AscendTypePreserving(current);
+            var receiver = AscendTypePreserving(current);
+            if (isTextBlockReceiver && !ReferenceEquals(receiver, current) && HasElementResultType(receiver, model))
+                isTextBlockReceiver = false;
+            current = receiver;
             switch (current.Parent)
             {
                 case MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax invocation } member
@@ -641,6 +644,19 @@ public sealed class GallerySampleLintTests
             }
         }
     }
+
+    // A branch typed as Element widens the shared receiver to the base type.
+    static bool HasElementResultType(ExpressionSyntax expression, SemanticModel model) => expression switch
+    {
+        ParenthesizedExpressionSyntax paren => HasElementResultType(paren.Expression, model),
+        CastExpressionSyntax cast => RightmostName(cast.Type) == "Element",
+        ConditionalExpressionSyntax conditional
+            => HasElementResultType(conditional.WhenTrue, model) || HasElementResultType(conditional.WhenFalse, model),
+        BinaryExpressionSyntax coalesce when coalesce.IsKind(SyntaxKind.CoalesceExpression)
+            => HasElementResultType(coalesce.Left, model) || HasElementResultType(coalesce.Right, model),
+        SwitchExpressionSyntax choice => choice.Arms.Any(arm => HasElementResultType(arm.Expression, model)),
+        _ => model.GetTypeInfo(expression, TestContext.Current.CancellationToken).Type?.Name == "Element",
+    };
 
     static bool IsNullOrDefault(ExpressionSyntax expression, SemanticModel model) => expression switch
     {
@@ -751,6 +767,7 @@ public sealed class GallerySampleLintTests
     [InlineData("sibling constant is invisible", """class P { const string Glyph = "OK"; object R() { { const string Glyph = "\uE930"; } return TextBlock(Glyph); } }""", 0, 0, 0)]
     [InlineData("lambda parameter shadows field", """class P { const string Glyph = "\uE930"; System.Func<string, object> R() => Glyph => TextBlock(Glyph); }""", 0, 0, 0)]
     [InlineData("conditional shared font", """class P { object R(bool flag) => (flag ? TextBlock("\uE930") : TextBlock("OK")).FontFamily(IconFont); }""", 1, 0, 0)]
+    [InlineData("conditional Element receiver keeps its font on null", """class P { object R(bool flag) => (flag ? TextBlock("\uE930").FontFamily("Segoe Fluent Icons") : (Element)Button("OK")).FontFamily((FontFamily)null!); }""", 1, 0, 0)]
     [InlineData("coalesce shared font", """class P { object R() => (Other() ?? TextBlock("\uE930")).FontFamily(IconFont); }""", 1, 0, 0)]
     [InlineData("switch shared font", """class P { object R(bool flag) => (flag switch { true => TextBlock("\uE930"), _ => TextBlock("OK") }).FontFamily(IconFont); }""", 1, 0, 0)]
     [InlineData("conditional sibling font", """class P { object R(bool flag) => flag ? TextBlock("\uE930") : TextBlock("OK").FontFamily(IconFont); }""", 1, 0, 1)]
