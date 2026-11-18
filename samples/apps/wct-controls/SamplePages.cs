@@ -720,7 +720,7 @@ internal sealed class RichSuggestBoxPage : Component
     {
         // Reactor roots this collection's WinRT projection for native ItemsSource under AOT.
         var suggestions = UseMemo(() => new ObservableCollection<object>(People), []);
-        var (choice, setChoice) = UseState((Name: "none", Count: 0));
+        var (choice, updateChoice) = UseReducer((Name: "none", Count: 0));
 
         return Gallery.Page(
             "RichSuggestBox",
@@ -748,7 +748,7 @@ internal sealed class RichSuggestBoxPage : Component
                             throw new InvalidOperationException("The selected suggestion must be a sample name.");
 
                         e.DisplayText = person;
-                        setChoice((person, choice.Count + 1));
+                        updateChoice(previous => (person, previous.Count + 1));
                     })
                     .AutomationId("Toolkit.RichSuggestBox")
                     .Width(420).Height(160),
