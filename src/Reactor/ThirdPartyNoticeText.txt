@@ -29,9 +29,11 @@ SOFTWARE.
 
 
 ------------------- WinUIEx -------------------------
-The window-placement persistence in Microsoft.UI.Reactor
-(src/Reactor/Hosting/Persistence/WindowPlacementCodec.cs, spec 036 §8)
-is adapted from WinUIEx WindowManager.SavePersistence / LoadPersistence.
+Parts of Microsoft.UI.Reactor's window hosting are adapted from WinUIEx:
+window-placement persistence (Hosting/Persistence/WindowPlacementCodec.cs,
+spec 036 §8) from WindowManager.SavePersistence / LoadPersistence, and the
+Win32 message monitor (Hosting/Messaging/WindowMessageMonitor.cs, spec 036
+§5.1) from Messaging.WindowMessageMonitor.
 
 MIT License
 
