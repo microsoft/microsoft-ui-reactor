@@ -15,6 +15,7 @@ $mutations = @(
     @{ Name = 'missing-result'; Tap = $tap; Rows = @($rows[0]); Exit = 0 },
     @{ Name = 'duplicate'; Tap = $tap; Rows = @($rows[0], $rows[0]); Exit = 0 },
     @{ Name = 'crash-after-results'; Tap = $tap; Rows = $rows; Exit = -1 },
+    @{ Name = 'missing-exit'; Tap = $tap; Rows = $rows; Exit = $null },
     @{ Name = 'wrong-plan'; Tap = $tap.Replace('1..2', '1..1'); Rows = $rows; Exit = 0 },
     @{ Name = 'duplicate-plan'; Tap = $tap + "1..2`n"; Rows = $rows; Exit = 0 },
     @{ Name = 'wrong-verdict'; Tap = $tap.Replace('ok 2 -', 'not ok 2 -'); Rows = $rows; Exit = 0 }
@@ -26,7 +27,7 @@ foreach ($mutation in $mutations) {
     if (-not $rejected) { throw "Accepted broken evidence: $($mutation.Name)" }
     Write-Output "PASS rejected $($mutation.Name)"
 }
-Write-Output 'PASS positive control and 8 corrupt-evidence cases'
+Write-Output "PASS positive control and $($mutations.Count) corrupt-evidence cases"
 $native = @([pscustomobject]@{
     Control = 'Panel'; Scenario = 'value-pattern'; Status = 'inapplicable'; Detail = 'Native layout root has no value pattern'
 })
@@ -65,6 +66,7 @@ try {
         @{ Name = 'incomplete-capture'; Status = 'failed'; Exit = 0; Capture = $false; Timeout = $false; ExpectedPasses = 0 },
         @{ Name = 'timed-out'; Status = 'failed'; Exit = 0; Capture = $true; Timeout = $true; ExpectedPasses = 0 },
         @{ Name = 'missing-execution'; Status = 'passed'; Exit = 0; Capture = $true; Timeout = $false; ExpectedPasses = 0 },
+        @{ Name = 'missing-exit'; Status = 'passed'; Exit = $null; Capture = $true; Timeout = $false; ExpectedPasses = 0 },
         @{ Name = 'recorded-verdict-mismatch'; Status = 'failed'; Exit = 0; Capture = $true; Timeout = $false; ExpectedPasses = 0 }
     )
     foreach ($case in $cases) {

@@ -3,7 +3,7 @@ function Test-CompatibilityResults {
         [Parameter(Mandatory)][string]$Tap,
         [Parameter(Mandatory)][object[]]$Results,
         [Parameter(Mandatory)][string[]]$ExpectedKeys,
-        [Parameter(Mandatory)][int]$ExitCode
+        [Parameter(Mandatory)][Nullable[int]]$ExitCode
     )
     $plans = [regex]::Matches($Tap, '(?m)^1\.\.(\d+)\r?$')
     if ($plans.Count -ne 1 -or [int]$plans[0].Groups[1].Value -ne $ExpectedKeys.Count -or
