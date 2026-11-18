@@ -124,9 +124,9 @@ the report:
 - If you changed anything, commit (`Address pr-review findings`) and push. If every
   finding was disputed, there's nothing to commit; go straight to the checkpoint.
 
-Record `pr-review: done@<sha>` in the checkpoint. If the report shows any dimension
-`✗ skipped`, re-run `pr-review` once for just those dimensions. If any are still
-skipped, record `pr-review: partial@<sha> (skipped: <dimensions>)` instead, and name the
+Record `pr-review: done@<sha>` in the checkpoint. `pr-review` already retries a failed
+dimension once; if its report still shows any dimension `✗ skipped`, record
+`pr-review: partial@<sha> (skipped: <dimensions>)` instead, and name the
 gap in the Phase 3 summary rather than presenting the PR as fully reviewed. A
 cross-family check reported as unavailable is a disclosed limitation, not a skip.
 **Don't run `pr-review` again in later

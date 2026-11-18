@@ -219,7 +219,10 @@ Collect the primary findings. Then:
 2. **Assign IDs.** `C1, C2, ...` for critical, `H1, H2, ...` for high,
    `M1, ...` for medium, `L1, ...` for low.
 3. **Sort.** critical → high → medium → low; within severity, sort by file path.
-4. **Cross-check phase B (reconcile).** If there are critical/high findings,
+4. **Cross-check phase B (reconcile).** First wait for phase A to finish and
+   capture its output (e.g. `read_agent` with `wait: true` for a background
+   agent); never send findings to a #8 that is still running, and never report
+   before phase A has returned. Then, if there are critical/high findings,
    send them, each with its Evidence, Recommendation, and contributing
    reviewers' host-reported models, to #8 as a follow-up message to the same
    sub-agent. If the host cannot do that, launch a second #8 call on the same
