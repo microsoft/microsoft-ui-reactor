@@ -97,9 +97,10 @@ Conventions for contributors:
   remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
 
 - The Toolkit RangeSelector sample now controls both endpoints through the shared
-  native event. It demonstrates parent acceptance/rejection, independent callback
+  native event. It demonstrates pointer-driven parent acceptance/rejection, independent callback
   counts and echo-free parent resets instead of calling one-way values controlled
-  (issue #1566; depends on #1564).
+  (issue #1566; depends on #1564). The pinned Toolkit's missing keyboard change
+  notifications are documented as an unsupported mapping scenario.
 
 - Generated wrappers now support multiple controlled properties, including range endpoints
   sharing one native event, without losing callbacks or notifying unchanged endpoints.

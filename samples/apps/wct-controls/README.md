@@ -30,7 +30,7 @@ The point of the sample is the **wrapper generator**. Each `[GenerateReactorWrap
 | `CameraPreview` | `[WrapLifecycle]` + `[WrapEvent("PreviewFailed", Arg = "Error")]` | declare the imperative start/stop lifecycle once; project typed event args into a callback |
 | `TokenizingTextBox`, `RichSuggestBox` | `Exclude = new[]{ "Items" }` | opt out of the auto items slot for an internally-managed collection |
 | `RadialGauge`, `ColorPicker` | (none) | the `{Prop}Changed` convention auto-pairs `Value` / `Color` as two-way controlled props |
-| `RangeSelector` | `[WrapControlled]` on `RangeStart` and `RangeEnd`, both using `ValueChanged` | notify only the changed endpoint and reassert supplied parent state without reconciliation echoes |
+| `RangeSelector` | `[WrapControlled]` on `RangeStart` and `RangeEnd`, both using `ValueChanged` | observe pointer-driven endpoint changes and reassert supplied parent state without reconciliation echoes; keyboard limitation below |
 | `SwitchPresenter` | (none) | populate the native `SwitchCases` collection and drive `Value`; leave the generated content slot unset so Toolkit owns selection |
 | layout panels (`UniformGrid`, `DockPanel`, `WrapPanel`, `StaggeredPanel`) | (none) | children flow through the generated panel slot; the DockPanel example uses the Toolkit's default left docking |
 | `ConstrainedBox`, `LayoutTransformControl` | (none) | a single reconciled content child; both controls affect layout |
@@ -59,13 +59,20 @@ header inputs remain unset. Only a previous Reactor `Header` supplies a child to
 reconcile; removing a previously supplied rich or text header releases its value.
 Teardown also leaves native-owned headers alone.
 
-## Controlled range scenario
+## Pointer-controlled range scenario
 
-Launch with `-- --page range`. Move each thumb by pointer or keyboard. With
+Launch with `-- --page range`. Drag each thumb with the pointer. With
 **Accept range changes** enabled, the corresponding parent endpoint and callback
 count change. Disable it and repeat: the callback still records the request, but
 the thumb returns to the parent's value. The other endpoint's callback count must
 not increase.
+
+**Keyboard control is not supported by this mapping.** In the pinned Toolkit
+`8.3.260402-preview2`, the [thumb key handlers](https://github.com/CommunityToolkit/Windows/blob/39c45efed2601b22170b9f6258c9cbe7e51031d1/components/RangeSelector/src/RangeSelector.Input.Key.cs)
+write `RangeStart`/`RangeEnd` without raising `ValueChanged`. Arrow keys can
+therefore move the native thumbs without updating the parent or callback counts.
+A later parent update reasserts the supplied values, but rejection is not immediate.
+Do not use keyboard edits to verify this pointer-driven accept/reject scenario.
 
 **Reset to 20–80** writes parent state without incrementing callback counts.
 **Rerender unchanged range** changes only Width by 1 px, making an unchanged-parent
