@@ -70,9 +70,9 @@
          5.0.0 = Visual Studio 2026 18.0 / .NET 10.0.100 SDK. Raise it by hand, only when
          dropping those hosts; Dependabot ignores its minor/major updates.
          Guarded by tests/Reactor.Tests/Tooling/ShippedAnalyzersRoslynFloorTests.cs. -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
