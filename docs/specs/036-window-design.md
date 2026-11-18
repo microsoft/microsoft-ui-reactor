@@ -736,7 +736,8 @@ public interface IWindowPersistenceStore
 Defaults:
 
 - Packaged apps: `ApplicationData.Current.LocalSettings` adapter
-  (matches WinUIEx behavior).
+  (same backing store as WinUIEx, but under Reactor's own container and
+  keys, so placements saved by WinUIEx are not read).
 - Unpackaged apps: a JSON file under
   `%LOCALAPPDATA%/<ProcessName>/reactor-windows.json`. This is the
   primary case for Reactor.
