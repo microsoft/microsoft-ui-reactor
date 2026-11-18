@@ -63,7 +63,9 @@ public partial record SettingsCardElement
             },
             update: static (ctx, c, oldElement, newElement) =>
             {
-                var existing = c.Header as Microsoft.UI.Xaml.UIElement;
+                if (oldElement.Header is null && newElement.Header is null &&
+                    oldElement.HeaderText == newElement.HeaderText) return;
+                var existing = oldElement.Header is not null ? c.Header as Microsoft.UI.Xaml.UIElement : null;
                 var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
                 if (newElement.Header is not null) c.Header = next!;
                 else if (newElement.HeaderText is { } text) c.Header = text;
@@ -71,8 +73,9 @@ public partial record SettingsCardElement
             },
             unmount: static (ctx, c) =>
             {
-                if (Reconciler.GetElementTag(c) is SettingsCardElement { Header: not null } &&
-                    c.Header is Microsoft.UI.Xaml.UIElement child)
+                if (Reconciler.GetElementTag(c) is not SettingsCardElement element ||
+                    (element.Header is null && element.HeaderText is null)) return;
+                if (element.Header is not null && c.Header is Microsoft.UI.Xaml.UIElement child)
                     ctx.Reconciler.UnmountChild(child);
                 c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
             });
@@ -122,7 +125,9 @@ public partial record SettingsExpanderElement
             },
             update: static (ctx, c, oldElement, newElement) =>
             {
-                var existing = c.Header as Microsoft.UI.Xaml.UIElement;
+                if (oldElement.Header is null && newElement.Header is null &&
+                    oldElement.HeaderText == newElement.HeaderText) return;
+                var existing = oldElement.Header is not null ? c.Header as Microsoft.UI.Xaml.UIElement : null;
                 var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
                 if (newElement.Header is not null) c.Header = next!;
                 else if (newElement.HeaderText is { } text) c.Header = text;
@@ -130,8 +135,9 @@ public partial record SettingsExpanderElement
             },
             unmount: static (ctx, c) =>
             {
-                if (Reconciler.GetElementTag(c) is SettingsExpanderElement { Header: not null } &&
-                    c.Header is Microsoft.UI.Xaml.UIElement child)
+                if (Reconciler.GetElementTag(c) is not SettingsExpanderElement element ||
+                    (element.Header is null && element.HeaderText is null)) return;
+                if (element.Header is not null && c.Header is Microsoft.UI.Xaml.UIElement child)
                     ctx.Reconciler.UnmountChild(child);
                 c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
             });

@@ -109,7 +109,8 @@ Conventions for contributors:
 
 - The Toolkit sample maps Settings headers, descriptions, icons and expander
   content as reconciled Element slots while preserving accessible string-header
-  names. Explicit wrapper factory calls keep the sample on actual Toolkit controls
+  names and native-owned headers when the wrapper's header inputs stay unset.
+  Explicit wrapper factory calls keep the sample on actual Toolkit controls
   rather than similarly named built-ins (issues #1504, #1566).
 
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
