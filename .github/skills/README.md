@@ -76,8 +76,8 @@ reference this same policy; none needs its own aging model list.
 
 Choose relative to the **actual first-pass reviewer or test author**, not merely
 the orchestrator. Opus and Sonnet are both Claude; changing between them, or
-between two GPT versions, is not family diversity. For direct reviews, the
-orchestrator is the first-pass reviewer.
+between two GPT versions, is not family diversity. When the orchestrator does
+the first-pass work itself (pr-review never does), it is the first-pass reviewer.
 
 Track model provenance per finding and reviewed area. If first-pass reviewers
 used mixed families, a single second-pass model may not independently cover
