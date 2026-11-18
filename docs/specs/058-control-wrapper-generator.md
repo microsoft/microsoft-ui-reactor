@@ -310,7 +310,7 @@ Q1–Q8 and Q11 are **resolved** (see §Resolved decisions). Remaining:
 - **Value props:** public instance, public get+set, non-indexer. `string`/`object` → text; `bool`/`int`/`double`/enum → nullable-backed `OneWayConditional`; **value-type structs** (`Thickness`, `CornerRadius`, `Color`, …) → `T?` nullable one-way (write `.Value`); **reference types** (`Brush`, `FontFamily`, …) → `T?` one-way (write when non-null); **`Nullable<U>` tri-state** (`bool?`, `DateTimeOffset?`, …) → **spec-050 `Optional<U?>`** (Unset ⇒ don't touch, `Of(null)` ⇒ write null, `Of(v)` ⇒ write v — `Optional<T>` mirrors `Nullable<T>`'s `.Value`/`.HasValue` so the same one-way/controlled emit handles it). Skipped: delegates, interfaces, arrays, collections (`IEnumerable`), templates/styles, and `UIElement`-derived types (those are content, not value props).
 - **Content slot:** discovered from the control's WinUI `[ContentProperty]` attribute, with a `[WrapContent("Prop")]` override and a property-named-`Content` fallback. Auto-accepted only when unambiguously a child — a `UIElement`-derived property (`Border.Child`, `Viewbox.Child`) or an `object` named exactly `Content` (`ContentControl.Content`). An `object` `[ContentProperty]` with another name (WinUI declares `ToggleSwitch`'s as `Header`) is treated as a value prop, not a child slot; a `[WrapContent]` override forces any single-content-typed property. Collections (`Panel.Children`/`ItemsControl.Items`) are panel/items strategies (P3), not this. The `SingleContent` strategy writes the discovered property (`c.Child`), not a hardcoded `c.Content`.
 - **Two-way props:** a value prop `P` paired with a `{P}Changed` event (auto-pair), a `[WrapControlled(P, ChangedEvent)]` override (single non-conventional event), or a `[WrapControlled(P, Events = new[]{…})]` override (multiple events, e.g. `Checked`+`Unchecked`) ⇒ `Optional<T>` + `On{P}Changed` (spec 050; §5.3). An isolated controlled property uses public `.Controlled<TValue,TArgs>`; composite wrappers use §8.2's grouped binding. For multi-event the value is read back from the control after any event fires. `[WrapOneWay(P)]` opts a prop out of auto-pairing (keeps it one-way despite a `{P}Changed` event — e.g. `ProgressBar.Value`).
-- **Events:** fire-and-forget `RoutedEventHandler` and `TypedEventHandler<,>` events not consumed by a controlled prop ⇒ `Action On{Event}` + `HandCodedEvent` trampoline (typed to the event's delegate) that reads the live element via `Reconciler.GetElementTag`.
+- **Events:** fire-and-forget `RoutedEventHandler` and `TypedEventHandler<,>` events not consumed by a controlled prop ⇒ `Action On{Event}` + `HandCodedEvent` trampoline that reads the subscribed owner's live element via `Reconciler.GetElementTag` (§8.3).
 - **Name-mapping:** `[WrapAlias("ElementName", "ControlProperty")]` surfaces a control property under a friendly element-facing name — the generated init-property and factory parameter use `ElementName`, while the descriptor reads/writes `ControlProperty` (e.g. `Min`→`Minimum`, `Content`→`Text`). **Aliasing the content property opts it out of the child slot:** when the aliased `ControlProperty` is the control's discovered `[ContentProperty]`, the generator treats it as a value prop (the string form of polymorphic content) rather than a `SingleContent` child — e.g. `[WrapAlias("Label", "Content")]` on `CheckBox`/`ToggleButton` surfaces `string? Label` writing `c.Content`, with no `Content` element child slot.
 - **One-way DP-backed props use spec-050 `Optional<T>` + `dp:` ClearValue.** When a one-way prop is backed by a public `{Prop}Property` dependency property, the element prop is `Optional<T>` and the descriptor uses `.OneWay(get, set, dp:)` — `Unset` ⇒ `ClearValue(dp)` releases the local value to the WinUI style/precedence chain (spec 050 §6.3), instead of the skip-write fallback. Props with no DP keep the nullable-`T?` `OneWayConditional` skip-write. Combined with controlled props (`Optional<T>`-enforced) and tri-state nullables (`Optional<U?>`), the generator is now fully Optional-native.
 - **Setters:** always emitted for the `.Set(...)` escape hatch.
@@ -377,6 +377,27 @@ An isolated single-controlled binding keeps its existing `Controlled` / deferred
 types, parent acceptance/rejection, callback replacement, omitted values, echo/coercion,
 ordinary events and teardown. Explicit `MoveStart`/`MoveEnd` events are the positive control;
 silent Toolkit property assignments are not event-wiring evidence.
+
+### §8.3 Event ownership (issue #1573)
+
+The sender of a native event need not be the control on which it was subscribed.
+For example, Toolkit `TokenizingTextBox.TextChanged` forwards its inner `AutoSuggestBox`.
+All generated subscription bridges resolve the subscribed owner, not the sender, before
+reading its current element, controlled value, or echo state. Typed ordinary events retain
+the original args object (including mutable/cancellable args); projected callbacks still
+project from that object. Null or unrelated senders do not invalidate an owner's event.
+
+The bridges capture a `System.WeakReference<TControl>`, not an element or a strong control
+reference. On the supported .NET runtime this is COM-aware and can recover a live native
+owner after its RCW is collected. Subscription gates remain in native attached state,
+not a managed-RCW-keyed table (issue #86). Single/deferred/ordinary descriptor payloads
+retain their one-time lifetime subscriptions, including across pool returns. A private
+native-attached owner record deactivates these bridges at unmount and reactivates them
+after remount's initial writes, so even a retained control with an old element tag stays
+silent outside its mount lifetime. The weak reference does not keep discarded controls
+alive. Composite bindings store their actual native delegates in their attached state, so
+unmount removes those exact delegates before clearing state. Their snapshot-before-callback
+and one-suppression-check-per-native-event rules are unchanged.
 
 ## §9 Trimming and AOT
 

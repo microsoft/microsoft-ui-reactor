@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Wrappers.Generator;
 
 public sealed partial class WrapperGenerator
 {
-    // Keep the single-controlled fast path unchanged. Composite wrappers use
+    // Keep the single-controlled descriptor semantics. Composite wrappers use
     // public descriptor hooks and native attached storage, not RCW-keyed tables
     // or Reactor internals. State is lazy so constructing an element stays headless.
     private static void EmitControlledBindings(
@@ -25,6 +25,8 @@ public sealed partial class WrapperGenerator
         sb.AppendLine("        static __ControlledState() { }");
         sb.AppendLine("        internal int WriteDepth;");
         sb.AppendLine("        internal bool Subscribed;");
+        foreach (var ev in events)
+            sb.AppendLine($"        internal {ev.First().Delegate}? {ev.Key}Handler;");
         foreach (var p in props)
         {
             sb.AppendLine($"        internal {p.ValueType} Last{p.Name} = default!;");
@@ -96,8 +98,15 @@ public sealed partial class WrapperGenerator
         sb.AppendLine("        var state = __GetControlledState(c);");
         sb.AppendLine("        if (state.Subscribed) return;");
         sb.AppendLine("        __CaptureControlled(c, state);");
+        sb.AppendLine($"        var owner = new global::System.WeakReference<{controlFqn}>(c);");
         foreach (var ev in events)
-            sb.AppendLine($"        c.{ev.Key} += __Controlled{ev.Key}Handler;");
+        {
+            sb.AppendLine($"        state.{ev.Key}Handler = (_, _) =>");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            if (owner.TryGetTarget(out var live)) __Controlled{ev.Key}Handler(live);");
+            sb.AppendLine("        };");
+            sb.AppendLine($"        c.{ev.Key} += state.{ev.Key}Handler;");
+        }
         sb.AppendLine("        state.Subscribed = true;");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -107,7 +116,7 @@ public sealed partial class WrapperGenerator
         sb.AppendLine("        if (state.Subscribed)");
         sb.AppendLine("        {");
         foreach (var ev in events)
-            sb.AppendLine($"            c.{ev.Key} -= __Controlled{ev.Key}Handler;");
+            sb.AppendLine($"            c.{ev.Key} -= state.{ev.Key}Handler;");
         sb.AppendLine("        }");
         sb.AppendLine("        c.ClearValue(__ControlledState.Property);");
         sb.AppendLine("    }");
@@ -115,11 +124,9 @@ public sealed partial class WrapperGenerator
 
         foreach (var ev in events)
         {
-            sb.AppendLine($"    private static readonly {ev.First().Delegate} __Controlled{ev.Key}Handler = static (sender, _) =>");
+            sb.AppendLine($"    private static void __Controlled{ev.Key}Handler({controlFqn} c)");
             sb.AppendLine("    {");
-            // Some native delegates declare a different control as sender.
-            // Check the runtime type without emitting an impossible C# pattern.
-            sb.AppendLine($"        if ((object?)sender is not {controlFqn} c || c.GetValue(__ControlledState.Property) is not __ControlledState state) return;");
+            sb.AppendLine("        if (c.GetValue(__ControlledState.Property) is not __ControlledState state) return;");
             sb.AppendLine("        if (state.WriteDepth != 0) return;");
             // Snapshot every affected value before invoking any callback. This
             // also makes reentrant events observe the new baseline.
@@ -142,8 +149,50 @@ public sealed partial class WrapperGenerator
                 sb.AppendLine($"            global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag(c) is {elementName} __live{p.Name})");
                 sb.AppendLine($"            __live{p.Name}.On{p.Name}Changed?.Invoke(__value{p.Name});");
             }
-            sb.AppendLine("    };");
+            sb.AppendLine("    }");
             sb.AppendLine();
         }
+    }
+
+    // .NET's COM-aware WeakReference can recover a live native owner's RCW.
+    // The existing attached payload still gates subscription by native identity;
+    // neither the owner nor the current immutable element is strongly captured.
+    private static void EmitEventOwner(StringBuilder sb, string controlFqn)
+    {
+        sb.AppendLine("    private sealed class __EventOwner");
+        sb.AppendLine("    {");
+        sb.AppendLine("        internal static readonly global::Microsoft.UI.Xaml.DependencyProperty Property =");
+        sb.AppendLine("            global::Microsoft.UI.Xaml.DependencyProperty.RegisterAttached(");
+        sb.AppendLine("                \"EventOwner\", typeof(object), typeof(__EventOwner), new global::Microsoft.UI.Xaml.PropertyMetadata(null));");
+        sb.AppendLine("        static __EventOwner() { }");
+        sb.AppendLine($"        internal readonly global::System.WeakReference<{controlFqn}> Reference;");
+        sb.AppendLine("        internal bool Active;");
+        sb.AppendLine($"        internal __EventOwner({controlFqn} c) => Reference = new global::System.WeakReference<{controlFqn}>(c);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine($"    private static __EventOwner __GetEventOwner({controlFqn} c)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (c.GetValue(__EventOwner.Property) is __EventOwner owner) return owner;");
+        sb.AppendLine("        owner = new __EventOwner(c);");
+        sb.AppendLine("        c.SetValue(__EventOwner.Property, owner);");
+        sb.AppendLine("        return owner;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    private static void EmitOwnerSubscription(
+        StringBuilder sb, string controlFqn, global::System.Collections.Generic.IEnumerable<string> events, bool forwardArgs)
+    {
+        sb.AppendLine("            subscribe:   static (c, h) =>");
+        sb.AppendLine("            {");
+        sb.AppendLine($"                var owner = __GetEventOwner(({controlFqn})c);");
+        foreach (var ev in events)
+        {
+            sb.AppendLine($"                (({controlFqn})c).{ev} += (_, args) =>");
+            sb.AppendLine("                {");
+            sb.AppendLine($"                    if (owner.Active && owner.Reference.TryGetTarget(out var live)) h(live{(forwardArgs ? ", args" : "")});");
+            sb.AppendLine("                };");
+        }
+        sb.AppendLine("            },");
     }
 }
