@@ -192,8 +192,9 @@ pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\ta
 ```
 
 The regression checks visible external document composition, actual Toolkit
-Home/View tabs and all five native commands, exact command feedback across
-rerenders, retained tab/button identity and selection, light/dark background
+Home/View tabs and all five native commands, a two-command burst issued without
+yielding between UIA invokes, exact command feedback across rerenders, retained
+tab/button identity and selection, light/dark background
 changes, removal and fresh remount. Selection uses native `SelectedItem`, and
 commands use the public UIA Invoke provider with a real Click-event check.
 Neither is physical keyboard/pointer input. OS high contrast/text scaling,

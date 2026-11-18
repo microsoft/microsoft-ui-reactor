@@ -27,7 +27,19 @@ internal static class TabbedCommandBarSampleChecks
         var buttons = tabs.SelectMany(t => t.PrimaryCommands).OfType<Native.AppBarButton>().ToArray();
         Program.Check(buttons.Select(b => b.Label).SequenceEqual(["Add", "Edit", "Share", "Zoom", "Refresh"]),
             "Unexpected native sample command labels.");
-        int count = 0;
+        await InvokeBurstAsync(buttons[0], buttons[1]);
+        try
+        {
+            await CompatibilityRoot.WaitAsync(() => Status.Text == StatusText(2, "Edit"),
+                "Batched command feedback after two native Click events");
+        }
+        catch (TimeoutException error)
+        {
+            throw new InvalidOperationException(
+                $"Expected '{StatusText(2, "Edit")}' after the burst, actual '{Status.Text}'.", error);
+        }
+        CheckStatus(2, "Edit");
+        int count = 2;
         foreach (var tab in tabs)
         {
             bar.SelectedItem = tab;
@@ -50,9 +62,9 @@ internal static class TabbedCommandBarSampleChecks
                 }
             }
         }
-        CheckStatus(10, "Refresh");
+        CheckStatus(12, "Refresh");
         CheckDocument(bar);
-        Program.Results.Note("actual sample mount/update: external document and all five commands twice; native objects retained");
+        Program.Results.Note("actual sample mount/update: external document, two-command burst and all five commands twice; native objects retained");
 
         var page = CompatibilityRoot.Descendants(WindowRoot).OfType<FrameworkElement>()
             .Single(e => AutomationProperties.GetAutomationId(e) == "Page.TabbedCommandBar");
@@ -142,13 +154,46 @@ internal static class TabbedCommandBarSampleChecks
         button.Click += Clicked;
         try
         {
-            var peer = FrameworkElementAutomationPeer.CreatePeerForElement(button);
-            Program.Check(peer?.GetName() == button.Label, "Native command accessible name differs from label.");
-            Program.Check(peer?.GetPattern(PatternInterface.Invoke) is IInvokeProvider, "Missing native Invoke provider.");
-            ((IInvokeProvider)peer!.GetPattern(PatternInterface.Invoke)).Invoke();
+            InvokeProvider(button).Invoke();
             await CompatibilityRoot.WaitAsync(() => clicks == 1, "Native Click after public UIA Invoke");
             Program.Results.Note($"native command={button.Label}; public UIA Invoke; Click count={clicks}; not physical input");
         }
         finally { button.Click -= Clicked; }
+    }
+
+    private static async Task InvokeBurstAsync(Native.AppBarButton first, Native.AppBarButton second)
+    {
+        await CompatibilityRoot.WaitAsync(() => first.IsLoaded && first.ActualWidth > 0 &&
+            second.IsLoaded && second.ActualWidth > 0, "Both native burst commands realized");
+        var firstProvider = InvokeProvider(first);
+        var secondProvider = InvokeProvider(second);
+        int firstClicks = 0, secondClicks = 0;
+        void FirstClicked(object sender, RoutedEventArgs args) => firstClicks++;
+        void SecondClicked(object sender, RoutedEventArgs args) => secondClicks++;
+        first.Click += FirstClicked;
+        second.Click += SecondClicked;
+        try
+        {
+            firstProvider.Invoke();
+            secondProvider.Invoke();
+            await CompatibilityRoot.WaitAsync(() => firstClicks > 0 && secondClicks > 0,
+                "Both native Click events after consecutive UIA invokes");
+            Program.Check(firstClicks == 1 && secondClicks == 1,
+                $"Expected one Click per burst command, got {first.Label}={firstClicks}, {second.Label}={secondClicks}.");
+            Program.Results.Note($"native burst={first.Label},{second.Label}; Click count={firstClicks + secondClicks}; no yield between public UIA invokes; not physical input");
+        }
+        finally
+        {
+            first.Click -= FirstClicked;
+            second.Click -= SecondClicked;
+        }
+    }
+
+    private static IInvokeProvider InvokeProvider(Native.AppBarButton button)
+    {
+        var peer = FrameworkElementAutomationPeer.CreatePeerForElement(button);
+        Program.Check(peer?.GetName() == button.Label, "Native command accessible name differs from label.");
+        return peer?.GetPattern(PatternInterface.Invoke) as IInvokeProvider
+            ?? throw new InvalidOperationException("Missing native Invoke provider.");
     }
 }
