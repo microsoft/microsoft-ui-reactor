@@ -56,12 +56,18 @@ public partial record SettingsCardElement
         Customize(ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard> d) =>
         d.ImperativeBridged(
             mount: static (ctx, c, e) =>
-                c.Header = e.Header is not null ? ctx.MountChild(e.Header)! : e.HeaderText ?? string.Empty,
+            {
+                if (e.Header is not null) c.Header = ctx.MountChild(e.Header)!;
+                else if (e.HeaderText is { } text) c.Header = text;
+                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
+            },
             update: static (ctx, c, oldElement, newElement) =>
             {
                 var existing = c.Header as Microsoft.UI.Xaml.UIElement;
                 var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
-                c.Header = newElement.Header is not null ? next! : newElement.HeaderText ?? string.Empty;
+                if (newElement.Header is not null) c.Header = next!;
+                else if (newElement.HeaderText is { } text) c.Header = text;
+                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
             },
             unmount: static (ctx, c) =>
             {
@@ -109,12 +115,18 @@ public partial record SettingsExpanderElement
         Customize(ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander> d) =>
         d.ImperativeBridged(
             mount: static (ctx, c, e) =>
-                c.Header = e.Header is not null ? ctx.MountChild(e.Header)! : e.HeaderText ?? string.Empty,
+            {
+                if (e.Header is not null) c.Header = ctx.MountChild(e.Header)!;
+                else if (e.HeaderText is { } text) c.Header = text;
+                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
+            },
             update: static (ctx, c, oldElement, newElement) =>
             {
                 var existing = c.Header as Microsoft.UI.Xaml.UIElement;
                 var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
-                c.Header = newElement.Header is not null ? next! : newElement.HeaderText ?? string.Empty;
+                if (newElement.Header is not null) c.Header = next!;
+                else if (newElement.HeaderText is { } text) c.Header = text;
+                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
             },
             unmount: static (ctx, c) =>
             {
