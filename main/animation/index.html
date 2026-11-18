@@ -3932,6 +3932,14 @@ or <a href="#choreography">Choreography</a> if you're trying to sequence steps.<
 translation) and attach a transition modifier. When the value changes on the
 next render — driven by <a href="../hooks/">hooks</a> and state — WinUI animates from
 the old value to the new one automatically.</p>
+<p>Animation and transition configuration changes are also checked on each render,
+even when the element's other properties stay the same. For example, changing
+only <code>.LayoutAnimation()</code>'s duration updates the layout animation on the next render.</p>
+<p>Value-equivalent plain-data configurations such as <code>.Animate()</code> and
+<code>.LayoutAnimation()</code> can still skip updates. Native objects and arrays use
+reference equality: rebuilding <code>.OpacityTransition()</code>, <code>.WithTransitions()</code>,
+<code>.Keyframes()</code>, or <code>.ScrollLinked()</code> with fresh objects or arrays prevents
+skipping, even when the settings match.</p>
 <h2 id="reference">Reference<a class="headerlink" href="#reference" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -4578,8 +4586,9 @@ Combine with <code>.LayoutAnimation()</code> on each child and <code>.WithKey()<
 reorder cascades.</p>
 <h2 id="keyframes">Keyframes<a class="headerlink" href="#keyframes" title="Permanent link">&para;</a></h2>
 <p><code>.Keyframes(name, trigger, configure)</code> runs a multi-property keyframe
-animation whenever <code>trigger</code> changes. Define keyframes at progress points
-from 0.0 to 1.0:</p>
+animation whenever <code>trigger</code> changes, even if the element's other properties
+stay unchanged. Re-rendering with the same trigger does not restart it.
+Define keyframes at progress points from 0.0 to 1.0:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">KeyframeDemo</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="p">{</span>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span>
