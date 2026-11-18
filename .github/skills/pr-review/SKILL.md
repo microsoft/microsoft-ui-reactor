@@ -103,6 +103,14 @@ For all scopes, capture:
 - For `all`, run both diff commands and concatenate the outputs with a clear
   separator banner so sub-agents can tell committed from uncommitted parts.
 
+Write the complete captured diff (including untracked-file contents and any
+`all` banner) **once** to a scratch file outside the repo — the session's
+artifacts/files directory if the host provides one, else the system temp
+directory, e.g. `pr-review-<head-short-sha>.diff`. Sub-agents read it from that
+absolute path. Do not paste the full diff into each sub-agent prompt: seven
+copies in one response can exceed the output limit and truncate the later
+`task` calls. This scratch file is not report output.
+
 ### 2. Diff-size guardrail
 
 Before fanning out:
@@ -271,7 +279,8 @@ Coverage block and include its short "what I checked" note in a final
   catch yourself thinking "this diff is small enough to review directly", that
   is the failure mode this rule exists to prevent.
 - **No fix application.** Even if findings are obvious, do not edit code.
-- **No file output.** Stdout only, unless the user explicitly asked for a file.
+- **No file output.** Stdout only, unless the user explicitly asked for a file
+  (the step 1c scratch diff outside the repo is the one exception).
 - **No build/test execution.** Flag staleness (e.g. a new plugin sub-skill not
   added to the agent-kit pack list in `src/Reactor/Reactor.csproj`, or
   `skills/reactor.api.txt` looking out of date) but do not run `mur check`,
@@ -293,8 +302,9 @@ from these blocks (in order):
 
 1. **Role line.** "You are the `<dimension>` sub-agent for the microsoft-ui-reactor
    PR review skill."
-2. **Diff context.** Base ref, head ref, file list with line counts, and the
-   full unified diff.
+2. **Diff context.** Scope, base ref, head ref, file list with line counts, and
+   the absolute path of the captured diff file, with an instruction to read
+   the whole file before reviewing.
 3. **Area classification.** Which files in the diff fall under this
    dimension's primary focus.
 4. **Shared contract.** Inline the contents of

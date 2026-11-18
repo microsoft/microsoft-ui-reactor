@@ -18,7 +18,8 @@ than labeling the result an independent cross-family confirmation.
 
 The orchestrator passes you:
 
-1. The captured unified diff for the selected scope, including any in-scope
+1. The path of the captured unified diff file for the selected scope (read it
+   all), including any in-scope
    staged, working-tree, or untracked content, and its base/head context.
 2. The repo file map / area classification.
 3. In a separate section at the end of the prompt: the consolidated
