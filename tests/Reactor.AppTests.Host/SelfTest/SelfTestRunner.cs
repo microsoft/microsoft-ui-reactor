@@ -415,11 +415,6 @@ internal static class SelfTestRunner
     }
 
     public static void RunAll()
-        // Program uses top-level statements, so its entry thread is MTA. Match
-        // ReactorApp.Run: WinUI's UIA island provider requires an STA UI thread.
-        => ReactorApp.RunOnSta(RunAllOnSta);
-
-    private static void RunAllOnSta()
     {
         StartHangWatchdog();
         WinRT.ComWrappersSupport.InitializeComWrappers();

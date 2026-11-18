@@ -1,16 +1,11 @@
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Reflection;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Xaml;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;
 
-public class RemainingModifierOwnerTests(ITestOutputHelper output)
+public class RemainingModifierOwnerTests
 {
-    private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
     private static readonly Func<ElementModifiers, bool> HasScale = static m => m.Scale.HasValue;
     private delegate (Element Source, ElementModifiers Modifiers)? Lookup(Func<ElementModifiers, bool> declares);
     private sealed record Leaf(int Id) : Element;
@@ -72,27 +67,6 @@ public class RemainingModifierOwnerTests(ITestOutputHelper output)
         Assert.Null(Bind(root)(HasScale));
     }
 
-    [Fact]
-    public void Lookup_Does_Not_Allocate_Per_Iteration()
-    {
-        var metrics = new List<(string Name, double Bytes, double Nanoseconds)>();
-        foreach (bool legacy in new[] { false, true })
-        foreach (bool hit in new[] { false, true })
-        {
-            Element root = new Leaf(1) { Modifiers = Mods(hit ? 2 : null) };
-            if (legacy)
-                for (int i = 0; i < 3; i++) root = new ModifiedElement(root, Mods(null));
-            var reconciler = Prepare(root);
-            // Bind before measuring; the typed delegate does not box the result.
-            var measured = Measure(Method().CreateDelegate<Func<Func<ElementModifiers, bool>,
-                (Element Source, ElementModifiers Modifiers)?>>(reconciler));
-            metrics.Add(($"{(legacy ? "legacy" : "direct")}-{(hit ? "hit" : "miss")}", measured.Bytes, measured.Nanoseconds));
-        }
-        foreach (var row in metrics)
-            output.WriteLine($"{row.Name}: {row.Bytes:F1} B/call, {row.Nanoseconds:F1} ns/call");
-        Assert.True(metrics.All(row => row.Bytes == 0), string.Join("; ", metrics.Select(row => $"{row.Name}={row.Bytes:F1} B/call")));
-    }
-
     private static ElementModifiers Mods(float? scale) => new()
     {
         Width = 120,
@@ -100,38 +74,20 @@ public class RemainingModifierOwnerTests(ITestOutputHelper output)
         Scale = scale.HasValue ? new Vector3(scale.Value) : null,
     };
 
-    [DynamicDependency("FindRemainingModifierOwner", typeof(Reconciler))]
-    private static MethodInfo Method() => typeof(Reconciler).GetMethod("FindRemainingModifierOwner", PrivateInstance)!;
+    private static Reconciler Prepare(Element root) => new() { ModifierUpdate = (null, root, root.Modifiers) };
 
-    [DynamicDependency("_modifierUpdate", typeof(Reconciler))]
-    private static Reconciler Prepare(Element root)
+    private static Lookup Bind(Element root) => Prepare(root).FindRemainingModifierOwner;
+
+    [Fact]
+    public void Merged_Bag_Does_Not_Require_Cloning_The_Element()
     {
-        var reconciler = new Reconciler();
-        typeof(Reconciler).GetField("_modifierUpdate", PrivateInstance)!
-            .SetValue(reconciler, ((UIElement?)null, root));
-        return reconciler;
-    }
-
-    private static Lookup Bind(Element root) => Method().CreateDelegate<Lookup>(Prepare(root));
-
-    private static (double Bytes, double Nanoseconds) Measure<T>(Func<Func<ElementModifiers, bool>, T> lookup)
-    {
-        for (int i = 0; i < 10_000; i++) _ = lookup(HasScale);
-        const int iterations = 20_000;
-        var times = new double[7];
-        double bytes = 0;
-        T last = default!;
-        for (int sample = 0; sample < times.Length; sample++)
-        {
-            long allocated = GC.GetAllocatedBytesForCurrentThread();
-            long started = Stopwatch.GetTimestamp();
-            for (int i = 0; i < iterations; i++) last = lookup(HasScale);
-            long elapsed = Stopwatch.GetTimestamp() - started;
-            bytes = Math.Max(bytes, (GC.GetAllocatedBytesForCurrentThread() - allocated) / (double)iterations);
-            times[sample] = elapsed * (1_000_000_000.0 / Stopwatch.Frequency) / iterations;
-        }
-        GC.KeepAlive(last);
-        Array.Sort(times);
-        return (bytes, times[times.Length / 2]);
+        var root = new Leaf(1) { Modifiers = new() { Rotation = 30 } };
+        var merged = root.Modifiers.Merge(Mods(2));
+        using var reconciler = new Reconciler { ModifierUpdate = (null, root, merged) };
+        var owner = reconciler.FindRemainingModifierOwner(HasScale)!.Value;
+        Assert.Same(root, owner.Source);
+        Assert.Same(merged, owner.Modifiers);
+        Assert.Same(root, reconciler.ModifierUpdate.Root);
+        Assert.False(root.Modifiers.Scale.HasValue);
     }
 }

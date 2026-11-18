@@ -36,6 +36,12 @@ Conventions for contributors:
 
 ### Fixed
 
+- Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
+  declaration restores its identity value and releases modifier-owned composition
+  animations. Removing `.Opacity()` also releases its compositor override so styles
+  take effect again; surviving declarations on shared-control wrappers are preserved
+  (issue #1001).
+
 - Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
   restore null normal brushes and the latest normal value, including border modifier
   changes during an active interaction (issue #1501).

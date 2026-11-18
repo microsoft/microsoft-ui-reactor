@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -176,6 +177,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 await Harness.Render();
                 H.Check(name + "_Reset", visual.Scale == Vector3.One && visual.RotationAngle == 0
                     && visual.CenterPoint == Vector3.Zero
+                    && target.Translation == Vector3.Zero
                     && visual.TryGetAnimationController("Opacity") is null);
             }
             catch (Exception ex)
@@ -301,6 +303,107 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
     public override async Task RunAsync()
     {
         ControlRegistry.RegisterDecorator<Forwarder>(static () => new ForwarderHandler());
+        ControlRegistry.RegisterDecorator<OpaqueForwarder>(static () => new OpaqueForwarderHandler());
+        using (var reconciler = new Reconciler())
+        {
+            var leaf = TextBlock("Plain memo output") with { CallSite = null };
+            var memo = Memo(1, () => leaf);
+            var direct = (TextBlock)reconciler.Mount(leaf, static () => { })!;
+            var wrapped = (TextBlock)reconciler.Mount(memo, static () => { })!;
+            H.Check("TransformMountedOwner_PlainLeafUntagged", !Reconciler.TryGetReactorState(direct, out _));
+            H.Check("TransformMountedOwner_PlainMemoUntagged", !Reconciler.TryGetReactorState(wrapped, out var state),
+                $"targets={state?.ModifierTargets?.Count}");
+        }
+        foreach (string wrapper in new[] { "Memo", "Forwarder", "Nested" })
+        foreach (string property in new[] { "Scale", "Rotation", "Translation", "CenterPoint", "Opacity" })
+        {
+            using var reconciler = new Reconciler();
+            Element Configure(Element value, float amount) => property switch
+            {
+                "Scale" => value.Scale(amount),
+                "Rotation" => value.Rotation(amount * 15),
+                "Translation" => value.Translation(amount * 8, amount * 4, 0),
+                "CenterPoint" => value.CenterPoint(new Vector3(amount * 10, amount * 5, 0)),
+                _ => value.Opacity(amount / 4),
+            };
+            Element plain = Border(TextBlock("Mounted modifier owner"));
+            Element inner = Configure(plain, 2);
+            int factoryCalls = 0;
+            Element Wrap(bool retained = true) => wrapper switch
+            {
+                "Memo" => Memo(1, () => { factoryCalls++; return inner; }),
+                "Forwarder" => new OpaqueForwarder(retained ? inner : plain),
+                _ => new OpaqueForwarder(retained ? new OpaqueForwarder(inner).Scale(1.5f) : new OpaqueForwarder(plain)),
+            };
+            var before = Configure(Wrap(), 3);
+            var unchanged = before;
+            var after = Wrap();
+            var tree = VStack(before).Width(120);
+            var parent = (Panel)reconciler.Mount(tree, () => { })!;
+            var target = (Border)parent.Children[0];
+            H.SetContent(parent);
+            await Harness.Render();
+            int skipped = reconciler.DebugElementsSkipped;
+            reconciler.Update(tree, VStack(unchanged).Width(121), parent, () => { });
+            H.Check($"TransformMountedOwner_{wrapper}_{property}_ParentSkippedChild", reconciler.DebugElementsSkipped > skipped);
+            var replacement = reconciler.Update(unchanged, after, target, () => { });
+            await Harness.Render();
+            float expectedScale = wrapper == "Nested" ? 1.5f : 2;
+            bool correct = property switch
+            {
+                "Scale" => target.Scale == new Vector3(expectedScale, expectedScale, 1),
+                "Rotation" => target.Rotation == 30,
+                "Translation" => target.Translation == new Vector3(16, 8, 0),
+                "CenterPoint" => target.CenterPoint == new Vector3(20, 10, 0),
+                _ => Math.Abs(target.Opacity - 0.5) < 0.001,
+            };
+            string name = $"TransformMountedOwner_{wrapper}_{property}";
+            H.Check(name + "_Retained", correct,
+                $"scale={target.Scale},rotation={target.Rotation},translation={target.Translation},center={target.CenterPoint},opacity={target.Opacity}");
+            H.Check(name + "_SameControl", replacement is null || ReferenceEquals(replacement, target));
+            H.Check(name + "_FactoryCalls", factoryCalls == (wrapper == "Memo" ? 1 : 0), $"calls={factoryCalls}");
+            if (wrapper != "Memo")
+            {
+                reconciler.Update(after, Wrap(false), target, () => { });
+                H.Check(name + "_LastOwnerRemoved", target.Scale == Vector3.One && target.Rotation == 0
+                    && target.Translation == Vector3.Zero && target.CenterPoint == Vector3.Zero && target.Opacity == 1);
+            }
+            H.SetContent(null);
+        }
+        foreach (bool nested in new[] { false, true })
+        {
+            using var reconciler = new Reconciler();
+            Element Wrap(Element value) => new OpaqueForwarder(nested ? new OpaqueForwarder(value) : value);
+            var before = Wrap(Border(TextBlock("Old target")).Opacity(0.5)).Opacity(0.75);
+            var after = Wrap(TextBlock("New target").Opacity(0.25));
+            var target = reconciler.Mount(before, () => { })!;
+            var replacement = reconciler.Update(before, after, target, () => { });
+            H.Check($"TransformMountedOwner_ReplacedTarget_{nested}", replacement is TextBlock { Opacity: 0.25 },
+                $"opacity={(replacement as UIElement)?.Opacity}");
+        }
+        using (var reconciler = new Reconciler())
+        {
+            // Expander owns its own native root and only hosts this ordinary child.
+            var child = TextBlock("Independent child") with { CallSite = null };
+            var expander = (Expander)reconciler.Mount(Expander("Header", child), () => { })!;
+            var content = (TextBlock)expander.Content;
+            H.Check("TransformMountedOwner_IndependentChildUntagged", !Reconciler.TryGetReactorState(content, out _));
+        }
+        using (var reconciler = new Reconciler())
+        {
+            var leaf = Border(TextBlock("Late declaration"));
+            Element Wrap(Element value) => new OpaqueForwarder(new OpaqueForwarder(value));
+            var before = Wrap(leaf);
+            var added = Wrap(leaf.Scale(2)).Scale(3);
+            var target = (Border)reconciler.Mount(before, static () => { })!;
+            H.Check("TransformMountedOwner_PlainForwarderUntracked",
+                Reconciler.TryGetReactorState(target, out var state) && state.ModifierTargets is null);
+            reconciler.Update(before, added, target, static () => { });
+            H.Check("TransformMountedOwner_LateOuterScaleApplied", target.Scale == new Vector3(3, 3, 1));
+            reconciler.Update(added, Wrap(leaf.Scale(2)), target, static () => { });
+            H.Check("TransformMountedOwner_LateInnerScaleRetained", target.Scale == new Vector3(2, 2, 1));
+        }
+        await CheckMemoResourceRefresh();
         foreach (string property in new[] { "Scale", "Rotation", "Translation", "CenterPoint" })
         foreach (bool removeOuter in new[] { true, false })
         foreach (bool custom in new[] { false, true })
@@ -426,7 +529,54 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
         }
     }
 
+    private async Task CheckMemoResourceRefresh()
+    {
+        var parent = new Border();
+        H.SetContent(parent);
+        using var host = new ReactorHost(H.Window) { ContentTarget = parent };
+        using var isolation = ThemeResourceListeners.IsolateForTest(host);
+        int calls = 0;
+        Element Output()
+        {
+            calls++;
+            return new OpaqueForwarder(new OpaqueForwarder(Border(TextBlock("Memo refresh")).Scale(2)));
+        }
+
+        KeyedMemoElement memo = Memo(1, Output);
+        var scaledMemo = memo.Scale(3);
+        bool outer = true;
+        host.Mount(_ => outer ? scaledMemo : memo);
+        await host.WaitForIdleAsync();
+        var target = (Border)parent.Child;
+        int initialCalls = calls;
+        for (int i = 0; i < 4; i++)
+        {
+            Theme.NotifyResourcesChanged();
+            await host.WaitForIdleAsync();
+        }
+        H.Check("TransformMountedOwner_MemoRefreshReusedTarget", calls == initialCalls + 4
+            && ReferenceEquals(parent.Child, target), $"calls={calls}, initial={initialCalls}");
+        var count = Reconciler.GetOrCreateReactorState(target).ModifierTargets?.Count;
+        H.Check("TransformMountedOwner_MemoRefreshBounded", count == 3, $"entries={count}");
+        outer = false;
+        host.RequestRender();
+        await host.WaitForIdleAsync();
+        H.Check("TransformMountedOwner_MemoRefreshRetained", ReferenceEquals(parent.Child, target)
+            && target.Scale == new Vector3(2, 2, 1) && calls == initialCalls + 4,
+            $"scale={target.Scale}, calls={calls}");
+        H.SetContent(null);
+    }
+
     private sealed record Forwarder(Element Target) : Element;
+    private sealed record OpaqueForwarder(Element Target) : Element;
+    private sealed class OpaqueForwarderHandler : IDecoratorElementHandler<OpaqueForwarder>
+    {
+        public UIElement Mount(MountContext context, OpaqueForwarder element) => context.MountChild(element.Target)!;
+        public UIElement Update(UpdateContext context, OpaqueForwarder oldEl, OpaqueForwarder newEl, UIElement control)
+            => context.ReconcileChild(oldEl.Target, newEl.Target, control)!;
+        public V1UnmountDisposition Unmount(UnmountContext context, OpaqueForwarder? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+    }
     private sealed class ForwarderHandler : IDecoratorElementHandler<Forwarder>
     {
         public UIElement Mount(MountContext context, Forwarder element) => context.MountChild(element.Target)!;

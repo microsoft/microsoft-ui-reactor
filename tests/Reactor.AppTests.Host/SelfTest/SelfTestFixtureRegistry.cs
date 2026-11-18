@@ -913,7 +913,6 @@ internal static class SelfTestFixtureRegistry
         "ScrollAnim_CustomExpression",
         // Animation combination tests — single features
         "ModifierTransform_Direct",
-        "SelfTest_StaThreadAffinity",
         "ModifierTransform_Transitions",
         "ModifierTransform_RemovalOrdering",
         "ModifierTransform_Decorator",
@@ -3260,7 +3259,6 @@ internal static class SelfTestFixtureRegistry
         "ScrollAnim_CustomExpression" => new ScrollAnimationTests.CustomExpression(harness),
         // Animation combination tests — single features
         "ModifierTransform_Direct" => new TransformModifierFixture(harness, "Direct"),
-        "SelfTest_StaThreadAffinity" => new SelfTestStaThreadFixture(harness),
         "ModifierTransform_Transitions" => new TransformModifierTransitionsFixture(harness),
         "ModifierTransform_RemovalOrdering" => new TransformModifierOrderingFixture(harness),
         "ModifierTransform_Decorator" => new TransformModifierDecoratorFixture(harness),

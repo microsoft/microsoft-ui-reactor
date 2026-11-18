@@ -1588,6 +1588,8 @@ public sealed partial class Reconciler : IDisposable
         // Target controls keep their own element for event dispatch. Flyout decorators
         // share that control, but need a separate identity for callbacks and teardown.
         internal Element? DecoratorElement;
+        // Shared-control child roots with transform or opacity declarations to restore.
+        internal List<(Element Parent, Element Target)>? ModifierTargets;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
         // Properties written on the handed-out Visual by a modifier. Kept on native
@@ -1812,6 +1814,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(control);
                 state.DecoratorElement = null;
+                state.ModifierTargets = null;
             }
             return;
         }
@@ -2177,6 +2180,7 @@ public sealed partial class Reconciler : IDisposable
             if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
             state.Element = null;
             state.DecoratorElement = null;
+            state.ModifierTargets = null;
         }
         ClearPublishedSource(fe);
     }
@@ -2262,6 +2266,7 @@ public sealed partial class Reconciler : IDisposable
             Diagnostics.ComponentRenderControls.Registry.Forget(state.ComponentDiagnosticId, fe);
         state.Element = null;
         state.DecoratorElement = null;
+        state.ModifierTargets = null;
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
         state.Modifiers?.ClearCurrentHandlers();
@@ -2659,6 +2664,7 @@ public sealed partial class Reconciler : IDisposable
                 ClearRefreshSnapshots(rs);
                 rs.Element = null;
                 rs.DecoratorElement = null;
+                rs.ModifierTargets = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
@@ -3016,7 +3022,10 @@ public sealed partial class Reconciler : IDisposable
     private Element? _reconcilingElement;
     // The outermost current layer updating this same native control. Custom
     // decorators share modifier priority just like the built-in flyout decorators.
-    private (UIElement? Control, Element? Root) _modifierUpdate;
+    internal (UIElement? Control, Element? Root, ElementModifiers? Modifiers) ModifierUpdate;
+    private bool _hasModifierTargets;
+    private Element? _modifierMountParent;
+    private List<(UIElement Control, Element Target)>? _modifierMounts;
     // Until the target update returns, its mounted decorator still describes the previous render.
     internal (FrameworkElement? Target, Element? Decorator) UpdatingFlyout;
 
@@ -6549,14 +6558,109 @@ public sealed partial class Reconciler : IDisposable
         return _reconcilingElement is { } element && IsFlyoutDecorator(element) ? element : null;
     }
 
-    private (Element Source, ElementModifiers Modifiers)? FindRemainingModifierOwner(Func<ElementModifiers, bool> declares)
+    internal ModifierMountScope CaptureModifierMounts(Element parent) => new(this, parent);
+
+    // A V1 decorator can mount several children but only the control it returns
+    // can share its modifiers. Keep candidates on the reconciler until that return.
+    internal readonly ref struct ModifierMountScope
+    {
+        private readonly Reconciler _owner;
+        private readonly Element? _previousParent;
+        private readonly int _start;
+
+        internal ModifierMountScope(Reconciler owner, Element parent)
+        {
+            _owner = owner;
+            _previousParent = owner._modifierMountParent;
+            _start = owner._modifierMounts?.Count ?? 0;
+            owner._modifierMountParent = parent;
+        }
+
+        internal void RecordReturnedChild(UIElement control)
+        {
+            if (_owner._modifierMounts is not { } mounts) return;
+            for (int i = mounts.Count - 1; i >= _start; i--)
+            {
+                if (!ReferenceEquals(mounts[i].Control, control)) continue;
+                _owner.RecordModifierTarget(control, _owner._modifierMountParent!, mounts[i].Target);
+                break;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_owner._modifierMounts is { } mounts && mounts.Count > _start)
+                mounts.RemoveRange(_start, mounts.Count - _start);
+            _owner._modifierMountParent = _previousParent;
+        }
+    }
+
+    private Element? RecordModifierTarget(UIElement control, Element parent, Element target)
+    {
+        var state = _hasModifierTargets ? control.GetValue(ReactorAttached.StateProperty) as ReactorState : null;
+        var targets = state?.ModifierTargets;
+        if (targets is not null)
+        {
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (!ReferenceEquals(targets[i].Parent, parent)) continue;
+                var previous = targets[i].Target;
+                targets[i] = (parent, target);
+                return previous;
+            }
+        }
+        // A plain Memo output needs no persistent state. An inner tracked layer
+        // still needs a path through wrappers that have no modifiers themselves.
+        if (!HasRestorableModifier(target, targets)) return null;
+        targets ??= (state ?? GetOrCreateReactorState(control)).ModifierTargets ??= [];
+        targets.Add((parent, target));
+        _hasModifierTargets = true;
+        return null;
+    }
+
+    private static bool HasRestorableModifier(Element target, List<(Element Parent, Element Target)>? targets)
+    {
+        static bool Declares(ElementModifiers? modifiers) => modifiers?.Visual is { } v
+            && (v.Opacity.HasValue || v.Scale.HasValue || v.Rotation.HasValue
+                || v.Translation.HasValue || v.CenterPoint.HasValue);
+
+        while (target is ModifiedElement wrapped)
+        {
+            if (Declares(wrapped.Modifiers) || Declares(wrapped.WrappedModifiers)) return true;
+            target = wrapped.Inner;
+        }
+        if (Declares(target.Modifiers)) return true;
+        if (targets is not null)
+            foreach (var entry in targets)
+                if (ReferenceEquals(entry.Parent, target)) return true;
+        return false;
+    }
+
+    private void RefreshModifierTarget(UIElement control, Element oldElement, Element newElement)
+    {
+        if (!_hasModifierTargets || !(newElement is KeyedMemoElement
+            || (_v1Handlers.TryGet(newElement.GetType(), out var entry) && entry is IV1SourceTargetResolver))) return;
+        if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState { ModifierTargets: { } targets }) return;
+        // A Memo resource refresh passes a fresh element as both old and new.
+        // Rebind using the previously recorded target, including through legacy wrappers.
+        while (oldElement is ModifiedElement wrapped) oldElement = wrapped.Inner;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            if (!ReferenceEquals(targets[i].Parent, oldElement)) continue;
+            targets[i] = (newElement, targets[i].Target);
+            return;
+        }
+    }
+
+    internal (Element Source, ElementModifiers Modifiers)? FindRemainingModifierOwner(Func<ElementModifiers, bool> declares)
     {
         // During target recursion the mounted decorator still describes the old tree.
         // Resolve one property: outer decorators win; inner legacy declarations override outer ones.
-        var root = _modifierUpdate.Root;
+        var root = ModifierUpdate.Root;
         for (var depth = 0; root is not null && depth <= ReactorSourceMap.MaxDecoratorDepth; depth++)
         {
-            var modifiers = root is ModifiedElement ? root.Modifiers : null;
+            var modifiers = ReferenceEquals(root, ModifierUpdate.Root) ? ModifierUpdate.Modifiers : null;
+            if (root is ModifiedElement && modifiers is null) modifiers = root.Modifiers;
             while (root is ModifiedElement wrapped && depth++ <= ReactorSourceMap.MaxDecoratorDepth)
             {
                 if (declares(wrapped.WrappedModifiers)) modifiers = wrapped.WrappedModifiers;
@@ -6564,7 +6668,12 @@ public sealed partial class Reconciler : IDisposable
             }
             if (root.Modifiers is { } inner && declares(inner)) return (root, inner);
             if (modifiers is not null && declares(modifiers)) return (root, modifiers);
-            root = ReactorSourceMap.DecoratorTarget(root);
+            var next = ReactorSourceMap.DecoratorTarget(root);
+            if (next is null && ModifierUpdate.Control?.GetValue(ReactorAttached.StateProperty)
+                is ReactorState { ModifierTargets: { } targets })
+                foreach (var target in targets)
+                    if (ReferenceEquals(target.Parent, root)) { next = target.Target; break; }
+            root = next;
         }
         return null;
     }
@@ -6572,7 +6681,7 @@ public sealed partial class Reconciler : IDisposable
     private Element? GetRetainedModifierAnimationSource(FrameworkElement control, Element owner)
     {
         if (FindMountedElementValue(control, static e => e.AnimationConfig, owner) is not null) return owner;
-        return GetModifierAnimationSource(control) ?? _modifierUpdate.Root;
+        return GetModifierAnimationSource(control) ?? ModifierUpdate.Root;
     }
 
     private void ClearRemovedTransformModifiers(FrameworkElement control, ElementModifiers? old, ElementModifiers? current)
