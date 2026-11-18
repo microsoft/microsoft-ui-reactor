@@ -38,7 +38,9 @@ Conventions for contributors:
 
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.
-  Equivalent configurations remain eligible for skipping (issue #1536; spec 014).
+  Value-equivalent plain-data configurations remain eligible for skipping; native
+  objects and arrays retain reference equality. This also restores `.Keyframes()`
+  playback when only the trigger changes (issue #1536; spec 014).
 
 - Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
   restore null normal brushes and the latest normal value, including border modifier
