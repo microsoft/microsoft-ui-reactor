@@ -2037,6 +2037,10 @@ internal static class SelfTestFixtureRegistry
         // through the suppress-counter echo channel via the PUBLIC
         // ReactorBinding.ShouldSuppressEcho primitive.
         "Spec062DeferredControlled_Echo",
+        "ForwardedEvent_Single",
+        "ForwardedEvent_Deferred",
+        "ForwardedEvent_Ordinary",
+        "ForwardedEvent_Combined",
         "MultipleControlled_Shared",
         "MultipleControlled_TwoValuesOnly",
         "MultipleControlled_Mixed",
@@ -4366,6 +4370,10 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 062 §14 — external no-IVT generated deferred-controlled echo proof.
         "Spec062DeferredControlled_Echo" => new Spec062DeferredControlledFixtures.Echo(harness),
+        "ForwardedEvent_Single" => new ForwardedEventWrapperFixtures.Single(harness),
+        "ForwardedEvent_Deferred" => new ForwardedEventWrapperFixtures.Deferred(harness),
+        "ForwardedEvent_Ordinary" => new ForwardedEventWrapperFixtures.Ordinary(harness),
+        "ForwardedEvent_Combined" => new ForwardedEventWrapperFixtures.Combined(harness),
         "MultipleControlled_Shared" => new MultipleControlledWrapperFixtures.Shared(harness),
         "MultipleControlled_TwoValuesOnly" => new MultipleControlledWrapperFixtures.TwoValuesOnly(harness),
         "MultipleControlled_Mixed" => new MultipleControlledWrapperFixtures.Mixed(harness),
