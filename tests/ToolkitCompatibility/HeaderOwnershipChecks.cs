@@ -121,6 +121,141 @@ internal static class HeaderOwnershipChecks
         }
         Program.Check(foreignCardCleanup == 1 && foreignExpanderCleanup == 1,
             "External-owner cleanup positive control failed.");
+        await DisplacedHeadersAsync(root);
+    }
+
+    private static async Task DisplacedHeadersAsync(CompatibilityRoot root)
+    {
+        var state = new State();
+        Wct.SettingsCard? card = null;
+        Wct.SettingsExpander? expander = null;
+        var cardReplacement = Replacement("foreign card");
+        var expanderReplacement = Replacement("foreign expander");
+        int currentStage = 0, unmountActions = 0, checks = 0;
+        var failures = new List<string>();
+
+        Element Build(int stage)
+        {
+            var cardElement = SettingsCardElement.SettingsCard().Width(300 + stage) with
+            {
+                Header = stage == 7 ? null : Component<Counter, CounterProps>(new(true, stage, state))
+            };
+            var expanderElement = SettingsExpanderElement.SettingsExpander().Width(300 + stage) with
+            {
+                Header = stage == 7 ? null : Component<Counter, CounterProps>(new(false, stage, state))
+            };
+            return VStack(12,
+                stage is 3 or 5 or 8 ? TextBlock("Card removed") : cardElement
+                    .OnMountAdd(control => card = (Wct.SettingsCard)control)
+                    .OnUnmountAdd(control =>
+                    {
+                        unmountActions++;
+                        // The callback belongs to the previous element, but observes the removal phase.
+                        if (currentStage == 3) ((Wct.SettingsCard)control).Header = cardReplacement;
+                        if (currentStage == 5) control.ClearValue(Wct.SettingsCard.HeaderProperty);
+                    }),
+                stage is 3 or 5 or 8 ? TextBlock("Expander removed") : expanderElement
+                    .OnMountAdd(control => expander = (Wct.SettingsExpander)control)
+                    .OnUnmountAdd(control =>
+                    {
+                        unmountActions++;
+                        if (currentStage == 3) control.ClearValue(Wct.SettingsExpander.HeaderProperty);
+                        if (currentStage == 5) ((Wct.SettingsExpander)control).Header = expanderReplacement;
+                    }));
+        }
+
+        async Task ChangeAsync(int stage)
+        {
+            currentStage = stage;
+            await root.ShowAsync(Build(stage));
+            await CompatibilityRoot.WaitAsync(() => stage is 3 or 5 or 8 ||
+                card?.Width == 300 + stage && expander?.Width == 300 + stage,
+                $"Displaced-header stage {stage}");
+        }
+
+        void Check(bool success, string label)
+        {
+            checks++;
+            Program.Results.Note($"displaced-header {(success ? "PASS" : "FAIL")} {label}");
+            if (!success) failures.Add(label);
+        }
+
+        try
+        {
+            await ChangeAsync(0);
+            await CompatibilityRoot.WaitAsync(() => card is not null && expander is not null &&
+                CompatibilityRoot.IsAttached(card) && CompatibilityRoot.IsAttached(expander),
+                "Exact displaced-header controls mounted");
+            var cardChild = (FrameworkElement)card!.Header;
+            var expanderChild = (FrameworkElement)expander!.Header;
+            state.IncrementCard!();
+            state.IncrementExpander!();
+            await CompatibilityRoot.WaitAsync(() => Text(cardChild) == "Card:1:0" &&
+                Text(expanderChild) == "Expander:1:0", "Initial displaced-header descendant state");
+            Check(state.CardCleanups == 0 && state.ExpanderCleanups == 0,
+                "Positive control: live stateful owned headers");
+
+            card.Header = cardReplacement;
+            expander.Header = expanderReplacement;
+            await ChangeAsync(1);
+            Check(ReferenceEquals(cardChild, card.Header) && Text(cardChild) == "Card:1:1",
+                "Card reconciles its displaced owned child without resetting state");
+            Check(ReferenceEquals(expanderChild, expander.Header) && Text(expanderChild) == "Expander:1:1",
+                "Expander reconciles its displaced owned child without resetting state");
+            Check(cardReplacement.Children.Count == 1 && expanderReplacement.Children.Count == 1,
+                "Foreign replacements are not unmounted during rich reconciliation");
+
+            card.ClearValue(Wct.SettingsCard.HeaderProperty);
+            expander.ClearValue(Wct.SettingsExpander.HeaderProperty);
+            await ChangeAsync(2);
+            Check(ReferenceEquals(cardChild, card.Header) && Text(cardChild) == "Card:1:2",
+                "Card retains ownership after native Header clear");
+            Check(ReferenceEquals(expanderChild, expander.Header) && Text(expanderChild) == "Expander:1:2",
+                "Expander retains ownership after native Header clear");
+
+            await ChangeAsync(3);
+            Check(unmountActions == 2, "Positive control: parent OnUnmount callbacks executed");
+            Check(state.CardCleanups == 1 && state.ExpanderCleanups == 1,
+                $"Owned children cleaned after OnUnmount replacement/clear (card={state.CardCleanups}, expander={state.ExpanderCleanups})");
+            Check(ReferenceEquals(card.Header, cardReplacement) && cardReplacement.Children.Count == 1,
+                "Card preserves OnUnmount replacement");
+            Check(expander.Header is null, "Expander preserves OnUnmount clear");
+
+            await ChangeAsync(4);
+            await ChangeAsync(5);
+            Check(unmountActions == 4 && state.CardCleanups == 2 && state.ExpanderCleanups == 2,
+                "Reverse clear/replacement also cleans each owned child exactly once");
+            Check(ReferenceEquals(expander!.Header, expanderReplacement) && expanderReplacement.Children.Count == 1,
+                "Expander preserves OnUnmount replacement");
+            Check(card!.Header is null, "Card preserves OnUnmount clear");
+
+            await ChangeAsync(6);
+            card!.Header = cardReplacement;
+            expander!.Header = expanderReplacement;
+            await ChangeAsync(7);
+            Check(state.CardCleanups == 3 && state.ExpanderCleanups == 3,
+                "Rich-to-unset cleans displaced owned children");
+            Check(ReferenceEquals(card.Header, cardReplacement) && ReferenceEquals(expander.Header, expanderReplacement),
+                "Rich-to-unset preserves externally supplied replacements");
+            await ChangeAsync(8);
+            Check(state.CardCleanups == 3 && state.ExpanderCleanups == 3,
+                "No duplicate cleanup after releasing the declared headers");
+        }
+        finally
+        {
+            currentStage = 8;
+            await root.ShowAsync(TextBlock("Displaced header cleanup"));
+        }
+        Program.Results.Note($"displaced-header assertions={checks}; failures={failures.Count}");
+        Program.Check(checks == 16 && failures.Count == 0,
+            $"Displaced-header assertions={checks}, failures={failures.Count}: {string.Join("; ", failures)}");
+    }
+
+    private static Native.StackPanel Replacement(string value)
+    {
+        var panel = new Native.StackPanel();
+        panel.Children.Add(new Native.TextBlock { Text = value });
+        return panel;
     }
 
     private static string Text(FrameworkElement element) =>

@@ -94,6 +94,11 @@ notification. `GetElementTag` is diagnostic association, not a guarantee of
 active ownership or a cleared-on-unmount contract. Native asynchronous resource
 release is separately asserted by the consent-gated camera probe.
 
+Settings header ownership checks also replace or clear native headers before an
+unrelated update and inside parent `OnUnmount` callbacks. Stateful descendants
+must survive updates, each displaced owned child must be cleaned exactly once,
+and externally supplied replacements must retain their identity and children.
+
 Direct-native or explicit-provider positive controls belong in distinct
 builds/processes, never a runtime switch that roots providers in the normal AOT
 binary. Classify new failures using an equivalent actual Toolkit baseline and
