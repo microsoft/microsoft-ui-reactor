@@ -47,22 +47,14 @@ updates:
       # a version behind, and #1113 repeated it. Group them so a Roslyn bump
       # always moves the whole set in a single PR.
       #
-      # Microsoft.CodeAnalysis.CSharp(.Workspaces) are the exception: they are the
-      # Roslyn floor the shipped analyzers impose on consumers, pinned by hand in
-      # Directory.Packages.props, and only take patches (see the ignore rules below).
-      # Dependabot does not honor those ignore rules for members of a group: #1560
-      # bumped CSharp 5.0.0 -> 5.12.0 alongside Microsoft.CodeAnalysis.Analyzers and
-      # left Workspaces on 5.0.0, which failed restore with NU1608. So they get their
-      # own patch-only group, declared first because a dependency joins the first
-      # group it matches. A minor or major update then matches no group and falls
-      # back to the ignore rules. Microsoft.CodeAnalysis.Common 5.0.0 only needs
-      # Microsoft.CodeAnalysis.Analyzers >= 3.11.0, so Analyzers can move on its own.
-      roslyn-floor:
-        patterns:
-          - "Microsoft.CodeAnalysis.CSharp"
-          - "Microsoft.CodeAnalysis.CSharp.Workspaces"
-        update-types:
-          - "patch"
+      # CSharp(.Workspaces) are also the Roslyn floor the shipped analyzers impose on
+      # consumers, pinned by hand in Directory.Packages.props, so Dependabot only
+      # proposes their patches (see the ignore rules below) and this group is
+      # patch-only. Microsoft.CodeAnalysis.Analyzers moves by hand with them and is
+      # ignored entirely: Dependabot's NuGet updater runs a "peer dependencies" step
+      # when it bumps Analyzers, and that step raised CSharp 5.0.0 -> 5.12.0 without
+      # applying CSharp's ignore rule (#1560, #1572), stranding Workspaces on 5.0.0
+      # (NU1608). A separate group for the floor did not prevent it.
       roslyn:
         patterns:
           - "Microsoft.CodeAnalysis*"
@@ -70,8 +62,8 @@ updates:
         # independent 1.1.x line, so it must not be dragged into a 5.x bump.
         exclude-patterns:
           - "Microsoft.CodeAnalysis*Testing"
-          - "Microsoft.CodeAnalysis.CSharp"
-          - "Microsoft.CodeAnalysis.CSharp.Workspaces"
+        update-types:
+          - "patch"
 
       # The roslyn-sdk test harness is its own version-locked set, one line down:
       # Microsoft.CodeAnalysis.CSharp.CodeFix.Testing 1.1.4 exact-pins
@@ -123,6 +115,9 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Moves by hand with the Roslyn floor above; any Dependabot bump of it drags
+      # Microsoft.CodeAnalysis.CSharp along (see the `roslyn` group comment).
+      - dependency-name: "Microsoft.CodeAnalysis.Analyzers"
       # A floor Microsoft.UI.Reactor ships to its consumers; it moves by hand with the
       # Windows App SDK (src/Reactor/Reactor.csproj). Also held back via IGNORE_PACKAGES
       # in .github/workflows/windows-nuget-updates.yml.
