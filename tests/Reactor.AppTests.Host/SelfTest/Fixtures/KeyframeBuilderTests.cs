@@ -39,48 +39,48 @@ internal static class KeyframeBuilderTests
     {
         public override async Task RunAsync()
         {
-            var host = H.CreateHost();
-            var counter = 0;
-
-            host.Mount(ctx =>
+            using var reconciler = new Reconciler();
+            ButtonElement Render(int trigger) => Button("Pulse")
+                .Keyframes("pulse", trigger, kf => kf
+                    .Duration(1000).Loop()
+                    .At(0.0f, opacity: 1f)
+                    .At(0.5f, opacity: 0.5f)
+                    .At(1.0f, opacity: 1f));
+            var current = Render(0);
+            var target = (Button)reconciler.Mount(current, static () => { })!;
+            H.SetContent(target);
+            try
             {
-                return VStack(
-                    Border(TextBlock("Pulse"))
-                        .Keyframes("pulse", counter, kf => kf
-                            .Duration(300)
-                            .At(0.0f, opacity: 1f)
-                            .At(0.5f, opacity: 0.5f)
-                            .At(1.0f, opacity: 1f))
-                        .AutomationId("keyframe-target")
-                );
-            });
+                await Harness.Render();
+                var visual = ElementCompositionPreview.GetElementVisual(target);
+                var initial = visual.TryGetAnimationController("Opacity");
+                H.Check("Keyframe_InitialAnimationStarted", initial is not null);
+                if (initial is null) return;
 
-            await Harness.Render();
+                // Mark the controller so a restart is observable without timing animation progress.
+                initial.PlaybackRate = 0.5f;
+                H.Check("Keyframe_InitialControllerMarked", initial.PlaybackRate == 0.5f);
 
-            var target = H.FindControl<Border>(b =>
-                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(b) == "keyframe-target");
+                var sameTrigger = Render(0);
+                H.Check("Keyframe_SameTriggerKeepsControl",
+                    reconciler.Update(current, sameTrigger, target, static () => { }) is null);
+                current = sameTrigger;
+                await Harness.Render();
+                H.Check("Keyframe_SameTriggerDoesNotRestart",
+                    visual.TryGetAnimationController("Opacity") is { PlaybackRate: 0.5f });
 
-            H.Check("Keyframe_TargetMounted", target is not null);
-
-            // Change trigger
-            counter = 1;
-            host.Mount(ctx =>
+                var changedTrigger = Render(1);
+                H.Check("Keyframe_ChangedTriggerKeepsControl",
+                    reconciler.Update(current, changedTrigger, target, static () => { }) is null);
+                await Harness.Render();
+                H.Check("Keyframe_ChangedTriggerRestartsAnimation",
+                    visual.TryGetAnimationController("Opacity") is { PlaybackRate: 1f });
+            }
+            finally
             {
-                return VStack(
-                    Border(TextBlock("Pulse"))
-                        .Keyframes("pulse", counter, kf => kf
-                            .Duration(300)
-                            .At(0.0f, opacity: 1f)
-                            .At(0.5f, opacity: 0.5f)
-                            .At(1.0f, opacity: 1f))
-                        .AutomationId("keyframe-target")
-                );
-            });
-
-            await Harness.Render();
-
-            // If we get here without crash, trigger detection + animation start worked
-            H.Check("Keyframe_TriggerChanged_NoError", true);
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
     }
 
