@@ -350,6 +350,10 @@ the element without a WinUI dispatcher does not register a dependency property.
 Each distinct native change event is subscribed once. Its handler snapshots its affected
 properties before callbacks, checks `ReactorBinding.ShouldSuppressEcho` once, and invokes
 only callbacks whose readback changed, resolving callbacks from the current element.
+Before each callback, per-property versions and native readback reject observations
+superseded by nested events or writes. Unrelated nested changes do not discard pending
+notifications. The binding must still be attached, and callbacks are resolved again so
+reentrant reconciliation cannot invoke a replaced callback.
 Ordinary events retain their existing `HandCodedEvent` behavior and payload. Controlled
 subscriptions are removed and their attached state cleared at unmount.
 

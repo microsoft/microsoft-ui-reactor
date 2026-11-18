@@ -2043,6 +2043,7 @@ internal static class SelfTestFixtureRegistry
         "MultipleControlled_Distinct",
         "MultipleControlled_Deferred",
         "MultipleControlled_SingleWithEvent",
+        "MultipleControlled_Reentrant",
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity",
@@ -4372,6 +4373,7 @@ internal static class SelfTestFixtureRegistry
         "MultipleControlled_Distinct" => new MultipleControlledWrapperFixtures.Distinct(harness),
         "MultipleControlled_Deferred" => new MultipleControlledWrapperFixtures.Deferred(harness),
         "MultipleControlled_SingleWithEvent" => new MultipleControlledWrapperFixtures.SingleWithEvent(harness),
+        "MultipleControlled_Reentrant" => new MultipleControlledWrapperFixtures.Reentrant(harness),
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity" => new ToggleSwitchWrapperParityFixture.Execution(harness),
