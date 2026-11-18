@@ -40,7 +40,7 @@ internal static class Scenarios
         "SettingsCard" or "SettingsExpander" => ["settings-rich-string-slots-and-naming", "settings-borrowed-header-ownership"],
         "ContentSizer" => ["sample-target-lifecycle"],
         "PropertySizer" => ["sample-native-binding-target"],
-        "RichSuggestBox" => ["sample-native-suggestion-filtering", "sample-native-suggestion-choice"],
+        "RichSuggestBox" => ["sample-native-suggestion-filtering", "sample-native-suggestion-choice", "sample-deferred-choice-burst"],
         "SwitchPresenter" => ["sample-native-case-selection"],
         "TokenizingTextBox" => ["sample-filtering-tokens"],
         "RangeSelector" => ["sample-silent-drift-reassertion"],

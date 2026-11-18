@@ -99,6 +99,11 @@ unrelated update and inside parent `OnUnmount` callbacks. Stateful descendants
 must survive updates, each displaced owned child must be cleaned exactly once,
 and externally supplied replacements must retain their identity and children.
 
+`sample-deferred-choice-burst` mounts the actual RichSuggestBox page under a separate
+public `Reconciler` whose render requests are recorded, not applied. It commits two
+native suggestions through public UIA Invoke, then reconciles once and requires a
+selection count of two. This checks callback/state batching, not keyboard input.
+
 Direct-native or explicit-provider positive controls belong in distinct
 builds/processes, never a runtime switch that roots providers in the normal AOT
 binary. Classify new failures using an equivalent actual Toolkit baseline and

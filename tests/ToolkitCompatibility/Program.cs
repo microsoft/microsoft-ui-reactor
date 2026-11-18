@@ -313,6 +313,7 @@ internal sealed class CompatibilityRoot : Component
                 {
                     await results.RunAsync(name, "sample-native-suggestion-filtering", () => RichSuggestSampleChecks.RunAsync(this));
                     await results.RunAsync(name, "sample-native-suggestion-choice", () => RichSuggestSampleChecks.ChooseAsync(this));
+                    await results.RunAsync(name, "sample-deferred-choice-burst", () => RichSuggestSampleChecks.DeferredChoicesAsync(this));
                 }
                 if (name == "SwitchPresenter")
                     await results.RunAsync(name, "sample-native-case-selection", () => SwitchPresenterSampleChecks.RunAsync(this));
