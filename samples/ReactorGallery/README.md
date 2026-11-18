@@ -108,8 +108,9 @@ a first-chance exception in every debugger session.
 ## Editing sample snippets
 
 Keep each `SampleCard`'s displayed `sourceCode` consistent with its live sample.
-For a Private Use Area (PUA) icon in `TextBlock` or `Button` string content,
-include the icon font in both the live element chain and the displayed snippet:
+For a Private Use Area (PUA) icon in the string content of a text or button
+factory, include the icon font in both the live element chain and the displayed
+snippet.
 
 ```csharp
 TextBlock("\uE930")
