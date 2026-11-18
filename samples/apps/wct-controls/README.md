@@ -45,6 +45,9 @@ behavior, rather than blanket-naming every root and child. An Element `Header`
 takes precedence over `HeaderText`. Rich-header callers must provide appropriate
 `.AutomationName(...)` values and label interactive content; custom names are
 never replaced by the helpers.
+Omitted `isExpanded` and `isClickEnabled` remain `Optional<bool>.Unset`, not
+explicit `false`: the Toolkit owns omitted expansion state, and styles can
+provide an omitted click-enabled value.
 
 The shared native `Header` property has one lifecycle owner in `Customize`, using
 the public mount/reconcile/unmount methods. It is intentionally not also a
