@@ -355,7 +355,7 @@ internal sealed class RangeSelectorPage : Component
 
         return Gallery.Page(
             "RangeSelector",
-            "Both endpoints are controlled. Move either thumb with the pointer or arrow keys. The parent can accept or reject requests; parent writes must not increment the endpoint callback counts.",
+            "Drag either thumb to test controlled pointer changes. The parent can accept or reject requests; parent writes must not increment callback counts. This Toolkit version does not report keyboard edits through ValueChanged.",
             VStack(12,
                 ToggleSwitch(isOn: range.Accept,
                     onIsOnChanged: value => update(s => s with { Accept = value }))
