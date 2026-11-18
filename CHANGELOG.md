@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Layout fluent modifiers copy the existing layout bucket directly instead of
+  constructing a temporary delta to merge. Chained sizing, spacing, alignment,
+  visibility, and theme updates preserve immutable snapshots and last-write
+  precedence with fewer allocations (spec 034 §A).
+
 - `UseState` setters and both `UseReducer` callbacks defer marshaling closures
   until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
   invocations avoid those allocations, including unchanged values; callback identity,
