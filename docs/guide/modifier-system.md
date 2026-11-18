@@ -2,9 +2,10 @@
 A modifier in Microsoft.UI.Reactor (Reactor) is not an operation — it is a value-bearing
 function `T -> T` that returns a new [`Element`](components.md) record
 with its `Modifiers` slot replaced. `.Bold().Margin(8).Background(Theme.Accent)`
-allocates one `TextBlockElement` and folds three small `ElementModifiers`
-records into it via `ElementModifiers.Merge`, then the reconciler reads
-the merged record at commit time and writes WinUI properties in a single
+copies the element on each call, updating its modifier or theme-binding
+records without adding wrappers. Layout modifiers copy the existing layout
+bucket directly, avoiding a temporary delta and merge. The reconciler reads
+the final record at commit time and writes WinUI properties in a single
 sweep. The trade-off is that you do not get the SwiftUI / Compose
 "each modifier wraps the previous one" semantics — most Reactor
 modifiers are commutative because they live in a flat record, not on a
@@ -26,32 +27,30 @@ half of the call you care about — the API or the fold.
 ## Modifiers are flat records, not nested wrappers
 
 A modifier extension method does exactly one thing: it produces a new
-`Element` whose `Modifiers` slot is the merge of the old one with a
-single-field `ElementModifiers` carrying the new value. The two
-helpers that do all the work are `Modify` and `ModifyTheme`:
+`Element` whose modifier values combine the old ones with the new value.
+General modifiers use `Modify` to merge a delta; layout modifiers copy only
+the changed fields into a new layout bucket and use `WithLayout` to replace
+that bucket. Both preserve untouched fields and previous snapshots.
+`ModifyTheme` handles theme bindings separately:
 
 ```csharp
 private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
     el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
 
-// #165/#157 — bucket-level merge entry points for pure-layout / pure-visual
-// fluent modifiers. Routing through these avoids allocating a throwaway parent
-// ElementModifiers (and the bucket sub-record its init shim builds) on every
-// chained call: `.Margin().Width().Foreground()` merges the delta straight into
-// the Layout / Visual slot instead of constructing a temporary ElementModifiers
-// per step. Semantics are identical to Modify(el, new ElementModifiers { <field> }):
-// ElementModifiers.Merge copies every non-bucket field as `other.X ?? X` (i.e.
-// unchanged) when only a bucket is supplied, and merges the bucket with the same
-// `other ?? this` precedence used here.
-private static T ModifyLayout<T>(T el, LayoutModifiers delta) where T : Element
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
 {
     var mods = el.Modifiers;
-    if (mods is null)
-        return el with { Modifiers = new ElementModifiers { Layout = delta } };
-    var merged = mods.Layout is not null ? mods.Layout.Merge(delta) : delta;
-    return el with { Modifiers = mods with { Layout = merged } };
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
 }
 
+// Merge visual deltas directly into the bucket, without a temporary parent.
 private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
 {
     var mods = el.Modifiers;
@@ -347,24 +346,20 @@ TextBlock("hi").Padding(10).Background("#FF0000");
 private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
     el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
 
-// #165/#157 — bucket-level merge entry points for pure-layout / pure-visual
-// fluent modifiers. Routing through these avoids allocating a throwaway parent
-// ElementModifiers (and the bucket sub-record its init shim builds) on every
-// chained call: `.Margin().Width().Foreground()` merges the delta straight into
-// the Layout / Visual slot instead of constructing a temporary ElementModifiers
-// per step. Semantics are identical to Modify(el, new ElementModifiers { <field> }):
-// ElementModifiers.Merge copies every non-bucket field as `other.X ?? X` (i.e.
-// unchanged) when only a bucket is supplied, and merges the bucket with the same
-// `other ?? this` precedence used here.
-private static T ModifyLayout<T>(T el, LayoutModifiers delta) where T : Element
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
 {
     var mods = el.Modifiers;
-    if (mods is null)
-        return el with { Modifiers = new ElementModifiers { Layout = delta } };
-    var merged = mods.Layout is not null ? mods.Layout.Merge(delta) : delta;
-    return el with { Modifiers = mods with { Layout = merged } };
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
 }
 
+// Merge visual deltas directly into the bucket, without a temporary parent.
 private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
 {
     var mods = el.Modifiers;
@@ -411,24 +406,20 @@ TextBlock("hi").Margin(8).Margin(left: 16);   // last wins — margin is (16,8,8
 private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
     el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
 
-// #165/#157 — bucket-level merge entry points for pure-layout / pure-visual
-// fluent modifiers. Routing through these avoids allocating a throwaway parent
-// ElementModifiers (and the bucket sub-record its init shim builds) on every
-// chained call: `.Margin().Width().Foreground()` merges the delta straight into
-// the Layout / Visual slot instead of constructing a temporary ElementModifiers
-// per step. Semantics are identical to Modify(el, new ElementModifiers { <field> }):
-// ElementModifiers.Merge copies every non-bucket field as `other.X ?? X` (i.e.
-// unchanged) when only a bucket is supplied, and merges the bucket with the same
-// `other ?? this` precedence used here.
-private static T ModifyLayout<T>(T el, LayoutModifiers delta) where T : Element
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
 {
     var mods = el.Modifiers;
-    if (mods is null)
-        return el with { Modifiers = new ElementModifiers { Layout = delta } };
-    var merged = mods.Layout is not null ? mods.Layout.Merge(delta) : delta;
-    return el with { Modifiers = mods with { Layout = merged } };
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
 }
 
+// Merge visual deltas directly into the bucket, without a temporary parent.
 private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
 {
     var mods = el.Modifiers;

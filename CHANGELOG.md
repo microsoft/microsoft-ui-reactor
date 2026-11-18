@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Layout fluent modifiers copy the existing layout bucket directly instead of
+  constructing a temporary delta to merge. Chained sizing, spacing, alignment,
+  visibility, and theme updates preserve immutable snapshots and last-write
+  precedence with fewer allocations (spec 034 §A).
+
 - Avoid redundant element copies when assigning keys in built-in component factories,
   DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
   supplied key is already the same string reference. Different key references still
