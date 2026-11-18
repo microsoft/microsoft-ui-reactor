@@ -36,9 +36,9 @@
   <ItemGroup>
     <!-- Framework runtime dependencies -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
-    <PackageVersion Include="System.Drawing.Common" Version="10.0.14" />
+    <PackageVersion Include="System.Drawing.Common" Version="11.0.0" />
     <PackageVersion Include="System.Text.Json" Version="10.0.14" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="11.0.0" />
     <PackageVersion Include="System.Reflection.DispatchProxy" Version="4.8.2" />
     <PackageVersion Include="MessageFormat" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />
@@ -47,10 +47,10 @@
          YamlStaticContext for the doc pipeline's YAML DTOs (tools/Reactor.DocPipeline).
          Analyzer-only (PrivateAssets=all). Version tracks YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.28" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.34" />
     <!-- MXC sandbox SDK (in-process mxc_ffi native runtime for win-x64/win-arm64) used by
          samples/apps/widget-creator. Stable releases only. -->
-    <PackageVersion Include="Microsoft.Mxc.Sdk" Version="1.0.1" />
+    <PackageVersion Include="Microsoft.Mxc.Sdk" Version="1.1.0" />
     <PackageVersion Include="MessagePack" Version="2.5.307" />
   </ItemGroup>
 
@@ -58,26 +58,38 @@
     <!-- Doc pipeline screenshot capture (tools/Reactor.DocPipeline): the library behind
          `winapp ui`, used in-process. Its Windows Graphics Capture build needs a Windows 10
          19041+ TFM. The DI container is how the library hands out IWindowCapture. -->
-    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.7.1" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools.WinApp.UIAutomation" Version="0.8.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Roslyn (analyzers, source generators, CLI) -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <!-- Roslyn (analyzers, source generators, CLI).
+         CSharp / CSharp.Workspaces are a consumer-facing floor, not a regular dependency:
+         the analyzers and generators packed into Microsoft.UI.Reactor load into the app's
+         compiler, which rejects (CS8032) one built against a newer Roslyn than its own.
+         5.0.0 = Visual Studio 2026 18.0 / .NET 10.0.100 SDK. Raise it by hand, only when
+         dropping those hosts; Dependabot ignores its minor/major updates. Bump
+         Microsoft.CodeAnalysis.Analyzers by hand too: Dependabot ignores it because its
+         peer-dependency step would raise CSharp along with it (#1572).
+         Guarded by tests/Reactor.Tests/Tooling/ShippedAnalyzersRoslynFloorTests.cs. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
+    <!-- Security pin (CVE-2026-84008): the test harness above reaches
+         System.Security.Cryptography.Pkcs 9.0.6 through NuGet.Packaging. Test projects
+         that use it reference this directly to lift it to a patched version. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Test infrastructure -->
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="4.5.2" />
-    <PackageVersion Include="MSTest.TestFramework" Version="4.5.2" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="4.5.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.5.3" />
     <!-- Microsoft.Testing.Platform extensions. xunit.v3 v4 dropped the VSTest bridge, so
          the repo runs every suite under MTP (see global.json). MTP ships no TRX writer or
          hang detector in the box: these restore the VSTest "logger trx" and "blame hang"
@@ -98,8 +110,8 @@
     <PackageVersion Include="Microsoft.VisualStudio.Composition" Version="17.13.41" />
     <PackageVersion Include="Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3" Version="17.11.66" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1" />
-    <PackageVersion Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" />
-    <PackageVersion Include="Microsoft.VSSDK.BuildTools" Version="18.6.38345" />
+    <PackageVersion Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.179" />
+    <PackageVersion Include="Microsoft.VSSDK.BuildTools" Version="18.12.1606" />
   </ItemGroup>
 
   <ItemGroup>
