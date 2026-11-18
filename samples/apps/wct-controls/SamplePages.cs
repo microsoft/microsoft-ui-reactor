@@ -3,30 +3,6 @@ using Microsoft.UI.Reactor.Core;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;   // IBuffer.AsStream() for the ImageCropper sample bitmap
 using static Microsoft.UI.Reactor.Factories;
-using static WctControls.SettingsCardElement;
-using static WctControls.SettingsExpanderElement;
-using static WctControls.RadialGaugeElement;
-using static WctControls.SegmentedElement;
-using static WctControls.CameraPreviewElement;
-using static WctControls.ColorPickerElement;
-using static WctControls.ImageCropperElement;
-using static WctControls.GridSplitterElement;
-using static WctControls.TokenizingTextBoxElement;
-using static WctControls.RangeSelectorElement;
-using static WctControls.HeaderedContentControlElement;
-using static WctControls.HeaderedItemsControlElement;
-using static WctControls.HeaderedTreeViewElement;
-using static WctControls.LayoutTransformControlElement;
-using static WctControls.TabbedCommandBarElement;
-using static WctControls.ContentSizerElement;
-using static WctControls.PropertySizerElement;
-using static WctControls.MetadataControlElement;
-using static WctControls.ConstrainedBoxElement;
-using static WctControls.SwitchPresenterElement;
-using static WctControls.DockPanelElement;
-using static WctControls.StaggeredPanelElement;
-using static WctControls.WrapPanelElement;
-using static WctControls.RichSuggestBoxElement;
 
 namespace WctControls;
 
@@ -123,16 +99,19 @@ internal sealed class CardsPage : Component
             "SettingsCard",
             "A settings row: header + description, content on the right, and an optional whole-card click.",
             VStack(12,
-                SettingsCard(
+                SettingsCardElement.SettingsCard(
                     header: "Wi-Fi",
                     description: wifiOn ? "Connected to CONTOSO-5G" : "Disconnected",
                     content: ToggleSwitch(isOn: wifiOn, onIsOnChanged: setWifiOn),
-                    headerIcon: Icon(FontIcon("\uE701"))),   // secondary element slot, a generated factory param via [WrapElementSlot]
-                SettingsCard(
-                    header: "About",
-                    description: $"Tapped {clicks} time(s) — click anywhere on this card",
+                    headerIcon: Icon(FontIcon("\uE701")))
+                    .AutomationId("Toolkit.SettingsCard"),
+                SettingsCardElement.SettingsCard(
+                    header: HStack(8, Icon(FontIcon("\uE946")), TextBlock("About")),
+                    description: TextBlock($"Tapped {clicks} time(s) — click anywhere on this card")
+                        .AutomationId("SettingsCard.Clicks"),
                     isClickEnabled: true,
-                    onClick: () => setClicks(clicks + 1))));
+                    onClick: () => setClicks(clicks + 1))
+                    .AutomationName("About").AutomationId("SettingsCard.About")));
     }
 }
 
@@ -143,23 +122,29 @@ internal sealed class ExpanderPage : Component
     {
         var (notifications, setNotifications) = UseState(true);
         var (sounds, setSounds) = UseState(false);
+        var (expanded, setExpanded) = UseState(true);
 
         return Gallery.Page(
             "SettingsExpander",
-            "A settings group that expands to reveal child cards (populated through the generated items slot).",
-            SettingsExpander(
+            "Reconciled header, description, icon and content slots coexist with child cards in the items collection.",
+            SettingsExpanderElement.SettingsExpander(
                 header: "Notifications",
                 description: notifications ? "On" : "Off",
-                isExpanded: true,
+                headerIcon: Icon(FontIcon("\uE7F4")),
+                content: TextBlock(notifications ? "Enabled" : "Muted")
+                    .AutomationId("SettingsExpander.Status"),
+                isExpanded: expanded,
+                onIsExpandedChanged: setExpanded,
                 items: new object[]
                 {
-                    SettingsCard(
+                    SettingsCardElement.SettingsCard(
                         header: "Show notifications",
-                        content: ToggleSwitch(isOn: notifications, onIsOnChanged: setNotifications)),
-                    SettingsCard(
+                        content: ToggleSwitch(isOn: notifications, onIsOnChanged: setNotifications)
+                            .AutomationId("SettingsExpander.Notifications")),
+                    SettingsCardElement.SettingsCard(
                         header: "Play sounds",
                         content: ToggleSwitch(isOn: sounds, onIsOnChanged: setSounds)),
-                }));
+                }).AutomationId("Toolkit.SettingsExpander"));
     }
 }
 
@@ -175,7 +160,7 @@ internal sealed class SegmentedPage : Component
             "Segmented",
             "A single-choice selector. SelectionChanged is bound two-way to SelectedIndex via [WrapControlled].",
             VStack(12,
-                Segmented(
+                SegmentedElement.Segmented(
                     selectedIndex: choice,
                     onSelectedIndexChanged: setChoice,
                     items: new object[] { "List", "Grid", "Details" }),
@@ -193,12 +178,12 @@ internal sealed class GaugePage : Component
         return Gallery.Page(
             "RadialGauge",
             "A circular gauge whose Value is a two-way controlled prop, driven live by a Reactor Slider.",
-            SettingsCard(
+            SettingsCardElement.SettingsCard(
                 header: "Volume",
                 description: $"{volume:0} %",
                 content: HStack(16,
                     Slider(value: volume, min: 0, max: 100, onValueChanged: setVolume).Width(240),
-                    RadialGauge(
+                    RadialGaugeElement.RadialGauge(
                         value: volume, minimum: 0, maximum: 100, unit: "%",
                         onValueChanged: setVolume).Size(132, 132))));
     }
@@ -214,10 +199,10 @@ internal sealed class CameraPage : Component
         return Gallery.Page(
             "CameraPreview",
             "An imperative WCT control — its StartAsync-on-mount / Stop-on-unmount lifecycle is declared once via [WrapLifecycle], so the call site is a plain declarative element. PreviewFailed surfaces via OnPreviewFailed.",
-            SettingsCard(
+            SettingsCardElement.SettingsCard(
                 header: "Live camera",
                 description: camError is null ? "Streaming (or starting…)" : $"Unavailable — {camError}",
-                content: CameraPreview(
+                content: CameraPreviewElement.CameraPreview(
                     isFrameSourceGroupButtonVisible: true,
                     onPreviewFailed: setCamError).Size(440, 280)));
     }
@@ -235,8 +220,8 @@ internal sealed class ColorPickerPage : Component
             "ColorPicker",
             "A full color picker. Color ↔ ColorChanged follows the {Prop}Changed convention, so Color is a two-way controlled prop.",
             VStack(12,
-                SettingsCard(header: "Selected", description: hex),
-                ColorPicker(
+                SettingsCardElement.SettingsCard(header: "Selected", description: hex),
+                ColorPickerElement.ColorPicker(
                     color: color,
                     onColorChanged: setColor,
                     isAlphaEnabled: true)));
@@ -257,11 +242,11 @@ internal sealed class ImageCropperPage : Component
             "ImageCropper",
             "Crops/zooms/rotates an image. Both Source (a sample bitmap) and CropShape are bound declaratively as element props.",
             VStack(12,
-                Segmented(
+                SegmentedElement.Segmented(
                     selectedIndex: shape,
                     onSelectedIndexChanged: setShape,
                     items: new object[] { "Rectangular", "Circular" }),
-                ImageCropper(
+                ImageCropperElement.ImageCropper(
                     source: image,
                     cropShape: shape == 0
                         ? CommunityToolkit.WinUI.Controls.CropShape.Rectangular
@@ -302,7 +287,7 @@ internal sealed class GridSplitterPage : Component
                 columns: new[] { GridSize.Star(), GridSize.Px(11), GridSize.Star() },
                 rows: new[] { GridSize.Star() },
                 Pane("Left").Grid(row: 0, column: 0),
-                GridSplitter().Grid(row: 0, column: 1),
+                GridSplitterElement.GridSplitter().Grid(row: 0, column: 1),
                 Pane("Right").Grid(row: 0, column: 2))
             .Height(260));
 
@@ -334,7 +319,7 @@ internal sealed class TokenizingPage : Component
             "TokenizingTextBox",
             "Type to filter the suggestions and pick one, or type free text + the delimiter (comma) to create a token. TokenItemAdding converts the typed text into a matching suggestion (or keeps it as a new token), and the box is capped at 5 — the WCT gallery pattern.",
             VStack(12,
-                TokenizingTextBox(
+                TokenizingTextBoxElement.TokenizingTextBox(
                     text: text,
                     onTextChanged: setText,
                     onTokenItemAdding: ConvertToken,
@@ -368,7 +353,7 @@ internal sealed class RangeSelectorPage : Component
             "RangeSelector",
             "A dual-thumb range slider. RangeStart/RangeEnd are one-way props (force-asserted from state) and the single ValueChanged event — which carries WHICH thumb moved — drives the matching state setter. (Two thumbs share one event, so they can't both be [WrapControlled]; this one-way + typed-event shape is the idiomatic fit.)",
             VStack(12,
-                RangeSelector(
+                RangeSelectorElement.RangeSelector(
                     minimum: 0, maximum: 100, stepFrequency: 1,
                     rangeStart: lo, rangeEnd: hi,
                     onValueChanged: e =>
@@ -389,7 +374,7 @@ internal sealed class HeaderedContentPage : Component
         Gallery.Page(
             "HeaderedContentControl",
             "A ContentControl with a Header (an object? value prop) above its single content child.",
-            HeaderedContentControl(
+            HeaderedContentControlElement.HeaderedContentControl(
                 header: "Shipping address",
                 content: Border(
                     VStack(6,
@@ -406,7 +391,7 @@ internal sealed class HeaderedItemsPage : Component
         Gallery.Page(
             "HeaderedItemsControl",
             "An ItemsControl with a Header. Items flow through the generated items slot — strings pass straight through, Element items mount via the reconciler.",
-            HeaderedItemsControl(
+            HeaderedItemsControlElement.HeaderedItemsControl(
                 header: "Fruits",
                 items: new object[] { "Apple", "Banana", "Cherry", "Date" })
                 .Width(320));
@@ -419,7 +404,7 @@ internal sealed class HeaderedTreePage : Component
         Gallery.Page(
             "HeaderedTreeView",
             "Derives from WinUI TreeView, so its hierarchy is data-bound through ItemsSource (not a flat Children/Items slot). Header + ItemsSource are surfaced as declarative props.",
-            HeaderedTreeView(
+            HeaderedTreeViewElement.HeaderedTreeView(
                 header: "Library",
                 itemsSource: new[] { "Documents", "Pictures", "Music", "Videos" })
                 .Width(320).Height(220));
@@ -436,7 +421,7 @@ internal sealed class LayoutTransformPage : Component
             "LayoutTransformControl",
             "Applies a render Transform to its single Child while still affecting layout. Transform is a one-way prop, driven live here by a Reactor Slider.",
             VStack(16,
-                LayoutTransformControl(
+                LayoutTransformControlElement.LayoutTransformControl(
                     transform: new Microsoft.UI.Xaml.Media.RotateTransform { Angle = angle },
                     content: Gallery.Box("#FFB74D", "Rotated", 90).Width(180)),
                 Slider(value: angle, min: 0, max: 360, onValueChanged: setAngle).Width(300),
@@ -451,7 +436,7 @@ internal sealed class TabbedCommandBarPage : Component
         Gallery.Page(
             "TabbedCommandBar",
             "A ribbon-style NavigationView whose tabs are TabbedCommandBarItem (a CommandBar) objects in MenuItems — a WinUI control subtree the prop/event wrapper can't express declaratively, so the tabs are built once through the imperative Setters escape hatch (legitimate here: it's controls, not data). The document body is the declarative content slot.",
-            (TabbedCommandBar(
+            (TabbedCommandBarElement.TabbedCommandBar(
                 content: Border(TextBlock("Document body — pick a ribbon tab above.").Center())
                     .Background("#F0F8FF").CornerRadius(8).Height(150))
                 .Set(BuildTabs))
@@ -489,7 +474,7 @@ internal sealed class ContentSizerPage : Component
             "A draggable sizer (Sizers package) that resizes its target content (vs GridSplitter, which resizes grid definitions). Drag the bar to resize the panel above it.",
             VStack(0,
                 Gallery.Box("#FFCC80", "Resizable content — drag the bar below", 140),
-                ContentSizer(orientation: Microsoft.UI.Xaml.Controls.Orientation.Horizontal))
+                ContentSizerElement.ContentSizer(orientation: Microsoft.UI.Xaml.Controls.Orientation.Horizontal))
                 .Width(360));
 }
 
@@ -512,7 +497,7 @@ internal sealed class PropertySizerPage : Component
             "A sizer that drives a single bound double dependency property (e.g. a pane width), clamped by Minimum/Maximum. Drag the bar to resize the pane — Binding is pushed from state one-way and its changes are observed back into state.",
             HStack(0,
                 Gallery.Box("#A5D6A7", $"Pane — {width:0} px", 160).Width(width),
-                PropertySizer(binding: width, minimum: 120, maximum: 360)
+                PropertySizerElement.PropertySizer(binding: width, minimum: 120, maximum: 360)
                     .Height(160)
                     .OnMount(fe => token.Current = ((CommunityToolkit.WinUI.Controls.PropertySizer)fe).RegisterPropertyChangedCallback(
                         CommunityToolkit.WinUI.Controls.PropertySizer.BindingProperty,
@@ -537,7 +522,7 @@ internal sealed class MetadataPage : Component
         Gallery.Page(
             "MetadataControl",
             "A compact metadata line (author • date • tags) joined by a Separator. Its Items are a typed IEnumerable<MetadataItem> — surfaced as a declarative collection prop you just pass, no escape hatch.",
-            MetadataControl(separator: " • ", items: Items));
+            MetadataControlElement.MetadataControl(separator: " • ", items: Items));
 }
 
 // ── DockPanel ───────────────────────────────────────────────────────────
@@ -546,8 +531,8 @@ internal sealed class DockPanelPage : Component
     public override Element Render() =>
         Gallery.Page(
             "DockPanel",
-            "A Panel that docks children to its edges. Children flow through the generated Panel slot; the per-child Dock is an attached property (set via a layout modifier, not generated), so here they dock in order with LastChildFill filling the remainder.",
-            DockPanel(
+            "Children use the Toolkit's default Dock.Left, with LastChildFill filling the remainder. Other sides need the Toolkit's Dock attached property.",
+            DockPanelElement.DockPanel(
                 lastChildFill: true,
                 children: new Element[]
                 {
@@ -582,7 +567,7 @@ internal sealed class WrapPanelPage : Component
         Gallery.Page(
             "WrapPanel",
             "A panel that wraps children onto new lines once they run out of room, with Horizontal/Vertical spacing.",
-            WrapPanel(
+            WrapPanelElement.WrapPanel(
                 horizontalSpacing: 8, verticalSpacing: 8,
                 children: new Element[]
                 {
@@ -600,7 +585,7 @@ internal sealed class StaggeredPanelPage : Component
         Gallery.Page(
             "StaggeredPanel",
             "A Pinterest-style panel: children flow top-to-bottom into the shortest column. DesiredColumnWidth drives the column count.",
-            StaggeredPanel(
+            StaggeredPanelElement.StaggeredPanel(
                 desiredColumnWidth: 110, columnSpacing: 8, rowSpacing: 8,
                 children: new Element[]
                 {
@@ -618,7 +603,7 @@ internal sealed class ConstrainedBoxPage : Component
         Gallery.Page(
             "ConstrainedBox",
             "A ContentPresenter that constrains its single child to an aspect ratio (or pixel multiple). Here the child is locked to 16:9 regardless of available width.",
-            ConstrainedBox(
+            ConstrainedBoxElement.ConstrainedBox(
                 aspectRatio: new CommunityToolkit.WinUI.Controls.AspectRatio(16, 9),
                 content: Gallery.Box("#B39DDB", "16 : 9"))
                 .Width(360));
@@ -636,10 +621,10 @@ internal sealed class SwitchPresenterPage : Component
             "SwitchPresenter",
             "Shows exactly one SwitchCase based on Value (a switch over UI). SwitchCase children are typed objects, not a generated slot, so here a Reactor switch drives the displayed content while Value mirrors the selection.",
             VStack(12,
-                Segmented(
+                SegmentedElement.Segmented(
                     selectedIndex: choice, onSelectedIndexChanged: setChoice,
                     items: new object[] { "Loading", "Ready", "Error" }),
-                SwitchPresenter(
+                SwitchPresenterElement.SwitchPresenter(
                     value: states[choice],
                     content: Gallery.Box(
                         choice switch { 0 => "#FFE082", 1 => "#A5D6A7", _ => "#EF9A9A" },
@@ -660,7 +645,7 @@ internal sealed class RichSuggestBoxPage : Component
         Gallery.Page(
             "RichSuggestBox",
             "An ItemsControl wrapping a RichEditBox. Type the “@” prefix to mention someone — SuggestionRequested fires and the suggestion list (ItemsSource) is filtered. Tokens are managed internally, so the Items slot is excluded.",
-            RichSuggestBox(
+            RichSuggestBoxElement.RichSuggestBox(
                 header: "Message",
                 placeholderText: "Type @ to mention someone…",
                 prefixes: "@",

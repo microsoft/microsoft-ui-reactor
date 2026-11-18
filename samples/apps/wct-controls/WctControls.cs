@@ -1,4 +1,8 @@
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Wrappers;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace WctControls;
 
@@ -11,28 +15,115 @@ namespace WctControls;
 //  that same partial: one init-property per surfaced control property, child /
 //  items slots, On{Event} callbacks, the ControlDescriptor, Pattern-A
 //  registration, and a parameterized factory method named after the control.
-//  No hand-written wrapper/handler code.
+//  The string-header helpers below preserve accessible naming for rich slots.
 // ─────────────────────────────────────────────────────────────────────────
 
 // A settings "row": Header + Description + an optional HeaderIcon, with a
 // content child (a control on the right) and an optional whole-card Click.
 // CommandParameter is an inherited ButtonBase prop with no declarative meaning.
 //
-// HeaderIcon is typed IconElement (UIElement-derived), so the generator treats
-// it as a content slot — and a control has only ONE content slot, already taken
-// by Content. [WrapElementSlot("HeaderIcon")] promotes it to a SECONDARY element
-// slot: the generator surfaces the Element? HeaderIcon init prop + factory param
-// and emits the state-preserving mount/reconcile wiring (ctx.MountChild on mount,
-// the public ctx.ReconcileChild on update). Authors pass any Reactor icon element
-// through the generated factory param, e.g. `SettingsCard(header: …, headerIcon: Icon(FontIcon("\uE701")))`.
+// Object-valued properties are NOT reconciled Element slots without annotations.
+// The string overload keeps a native string Header so the Toolkit retains its
+// own group/button/content naming rules. Rich-header callers supply names.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsCard),
     Exclude = new[] { "CommandParameter" })]
 [WrapElementSlot("HeaderIcon")]
-public partial record SettingsCardElement;
+[WrapElementSlot("Description")]
+[WrapManual("Header")]
+[WrapManual("HeaderText")]
+public partial record SettingsCardElement
+{
+    public Element? Header { get; init; }
+    public string? HeaderText { get; init; }
+
+    public static SettingsCardElement SettingsCard(
+        Element header, Element? description = null, Element? content = null,
+        Element? headerIcon = null, bool isClickEnabled = false, Action? onClick = null) =>
+        SettingsCardElement.SettingsCard(
+            description: description, content: content, headerIcon: headerIcon,
+            isClickEnabled: isClickEnabled, onClick: onClick) with { Header = header };
+
+    public static SettingsCardElement SettingsCard(
+        string header, string? description = null, Element? content = null,
+        Element? headerIcon = null, bool isClickEnabled = false, Action? onClick = null) =>
+        SettingsCardElement.SettingsCard(
+            description: description is null ? null : TextBlock(description),
+            content: content,
+            headerIcon: headerIcon, isClickEnabled: isClickEnabled, onClick: onClick)
+            with { HeaderText = header };
+
+    private static partial ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard>
+        Customize(ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard> d) =>
+        d.ImperativeBridged(
+            mount: static (ctx, c, e) =>
+                c.Header = e.Header is not null ? ctx.MountChild(e.Header)! : e.HeaderText ?? string.Empty,
+            update: static (ctx, c, oldElement, newElement) =>
+            {
+                var existing = c.Header as Microsoft.UI.Xaml.UIElement;
+                var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
+                c.Header = newElement.Header is not null ? next! : newElement.HeaderText ?? string.Empty;
+            },
+            unmount: static (ctx, c) =>
+            {
+                if (Reconciler.GetElementTag(c) is SettingsCardElement { Header: not null } &&
+                    c.Header is Microsoft.UI.Xaml.UIElement child)
+                    ctx.Reconciler.UnmountChild(child);
+                c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
+            });
+}
 
 // A settings group that expands to reveal child SettingsCards (its Items).
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsExpander))]
-public partial record SettingsExpanderElement;
+[WrapManual("Header")]
+[WrapElementSlot("Description")]
+[WrapElementSlot("Content")]
+[WrapElementSlot("HeaderIcon")]
+[WrapControlled("IsExpanded", Events = new[] { "Expanded", "Collapsed" })]
+[WrapManual("HeaderText")]
+public partial record SettingsExpanderElement
+{
+    public Element? Header { get; init; }
+    public string? HeaderText { get; init; }
+
+    public static SettingsExpanderElement SettingsExpander(
+        Element header, Element? description = null, Element? content = null,
+        Element? headerIcon = null, bool isExpanded = false,
+        Action<bool>? onIsExpandedChanged = null, IReadOnlyList<object>? items = null) =>
+        SettingsExpanderElement.SettingsExpander(
+            description: description, content: content, headerIcon: headerIcon,
+            isExpanded: isExpanded, onIsExpandedChanged: onIsExpandedChanged,
+            items: items?.ToArray() ?? []) with { Header = header };
+
+    public static SettingsExpanderElement SettingsExpander(
+        string header, string? description = null, Element? content = null,
+        Element? headerIcon = null, bool isExpanded = false,
+        Action<bool>? onIsExpandedChanged = null, IReadOnlyList<object>? items = null) =>
+        SettingsExpanderElement.SettingsExpander(
+            description: description is null ? null : TextBlock(description),
+            content: content,
+            headerIcon: headerIcon, isExpanded: isExpanded,
+            onIsExpandedChanged: onIsExpandedChanged, items: items?.ToArray() ?? [])
+            with { HeaderText = header };
+
+    private static partial ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander>
+        Customize(ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander> d) =>
+        d.ImperativeBridged(
+            mount: static (ctx, c, e) =>
+                c.Header = e.Header is not null ? ctx.MountChild(e.Header)! : e.HeaderText ?? string.Empty,
+            update: static (ctx, c, oldElement, newElement) =>
+            {
+                var existing = c.Header as Microsoft.UI.Xaml.UIElement;
+                var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
+                c.Header = newElement.Header is not null ? next! : newElement.HeaderText ?? string.Empty;
+            },
+            unmount: static (ctx, c) =>
+            {
+                if (Reconciler.GetElementTag(c) is SettingsExpanderElement { Header: not null } &&
+                    c.Header is Microsoft.UI.Xaml.UIElement child)
+                    ctx.Reconciler.UnmountChild(child);
+                c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
+            });
+}
 
 // A circular gauge — pure value props (Value/Minimum/Maximum/Unit/…) plus a
 // ValueChanged event, so it surfaces as a two-way controlled Value.
@@ -124,8 +215,7 @@ public partial record HeaderedContentControlElement;
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.HeaderedItemsControl))]
 public partial record HeaderedItemsControlElement;
 
-// Applies an arbitrary render Transform to its single Child without affecting
-// layout. Child is the content slot; Transform is a value prop.
+// Applies a Transform to its single Child and includes it in layout measurement.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.LayoutTransformControl))]
 public partial record LayoutTransformControlElement;
 
@@ -160,8 +250,8 @@ public partial record ConstrainedBoxElement;
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.UniformGrid))]
 public partial record UniformGridElement;
 
-// A Panel that docks children to its edges (the per-child Dock is an attached
-// property set via the layout modifier, not generated). LastChildFill fills the rest.
+// A Panel that docks children to its edges. The sample uses the Toolkit's default
+// Dock.Left; non-default sides need the Toolkit's per-child Dock attached property.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.DockPanel))]
 public partial record DockPanelElement;
 
@@ -190,8 +280,7 @@ public partial record SwitchPresenterElement;
 
 // TabbedCommandBar derives from NavigationView: its tabs are TabbedCommandBarItem
 // objects in MenuItems (a NavigationView collection, not a flat Items), so the
-// generator surfaces only props/content here. Tabs are built declaratively via
-// the MenuItems value prop in the sample.
+// sample builds them once through a guarded native setter, not an Element slot.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.TabbedCommandBar))]
 public partial record TabbedCommandBarElement;
 
