@@ -358,7 +358,7 @@ internal static class AnimatedIconStateFixtures
             // that first write -- a hard cut -- and only the second interaction animates.
             // That is precisely the reported symptom: click animates, hover does not.
             var directMountState = directBefore is null ? null : XamlAnimatedIcon.GetState(directBefore);
-            ReportWrapperCollected("direct", CollectContentButtonWrapper(H));
+            ReportWrapperCollected(H, "Direct", CollectContentButtonWrapper(H));
             H.ClickButton("BumpDirect");
             await Harness.Render();
             var directAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
@@ -384,7 +384,7 @@ internal static class AnimatedIconStateFixtures
             await Harness.Render();
             var nestedBefore = H.FindControl<XamlAnimatedIcon>(_ => true);
             var nestedMountState = nestedBefore is null ? null : XamlAnimatedIcon.GetState(nestedBefore);
-            ReportWrapperCollected("nested", CollectContentButtonWrapper(H));
+            ReportWrapperCollected(H, "Nested", CollectContentButtonWrapper(H));
             H.ClickButton("BumpNested");
             await Harness.Render();
             var nestedAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
@@ -470,7 +470,16 @@ internal static class AnimatedIconStateFixtures
     static XamlButton? FindContentButton(Harness h) =>
         h.FindControl<XamlButton>(b => b.Content is not null and not string);
 
-    // A diagnostic, not a check: it says whether this run exercised the fresh-wrapper path.
-    static void ReportWrapperCollected(string arm, bool fresh) =>
-        Console.WriteLine($"# AnimIconInButton: {arm} content Button wrapper collected before update: {fresh}");
+    // The fresh-wrapper path is the point of this regression test, so it is reported, not just
+    // logged: a run where the wrapper survived the collection would pass the in-place checks
+    // even with the old wrapper-keyed table. That shows as a skip rather than an ordinary pass.
+    // Collected in every one of 200 AOT stress observations, so a skip, not a failure.
+    static void ReportWrapperCollected(Harness h, string arm, bool fresh)
+    {
+        var name = $"AnimIconInButton_{arm}WrapperCollected";
+        if (fresh)
+            h.Check(name, true);
+        else
+            h.Skip(name, "the Button's wrapper survived the forced collection, so the update did not run against a fresh wrapper");
+    }
 }

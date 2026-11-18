@@ -1404,6 +1404,10 @@ internal static class ReconcilerBigCoverageFixtures
     // ════════════════════════════════════════════════════════════════════
     internal class ExitTransitionOnRemove(Harness h) : SelfTestFixtureBase(h)
     {
+        // Two removals, each allowed up to 15 s (budget plus the late-completion watch) when
+        // the compositor never completes, which would overrun the 30 s default and stop the run.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
