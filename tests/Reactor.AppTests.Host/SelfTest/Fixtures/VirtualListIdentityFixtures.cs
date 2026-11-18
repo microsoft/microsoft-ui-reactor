@@ -180,6 +180,69 @@ internal static class VirtualListIdentityFixtures
         }
     }
 
+    internal sealed class DuplicateKeysToDefaultThenGrow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            string[] keys = ["1", "1", "3", "3", "4", "5", "6", "7", "8", "9", "10", "11"];
+            int count = keys.Length;
+            bool custom = true;
+            var host = H.CreateHost();
+            ReactorDiagnostics.ClearRecentKeyedListWarnings();
+            try
+            {
+                host.Mount(_ => VirtualList(count, i => TextBlock($"duplicate row {i}"),
+                    getItemKey: custom ? i => keys[i] : null, itemHeight: 24)
+                    .WithKey("duplicate-to-default").Height(160));
+                await Harness.Render();
+                var repeater = H.FindControl<WinUI.ItemsRepeater>(_ => true)
+                    ?? throw new InvalidOperationException("VirtualList repeater not mounted.");
+                var state = Reconciler.GetListState(repeater)!;
+                var source = state.Source;
+                H.Check("VirtualListIdentity_DuplicateOverlapMounted",
+                    state.Source.Count == 12 && state.ByKey.Count == 10 && state.LastKeys.SequenceEqual(keys));
+
+                custom = false;
+                host.RequestRender(force: true);
+                await Harness.Render();
+                state = Reconciler.GetListState(repeater)!;
+                var expected = Enumerable.Range(0, count).Select(i => i.ToString()).ToArray();
+                Console.WriteLine($"# duplicate-to-default count={state.Source.Count} keys={string.Join(",", state.LastKeys)}");
+                H.Check("VirtualListIdentity_DuplicateToDefaultKeepsBinding",
+                    ReferenceEquals(source, state.Source) && ReferenceEquals(source, repeater.ItemsSource));
+                H.Check("VirtualListIdentity_DuplicateToDefaultCount",
+                    state.Source.Count == count && state.ByKey.Count == count);
+                H.Check("VirtualListIdentity_DuplicateToDefaultKeys",
+                    state.LastKeys.SequenceEqual(expected) && state.Source.Select(r => r.Key).SequenceEqual(expected));
+                H.Check("VirtualListIdentity_DuplicateToDefaultIndices",
+                    state.Source.Select((row, i) => row.Index == i
+                        && state.ByKey.TryGetValue(row.Key, out var indexed) && ReferenceEquals(row, indexed)).All(match => match));
+                var first = state.Source[0];
+                var events = new List<NotifyCollectionChangedAction>();
+                state.Source.CollectionChanged += (_, e) => events.Add(e.Action);
+
+                count++;
+                host.RequestRender(force: true);
+                await Harness.Render();
+                var grown = Reconciler.GetListState(repeater)!;
+                expected = Enumerable.Range(0, count).Select(i => i.ToString()).ToArray();
+                H.Check("VirtualListIdentity_DuplicateRecoveryGrowth",
+                    grown.Source.Count == count && grown.ByKey.Count == count
+                    && grown.LastKeys.SequenceEqual(expected) && grown.Source.Select(r => r.Key).SequenceEqual(expected));
+                H.Check("VirtualListIdentity_DuplicateRecoveryAppendsOnce",
+                    ReferenceEquals(state, grown) && ReferenceEquals(first, grown.Source[0])
+                    && events.SequenceEqual(new[] { NotifyCollectionChangedAction.Add }));
+                var tail = repeater.GetOrCreateElement(count - 1);
+                H.Check("VirtualListIdentity_DuplicateRecoveryRendersTail",
+                    tail is WinUI.TextBlock { Text: "duplicate row 12" } && Reconciler.GetElementTag(tail)?.Key == "12");
+            }
+            finally
+            {
+                ReactorDiagnostics.ClearRecentKeyedListWarnings();
+            }
+        }
+    }
+
     internal sealed class UpdateAllocations(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

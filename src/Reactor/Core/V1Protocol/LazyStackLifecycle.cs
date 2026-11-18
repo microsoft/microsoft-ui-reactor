@@ -104,6 +104,7 @@ internal static class LazyStackLifecycle
 
     private static void ApplyLazyKeyedDiffOrFallback(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase n, IElementFactory factory)
     {
+        bool defaultKeys = VirtualListIndices.IsDefaultKeySource(n);
         var state = Reconciler.GetListState(repeater);
         if (state is null || !ReferenceEquals(repeater.ItemsSource, state.Source))
         {
@@ -114,7 +115,14 @@ internal static class LazyStackLifecycle
             return;
         }
 
-        bool defaultKeys = VirtualListIndices.IsDefaultKeySource(n);
+        // A prior duplicate-key bailout collapses ByKey. Reseed before switching
+        // to default positions, preserving the existing collection binding.
+        if (defaultKeys && state.ByKey.Count != state.LastKeys.Count)
+        {
+            SeedListState(reconciler, repeater, n, state);
+            return;
+        }
+
         if (defaultKeys && state.HasDefaultPositionalKeys && state.LastKeys.Count == n.ItemCount)
             return;
 
@@ -164,10 +172,15 @@ internal static class LazyStackLifecycle
     private static ReactorListState BuildListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy)
     {
         var state = new ReactorListState();
+        SeedListState(reconciler, repeater, lazy, state);
+        return state;
+    }
+
+    private static void SeedListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy, ReactorListState state)
+    {
         state.Reset(KeyedListDiff.SeedKeys(
             lazy, lazy.ItemCount, static (l, i) => l.GetKeyAt(i),
             reconciler._logger, repeater.GetType().Name, repeater, reconciler.KeyedListAttributionFor(lazy)));
         state.HasDefaultPositionalKeys = VirtualListIndices.IsDefaultKeySource(lazy);
-        return state;
     }
 }
