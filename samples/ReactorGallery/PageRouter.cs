@@ -35,6 +35,7 @@ static class PageRouter
         "flip-view" => Component<FlipViewPage>(),
         "grid-view" => Component<GridViewPage>(),
         "items-view" => Component<ItemsViewPage>(),
+        "chat-feed" => Component<ControlPages.Collections.ChatFeedPage>(),
         "list-box" => Component<ListBoxPage>(),
         "list-view" => Component<ListViewPage>(),
         "tree-view" => Component<TreeViewPage>(),

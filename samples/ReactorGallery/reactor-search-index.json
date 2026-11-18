@@ -110,6 +110,7 @@
         "labelled scrollbar",
         "scroll annotations",
         "track markers",
+        "history ticks",
         "minimap",
         "jump to section"
       ],
@@ -121,9 +122,9 @@
       "galleryRoute": "annotated-scroll-bar",
       "samples": [
         {
-          "header": "Standalone control surface",
+          "header": "Connected scrolling with annotations",
           "language": "csharp",
-          "code": "Border(AnnotatedScrollBar().Height(300).Width(40))\n    .Padding(12)\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.DividerStroke)"
+          "code": "var bar = this.UseElementRef<Microsoft.UI.Xaml.Controls.AnnotatedScrollBar>();\nGrid(columns: [GridSize.Star(), GridSize.Px(100)], rows: [GridSize.Star()],\n    children:\n    [\n        (ScrollView(content) with\n            { VerticalScrollBarVisibility = ScrollingScrollBarVisibility.Hidden })\n            .VerticalScrollBar(bar),\n        AnnotatedScrollBar().Ref(bar).Annotations(\n            [new ScrollAnnotation(0, \"Start\"), new ScrollAnnotation(540, \"Chapter 2\")])\n            .AutomationName(\"Sections\").Grid(column: 1),\n    ]).Height(340)"
         }
       ]
     },
@@ -392,6 +393,38 @@
           "header": "Override defaults via chained fluents",
           "language": "csharp",
           "code": "Card(VStack(8, BodyStrong(\"Custom padding & radius\"), Body(\"...\"))).Padding(24).CornerRadius(16)"
+        }
+      ]
+    },
+    {
+      "id": "chat-feed",
+      "name": "Chat feed",
+      "category": "Collections",
+      "description": "Tail-following messages, history ticks, Enter-to-send, and a resizable details pane.",
+      "keywords": [
+        "chat",
+        "conversation",
+        "tail following",
+        "streaming",
+        "history ticks",
+        "composer",
+        "enter to send",
+        "resizable pane"
+      ],
+      "relatedControls": [
+        "ItemsView",
+        "AnnotatedScrollBar",
+        "TextBox",
+        "SplitView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "chat-feed",
+      "samples": [
+        {
+          "header": "Conversation with history and a resizable pane",
+          "language": "csharp",
+          "code": "var (tailRequest, setTailRequest) = UseState(0);\nvar (following, setFollowing) = UseState(true);\nvar itemsRef = this.UseElementRef<Microsoft.UI.Xaml.Controls.ItemsView>();\n\nItemsView(messages, message => message.Id,\n    (message, _) => ItemContainer(TextBlock(message.Text).TextWrapping(TextWrapping.Wrap)))\n    .Ref(itemsRef)\n    .FollowTail(onFollowingChanged: setFollowing)\n    .ScrollToTail(tailRequest)\n    .ScrollIntoView(navigation.Key, navigation.Request);\n\n// OpenClaw's native tick template and hover preview, independent of pixel estimates.\nAnnotatedScrollBar()\n    .ScrollRange(1)\n    .Set(bar => OpenClawHistoryRail.Update(bar, historyEntries, itemsRef.Current, Navigate))\n    .OnUnmount(OpenClawHistoryRail.Detach);\n\nvar composer = OpenClawChatStyles.Composer(\n    TextBox(draft, setDraft, \"Message Assistant\")\n        .AutomationName(\"Message\")\n        .SubmitOnEnter(Send), // native text; Shift+Enter inserts a newline\n    toolbar, viewportWidth);\n\n(SplitView(pane: details, content: conversation) with\n    { DisplayMode = SplitViewDisplayMode.Inline, OpenPaneLength = paneWidth })\n    .ResizablePane(minimum: 160, maximum: 360, onLengthChanged: setPaneWidth);"
         }
       ]
     },
@@ -2980,6 +3013,11 @@
           "header": "Multiline TextBox",
           "language": "csharp",
           "code": "TextBox(multiline, v => setMultiline(v), \"Enter multiple lines...\")\n    .AcceptsReturn()\n    .TextWrapping(TextWrapping.Wrap)\n    .Height(120)"
+        },
+        {
+          "header": "Enter to submit, Shift+Enter for a newline",
+          "language": "csharp",
+          "code": "TextBox(draft, setDraft, \"Write a message\")\n    .Header(\"Message\").AcceptsReturn().TextWrapping(TextWrapping.Wrap)\n    .SubmitOnEnter(value => { setSubmitted(value); setDraft(\"\"); })\n    .MinHeight(80)"
         },
         {
           "header": "TextBox with Header",

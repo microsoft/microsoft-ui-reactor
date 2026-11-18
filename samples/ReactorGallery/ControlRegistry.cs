@@ -35,6 +35,7 @@ public static class ControlRegistry
         new("FlipView", "A control that presents one item at a time with flipping navigation.", "Collections", "\uE8A9", "flip-view", "FlipView.png"),
         new("GridView", "A control that displays items in a horizontally wrapping grid.", "Collections", "\uE8A9", "grid-view", "GridView.png"),
         new("ItemsView", "A flexible control for displaying collections of data items.", "Collections", "\uE8A9", "items-view", "ItemsView.png"),
+        new("Chat feed", "Tail-following messages, history ticks, Enter-to-send, and a resizable details pane.", "Collections", "\uE8A9", "chat-feed", "ItemsView.png"),
         new("ListBox", "A list of selectable items presented inline.", "Collections", "\uE8A9", "list-box", "ListBox.png"),
         new("ListView", "A control that displays items in a vertical scrolling list.", "Collections", "\uE8A9", "list-view", "ListView.png"),
         new("TreeView", "A hierarchical list with expanding and collapsing nodes.", "Collections", "\uE8A9", "tree-view", "TreeView.png"),

@@ -240,6 +240,9 @@ XamlPage(Type pageType, object parameter = null) → XamlPageElement
 
 AnimatedIconElement.Set(Action<AnimatedIcon> configure) → AnimatedIconElement
 AnimatedVisualPlayerElement.Set(Action<AnimatedVisualPlayer> configure) → AnimatedVisualPlayerElement
+AnnotatedScrollBarElement.Annotations(IReadOnlyList<ScrollAnnotation> annotations) → AnnotatedScrollBarElement
+AnnotatedScrollBarElement.ScrollRange(double maximum, double value = 0, double viewport = 0) → AnnotatedScrollBarElement
+AnnotatedScrollBarElement.ScrollRequested(Action<double> onRequested) → AnnotatedScrollBarElement
 AnnotatedScrollBarElement.Set(Action<AnnotatedScrollBar> configure) → AnnotatedScrollBarElement
 AutoSuggestBoxElement.Header(string header) → AutoSuggestBoxElement
 AutoSuggestBoxElement.IsSuggestionListOpen(bool open = true) → AutoSuggestBoxElement
@@ -375,6 +378,7 @@ ItemContainerElement.Set(Action<ItemContainer> configure) → ItemContainerEleme
 ItemsViewElement<T>.ItemInvoked<T>(Action<T> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → ItemsViewElement<T>
 ItemsViewElement<T>.Set<T>(Action<ItemsView> configure) → ItemsViewElement<T>
+ItemsViewElement<T>.TailFollowingChanged<T>(Action<bool> handler) → ItemsViewElement<T>
 LazyHStackElement<T>.Set<T>(Action<ScrollViewer> configure) → LazyHStackElement<T>
 LazyHStackElement<T>.SetRepeater<T>(Action<ItemsRepeater> configure) → LazyHStackElement<T>
 LazyVStackElement<T>.Set<T>(Action<ScrollViewer> configure) → LazyVStackElement<T>
@@ -544,6 +548,7 @@ ScrollViewElement.AnchorRatio(double horizontal, double vertical) → ScrollView
 ScrollViewElement.ContentOrientation(ScrollingContentOrientation orientation) → ScrollViewElement
 ScrollViewElement.HorizontalScrollMode(ScrollingScrollMode mode) → ScrollViewElement
 ScrollViewElement.Set(Action<ScrollView> configure) → ScrollViewElement
+ScrollViewElement.VerticalScrollBar(ElementRef<AnnotatedScrollBar> scrollBar) → ScrollViewElement
 ScrollViewElement.VerticalScrollMode(ScrollingScrollMode mode) → ScrollViewElement
 ScrollViewElement.ViewChanged(Action handler) → ScrollViewElement
 ScrollViewElement.ZoomMode(ScrollingZoomMode mode) → ScrollViewElement
@@ -573,7 +578,9 @@ SplitViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) →
 SplitViewElement.LightDismissOverlayMode(LightDismissOverlayMode mode) → SplitViewElement
 SplitViewElement.PaneBackground(Brush brush) → SplitViewElement
 SplitViewElement.PaneBackground(ThemeRef theme) → SplitViewElement
+SplitViewElement.PaneLengthChanged(Action<double> handler) → SplitViewElement
 SplitViewElement.PaneOpenChanged(Action<bool> handler) → SplitViewElement
+SplitViewElement.ResizablePane(double minimum = 160, double maximum = 640, Action<double> onLengthChanged = null, bool enabled = true, string automationName = "Resize pane", double keyboardStep = 16) → SplitViewElement
 SplitViewElement.Set(Action<SplitView> configure) → SplitViewElement
 StackElement.BackgroundTransition(TimeSpan? duration = null) → StackElement
 StackElement.Set(Action<StackPanel> configure) → StackElement
@@ -616,6 +623,7 @@ T.FlowsFrom<T>(ElementRef[] targets) → T
 T.FlowsTo<T>(ElementRef[] targets) → T
 T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
 T.FocusTrap<T>(FocusTrapHandle handle) → T
+T.FollowTail<T>(bool enabled = true, Action<bool> onFollowingChanged = null, double threshold = 60) → T
 T.FontFamily<T>(FontFamily family) → T
 T.FontFamily<T>(string family) → T
 T.FontSize<T>(double size) → T
@@ -724,7 +732,9 @@ T.RotationTransition<T>(TimeSpan? duration = null) → T
 T.Scale<T>(Vector3 scale) → T
 T.Scale<T>(float uniform) → T
 T.ScaleTransition<T>(Vector3Transition transition = null) → T
+T.ScrollIntoView<T>(string key, int requestId = 0) → T
 T.ScrollLinked<T>(ScrollViewer scrollViewer, Func<ScrollAnimationBuilder, ScrollAnimationBuilder> configure) → T
+T.ScrollToTail<T>(int requestId) → T
 T.Semantics<T>(string role = null, string value = null, double? rangeMin = null, double? rangeMax = null, double? rangeValue = null, bool isReadOnly = true) → SemanticElement
 T.ShowErrors<T>(ShowWhen showWhen = ShowWhen.Always) → ValidationVisualizerElement
 T.Size<T>(double width, double height) → T
@@ -747,6 +757,7 @@ T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
 T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
 T.VerticalAlignment<T>(VerticalAlignment alignment) → T
 T.VerticalContentAlignment<T>(VerticalAlignment alignment) → T
+T.VerticalScrollBar<T>(ElementRef<AnnotatedScrollBar> scrollBar) → T
 T.Width<T>(double width) → T
 T.WithBorder<T>(Brush brush, double thickness = 1) → T
 T.WithBorder<T>(ThemeRef theme, double thickness = 1) → T
@@ -833,6 +844,8 @@ TextBoxElement.PlaceholderText(string text) → TextBoxElement
 TextBoxElement.SearchInput() → TextBoxElement
 TextBoxElement.SelectionChanged(Action<string, int, int> handler) → TextBoxElement
 TextBoxElement.Set(Action<TextBox> configure) → TextBoxElement
+TextBoxElement.SubmitOnEnter(Action<string> onSubmitted) → TextBoxElement
+TextBoxElement.Submitted(Action<string> handler) → TextBoxElement
 TextBoxElement.TextAlignment(TextAlignment alignment) → TextBoxElement
 TextBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextBoxElement
 TextBoxElement.UrlInput() → TextBoxElement
@@ -1189,6 +1202,11 @@ Animate<T>(AnimationKind kind, Func<T> func) → T
 
 ### record AnnotatedScrollBarElement
 new()
+Action<double> OnScrollRequested { get; init; }
+IReadOnlyList<ScrollAnnotation> Annotations { get; init; }
+double ScrollValue { get; init; }
+double ScrollViewport { get; init; }
+double? ScrollMaximum { get; init; }
 Equals(AnnotatedScrollBarElement other) → bool
 Equals(Element other) → bool
 Equals(object obj) → bool
@@ -3275,10 +3293,17 @@ ToString() → string
 TryUpdateFactory(IElementFactory existingFactory) → bool
 
 ### record ItemsViewElementBase
+Action<bool> OnTailFollowingChanged { get; init; }
+ElementRef<AnnotatedScrollBar> VerticalScrollBar { get; init; }
 ItemsViewLayoutKind LayoutKind { get; init; }
 ItemsViewSelectionMode SelectionMode { get; init; }
 bool IsItemInvokedEnabled { get; init; }
+bool IsTailFollowingEnabled { get; init; }
+double TailFollowThreshold { get; init; }
 int ItemCount { get; }
+int ScrollIntoViewRequest { get; init; }
+int TailScrollRequest { get; init; }
+string ScrollIntoViewKey { get; init; }
 CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool pool) → IElementFactory
 Equals(Element other) → bool
 Equals(ItemsViewElementBase other) → bool
@@ -4169,6 +4194,18 @@ bool WithInertia { get; init; }
 double MinimumDistance { get; init; }
 Deconstruct(ref Action<PanGesture> OnChanged) → void
 Equals(PanGestureConfig other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record PaneResizeOptions
+new(double Minimum = 160, double Maximum = 640, double KeyboardStep = 16, string AutomationName = "Resize pane")
+double KeyboardStep { get; init; }
+double Maximum { get; init; }
+double Minimum { get; init; }
+string AutomationName { get; init; }
+Deconstruct(ref double Minimum, ref double Maximum, ref double KeyboardStep, ref string AutomationName) → void
+Equals(PaneResizeOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -5297,6 +5334,17 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### record ScrollAnnotation
+new(double Offset, string Label, string Detail = null)
+double Offset { get; init; }
+string Detail { get; init; }
+string Label { get; init; }
+Deconstruct(ref double Offset, ref string Label, ref string Detail) → void
+Equals(ScrollAnnotation other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
 ### record ScrollExpression
 new(string Property, string Expression)
 string Expression { get; init; }
@@ -5311,6 +5359,7 @@ ToString() → string
 new(Element Child)
 Action OnViewChanged { get; init; }
 Element Child { get; init; }
+ElementRef<AnnotatedScrollBar> VerticalScrollBar { get; init; }
 ScrollingContentOrientation ContentOrientation { get; init; }
 ScrollingScrollBarVisibility HorizontalScrollBarVisibility { get; init; }
 ScrollingScrollBarVisibility VerticalScrollBarVisibility { get; init; }
@@ -5526,11 +5575,14 @@ ToString() → string
 ### record SplitViewElement
 new(Element Pane = null, Element Content = null)
 Action<bool> OnPaneOpenChanged { get; init; }
+Action<double> OnPaneLengthChanged { get; init; }
 Brush PaneBackground { get; init; }
 Element Content { get; init; }
 Element Pane { get; init; }
 LightDismissOverlayMode LightDismissOverlayMode { get; init; }
+PaneResizeOptions PaneResize { get; init; }
 SplitViewDisplayMode DisplayMode { get; init; }
+SplitViewPanePlacement PanePlacement { get; init; }
 bool IsPaneOpen { get; init; }
 double CompactPaneLength { get; init; }
 double OpenPaneLength { get; init; }
@@ -5979,6 +6031,7 @@ ToString() → string
 new(Optional<string> Value = default, Action<string> OnChanged = null, string PlaceholderText = null)
 Action<string, int, int> OnSelectionChanged { get; init; }
 Action<string> OnChanged { get; init; }
+Action<string> OnSubmitted { get; init; }
 CharacterCasing CharacterCasing { get; init; }
 Optional<string> Value { get; init; }
 TextAlignment TextAlignment { get; init; }

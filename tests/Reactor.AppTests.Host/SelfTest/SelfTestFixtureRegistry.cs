@@ -9,6 +9,11 @@ internal static class SelfTestFixtureRegistry
 {
     public static readonly string[] AllFixtures =
     [
+        "ScrollBehaviors_OpenClawStyling",
+        "ScrollBehaviors_TextSubmit",
+        "ScrollBehaviors_TailFollowing",
+        "ScrollBehaviors_Annotations",
+        "ScrollBehaviors_PaneResizing",
         "JumpList_NativeInterop",
         "Packaged_JumpList",
         "SourceMapReadPath_Enabled",
@@ -2388,6 +2393,11 @@ internal static class SelfTestFixtureRegistry
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
+        "ScrollBehaviors_OpenClawStyling" => new OpenClawStylingFixture(harness),
+        "ScrollBehaviors_TextSubmit" => new ScrollBehaviorFixtures.TextSubmit(harness),
+        "ScrollBehaviors_TailFollowing" => new ScrollBehaviorFixtures.TailFollowing(harness),
+        "ScrollBehaviors_Annotations" => new ScrollBehaviorFixtures.Annotations(harness),
+        "ScrollBehaviors_PaneResizing" => new ScrollBehaviorFixtures.PaneResizing(harness),
         "JumpList_NativeInterop" => new JumpListNativeInteropFixture(harness),
         "Packaged_JumpList" => new PackagedJumpListFixture(harness),
         "HarnessGuard_ClickButtonFailsLoudly" => new HarnessGuardFixtures.ClickButtonFailsLoudly(harness),

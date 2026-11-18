@@ -36,6 +36,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\samples\ReactorGallery\ControlPages\Collections\OpenClawChatStyles.cs" Link="Gallery\OpenClawChatStyles.cs" />
+    <Compile Include="..\..\samples\ReactorGallery\ControlPages\Collections\OpenClawHistoryRail.cs" Link="Gallery\OpenClawHistoryRail.cs" />
+    <Compile Include="..\..\samples\ReactorGallery\ControlPages\Collections\OpenClawTranscriptFade.cs" Link="Gallery\OpenClawTranscriptFade.cs" />
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
     <Compile Include="..\_shared\EtwPrivateCapture.cs" Link="EtwPrivateCapture.cs" />
     <!-- PackagedIdentityFixtures lives here and is linked into the packaged host, so the

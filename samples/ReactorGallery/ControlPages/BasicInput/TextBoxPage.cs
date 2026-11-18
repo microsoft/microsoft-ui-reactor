@@ -17,6 +17,8 @@ class TextBoxPage: Component
         var (numericText, setNumericText) = UseState("");
         var (emailText, setEmailText) = UseState("");
         var (urlText, setUrlText) = UseState("");
+        var (draft, setDraft) = UseState("");
+        var (submitted, setSubmitted) = UseState("");
 
         return ScrollView(VStack(16,
             PageHeader("TextBox", "A single-line or multi-line plain text input field."),
@@ -40,6 +42,20 @@ TextBox(multiline, v => setMultiline(v), ""Enter multiple lines..."")
     .TextWrapping(TextWrapping.Wrap)
     .Height(120)
 "),
+
+            SampleCard("Enter to submit, Shift+Enter for a newline",
+                VStack(8,
+                    TextBox(draft, setDraft, "Write a message")
+                        .Header("Message").AcceptsReturn().TextWrapping(TextWrapping.Wrap)
+                        .SubmitOnEnter(value => { setSubmitted(value); setDraft(""); })
+                        .MinHeight(80),
+                    TextBlock($"Last submitted: {submitted}").TextWrapping(TextWrapping.Wrap)),
+                sourceCode: """
+                TextBox(draft, setDraft, "Write a message")
+                    .Header("Message").AcceptsReturn().TextWrapping(TextWrapping.Wrap)
+                    .SubmitOnEnter(value => { setSubmitted(value); setDraft(""); })
+                    .MinHeight(80)
+                """),
 
             SampleCard("TextBox with Header",
                 TextBox(headerText, v => setHeaderText(v), "user@example.com").Header("Email"),

@@ -13,8 +13,12 @@
     "relatedControls": ["AnimatedIcon", "MediaPlayerElement"]
   },
   "annotated-scroll-bar": {
-    "keywords": ["labelled scrollbar", "scroll annotations", "track markers", "minimap", "jump to section"],
+    "keywords": ["labelled scrollbar", "scroll annotations", "track markers", "history ticks", "minimap", "jump to section"],
     "relatedControls": ["ScrollView"]
+  },
+  "chat-feed": {
+    "keywords": ["chat", "conversation", "tail following", "streaming", "history ticks", "composer", "enter to send", "resizable pane"],
+    "relatedControls": ["ItemsView", "AnnotatedScrollBar", "TextBox", "SplitView"]
   },
   "auto-suggest-box": {
     "keywords": ["autocomplete", "typeahead", "suggestions", "search box", "combobox input"],

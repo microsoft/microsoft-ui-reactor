@@ -40,6 +40,8 @@ internal sealed class ButtonEventPayload
 
 internal sealed class TextBoxEventPayload
 {
+    public bool SubmitWired;
+    public bool IsComposing;
     public Microsoft.UI.Xaml.Controls.TextChangedEventHandler? TextChangedTrampoline;
     public Action<Element, Microsoft.UI.Xaml.Controls.TextChangedEventArgs>? CurrentTextChanged;
     public Microsoft.UI.Xaml.RoutedEventHandler? SelectionChangedTrampoline;
