@@ -239,7 +239,8 @@ public partial record CameraPreviewElement
         public PreviewSession(CommunityToolkit.WinUI.Controls.CameraPreview control, Task previousCleanup)
         {
             _control = control;
-            _lifetime = new(previousCleanup, StartAsync, control.Stop, CleanupAsync, Report);
+            _lifetime = new(previousCleanup, StartAsync, control.Stop, CleanupAsync, Report,
+                () => _control.PreviewFailed -= OnPreviewFailed);
         }
 
         public void Attach()
@@ -273,7 +274,6 @@ public partial record CameraPreviewElement
         {
             _unmounted = true;
             _control.Loaded -= OnLoaded;
-            _control.PreviewFailed -= OnPreviewFailed;
             return _lifetime.StopAsync();
         }
 

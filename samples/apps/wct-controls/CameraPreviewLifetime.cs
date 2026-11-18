@@ -9,15 +9,17 @@ internal sealed class CameraPreviewLifetime
     private readonly Action _stop;
     private readonly Func<Task> _cleanup;
     private readonly Action<string, Exception> _report;
+    private readonly Action? _unsubscribe;
 
     public CameraPreviewLifetime(Task previousCleanup, Func<Task> start, Action stop,
-        Func<Task> cleanup, Action<string, Exception> report)
+        Func<Task> cleanup, Action<string, Exception> report, Action? unsubscribe = null)
     {
         _start = start;
         _stop = stop;
         _cleanup = cleanup;
         _report = report;
-        Completion = RunAsync(previousCleanup);
+        _unsubscribe = unsubscribe;
+        Completion = RunAndUnsubscribeAsync(previousCleanup);
     }
 
     public Task Completion { get; }
@@ -32,6 +34,25 @@ internal sealed class CameraPreviewLifetime
         _stopRequested.TrySetResult();
         _loaded.TrySetResult();
         return Completion;
+    }
+
+    private async Task RunAndUnsubscribeAsync(Task previousCleanup)
+    {
+        try
+        {
+            await RunAsync(previousCleanup);
+        }
+        finally
+        {
+            try
+            {
+                _unsubscribe?.Invoke();
+            }
+            catch (Exception error)
+            {
+                Report("unsubscribe", error);
+            }
+        }
     }
 
     private async Task RunAsync(Task previousCleanup)
@@ -96,5 +117,20 @@ internal sealed class CameraPreviewLifetime
     {
         HasErrors = true;
         _report(operation, error);
+    }
+}
+
+internal sealed class CameraPreviewPageLifetime
+{
+    private bool _inactive;
+
+    public string Key { get; } = Guid.NewGuid().ToString("N");
+
+    public void Deactivate() => _inactive = true;
+
+    public void Report(string? error, Action<string?> onError)
+    {
+        if (!_inactive)
+            onError(error);
     }
 }

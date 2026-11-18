@@ -151,6 +151,9 @@ switch. Rapid navigation back waits for the previous preview's cleanup.
 The camera page also requests the same idempotent cleanup from `UseEffect`, since
 host disposal runs effect cleanup but does not guarantee native `OnUnmount`
 callbacks. Completion of asynchronous cleanup still requires a running dispatcher.
+The page lifetime guards late callbacks before requesting cleanup. Its preview
+key survives ordinary renders but changes when hot reload resets hook state, so
+recovery mounts a fresh preview instead of keeping a stopped native control.
 
 Toolkit failure results and lifecycle exceptions are written to stderr. While
 mounted, exceptions also reach the current `OnPreviewFailed` callback; callbacks
@@ -158,6 +161,8 @@ are not invoked after unmount. A failed start remains owned until unmount, so
 native camera-switch retries remain covered by the same cleanup. This adapter
 uses public Toolkit APIs, not a replacement capture
 implementation, and does not change device permissions.
+The diagnostic failure listener remains attached until pending startup and cleanup
+complete, including when a denied/no-device result arrives after page disposal.
 
 Live validation requires a provisioned, permission-approved camera. Open the
 `camera` page, verify actual frames, navigate away during startup and after

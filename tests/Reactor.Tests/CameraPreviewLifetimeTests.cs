@@ -1,3 +1,4 @@
+using Microsoft.UI.Reactor.Core;
 using WctControls;
 using Xunit;
 
@@ -5,6 +6,77 @@ namespace Microsoft.UI.Reactor.Tests;
 
 public class CameraPreviewLifetimeTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PageRetirement_IgnoresLateFailuresAndGivesReplacementANewKey(bool hotReload)
+    {
+        var context = new RenderContext();
+        var errors = new List<string?>();
+        CameraPreviewPageLifetime Render()
+        {
+            context.BeginRender(() => { });
+            var lifetime = context.UseMemo(static () => new CameraPreviewPageLifetime(), Array.Empty<object>());
+            context.UseEffect(() => () => lifetime.Deactivate(), Array.Empty<object>());
+            context.FlushEffects();
+            return lifetime;
+        }
+
+        var first = Render();
+        first.Report("live", errors.Add);
+        Assert.Same(first, Render());
+        if (hotReload)
+            context.ResetForHotReload();
+        else
+        {
+            context.RunCleanups();
+            context = new RenderContext();
+        }
+
+        var replacement = Render();
+        Assert.NotEqual(first.Key, replacement.Key);
+        first.Report("late", errors.Add);
+        replacement.Report("replacement", errors.Add);
+        Assert.Equal(["live", "replacement"], errors);
+        context.RunCleanups();
+    }
+
+    [Fact]
+    public async Task UnmountDuringStart_KeepsFailureListenerThroughCleanup()
+    {
+        var started = new TaskCompletionSource();
+        var finishStart = new TaskCompletionSource();
+        var cleaning = new TaskCompletionSource();
+        var finishCleanup = new TaskCompletionSource();
+        var errors = new List<string>();
+        Action? failureEvent = null;
+        Action? failureHandler = null;
+        var lifetime = new CameraPreviewLifetime(Task.CompletedTask,
+            async () => { started.SetResult(); await finishStart.Task; },
+            () => { },
+            async () => { cleaning.SetResult(); await finishCleanup.Task; },
+            (_, error) => Assert.Fail(error.ToString()),
+            () => failureEvent -= failureHandler);
+        failureHandler = () => { errors.Add("CameraAccessDenied"); lifetime.RecordFailure(); };
+        failureEvent += failureHandler;
+
+        lifetime.Start();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        var completion = lifetime.StopAsync();
+        Assert.False(completion.IsCompleted);
+        failureEvent?.Invoke();
+        Assert.Equal(["CameraAccessDenied"], errors);
+        Assert.True(lifetime.HasErrors);
+
+        finishStart.SetResult();
+        await cleaning.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        failureEvent?.Invoke();
+        Assert.Equal(2, errors.Count);
+        finishCleanup.SetResult();
+        await completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Null(failureEvent);
+    }
+
     [Fact]
     public async Task UnmountDuringStart_WaitsThenCleansUpOnce()
     {

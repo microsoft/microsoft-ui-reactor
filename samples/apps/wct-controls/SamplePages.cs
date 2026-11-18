@@ -198,9 +198,11 @@ internal sealed class CameraPage : Component
     {
         var (camError, setCamError) = UseState<string?>(null);
         var preview = UseRef<CommunityToolkit.WinUI.Controls.CameraPreview?>(null);
+        var lifetime = UseMemo(static () => new CameraPreviewPageLifetime(), Array.Empty<object>());
         // Host disposal runs effect cleanup, but does not guarantee OnUnmount.
         UseEffect(() => () =>
         {
+            lifetime.Deactivate();
             if (preview.Current is { } control)
                 CameraPreviewElement.StopPreview(control);
             preview.Current = null;
@@ -214,7 +216,8 @@ internal sealed class CameraPage : Component
                 description: camError is null ? "Streaming (or starting…)" : $"Unavailable — {camError}",
                 content: CameraPreviewElement.CameraPreview(
                     isFrameSourceGroupButtonVisible: true,
-                    onPreviewFailed: setCamError)
+                    onPreviewFailed: error => lifetime.Report(error, setCamError))
+                    .WithKey(lifetime.Key)
                     .OnMountAdd(control => preview.Current = (CommunityToolkit.WinUI.Controls.CameraPreview)control)
                     .Size(440, 280)));
     }
