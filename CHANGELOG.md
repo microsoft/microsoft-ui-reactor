@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Layout fluent modifiers copy the existing layout bucket directly instead of
+  constructing a temporary delta to merge. Chained sizing, spacing, alignment,
+  visibility, and theme updates preserve immutable snapshots and last-write
+  precedence with fewer allocations (spec 034 §A).
+
 - `VirtualList` with default positional keys no longer projects every key on
   unchanged-count updates; realized content and callbacks still refresh. Its memoized
   index source is now an immutable range instead of an allocated integer list, reducing
