@@ -55,21 +55,6 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
-    // REACTORGEN012 — a control has a single controlled-event state slot (the
-    // descriptor controlled-prop payload is keyed per-control), so AT MOST ONE
-    // controlled/two-way prop per control works. A second controlled prop (whether
-    // auto-paired via a {Prop}Changed convention or an explicit [WrapControlled])
-    // silently never fires its callback. The fix is to make all but one of them
-    // one-way and observe changes through a single typed event instead
-    // (e.g. RangeSelector: one-way RangeStart/RangeEnd + OnValueChanged).
-    private static readonly DiagnosticDescriptor MultipleControlledProps = new(
-        id: "REACTORGEN012",
-        title: "Multiple controlled props on one control",
-        messageFormat: "'{0}' surfaces {1} controlled/two-way props ({2}) but a control supports only one — the extras never fire. Make all but one one-way and observe changes through a single typed event.",
-        category: "Reactor.Wrappers",
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
-
     // Fully-qualified display that also preserves nullable-reference annotations
     // (e.g. a projected event-arg property typed `string?` surfaces as a
     // `string?` callback parameter, not `string` — so the generated trampoline's
@@ -554,20 +539,6 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
 
         var hint = descriptorOnly ? $"{elementName}.Descriptor.g.cs" : $"{elementName}.Wrapper.g.cs";
 
-        // REACTORGEN012 — a control supports only one controlled/two-way prop (single
-        // per-control event-state slot). Warn if more than one was surfaced; the
-        // extras silently never fire (see RangeSelector: RangeStart + RangeEnd).
-        // Full-wrapper only — descriptor-only built-ins are hand-reviewed records.
-        var controlled = props.Where(p => p.Controlled).Select(p => p.Name).ToImmutableArray();
-        if (!descriptorOnly && controlled.Length > 1)
-        {
-            var d = Diagnostic.Create(
-                MultipleControlledProps,
-                element.Locations.FirstOrDefault() ?? Location.None,
-                elementName, controlled.Length, string.Join(", ", controlled));
-            return WrapperModel.OkWithDiagnostic(hint, source, d) with { Factory = factory, MetadataRegistrationDiagnostic = metadataDiagnostic };
-        }
-
         return WrapperModel.Ok(hint, source) with { Factory = factory, MetadataRegistrationDiagnostic = metadataDiagnostic };
     }
 
@@ -744,7 +715,9 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
                         surfacedName, prop.Name, c.ValueType,
                         ElementType: $"global::Microsoft.UI.Reactor.Optional<{c.ValueType}>",
                         IsReference: false, Controlled: true, ChangedEvents: resolved, ArgsType: argsType, Dp: null,
-                        Deferred: deferred, ControlledDelegate: ctrlDelegate));
+                        Deferred: deferred, ControlledDelegate: ctrlDelegate,
+                        ChangedDelegates: resolved.Select(ev => eventsByName[ev].Type
+                            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)).ToImmutableArray()));
                     continue;
                 }
 
@@ -1492,8 +1465,17 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         sb.AppendLine();
         }
 
+        // The ordinary descriptor fast path owns the entire event payload box.
+        // Multiple bindings (or an ordinary event alongside one) need isolated
+        // observations and one suppression decision per native event instead.
+        var controlledProps = props.Where(p => p.Controlled).ToImmutableArray();
+        var groupedControlled = controlledProps.Length > 1 ||
+            (controlledProps.Any(p => !p.Deferred) && events.Length > 0);
+        if (groupedControlled)
+            EmitControlledBindings(sb, elementName, controlFqn, controlledProps);
+
         // ── Event / deferred-controlled payload + trampolines ─────────────
-        var deferredProps = props.Where(p => p.Deferred).ToImmutableArray();
+        var deferredProps = props.Where(p => p.Deferred && !groupedControlled).ToImmutableArray();
         if (events.Length > 0 || deferredProps.Length > 0)
         {
             sb.AppendLine("    private sealed class __EventPayload");
@@ -1617,7 +1599,13 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         foreach (var p in props)
         {
             sb.AppendLine();
-            if (p.Controlled && p.Deferred)
+            if (p.Controlled && groupedControlled)
+            {
+                sb.AppendLine("        .ImperativeBridged(");
+                sb.AppendLine($"            mount:  static (ctx, c, e) => __Write{p.Name}(c, e),");
+                sb.Append($"            update: static (ctx, c, o, n) => __Write{p.Name}(c, n))");
+            }
+            else if (p.Controlled && p.Deferred)
             {
                 // Deferred (suppress-counter) two-way via HandCodedControlled: the
                 // generated trampoline (above) gates on the public
@@ -1692,6 +1680,14 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
             {
                 sb.Append($"        .OneWayConditional<{p.ValueType}>(static e => e.{p.Name}!.Value, static (c, v) => c.{p.ControlProp} = {ConvertRhs(p)}, static e => e.{p.Name}.HasValue)");
             }
+        }
+        if (groupedControlled)
+        {
+            sb.AppendLine();
+            sb.AppendLine("        .ImperativeBridged(");
+            sb.AppendLine("            mount:   static (ctx, c, e) => __SubscribeControlled(c),");
+            sb.AppendLine("            update:  static (ctx, c, o, n) => __SubscribeControlled(c),");
+            sb.Append("            unmount: static (ctx, c) => __UnsubscribeControlled(c))");
         }
         foreach (var e in events)
         {
@@ -1915,7 +1911,8 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         string? Convert = null,
         bool Unconditional = false,
         bool Deferred = false,
-        string? ControlledDelegate = null);
+        string? ControlledDelegate = null,
+        ImmutableArray<string> ChangedDelegates = default);
 
     private sealed record EventInfo(string Name, string DelegateType, bool Typed = false, ImmutableArray<string> ArgProperties = default, ImmutableArray<string> ArgTypes = default);
 

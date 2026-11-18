@@ -309,7 +309,7 @@ Q1–Q8 and Q11 are **resolved** (see §Resolved decisions). Remaining:
 - **Member walk:** from the most-derived type up to, but excluding, `Microsoft.UI.Xaml.Controls.Control`. Captures control-specific members (`ButtonBase.Click`, `ContentControl.Content`, `SettingsCard.Header`) while skipping `Control`/`FrameworkElement` layout plumbing Reactor already models via modifiers.
 - **Value props:** public instance, public get+set, non-indexer. `string`/`object` → text; `bool`/`int`/`double`/enum → nullable-backed `OneWayConditional`; **value-type structs** (`Thickness`, `CornerRadius`, `Color`, …) → `T?` nullable one-way (write `.Value`); **reference types** (`Brush`, `FontFamily`, …) → `T?` one-way (write when non-null); **`Nullable<U>` tri-state** (`bool?`, `DateTimeOffset?`, …) → **spec-050 `Optional<U?>`** (Unset ⇒ don't touch, `Of(null)` ⇒ write null, `Of(v)` ⇒ write v — `Optional<T>` mirrors `Nullable<T>`'s `.Value`/`.HasValue` so the same one-way/controlled emit handles it). Skipped: delegates, interfaces, arrays, collections (`IEnumerable`), templates/styles, and `UIElement`-derived types (those are content, not value props).
 - **Content slot:** discovered from the control's WinUI `[ContentProperty]` attribute, with a `[WrapContent("Prop")]` override and a property-named-`Content` fallback. Auto-accepted only when unambiguously a child — a `UIElement`-derived property (`Border.Child`, `Viewbox.Child`) or an `object` named exactly `Content` (`ContentControl.Content`). An `object` `[ContentProperty]` with another name (WinUI declares `ToggleSwitch`'s as `Header`) is treated as a value prop, not a child slot; a `[WrapContent]` override forces any single-content-typed property. Collections (`Panel.Children`/`ItemsControl.Items`) are panel/items strategies (P3), not this. The `SingleContent` strategy writes the discovered property (`c.Child`), not a hardcoded `c.Content`.
-- **Two-way props:** a value prop `P` paired with a `{P}Changed` event (auto-pair), a `[WrapControlled(P, ChangedEvent)]` override (single non-conventional event), or a `[WrapControlled(P, Events = new[]{…})]` override (multiple events, e.g. `Checked`+`Unchecked`) ⇒ `Optional<T>` + `On{P}Changed` + public `.Controlled<TValue,TArgs>` (spec 050; §5.3). For multi-event the value is read back from the control after any event fires; `TArgs` is taken from the first event. `[WrapOneWay(P)]` opts a prop out of auto-pairing (keeps it one-way despite a `{P}Changed` event — e.g. `ProgressBar.Value`).
+- **Two-way props:** a value prop `P` paired with a `{P}Changed` event (auto-pair), a `[WrapControlled(P, ChangedEvent)]` override (single non-conventional event), or a `[WrapControlled(P, Events = new[]{…})]` override (multiple events, e.g. `Checked`+`Unchecked`) ⇒ `Optional<T>` + `On{P}Changed` (spec 050; §5.3). An isolated controlled property uses public `.Controlled<TValue,TArgs>`; composite wrappers use §8.2's grouped binding. For multi-event the value is read back from the control after any event fires. `[WrapOneWay(P)]` opts a prop out of auto-pairing (keeps it one-way despite a `{P}Changed` event — e.g. `ProgressBar.Value`).
 - **Events:** fire-and-forget `RoutedEventHandler` and `TypedEventHandler<,>` events not consumed by a controlled prop ⇒ `Action On{Event}` + `HandCodedEvent` trampoline (typed to the event's delegate) that reads the live element via `Reconciler.GetElementTag`.
 - **Name-mapping:** `[WrapAlias("ElementName", "ControlProperty")]` surfaces a control property under a friendly element-facing name — the generated init-property and factory parameter use `ElementName`, while the descriptor reads/writes `ControlProperty` (e.g. `Min`→`Minimum`, `Content`→`Text`). **Aliasing the content property opts it out of the child slot:** when the aliased `ControlProperty` is the control's discovered `[ContentProperty]`, the generator treats it as a value prop (the string form of polymorphic content) rather than a `SingleContent` child — e.g. `[WrapAlias("Label", "Content")]` on `CheckBox`/`ToggleButton` surfaces `string? Label` writing `c.Content`, with no `Content` element child slot.
 - **One-way DP-backed props use spec-050 `Optional<T>` + `dp:` ClearValue.** When a one-way prop is backed by a public `{Prop}Property` dependency property, the element prop is `Optional<T>` and the descriptor uses `.OneWay(get, set, dp:)` — `Unset` ⇒ `ClearValue(dp)` releases the local value to the WinUI style/precedence chain (spec 050 §6.3), instead of the skip-write fallback. Props with no DP keep the nullable-`T?` `OneWayConditional` skip-write. Combined with controlled props (`Optional<T>`-enforced) and tri-state nullables (`Optional<U?>`), the generator is now fully Optional-native.
@@ -333,6 +333,43 @@ inspected ≥20 migrated controls so it can't pass vacuously).
 > §11. The WCT gallery (`samples/apps/wct-controls`) is the living proof that the generator handles
 > arbitrary third-party controls.
 
+
+### §8.2 Composite controlled bindings (issue #1564)
+
+Multiple controlled properties are supported, including two range endpoints sharing
+`ValueChanged`. The same path handles an ordinary controlled property alongside generated
+ordinary events. `REACTORGEN012` is retired; `Deferred = true` is not a workaround or a
+requirement for multiple values.
+
+The generator emits public `ImperativeBridged` descriptor hooks and a lazily registered
+native attached property holding one typed last-observed value per controlled property.
+This avoids both the single `ControlledPropEntry` payload collision and RCW-keyed side
+tables. No Reactor internals, reflection, or new public API is required, and constructing
+the element without a WinUI dispatcher does not register a dependency property.
+
+Each distinct native change event is subscribed once. Its handler snapshots its affected
+properties before callbacks, checks `ReactorBinding.ShouldSuppressEcho` once, and invokes
+only callbacks whose readback changed, resolving callbacks from the current element.
+Ordinary events retain their existing `HandCodedEvent` behavior and payload. Controlled
+subscriptions are removed and their attached state cleared at unmount.
+
+A specified value is compared against native readback on every update, even if the parent
+value did not change. Unset skips the write without disabling observation. Controlled
+writes use a scoped depth guard and then snapshot actual readback, including sibling
+coercion. Synchronous echoes cannot escape during the write; delayed echoes matching the
+snapshot and unchanged-endpoint events do not notify. Silent or guarded setters leave no
+suppression token to swallow later input. A user edit arriving before a delayed echo still
+notifies if its readback differs. This is value observation, not delivery of every native
+event; consumers requiring raw event arguments should use one-way properties and a typed
+event instead. Non-controlled writes that require bespoke coercion ordering still belong
+in the existing customization hooks.
+
+An isolated single-controlled binding keeps its existing `Controlled` / deferred
+`HandCodedControlled` path. The external no-IVT `ControlledRangeProbe` and
+`MultipleControlled_*` live fixtures exercise shared/distinct events, same/different value
+types, parent acceptance/rejection, callback replacement, omitted values, echo/coercion,
+ordinary events and teardown. Explicit `MoveStart`/`MoveEnd` events are the positive control;
+silent Toolkit property assignments are not event-wiring evidence.
 
 ## §9 Trimming and AOT
 
