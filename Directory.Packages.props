@@ -68,7 +68,9 @@
          the analyzers and generators packed into Microsoft.UI.Reactor load into the app's
          compiler, which rejects (CS8032) one built against a newer Roslyn than its own.
          5.0.0 = Visual Studio 2026 18.0 / .NET 10.0.100 SDK. Raise it by hand, only when
-         dropping those hosts; Dependabot ignores its minor/major updates.
+         dropping those hosts; Dependabot ignores its minor/major updates. Bump
+         Microsoft.CodeAnalysis.Analyzers by hand too: Dependabot ignores it because its
+         peer-dependency step would raise CSharp along with it (#1572).
          Guarded by tests/Reactor.Tests/Tooling/ShippedAnalyzersRoslynFloorTests.cs. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
