@@ -445,10 +445,10 @@ private static T ModifyTheme<T>(T el, string property, ThemeRef theme) where T :
 }
 ```
 
-The second `.Margin(left: 16)` builds a fresh `ElementModifiers` with
-`Margin = new Thickness(16, 0, 0, 0)` and hands it to `Merge`. `Merge`
-treats the new `Margin` value as a single atomic field — there's no
-field-level merge inside `Thickness`. The result is `(16, 0, 0, 0)`,
+The second `.Margin(left: 16)` copies the existing layout bucket with
+`Margin = new Thickness(16, 0, 0, 0)`, then replaces that bucket in a
+copied modifiers parent and element. The whole `Thickness` value is
+replaced, not merged side by side. The result is `(16, 0, 0, 0)`,
 not `(16, 8, 8, 8)`. Either call the per-side overload once
 (`.Margin(left: 16, top: 8, right: 8, bottom: 8)`) or stick to the
 uniform shape if all sides are equal.
