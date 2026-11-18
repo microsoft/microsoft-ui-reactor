@@ -337,6 +337,7 @@ attachment action are local demonstration data, not a gateway connection.
 ```csharp
 ItemsView(messages, message => message.Id,
     (message, _) => ItemContainer(TextBlock(message.Text)))
+    .VerticalContentAlignment(VerticalAlignment.Bottom)
     .FollowTail(onFollowingChanged: setFollowing)
     .ScrollToTail(tailRequest)
     .ScrollIntoView(selectedKey, navigationRequest);
@@ -351,6 +352,15 @@ TextBox(draft, setDraft, "Write a message")
     { DisplayMode = SplitViewDisplayMode.Inline, OpenPaneLength = paneWidth })
     .ResizablePane(minimum: 160, maximum: 360, onLengthChanged: setPaneWidth);
 ```
+
+**Content alignment.** `VerticalContentAlignment(VerticalAlignment.Bottom)` places
+short ItemsView feeds at the bottom of their viewport. Content that grows taller
+than the viewport scrolls normally, retaining native virtualization and source
+order; this does not reverse the items or scroll to the tail by itself.
+Omitting the modifier keeps the native top-aligned layout. Changing it to `Top`
+or removing it restores top alignment with the stock template. Alignment follows
+viewport resizing and is independent of `FollowTail`. The Gallery's ItemsView
+page includes a two-message example that can grow into a scrollable feed.
 
 **Tail following.** Give the ItemsView a bounded viewport and stable item keys.
 `FollowTail` initially shows the last row, follows appended rows and changing

@@ -51,6 +51,7 @@ internal static class ItemsViewDescriptor
         .OneWay(get: static el => el.LayoutKind, set: static (ctrl, v) => ctrl.Layout = BuildItemsViewLayout(v))
         .OneWay(get: static el => el.SelectionMode, set: static (ctrl, v) => ctrl.SelectionMode = v)
         .OneWay(get: static el => el.IsItemInvokedEnabled, set: static (ctrl, v) => ctrl.IsItemInvokedEnabled = v)
+        .OneWay(get: static el => el.Modifiers?.VerticalContentAlignment, set: ItemsViewContentAlignment.Set)
         .ImperativeBridged(
             static (_, c, e) => ItemsViewScrollBehavior.Update(c, null, e),
             static (_, c, old, e) => ItemsViewScrollBehavior.Update(c, old, e),
@@ -58,6 +59,7 @@ internal static class ItemsViewDescriptor
             {
                 ItemsViewScrollBehavior.Detach(c);
                 ItemsViewScrollBarBinding.Set(c, null);
+                ItemsViewContentAlignment.Detach(c);
             })
         .Reference(static e => e.VerticalScrollBar, ItemsViewScrollBarBinding.Set)
         .HandCodedEvent<ItemsViewEventPayload,

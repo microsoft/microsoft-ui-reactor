@@ -29,7 +29,8 @@ Conventions for contributors:
 ### Added
 
 - **Reusable feed and composer behaviors on existing controls:** ItemsView tail
-  following and keyed navigation, AnnotatedScrollBar labels/previews and scroll
+  following, keyed navigation, and opt-in bottom content alignment through
+  `VerticalContentAlignment`, AnnotatedScrollBar labels/previews and scroll
   controller binding, TextBox Enter-to-submit, and keyboard/pointer resizing for
   SplitView panes. The Gallery's **Chat feed** composition demonstrates them
   together, with the original native OpenClaw chat styling and independent

@@ -10,6 +10,7 @@ internal static class SelfTestFixtureRegistry
     public static readonly string[] AllFixtures =
     [
         "ScrollBehaviors_OpenClawStyling",
+        "ScrollBehaviors_ContentAlignment",
         "ScrollBehaviors_TextSubmit",
         "ScrollBehaviors_TailFollowing",
         "ScrollBehaviors_Annotations",
@@ -2394,6 +2395,7 @@ internal static class SelfTestFixtureRegistry
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
         "ScrollBehaviors_OpenClawStyling" => new OpenClawStylingFixture(harness),
+        "ScrollBehaviors_ContentAlignment" => new ScrollBehaviorFixtures.ContentAlignment(harness),
         "ScrollBehaviors_TextSubmit" => new ScrollBehaviorFixtures.TextSubmit(harness),
         "ScrollBehaviors_TailFollowing" => new ScrollBehaviorFixtures.TailFollowing(harness),
         "ScrollBehaviors_Annotations" => new ScrollBehaviorFixtures.Annotations(harness),

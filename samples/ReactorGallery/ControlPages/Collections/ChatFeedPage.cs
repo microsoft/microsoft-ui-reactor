@@ -22,6 +22,7 @@ class ChatFeedPage : Component
             ItemsView(messages, message => message.Id,
                 (message, _) => ItemContainer(TextBlock(message.Text).TextWrapping(TextWrapping.Wrap)))
                 .Ref(itemsRef)
+                .VerticalContentAlignment(VerticalAlignment.Bottom)
                 .FollowTail(onFollowingChanged: setFollowing)
                 .ScrollToTail(tailRequest)
                 .ScrollIntoView(navigation.Key, navigation.Request);
@@ -160,6 +161,7 @@ class ChatFeedDemo : Component
             ).Resources(OpenClawChatStyles.ItemResources).IsTabStop(false)
                 .Set(container => container.HorizontalContentAlignment = HorizontalAlignment.Stretch)
             ) with { SelectionMode = ItemsViewSelectionMode.None })
+            .VerticalContentAlignment(VerticalAlignment.Bottom)
             .FollowTail(onFollowingChanged: setFollowing)
             .ScrollToTail(tailRequest)
             .ScrollIntoView(navigation.Key, navigation.Request)

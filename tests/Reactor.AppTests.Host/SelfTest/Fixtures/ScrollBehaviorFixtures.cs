@@ -10,6 +10,123 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 internal static class ScrollBehaviorFixtures
 {
+    internal sealed class ContentAlignment(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed record Row(string Key, double Height = 40);
+
+        public override async Task RunAsync()
+        {
+            using var host = H.CreateHost();
+            Row[] rows = [new("first"), new("second")];
+            VerticalAlignment? alignment = null;
+            var height = 300.0;
+            Element Render()
+            {
+                var element = ItemsView(rows, row => row.Key,
+                    (row, _) => ItemContainer(TextBlock(row.Key)).Height(row.Height))
+                    .Height(height).Width(400);
+                return alignment is { } value ? element.VerticalContentAlignment(value) : element;
+            }
+
+            host.Mount(_ => Render());
+            await Harness.Render();
+            var items = H.FindControl<ItemsView>(_ => true)!;
+
+            bool IsAligned(VerticalAlignment expected)
+            {
+                if (rows.Length == 0 || items.ScrollView is not { ViewportHeight: > 0 } scroll
+                    || scroll.Content is not ItemsRepeater repeater
+                    || repeater.TryGetElement(0) is not FrameworkElement { ActualHeight: > 0 } first
+                    || repeater.TryGetElement(rows.Length - 1) is not FrameworkElement { ActualHeight: > 0 } last)
+                    return false;
+                var top = first.TransformToVisual(scroll).TransformPoint(default).Y;
+                var bottom = last.TransformToVisual(scroll).TransformPoint(default).Y + last.ActualHeight;
+                if (scroll.ViewportHeight - (bottom - top) < 50) return false;
+                var error = expected switch
+                {
+                    VerticalAlignment.Top => top,
+                    VerticalAlignment.Bottom => bottom - scroll.ViewportHeight,
+                    _ => (top + bottom - scroll.ViewportHeight) / 2,
+                };
+                return Math.Abs(error) < 2;
+            }
+
+            string Position()
+            {
+                var scroll = items.ScrollView;
+                return $"viewport={scroll?.ViewportHeight} extent={scroll?.ExtentHeight} offset={scroll?.VerticalOffset}";
+            }
+
+            H.Check("Alignment_DefaultIsTop", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Top), 2000), Position());
+            alignment = VerticalAlignment.Bottom;
+            host.Mount(_ => Render());
+            H.Check("Alignment_ShortFeedAtBottom", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Bottom), 2000), Position());
+            H.Check("Alignment_UpdatesExistingControl", ReferenceEquals(items, H.FindControl<ItemsView>(_ => true)));
+            H.Check("Alignment_DoesNotEnableFollowing", !ItemsViewScrollBehavior.IsNavigationPending(items)
+                && items.ScrollView!.VerticalOffset == 0);
+
+            height = 420;
+            host.Mount(_ => Render());
+            H.Check("Alignment_TracksViewportResize", await Harness.WaitForWithin(() =>
+                items.ScrollView!.ViewportHeight > 400 && IsAligned(VerticalAlignment.Bottom), 2000), Position());
+            rows = [.. rows, new("third", 75)];
+            host.Mount(_ => Render());
+            H.Check("Alignment_AppendStaysBottom", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Bottom), 2000), Position());
+            var repeater = (ItemsRepeater)items.ScrollView!.Content;
+            H.Check("Alignment_PreservesSourceOrder", Enumerable.Range(0, rows.Length).All(index =>
+                repeater.TryGetElement(index) is ItemContainer { Child: TextBlock text } && text.Text == rows[index].Key));
+
+            rows = [.. rows[..^1], rows[^1] with { Height = 120 }];
+            host.Mount(_ => Render());
+            H.Check("Alignment_TracksRowGrowth", await Harness.WaitForWithin(() =>
+                repeater.TryGetElement(2) is FrameworkElement { ActualHeight: 120 } && IsAligned(VerticalAlignment.Bottom), 2000), Position());
+
+            rows = Enumerable.Range(0, 60).Select(index => new Row($"overflow-{index}")).ToArray();
+            host.Mount(_ => Render());
+            H.Check("Alignment_OverflowKeepsNativeScrolling", await Harness.WaitForWithin(() =>
+                items.ScrollView.ScrollableHeight > 1000 && items.ScrollView.VerticalOffset < 1, 2000), Position());
+            H.Check("Alignment_OverflowStillVirtualized", Enumerable.Range(0, rows.Length).Count(index =>
+                repeater.TryGetElement(index) is not null) < rows.Length / 2);
+
+            rows = [new("first"), new("second")];
+            host.Mount(_ => Render());
+            H.Check("Alignment_ShrinkReturnsToBottom", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Bottom), 2000), Position());
+            rows = [];
+            host.Mount(_ => Render());
+            await Harness.Render();
+            H.Check("Alignment_EmptyHasNoScrollRange", items.ScrollView.ScrollableHeight == 0);
+            rows = [new("after-empty")];
+            host.Mount(_ => Render());
+            H.Check("Alignment_EmptyToPopulated", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Bottom), 2000), Position());
+
+            H.SetContent(null);
+            await Harness.Render();
+            H.Check("Alignment_UnloadedContentRestored", !items.IsLoaded && repeater.VerticalAlignment == VerticalAlignment.Top);
+            H.SetContent(items);
+            H.Check("Alignment_ReloadedContentRebound", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Bottom), 2000), Position());
+
+            alignment = VerticalAlignment.Center;
+            host.Mount(_ => Render());
+            H.Check("Alignment_CenterUsesSameAPI", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Center), 2000), Position());
+            alignment = VerticalAlignment.Top;
+            host.Mount(_ => Render());
+            H.Check("Alignment_ExplicitTopRestoresTop", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Top), 2000), Position());
+            alignment = VerticalAlignment.Bottom;
+            host.Mount(_ => Render());
+            await Harness.Render();
+            alignment = null;
+            host.Mount(_ => Render());
+            H.Check("Alignment_RemovingModifierRestoresTemplate", await Harness.WaitForWithin(() => IsAligned(VerticalAlignment.Top), 2000), Position());
+
+            alignment = VerticalAlignment.Bottom;
+            host.Mount(_ => Render());
+            await Harness.Render();
+            host.Mount(_ => Empty());
+            await Harness.Render();
+            H.Check("Alignment_UnmountRestoresContent", repeater.VerticalAlignment == VerticalAlignment.Top);
+        }
+    }
+
     internal sealed class TextSubmit(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -61,6 +178,7 @@ internal static class ScrollBehaviorFixtures
             Element Render() => ItemsView(rows, r => r.Key,
                     (r, _) => ItemContainer(TextBlock(r.Key)).Height(r.Height))
                 .Height(260).Width(500)
+                .VerticalContentAlignment(VerticalAlignment.Bottom)
                 .FollowTail(onFollowingChanged: value => following = value)
                 .ScrollToTail(tailRequest).ScrollIntoView(target, navigation);
             host.Mount(_ => Render());

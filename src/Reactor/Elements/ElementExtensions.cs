@@ -146,6 +146,10 @@ public static partial class ElementExtensions
     public static T HorizontalContentAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { HorizontalContentAlignment = alignment });
 
+    /// <summary>
+    /// Aligns content inside a control. On ItemsView, Bottom places a short feed at
+    /// the viewport's bottom without reversing its items or enabling tail following.
+    /// </summary>
     public static T VerticalContentAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { VerticalContentAlignment = alignment });
 
