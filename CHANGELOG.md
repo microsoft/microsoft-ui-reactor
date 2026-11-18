@@ -90,6 +90,11 @@ Conventions for contributors:
   template does not display. Native tabs and commands remain intact, with visible
   command feedback that stays current across rerenders (issue #1577).
 
+- The Toolkit sample's GridSplitter panes and HeaderedContentControl card use
+  `Theme.CardBackground` instead of a hardcoded pale background, adapting to the app
+  theme and avoiding `REACTOR_THEME_001` errors in package consumers with warnings
+  treated as errors (issue #1578).
+
 - **A button whose content is an element no longer remounts that content after a garbage
   collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
   rest of the button family remembered which child they owned by the control's managed wrapper.
