@@ -33,10 +33,19 @@ foreach ($laneName in $plannedLanes) {
         $results = @()
         if ($outcome.Count -eq 1) {
             try {
+                $execution = $outcome[0].execution
+                if ($null -eq $execution -or
+                    $execution.timedOut -isnot [bool] -or $execution.captureComplete -isnot [bool] -or
+                    $execution.timedOut -or -not $execution.captureComplete) {
+                    throw 'Process completion metadata is missing, timed out or incompletely captured.'
+                }
                 $results = @(Get-Content (Join-Path $laneDirectory "$control.results.jsonl") |
                     ForEach-Object { $_ | ConvertFrom-Json })
                 $tap = Get-Content (Join-Path $laneDirectory "$control.stdout.txt") -Raw
-                $null = Test-CompatibilityResults $tap $results $keys $outcome[0].exitCode
+                $verdict = Test-CompatibilityResults $tap $results $keys $outcome[0].exitCode
+                if ($verdict.Status -cne $outcome[0].status) {
+                    throw 'Recorded process verdict disagrees with revalidated results.'
+                }
                 $validated = $true
             } catch { $failure = $_.Exception.Message }
         } elseif ($outcome.Count -gt 1) {

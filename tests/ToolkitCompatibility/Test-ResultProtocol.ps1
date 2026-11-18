@@ -39,3 +39,57 @@ try { Test-CompatibilityResults $nativeTap $native @('Panel/value-pattern') 0 | 
 catch { $rejected = $true }
 if (-not $rejected) { throw 'Skip directive was accepted as an executed pass.' }
 Write-Output 'PASS explicit native-contract skip cannot masquerade as an executed pass'
+
+$directory = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'reactor-toolkit-summary-' + [Guid]::NewGuid().ToString('N'))
+$lane = Join-Path $directory 'jit-unpackaged'
+New-Item $lane -ItemType Directory | Out-Null
+$summaryFailures = [Collections.Generic.List[string]]::new()
+try {
+    @{
+        revision = 'synthetic-protocol-fixture'
+        controls = @('SettingsCard')
+        parameters = @{ Runtime = @('jit'); Deployment = @('unpackaged') }
+    } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'run.json')
+    @{ lane = 'jit-unpackaged'; status = 'blocked'; detail = 'Synthetic fixture' } |
+        ConvertTo-Json | Set-Content (Join-Path $directory 'matrix.json')
+    @('environment/identity-runtime-location', 'SettingsCard/mount') |
+        Set-Content (Join-Path $lane 'inventory.stdout.txt')
+    $summaryRows = @(
+        [pscustomobject]@{ Control = 'environment'; Scenario = 'identity-runtime-location'; Status = 'passed'; Detail = 'Synthetic environment' },
+        [pscustomobject]@{ Control = 'SettingsCard'; Scenario = 'mount'; Status = 'passed'; Detail = 'Synthetic mount' }
+    )
+    $summaryTap = $tap.Replace('environment/identity', 'environment/identity-runtime-location')
+    $cases = @(
+        @{ Name = 'complete-pass'; Status = 'passed'; Exit = 0; Capture = $true; Timeout = $false; ExpectedPasses = 2 },
+        @{ Name = 'complete-assertion-failure'; Status = 'failed'; Exit = 1; Capture = $true; Timeout = $false; ExpectedPasses = 1 },
+        @{ Name = 'incomplete-capture'; Status = 'failed'; Exit = 0; Capture = $false; Timeout = $false; ExpectedPasses = 0 },
+        @{ Name = 'timed-out'; Status = 'failed'; Exit = 0; Capture = $true; Timeout = $true; ExpectedPasses = 0 },
+        @{ Name = 'missing-execution'; Status = 'passed'; Exit = 0; Capture = $true; Timeout = $false; ExpectedPasses = 0 },
+        @{ Name = 'recorded-verdict-mismatch'; Status = 'failed'; Exit = 0; Capture = $true; Timeout = $false; ExpectedPasses = 0 }
+    )
+    foreach ($case in $cases) {
+        $summaryRows[1].Status = if ($case.Exit -eq 1) { 'failed' } else { 'passed' }
+        $summaryRows | ForEach-Object { $_ | ConvertTo-Json -Compress } |
+            Set-Content (Join-Path $lane 'SettingsCard.results.jsonl')
+        $caseTap = if ($case.Exit -eq 1) { $summaryTap.Replace('ok 2 -', 'not ok 2 -').Replace('Total failures: 0', 'Total failures: 1') }
+            else { $summaryTap }
+        $caseTap | Set-Content (Join-Path $lane 'SettingsCard.stdout.txt')
+        $outcome = @{
+            control = 'SettingsCard'; status = $case.Status; detail = $case.Name; exitCode = $case.Exit
+        }
+        if ($case.Name -ne 'missing-execution') {
+            $outcome.execution = @{ timedOut = $case.Timeout; captureComplete = $case.Capture }
+        }
+        $outcome | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $lane 'controls.json')
+        & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null
+        $summary = @(Get-Content (Join-Path $directory 'scenario-matrix.json') -Raw | ConvertFrom-Json)
+        $passes = @($summary | Where-Object status -eq 'passed').Count
+        if ($passes -ne $case.ExpectedPasses -or
+            ($case.ExpectedPasses -eq 0 -and @($summary | Where-Object validatedCompleteProcess).Count -ne 0)) {
+            $summaryFailures.Add("Summary accepted incorrect process evidence: $($case.Name)")
+        } else { Write-Output "PASS summary $($case.Name)" }
+    }
+} finally {
+    Remove-Item -LiteralPath $directory -Recurse -Force
+}
+if ($summaryFailures.Count) { throw ($summaryFailures -join "`n") }

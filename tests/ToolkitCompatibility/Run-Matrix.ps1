@@ -89,15 +89,16 @@ function Invoke-Logged([string]$Log, [string]$Executable, [string[]]$Arguments) 
     if ($code -ne 0) { throw "$Executable exited $code. See $Log" }
 }
 
-function Invoke-Appx([string]$Operation, [string]$Path, [string]$Name, [string]$Log) {
+function Invoke-Appx([string]$Operation, [string]$Path, [string]$Name, [string]$Log, [switch]$AllUsers) {
     # Appx is a Windows PowerShell module. Base64 avoids quoting paths into executable code.
     $quotedPath = "'" + $Path.Replace("'", "''") + "'"
     $quotedName = "'" + $Name.Replace("'", "''") + "'"
+    $scope = if ($AllUsers) { ' -AllUsers' } else { '' }
     $command = switch ($Operation) {
         'register' { "Add-AppxPackage -Register $quotedPath -ErrorAction Stop" }
         'install' { "Add-AppxPackage -Path $quotedPath -AllowUnsigned -ErrorAction Stop" }
-        'query' { "Get-AppxPackage -Name $quotedName | Select-Object Name,PackageFullName,InstallLocation,IsDevelopmentMode | ConvertTo-Json -Compress" }
-        'remove' { "Remove-AppxPackage -Package $quotedName -ErrorAction Stop" }
+        'query' { "Get-AppxPackage$scope -Name $quotedName | Select-Object Name,PackageFullName,InstallLocation,IsDevelopmentMode | ConvertTo-Json -Compress" }
+        'remove' { "Remove-AppxPackage$scope -Package $quotedName -ErrorAction Stop" }
         default { throw "Unknown deployment operation." }
     }
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(
@@ -113,10 +114,13 @@ function Invoke-Consumer([string]$Executable, [string[]]$Arguments, [string]$Dir
     $start.WorkingDirectory = $Directory
     foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
     "$Executable $($Arguments -join ' ')" | Add-Content (Join-Path $evidence 'commands.txt')
-    $process = [Diagnostics.Process]::Start($start)
-    $stdoutFile = [IO.File]::Create("$Prefix.stdout.txt")
-    $stderrFile = [IO.File]::Create("$Prefix.stderr.txt")
+    $process = $null
+    $stdoutFile = $null
+    $stderrFile = $null
     try {
+        $stdoutFile = [IO.File]::Create("$Prefix.stdout.txt")
+        $stderrFile = [IO.File]::Create("$Prefix.stderr.txt")
+        $process = [Diagnostics.Process]::Start($start)
         $stdoutTask = $process.StandardOutput.BaseStream.CopyToAsync($stdoutFile)
         $stderrTask = $process.StandardError.BaseStream.CopyToAsync($stderrFile)
         $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
@@ -136,18 +140,26 @@ function Invoke-Consumer([string]$Executable, [string[]]$Arguments, [string]$Dir
         }
         $stdoutFile.Flush()
         $stderrFile.Flush()
-        $stdoutFile.Dispose()
-        $stderrFile.Dispose()
-        [pscustomobject]@{
-            Stdout = [IO.File]::ReadAllText("$Prefix.stdout.txt")
-            ExitCode = $process.ExitCode
-            TimedOut = $timedOut
-            CaptureComplete = $captureComplete
-        }
+        $exitCode = $process.ExitCode
     } finally {
-        $stdoutFile.Dispose()
-        $stderrFile.Dispose()
-        $process.Dispose()
+        try {
+            if ($process -and -not $process.HasExited) {
+                $process.Kill($true)
+                if (-not $process.WaitForExit(5000)) { throw 'Owned process did not exit during cleanup.' }
+            }
+        } finally {
+            try { if ($stdoutFile) { $stdoutFile.Dispose() } }
+            finally {
+                try { if ($stderrFile) { $stderrFile.Dispose() } }
+                finally { if ($process) { $process.Dispose() } }
+            }
+        }
+    }
+    [pscustomobject]@{
+        Stdout = [IO.File]::ReadAllText("$Prefix.stdout.txt")
+        ExitCode = $exitCode
+        TimedOut = $timedOut
+        CaptureComplete = $captureComplete
     }
 }
 
@@ -161,6 +173,7 @@ foreach ($runtimeName in $Runtime) {
         $alias = "toolkit-compat-$run-$laneName.exe"
         $ownedFullName = $null
         $deploymentSucceeded = $false
+        $allUsers = $deploymentName -eq 'msix'
         $status = 'blocked'
         $detail = ''
         $exitCode = $null
@@ -218,15 +231,7 @@ foreach ($runtimeName in $Runtime) {
             $expectedRoot = $layout
             if ($deploymentName -ne 'unpackaged') {
                 Copy-Item $manifestPath (Join-Path $layout 'AppxManifest.xml')
-                $preflight = Join-Path $lane 'preexisting-registration.json'
-                Invoke-Appx 'query' '' $identity $preflight
-                if (-not [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText($preflight))) {
-                    throw 'Per-run identity already exists; refusing to replace or remove it.'
-                }
-                if ($deploymentName -eq 'loose') {
-                    Invoke-Appx 'register' (Join-Path $layout 'AppxManifest.xml') $identity (Join-Path $lane 'register.log')
-                    $deploymentSucceeded = $true
-                } else {
+                if ($deploymentName -eq 'msix') {
                     $archive = Join-Path $lane 'ToolkitCompatibility.msix'
                     Invoke-Logged (Join-Path $lane 'package.log') 'winapp' @(
                         'package', $layout, '--manifest', (Join-Path $layout 'AppxManifest.xml'),
@@ -243,22 +248,37 @@ foreach ($runtimeName in $Runtime) {
                         runnerRevision = $runnerRevision
                         preparedConsumer = $consumerProvenance
                         lane = $laneName
+                        installationScope = 'all-users'
+                        cleanupScope = 'all-users'
+                        requiresAdministrator = $true
                         installCommand = "Add-AppxPackage -Path '$escapedArchive' -AllowUnsigned -ErrorAction Stop"
                     } | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $lane 'installation-request.json')
                     if ($PrepareMsixOnly) {
                         throw 'Real MSIX archive prepared. Installation is approval-blocked; no installation was attempted.'
                     }
+                }
+                $preflight = Join-Path $lane 'preexisting-registration.json'
+                Invoke-Appx 'query' '' $identity $preflight -AllUsers:$allUsers
+                if (-not [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText($preflight))) {
+                    throw 'Per-run identity already exists; refusing to replace or remove it.'
+                }
+                if ($deploymentName -eq 'loose') {
+                    Invoke-Appx 'register' (Join-Path $layout 'AppxManifest.xml') $identity (Join-Path $lane 'register.log')
+                    $deploymentSucceeded = $true
+                } else {
                     Invoke-Appx 'install' $archive $identity (Join-Path $lane 'install.log')
                     $deploymentSucceeded = $true
                 }
                 $queryLog = Join-Path $lane 'registration.json'
-                Invoke-Appx 'query' '' $identity $queryLog
-                $registration = Get-Content $queryLog -Raw | ConvertFrom-Json
-                if ($registration.Name -ne $identity) { throw 'Installed identity did not match owned run.' }
-                $ownedFullName = $registration.PackageFullName
-                $expectedRoot = $registration.InstallLocation
+                Invoke-Appx 'query' '' $identity $queryLog -AllUsers:$allUsers
+                $registration = @(Get-Content $queryLog -Raw | ConvertFrom-Json)
+                if ($registration.Count -ne 1 -or $registration[0].Name -ne $identity) {
+                    throw 'Installed identity did not uniquely match owned run.'
+                }
+                $ownedFullName = $registration[0].PackageFullName
+                $expectedRoot = $registration[0].InstallLocation
                 if ($deploymentName -eq 'msix' -and (
-                    $registration.IsDevelopmentMode -or
+                    $registration[0].IsDevelopmentMode -or
                     [IO.Path]::GetFullPath($expectedRoot) -eq [IO.Path]::GetFullPath($layout))) {
                     throw 'MSIX lane resolved a development/build layout, not an installed package.'
                 }
@@ -291,6 +311,7 @@ foreach ($runtimeName in $Runtime) {
                 $resultPath = Join-Path $lane "$control.results.jsonl"
                 $controlStatus = 'failed'
                 $controlExit = $null
+                $execution = $null
                 try {
                     $arguments = @('--output', $resultPath, '--deployment', $deploymentName,
                         '--runtime', $runtimeName, '--expected-root', $expectedRoot,
@@ -312,6 +333,9 @@ foreach ($runtimeName in $Runtime) {
                 }
                 $controlOutcomes.Add([pscustomobject]@{
                     control = $control; status = $controlStatus; detail = $controlDetail; exitCode = $controlExit
+                    execution = if ($execution) {
+                        @{ timedOut = $execution.TimedOut; captureComplete = $execution.CaptureComplete }
+                    } else { $null }
                 })
                 $controlOutcomes | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $lane 'controls.json')
             }
@@ -326,7 +350,7 @@ foreach ($runtimeName in $Runtime) {
             if ($deploymentSucceeded -and -not $ownedFullName) {
                 try {
                     $recoveryLog = Join-Path $lane 'cleanup-lookup.json'
-                    Invoke-Appx 'query' '' $identity $recoveryLog
+                    Invoke-Appx 'query' '' $identity $recoveryLog -AllUsers:$allUsers
                     $recovered = @(Get-Content $recoveryLog -Raw | ConvertFrom-Json)
                     if ($recovered.Count -ne 1 -or $recovered[0].Name -ne $identity) {
                         throw 'Cannot uniquely verify the successful deployment for cleanup.'
@@ -339,9 +363,9 @@ foreach ($runtimeName in $Runtime) {
             }
             if ($ownedFullName) {
                 try {
-                    Invoke-Appx 'remove' '' $ownedFullName (Join-Path $lane 'cleanup.log')
+                    Invoke-Appx 'remove' '' $ownedFullName (Join-Path $lane 'cleanup.log') -AllUsers:$allUsers
                     $verifyLog = Join-Path $lane 'cleanup-verification.json'
-                    Invoke-Appx 'query' '' $identity $verifyLog
+                    Invoke-Appx 'query' '' $identity $verifyLog -AllUsers:$allUsers
                     if (-not [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText($verifyLog))) {
                         throw 'Owned package is still registered after cleanup.'
                     }

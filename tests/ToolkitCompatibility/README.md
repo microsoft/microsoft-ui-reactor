@@ -115,6 +115,7 @@ policy is relaxed. The runner restores separately, then publishes Release.
 
 ```powershell
 pwsh tests\ToolkitCompatibility\Test-ResultProtocol.ps1
+pwsh tests\ToolkitCompatibility\Test-RunnerSafety.ps1
 pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\unique-run
 # Narrow diagnostic, not acceptance of the full inventory:
 pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\settings-run -Runtime jit -Filter SettingsCard
@@ -133,8 +134,11 @@ approval-blocked lanes, with:
 pwsh tests\ToolkitCompatibility\Summarize-Matrix.ps1 -EvidenceDirectory C:\evidence\unique-run
 ```
 
-The summarizer revalidates each complete process stream before counting its
-passed rows. It writes `scenario-matrix.json` and `summary.md`. Published binary,
+The summarizer requires recorded timeout/capture-completion metadata and a
+matching process verdict before counting revalidated scenario rows. Archives
+from before that metadata was recorded must retain their original versioned
+reports; the current summarizer rejects missing metadata rather than inferring
+complete capture from TAP alone. It writes `scenario-matrix.json` and `summary.md`. Published binary,
 PRI and XBF hashes, effective build properties and restored dependency assets
 are retained per lane. Package-consumer runs validate the staged-source/package
 hashes and the exact resolved package version; untransformed JIT `Reactor.dll`
@@ -165,10 +169,18 @@ The manifest uses Windows 11's documented unsigned-package publisher namespace
 administrator privileges and install for **all users**, not only the current
 account ([official documentation](https://learn.microsoft.com/en-us/windows/msix/package/unsigned-package)).
 The runner does not elevate or change certificate trust; an unapproved
-installation remains blocked.
+installation remains blocked. Installed-MSIX ownership queries, exact-package
+removal and cleanup verification use the same all-users scope; loose-layout
+registration and cleanup remain current-user scoped.
 Pass `-PrepareMsixOnly` to build final archives without retrying an
 approval-blocked installation. Each archive gets an `installation-request.json`
-containing its hash, identity, alias, source revision and exact install command.
+containing its hash, identity, alias, source revision, exact install command,
+administrator requirement and all-users installation/cleanup scope. Archive-only
+preparation does not perform an all-users package query or installation.
+
+The dependency-free script checks exercise synthetic result streams, mocked Appx
+commands and owned console child processes. They do not install packages, elevate,
+open a camera or establish live MSIX cleanup behavior.
 
 ### Focused TabbedCommandBar sample regression
 
