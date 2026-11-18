@@ -158,6 +158,21 @@ internal static class MultipleControlledWrapperFixtures
             ExpectValues("RejectionDoesNotEcho", "1:start=35", "1:end=65", "1:count=6");
 
             c.Echo = RangeProbeEcho.Silent;
+            c.RangeStart = 100;
+            c.Echo = RangeProbeEcho.Deferred;
+            start = 150;
+            rerender();
+            await Harness.Render();
+            raw.Clear();
+            c.ValueChanged += observer;
+            c.FlushEchoes();
+            c.ValueChanged -= observer;
+            Check("CoercedNoOpNativePositiveControl",
+                c.RangeStart == 100 && raw.SequenceEqual(new[] { "Start" }));
+            Expect("CoercedNoOpDoesNotEcho");
+            start = 26;
+
+            c.Echo = RangeProbeEcho.Silent;
             c.RangeStart = 40;
             c.RangeEnd = 60;
             rerender();
