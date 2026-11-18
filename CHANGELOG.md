@@ -142,6 +142,13 @@ Conventions for contributors:
   `Microsoft.UI.Reactor`, md4c, D3 and WinUI.Dock in `Microsoft.UI.Reactor.Advanced`), and the
   package workflows fail if it is missing or out of date.
 
+- **`Microsoft.UI.Reactor` now credits WinUIEx in `ThirdPartyNoticeText.txt`.** Window-placement
+  persistence (`WindowPlacementCodec`) and the Win32 message monitor (`WindowMessageMonitor`) are
+  adapted from WinUIEx (MIT) but shipped without its notice. Comments that claimed Reactor reads
+  placements saved by WinUIEx were also corrected. It never did, because Reactor uses its own
+  settings container and keys. Behavior and the stored format are unchanged (spec 036 §5.1 and
+  §8, related issue #184).
+
 - **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
   accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
   `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's

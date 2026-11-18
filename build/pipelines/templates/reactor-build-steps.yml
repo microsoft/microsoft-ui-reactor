@@ -365,7 +365,7 @@ steps:
           -o "${{ parameters.outputDirectory }}\nupkg"
       displayName: 'Pack Devtools NuGet'
 
-    # Packages with code ported from other projects (Yoga, md4c, D3, WinUI.Dock) must carry their
+    # Packages with code ported from other projects (Yoga, WinUIEx, md4c, D3, WinUI.Dock) must carry their
     # license notices (issue #1535). Mirrors 'Check third-party notices are packed' in
     # .github/workflows/release.yml.
     - pwsh: |

@@ -12,6 +12,9 @@ namespace Microsoft.UI.Reactor.Hosting.Messaging;
 /// show/hide).
 /// </summary>
 /// <remarks>
+/// <para>Adapted from WinUIEx (<c>Messaging.WindowMessageMonitor</c>,
+/// https://github.com/dotMorten/WinUIEx), MIT License, Copyright (c) 2021
+/// Morten Nielsen. See <c>ThirdPartyNoticeText.txt</c>.</para>
 /// <para>Threading: <c>WndProc</c> runs on the lifted-XAML message pump's
 /// UI thread. Subscribers' handlers run on that thread; do not marshal
 /// heavy work into the WndProc — return quickly so paint / input continue.</para>

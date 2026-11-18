@@ -28,7 +28,10 @@ public sealed partial class WrapperGenerator
         foreach (var ev in events)
             sb.AppendLine($"        internal {ev.First().Delegate}? {ev.Key}Handler;");
         foreach (var p in props)
+        {
             sb.AppendLine($"        internal {p.ValueType} Last{p.Name} = default!;");
+            sb.AppendLine($"        internal int Version{p.Name};");
+        }
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine($"    private static __ControlledState __GetControlledState({controlFqn} c)");
@@ -43,7 +46,10 @@ public sealed partial class WrapperGenerator
         sb.AppendLine($"    private static void __CaptureControlled({controlFqn} c, __ControlledState state)");
         sb.AppendLine("    {");
         foreach (var p in props)
+        {
             sb.AppendLine($"        state.Last{p.Name} = c.{p.ControlProp};");
+            sb.AppendLine($"        state.Version{p.Name} = unchecked(state.Version{p.Name} + 1);");
+        }
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -70,11 +76,17 @@ public sealed partial class WrapperGenerator
             {
                 sb.AppendLine($"            var __after{observed.Name} = c.{observed.ControlProp};");
                 if (observed.Name == p.Name)
+                {
                     sb.AppendLine($"            state.Last{observed.Name} = __after{observed.Name};");
+                    sb.AppendLine($"            state.Version{observed.Name} = unchecked(state.Version{observed.Name} + 1);");
+                }
                 else
                 {
                     sb.AppendLine($"            if (!{comparer}<{observed.ValueType}>.Default.Equals(__before{observed.Name}, __after{observed.Name}))");
+                    sb.AppendLine("            {");
                     sb.AppendLine($"                state.Last{observed.Name} = __after{observed.Name};");
+                    sb.AppendLine($"                state.Version{observed.Name} = unchecked(state.Version{observed.Name} + 1);");
+                    sb.AppendLine("            }");
                 }
             }
             sb.AppendLine("        }");
@@ -125,13 +137,20 @@ public sealed partial class WrapperGenerator
                 sb.AppendLine($"        var __value{p.Name} = c.{p.ControlProp};");
                 sb.AppendLine($"        var __changed{p.Name} = !{comparer}<{p.ValueType}>.Default.Equals(state.Last{p.Name}, __value{p.Name});");
                 sb.AppendLine($"        state.Last{p.Name} = __value{p.Name};");
+                sb.AppendLine($"        if (__changed{p.Name}) state.Version{p.Name} = unchecked(state.Version{p.Name} + 1);");
+                sb.AppendLine($"        var __version{p.Name} = state.Version{p.Name};");
             }
             sb.AppendLine("        if (global::Microsoft.UI.Reactor.Core.ReactorBinding.ShouldSuppressEcho(c)) return;");
-            sb.AppendLine($"        if (global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag(c) is not {elementName} live) return;");
+            // Earlier callbacks can update, replace, or detach this binding.
+            // Versions also reject a nested change that returns to the snapshot value.
             foreach (var entry in ev)
             {
                 var p = entry.Prop;
-                sb.AppendLine($"        if (__changed{p.Name}) live.On{p.Name}Changed?.Invoke(__value{p.Name});");
+                sb.AppendLine($"        if (__changed{p.Name} && state.Version{p.Name} == __version{p.Name} &&");
+                sb.AppendLine("            global::System.Object.ReferenceEquals(c.GetValue(__ControlledState.Property), state) &&");
+                sb.AppendLine($"            {comparer}<{p.ValueType}>.Default.Equals(c.{p.ControlProp}, __value{p.Name}) &&");
+                sb.AppendLine($"            global::Microsoft.UI.Reactor.Core.Reconciler.GetElementTag(c) is {elementName} __live{p.Name})");
+                sb.AppendLine($"            __live{p.Name}.On{p.Name}Changed?.Invoke(__value{p.Name});");
             }
             sb.AppendLine("    }");
             sb.AppendLine();
