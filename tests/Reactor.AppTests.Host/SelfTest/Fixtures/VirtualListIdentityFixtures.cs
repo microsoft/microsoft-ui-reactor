@@ -180,6 +180,61 @@ internal static class VirtualListIdentityFixtures
         }
     }
 
+    internal sealed class CustomNumericToDefaultKeepsIdentity(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const int count = 12;
+            bool custom = true;
+            int version = 0, calls = 0, changes = 0;
+            Func<int, string> selector = i => { calls++; return i.ToString(); };
+            var host = H.CreateHost();
+            host.Mount(_ =>
+            {
+                int captured = version;
+                return VirtualList(count, i => TextBlock($"numeric row {i} v{captured}"),
+                    getItemKey: custom ? selector : null, itemHeight: 24).Height(160);
+            });
+            await Harness.Render();
+            var repeater = H.FindControl<WinUI.ItemsRepeater>(_ => true)
+                ?? throw new InvalidOperationException("VirtualList repeater not mounted.");
+            var state = Reconciler.GetListState(repeater)!;
+            var rows = state.Source.ToArray();
+            var first = repeater.TryGetElement(0);
+            var factory = repeater.ItemTemplate;
+            state.Source.CollectionChanged += (_, _) => changes++;
+            H.Check("VirtualListIdentity_CustomNumericMounted",
+                calls == count && state.ByKey.Count == count
+                && state.LastKeys.SequenceEqual(Enumerable.Range(0, count).Select(i => i.ToString()))
+                && first is WinUI.TextBlock { Text: "numeric row 0 v0" });
+
+            custom = false;
+            version = 1;
+            calls = 0;
+            host.RequestRender(force: true);
+            await Harness.Render();
+            H.Check("VirtualListIdentity_HealthyTransitionKeepsBinding",
+                ReferenceEquals(state, Reconciler.GetListState(repeater))
+                && ReferenceEquals(state.Source, repeater.ItemsSource) && changes == 0);
+            H.Check("VirtualListIdentity_HealthyTransitionKeepsRows",
+                state.Source.Count == count && state.ByKey.Count == count
+                && rows.Zip(state.Source, static (oldRow, newRow) => ReferenceEquals(oldRow, newRow)).All(same => same));
+            H.Check("VirtualListIdentity_HealthyTransitionKeepsNativeIdentity",
+                first is not null && ReferenceEquals(first, repeater.TryGetElement(0))
+                && ReferenceEquals(factory, repeater.ItemTemplate));
+            H.Check("VirtualListIdentity_HealthyTransitionRefreshesContent",
+                first is WinUI.TextBlock { Text: "numeric row 0 v1" });
+            H.Check("VirtualListIdentity_HealthyTransitionDropsCustomSelector", calls == 0);
+
+            version = 2;
+            host.RequestRender(force: true);
+            await Harness.Render();
+            H.Check("VirtualListIdentity_HealthyTransitionThenDefaultUpdate",
+                first is WinUI.TextBlock { Text: "numeric row 0 v2" }
+                && ReferenceEquals(first, repeater.TryGetElement(0)) && changes == 0 && calls == 0);
+        }
+    }
+
     internal sealed class DuplicateKeysToDefaultThenGrow(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
