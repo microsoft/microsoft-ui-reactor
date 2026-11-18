@@ -6695,9 +6695,10 @@ public sealed partial class Reconciler : IDisposable
                 return previous;
             }
         }
-        // A plain Memo output needs no persistent state. An inner tracked layer
-        // still needs a path through wrappers that have no modifiers themselves.
-        if (!HasRestorableModifier(target, targets)) return null;
+        // Keep the shared edge if a modifier on the parent can be handed to keyframes.
+        // Its otherwise plain target may introduce a keyframe trigger on a later update.
+        if (!HasRestorableModifier(target, targets)
+            && (parent.KeyframeAnimations is null || !HasRestorableModifier(parent, null))) return null;
         targets ??= (state ?? GetOrCreateReactorState(control)).ModifierTargets ??= [];
         targets.Add((parent, target));
         _hasModifierTargets = true;
@@ -6722,11 +6723,11 @@ public sealed partial class Reconciler : IDisposable
         return false;
     }
 
-    private void RefreshModifierTarget(UIElement control, Element oldElement, Element newElement)
+    private bool RefreshModifierTarget(UIElement control, Element oldElement, Element newElement)
     {
         if (!_hasModifierTargets || !(newElement is KeyedMemoElement
-            || (_v1Handlers.TryGet(newElement.GetType(), out var entry) && entry is IV1SourceTargetResolver))) return;
-        if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState { ModifierTargets: { } targets }) return;
+            || (_v1Handlers.TryGet(newElement.GetType(), out var entry) && entry is IV1SourceTargetResolver))) return false;
+        if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState { ModifierTargets: { } targets }) return false;
         // A Memo resource refresh passes a fresh element as both old and new.
         // Rebind using the previously recorded target, including through legacy wrappers.
         while (oldElement is ModifiedElement wrapped) oldElement = wrapped.Inner;
@@ -6734,8 +6735,9 @@ public sealed partial class Reconciler : IDisposable
         {
             if (!ReferenceEquals(targets[i].Parent, oldElement)) continue;
             targets[i] = (newElement, targets[i].Target);
-            return;
+            return true;
         }
+        return false;
     }
 
     internal (Element Source, ElementModifiers Modifiers)? FindRemainingModifierOwner(Func<ElementModifiers, bool> declares)

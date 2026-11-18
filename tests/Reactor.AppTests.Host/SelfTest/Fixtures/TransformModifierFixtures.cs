@@ -361,11 +361,13 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
         H.SetContent(null);
 
-        foreach (var (scenario, removeChildPulse, childWritesScale) in new[]
+        ControlRegistry.RegisterDecorator<TransformModifierDecoratorFixture.Forwarder>(static () => new TransformModifierDecoratorFixture.ForwarderHandler());
+        foreach (var (scenario, removeChildPulse, childWritesScale, useForwarder) in new[]
         {
-            ("FlyoutChildAdvancesTrigger", false, false),
-            ("FlyoutChildDropsPulse", true, false),
-            ("FlyoutChildWritesScale", false, true),
+            ("FlyoutChildAdvancesTrigger", false, false, false),
+            ("FlyoutChildDropsPulse", true, false, false),
+            ("FlyoutChildWritesScale", false, true, false),
+            ("ForwarderChildAdvancesTrigger", false, false, true),
         })
         {
             using var reconciler = new Reconciler();
@@ -385,10 +387,11 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 });
             var menu = TextBlock("Menu");
             var curve = Curve.Linear(60000);
-            FlyoutElement Wrap(Element child) => Flyout(child, menu).Animate(curve, AnimateProperty.Scale);
+            Element Decorate(Element child) => useForwarder ? new TransformModifierDecoratorFixture.Forwarder(child) : Flyout(child, menu);
+            Element Wrap(Element child) => Decorate(child).Animate(curve, AnimateProperty.Scale);
 
             var initial = Wrap(beforeChild);
-            var seed = Flyout(beforeChild, menu).Scale(2);
+            var seed = Decorate(beforeChild).Scale(2);
             var before = initial.Scale(2).Keyframes("pulse", 2, Pulse);
             var after = Wrap(afterChild).Keyframes("pulse", 2, removeChildPulse ? Pulse : OpacityPulse);
             var target = (Border)reconciler.Mount(initial, () => { })!;
@@ -417,7 +420,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                     currentScale is null && visual.Scale == (childWritesScale ? new Vector3(3, 3, 1) : Vector3.One)
                     && visual.TryGetAnimationController("Opacity") is not null,
                     $"scale={visual.Scale}, loop={currentScale is not null}");
-            reconciler.Update(after, Flyout(leaf, menu), target, () => { });
+            reconciler.Update(after, Decorate(leaf), target, () => { });
             H.SetContent(null);
         }
 
@@ -817,7 +820,7 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
         H.SetContent(null);
     }
 
-    private sealed record Forwarder(Element Target) : Element;
+    internal sealed record Forwarder(Element Target) : Element;
     private sealed record OpaqueForwarder(Element Target) : Element;
     private sealed class IndependentFlyoutHandler : IElementHandler<FlyoutElement, Border>
     {
@@ -833,7 +836,7 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
         public V1UnmountDisposition Unmount(UnmountContext context, OpaqueForwarder? element, UIElement control)
             => V1UnmountDisposition.ContinueDefaultTraversal;
     }
-    private sealed class ForwarderHandler : IDecoratorElementHandler<Forwarder>
+    internal sealed class ForwarderHandler : IDecoratorElementHandler<Forwarder>
     {
         public UIElement Mount(MountContext context, Forwarder element) => context.MountChild(element.Target)!;
         public UIElement Update(UpdateContext context, Forwarder oldElement, Forwarder newElement, UIElement control)

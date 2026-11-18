@@ -63,7 +63,7 @@ public sealed partial class Reconciler
             oldModifiers = oldModifiers is not null ? oldModifiers.Merge(oldEl.Modifiers) : oldEl.Modifiers;
         if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
-        RefreshModifierTarget(control, mountedModifierTarget ?? oldEl, newEl);
+        bool sharesModifierTarget = RefreshModifierTarget(control, mountedModifierTarget ?? oldEl, newEl);
 
         // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
         // resolution (mount-theme bug): the element's own RequestedTheme wins, else the
@@ -227,8 +227,9 @@ public sealed partial class Reconciler
         }
 
         var keyframes = newEl.KeyframeAnimations;
-        bool targetCanAdvanceTrigger = keyframes is not null && IsFlyoutDecorator(newEl)
-            && _v1Handlers.TryGet(newEl.GetType(), out var keyframeHandler) && keyframeHandler.PreservesTargetTag;
+        bool targetCanAdvanceTrigger = keyframes is not null
+            && (sharesModifierTarget || (IsFlyoutDecorator(newEl)
+                && _v1Handlers.TryGet(newEl.GetType(), out var keyframeHandler) && keyframeHandler.PreservesTargetTag));
         // Release removed declarations before setters. A shared target can change a
         // retained name's trigger before the decorator reaches its own playback.
         if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
