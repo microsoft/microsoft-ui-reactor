@@ -63,6 +63,8 @@ public sealed partial class ControlledRangeProbe : Control
         remove { _pinged -= value; PingSubscriptions--; }
     }
 
+    public event global::Windows.Foundation.TypedEventHandler<AutoSuggestBox, RangeProbeChangedEventArgs>? ForeignChanged;
+
     public double RangeStart
     {
         get => _start;
@@ -97,6 +99,7 @@ public sealed partial class ControlledRangeProbe : Control
         RaiseRange("Count");
     }
     public void Ping() => _pinged?.Invoke(this, EventArgs.Empty);
+    public void RaiseForeign(AutoSuggestBox sender) => ForeignChanged?.Invoke(sender, new RangeProbeChangedEventArgs("Start"));
     public void FlushEchoes() { while (_echoes.TryDequeue(out var echo)) echo(); }
 
     private void EchoChange(Action raise)
@@ -119,6 +122,14 @@ public sealed partial class ControlledRangeProbe : Control
 [WrapControlled("RangeStart", ChangedEvent = "ValueChanged")]
 [WrapControlled("RangeEnd", ChangedEvent = "ValueChanged")]
 public partial record BareRangeProbeElement;
+
+// Compile-only regression for strongly typed forwarded senders. Owner resolution
+// is separate; the generated binding must compile without pinning its implementation.
+[GenerateReactorWrapper(typeof(ControlledRangeProbe), AutoDiscover = false,
+    Include = new[] { "RangeStart", "RangeEnd" }, RegisterAssembly = false)]
+[WrapControlled("RangeStart", ChangedEvent = "ForeignChanged")]
+[WrapControlled("RangeEnd", ChangedEvent = "ForeignChanged")]
+public partial record ForeignSenderRangeProbeElement;
 
 [GenerateReactorWrapper(typeof(ControlledRangeProbe),
     Exclude = new[] { "Echo", "CoerceSibling" }, RegisterAssembly = false)]
