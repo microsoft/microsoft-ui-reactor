@@ -77,6 +77,10 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.4" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.4" />
+    <!-- Security pin (CVE-2026-84008): the test harness above reaches
+         System.Security.Cryptography.Pkcs 9.0.6 through NuGet.Packaging. Test projects
+         that use it reference this directly to lift it to a patched version. -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
   </ItemGroup>
 
