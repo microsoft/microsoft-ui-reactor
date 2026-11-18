@@ -206,14 +206,12 @@ public partial record TokenizingTextBoxElement;
 
 // ── Input ────────────────────────────────────────────────────────────────
 
-// A dual-thumb range slider. RangeStart/RangeEnd both change through the SINGLE
-// ValueChanged event (carrying which thumb moved via RangeChangedEventArgs), not
-// two {Prop}Changed events — and a control has only one controlled-event slot, so
-// they CANNOT both be [WrapControlled]. The idiomatic shape: one-way RangeStart/
-// RangeEnd (force-asserted from state) + the auto-surfaced OnValueChanged typed
-// event, which the sample uses to update the right end. (The generator warns,
-// REACTORGEN012, if two [WrapControlled] props share a control.)
+// Both endpoints use the same native ValueChanged event. The generated bindings
+// notify only the changed endpoint and reassert supplied parent values on update.
+// One-way props would leave native drift untouched when parent values stay equal.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.RangeSelector))]
+[WrapControlled("RangeStart", ChangedEvent = "ValueChanged")]
+[WrapControlled("RangeEnd", ChangedEvent = "ValueChanged")]
 public partial record RangeSelectorElement;
 
 // ── Layout (controls) ──────────────────────────────────────────────────────
