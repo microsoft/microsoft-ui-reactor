@@ -667,9 +667,23 @@ The unused RadialGauge wrapper is a trimming sentinel: native output should cont
 the used `CardElement`/SettingsControls provider symbols but not `UnusedGaugeElement`
 or the RadialGauge metadata-provider namespace.
 
-For shipping-package coverage, pack `src\Reactor` at a unique local version, copy
+The in-repo proof uses central package versions and Windows App SDK injection.
+For shipping-package coverage, pack `src\Reactor` at a unique local version and copy
 **only** this proof's `.csproj` and `Program.cs` into a fresh directory outside the
-repository, then run the same build/publish commands there with
+repository and any inherited `Directory.Build.*` / `Directory.Packages.props`.
+Materialize its package versions in that **external copy**, where CPM is off by
+default and the repository's SDK injection is absent:
+
+```powershell
+# $consumer is the full path to the copied Reactor.WrapperMetadata.csproj.
+# Use the current central values from Directory.Build.props / Directory.Packages.props.
+dotnet add $consumer package Microsoft.WindowsAppSDK --version 2.2.0 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.SettingsControls --version 8.3.260402-preview2 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.HeaderedControls --version 8.3.260402-preview2 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.RadialGauge --version 8.3.260402-preview2 --no-restore
+```
+
+Then run the same build/publish commands against the external project with
 `-p:ReactorPackageVersion=<version>` and
 `-p:RestoreAdditionalProjectSources=<local-package-feed>`. That selects a
 `PackageReference` instead of all three Reactor project references, exercising the

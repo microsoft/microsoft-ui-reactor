@@ -12,17 +12,15 @@
     <IsPackable>false</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <ReactorRoot Condition="'$(ReactorRoot)' == ''">..\..\..</ReactorRoot>
   </PropertyGroup>
   <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
     <PublishAot>true</PublishAot>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.3.260402-preview2" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.HeaderedControls" Version="8.3.260402-preview2" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.RadialGauge" Version="8.3.260402-preview2" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.HeaderedControls" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RadialGauge" />
   </ItemGroup>
   <ItemGroup Condition="'$(ReactorPackageVersion)' == ''">
     <ProjectReference Include="$(ReactorRoot)\src\Reactor\Reactor.csproj" />
