@@ -856,6 +856,8 @@ internal static class SelfTestFixtureRegistry
         "ThreadSafe_RenderCoalescing",
         "ThreadSafe_RenderCoalescingDispatcherBatch",
         "ThreadSafe_NonThreadSafeAutoMarshal",
+        "ThreadSafe_QueuedCallbacksUseLiveState",
+        "ThreadSafe_CallbacksAfterDispatcherShutdown",
         // Thread-safe navigation (#234) — off-thread marshal on a real dispatcher
         "ThreadSafeNav_NavigateOffThreadMarshals",
         "ThreadSafeNav_MutatorsOffThreadMarshal",
@@ -3171,6 +3173,8 @@ internal static class SelfTestFixtureRegistry
         "ThreadSafe_RenderCoalescing" => new ThreadSafeHookFixtures.RenderCoalescing(harness),
         "ThreadSafe_RenderCoalescingDispatcherBatch" => new ThreadSafeHookFixtures.RenderCoalescingDispatcherBatch(harness),
         "ThreadSafe_NonThreadSafeAutoMarshal" => new ThreadSafeHookFixtures.NonThreadSafeAutoMarshal(harness),
+        "ThreadSafe_QueuedCallbacksUseLiveState" => new ThreadSafeHookFixtures.QueuedCallbacksUseLiveState(harness),
+        "ThreadSafe_CallbacksAfterDispatcherShutdown" => new ThreadSafeHookFixtures.CallbacksAfterDispatcherShutdown(harness),
         "ThreadSafeNav_NavigateOffThreadMarshals" => new ThreadSafeNavigationFixtures.NavigateOffThreadMarshals(harness),
         "ThreadSafeNav_MutatorsOffThreadMarshal" => new ThreadSafeNavigationFixtures.MutatorsOffThreadMarshal(harness),
         "ThreadSafeNav_SetStateOffThreadFreezesSnapshot" => new ThreadSafeNavigationFixtures.SetStateOffThreadFreezesSnapshot(harness),

@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- `UseState` setters and both `UseReducer` callbacks defer marshaling closures
+  until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
+  invocations avoid those allocations, including unchanged values; callback identity,
+  equality checks, and cross-thread dispatch behavior are unchanged (issue #659).
+
 - Avoid redundant element copies when assigning keys in built-in component factories,
   DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
   supplied key is already the same string reference. Different key references still
