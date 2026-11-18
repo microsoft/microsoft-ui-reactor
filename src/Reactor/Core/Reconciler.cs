@@ -1737,7 +1737,36 @@ public sealed partial class Reconciler : IDisposable
 
         // Warning counts follow the native control's lifetime, including pool reuse.
         public global::System.Collections.Concurrent.ConcurrentDictionary<long, int>? KeyedDiagnosticLedger;
+
+        // Issue #965 — what the last BiDi inline overlay of each Thickness used as its base and
+        // what it wrote. See ApplyModifiers.
+        public InlineOverlayRecord? InlineOverlays;
     }
+
+    /// <summary>
+    /// Issue #965 — the base and the written value of the last inline overlay per Thickness
+    /// property. With no declared physical value the overlay takes its unowned edges from the
+    /// control, but on an update the control still carries the previous overlay, so reading it
+    /// back would re-adopt the old inline edge (<c>.PaddingInlineStart(8)</c> →
+    /// <c>.PaddingInlineEnd(4)</c> gave <c>8,0,4,0</c>). While the control still holds exactly
+    /// what was written, the recorded base is the right one; any other value was written by
+    /// someone else (a setter, app code, an outer layer) and is used as is.
+    /// <para>Only the element that owns the control keeps a record. A flyout decorator or keyed
+    /// memo applies its modifiers to another element's control after that element's own, so the
+    /// live value it sees may be a write from this pass that merely equals its previous output;
+    /// those layers read the live value.</para>
+    /// </summary>
+    internal sealed class InlineOverlayRecord
+    {
+        public InlineOverlay? Margin;
+        public InlineOverlay? Padding;
+        public InlineOverlay? Border;
+    }
+
+    /// <summary>
+    /// One inline overlay: its base and the value it wrote.
+    /// </summary>
+    internal readonly record struct InlineOverlay(Thickness Base, Thickness Written);
 
     internal static class ReactorAttached
     {
@@ -1757,6 +1786,20 @@ public sealed partial class Reconciler : IDisposable
         fe.SetValue(ReactorAttached.StateProperty, state);
         return state;
     }
+
+    private static InlineOverlayRecord? GetInlineOverlays(FrameworkElement fe)
+        => (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.InlineOverlays;
+
+    private static InlineOverlayRecord GetOrCreateInlineOverlays(FrameworkElement fe)
+        => GetOrCreateReactorState(fe).InlineOverlays ??= new InlineOverlayRecord();
+
+    /// <summary>
+    /// Issue #965 — the base for the edges an inline overlay does not own, given the control's
+    /// live value. If the control still holds exactly what the previous overlay wrote, that is
+    /// our own output, not a base, so the previous overlay's base is used instead.
+    /// </summary>
+    internal static Thickness UnoverlaidBase(Thickness live, InlineOverlay? previous)
+        => previous is { } p && p.Written == live ? p.Base : live;
 
     /// <summary>
     /// Issue #207 — single attached-DP read for change-event trampolines.
@@ -6530,8 +6573,8 @@ public sealed partial class Reconciler : IDisposable
         _preparedConnectedAnimationKeys.Clear();
     }
 
-    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender)
-        => ApplyModifiers(fe, null, m, requestRerender);
+    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender, bool ownsControl = false)
+        => ApplyModifiers(fe, null, m, requestRerender, ownsControl: ownsControl);
 
     private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
         => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
@@ -6543,8 +6586,11 @@ public sealed partial class Reconciler : IDisposable
         return _reconcilingElement is { } element && IsFlyoutDecorator(element) ? element : null;
     }
 
+    // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
+    // flyout decorator or keyed memo layered over another element's control. Only the owner's
+    // inline overlays are recorded (issue #965).
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
-        bool keepRemovedBackground = false)
+        bool keepRemovedBackground = false, bool ownsControl = false)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -6563,13 +6609,21 @@ public sealed partial class Reconciler : IDisposable
         // the value non-null whenever the last render had a margin, which left the unset
         // arm below unreachable and meant `.Margin(x)` → no margin reset nothing (#952).
         var resolvedMargin = m.Margin;
+        // Issue #965: the owner's previous overlay, consulted only when the previous render
+        // wrote one.
+        InlineOverlay? prevMarginOverlay = null;
         if (m.MarginInlineStart.HasValue || m.MarginInlineEnd.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
-            var baseMargin = resolvedMargin ?? oldM?.Margin ?? fe.Margin;
+            if (ownsControl && oldM is { } oldMargins && (oldMargins.MarginInlineStart.HasValue || oldMargins.MarginInlineEnd.HasValue))
+                prevMarginOverlay = GetInlineOverlays(fe)?.Margin;
+            var baseMargin = resolvedMargin ?? oldM?.Margin ?? UnoverlaidBase(fe.Margin, prevMarginOverlay);
             var left = isRtl ? (m.MarginInlineEnd ?? baseMargin.Left) : (m.MarginInlineStart ?? baseMargin.Left);
             var right = isRtl ? (m.MarginInlineStart ?? baseMargin.Right) : (m.MarginInlineEnd ?? baseMargin.Right);
             resolvedMargin = new Thickness(left, baseMargin.Top, right, baseMargin.Bottom);
+            var marginOverlay = new InlineOverlay(baseMargin, resolvedMargin.Value);
+            if (ownsControl && prevMarginOverlay != marginOverlay)
+                GetOrCreateInlineOverlays(fe).Margin = marginOverlay;
         }
         // Unset goes through ClearValue, never through "write the DP default". A local
         // value outranks every Style setter in WinUI's precedence order, so assigning the
@@ -6578,9 +6632,12 @@ public sealed partial class Reconciler : IDisposable
         // The value guard compares against the previous *physical* margin, so dropping or
         // changing an inline edge while the physical margin stays put would resolve back to
         // the old value and skip the write, stranding the previous render's inline edge on
-        // the control. An inline delta is a change in its own right.
+        // the control. An inline delta is a change in its own right — and so is a resolved value
+        // that differs from what the previous overlay wrote (a FlowDirection flip under unchanged
+        // modifiers can resolve back to the physical value).
         var marginInlineChanged = m.MarginInlineStart != oldM?.MarginInlineStart
-            || m.MarginInlineEnd != oldM?.MarginInlineEnd;
+            || m.MarginInlineEnd != oldM?.MarginInlineEnd
+            || (prevMarginOverlay is { } pm && pm.Written != resolvedMargin);
         if (resolvedMargin.HasValue && (resolvedMargin != oldM?.Margin || marginInlineChanged)) fe.Margin = resolvedMargin.Value;
         else if (!resolvedMargin.HasValue && (oldM?.Margin.HasValue == true || oldM?.MarginInlineStart.HasValue == true || oldM?.MarginInlineEnd.HasValue == true))
             fe.ClearValue(FrameworkElement.MarginProperty);
@@ -6598,10 +6655,13 @@ public sealed partial class Reconciler : IDisposable
         var wantsPadding = m.Padding.HasValue || m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue;
         var hadPadding = oldM is not null && (oldM.Padding.HasValue || oldM.PaddingInlineStart.HasValue || oldM.PaddingInlineEnd.HasValue);
         var resolvedPadding = m.Padding ?? oldM?.Padding;
+        InlineOverlay? prevPadOverlay = null;
         if (m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
-            var basePad = resolvedPadding ?? fe switch
+            if (ownsControl && oldM is { } oldPads && (oldPads.PaddingInlineStart.HasValue || oldPads.PaddingInlineEnd.HasValue))
+                prevPadOverlay = GetInlineOverlays(fe)?.Padding;
+            var basePad = resolvedPadding ?? UnoverlaidBase(fe switch
             {
                 WinUI.Control pc => pc.Padding,
                 WinUI.Border pb => pb.Padding,
@@ -6610,14 +6670,18 @@ public sealed partial class Reconciler : IDisposable
                 WinUI.RelativePanel prp => prp.Padding,
                 WinUI.TextBlock ptb => ptb.Padding,
                 _ => new Thickness(),
-            };
+            }, prevPadOverlay);
             var left = isRtl ? (m.PaddingInlineEnd ?? basePad.Left) : (m.PaddingInlineStart ?? basePad.Left);
             var right = isRtl ? (m.PaddingInlineStart ?? basePad.Right) : (m.PaddingInlineEnd ?? basePad.Right);
             resolvedPadding = new Thickness(left, basePad.Top, right, basePad.Bottom);
+            var padOverlay = new InlineOverlay(basePad, resolvedPadding.Value);
+            if (ownsControl && prevPadOverlay != padOverlay)
+                GetOrCreateInlineOverlays(fe).Padding = padOverlay;
         }
         // Same inline-delta rule as Margin above.
         var paddingInlineChanged = m.PaddingInlineStart != oldM?.PaddingInlineStart
-            || m.PaddingInlineEnd != oldM?.PaddingInlineEnd;
+            || m.PaddingInlineEnd != oldM?.PaddingInlineEnd
+            || (prevPadOverlay is { } pp && pp.Written != resolvedPadding);
         if (resolvedPadding.HasValue && (resolvedPadding != oldM?.Padding || paddingInlineChanged))
         {
             if (fe is WinUI.Control padCtrl) padCtrl.Padding = resolvedPadding.Value;
@@ -6786,12 +6850,15 @@ public sealed partial class Reconciler : IDisposable
         }
         // Apply physical border thickness, then overlay logical (BiDi-aware) inline border
         var resolvedBorder = m.BorderThickness;
+        InlineOverlay? prevBorderOverlay = null;
         if (m.BorderInlineStart.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
-            // Same base rule as Margin/Padding: the previous render's physical thickness, not
-            // the live control value, which already carries the last render's inline overlay.
-            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? (fe switch
+            if (ownsControl && oldM?.BorderInlineStart is not null)
+                prevBorderOverlay = GetInlineOverlays(fe)?.Border;
+            // Same base rule as Margin/Padding: the previous render's physical thickness, else the
+            // control's value minus the previous inline overlay (issue #965).
+            var baseBorder = resolvedBorder ?? oldM?.BorderThickness ?? UnoverlaidBase(fe switch
             {
                 WinUI.Control c => c.BorderThickness,
                 WinUI.Border b => b.BorderThickness,
@@ -6799,16 +6866,20 @@ public sealed partial class Reconciler : IDisposable
                 WinUI.StackPanel s => s.BorderThickness,
                 WinUI.RelativePanel r => r.BorderThickness,
                 _ => new Thickness(),
-            });
+            }, prevBorderOverlay);
             var inlineStartThickness = m.BorderInlineStart.Value;
             if (isRtl)
                 resolvedBorder = new Thickness(baseBorder.Left, baseBorder.Top, inlineStartThickness.Left, baseBorder.Bottom);
             else
                 resolvedBorder = new Thickness(inlineStartThickness.Left, baseBorder.Top, baseBorder.Right, baseBorder.Bottom);
+            var borderOverlay = new InlineOverlay(baseBorder, resolvedBorder.Value);
+            if (ownsControl && prevBorderOverlay != borderOverlay)
+                GetOrCreateInlineOverlays(fe).Border = borderOverlay;
         }
         // Same inline-delta rule as Margin/Padding above; the reset arm likewise has to fire
         // when the old bag carried only an inline border, or that edge is never released.
-        var borderInlineChanged = m.BorderInlineStart != oldM?.BorderInlineStart;
+        var borderInlineChanged = m.BorderInlineStart != oldM?.BorderInlineStart
+            || (prevBorderOverlay is { } pb2 && pb2.Written != resolvedBorder);
         if (resolvedBorder.HasValue && (resolvedBorder != oldM?.BorderThickness || borderInlineChanged))
         {
             if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = resolvedBorder.Value;

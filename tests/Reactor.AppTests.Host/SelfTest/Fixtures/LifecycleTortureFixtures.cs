@@ -67,7 +67,12 @@ internal sealed class LT_OnMountUnmountBalanced(Harness h) : SelfTestFixtureBase
         // LT_EffectCleanupBalanced / LT_NavSwapNoLeak). The asserts stay exact, so a
         // genuine missed-unmount regression still fails: WaitFor just exhausts its
         // passes and the Check below reports the real number.
-        await Harness.WaitFor(() => mounts == 30 && unmounts == 30);
+        bool settled = await Harness.WaitFor(() => mounts == 30 && unmounts == 30);
+        // H.Check prints no values, so record the actual counts on a miss: a short
+        // count that never converges is a lost callback (issue #994, fixed by #1434 —
+        // teardown was keyed by a collectable WinRT wrapper), not a slow flush.
+        if (!settled)
+            Console.WriteLine($"# LT_OnMountUnmountBalanced did not settle: mounts={mounts} unmounts={unmounts} gotControl={gotControl}");
 
         var counts = $"mounts={mounts} unmounts={unmounts} gotControl={gotControl}";
         H.Check("LT_Mounts_Exactly_30", mounts == 30, counts);

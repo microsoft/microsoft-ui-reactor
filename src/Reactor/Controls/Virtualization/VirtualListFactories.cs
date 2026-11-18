@@ -31,7 +31,6 @@ public static partial class Factories
             OnVisibleRangeChanged = onVisibleRangeChanged,
         };
 
-        return Component<VirtualListComponent, VirtualListElement>(props)
-            .WithKey($"vl-{itemCount}");
+        return ComponentWithKey<VirtualListComponent, VirtualListElement>(props, $"vl-{itemCount}");
     }
 }

@@ -131,15 +131,23 @@ DataGrid(
                     Caption("EditMode.Row puts every editable cell in the row into edit mode at once, so the whole row commits or cancels together.")
                         .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
+var (lastRowEdit, setLastRowEdit) = UseState(""(none yet)"");
+
 // `rowEditSource` and `Columns()` are the same list source and five columns
 // the card above uses — this card differs only in editMode.
-DataGrid(
-    source: rowEditSource,
-    columns: Columns(),
-    editable: true,
-    editMode: EditMode.Row,   // whole row edits and commits together
-    onRowChanged: (key, item) => { /* persist the row */ return Task.CompletedTask; },
-    rowHeight: 36)")
+VStack(8,
+    DataGrid(
+        source: rowEditSource,
+        columns: Columns(),
+        editable: true,
+        editMode: EditMode.Row,   // whole row edits and commits together
+        onRowChanged: (key, item) =>
+        {
+            setLastRowEdit($""row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}"");
+            return Task.CompletedTask;
+        },
+        rowHeight: 36),
+    TextBlock($""Last committed row: {lastRowEdit}""))")
         ).Margin(36, 24, 36, 36));
     }
 }

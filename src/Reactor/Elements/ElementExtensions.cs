@@ -2309,8 +2309,12 @@ public static partial class ElementExtensions
         el.IsAddTabButtonVisible(visible);
     // ── Key ─────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Assigns a stable reconciliation key. Reuses the element when it already holds
+    /// the same string reference; otherwise returns an immutable copy.
+    /// </summary>
     public static T WithKey<T>(this T el, string key) where T : Element =>
-        el with { Key = key };
+        ReferenceEquals(el.Key, key) ? el : el with { Key = key };
 
     /// <summary>
     /// Assigns the stable identity from an <see cref="IReactorKeyed"/> data
@@ -2328,7 +2332,7 @@ public static partial class ElementExtensions
         where TKey : IReactorKeyed
     {
         ArgumentNullException.ThrowIfNull(item);
-        return el with { Key = item.Key };
+        return el.WithKey(item.Key);
     }
 
     // ════════════════════════════════════════════════════════════════

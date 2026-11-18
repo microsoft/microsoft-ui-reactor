@@ -409,6 +409,26 @@ internal sealed class Harness
         return condition();
     }
 
+    /// <summary>
+    /// Like <see cref="WaitFor"/>, but bounded by wall-clock time instead of a pass
+    /// count. Use it for conditions completed by something outside the dispatcher's
+    /// control — a compositor <c>ScopedBatch.Completed</c>, a native window message —
+    /// whose latency on a software-rendered CI VM has a long tail that no pass count
+    /// tracks (a pass costs 2-4 dispatcher drains plus <paramref name="perPassMs"/>,
+    /// and that cost itself varies with load). Returns as soon as the condition holds,
+    /// so a generous <paramref name="timeoutMs"/> costs nothing when healthy.
+    /// </summary>
+    public static async Task<bool> WaitForWithin(Func<bool> condition, int timeoutMs, int perPassMs = 16)
+    {
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (condition()) return true;
+            await Render(perPassMs);
+        }
+        return condition();
+    }
+
     private static Window? _currentWindow;
 
     // -- VisualTree query helpers ----------------------------------------

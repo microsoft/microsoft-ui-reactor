@@ -351,6 +351,16 @@ public static partial class AccessibilityScanner
             case AutoSuggestBoxElement asb:
                 placeholder = asb.PlaceholderText;
                 break;
+            // A ComboBox's UIA name falls back to Header only; PlaceholderText is help text.
+            case ComboBoxElement cb:
+                header = cb.Header;
+                placeholder = cb.PlaceholderText;
+                break;
+            // Same precedence as Reconciler.ResolveCaptionForElement, which mirrors
+            // `Header ?? OnContent ?? OffContent` into the name: an empty header yields no caption.
+            case ToggleSwitchElement ts:
+                header = ts.Header ?? ts.OnContent ?? ts.OffContent;
+                break;
             default:
                 return;
         }

@@ -688,18 +688,40 @@ internal class FlyoutItemIdentity_Published(Harness h) : SelfTestFixtureBase(h)
             if (menu is null || commands is null) return;
 
             var alpha = menu.Items.OfType<WinUI.MenuFlyoutItem>().FirstOrDefault(i => i.Text == "Alpha");
-            var cut = commands.PrimaryCommands.OfType<WinUI.AppBarButton>().FirstOrDefault(b => b.Label == "Cut");
+            var primary = commands.PrimaryCommands.ToList();
+            var cut = primary.OfType<WinUI.AppBarButton>().FirstOrDefault(b => b.Label == "Cut");
+            var primaryLabels = string.Join(",", primary.Select(c => (c as WinUI.AppBarButton)?.Label ?? c?.GetType().Name ?? "null"));
+            // The flyout is never opened, so its commands sit outside the live tree, and a garbage
+            // collection can reset a closed CommandBarFlyout's commands: both are still there, but
+            // their label and every other value are gone (outside Reactor's control; see
+            // ReactorSource_RootRemountRenamesOwner). A collection between the mount and this read
+            // happens on some runs, so the "Cut" command can't be found by its label. That reset
+            // is told apart from a real defect by its shape (the two commands, no label left), and
+            // the command checks are skipped for it; anything else that loses "Cut" still fails.
+            // The in-tree CommandBar commands below are created and published by the same code.
+            bool commandsReset = cut is null
+                && primary.Count == 2
+                && primary.All(c => c is WinUI.AppBarButton b && string.IsNullOrEmpty(b.Label));
+            const string resetReason = "the closed CommandBarFlyout's commands were reset by a collection";
             var alphaValue = alpha is null ? null : ReactorDiagnostics.GetSource(alpha);
             var cutValue = cut is null ? null : ReactorDiagnostics.GetSource(cut);
             Console.WriteLine($"# Alpha: {alphaValue}");
-            Console.WriteLine($"# Cut: {cutValue}");
+            Console.WriteLine($"# Cut: {cutValue}; primary commands: {primaryLabels}");
 
             H.Check("FlyoutItemIdentity_MenuItemPublished",
                 alphaValue?.Contains("|element=MenuFlyoutItem", StringComparison.Ordinal) == true
                 && alphaValue.Contains("|owner=" + nameof(FlyoutItemsProbe), StringComparison.Ordinal));
-            H.Check("FlyoutItemIdentity_AppBarButtonPublished",
-                cutValue?.Contains("|element=AppBarButton", StringComparison.Ordinal) == true
-                && cutValue.Contains("|owner=" + nameof(FlyoutItemsProbe), StringComparison.Ordinal));
+            if (commandsReset)
+            {
+                H.Skip("FlyoutItemIdentity_AppBarButtonPublished", resetReason);
+            }
+            else
+            {
+                H.Check("FlyoutItemIdentity_AppBarButtonPublished",
+                    cutValue?.Contains("|element=AppBarButton", StringComparison.Ordinal) == true
+                    && cutValue.Contains("|owner=" + nameof(FlyoutItemsProbe), StringComparison.Ordinal),
+                    $"Cut: {cutValue ?? "<null>"}; primary commands: {primaryLabels}");
+            }
 
             if (alphaValue?.Contains("|at=", StringComparison.Ordinal) != true)
             {
@@ -708,11 +730,22 @@ internal class FlyoutItemIdentity_Published(Harness h) : SelfTestFixtureBase(h)
             else
             {
                 var alphaSite = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(alpha!);
-                var cutSite = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(cut!);
                 H.Check("FlyoutItemIdentity_MenuItemCallSite", alphaSite?.LineNumber == FlyoutItemsProbe.AlphaLine,
                     $"{alphaSite?.LineNumber} vs {FlyoutItemsProbe.AlphaLine}");
-                H.Check("FlyoutItemIdentity_AppBarButtonCallSite", cutSite?.LineNumber == FlyoutItemsProbe.CutLine,
-                    $"{cutSite?.LineNumber} vs {FlyoutItemsProbe.CutLine}");
+                if (cut is not null)
+                {
+                    var cutSite = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.GetSource(cut);
+                    H.Check("FlyoutItemIdentity_AppBarButtonCallSite", cutSite?.LineNumber == FlyoutItemsProbe.CutLine,
+                        $"{cutSite?.LineNumber} vs {FlyoutItemsProbe.CutLine}");
+                }
+                else if (commandsReset)
+                {
+                    H.Skip("FlyoutItemIdentity_AppBarButtonCallSite", resetReason);
+                }
+                else
+                {
+                    H.Check("FlyoutItemIdentity_AppBarButtonCallSite", false, $"no \"Cut\" command; primary commands: {primaryLabels}");
+                }
             }
 
             // MenuBar and CommandBar items (and a submenu's children) are built the same way.

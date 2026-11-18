@@ -289,6 +289,41 @@ jobs:
           if ($problems.Count -gt 0) { throw "Package layout problems:`n$($problems -join "`n")" }
           Write-Host "One lib/ folder in each of $($packages.Count) packages."
 
+      # Packages with code ported from other projects (Yoga, md4c, D3, WinUI.Dock) must carry their
+      # license notices (issue #1535). The ids are listed rather than discovered so a package that
+      # failed to pack fails here instead of passing vacuously. Mirrored in
+      # build/pipelines/templates/reactor-build-steps.yml.
+      - name: Check third-party notices are packed
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $expectedFiles = @{
+            'Microsoft.UI.Reactor'          = 'src/Reactor/ThirdPartyNoticeText.txt'
+            'Microsoft.UI.Reactor.Advanced' = 'src/Reactor.Advanced/ThirdPartyNoticeText.txt'
+          }
+          $problems = [System.Collections.Generic.List[string]]::new()
+          foreach ($id in $expectedFiles.Keys) {
+            $expected = [System.IO.File]::ReadAllBytes((Resolve-Path $expectedFiles[$id]))
+            # A digit after the id keeps Microsoft.UI.Reactor from matching Microsoft.UI.Reactor.Advanced.
+            $matched = @(Get-ChildItem artifacts/nupkg -Filter *.nupkg -File |
+              Where-Object { $_.Name -match "^$([regex]::Escape($id))\.\d" -and $_.Name -notlike '*.symbols.nupkg' })
+            if ($matched.Count -ne 1) { $problems.Add("Expected one $id package, found $($matched.Count)."); continue }
+            $path = $matched[0].FullName
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
+            try {
+              $entry = $zip.GetEntry('ThirdPartyNoticeText.txt')
+              if (-not $entry) { $problems.Add("$path has no ThirdPartyNoticeText.txt at its root."); continue }
+              $bytes = [System.IO.MemoryStream]::new()
+              $stream = $entry.Open()
+              try { $stream.CopyTo($bytes) } finally { $stream.Dispose() }
+              if (-not [System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes.ToArray(), [byte[]]$expected)) {
+                $problems.Add("$path has a ThirdPartyNoticeText.txt that differs from $($expectedFiles[$id]).")
+              }
+            } finally { $zip.Dispose() }
+          }
+          if ($problems.Count -gt 0) { throw "Third-party notice problems:`n$($problems -join "`n")" }
+          Write-Host "ThirdPartyNoticeText.txt is packed in Microsoft.UI.Reactor and Microsoft.UI.Reactor.Advanced."
+
       - name: Build VSIX
         shell: pwsh
         run: |
@@ -442,7 +477,7 @@ jobs:
 
             ## New in this release
 
-            `Reactor.VsExtension.vsix` — very rough, experimental live embedded preview for Visual Studio 2022. This is the roughest surface in the experimental Reactor repo; expect install friction, solution-load races, HWND/DPI edge cases, and breaking changes. Requires Windows 11 23H2+ and WinAppSDK 1.6+. See [VS extension guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/vs-extension.md) or [src/vs-reactor/README.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 dev distribution may be unsigned.
+            `Reactor.VsExtension.vsix` — very rough, experimental live embedded preview for Visual Studio 2026. This is the roughest surface in the experimental Reactor repo; expect install friction, solution-load races, HWND/DPI edge cases, and breaking changes. Requires Windows 11 23H2+ and WinAppSDK 1.6+. See [VS extension guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/vs-extension.md) or [src/vs-reactor/README.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 dev distribution may be unsigned.
 
             ## Five assets
 
@@ -490,6 +525,6 @@ jobs:
 
             Installs to `~/.claude/skills/reactor/` and adds `bin/<arch>` to your user PATH. After a new shell, `mur --version` should resolve.
 
-            ### `Reactor.VsExtension.vsix` — Visual Studio 2022 embedded preview
+            ### `Reactor.VsExtension.vsix` — Visual Studio 2026 embedded preview
 
             Double-click to install per-user, or install into the Experimental hive for smoke testing. This VSIX is intentionally rougher than the rest of the release assets and should be treated as an experimental feedback vehicle, not a stable workflow. See `src/vs-reactor/TESTING.md` before release promotion.

@@ -365,6 +365,41 @@ steps:
           -o "${{ parameters.outputDirectory }}\nupkg"
       displayName: 'Pack Devtools NuGet'
 
+    # Packages with code ported from other projects (Yoga, md4c, D3, WinUI.Dock) must carry their
+    # license notices (issue #1535). Mirrors 'Check third-party notices are packed' in
+    # .github/workflows/release.yml.
+    - pwsh: |
+        $ErrorActionPreference = 'Stop'
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $nupkgDir = "${{ parameters.outputDirectory }}\nupkg"
+        $expectedFiles = @{
+          'Microsoft.UI.Reactor'          = "$(Build.SourcesDirectory)\src\Reactor\ThirdPartyNoticeText.txt"
+          'Microsoft.UI.Reactor.Advanced' = "$(Build.SourcesDirectory)\src\Reactor.Advanced\ThirdPartyNoticeText.txt"
+        }
+        $problems = [System.Collections.Generic.List[string]]::new()
+        foreach ($id in $expectedFiles.Keys) {
+          $expected = [System.IO.File]::ReadAllBytes($expectedFiles[$id])
+          # A digit after the id keeps Microsoft.UI.Reactor from matching Microsoft.UI.Reactor.Advanced.
+          $matched = @(Get-ChildItem $nupkgDir -Filter *.nupkg -File |
+            Where-Object { $_.Name -match "^$([regex]::Escape($id))\.\d" -and $_.Name -notlike '*.symbols.nupkg' })
+          if ($matched.Count -ne 1) { $problems.Add("Expected one $id package in $nupkgDir, found $($matched.Count)."); continue }
+          $path = $matched[0].FullName
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
+          try {
+            $entry = $zip.GetEntry('ThirdPartyNoticeText.txt')
+            if (-not $entry) { $problems.Add("$path has no ThirdPartyNoticeText.txt at its root."); continue }
+            $bytes = [System.IO.MemoryStream]::new()
+            $stream = $entry.Open()
+            try { $stream.CopyTo($bytes) } finally { $stream.Dispose() }
+            if (-not [System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes.ToArray(), [byte[]]$expected)) {
+              $problems.Add("$path has a ThirdPartyNoticeText.txt that differs from $($expectedFiles[$id]).")
+            }
+          } finally { $zip.Dispose() }
+        }
+        if ($problems.Count -gt 0) { throw "Third-party notice problems:`n$($problems -join "`n")" }
+        Write-Host "ThirdPartyNoticeText.txt is packed in Microsoft.UI.Reactor and Microsoft.UI.Reactor.Advanced."
+      displayName: 'Check third-party notices are packed'
+
     # ── NuGet.org Microsoft-compliance pre-flight (fail BEFORE the gated publish). ──
     # nuget.org enforces https://aka.ms/Microsoft-NuGet-Compliance on every
     # Microsoft-signed package: a missing ProjectUrl (or other required field) is

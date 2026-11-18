@@ -274,32 +274,17 @@ if ($nugetSelection) {
     Write-Dbg 'No reachable configured NuGet proxy detected; using the repo nuget.config'
 }
 
-function Get-ResolvedDotnetSdkVersion {
-    $sdkVersion = (& dotnet --version 2>$null | Select-Object -First 1)
-    $rc = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
-    if ($rc -ne 0 -or [string]::IsNullOrWhiteSpace($sdkVersion)) { return $null }
-    return $sdkVersion.Trim()
-}
-
 function Get-VsExtensionSkipReason {
     param([Parameter(Mandatory)]$VsInstance)
 
-    $sdkVersion = Get-ResolvedDotnetSdkVersion
-    if (-not $sdkVersion -or $sdkVersion -notmatch '^(\d+)\.(\d+)\.(\d+)') { return $null }
-
-    $sdkMajor = [int]$Matches[1]
-    $sdkPatch = [int]$Matches[3]
-    $sdkRequiresMsBuild18 = ($sdkMajor -gt 10) -or ($sdkMajor -eq 10 -and $sdkPatch -ge 300)
-    if (-not $sdkRequiresMsBuild18) { return $null }
-
+    # The VSIX manifest targets [18.0,19.0): the extension supports Visual Studio 2026 only.
     $vsVersion = [string]$VsInstance.installationVersion
     if ($vsVersion -notmatch '^(\d+)\.') { return $null }
 
     $vsMajor = [int]$Matches[1]
     if ($vsMajor -ge 18) { return $null }
 
-    return "Visual Studio $vsVersion uses MSBuild 17.x, but this checkout resolves .NET SDK $sdkVersion, which requires MSBuild 18+ for desktop VSIX builds."
+    return "The Reactor Preview extension supports Visual Studio 2026 (18.0+) only, but the newest instance with the 'Visual Studio extension development' workload is $vsVersion."
 }
 
 # Windows App SDK runtime — recommended for samples, perf-tests, and any
@@ -875,7 +860,7 @@ if ($SkipVsExtension) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
         Write-Host '    [skip] vswhere.exe not found - Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
-        Write-Host "           To install the preview extension later, install VS 2022/2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
+        Write-Host "           To install the preview extension later, install Visual Studio 2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
     } else {
         # `-requires Microsoft.VisualStudio.Workload.VisualStudioExtension` filters to
         # instances that have the VSIX-development workload (desktop MSBuild + VSSDK
@@ -902,7 +887,7 @@ if ($SkipVsExtension) {
                 $skipReason = Get-VsExtensionSkipReason $target
                 if ($skipReason) {
                     Write-Host "    [skip] $skipReason" -ForegroundColor Yellow
-                    Write-Host "           Install Visual Studio 2026 / MSBuild 18+ to build and install the optional Reactor Preview VSIX from bootstrap."
+                    Write-Host "           Install Visual Studio 2026 with that workload to build and install the optional Reactor Preview VSIX from bootstrap."
                 } else {
                     # Reinstall-Vsix.ps1 chains Build-Vsix.ps1 (desktop MSBuild build) then
                     # the VSIXInstaller against the per-user data dir, plus a synchronous

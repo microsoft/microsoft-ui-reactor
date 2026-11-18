@@ -198,6 +198,8 @@ public sealed partial class Reconciler
 
         UIElement? result;
         bool registeredType = false;
+        // Issue #965 — whether the control was created for this element (see ApplyModifiers).
+        bool ownsControl = false;
         try
         {
         // Publish the effective theme for the subtree now that we're committed to the
@@ -233,6 +235,7 @@ public sealed partial class Reconciler
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
+            ownsControl = v1Entry.OwnsControl(newEl);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
@@ -244,6 +247,7 @@ public sealed partial class Reconciler
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
+            ownsControl = v1Entry.OwnsControl(newEl);
         }
         else
         {
@@ -276,6 +280,8 @@ public sealed partial class Reconciler
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
+        // Composition primitives own their Border wrapper; a keyed memo is transparent.
+        ownsControl = newEl is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
 
         // A transparent layer (a keyed Memo, a flyout wrapping its target) shares its inner
@@ -323,7 +329,8 @@ public sealed partial class Reconciler
         var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
             && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
-            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground);
+            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
+                ownsControl: ownsControl && result is null);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is

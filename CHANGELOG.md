@@ -30,11 +30,64 @@ Conventions for contributors:
 
 ### Changed
 
+- Avoid redundant element copies when assigning keys in built-in component factories,
+  DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
+  supplied key is already the same string reference. Different key references still
+  produce a copy, and key values and formatting are unchanged (spec 042 §5).
+
+- **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
+  `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
+  unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
+  `PasswordBox` and `AutoSuggestBox`. Both are now checked. A `ToggleSwitch` is also labeled by
+  its on/off content, which WinUI uses as its name. A `ComboBox` placeholder is not, because
+  WinUI only exposes `PlaceholderText` as help text. Projects that build with warnings as errors
+  may see new `REACTOR_A11Y_003` errors on unlabeled combo boxes and switches; add `.Header(...)`
+  or `.AutomationName(...)`. A label on an enclosing container (`Expander(field).Header(...)`)
+  no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
+  (devtools) covers the same two controls.
+
 ### Deprecated
 
 ### Removed
 
+- **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
+  2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
+  toolchain CI builds it with. `Build-Vsix.ps1` and `Reinstall-Vsix.ps1` only use Visual
+  Studio 2026 instances, and `bootstrap.ps1` skips the extension when the newest instance is
+  Visual Studio 2022. The build's fallback to the `Microsoft.VSSDK.BuildTools`
+  package targets now follows the restored package instead of a hardcoded version.
+
 ### Fixed
+
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
+  rest of the button family remembered which child they owned by the control's managed wrapper.
+  When a collection replaced that wrapper between renders, the next update mounted a second copy
+  of the content instead of updating it, which dropped its state (an `AnimatedIcon`'s visual
+  state, focus, caret) and leaked the old copy without unmounting it. The record now lives on the
+  native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
+  selftest failures.
+
+- The analyzers and source generators in the `Microsoft.UI.Reactor` package are
+  now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
+  the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
+  failed with CS8032 on anything older than VS 18.9 / SDK 10.0.400, which also
+  broke generator-dependent code. Visual Studio 2022 remains unsupported (#1558).
+
+- **The `Microsoft.UI.Reactor` and `Microsoft.UI.Reactor.Advanced` packages now include
+  `ThirdPartyNoticeText.txt` (issue #1535).** Both packages contain code ported from other
+  open-source projects (Yoga, md4c, D3, WinUI.Dock), but only shipped Reactor's own license.
+  Each package now carries a notice file at its root that lists only the code it ports (Yoga in
+  `Microsoft.UI.Reactor`, md4c, D3 and WinUI.Dock in `Microsoft.UI.Reactor.Advanced`), and the
+  package workflows fail if it is missing or out of date.
+
+- **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
+  accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
+  `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
+  own guidance recommends), a field passed as the `content` of a Community Toolkit
+  `SettingsCard` with a string header, and a field passed to a helper declared in the project that
+  applies `.AutomationName`, `.Header` or `.LabeledBy` to it, such as a
+  `SettingsRow(label, control)` row helper.
 
 - Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
   restore null normal brushes and the latest normal value, including border modifier
@@ -62,6 +115,14 @@ Conventions for contributors:
   has just deployed. A tag run now publishes its version to `gh-pages` and hands the
   deployment to a `Publish docs` run it dispatches on `main`, whose `verify` job also probes
   the handed-off release directories.
+- **Inline margin, padding and border edges no longer keep the previous render's value
+  (issue #965).** With no physical value declared, `.MarginInlineStart`/`End`,
+  `.PaddingInlineStart`/`End` and `.BorderInlineStart` took the edges they do not set from
+  the control, which on an update still held the previous render's inline edge. Swapping
+  `.PaddingInlineStart(8)` for `.PaddingInlineEnd(4)` gave `8,0,4,0` instead of `0,0,4,0`,
+  and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
+  instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
+  also skip the write and leave the right-to-left value on the control.
 
 ### Security
 

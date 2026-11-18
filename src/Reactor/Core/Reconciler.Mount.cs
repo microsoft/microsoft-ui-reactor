@@ -69,6 +69,8 @@ public sealed partial class Reconciler
             ? ownTheme : prevAmbientTheme;
 
         UIElement? control;
+        // Issue #965 — whether the control was created for this element (see ApplyModifiers).
+        bool ownsControl = false;
         // A per-host RegisterType callback may return the control it mounted for a child
         // element; that control already describes the child (see ForwardsAnotherElement).
         bool registeredType = false;
@@ -100,6 +102,7 @@ public sealed partial class Reconciler
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl(element);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
@@ -110,6 +113,7 @@ public sealed partial class Reconciler
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl(element);
         }
         else
         {
@@ -136,6 +140,8 @@ public sealed partial class Reconciler
             EmptyElement => null,
             _ => ThrowNoHandlerRegistered(element),
         };
+        // Composition primitives mount their own Border wrapper; a keyed memo is transparent.
+        ownsControl = element is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
 
         if (control is not null)
@@ -166,7 +172,7 @@ public sealed partial class Reconciler
 
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
-            ApplyModifiers(fe, modifiers, requestRerender);
+            ApplyModifiers(fe, modifiers, requestRerender, ownsControl);
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
         // Issue #1262 — bind a `.Validate(field, value, …)` verdict to the control's
