@@ -96,11 +96,29 @@ Conventions for contributors:
   without rooting whole assemblies. Provider-free controls and explicit registration
   remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
 
+- The Toolkit RangeSelector sample now controls both endpoints through the shared
+  native event. It demonstrates pointer-driven parent acceptance/rejection, independent callback
+  counts and echo-free parent resets instead of calling one-way values controlled
+  (issue #1566; depends on #1564). The pinned Toolkit's missing keyboard change
+  notifications are documented as an unsupported mapping scenario.
+
 - Generated wrappers now support multiple controlled properties, including range endpoints
   sharing one native event, without losing callbacks or notifying unchanged endpoints.
   Controlled bindings also coexist with ordinary events, reassert parent values, and
   suppress synchronous, deferred, silent-setter and coercion echoes. The obsolete
   `REACTORGEN012` warning is retired (spec 058 §8.2, issue #1564).
+
+- The Toolkit sample maps Settings headers, descriptions, icons and expander
+  content as reconciled Element slots while preserving accessible string-header
+  names and native-owned headers when the wrapper's header inputs stay unset.
+  Rich-header state and cleanup survive native or lifecycle-driven Header
+  replacement without unmounting or clearing the foreign replacement.
+  Explicit wrapper factory calls keep the sample on actual Toolkit controls
+  rather than similarly named built-ins (issues #1504, #1566).
+
+- The Toolkit ContentSizer sample explicitly targets the advertised sibling
+  instead of resizing its containing stack. The target is connected on mount and
+  cleared on unmount, including when navigating away and back (issue #1567).
 
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with

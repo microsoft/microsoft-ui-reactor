@@ -1,12 +1,20 @@
 # WCT × Reactor — Control Gallery
 
-A gallery app (modelled on the Windows Community Toolkit sample app) that turns ~25 real **Windows Community Toolkit** controls into first-class Reactor elements using `Reactor.Wrappers.Generator` — **no hand-written wrapper or handler code**. A `NavigationView` lists the controls; each gets its own self-contained page (its own Reactor `Component`), so its demo state is isolated and it mounts/unmounts as you navigate.
+A gallery app (modelled on the Windows Community Toolkit sample app) that wraps 25 real **Windows Community Toolkit** controls using `Reactor.Wrappers.Generator` and small public adapters. A `NavigationView` lists the controls; each gets its own self-contained page (its own Reactor `Component`), so its demo state is isolated and it mounts/unmounts as you navigate.
+
+The sample deliberately qualifies each wrapper factory (`SettingsCardElement.SettingsCard`,
+for example). These remain Toolkit controls even when Reactor offers a similarly named
+built-in factory.
 
 ## Run
 
 ```powershell
 dotnet run --project samples/apps/wct-controls -p:Platform=x64 -p:RuntimeIdentifier=win-x64
 ```
+
+Select a page directly with `-- --page range` (or any ID in
+`SamplePages.Routes`). Unknown routes fail rather than opening a different page.
+Each page root has the automation ID `Page.<ControlName>`.
 
 (Needs a desktop Windows session — it opens a real WinUI 3 window. `CameraPreview` degrades gracefully when no camera is available, reporting through `PreviewFailed`.)
 
@@ -16,17 +24,87 @@ The point of the sample is the **wrapper generator**. Each `[GenerateReactorWrap
 
 | Control | Annotation shown | Why |
 | --- | --- | --- |
-| `SettingsCard` | `Exclude = new[]{ "CommandParameter" }` | drop the meaningless inherited `ButtonBase.CommandParameter` prop (the content slot is already `Content`) |
+| `SettingsCard` | `[WrapElementSlot]` on `Description`, `HeaderIcon`; `[WrapManual]` for rich/text header precedence | reconcile rich header/description/icon Elements alongside the main content child |
+| `SettingsExpander` | `[WrapElementSlot]` on `Description`, `Content`, `HeaderIcon`; manual rich/text header; `[WrapControlled]` for `IsExpanded` | reconcile header children alongside items and keep expansion state in the parent via `Expanded` / `Collapsed` |
 | `Segmented` | `[WrapControlled("SelectedIndex", ChangedEvent = "SelectionChanged")]` | two-way bind a value whose change event doesn't follow the `{Prop}Changed` convention |
 | `CameraPreview` | `[WrapLifecycle]` + `[WrapEvent("PreviewFailed", Arg = "Error")]` | declare the imperative start/stop lifecycle once; project typed event args into a callback |
 | `TokenizingTextBox`, `RichSuggestBox` | `Exclude = new[]{ "Items" }` | opt out of the auto items slot for an internally-managed collection |
 | `RadialGauge`, `ColorPicker` | (none) | the `{Prop}Changed` convention auto-pairs `Value` / `Color` as two-way controlled props |
-| `RangeSelector` | (none — see `WctControls.cs`) | two range thumbs share one `ValueChanged`, so they can't both be `[WrapControlled]` |
-| layout panels (`UniformGrid`, `DockPanel`, `WrapPanel`, `StaggeredPanel`, `ConstrainedBox`) | (none) | children flow through the generated panel / items slot |
+| `RangeSelector` | `[WrapControlled]` on `RangeStart` and `RangeEnd`, both using `ValueChanged` | observe pointer-driven endpoint changes and reassert supplied parent state without reconciliation echoes; keyboard limitation below |
+| layout panels (`UniformGrid`, `DockPanel`, `WrapPanel`, `StaggeredPanel`) | (none) | children flow through the generated panel slot; the DockPanel example uses the Toolkit's default left docking |
+| `ConstrainedBox`, `LayoutTransformControl` | (none) | a single reconciled content child; both controls affect layout |
 
 See the comments in [`WctControls.cs`](WctControls.cs) for the full rationale on every wrapped control.
+
+Object-valued properties are raw native values unless mapped with `[WrapElementSlot]`.
+Passing a Reactor `Element` to an unmapped `object` property does **not** mount it.
+The Settings wrappers provide string-header overloads that retain a native string
+`Header` (stored as `HeaderText` on the element). That preserves the Toolkit's own
+accessible naming, including its non-clickable group versus clickable button
+behavior, rather than blanket-naming every root and child. An Element `Header`
+takes precedence over `HeaderText`. Rich-header callers must provide appropriate
+`.AutomationName(...)` values and label interactive content; custom names are
+never replaced by the helpers.
+Omitted `isExpanded` and `isClickEnabled` remain `Optional<bool>.Unset`, not
+explicit `false`: the Toolkit owns omitted expansion state, and styles can
+provide an omitted click-enabled value.
+
+The shared native `Header` property has one lifecycle owner in `Customize`, using
+the public mount/reconcile/unmount methods. It is intentionally not also a
+generated slot: a generated header slot and a separate string writer would race
+when switching from a rich header back to text.
+An unrelated update leaves a native/style/imperative header alone when both
+header inputs remain unset. Only a previous Reactor `Header` supplies a child to
+reconcile; removing a previously supplied rich or text header releases its value.
+Ownership is stored on the native control independently of its current `Header`.
+If native code replaces or clears that property, a later rich-header update
+reconciles the original child without losing its state. Removal and teardown
+unmount only that owned child, once, and clear the native property only if it
+still holds the owned value. Native replacements, including those installed by
+`.OnUnmount(...)`, are left alone.
+
+## Pointer-controlled range scenario
+
+Launch with `-- --page range`. Drag each thumb with the pointer. With
+**Accept range changes** enabled, the corresponding parent endpoint and callback
+count change. Disable it and repeat: the callback still records the request, but
+the thumb returns to the parent's value. The other endpoint's callback count must
+not increase.
+
+**Keyboard control is not supported by this mapping.** In the pinned Toolkit
+`8.3.260402-preview2`, the [thumb key handlers](https://github.com/CommunityToolkit/Windows/blob/39c45efed2601b22170b9f6258c9cbe7e51031d1/components/RangeSelector/src/RangeSelector.Input.Key.cs)
+write `RangeStart`/`RangeEnd` without raising `ValueChanged`. Arrow keys can
+therefore move the native thumbs without updating the parent or callback counts.
+A later parent update reasserts the supplied values, but rejection is not immediate.
+Do not use keyboard edits to verify this pointer-driven accept/reject scenario.
+
+**Reset to 20–80** writes parent state without incrementing callback counts.
+**Rerender unchanged range** changes only Width by 1 px, making an unchanged-parent
+reconciliation observable. If native values have drifted, this restores the parent
+range; one-way endpoint properties would not. Native property assignments alone
+are not evidence of user-input events.
+
+Selectors are `Toolkit.RangeSelector`, `Range.AcceptChanges`, `Range.Reset`,
+`Range.Rerender`, `Range.Parent`, `Range.Callbacks`, `Range.LastChange` and
+`Range.ParentUpdates`. Omitted endpoints remain uncontrolled (`Optional.Unset`);
+the example supplies both endpoints deliberately.
+
+## ContentSizer target
+
+The ContentSizer page keeps the Toolkit control and explicitly targets the colored
+sibling above the bar. The sibling's `.Ref(...)` is populated before the sizer's
+`.OnMount(...)` assigns `TargetControl`; reading the ref during `Render` would be too
+early. `.OnUnmount(...)` clears the target, and navigating back creates a fresh
+mapping. The horizontal bar changes the sibling's height, not the containing
+stack's explicit height (which remains automatic). The stack still measures to fit
+its resized content. No extra size limits or orientation switches are imposed by
+this sample.
 
 ## Layout
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).
-- `Program.cs` — the `NavigationView` gallery shell plus one demo page per control.
+- `Program.cs` — launch options and application entry point.
+- `SamplePages.cs` — the gallery shell and pages, shared route inventory
+  (`Id`, `NativeTypeName`) and `SamplePages.CreatePage(route)` selector. Validation
+  hosts can link this file together with `WctControls.cs` instead of maintaining
+  test-only wrapper or page copies.
