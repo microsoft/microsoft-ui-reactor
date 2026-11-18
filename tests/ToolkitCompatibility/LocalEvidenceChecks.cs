@@ -60,8 +60,12 @@ internal static class LocalEvidenceChecks
                     "Gauge UIA range values differ from actual native values.");
                 Program.Results.Note($"UIA gauge Value={range.Value}; Minimum={range.Minimum}; Maximum={range.Maximum}");
                 break;
-            case Wct.Segmented segmented when peer?.GetPattern(PatternInterface.Selection) is ISelectionProvider selection:
-                Program.Check(segmented.SelectedIndex == 0 && segmented.Items.Count > 1 && !selection.CanSelectMultiple,
+            case Wct.Segmented segmented:
+                // The root peer can be a named container without a Selection pattern, so selection
+                // identity is read from each item's SelectionItem provider.
+                var selection = peer?.GetPattern(PatternInterface.Selection) as ISelectionProvider;
+                Program.Results.Note($"UIA Segmented root peer={peer?.GetClassName() ?? "(none)"}; Selection pattern={(selection is null ? "absent" : "present")}");
+                Program.Check(segmented.SelectedIndex == 0 && segmented.Items.Count > 1 && selection?.CanSelectMultiple != true,
                     "Segmented UIA selection does not describe a single-selection native control.");
                 try
                 {
@@ -72,15 +76,20 @@ internal static class LocalEvidenceChecks
                         await CompatibilityRoot.WaitAsync(() => segmented.SelectedIndex == index &&
                             Enumerable.Range(0, segmented.Items.Count).All(i => segmented.ContainerFromIndex(i) is UIElement),
                             $"Segmented selection {index} realized");
-                        Program.Check(selection.GetSelection().Length == 1, "UIA selection does not contain exactly one item.");
+                        if (selection is not null)
+                            Program.Check(selection.GetSelection().Length == 1, "UIA selection does not contain exactly one item.");
+                        int selected = 0;
                         for (int i = 0; i < segmented.Items.Count; i++)
                         {
                             var container = (UIElement)segmented.ContainerFromIndex(i);
                             var item = FrameworkElementAutomationPeer.CreatePeerForElement(container)?
-                                .GetPattern(PatternInterface.SelectionItem) as ISelectionItemProvider;
-                            Program.Check(item is not null && item.IsSelected == (i == index),
-                                $"UIA SelectionItem {i} ('{segmented.Items[i]}') IsSelected={item?.IsSelected}, native SelectedIndex={index}.");
+                                .GetPattern(PatternInterface.SelectionItem) as ISelectionItemProvider
+                                ?? throw new NativeContractException($"Segmented item {i} exposes no UIA SelectionItem provider.");
+                            Program.Check(item.IsSelected == (i == index),
+                                $"UIA SelectionItem {i} ('{segmented.Items[i]}') IsSelected={item.IsSelected}, native SelectedIndex={index}.");
+                            if (item.IsSelected) selected++;
                         }
+                        Program.Check(selected == 1, $"UIA reports {selected} selected Segmented items.");
                         Program.Results.Note($"UIA Segmented selection matches native SelectedItem '{segmented.SelectedItem}'");
                     }
                 }
