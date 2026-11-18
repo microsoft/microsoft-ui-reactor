@@ -483,9 +483,9 @@ internal sealed class TabbedCommandBarPage : Component
 
     public override Element Render()
     {
-        var (activity, setActivity) = UseState((Count: 0, LastCommand: "None"));
+        var (activity, updateActivity) = UseReducer((Count: 0, LastCommand: "None"));
         // The native buttons survive rerenders; their handlers read the current callback.
-        _onCommand = label => setActivity((activity.Count + 1, label));
+        _onCommand = label => updateActivity(current => (current.Count + 1, label));
 
         return Gallery.Page(
             "TabbedCommandBar",

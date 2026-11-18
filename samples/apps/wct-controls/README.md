@@ -201,7 +201,9 @@ This is a command demonstration, not a document editor.
 
 The actual Toolkit tabs and `AppBarButton` objects are built once through `Set`
 and retained across rerenders. Click handlers read the current callback, and are
-detached when the page unmounts. No Toolkit template or control is replaced.
+detached when the page unmounts. A functional state updater counts each invocation
+even when multiple commands arrive before the next render. No Toolkit template or
+control is replaced.
 
 ## Layout
 
