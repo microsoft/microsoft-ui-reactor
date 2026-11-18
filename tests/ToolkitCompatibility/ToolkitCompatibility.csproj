@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Platform>x64</Platform>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>ToolkitCompatibility</AssemblyName>
+    <RootNamespace>ToolkitCompatibility</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsPackageType Condition="'$(CompatibilityPackaged)' == 'true'">MSIX</WindowsPackageType>
+    <EnableMsixTooling Condition="'$(CompatibilityPackaged)' == 'true'">true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Never</AppxBundle>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <PublishAot Condition="'$(CompatibilityAot)' == 'true'">true</PublishAot>
+    <PublishAot Condition="'$(CompatibilityAot)' != 'true'">false</PublishAot>
+    <ToolkitVersion>8.3.260402-preview2</ToolkitVersion>
+    <DefineConstants Condition="'$(CompatibilityNativeBaseline)' == 'true'">$(DefineConstants);COMPATIBILITY_NATIVE_BASELINE</DefineConstants>
+    <SampleMappings Condition="'$(SampleMappings)' == ''">..\..\samples\apps\wct-controls\WctControls.cs</SampleMappings>
+    <SamplePages Condition="'$(SamplePages)' == ''">..\..\samples\apps\wct-controls\SamplePages.cs</SamplePages>
+    <SampleCameraLifetime Condition="'$(SampleCameraLifetime)' == ''">..\..\samples\apps\wct-controls\CameraPreviewLifetime.cs</SampleCameraLifetime>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(SampleMappings)" Link="WctControls.cs" />
+    <Compile Include="$(SamplePages)" Link="SamplePages.cs" />
+    <Compile Include="$(SampleCameraLifetime)" Link="CameraPreviewLifetime.cs" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RadialGauge" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.CameraPreview" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.ColorPicker" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.ImageCropper" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.TokenizingTextBox" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RangeSelector" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.HeaderedControls" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.TabbedCommandBar" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.MetadataControl" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RichSuggestBox" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ReactorPackageVersion)' == ''">
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Wrappers.Generator\Reactor.Wrappers.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ReactorPackageVersion)' != ''">
+    <PackageReference Include="Microsoft.UI.Reactor" Version="$(ReactorPackageVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ManagePackageVersionsCentrally)' != 'true'">
+    <PackageReference Update="CommunityToolkit.WinUI.Controls.*" Version="$(ToolkitVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(CompatibilityPackaged)' == 'true'">
+    <AppxManifest Include="$(CompatibilityManifest)" />
+    <Content Include="..\Reactor.PackagedTests.Host\Images\*.png"
+             Link="Images\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
