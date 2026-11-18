@@ -324,12 +324,14 @@ internal sealed class TokenizingPage : Component
                     text: text,
                     onTextChanged: setText,
                     onTokenItemAdding: ConvertToken,
-                    suggestedItemsSource: Suggestions,
+                    suggestedItemsSource: System.Array.FindAll(Suggestions,
+                        s => s.Contains(text, System.StringComparison.CurrentCultureIgnoreCase)),
                     header: "Add up to 5 actions",
                     placeholderText: "Add actions",
                     tokenDelimiter: ",",
-                    maximumTokens: 5),
-                Caption(string.IsNullOrEmpty(text) ? "Pick from suggestions or type a new tag." : $"Editing: {text}")));
+                    maximumTokens: 5).AutomationId("Tokens.Input"),
+                Caption(string.IsNullOrEmpty(text) ? "Pick from suggestions or type a new tag." : $"Editing: {text}")
+                    .AutomationId("Tokens.Status")));
     }
 
     // TokenItemAdding (the WCT sample's TokenItemCreating): convert the typed text

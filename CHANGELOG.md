@@ -122,6 +122,10 @@ Conventions for contributors:
   transitions without replacing Toolkit's selected content with a Reactor
   switch expression (issue #1568).
 
+- The Toolkit `TokenizingTextBox` sample filters suggestions as advertised, using
+  case-insensitive substring matching while preserving native token creation and
+  removal (issue #1569).
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and

@@ -103,6 +103,14 @@ unset. Reactor preserves native content when neither render declares a child;
 supplying a Reactor child would instead let its child strategy replace Toolkit's
 selection. No descriptor customization or presenter reimplementation is needed.
 
+## TokenizingTextBox
+
+The TokenizingTextBox page filters its existing action list by case-insensitive
+substring as text changes (`cal` offers only `Calendar`). An unmatched query has
+no suggestions but can still become a free-text token with a comma. Clearing the
+query restores the full list. Filtering changes `SuggestedItemsSource`, never the
+Toolkit-owned token `Items` collection.
+
 ## Layout
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).
