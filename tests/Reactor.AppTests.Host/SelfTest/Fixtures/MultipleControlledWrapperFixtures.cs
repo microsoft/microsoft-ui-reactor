@@ -323,6 +323,103 @@ internal static class MultipleControlledWrapperFixtures
         }
     }
 
+    internal sealed class Reentrant(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await RunCase("NestedValue", 40, ["end=70", "start=40"]);
+            await RunCase("RoundTrip", 30, ["end=70", "start=40", "start=30"]);
+            await RunCase("OtherProperty", 30, ["end=70", "count=9", "start=30"]);
+            await RunCase("QueuedValue", 40, ["end=70", "start=40"]);
+            await RunCase("ReplaceCallback", 30, ["end=70", "new-start=30"]);
+            await RunCase("Unmount", 20, ["end=70"]);
+        }
+
+        private async Task RunCase(string name, double expectedStart, string[] expected)
+        {
+            using var reconciler = new Reconciler();
+            var log = new List<string>();
+            double start = 20, end = 80;
+            int count = 2;
+            ControlledRangeProbe? control = null;
+            Element? element = null;
+            Action<double> onStart = value => { start = value; log.Add($"start={value}"); };
+
+            Element Create() => name == "OtherProperty"
+                ? new MixedRangeProbeElement
+                {
+                    RangeStart = start, RangeEnd = end, Count = count,
+                    OnRangeStartChanged = onStart, OnRangeEndChanged = OnEnd,
+                    OnCountChanged = value => { count = value; log.Add($"count={value}"); },
+                }
+                : new BareRangeProbeElement
+                {
+                    RangeStart = start, RangeEnd = end,
+                    OnRangeStartChanged = onStart, OnRangeEndChanged = OnEnd,
+                };
+
+            void OnEnd(double value)
+            {
+                end = value;
+                log.Add($"end={value}");
+                var c = control ?? throw new InvalidOperationException("Reentrant callback before mount");
+                switch (name)
+                {
+                    case "NestedValue":
+                        c.MoveStart(40);
+                        break;
+                    case "RoundTrip":
+                        c.MoveStart(40);
+                        c.MoveStart(30);
+                        break;
+                    case "OtherProperty":
+                        c.MoveCount(9);
+                        break;
+                    case "QueuedValue":
+                        c.QueueStart(40);
+                        break;
+                    case "ReplaceCallback":
+                        start = c.RangeStart;
+                        onStart = v => { start = v; log.Add($"new-start={v}"); };
+                        var updated = Create();
+                        reconciler.Reconcile(element, updated, c, static () => { });
+                        element = updated;
+                        break;
+                    case "Unmount":
+                        reconciler.UnmountChild(c);
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Unknown reentrant case {name}");
+                }
+            }
+
+            element = Create();
+            control = reconciler.Mount(element, static () => { }) as ControlledRangeProbe
+                ?? throw new InvalidOperationException("Reentrant probe did not mount");
+            H.SetContent(control);
+            await Harness.Render();
+            log.Clear();
+            control.MoveBoth(30, 70);
+            if (name == "QueuedValue") control.FlushEchoes();
+
+            if (name == "Unmount")
+                H.Check($"MultipleControlled_Reentrant_{name}_Detached", control.ValueSubscriptions == 0);
+            else
+            {
+                var accepted = Create();
+                reconciler.Reconcile(element, accepted, control, static () => { });
+                H.Check($"MultipleControlled_Reentrant_{name}_AcceptedValue",
+                    start == expectedStart && control.RangeStart == expectedStart && control.RangeEnd == 70 &&
+                    (name != "OtherProperty" || count == 9 && control.Count == 9),
+                    $"parent={start}, native={control.RangeStart}, expected={expectedStart}");
+                reconciler.UnmountChild(control);
+            }
+            H.Check($"MultipleControlled_Reentrant_{name}_Callbacks", log.SequenceEqual(expected),
+                $"expected [{string.Join(", ", expected)}], actual [{string.Join(", ", log)}]");
+            H.SetContent(new global::Microsoft.UI.Xaml.Controls.Grid());
+        }
+    }
+
     internal sealed class SingleWithEvent(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
