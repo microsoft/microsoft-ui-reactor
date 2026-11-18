@@ -102,6 +102,11 @@ Conventions for contributors:
   suppress synchronous, deferred, silent-setter and coercion echoes. The obsolete
   `REACTORGEN012` warning is retired (spec 058 §8.2, issue #1564).
 
+- The Toolkit sample maps Settings headers, descriptions, icons and expander
+  content as reconciled Element slots while preserving accessible string-header
+  names. Explicit wrapper factory calls keep the sample on actual Toolkit controls
+  rather than similarly named built-ins (issues #1504, #1566).
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
