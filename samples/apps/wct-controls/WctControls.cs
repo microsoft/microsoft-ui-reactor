@@ -215,6 +215,8 @@ public partial record TokenizingTextBoxElement;
 // Both endpoints use the same native ValueChanged event. The generated bindings
 // notify only the changed endpoint and reassert supplied parent values on update.
 // One-way props would leave native drift untouched when parent values stay equal.
+// The pinned Toolkit does not raise ValueChanged for keyboard edits, so this
+// sample's change notifications cover pointer interaction, not keyboard control.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.RangeSelector))]
 [WrapControlled("RangeStart", ChangedEvent = "ValueChanged")]
 [WrapControlled("RangeEnd", ChangedEvent = "ValueChanged")]
