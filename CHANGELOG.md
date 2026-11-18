@@ -111,6 +111,8 @@ Conventions for contributors:
 - The Toolkit sample maps Settings headers, descriptions, icons and expander
   content as reconciled Element slots while preserving accessible string-header
   names and native-owned headers when the wrapper's header inputs stay unset.
+  Rich-header state and cleanup survive native or lifecycle-driven Header
+  replacement without unmounting or clearing the foreign replacement.
   Explicit wrapper factory calls keep the sample on actual Toolkit controls
   rather than similarly named built-ins (issues #1504, #1566).
 

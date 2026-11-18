@@ -2,6 +2,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Wrappers;
+using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace WctControls;
@@ -54,31 +55,8 @@ public partial record SettingsCardElement
 
     private static partial ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard>
         Customize(ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard> d) =>
-        d.ImperativeBridged(
-            mount: static (ctx, c, e) =>
-            {
-                if (e.Header is not null) c.Header = ctx.MountChild(e.Header)!;
-                else if (e.HeaderText is { } text) c.Header = text;
-                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
-            },
-            update: static (ctx, c, oldElement, newElement) =>
-            {
-                if (oldElement.Header is null && newElement.Header is null &&
-                    oldElement.HeaderText == newElement.HeaderText) return;
-                var existing = oldElement.Header is not null ? c.Header as Microsoft.UI.Xaml.UIElement : null;
-                var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
-                if (newElement.Header is not null) c.Header = next!;
-                else if (newElement.HeaderText is { } text) c.Header = text;
-                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
-            },
-            unmount: static (ctx, c) =>
-            {
-                if (Reconciler.GetElementTag(c) is not SettingsCardElement element ||
-                    (element.Header is null && element.HeaderText is null)) return;
-                if (element.Header is not null && c.Header is Microsoft.UI.Xaml.UIElement child)
-                    ctx.Reconciler.UnmountChild(child);
-                c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
-            });
+        d.WithSettingsHeader(static e => e.Header, static e => e.HeaderText,
+            static () => CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
 }
 
 // A settings group that expands to reveal child SettingsCards (its Items).
@@ -116,31 +94,89 @@ public partial record SettingsExpanderElement
 
     private static partial ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander>
         Customize(ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander> d) =>
-        d.ImperativeBridged(
-            mount: static (ctx, c, e) =>
+        d.WithSettingsHeader(static e => e.Header, static e => e.HeaderText,
+            static () => CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
+}
+
+internal static class SettingsHeaderBridge
+{
+    private sealed class HeaderState
+    {
+        internal UIElement? Child;
+        internal object? Value;
+    }
+
+    // Keep ownership on the native control even when Header is replaced or its RCW is collected.
+    // Register lazily so constructing a descriptor does not touch WinUI.
+    private static DependencyProperty? s_ownedHeaderProperty;
+    private static DependencyProperty OwnedHeaderProperty => s_ownedHeaderProperty ??=
+        DependencyProperty.RegisterAttached(
+            "ReactorOwnedSettingsHeader", typeof(object), typeof(SettingsHeaderBridge), new PropertyMetadata(null));
+
+    private static HeaderState? GetOwnedHeader(FrameworkElement control) =>
+        s_ownedHeaderProperty is { } property ? control.GetValue(property) as HeaderState : null;
+
+    internal static ControlDescriptor<TElement, TControl> WithSettingsHeader<TElement, TControl>(
+        this ControlDescriptor<TElement, TControl> descriptor,
+        Func<TElement, Element?> getHeader,
+        Func<TElement, string?> getText,
+        Func<DependencyProperty> getHeaderProperty)
+        where TElement : Element
+        where TControl : FrameworkElement, new() =>
+        descriptor.ImperativeBridged(
+            mount: (ctx, control, element) =>
             {
-                if (e.Header is not null) c.Header = ctx.MountChild(e.Header)!;
-                else if (e.HeaderText is { } text) c.Header = text;
-                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
+                var header = getHeader(element);
+                var text = getText(element);
+                if (header is null && text is null) return;
+                var state = new HeaderState();
+                control.SetValue(OwnedHeaderProperty, state);
+                state.Child = header is null ? null : ctx.MountChild(header);
+                state.Value = header is null ? text : state.Child;
+                control.SetValue(getHeaderProperty(), state.Value);
             },
-            update: static (ctx, c, oldElement, newElement) =>
+            update: (ctx, control, oldElement, newElement) =>
             {
-                if (oldElement.Header is null && newElement.Header is null &&
-                    oldElement.HeaderText == newElement.HeaderText) return;
-                var existing = oldElement.Header is not null ? c.Header as Microsoft.UI.Xaml.UIElement : null;
-                var next = ctx.ReconcileChild(oldElement.Header, newElement.Header, existing);
-                if (newElement.Header is not null) c.Header = next!;
-                else if (newElement.HeaderText is { } text) c.Header = text;
-                else c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
+                var oldHeader = getHeader(oldElement);
+                var header = getHeader(newElement);
+                if (header is not null)
+                {
+                    var state = GetOwnedHeader(control);
+                    var hadHeader = state is not null;
+                    if (state is null)
+                    {
+                        state = new HeaderState();
+                        control.SetValue(OwnedHeaderProperty, state);
+                    }
+                    state.Child = ctx.ReconcileChild(hadHeader ? oldHeader : null, header, state.Child);
+                    state.Value = state.Child;
+                    if (!ReferenceEquals(control.GetValue(getHeaderProperty()), state.Value))
+                        control.SetValue(getHeaderProperty(), state.Value);
+                    return;
+                }
+                var text = getText(newElement);
+                if (oldHeader is null && getText(oldElement) == text) return;
+                ReleaseHeader(ctx.Reconciler, control, getHeaderProperty(), clearHeader: text is null);
+                if (text is not null)
+                {
+                    control.SetValue(OwnedHeaderProperty, new HeaderState { Value = text });
+                    control.SetValue(getHeaderProperty(), text);
+                }
             },
-            unmount: static (ctx, c) =>
-            {
-                if (Reconciler.GetElementTag(c) is not SettingsExpanderElement element ||
-                    (element.Header is null && element.HeaderText is null)) return;
-                if (element.Header is not null && c.Header is Microsoft.UI.Xaml.UIElement child)
-                    ctx.Reconciler.UnmountChild(child);
-                c.ClearValue(CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
-            });
+            unmount: (ctx, control) =>
+                ReleaseHeader(ctx.Reconciler, control, getHeaderProperty(), clearHeader: true));
+
+    private static void ReleaseHeader(
+        Reconciler reconciler, FrameworkElement control, DependencyProperty headerProperty, bool clearHeader)
+    {
+        if (GetOwnedHeader(control) is not { } state) return;
+        control.ClearValue(OwnedHeaderProperty);
+        if (state.Child is { } child) reconciler.UnmountChild(child);
+        var current = control.GetValue(headerProperty);
+        if (clearHeader && (ReferenceEquals(current, state.Value) ||
+            current is string text && state.Value is string ownedText && text == ownedText))
+            control.ClearValue(headerProperty);
+    }
 }
 
 // A circular gauge — pure value props (Value/Minimum/Maximum/Unit/…) plus a
