@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;   // IBuffer.AsStream() for the ImageCropper sample bitmap
 using static Microsoft.UI.Reactor.Factories;
@@ -498,14 +499,26 @@ internal sealed class TabbedCommandBarPage : Component
 // ── ContentSizer ────────────────────────────────────────────────────────
 internal sealed class ContentSizerPage : Component
 {
-    public override Element Render() =>
-        Gallery.Page(
+    public override Element Render()
+    {
+        var target = this.UseElementRef<Microsoft.UI.Xaml.Controls.Border>();
+
+        return Gallery.Page(
             "ContentSizer",
             "A draggable sizer (Sizers package) that resizes its target content (vs GridSplitter, which resizes grid definitions). Drag the bar to resize the panel above it.",
             VStack(0,
-                Gallery.Box("#FFCC80", "Resizable content — drag the bar below", 140),
-                ContentSizerElement.ContentSizer(orientation: Microsoft.UI.Xaml.Controls.Orientation.Horizontal))
-                .Width(360));
+                Gallery.Box("#FFCC80", "Resizable content — drag the bar below", 140)
+                    .Ref(target)
+                    .AutomationId("ContentSizer.Target"),
+                ContentSizerElement.ContentSizer(orientation: Microsoft.UI.Xaml.Controls.Orientation.Horizontal)
+                    .AutomationId("ContentSizer.Sizer")
+                    // The preceding sibling has mounted; reading the ref during Render would be too early.
+                    .OnMount(fe => ((CommunityToolkit.WinUI.Controls.ContentSizer)fe).TargetControl =
+                        target.Current ?? throw new InvalidOperationException("The resize target must mount before its sizer."))
+                    .OnUnmount(fe => fe.ClearValue(CommunityToolkit.WinUI.Controls.ContentSizer.TargetControlProperty)))
+                .Width(360)
+                .AutomationId("ContentSizer.Container"));
+    }
 }
 
 // ── PropertySizer ───────────────────────────────────────────────────────
