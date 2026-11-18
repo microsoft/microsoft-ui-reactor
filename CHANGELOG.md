@@ -117,6 +117,11 @@ Conventions for contributors:
   instead of resizing its containing stack. The target is connected on mount and
   cleared on unmount, including when navigating away and back (issue #1567).
 
+- The Toolkit `SwitchPresenter` sample now populates native `SwitchCases` and
+  drives `Value` declaratively, demonstrating matching, default and no-match
+  transitions without replacing Toolkit's selected content with a Reactor
+  switch expression (issue #1568).
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and

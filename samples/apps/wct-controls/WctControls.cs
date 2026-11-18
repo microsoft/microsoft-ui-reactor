@@ -288,9 +288,9 @@ public partial record WrapPanelElement;
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.HeaderedTreeView))]
 public partial record HeaderedTreeViewElement;
 
-// SwitchPresenter shows exactly one matching SwitchCase based on Value. Cases are
-// SwitchCase objects (not UIElements), surfaced through the generated items slot;
-// Value is the discriminator (a one-way prop here — no {Prop}Changed event).
+// SwitchCases is a settable CaseCollection, generated as a one-way value prop.
+// Toolkit selects CurrentCase and owns Content. Leave the generated Content slot
+// unset so Reactor does not replace Toolkit's selected content.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SwitchPresenter))]
 public partial record SwitchPresenterElement;
 

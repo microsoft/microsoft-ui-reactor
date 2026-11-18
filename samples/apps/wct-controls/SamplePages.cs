@@ -658,20 +658,49 @@ internal sealed class SwitchPresenterPage : Component
     public override Element Render()
     {
         var (choice, setChoice) = UseState(0);
-        string[] states = { "Loading", "Ready", "Error" };
+        string[] states = { "Loading", "Ready", "Error", "Unknown" };
+        // Keep native cases/content stable when only Value changes.
+        var withDefault = UseMemo(() => CreateCases(includeDefault: true), []);
+        var withoutDefault = UseMemo(() => CreateCases(includeDefault: false), []);
 
         return Gallery.Page(
             "SwitchPresenter",
-            "Shows exactly one SwitchCase based on Value (a switch over UI). SwitchCase children are typed objects, not a generated slot, so here a Reactor switch drives the displayed content while Value mirrors the selection.",
+            "Toolkit selects a native Case from SwitchCases based on Value. Unknown uses the default case above and leaves the presenter below empty.",
             VStack(12,
                 SegmentedElement.Segmented(
                     selectedIndex: choice, onSelectedIndexChanged: setChoice,
-                    items: new object[] { "Loading", "Ready", "Error" }),
+                    items: states)
+                    .AutomationId("SwitchPresenter.Choice"),
+                Caption("With a default case"),
                 SwitchPresenterElement.SwitchPresenter(
-                    value: states[choice],
-                    content: Gallery.Box(
-                        choice switch { 0 => "#FFE082", 1 => "#A5D6A7", _ => "#EF9A9A" },
-                        states[choice], 100))));
+                    value: states[choice], switchCases: withDefault)
+                    .Height(70).AutomationId("SwitchPresenter.WithDefault"),
+                Caption("Without a default case"),
+                SwitchPresenterElement.SwitchPresenter(
+                    value: states[choice], switchCases: withoutDefault)
+                    .Height(70).AutomationId("SwitchPresenter.WithoutDefault")));
+    }
+
+    private static CommunityToolkit.WinUI.Controls.CaseCollection CreateCases(bool includeDefault)
+    {
+        var cases = new CommunityToolkit.WinUI.Controls.CaseCollection();
+        foreach (var value in new[] { "Loading", "Ready", "Error" })
+        {
+            cases.Add(new CommunityToolkit.WinUI.Controls.Case
+            {
+                Value = value,
+                Content = new Microsoft.UI.Xaml.Controls.TextBlock { Text = value, FontSize = 24 },
+            });
+        }
+        if (includeDefault)
+        {
+            cases.Add(new CommunityToolkit.WinUI.Controls.Case
+            {
+                IsDefault = true,
+                Content = new Microsoft.UI.Xaml.Controls.TextBlock { Text = "Unknown state (default)", FontSize = 24 },
+            });
+        }
+        return cases;
     }
 }
 
