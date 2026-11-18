@@ -344,26 +344,56 @@ internal sealed class TokenizingPage : Component
 // ── RangeSelector ───────────────────────────────────────────────────────
 internal sealed class RangeSelectorPage : Component
 {
+    private sealed record RangeState(
+        double Start = 20, double End = 80, bool Accept = true,
+        int StartCallbacks = 0, int EndCallbacks = 0, int ParentUpdates = 0,
+        string LastChange = "No endpoint callbacks yet.");
+
     public override Element Render()
     {
-        var (lo, setLo) = UseState(20.0);
-        var (hi, setHi) = UseState(80.0);
+        var (range, update) = UseReducer(new RangeState());
 
         return Gallery.Page(
             "RangeSelector",
-            "A dual-thumb range slider. RangeStart/RangeEnd are one-way props (force-asserted from state) and the single ValueChanged event — which carries WHICH thumb moved — drives the matching state setter. (Two thumbs share one event, so they can't both be [WrapControlled]; this one-way + typed-event shape is the idiomatic fit.)",
+            "Both endpoints are controlled. Move either thumb with the pointer or arrow keys. The parent can accept or reject requests; parent writes must not increment the endpoint callback counts.",
             VStack(12,
+                ToggleSwitch(isOn: range.Accept,
+                    onIsOnChanged: value => update(s => s with { Accept = value }))
+                    .AutomationName("Accept range changes").AutomationId("Range.AcceptChanges"),
                 RangeSelectorElement.RangeSelector(
                     minimum: 0, maximum: 100, stepFrequency: 1,
-                    rangeStart: lo, rangeEnd: hi,
-                    onValueChanged: e =>
+                    rangeStart: range.Start, rangeEnd: range.End,
+                    onRangeStartChanged: value => update(s => s with
                     {
-                        if (e.ChangedRangeProperty == CommunityToolkit.WinUI.Controls.RangeSelectorProperty.MinimumValue)
-                            setLo(e.NewValue);
-                        else
-                            setHi(e.NewValue);
-                    }).Width(380),
-                Caption($"Selected range: {lo:0} – {hi:0}")));
+                        Start = s.Accept ? value : s.Start,
+                        StartCallbacks = s.StartCallbacks + 1,
+                        LastChange = $"Start requested {value:0}: {(s.Accept ? "accepted" : "rejected")}.",
+                    }),
+                    onRangeEndChanged: value => update(s => s with
+                    {
+                        End = s.Accept ? value : s.End,
+                        EndCallbacks = s.EndCallbacks + 1,
+                        LastChange = $"End requested {value:0}: {(s.Accept ? "accepted" : "rejected")}.",
+                    }))
+                    .Width(380 + range.ParentUpdates % 2)
+                    .AutomationName("Selected range").AutomationId("Toolkit.RangeSelector"),
+                HStack(12,
+                    Button("Reset to 20–80", () => update(s => s with
+                    {
+                        Start = 20, End = 80, ParentUpdates = s.ParentUpdates + 1,
+                        LastChange = "Parent reset to 20–80.",
+                    })).AutomationId("Range.Reset"),
+                    Button("Rerender unchanged range", () => update(s => s with
+                    {
+                        ParentUpdates = s.ParentUpdates + 1,
+                    })).AutomationId("Range.Rerender")),
+                Caption($"Parent range: {range.Start:0} – {range.End:0}")
+                    .AutomationId("Range.Parent"),
+                Caption($"Endpoint callbacks: start {range.StartCallbacks}, end {range.EndCallbacks}")
+                    .AutomationId("Range.Callbacks"),
+                Caption(range.LastChange).AutomationId("Range.LastChange"),
+                Caption($"Parent updates: {range.ParentUpdates}. Rerender changes Width by 1 px without changing the range.")
+                    .AutomationId("Range.ParentUpdates")));
     }
 }
 

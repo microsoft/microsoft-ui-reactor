@@ -30,7 +30,7 @@ The point of the sample is the **wrapper generator**. Each `[GenerateReactorWrap
 | `CameraPreview` | `[WrapLifecycle]` + `[WrapEvent("PreviewFailed", Arg = "Error")]` | declare the imperative start/stop lifecycle once; project typed event args into a callback |
 | `TokenizingTextBox`, `RichSuggestBox` | `Exclude = new[]{ "Items" }` | opt out of the auto items slot for an internally-managed collection |
 | `RadialGauge`, `ColorPicker` | (none) | the `{Prop}Changed` convention auto-pairs `Value` / `Color` as two-way controlled props |
-| `RangeSelector` | (none — see `WctControls.cs`) | two range thumbs share one `ValueChanged`, so they can't both be `[WrapControlled]` |
+| `RangeSelector` | `[WrapControlled]` on `RangeStart` and `RangeEnd`, both using `ValueChanged` | notify only the changed endpoint and reassert supplied parent state without reconciliation echoes |
 | layout panels (`UniformGrid`, `DockPanel`, `WrapPanel`, `StaggeredPanel`) | (none) | children flow through the generated panel slot; the DockPanel example uses the Toolkit's default left docking |
 | `ConstrainedBox`, `LayoutTransformControl` | (none) | a single reconciled content child; both controls affect layout |
 
@@ -53,6 +53,25 @@ The shared native `Header` property has one lifecycle owner in `Customize`, usin
 the public mount/reconcile/unmount methods. It is intentionally not also a
 generated slot: a generated header slot and a separate string writer would race
 when switching from a rich header back to text.
+
+## Controlled range scenario
+
+Launch with `-- --page range`. Move each thumb by pointer or keyboard. With
+**Accept range changes** enabled, the corresponding parent endpoint and callback
+count change. Disable it and repeat: the callback still records the request, but
+the thumb returns to the parent's value. The other endpoint's callback count must
+not increase.
+
+**Reset to 20–80** writes parent state without incrementing callback counts.
+**Rerender unchanged range** changes only Width by 1 px, making an unchanged-parent
+reconciliation observable. If native values have drifted, this restores the parent
+range; one-way endpoint properties would not. Native property assignments alone
+are not evidence of user-input events.
+
+Selectors are `Toolkit.RangeSelector`, `Range.AcceptChanges`, `Range.Reset`,
+`Range.Rerender`, `Range.Parent`, `Range.Callbacks`, `Range.LastChange` and
+`Range.ParentUpdates`. Omitted endpoints remain uncontrolled (`Optional.Unset`);
+the example supplies both endpoints deliberately.
 
 ## Layout
 
