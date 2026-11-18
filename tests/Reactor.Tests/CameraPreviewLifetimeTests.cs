@@ -9,6 +9,47 @@ public class CameraPreviewLifetimeTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task CleanupQueue_OnlyBlocksReentryWhenReleaseFails(bool failCleanup)
+    {
+        var queue = new CameraPreviewCleanupQueue();
+        var reports = new List<string>();
+        var previous = new CameraPreviewLifetime(Task.CompletedTask,
+            () => Task.FromException(new InvalidOperationException("start")),
+            () => { },
+            () => failCleanup
+                ? Task.FromException(new InvalidOperationException("cleanup"))
+                : Task.CompletedTask,
+            (operation, _) => reports.Add(operation));
+        previous.Start();
+        queue.Retire(previous);
+        await previous.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.True(previous.HasErrors);
+        Assert.Equal(!failCleanup, previous.ReleaseSucceeded);
+
+        int starts = 0;
+        var next = new CameraPreviewLifetime(queue.WaitAsync(),
+            () => { starts++; return Task.CompletedTask; },
+            () => { },
+            () => Task.CompletedTask,
+            (operation, _) => reports.Add(operation));
+        next.Start();
+        if (failCleanup)
+        {
+            await next.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Contains("previous cleanup", reports);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => queue.WaitAsync());
+        }
+        else
+        {
+            await next.StopAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.DoesNotContain("previous cleanup", reports);
+        }
+        Assert.Equal(failCleanup ? 0 : 1, starts);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void PageRetirement_IgnoresLateFailuresAndGivesReplacementANewKey(bool hotReload)
     {
         var context = new RenderContext();

@@ -204,7 +204,7 @@ public partial record SegmentedElement;
 public partial record CameraPreviewElement
 {
     private static readonly ConditionalWeakTable<CommunityToolkit.WinUI.Controls.CameraPreview, PreviewSession> Previews = new();
-    private static Task _pendingCleanup = Task.CompletedTask;
+    private static readonly CameraPreviewCleanupQueue Cleanup = new();
 
     internal static CameraPreviewLifetime GetLifetime(CommunityToolkit.WinUI.Controls.CameraPreview control) =>
         Previews.TryGetValue(control, out var session)
@@ -213,7 +213,7 @@ public partial record CameraPreviewElement
 
     private static void StartPreview(CommunityToolkit.WinUI.Controls.CameraPreview control)
     {
-        var session = new PreviewSession(control, _pendingCleanup);
+        var session = new PreviewSession(control, Cleanup.WaitAsync());
         Previews.Add(control, session);
         session.Attach();
     }
@@ -223,7 +223,14 @@ public partial record CameraPreviewElement
         if (Previews.TryGetValue(control, out var session))
         {
             Previews.Remove(control);
-            _pendingCleanup = Task.WhenAll(_pendingCleanup, session.Detach());
+            try
+            {
+                session.Detach();
+            }
+            finally
+            {
+                Cleanup.Retire(session.Lifetime);
+            }
         }
     }
 
@@ -270,11 +277,12 @@ public partial record CameraPreviewElement
 
         private Task CleanupAsync() => _helper?.CleanUpAsync() ?? Task.CompletedTask;
 
-        public Task Detach()
+        public void Detach()
         {
             _unmounted = true;
             _control.Loaded -= OnLoaded;
-            return _lifetime.StopAsync();
+            // Host disposal can leave the native subtree visible.
+            _control.IsEnabled = false;
         }
 
         private void OnPreviewFailed(object? sender, CommunityToolkit.WinUI.Controls.PreviewFailedEventArgs args)
@@ -292,7 +300,7 @@ public partial record CameraPreviewElement
                 {
                     element.OnPreviewFailed?.Invoke($"{operation}: {error.Message}");
                 }
-                catch (Exception callbackError)
+                catch (Exception callbackError) when (callbackError is not OutOfMemoryException and not StackOverflowException)
                 {
                     Console.Error.WriteLine($"CameraPreview error callback failed: {callbackError}");
                 }

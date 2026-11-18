@@ -154,6 +154,8 @@ callbacks. Completion of asynchronous cleanup still requires a running dispatche
 The page lifetime guards late callbacks before requesting cleanup. Its preview
 key survives ordinary renders but changes when hot reload resets hook state, so
 recovery mounts a fresh preview instead of keeping a stopped native control.
+Teardown disables the abandoned native preview before cleanup, preventing its
+camera-switch button from restarting capture if a disposed host leaves it visible.
 
 Toolkit failure results and lifecycle exceptions are written to stderr. While
 mounted, exceptions also reach the current `OnPreviewFailed` callback; callbacks
@@ -163,6 +165,10 @@ uses public Toolkit APIs, not a replacement capture
 implementation, and does not change device permissions.
 The diagnostic failure listener remains attached until pending startup and cleanup
 complete, including when a denied/no-device result arrives after page disposal.
+Cleanup completion alone is not proof of release. If capture cleanup, final
+playback shutdown, or listener removal fails, the sample retains that lifetime
+and blocks new previews with a reported error until the sample is restarted.
+Ordinary start/preview failures do not block re-entry after successful cleanup.
 
 Live validation requires a provisioned, permission-approved camera. Open the
 `camera` page, verify actual frames, navigate away during startup and after
