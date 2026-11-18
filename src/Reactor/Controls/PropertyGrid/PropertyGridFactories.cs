@@ -22,7 +22,7 @@ public static partial class Factories
             OnRootChanged = onRootChanged,
         };
 
-        return Component<PropertyGridComponent, PropertyGridElement>(props)
-            .WithKey($"pg-{target.GetType().FullName}");
+        return ComponentWithKey<PropertyGridComponent, PropertyGridElement>(props,
+            $"pg-{target.GetType().FullName}");
     }
 }

@@ -1307,7 +1307,11 @@ public static partial class Factories
     /// </summary>
     public static ComponentElement<TProps> Component<T, TProps>(TProps props)
         where T : Component<TProps>, new() =>
-        new(typeof(T), props) { _factory = () => new T() };
+        ComponentWithKey<T, TProps>(props, null);
+
+    private static ComponentElement<TProps> ComponentWithKey<T, TProps>(TProps props, string? key)
+        where T : Component<TProps>, new() =>
+        new(typeof(T), props) { _factory = () => new T(), Key = key };
 
     /// <summary>
     /// Define a memoized inline function component. Skips re-render when dependencies haven't changed.
