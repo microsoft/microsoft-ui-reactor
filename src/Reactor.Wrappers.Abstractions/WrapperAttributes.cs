@@ -25,10 +25,12 @@ namespace Microsoft.UI.Reactor.Wrappers
         /// <summary>When true (default) every settable value property is surfaced; when false only <see cref="Include"/> are.</summary>
         public bool AutoDiscover { get; set; } = true;
 
-        /// <summary>When true (default) the generated registration cctor calls <c>ReactorApp.RegisterControlAssembly</c>
-        /// to load the control assembly's XAML metadata (needed for third-party/WCT controls). Set false for built-in
-        /// WinUI controls whose metadata the framework already loads — the call throws in a headless host when the
-        /// assembly has no <c>IXamlMetadataProvider</c>.</summary>
+        /// <summary>When true (default) the generated registration cctor registers the control assembly's
+        /// XAML metadata. A unique public, non-generic <c>IXamlMetadataProvider</c> with a public parameterless
+        /// constructor is referenced directly, preserving it under trimming/NativeAOT. Otherwise registration
+        /// uses best-effort reflection, which tolerates code-only controls without metadata but cannot preserve
+        /// undiscoverable providers under trimming. Set false when registering a custom provider explicitly
+        /// or wrapping built-in WinUI controls whose metadata the framework already loads.</summary>
         public bool RegisterAssembly { get; set; } = true;
 
         /// <summary>Property names to surface when <see cref="AutoDiscover"/> is false.</summary>

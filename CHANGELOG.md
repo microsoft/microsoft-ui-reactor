@@ -83,6 +83,13 @@ Conventions for contributors:
   native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
   selftest failures.
 
+- **Generated wrappers preserve their control library's XAML metadata under
+  trimming/NativeAOT (issue #1565, spec 058 §9a).** A unique publicly constructible
+  metadata provider is now registered through a static reference when the wrapper
+  is first used, fixing code-only Toolkit SettingsCard/SettingsExpander consumers
+  without rooting whole assemblies. Provider-free controls and explicit registration
+  remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and

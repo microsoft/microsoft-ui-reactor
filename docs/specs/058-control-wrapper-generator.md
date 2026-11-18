@@ -342,17 +342,40 @@ The generated factory holder is the spec-048 §6 Pattern-A trim-root: `ControlRe
 
 A third-party control's default style/template lives in its assembly's `Themes/Generic.xaml`. When the WinUI loader parses that dictionary it resolves type references through `Application.Current`'s `IXamlMetadataProvider` chain. A Reactor app with no XAML of its own has no compiler-generated provider for the referenced control library, so the lookup fails and the app **crashes at first realization** with `0xC000027B` (E_FAIL in `Microsoft.UI.Xaml.dll`) — observed with `SettingsCard` before the fix. The cure is `ReactorApp.RegisterControlAssembly(controlAssembly)` (issue #142).
 
-The generator emits this call automatically in the element type's **static constructor**, immediately before `ControlRegistry.Register`:
+For full wrappers with `RegisterAssembly = true` (the default), the generator resolves
+the control assembly's `IXamlMetadataProvider` at compile time. When there is one
+concrete, public, non-generic provider with a public parameterless constructor, it
+emits a direct construction in the element type's **static constructor**, immediately
+before `ControlRegistry.Register` (issue #1565):
 
 ```csharp
 static SettingsCardElement()
 {
-    global::Microsoft.UI.Reactor.ReactorApp.RegisterControlAssembly(typeof(SettingsCard).Assembly);
+    global::Microsoft.UI.Reactor.ReactorApp.RegisterControlAssembly(
+        new global::CommunityToolkit.WinUI.Controls.SettingsControlsRns.
+            CommunityToolkit_WinUI_Controls_SettingsControls_XamlTypeInfo.XamlMetaDataProvider());
     global::…ControlRegistry.Register<SettingsCardElement, SettingsCard>(static () => new …(Descriptor));
 }
 ```
 
-Because the static cctor runs the first time the factory is called (during `Render`, before the control is mounted and its `Generic.xaml` loads), the provider is registered in time. Authors therefore don't need a manual registration step — wrapping is self-contained.
+Because the static cctor runs when the element is first constructed (during `Render`,
+before the control is mounted and its `Generic.xaml` loads), the provider is registered
+in time and statically preserved under trimming/NativeAOT. Unused wrappers do not root
+their providers; no module initializer or whole-assembly root is emitted. A provider
+may itself reference other types as required by its control library.
+
+Code-only libraries with no provider retain the tolerant
+`TryRegisterControlAssembly(typeof(Control).Assembly)` fallback. That reflection path
+is also retained for compatibility with JIT-only or not-yet-visible generated providers,
+but is **not** a trimming guarantee. Providers produced later by another generator,
+providers in a different assembly, non-public/open-generic providers, providers that
+require constructor arguments or required-member initialization, and ambiguous
+multiple providers need explicit registration when XAML metadata is required.
+`REACTORGEN016` warns when visible candidates cannot be selected safely; no warning is
+issued merely because a code-only library has none. Application subclasses are not
+provider candidates. Use `RegisterAssembly = false` and the existing provider-instance
+overload for custom registration. Descriptor-only and decorator generation retain their
+existing registration behavior and do not gain automatic metadata registration.
 
 ## §10 Diagnostics
 
