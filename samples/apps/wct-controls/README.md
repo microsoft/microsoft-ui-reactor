@@ -56,7 +56,12 @@ when switching from a rich header back to text.
 An unrelated update leaves a native/style/imperative header alone when both
 header inputs remain unset. Only a previous Reactor `Header` supplies a child to
 reconcile; removing a previously supplied rich or text header releases its value.
-Teardown also leaves native-owned headers alone.
+Ownership is stored on the native control independently of its current `Header`.
+If native code replaces or clears that property, a later rich-header update
+reconciles the original child without losing its state. Removal and teardown
+unmount only that owned child, once, and clear the native property only if it
+still holds the owned value. Native replacements, including those installed by
+`.OnUnmount(...)`, are left alone.
 
 ## Pointer-controlled range scenario
 
