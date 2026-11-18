@@ -78,18 +78,27 @@ internal static class LocalEvidenceChecks
                             $"Segmented selection {index} realized");
                         if (selection is not null)
                             Program.Check(selection.GetSelection().Length == 1, "UIA selection does not contain exactly one item.");
+                        var itemPeers = SelectionItemPeers(peer);
                         int selected = 0;
                         for (int i = 0; i < segmented.Items.Count; i++)
                         {
                             var container = (UIElement)segmented.ContainerFromIndex(i);
+                            string label = segmented.Items[i]?.ToString() ?? "";
+                            // List selection items are usually item data peers under the parent peer,
+                            // not the container element's own peer, so check both.
                             var item = FrameworkElementAutomationPeer.CreatePeerForElement(container)?
                                 .GetPattern(PatternInterface.SelectionItem) as ISelectionItemProvider
-                                ?? throw new NativeContractException($"Segmented item {i} exposes no UIA SelectionItem provider.");
+                                ?? itemPeers.Where(p => p.Peer.GetName() == label).Select(p => p.Provider).SingleOrDefault()
+                                ?? throw new ScenarioBlockedException(
+                                    $"No UIA SelectionItem provider found for Segmented item {i} ('{label}') on its container or under the root peer " +
+                                    $"(providers seen: {string.Join(", ", itemPeers.Select(p => $"{p.Peer.GetClassName()}:'{p.Peer.GetName()}'"))}). " +
+                                    "This is unresolved harness coverage, not a proven native limitation.");
                             Program.Check(item.IsSelected == (i == index),
                                 $"UIA SelectionItem {i} ('{segmented.Items[i]}') IsSelected={item.IsSelected}, native SelectedIndex={index}.");
                             if (item.IsSelected) selected++;
                         }
                         Program.Check(selected == 1, $"UIA reports {selected} selected Segmented items.");
+                        Program.Results.Note($"UIA Segmented per-item SelectionItem checked for {segmented.Items.Count} items; providers under root={itemPeers.Count}");
                         Program.Results.Note($"UIA Segmented selection matches native SelectedItem '{segmented.SelectedItem}'");
                     }
                 }
@@ -116,6 +125,22 @@ internal static class LocalEvidenceChecks
                     "No numeric, selection or expansion value contract is selected by this harness for this native root; this is unimplemented coverage, not a proven native limitation.",
                     "not-implemented");
         }
+    }
+
+    static List<(AutomationPeer Peer, ISelectionItemProvider Provider)> SelectionItemPeers(AutomationPeer? root)
+    {
+        var found = new List<(AutomationPeer, ISelectionItemProvider)>();
+        var pending = new Queue<(AutomationPeer Peer, int Depth)>();
+        foreach (var child in root?.GetChildren() ?? []) pending.Enqueue((child, 1));
+        while (pending.Count > 0)
+        {
+            var (current, depth) = pending.Dequeue();
+            if (current.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider provider)
+                found.Add((current, provider));
+            else if (depth < 4)
+                foreach (var child in current.GetChildren() ?? []) pending.Enqueue((child, depth + 1));
+        }
+        return found;
     }
 
     internal static async Task FocusAsync(CompatibilityRoot root, Scenario scenario)
