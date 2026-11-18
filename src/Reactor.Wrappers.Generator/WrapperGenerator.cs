@@ -99,6 +99,7 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(models, static (spc, model) =>
         {
             if (model!.Diagnostic is { } d) spc.ReportDiagnostic(d);
+            if (model.MetadataRegistrationDiagnostic is { } metadataDiagnostic) spc.ReportDiagnostic(metadataDiagnostic);
             if (model.Source is { } src) spc.AddSource(model.HintName!, SourceText.From(src, Encoding.UTF8));
         });
 
@@ -526,6 +527,13 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
             contentPropTypeFqn = cps.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)
                                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
+        var metadataProvider = !descriptorOnly && registerAssembly
+            ? FindMetadataProvider(control.ContainingAssembly, compilation)
+            : default;
+        var metadataDiagnostic = metadataProvider.Unsupported
+            ? Diagnostic.Create(UnsupportedMetadataRegistration, element.Locations.FirstOrDefault(),
+                control.ContainingAssembly.Name)
+            : null;
         var factoryParameters = descriptorOnly ? null : new List<string>();
         var source = Emit(
             ns,
@@ -535,7 +543,8 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
             props, contentProp, panelChildren, items, events,
             descriptorOnly, hasManual, contentElementName, registerAssembly,
             panelPerChild, panelAfterAll, lifecycleMount, lifecycleUnmount,
-            contentPropTypeFqn, elementSlots, writableItems: CanAssignItems(control), factoryParameters: factoryParameters);
+            contentPropTypeFqn, elementSlots, writableItems: CanAssignItems(control), factoryParameters: factoryParameters,
+            metadataProviderFqn: metadataProvider.TypeName);
         var factory = factoryParameters is null
             ? null
             : new WrapperFactory(
@@ -556,10 +565,10 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
                 MultipleControlledProps,
                 element.Locations.FirstOrDefault() ?? Location.None,
                 elementName, controlled.Length, string.Join(", ", controlled));
-            return WrapperModel.OkWithDiagnostic(hint, source, d) with { Factory = factory };
+            return WrapperModel.OkWithDiagnostic(hint, source, d) with { Factory = factory, MetadataRegistrationDiagnostic = metadataDiagnostic };
         }
 
-        return WrapperModel.Ok(hint, source) with { Factory = factory };
+        return WrapperModel.Ok(hint, source) with { Factory = factory, MetadataRegistrationDiagnostic = metadataDiagnostic };
     }
 
     private static ImmutableHashSet<string> ToStringSet(TypedConstant tc)
@@ -1395,7 +1404,8 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         string? contentPropTypeFqn = null,
         IReadOnlyList<ElementSlotInfo>? elementSlots = null,
         bool writableItems = false,
-        List<string>? factoryParameters = null)
+        List<string>? factoryParameters = null,
+        string? metadataProviderFqn = null)
     {
         const string Element = "global::Microsoft.UI.Reactor.Core.Element";
         const string Action = "global::System.Action";
@@ -1762,11 +1772,15 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
         // controls (the descriptor-only migration targets) already have their
         // XAML metadata loaded by the framework, and the call is unsafe in a
         // headless host — so it is emitted only for full wrapper generation.
-        // Use the TOLERANT TryRegister: a pure-code control library (code-only
-        // panels with no XAML, e.g. WCT Primitives) has no metadata provider and
-        // needs none — registering must not throw.
         if (!descriptorOnly && registerAssembly)
-            sb.AppendLine($"        global::Microsoft.UI.Reactor.ReactorApp.TryRegisterControlAssembly(typeof({controlFqn}).Assembly);");
+        {
+            // Root only the selected provider, and only when this wrapper is used.
+            // The fallback preserves JIT discovery and provider-free code-only controls.
+            if (metadataProviderFqn is not null)
+                sb.AppendLine($"        global::Microsoft.UI.Reactor.ReactorApp.RegisterControlAssembly(new {metadataProviderFqn}());");
+            else
+                sb.AppendLine($"        global::Microsoft.UI.Reactor.ReactorApp.TryRegisterControlAssembly(typeof({controlFqn}).Assembly);");
+        }
         sb.AppendLine($"        {ControlRegistry}.Register<{elementName}, {controlFqn}>(");
         sb.AppendLine($"            static () => new {handlerType}(Descriptor));");
         sb.AppendLine("    }");
@@ -1914,6 +1928,8 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
     {
         /// <summary>The generated factory's shape, when this model emits one.</summary>
         public WrapperFactory? Factory { get; init; }
+
+        public Diagnostic? MetadataRegistrationDiagnostic { get; init; }
 
         public static WrapperModel Ok(string hint, string source) => new(hint, source, null);
         public static WrapperModel OkWithDiagnostic(string hint, string source, Diagnostic d) => new(hint, source, d);
