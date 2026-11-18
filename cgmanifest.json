@@ -17,6 +17,16 @@
       "Component": {
         "Type": "git",
         "Git": {
+          "RepositoryUrl": "https://github.com/dotMorten/WinUIEx",
+          "CommitHash": "5897280a62f954153d5e8ed578eb8f250382e970"
+        }
+      },
+      "Path": "src/Reactor/Hosting/Persistence/",
+      "DevelopmentDependency": false
+    },    {
+      "Component": {
+        "Type": "git",
+        "Git": {
           "RepositoryUrl": "https://github.com/mity/md4c",
           "CommitHash": "0000000000000000000000000000000000000000"
         }
