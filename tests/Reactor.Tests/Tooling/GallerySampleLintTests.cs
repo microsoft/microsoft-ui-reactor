@@ -428,11 +428,11 @@ public sealed class GallerySampleLintTests
         int Inspect(SyntaxNode sourceRoot, SemanticModel model, Func<InvocationExpressionSyntax, string> location)
         {
             var count = 0;
-            foreach (var call in PuaContentCalls(sourceRoot, model))
+            foreach (var (call, isTextBlock) in PuaContentCalls(sourceRoot, model))
             {
                 count++;
-                if (!HasFontFamilyOnChain(call))
-                    offenders.Add($"{location(call)}: {InvokedName(call)}(...) has PUA string content but no " +
+                if (!HasFontFamilyOnChain(call, isTextBlock, model))
+                    offenders.Add($"{location(call)}: {InvokedName(call)}(...) has PUA string content but no font set by " +
                                   ".FontFamily(...) on its own chain (issue #1019).");
             }
             return count;
@@ -482,7 +482,7 @@ public sealed class GallerySampleLintTests
         references: [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
         options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-    static IEnumerable<InvocationExpressionSyntax> PuaContentCalls(SyntaxNode root, SemanticModel model)
+    static IEnumerable<(InvocationExpressionSyntax Call, bool IsTextBlock)> PuaContentCalls(SyntaxNode root, SemanticModel model)
     {
         foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
@@ -496,21 +496,21 @@ public sealed class GallerySampleLintTests
                 _ => null,
             };
             // String overloads in Dsl.cs and Factories.NamedStyles.cs.
-            var contentName = name switch
+            (string? contentName, bool isTextBlock) = name switch
             {
                 "TextBlock" or "Heading" or "SubHeading" or "Caption" or
-                "Title" or "Subtitle" or "Body" or "BodyStrong" or "BodyLarge" or "TitleLarge" or "Display" or
-                "HyperlinkButton" => "content",
+                "Title" or "Subtitle" or "Body" or "BodyStrong" or "BodyLarge" or "TitleLarge" or "Display" => ("content", true),
+                "HyperlinkButton" => ("content", false),
                 "Button" or "ToggleButton" or "RepeatButton" or "ThreeStateToggleButton" or
-                "DropDownButton" or "SplitButton" or "ToggleSplitButton" or "RadioButton" => "label",
-                _ => null,
+                "DropDownButton" or "SplitButton" or "ToggleSplitButton" or "RadioButton" => ("label", false),
+                _ => (null, false),
             };
             if (contentName is null) continue;
 
             var args = call.ArgumentList.Arguments;
             var content = args.FirstOrDefault(arg => arg.NameColon?.Name.Identifier.Text == contentName)?.Expression
                           ?? (args.Count > 0 && args[0].NameColon is null ? args[0].Expression : null);
-            if (content is not null && HasPuaContent(content, model)) yield return call;
+            if (content is not null && HasPuaContent(content, model)) yield return (call, isTextBlock);
         }
     }
 
@@ -601,8 +601,10 @@ public sealed class GallerySampleLintTests
         _ => model.GetConstantValue(expression, TestContext.Current.CancellationToken),
     };
 
-    static bool HasFontFamilyOnChain(InvocationExpressionSyntax call)
+    static bool HasFontFamilyOnChain(InvocationExpressionSyntax call, bool isTextBlockReceiver, SemanticModel model)
     {
+        var textBlockFont = false;
+        var modifierFont = false;
         ExpressionSyntax current = call;
         while (true)
         {
@@ -613,10 +615,15 @@ public sealed class GallerySampleLintTests
             {
                 case MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax invocation } member
                     when ReferenceEquals(member.Expression, current) && ReferenceEquals(invocation.Expression, member):
-                    if (member.Name.Identifier.ValueText == "FontFamily" &&
-                        invocation.ArgumentList.Arguments.Count == 1 &&
-                        !IsNullOrDefault(invocation.ArgumentList.Arguments[0].Expression))
-                        return true;
+                    if (member.Name.Identifier.ValueText == "FontFamily" && invocation.ArgumentList.Arguments.Count == 1)
+                    {
+                        var hasFont = !IsNullOrDefault(invocation.ArgumentList.Arguments[0].Expression, model);
+                        // The TextBlock overload replaces the font. The generic modifier keeps it on null.
+                        if (isTextBlockReceiver && member.Name is IdentifierNameSyntax)
+                            textBlockFont = hasFont;
+                        else
+                            modifierFont |= hasFont;
+                    }
                     current = invocation;
                     break;
                 case WithExpressionSyntax with when ReferenceEquals(with.Expression, current):
@@ -626,20 +633,23 @@ public sealed class GallerySampleLintTests
                     current = suppress;
                     break;
                 case CastExpressionSyntax cast when ReferenceEquals(cast.Expression, current):
+                    isTextBlockReceiver = RightmostName(cast.Type) == "TextBlockElement";
                     current = cast;
                     break;
                 default:
-                    return false;
+                    return textBlockFont || modifierFont;
             }
         }
     }
 
-    static bool IsNullOrDefault(ExpressionSyntax expression) => expression switch
+    static bool IsNullOrDefault(ExpressionSyntax expression, SemanticModel model) => expression switch
     {
-        ParenthesizedExpressionSyntax paren => IsNullOrDefault(paren.Expression),
-        CastExpressionSyntax cast => IsNullOrDefault(cast.Expression),
+        ParenthesizedExpressionSyntax paren => IsNullOrDefault(paren.Expression, model),
+        CastExpressionSyntax cast => IsNullOrDefault(cast.Expression, model),
         PostfixUnaryExpressionSyntax suppress when suppress.IsKind(SyntaxKind.SuppressNullableWarningExpression)
-            => IsNullOrDefault(suppress.Operand),
+            => IsNullOrDefault(suppress.Operand, model),
+        ConditionalExpressionSyntax conditional when ConstantValue(conditional.Condition, model).Value is bool condition
+            => IsNullOrDefault(condition ? conditional.WhenTrue : conditional.WhenFalse, model),
         DefaultExpressionSyntax => true,
         _ => expression.IsKind(SyntaxKind.NullLiteralExpression) || expression.IsKind(SyntaxKind.DefaultLiteralExpression),
     };
@@ -700,6 +710,10 @@ public sealed class GallerySampleLintTests
     [InlineData("""TextBlock("\U0010FFFD")""", 1)]
     [InlineData("""TextBlock("\uE930").FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")""", 0)]
     [InlineData("""TextBlock("\uE930").FontFamily((FontFamily)null!)""", 1)]
+    [InlineData("""TextBlock("\uE930").FontFamily("Segoe Fluent Icons").FontFamily((FontFamily)null!)""", 1)]
+    [InlineData("""Button("\uE930").FontFamily("Segoe Fluent Icons").FontFamily((FontFamily)null!)""", 0)]
+    [InlineData("""TextBlock("\uE930").FontFamily(true ? (FontFamily)null! : new FontFamily("Segoe Fluent Icons"))""", 1)]
+    [InlineData("""TextBlock("\uE930").FontFamily(false ? (FontFamily)null! : new FontFamily("Segoe Fluent Icons"))""", 0)]
     [InlineData("TextBlock(\"\\uE930\")\n.Margin(4)\n.Foreground(Theme.Accent)\n.FontFamily(IconFont)", 0)]
     [InlineData("""(TextBlock("\uE930") with { Key = "icon" }).Margin(4).FontFamily(IconFont)""", 0)]
     [InlineData("""Button(Icon(FontIcon("\uE713")), () => {})""", 0)]
