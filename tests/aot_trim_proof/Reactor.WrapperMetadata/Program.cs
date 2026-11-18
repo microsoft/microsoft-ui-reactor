@@ -32,14 +32,17 @@ internal partial record UnusedGaugeElement;
 
 public sealed partial class CodeOnlyControl : Microsoft.UI.Xaml.Controls.ContentControl;
 
-internal sealed class Root : Component
+internal sealed class Probe
 {
-    internal static Action<int> SetVersion = null!;
+    internal Action<int> SetVersion = null!;
+}
 
+internal sealed class Root : Component<Probe>
+{
     public override Element Render()
     {
         var (version, setVersion) = UseState(0);
-        SetVersion = setVersion;
+        Props.SetVersion = setVersion;
         return VStack(
             new CardElement
             {
@@ -69,7 +72,8 @@ internal static class Program
             Console.Error.WriteLine("FAIL: realization/update timed out");
             Environment.Exit(2);
         });
-        ReactorApp.Run<Root>("Wrapper metadata proof", width: 720, height: 640, configure: host =>
+        var probe = new Probe();
+        ReactorApp.Run("Wrapper metadata proof", _ => Component<Root, Probe>(probe), width: 720, height: 640, configure: host =>
         {
             host.RenderErrorHandler = error =>
             {
@@ -101,7 +105,7 @@ internal static class Program
                         originalHeader = (NativeTextBlock)card.Header;
                         Console.WriteLine($"REALIZED card={card.ActualWidth}x{card.ActualHeight} expander={expander.ActualWidth}x{expander.ActualHeight} items={expander.Items.Count}");
                         phase = 1;
-                        Root.SetVersion(1);
+                        probe.SetVersion(1);
                         return;
                     }
                     if (!ReferenceEquals(originalHeader, card.Header))
