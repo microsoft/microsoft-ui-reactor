@@ -479,18 +479,33 @@ internal sealed class LayoutTransformPage : Component
 // ── TabbedCommandBar ────────────────────────────────────────────────────
 internal sealed class TabbedCommandBarPage : Component
 {
-    public override Element Render() =>
-        Gallery.Page(
+    private Action<string>? _onCommand;
+
+    public override Element Render()
+    {
+        var (activity, setActivity) = UseState((Count: 0, LastCommand: "None"));
+        // The native buttons survive rerenders; their handlers read the current callback.
+        _onCommand = label => setActivity((activity.Count + 1, label));
+
+        return Gallery.Page(
             "TabbedCommandBar",
-            "A ribbon-style NavigationView whose tabs are TabbedCommandBarItem (a CommandBar) objects in MenuItems — a WinUI control subtree the prop/event wrapper can't express declaratively, so the tabs are built once through the imperative Setters escape hatch (legitimate here: it's controls, not data). The document body is the declarative content slot.",
-            (TabbedCommandBarElement.TabbedCommandBar(
-                content: Border(TextBlock("Document body — pick a ribbon tab above.").Center())
-                    .Background("#F0F8FF").CornerRadius(8).Height(150))
-                .Set(BuildTabs))
-                .Height(260));
+            "Native Toolkit tabs select a TabbedCommandBarItem command bar. The document is composed below the ribbon, not in its inherited Content property. Pick Home or View, then invoke a command to see feedback.",
+            VStack(16,
+                WctControls.TabbedCommandBarElement.TabbedCommandBar()
+                    .Set(BuildTabs)
+                    .OnUnmount(fe => ReleaseTabs((CommunityToolkit.WinUI.Controls.TabbedCommandBar)fe))
+                    .Height(160),
+                Border(VStack(12,
+                    TextBlock("Document body - pick a ribbon tab above.").Foreground(Theme.PrimaryText),
+                    TextBlock($"Commands invoked: {activity.Count}. Last command: {activity.LastCommand}.")
+                        .Foreground(Theme.SecondaryText)
+                        .AutomationId("TabbedCommandBar.CommandStatus")))
+                    .Padding(24).Background(Theme.CardBackground).CornerRadius(8)
+                    .AutomationId("TabbedCommandBar.Document")));
+    }
 
     // Build the ribbon tabs once (Setters run on every Mount/Update → guard on Count).
-    private static void BuildTabs(CommunityToolkit.WinUI.Controls.TabbedCommandBar tcb)
+    private void BuildTabs(CommunityToolkit.WinUI.Controls.TabbedCommandBar tcb)
     {
         if (tcb.MenuItems.Count > 0) return;
 
@@ -506,10 +521,30 @@ internal sealed class TabbedCommandBarPage : Component
 
         tcb.MenuItems.Add(home);
         tcb.MenuItems.Add(view);
+        tcb.SelectedItem = home;
     }
 
-    private static Microsoft.UI.Xaml.Controls.AppBarButton Cmd(string label, Microsoft.UI.Xaml.Controls.Symbol symbol) =>
-        new() { Label = label, Icon = new Microsoft.UI.Xaml.Controls.SymbolIcon(symbol) };
+    private Microsoft.UI.Xaml.Controls.AppBarButton Cmd(string label, Microsoft.UI.Xaml.Controls.Symbol symbol)
+    {
+        var button = new Microsoft.UI.Xaml.Controls.AppBarButton
+        {
+            Label = label,
+            Icon = new Microsoft.UI.Xaml.Controls.SymbolIcon(symbol),
+        };
+        button.Click += CommandClicked;
+        return button;
+    }
+
+    private void CommandClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs args) =>
+        _onCommand?.Invoke(((Microsoft.UI.Xaml.Controls.AppBarButton)sender).Label);
+
+    private void ReleaseTabs(CommunityToolkit.WinUI.Controls.TabbedCommandBar tcb)
+    {
+        _onCommand = null;
+        foreach (var tab in tcb.MenuItems.OfType<CommunityToolkit.WinUI.Controls.TabbedCommandBarItem>())
+            foreach (var button in tab.PrimaryCommands.OfType<Microsoft.UI.Xaml.Controls.AppBarButton>())
+                button.Click -= CommandClicked;
+    }
 }
 
 // ── ContentSizer ────────────────────────────────────────────────────────
