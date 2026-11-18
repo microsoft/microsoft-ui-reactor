@@ -154,6 +154,20 @@ internal static class ConnectedNavigationFixtures
     {
         public override async Task RunAsync()
         {
+            // Both pages live only until the native card AND the page motion finish.
+            // With no page motion (an empty batch) that is the card's own duration,
+            // so a single slow Render pass after TryStart could outlive it and
+            // observe the old page already finalized. Pin the (Gravity-respected)
+            // card duration well beyond one pass so the two-page window is observable.
+            var service = Microsoft.UI.Xaml.Media.Animation.ConnectedAnimationService.GetForCurrentView();
+            var previousDuration = service.DefaultDuration;
+            service.DefaultDuration = TimeSpan.FromSeconds(2);
+            try { await RunCoreAsync(); }
+            finally { service.DefaultDuration = previousDuration; }
+        }
+
+        private async Task RunCoreAsync()
+        {
             using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
             var nav = new NavigationHandle<string>(new NavigationStack<string>("list"));
             var host = H.CreateHost();
@@ -175,7 +189,10 @@ internal static class ConnectedNavigationFixtures
             });
             H.Check("ConnectedNav_OptionsNativeCardStarts", await Harness.WaitFor(() =>
                 host.Reconciler.ConnectedAnimationStartCount == baseline + 1));
-            H.Check("ConnectedNav_OptionsBothPagesPresent", pages.Children.Count == 2);
+            var operation = host.Reconciler._navigationHostNodes.TryGetValue(pages, out var node)
+                ? node.ConnectedOperation : null;
+            H.Check("ConnectedNav_OptionsBothPagesPresent", pages.Children.Count == 2,
+                $"children={pages.Children.Count} operationInFlight={operation is { IsCompleted: false }}");
             H.Check("ConnectedNav_OptionsPageOpacityMatchesSelection", pages.Children.All(page =>
                 (ElementCompositionPreview.GetElementVisual(page).TryGetAnimationController("Opacity") is not null)
                 == (pageTransition is not SuppressTransition)));
@@ -186,7 +203,7 @@ internal static class ConnectedNavigationFixtures
                 (ElementCompositionPreview.GetElementVisual(page).TryGetAnimationController("Offset") is not null)
                 == (pageTransition is SlideTransition)));
             var oldPage = pages.Children[0];
-            H.Check("ConnectedNav_OptionsSettles", await Harness.WaitFor(() => pages.Children.Count == 1, 100));
+            H.Check("ConnectedNav_OptionsSettles", await Harness.WaitFor(() => pages.Children.Count == 1, 200, 20));
             H.Check("ConnectedNav_OptionsRestoresInput", oldPage.IsHitTestVisible && pages.Children[0].IsHitTestVisible);
             H.Check("ConnectedNav_OptionsReleasesProperties", new[] { oldPage, pages.Children[0] }.All(page =>
             {

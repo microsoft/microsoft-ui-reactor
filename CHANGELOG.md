@@ -47,6 +47,15 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
+  rest of the button family remembered which child they owned by the control's managed wrapper.
+  When a collection replaced that wrapper between renders, the next update mounted a second copy
+  of the content instead of updating it, which dropped its state (an `AnimatedIcon`'s visual
+  state, focus, caret) and leaked the old copy without unmounting it. The record now lives on the
+  native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
+  selftest failures.
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
