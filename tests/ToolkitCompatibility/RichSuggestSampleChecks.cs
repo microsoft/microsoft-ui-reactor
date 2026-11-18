@@ -115,9 +115,11 @@ internal static class RichSuggestSampleChecks
         host.Children.Add(control);
         try
         {
-            var box = CompatibilityRoot.Descendants(control).OfType<Wct.RichSuggestBox>().Single();
-            await CompatibilityRoot.WaitAsync(() => box.TextDocument is not null && box.IsLoaded, "Deferred RichSuggestBox document");
-            var document = box.TextDocument ?? throw new InvalidOperationException("No text document.");
+            Wct.RichSuggestBox? box = null;
+            await CompatibilityRoot.WaitAsync(() =>
+                (box = CompatibilityRoot.Descendants(control).OfType<Wct.RichSuggestBox>().SingleOrDefault()) is { IsLoaded: true, TextDocument: not null },
+                "Deferred RichSuggestBox realized with a document");
+            var document = box!.TextDocument ?? throw new InvalidOperationException("No text document.");
             Program.Check(CaptionText(control) == "Last chosen: none (0 selections)", "Unexpected initial caption.");
             for (int count = 1; count <= 2; count++)
             {
