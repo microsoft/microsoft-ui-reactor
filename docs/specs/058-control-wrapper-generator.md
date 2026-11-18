@@ -355,8 +355,10 @@ subscriptions are removed and their attached state cleared at unmount.
 
 A specified value is compared against native readback on every update, even if the parent
 value did not change. Unset skips the write without disabling observation. Controlled
-writes use a scoped depth guard and then snapshot actual readback, including sibling
-coercion. Synchronous echoes cannot escape during the write; delayed echoes matching the
+writes use a scoped depth guard and then update observations for values that the write
+actually changed, including sibling coercion. An unchanged sibling's pending native edit
+keeps its prior observation until its event arrives. Synchronous echoes cannot escape
+during the write; delayed echoes matching the
 snapshot and unchanged-endpoint events do not notify. Silent or guarded setters leave no
 suppression token to swallow later input. A user edit arriving before a delayed echo still
 notifies if its readback differs. This is value observation, not delivery of every native

@@ -196,6 +196,19 @@ internal static class MultipleControlledWrapperFixtures
             ExpectValues("ReenabledCallbacksAreCurrent", "2:start=43", "2:end=57", "2:count=9");
 
             rerenderOnEdit = false;
+            c.QueueStart(44);
+            end = 56;
+            rerender();
+            await Harness.Render();
+            Check("PendingEditAndSiblingWriteApplied", c.RangeStart == 44 && c.RangeEnd == 56);
+            raw.Clear();
+            c.ValueChanged += observer;
+            c.FlushEchoes();
+            c.ValueChanged -= observer;
+            Check("PendingEditNativePositiveControl", raw.SequenceEqual(new[] { "Start" }));
+            Expect("PendingEditSurvivesSiblingWrite", "2:start=44");
+            end = Optional<double>.Unset;
+
             c.Echo = RangeProbeEcho.Synchronous;
             c.CoerceSibling = true;
             start = 150;

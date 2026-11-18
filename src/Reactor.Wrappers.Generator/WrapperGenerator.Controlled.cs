@@ -51,6 +51,8 @@ public sealed partial class WrapperGenerator
             sb.AppendLine("    {");
             sb.AppendLine($"        if (!e.{p.Name}.HasValue || {comparer}<{p.ValueType}>.Default.Equals(c.{p.ControlProp}, e.{p.Name}.Value)) return;");
             sb.AppendLine("        var state = __GetControlledState(c);");
+            foreach (var observed in props)
+                sb.AppendLine($"        var __before{observed.Name} = c.{observed.ControlProp};");
             sb.AppendLine("        state.WriteDepth++;");
             sb.AppendLine("        try");
             sb.AppendLine("        {");
@@ -59,9 +61,14 @@ public sealed partial class WrapperGenerator
             sb.AppendLine("        finally");
             sb.AppendLine("        {");
             sb.AppendLine("            state.WriteDepth--;");
-            // Read back every endpoint: a setter may coerce itself or siblings,
-            // raise multiple events, defer its echo, or raise no event at all.
-            sb.AppendLine("            __CaptureControlled(c, state);");
+            // Only consume changes caused by this write. A sibling may already
+            // carry a native edit whose deferred event has not arrived yet.
+            foreach (var observed in props)
+            {
+                sb.AppendLine($"            var __after{observed.Name} = c.{observed.ControlProp};");
+                sb.AppendLine($"            if (!{comparer}<{observed.ValueType}>.Default.Equals(__before{observed.Name}, __after{observed.Name}))");
+                sb.AppendLine($"                state.Last{observed.Name} = __after{observed.Name};");
+            }
             sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine();

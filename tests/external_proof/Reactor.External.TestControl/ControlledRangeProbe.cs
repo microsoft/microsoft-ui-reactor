@@ -87,6 +87,7 @@ public sealed partial class ControlledRangeProbe : Control
     }
 
     public void MoveStart(double value) { _start = value; RaiseRange("Start"); }
+    public void QueueStart(double value) { _start = value; _echoes.Enqueue(() => RaiseRange("Start")); }
     public void MoveEnd(double value) { _end = value; RaiseRange("End"); }
     public void MoveBoth(double start, double end) { _start = start; _end = end; RaiseRange("Both"); }
     public void MoveCount(int value)
