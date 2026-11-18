@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -113,6 +114,14 @@ internal static class LazyStackLifecycle
             return;
         }
 
+        bool defaultKeys = VirtualListIndices.IsDefaultKeySource(n);
+        if (defaultKeys && state.HasDefaultPositionalKeys && state.LastKeys.Count == n.ItemCount)
+            return;
+
+        // Invalidate before invoking user code: a failed custom projection must not
+        // leave a positional invariant behind. Realized rows are refreshed by Update
+        // even when the unchanged-count default path above needs no structural diff.
+        state.HasDefaultPositionalKeys = false;
         var ambient = AnimationAmbient.Current;
         var attribution = reconciler.KeyedListAttributionFor(n);
         var stats = KeyedListDiff.Apply(
@@ -124,6 +133,7 @@ internal static class LazyStackLifecycle
             ambient,
             controlInstance: repeater,
             attribution: attribution);
+        state.HasDefaultPositionalKeys = defaultKeys;
 
         // ItemsRepeater realizes containers through ElementFactory, so the
         // enter animation runs from there. Moves on already-realized
@@ -157,6 +167,7 @@ internal static class LazyStackLifecycle
         state.Reset(KeyedListDiff.SeedKeys(
             lazy, lazy.ItemCount, static (l, i) => l.GetKeyAt(i),
             reconciler._logger, repeater.GetType().Name, repeater, reconciler.KeyedListAttributionFor(lazy)));
+        state.HasDefaultPositionalKeys = VirtualListIndices.IsDefaultKeySource(lazy);
         return state;
     }
 }

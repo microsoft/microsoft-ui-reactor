@@ -23,6 +23,8 @@ public record VirtualListElement : Element
     /// <summary>
     /// Optional key function for stable identity across re-renders.
     /// When provided, the reconciler uses this to match items across reorderings.
+    /// When omitted, identity is positional: an unchanged item count preserves row
+    /// identities without projecting all keys again. Realized content still refreshes.
     /// </summary>
     public Func<int, string>? GetItemKey { get; init; }
 

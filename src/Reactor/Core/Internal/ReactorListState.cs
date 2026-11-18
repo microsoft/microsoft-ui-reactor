@@ -106,6 +106,10 @@ internal sealed class ReactorListState
     /// </summary>
     internal Dictionary<string, ReactorRow> Scratch { get; } = new(StringComparer.Ordinal);
 
+    // Set only after the LazyStack lifecycle seeds/diffs VirtualList's immutable
+    // index range with its built-in selector. Never inferred from custom keys.
+    internal bool HasDefaultPositionalKeys { get; set; }
+
     /// <summary>
     /// Set whenever <see cref="Source"/> changes structurally; cleared by the reconciler's
     /// realized-container pass, which then checks the containers after the next layout pass
@@ -129,7 +133,11 @@ internal sealed class ReactorListState
     /// </summary>
     internal Microsoft.UI.Xaml.RoutedEventHandler? LoadedWatch { get; set; }
 
-    public ReactorListState() => Source.CollectionChanged += (_, _) => StructureChanged = true;
+    public ReactorListState() => Source.CollectionChanged += (_, _) =>
+    {
+        StructureChanged = true;
+        HasDefaultPositionalKeys = false;
+    };
 
     /// <summary>
     /// Reset the state to a fresh set of (index, key) pairs. Used during

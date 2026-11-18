@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- `VirtualList` with default positional keys no longer projects every key on
+  unchanged-count updates; realized content and callbacks still refresh. Its memoized
+  index source is now an immutable range instead of an allocated integer list, reducing
+  mount/count-change storage. Custom key selectors retain keyed reconciliation (spec 042 §4).
+
 - Avoid redundant element copies when assigning keys in built-in component factories,
   DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
   supplied key is already the same string reference. Different key references still
