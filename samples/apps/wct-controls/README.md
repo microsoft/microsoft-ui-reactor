@@ -131,7 +131,9 @@ to insert an `@Alex Wilber` token. Matching is case-insensitive; a query such as
 
 The generated `OnSuggestionRequested` callback updates a page-owned observable
 suggestion source synchronously, before the Toolkit decides whether to open its
-popup. `OnSuggestionChosen` supplies the chosen name as `DisplayText` (the Toolkit
+popup. It uses `ObservableCollection<object>` with string entries, reusing the
+WinRT collection projection that Reactor roots for NativeAOT.
+`OnSuggestionChosen` supplies the chosen name as `DisplayText` (the Toolkit
 adds the prefix) and updates the visible last-choice/count caption. The Toolkit
 still owns the rich document and token collection; the excluded `Items` slot is
 not written. Navigating away and back starts a fresh page.

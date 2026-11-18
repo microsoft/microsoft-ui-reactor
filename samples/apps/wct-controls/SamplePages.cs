@@ -718,7 +718,8 @@ internal sealed class RichSuggestBoxPage : Component
 
     public override Element Render()
     {
-        var suggestions = UseMemo(() => new ObservableCollection<string>(People), []);
+        // Reactor roots this collection's WinRT projection for native ItemsSource under AOT.
+        var suggestions = UseMemo(() => new ObservableCollection<object>(People), []);
         var (choice, setChoice) = UseState((Name: "none", Count: 0));
 
         return Gallery.Page(
