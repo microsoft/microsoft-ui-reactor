@@ -50,7 +50,7 @@ internal static class LocalEvidenceChecks
         Program.Results.Note($"UIA role={role}; class={className}; name={peer.GetName()}; patterns={string.Join(",", patterns)}");
     }
 
-    internal static Task PatternValuesAsync(FrameworkElement control)
+    internal static async Task PatternValuesAsync(FrameworkElement control)
     {
         var peer = FrameworkElementAutomationPeer.CreatePeerForElement(control);
         switch (control)
@@ -61,8 +61,30 @@ internal static class LocalEvidenceChecks
                 Program.Results.Note($"UIA gauge Value={range.Value}; Minimum={range.Minimum}; Maximum={range.Maximum}");
                 break;
             case Wct.Segmented segmented when peer?.GetPattern(PatternInterface.Selection) is ISelectionProvider selection:
-                Program.Check(segmented.SelectedIndex == 0 && selection.GetSelection().Length == 1 && !selection.CanSelectMultiple,
-                    "Segmented UIA selection does not describe the selected single item.");
+                Program.Check(segmented.SelectedIndex == 0 && segmented.Items.Count > 1 && !selection.CanSelectMultiple,
+                    "Segmented UIA selection does not describe a single-selection native control.");
+                try
+                {
+                    // Check which item UIA reports, before and after a native selection change.
+                    foreach (int index in new[] { 0, 1 })
+                    {
+                        segmented.SelectedIndex = index;
+                        await CompatibilityRoot.WaitAsync(() => segmented.SelectedIndex == index &&
+                            Enumerable.Range(0, segmented.Items.Count).All(i => segmented.ContainerFromIndex(i) is UIElement),
+                            $"Segmented selection {index} realized");
+                        Program.Check(selection.GetSelection().Length == 1, "UIA selection does not contain exactly one item.");
+                        for (int i = 0; i < segmented.Items.Count; i++)
+                        {
+                            var container = (UIElement)segmented.ContainerFromIndex(i);
+                            var item = FrameworkElementAutomationPeer.CreatePeerForElement(container)?
+                                .GetPattern(PatternInterface.SelectionItem) as ISelectionItemProvider;
+                            Program.Check(item is not null && item.IsSelected == (i == index),
+                                $"UIA SelectionItem {i} ('{segmented.Items[i]}') IsSelected={item?.IsSelected}, native SelectedIndex={index}.");
+                        }
+                        Program.Results.Note($"UIA Segmented selection matches native SelectedItem '{segmented.SelectedItem}'");
+                    }
+                }
+                finally { segmented.SelectedIndex = 0; }
                 break;
             case Wct.SettingsExpander expander:
                 var nativeExpander = CompatibilityRoot.Descendants(expander).OfType<Native.Expander>().SingleOrDefault();
@@ -85,7 +107,6 @@ internal static class LocalEvidenceChecks
                     "No numeric, selection or expansion value contract is selected by this harness for this native root; this is unimplemented coverage, not a proven native limitation.",
                     "not-implemented");
         }
-        return Task.CompletedTask;
     }
 
     internal static async Task FocusAsync(CompatibilityRoot root, Scenario scenario)

@@ -80,6 +80,8 @@ foreach ($laneName in $plannedLanes) {
                 reasonKind = $kind
                 detail = $detail
                 validatedCompleteProcess = $validated
+                laneStatus = if ($lane.Count) { $lane[0].status } else { 'not-executed' }
+                laneDetail = if ($lane.Count) { $lane[0].detail } else { 'Planned lane did not execute.' }
             })
         }
     }
@@ -104,6 +106,20 @@ foreach ($control in $run.controls) {
         "P$passed F$failed B$blocked N$notApplicable"
     }
     $text.Add("| $control | " + ($cells -join ' | ') + ' |')
+}
+$text.Add('')
+$text.Add('## Lane outcomes')
+$text.Add('')
+$text.Add('Valid scenario rows are kept even when the lane later failed, for example during package cleanup.')
+$text.Add('')
+foreach ($laneName in $plannedLanes) {
+    $lane = @($lanes | Where-Object lane -EQ $laneName)
+    if ($lane.Count) {
+        $laneDetail = ([string]$lane[0].detail -split '\r?\n' | Where-Object { $_.Trim() }) -join ' '
+        $text.Add("- ${laneName}: $($lane[0].status). $laneDetail")
+    } else {
+        $text.Add("- ${laneName}: not executed.")
+    }
 }
 $text.Add('')
 $text.Add('## Block classification')

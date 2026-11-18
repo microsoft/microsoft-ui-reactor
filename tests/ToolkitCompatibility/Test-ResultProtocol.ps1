@@ -91,6 +91,26 @@ try {
             $summaryFailures.Add("Summary accepted incorrect process evidence: $($case.Name)")
         } else { Write-Output "PASS summary $($case.Name)" }
     }
+
+    # A lane can fail after valid results, for example when owned-package cleanup fails.
+    $summaryRows[1].Status = 'passed'
+    $summaryRows | ForEach-Object { $_ | ConvertTo-Json -Compress } |
+        Set-Content (Join-Path $lane 'SettingsCard.results.jsonl')
+    $summaryTap | Set-Content (Join-Path $lane 'SettingsCard.stdout.txt')
+    @{ control = 'SettingsCard'; status = 'passed'; detail = 'complete'; exitCode = 0
+       execution = @{ timedOut = $false; captureComplete = $true } } |
+        ConvertTo-Json -Depth 3 | Set-Content (Join-Path $lane 'controls.json')
+    $cleanupError = 'Cleanup failed for exact owned package Rct.Wct.fixture: still registered'
+    @{ lane = 'jit-unpackaged'; status = 'failed'; detail = "1 controls, 0 failed, 0 blocked. $cleanupError" } |
+        ConvertTo-Json | Set-Content (Join-Path $directory 'matrix.json')
+    & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null
+    $summary = @(Get-Content (Join-Path $directory 'scenario-matrix.json') -Raw | ConvertFrom-Json)
+    $report = Get-Content (Join-Path $directory 'summary.md') -Raw
+    if (@($summary | Where-Object status -eq 'passed').Count -ne 2 -or
+        @($summary | Where-Object { $_.laneStatus -ne 'failed' -or -not $_.laneDetail.Contains($cleanupError) }).Count -or
+        -not $report.Contains("jit-unpackaged: failed.") -or -not $report.Contains($cleanupError)) {
+        $summaryFailures.Add('Summary hid a failed lane outcome behind valid scenario results.')
+    } else { Write-Output 'PASS summary lane-cleanup-failure' }
 } finally {
     Remove-Item -LiteralPath $directory -Recurse -Force
 }
