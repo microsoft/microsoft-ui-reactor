@@ -197,16 +197,10 @@ internal sealed class CameraPage : Component
     public override Element Render()
     {
         var (camError, setCamError) = UseState<string?>(null);
-        var preview = UseRef<CommunityToolkit.WinUI.Controls.CameraPreview?>(null);
-        var lifetime = UseMemo(static () => new CameraPreviewPageLifetime(), Array.Empty<object>());
+        var lifetime = UseMemo(static () => new CameraPreviewPageLifetime<CommunityToolkit.WinUI.Controls.CameraPreview>(
+            CameraPreviewElement.StopPreview), Array.Empty<object>());
         // Host disposal runs effect cleanup, but does not guarantee OnUnmount.
-        UseEffect(() => () =>
-        {
-            lifetime.Deactivate();
-            if (preview.Current is { } control)
-                CameraPreviewElement.StopPreview(control);
-            preview.Current = null;
-        }, Array.Empty<object>());
+        UseEffect(() => lifetime.Retire, Array.Empty<object>());
 
         return Gallery.Page(
             "CameraPreview",
@@ -218,7 +212,7 @@ internal sealed class CameraPage : Component
                     isFrameSourceGroupButtonVisible: true,
                     onPreviewFailed: error => lifetime.Report(error, setCamError))
                     .WithKey(lifetime.Key)
-                    .OnMountAdd(control => preview.Current = (CommunityToolkit.WinUI.Controls.CameraPreview)control)
+                    .OnMountAdd(control => lifetime.Attach((CommunityToolkit.WinUI.Controls.CameraPreview)control))
                     .Size(440, 280)));
     }
 }

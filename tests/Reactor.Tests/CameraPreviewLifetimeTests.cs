@@ -47,25 +47,61 @@ public class CameraPreviewLifetimeTests
         Assert.Equal(failCleanup ? 0 : 1, starts);
     }
 
+    [Fact]
+    public async Task FinalStopFailureAlone_BlocksReentry()
+    {
+        var queue = new CameraPreviewCleanupQueue();
+        var reports = new List<string>();
+        int stops = 0;
+        var started = new TaskCompletionSource();
+        var previous = new CameraPreviewLifetime(Task.CompletedTask,
+            () => { started.SetResult(); return Task.CompletedTask; },
+            () => { if (++stops == 2) throw new InvalidOperationException("final stop"); },
+            () => Task.CompletedTask,
+            (operation, _) => reports.Add(operation));
+        previous.Start();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        queue.Retire(previous);
+        await previous.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(2, stops);
+        Assert.Equal(["stop after cleanup"], reports);
+        Assert.False(previous.ReleaseSucceeded);
+
+        int starts = 0;
+        var next = new CameraPreviewLifetime(queue.WaitAsync(),
+            () => { starts++; return Task.CompletedTask; },
+            () => { },
+            () => Task.CompletedTask,
+            (operation, _) => reports.Add(operation));
+        next.Start();
+        await next.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(0, starts);
+        Assert.Contains("previous cleanup", reports);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PageRetirement_IgnoresLateFailuresAndGivesReplacementANewKey(bool hotReload)
+    public void PageRetirement_StopsMountedPreviewOnceAndGivesReplacementANewKey(bool hotReload)
     {
         var context = new RenderContext();
         var errors = new List<string?>();
-        CameraPreviewPageLifetime Render()
+        var stopped = new List<object>();
+        CameraPreviewPageLifetime<object> Render()
         {
             context.BeginRender(() => { });
-            var lifetime = context.UseMemo(static () => new CameraPreviewPageLifetime(), Array.Empty<object>());
-            context.UseEffect(() => () => lifetime.Deactivate(), Array.Empty<object>());
+            var lifetime = context.UseMemo(() => new CameraPreviewPageLifetime<object>(stopped.Add), Array.Empty<object>());
+            context.UseEffect(() => lifetime.Retire, Array.Empty<object>());
             context.FlushEffects();
             return lifetime;
         }
 
         var first = Render();
+        var control = new object();
+        first.Attach(control);
         first.Report("live", errors.Add);
         Assert.Same(first, Render());
+        Assert.Empty(stopped);
         if (hotReload)
             context.ResetForHotReload();
         else
@@ -73,6 +109,13 @@ public class CameraPreviewLifetimeTests
             context.RunCleanups();
             context = new RenderContext();
         }
+
+        Assert.Equal([control], stopped);
+        first.Retire();
+        Assert.Single(stopped);
+        var late = new object();
+        first.Attach(late);
+        Assert.Equal([control, late], stopped);
 
         var replacement = Render();
         Assert.NotEqual(first.Key, replacement.Key);

@@ -167,13 +167,31 @@ internal sealed class CameraPreviewCleanupQueue
     }
 }
 
-internal sealed class CameraPreviewPageLifetime
+// Page-owned link between the mounted native preview and host-disposal cleanup.
+internal sealed class CameraPreviewPageLifetime<TControl>(Action<TControl> stop) where TControl : class
 {
     private bool _inactive;
+    private TControl? _control;
 
     public string Key { get; } = Guid.NewGuid().ToString("N");
 
-    public void Deactivate() => _inactive = true;
+    public void Attach(TControl control)
+    {
+        if (_inactive)
+            stop(control);
+        else
+            _control = control;
+    }
+
+    public void Retire()
+    {
+        _inactive = true;
+        if (_control is { } control)
+        {
+            _control = null;
+            stop(control);
+        }
+    }
 
     public void Report(string? error, Action<string?> onError)
     {
