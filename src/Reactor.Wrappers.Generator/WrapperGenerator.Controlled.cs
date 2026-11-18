@@ -52,7 +52,8 @@ public sealed partial class WrapperGenerator
             sb.AppendLine($"        if (!e.{p.Name}.HasValue || {comparer}<{p.ValueType}>.Default.Equals(c.{p.ControlProp}, e.{p.Name}.Value)) return;");
             sb.AppendLine("        var state = __GetControlledState(c);");
             foreach (var observed in props)
-                sb.AppendLine($"        var __before{observed.Name} = c.{observed.ControlProp};");
+                if (observed.Name != p.Name)
+                    sb.AppendLine($"        var __before{observed.Name} = c.{observed.ControlProp};");
             sb.AppendLine("        state.WriteDepth++;");
             sb.AppendLine("        try");
             sb.AppendLine("        {");
@@ -61,13 +62,18 @@ public sealed partial class WrapperGenerator
             sb.AppendLine("        finally");
             sb.AppendLine("        {");
             sb.AppendLine("            state.WriteDepth--;");
-            // Only consume changes caused by this write. A sibling may already
-            // carry a native edit whose deferred event has not arrived yet.
+            // A coerced no-op still consumes the written property's observation.
+            // Unchanged siblings retain native edits whose events are pending.
             foreach (var observed in props)
             {
                 sb.AppendLine($"            var __after{observed.Name} = c.{observed.ControlProp};");
-                sb.AppendLine($"            if (!{comparer}<{observed.ValueType}>.Default.Equals(__before{observed.Name}, __after{observed.Name}))");
-                sb.AppendLine($"                state.Last{observed.Name} = __after{observed.Name};");
+                if (observed.Name == p.Name)
+                    sb.AppendLine($"            state.Last{observed.Name} = __after{observed.Name};");
+                else
+                {
+                    sb.AppendLine($"            if (!{comparer}<{observed.ValueType}>.Default.Equals(__before{observed.Name}, __after{observed.Name}))");
+                    sb.AppendLine($"                state.Last{observed.Name} = __after{observed.Name};");
+                }
             }
             sb.AppendLine("        }");
             sb.AppendLine("    }");
