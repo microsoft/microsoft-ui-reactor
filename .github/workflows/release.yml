@@ -289,7 +289,7 @@ jobs:
           if ($problems.Count -gt 0) { throw "Package layout problems:`n$($problems -join "`n")" }
           Write-Host "One lib/ folder in each of $($packages.Count) packages."
 
-      # Packages with code ported from other projects (Yoga, md4c, D3, WinUI.Dock) must carry their
+      # Packages with code ported from other projects (Yoga, WinUIEx, md4c, D3, WinUI.Dock) must carry their
       # license notices (issue #1535). The ids are listed rather than discovered so a package that
       # failed to pack fails here instead of passing vacuously. Mirrored in
       # build/pipelines/templates/reactor-build-steps.yml.
