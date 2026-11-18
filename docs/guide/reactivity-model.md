@@ -70,6 +70,11 @@ component's `Render()` runs and the slot read returns the new value.
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
+    // Keep the captured argument in a separate frame so inline/locked calls
+    // do not allocate a closure before deciding whether marshaling is needed.
+    bool MarshalSetter(T newValue)
+        => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
     void Setter(T newValue)
     {
         bool changed;
@@ -90,7 +95,7 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
         }
         else
         {
-            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -271,6 +276,11 @@ change.
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
+    // Keep the captured argument in a separate frame so inline/locked calls
+    // do not allocate a closure before deciding whether marshaling is needed.
+    bool MarshalSetter(T newValue)
+        => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
     void Setter(T newValue)
     {
         bool changed;
@@ -291,7 +301,7 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
         }
         else
         {
-            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
