@@ -81,7 +81,8 @@ env:
   # Microsoft.Windows.SDK.BuildTools.MSIX is a floor Microsoft.UI.Reactor ships to
   # its consumers; it moves by hand with the Windows App SDK (src/Reactor/Reactor.csproj).
   # Microsoft.CodeAnalysis.CSharp(.Workspaces) is the Roslyn floor the shipped analyzers
-  # impose on consumers (VS / .NET SDK minimum); it and Microsoft.CodeAnalysis.Analyzers move by hand (Directory.Packages.props).
+  # impose on consumers (VS / .NET SDK minimum); it and Microsoft.CodeAnalysis.Analyzers
+  # move by hand (Directory.Packages.props).
   # The Microsoft.VisualStudio.* runtime SDK packages (and the SDK test framework)
   # stay on the VS 2022 (17.x) line that src/vs-reactor's manifest supports. This
   # list holds every version, so their 17.x updates come from Dependabot, which
