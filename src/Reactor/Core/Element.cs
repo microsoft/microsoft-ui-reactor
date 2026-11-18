@@ -516,7 +516,7 @@ public abstract record Element
         // the common no-extras leaf.
         if (!(a.Extensions is null && b.Extensions is null))
         {
-            if (!Equals(a.AnimationConfig, b.AnimationConfig)) return false;
+            if (!(a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)) return false;
             if (!AttachedEqual(a.Attached, b.Attached)) return false;
             if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
             // Issue #675 — compare ResourceOverrides for symmetry with ThemeBindings: a
@@ -1811,6 +1811,24 @@ internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
 }
 
 /// <summary>
+/// Animation declarations compared together when deciding whether an element can skip an update.
+/// Record equality includes every field; arrays and native objects retain their existing equality semantics.
+/// </summary>
+internal readonly record struct AnimationExtras
+{
+    internal ImplicitTransitions? ImplicitTransitions { get; init; }
+    internal ThemeTransitions? ThemeTransitions { get; init; }
+    internal LayoutAnimationConfig? LayoutAnimation { get; init; }
+    internal Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+    internal Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+    internal Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+    internal Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+    internal Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    internal Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+    internal string? ConnectedAnimationKey { get; init; }
+}
+
+/// <summary>
 /// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
 /// Holds the 14 rarely-set fields (attached properties, transitions, theme
 /// bindings, animation configs, resource overrides, context values) that used
@@ -1836,6 +1854,9 @@ internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
 /// <remarks>Spec 047 §4.4.</remarks>
 public record ElementExtras
 {
+    /// <summary>Animation declarations shared by record equality and shallow comparison.</summary>
+    internal AnimationExtras Animations { get; private init; }
+
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
     /// Set via fluent extension methods: TextBlock("hi").Grid(row: 1, column: 2)
@@ -1849,13 +1870,21 @@ public record ElementExtras
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
-    public ImplicitTransitions? ImplicitTransitions { get; init; }
+    public ImplicitTransitions? ImplicitTransitions
+    {
+        get => Animations.ImplicitTransitions;
+        init => Animations = Animations with { ImplicitTransitions = value };
+    }
 
     /// <summary>
     /// Theme transitions (children, item container).
     /// Set via fluent extension methods: VStack(children).WithTransitions(...)
     /// </summary>
-    public ThemeTransitions? ThemeTransitions { get; init; }
+    public ThemeTransitions? ThemeTransitions
+    {
+        get => Animations.ThemeTransitions;
+        init => Animations = Animations with { ThemeTransitions = value };
+    }
 
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
@@ -1870,47 +1899,75 @@ public record ElementExtras
     /// so that layout-driven position (and optionally size) changes animate smoothly.
     /// Set via fluent extension methods: Border(child).LayoutAnimation()
     /// </summary>
-    public LayoutAnimationConfig? LayoutAnimation { get; init; }
+    public LayoutAnimationConfig? LayoutAnimation
+    {
+        get => Animations.LayoutAnimation;
+        init => Animations = Animations with { LayoutAnimation = value };
+    }
 
     /// <summary>
     /// Compositor property animation configuration (.Animate() modifier).
     /// When set, the reconciler creates ImplicitAnimationCollection entries on the
     /// element's Visual for Opacity/Scale/Rotation/Offset/CenterPoint.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig
+    {
+        get => Animations.AnimationConfig;
+        init => Animations = Animations with { AnimationConfig = value };
+    }
 
     /// <summary>
     /// Element enter/exit transition configuration (.Transition() modifier).
     /// When set, the reconciler animates mount (enter) and unmount (exit) with
     /// compositor animations, deferring removal until exit animation completes.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition
+    {
+        get => Animations.ElementTransition;
+        init => Animations = Animations with { ElementTransition = value };
+    }
 
     /// <summary>
     /// Interaction states configuration (.InteractionStates() modifier).
     /// When set, the reconciler registers pointer event handlers that drive
     /// zero-reconcile visual state transitions (hover, pressed, focused).
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates
+    {
+        get => Animations.InteractionStates;
+        init => Animations = Animations with { InteractionStates = value };
+    }
 
     /// <summary>
     /// Stagger configuration for container children (.Stagger() modifier).
     /// When set, child animations (enter, layout, property) have incrementing
     /// DelayTime = childIndex * staggerDelay.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig
+    {
+        get => Animations.StaggerConfig;
+        init => Animations = Animations with { StaggerConfig = value };
+    }
 
     /// <summary>
     /// Keyframe animation definitions (.Keyframes() modifier).
     /// Trigger-based: plays when the trigger value changes between renders.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations
+    {
+        get => Animations.KeyframeAnimations;
+        init => Animations = Animations with { KeyframeAnimations = value };
+    }
 
     /// <summary>
     /// Scroll-linked expression animation configuration (.ScrollLinked() modifier).
     /// Expression animations run on the compositor, driven by ScrollViewer position.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation
+    {
+        get => Animations.ScrollAnimation;
+        init => Animations = Animations with { ScrollAnimation = value };
+    }
 
     /// <summary>
     /// Connected animation key for cross-container transitions.
@@ -1919,7 +1976,11 @@ public record ElementExtras
     /// mount if a prepared animation with the same key exists.
     /// Set via fluent extension method: Border(child).ConnectedAnimation("hero")
     /// </summary>
-    public string? ConnectedAnimationKey { get; init; }
+    public string? ConnectedAnimationKey
+    {
+        get => Animations.ConnectedAnimationKey;
+        init => Animations = Animations with { ConnectedAnimationKey = value };
+    }
 
     /// <summary>
     /// Per-control resource overrides (lightweight styling). When set, the reconciler
@@ -2024,17 +2085,8 @@ public record ElementExtras
     /// </summary>
     internal bool IsBehaviorallyEmpty =>
         Attached is null
-        && ImplicitTransitions is null
-        && ThemeTransitions is null
+        && Animations.Equals(default)
         && ThemeBindings is null
-        && LayoutAnimation is null
-        && AnimationConfig is null
-        && ElementTransition is null
-        && InteractionStates is null
-        && StaggerConfig is null
-        && KeyframeAnimations is null
-        && ScrollAnimation is null
-        && ConnectedAnimationKey is null
         && ResourceOverrides is null
         && ContextValues is null;
 }

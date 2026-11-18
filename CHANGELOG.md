@@ -59,6 +59,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- Shallow comparison now checks all animation and transition declarations together,
+  so configuration-only changes reach direct updates and parent child-skip paths.
+  Value-equivalent plain-data configurations remain eligible for skipping; native
+  objects and arrays retain reference equality. This also restores `.Keyframes()`
+  playback when only the trigger changes (issue #1536; spec 014).
 - **A button whose content is an element no longer remounts that content after a garbage
   collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
   rest of the button family remembered which child they owned by the control's managed wrapper.
