@@ -38,14 +38,14 @@ public partial record SettingsCardElement
 
     public static SettingsCardElement SettingsCard(
         Element header, Element? description = null, Element? content = null,
-        Element? headerIcon = null, bool isClickEnabled = false, Action? onClick = null) =>
+        Element? headerIcon = null, Optional<bool> isClickEnabled = default, Action? onClick = null) =>
         SettingsCardElement.SettingsCard(
             description: description, content: content, headerIcon: headerIcon,
             isClickEnabled: isClickEnabled, onClick: onClick) with { Header = header };
 
     public static SettingsCardElement SettingsCard(
         string header, string? description = null, Element? content = null,
-        Element? headerIcon = null, bool isClickEnabled = false, Action? onClick = null) =>
+        Element? headerIcon = null, Optional<bool> isClickEnabled = default, Action? onClick = null) =>
         SettingsCardElement.SettingsCard(
             description: description is null ? null : TextBlock(description),
             content: content,
@@ -87,7 +87,7 @@ public partial record SettingsExpanderElement
 
     public static SettingsExpanderElement SettingsExpander(
         Element header, Element? description = null, Element? content = null,
-        Element? headerIcon = null, bool isExpanded = false,
+        Element? headerIcon = null, Optional<bool> isExpanded = default,
         Action<bool>? onIsExpandedChanged = null, IReadOnlyList<object>? items = null) =>
         SettingsExpanderElement.SettingsExpander(
             description: description, content: content, headerIcon: headerIcon,
@@ -96,7 +96,7 @@ public partial record SettingsExpanderElement
 
     public static SettingsExpanderElement SettingsExpander(
         string header, string? description = null, Element? content = null,
-        Element? headerIcon = null, bool isExpanded = false,
+        Element? headerIcon = null, Optional<bool> isExpanded = default,
         Action<bool>? onIsExpandedChanged = null, IReadOnlyList<object>? items = null) =>
         SettingsExpanderElement.SettingsExpander(
             description: description is null ? null : TextBlock(description),
