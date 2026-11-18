@@ -72,6 +72,35 @@ try {
         $unlocked = $true
     } catch { }
     Assert-Runner $unlocked 'partial capture stream is disposed after setup failure'
+
+    function dotnet {
+        if ($args[0] -eq '--version') { 'fixture-sdk'; $global:LASTEXITCODE = 0; return }
+        if ($args[0] -eq 'restore') {
+            $global:compatibilityTestRestoreCalls++
+            throw 'Parameter fixture stops before restoring or building.'
+        }
+        throw 'Unexpected dotnet operation in parameter fixture.'
+    }
+    function powershell.exe { throw 'Appx operations are forbidden in parameter fixtures.' }
+    foreach ($case in @(
+        @{ Runtime = 'JIT'; Deployment = 'Unpackaged'; Filter = 'sEtTiNgScArD'; Control = 'SettingsCard' },
+        @{ Runtime = 'AOT'; Deployment = 'LOOSE'; Filter = 'rangeSelector'; Control = 'RangeSelector' }
+    )) {
+        $global:compatibilityTestRestoreCalls = 0
+        $caseDirectory = Join-Path $evidence $case.Control
+        & (Join-Path $PSScriptRoot 'Run-Matrix.ps1') -EvidenceDirectory $caseDirectory `
+            -Runtime $case.Runtime -Deployment $case.Deployment -Filter $case.Filter | Out-Null
+        Assert-Runner ($global:compatibilityTestRestoreCalls -eq 1) "$($case.Control) mixed-case parameters reach the guarded restore"
+        $run = Get-Content (Join-Path $caseDirectory 'run.json') -Raw | ConvertFrom-Json
+        $laneResult = @(Get-Content (Join-Path $caseDirectory 'matrix.json') -Raw | ConvertFrom-Json)
+        Assert-Runner (@($run.controls).Count -eq 1 -and $run.controls[0] -ceq $case.Control -and
+            $run.parameters.Filter -ceq $case.Control) "$($case.Control) filter retains the declared canonical name"
+        Assert-Runner ($run.parameters.Runtime[0] -ceq $case.Runtime.ToLowerInvariant() -and
+            $run.parameters.Deployment[0] -ceq $case.Deployment.ToLowerInvariant() -and
+            $laneResult[0].lane -ceq "$($case.Runtime.ToLowerInvariant())-$($case.Deployment.ToLowerInvariant())") `
+            "$($case.Control) runtime and deployment are canonical in metadata and lane names"
+    }
+    $global:LASTEXITCODE = 0
 } finally {
     if (Test-Path $marker) {
         $childId = [int][IO.File]::ReadAllText($marker)

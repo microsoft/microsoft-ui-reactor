@@ -85,8 +85,7 @@ internal static class CameraSampleChecks
 
         private void OnFrameArrived(object? sender, FrameEventArgs args)
         {
-            // Count delivery only. Do not copy, encode, display, or retain pixels.
-            args.VideoFrame.Dispose();
+            // VideoFrame's getter copies pixels; count the event without requesting a frame.
             Interlocked.Increment(ref _count);
         }
 

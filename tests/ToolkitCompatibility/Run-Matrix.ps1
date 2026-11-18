@@ -13,6 +13,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$Runtime = @($Runtime | ForEach-Object { $_.ToLowerInvariant() })
+$Deployment = @($Deployment | ForEach-Object { $_.ToLowerInvariant() })
+if ($PSBoundParameters.ContainsKey('Runtime')) { $PSBoundParameters['Runtime'] = $Runtime }
+if ($PSBoundParameters.ContainsKey('Deployment')) { $PSBoundParameters['Deployment'] = $Deployment }
 . (Join-Path $PSScriptRoot 'ResultProtocol.ps1')
 $project = Join-Path $PSScriptRoot 'ToolkitCompatibility.csproj'
 if ($ConsumerProject) { $project = (Resolve-Path $ConsumerProject).Path }
@@ -62,8 +66,11 @@ if ($CameraProbeOnly) {
     $Filter = 'CameraPreview'
 }
 if ($Filter) {
-    if ($Filter -notin $controls) { throw "Unknown filter $Filter" }
+    $matched = @($controls | Where-Object { $_ -ieq $Filter })
+    if ($matched.Count -ne 1) { throw "Unknown filter $Filter" }
+    $Filter = $matched[0]
     $controls = @($Filter)
+    if ($PSBoundParameters.ContainsKey('Filter')) { $PSBoundParameters['Filter'] = $Filter }
 }
 if ($NativeBaseline -and $Filter -notin @('SettingsCard', 'SettingsExpander', 'ColorPicker', 'TabbedCommandBar', 'RichSuggestBox', 'RadialGauge')) {
     throw 'Direct-native diagnostics require a supported single-control filter.'

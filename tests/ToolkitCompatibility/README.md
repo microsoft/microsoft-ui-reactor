@@ -122,7 +122,9 @@ pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\se
 ```
 
 Each invocation requires a new evidence directory and owns unique package names
-and aliases. `run.json`, `commands.txt`, lane restore/publish/deploy logs, TAP,
+and aliases. Runtime, deployment and control-filter arguments are case-insensitive
+and are recorded and passed to the consumer using their canonical spelling.
+`run.json`, `commands.txt`, lane restore/publish/deploy logs, TAP,
 incrementally flushed `results.jsonl` and `matrix.json` retain the evidence.
 Exit 2 from the consumer means complete results with blocked scenarios; it is
 not success. The matrix runner returns nonzero for any non-passing lane.
@@ -223,8 +225,9 @@ The check mounts the actual camera sample page twice. Each generation must
 deliver at least three Toolkit `FrameArrived` events, then detach on navigation,
 complete the captured adapter cleanup task without `HasErrors`, and stop
 delivering frames. Re-entry must use fresh native control and helper instances
-and deliver fresh frames. Only event counts are logged; `VideoFrame` objects are
-disposed immediately, with no copied/encoded/retained pixels or screenshots.
+and deliver fresh frames. Only event counts are logged. The callback never reads
+`FrameEventArgs.VideoFrame`, whose getter copies pixels, so it acquires no disposable
+frame and does not copy, encode or retain pixels or screenshots.
 
 Helper/frame waits are bounded to five seconds and cleanup waits to ten seconds.
 A timeout is a failure, never proof of release. The silence check samples 350 ms
