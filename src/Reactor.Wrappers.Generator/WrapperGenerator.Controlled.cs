@@ -59,9 +59,8 @@ public sealed partial class WrapperGenerator
             sb.AppendLine("    {");
             sb.AppendLine($"        if (!e.{p.Name}.HasValue || {comparer}<{p.ValueType}>.Default.Equals(c.{p.ControlProp}, e.{p.Name}.Value)) return;");
             sb.AppendLine("        var state = __GetControlledState(c);");
-            foreach (var observed in props)
-                if (observed.Name != p.Name)
-                    sb.AppendLine($"        var __before{observed.Name} = c.{observed.ControlProp};");
+            foreach (var observed in props.Where(observed => observed.Name != p.Name))
+                sb.AppendLine($"        var __before{observed.Name} = c.{observed.ControlProp};");
             sb.AppendLine("        state.WriteDepth++;");
             sb.AppendLine("        try");
             sb.AppendLine("        {");
@@ -131,9 +130,8 @@ public sealed partial class WrapperGenerator
             sb.AppendLine("        if (state.WriteDepth != 0) return;");
             // Snapshot every affected value before invoking any callback. This
             // also makes reentrant events observe the new baseline.
-            foreach (var entry in ev)
+            foreach (var p in ev.Select(entry => entry.Prop))
             {
-                var p = entry.Prop;
                 sb.AppendLine($"        var __value{p.Name} = c.{p.ControlProp};");
                 sb.AppendLine($"        var __changed{p.Name} = !{comparer}<{p.ValueType}>.Default.Equals(state.Last{p.Name}, __value{p.Name});");
                 sb.AppendLine($"        state.Last{p.Name} = __value{p.Name};");
@@ -143,9 +141,8 @@ public sealed partial class WrapperGenerator
             sb.AppendLine("        if (global::Microsoft.UI.Reactor.Core.ReactorBinding.ShouldSuppressEcho(c)) return;");
             // Earlier callbacks can update, replace, or detach this binding.
             // Versions also reject a nested change that returns to the snapshot value.
-            foreach (var entry in ev)
+            foreach (var p in ev.Select(entry => entry.Prop))
             {
-                var p = entry.Prop;
                 sb.AppendLine($"        if (__changed{p.Name} && state.Version{p.Name} == __version{p.Name} &&");
                 sb.AppendLine("            global::System.Object.ReferenceEquals(c.GetValue(__ControlledState.Property), state) &&");
                 sb.AppendLine($"            {comparer}<{p.ValueType}>.Default.Equals(c.{p.ControlProp}, __value{p.Name}) &&");
