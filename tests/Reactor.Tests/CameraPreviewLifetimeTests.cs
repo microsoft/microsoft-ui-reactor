@@ -48,6 +48,37 @@ public class CameraPreviewLifetimeTests
     }
 
     [Fact]
+    public async Task UnsubscribeFailureAlone_BlocksReentry()
+    {
+        var queue = new CameraPreviewCleanupQueue();
+        var reports = new List<string>();
+        var started = new TaskCompletionSource();
+        var previous = new CameraPreviewLifetime(Task.CompletedTask,
+            () => { started.SetResult(); return Task.CompletedTask; },
+            () => { },
+            () => Task.CompletedTask,
+            (operation, _) => reports.Add(operation),
+            () => throw new InvalidOperationException("unsubscribe"));
+        previous.Start();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        queue.Retire(previous);
+        await previous.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(["unsubscribe"], reports);
+        Assert.False(previous.ReleaseSucceeded);
+
+        int starts = 0;
+        var next = new CameraPreviewLifetime(queue.WaitAsync(),
+            () => { starts++; return Task.CompletedTask; },
+            () => { },
+            () => Task.CompletedTask,
+            (operation, _) => reports.Add(operation));
+        next.Start();
+        await next.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(0, starts);
+        Assert.Contains("previous cleanup", reports);
+    }
+
+    [Fact]
     public async Task FinalStopFailureAlone_BlocksReentry()
     {
         var queue = new CameraPreviewCleanupQueue();
