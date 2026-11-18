@@ -30,7 +30,13 @@ internal static class AnimationHelper
                 && (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
 
     private static void MarkCompositionWrite(UIElement element, string property)
-        => Reconciler.GetOrCreateReactorState(element).CompositionModifierProperties |= PropertyFlag(property);
+    {
+        var state = Reconciler.GetOrCreateReactorState(element);
+        var flag = PropertyFlag(property);
+        state.CompositionModifierProperties |= flag;
+        state.KeyframeChannelOwners?.Remove(flag);
+        state.DeferredModifierResets &= ~flag;
+    }
 
     private static Visual GetAnimationVisual(UIElement element)
     {
@@ -44,7 +50,7 @@ internal static class AnimationHelper
     /// Ordinary facade writes must not call GetElementVisual: handing out the visual
     /// permanently disables XAML implicit transitions and makes the element unpoolable.
     /// </summary>
-    internal static void ResetCompositionModifier(UIElement element, string property)
+    internal static void ResetCompositionModifier(UIElement element, string property, AnimationController? expectedController = null)
     {
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
         var flag = PropertyFlag(property);
@@ -71,6 +77,20 @@ internal static class AnimationHelper
             }
         }
         var visual = GetAnimationVisual(element);
+        // A shared target can replace the deferred animation before its decorator plays.
+        if (expectedController is not null && !Equals(expectedController, visual.TryGetAnimationController(CompositorPropertyName(property))))
+        {
+            ClearCompositionOwnership(state, flag);
+            return;
+        }
+        if (state.KeyframeChannelOwners?.TryGetValue(flag, out var owner) == true && owner.Entry.Definition.Loop
+            && visual.TryGetAnimationController(CompositorPropertyName(property)) is { } controller)
+        {
+            state.DeferredModifierResets |= flag;
+            state.KeyframeChannelOwners[flag] = owner with { DeferredController = controller };
+            return;
+        }
+
         // A direct visual write replaces its running animation as well as its base
         // value. StopAnimation alone can leave the last animated value behind.
         // Disable implicit animations so .Animate() cannot animate this reset again.
@@ -91,7 +111,14 @@ internal static class AnimationHelper
             }
         }
         finally { visual.ImplicitAnimations = implicitAnimations; }
+        ClearCompositionOwnership(state, flag);
+    }
+
+    private static void ClearCompositionOwnership(Reconciler.ReactorState state, AnimateProperty flag)
+    {
         state.CompositionModifierProperties &= ~flag;
+        state.KeyframeChannelOwners?.Remove(flag);
+        state.DeferredModifierResets &= ~flag;
     }
 
     /// <summary>

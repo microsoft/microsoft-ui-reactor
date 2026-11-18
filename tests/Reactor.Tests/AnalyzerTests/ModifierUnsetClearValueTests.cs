@@ -67,7 +67,7 @@ public class ModifierUnsetClearValueTests
     /// <summary>
     /// Assignments inside an unset arm that are legitimately not <c>ClearValue</c> calls, keyed
     /// by the assignment target's trailing identifier. An entry is a claim that the target is
-    /// not a dependency property at all — a facade property or reconciler bookkeeping inside the
+    /// not a dependency property at all — reconciler bookkeeping that happens to live inside the
     /// arm — so the #952 precedence argument does not apply to it. Add one only with a reason;
     /// anything that <em>is</em> a DP must go through <c>ClearValue</c>.
     /// <para>

@@ -1595,6 +1595,10 @@ public sealed partial class Reconciler : IDisposable
         // Properties written on the handed-out Visual by a modifier. Kept on native
         // attached state so a replacement WinRT wrapper cannot lose cleanup ownership.
         internal AnimateProperty CompositionModifierProperties;
+        // Track the entry that took over each modifier's Visual channel so
+        // removing one named animation can release its deferred reset.
+        internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
+        internal AnimateProperty DeferredModifierResets;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -6198,6 +6202,27 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private static readonly Dictionary<(UIElement, string), object?> _keyframeTriggerValues = new();
 
+    internal readonly record struct KeyframeChannelOwner(
+        KeyframeEntry[] Scope, KeyframeEntry Entry, AnimationController? DeferredController = null);
+
+    private enum KeyframeReleaseStage { BeforeHandler, BeforeSharedTarget, BeforePlayback }
+
+    private static bool KeyframeTriggerChanged(bool hasPrevious, object? previous, object? trigger)
+        => !hasPrevious || !Equals(previous, trigger);
+
+    private static AnimateProperty GetKeyframeProperties(KeyframeAnimationDef definition)
+    {
+        var properties = default(AnimateProperty);
+        foreach (var frame in definition.Keyframes)
+        {
+            if (frame.Opacity.HasValue) properties |= AnimateProperty.Opacity;
+            if (frame.Scale.HasValue) properties |= AnimateProperty.Scale;
+            if (frame.Translation.HasValue) properties |= AnimateProperty.Offset;
+            if (frame.Rotation.HasValue) properties |= AnimateProperty.Rotation;
+        }
+        return properties;
+    }
+
     /// <summary>
     /// Checks trigger values and starts keyframe animations when they change.
     /// </summary>
@@ -6210,31 +6235,16 @@ public sealed partial class Reconciler : IDisposable
         foreach (var entry in entries)
         {
             var key = (uie, entry.Name);
-            var changed = false;
-
-            if (_keyframeTriggerValues.TryGetValue(key, out var prevTrigger))
-                changed = !Equals(prevTrigger, entry.Trigger);
-            else
-                changed = true; // First mount
-
+            bool hasPrevious = _keyframeTriggerValues.TryGetValue(key, out var previous);
+            bool changed = KeyframeTriggerChanged(hasPrevious, previous, entry.Trigger);
             _keyframeTriggerValues[key] = entry.Trigger;
-
             if (!changed) continue;
 
             var def = entry.Definition;
             var group = compositor.CreateAnimationGroup();
+            var properties = GetKeyframeProperties(def);
 
-            // Create per-property keyframe animations
-            bool hasOpacity = false, hasScale = false, hasTranslation = false, hasRotation = false;
-            foreach (var kf in def.Keyframes)
-            {
-                if (kf.Opacity.HasValue) hasOpacity = true;
-                if (kf.Scale.HasValue) hasScale = true;
-                if (kf.Translation.HasValue) hasTranslation = true;
-                if (kf.Rotation.HasValue) hasRotation = true;
-            }
-
-            if (hasOpacity)
+            if ((properties & AnimateProperty.Opacity) != 0)
             {
                 var anim = compositor.CreateScalarKeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6255,7 +6265,7 @@ public sealed partial class Reconciler : IDisposable
                 group.Add(anim);
             }
 
-            if (hasScale)
+            if ((properties & AnimateProperty.Scale) != 0)
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6276,7 +6286,7 @@ public sealed partial class Reconciler : IDisposable
                 group.Add(anim);
             }
 
-            if (hasTranslation)
+            if ((properties & AnimateProperty.Offset) != 0)
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6299,7 +6309,7 @@ public sealed partial class Reconciler : IDisposable
                 group.Add(anim);
             }
 
-            if (hasRotation)
+            if ((properties & AnimateProperty.Rotation) != 0)
             {
                 var anim = compositor.CreateScalarKeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6323,6 +6333,82 @@ public sealed partial class Reconciler : IDisposable
             // Start the animation group via Visual
             foreach (CompositionAnimation anim in group)
                 visual.StartAnimation(anim.Target, anim);
+
+            if (properties != default && uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+                TrackKeyframeChannelOwners(state, properties & state.CompositionModifierProperties,
+                    new KeyframeChannelOwner(entries, entry));
+        }
+    }
+
+    private static void TrackKeyframeChannelOwners(ReactorState state, AnimateProperty channels, KeyframeChannelOwner owner)
+    {
+        if (channels == default) return;
+        var tracked = owner.Entry.Definition.Loop ? channels : channels & state.DeferredModifierResets;
+        if (tracked == default && state.KeyframeChannelOwners is null) return;
+        var owners = state.KeyframeChannelOwners ??= new(4);
+        Track(AnimateProperty.Opacity);
+        Track(AnimateProperty.Scale);
+        Track(AnimateProperty.Rotation);
+        Track(AnimateProperty.Offset);
+
+        void Track(AnimateProperty property)
+        {
+            if ((channels & property) == 0) return;
+            if ((tracked & property) != 0) owners[property] = owner;
+            else owners.Remove(property);
+        }
+    }
+
+    private static void ReleaseRemovedKeyframeChannels(UIElement uie, KeyframeEntry[] previous, KeyframeEntry[]? current,
+        KeyframeReleaseStage stage)
+    {
+        if (uie.GetValue(ReactorAttached.StateProperty) is not ReactorState { KeyframeChannelOwners: { Count: > 0 } owners } state)
+            return;
+
+        Release(AnimateProperty.Opacity, "Opacity");
+        Release(AnimateProperty.Scale, "Scale");
+        Release(AnimateProperty.Rotation, "Rotation");
+        Release(AnimateProperty.Offset, "Translation");
+
+        void Release(AnimateProperty property, string name)
+        {
+            if (!owners.TryGetValue(property, out var owner) || !ReferenceEquals(owner.Scope, previous)) return;
+            if (current is not null)
+            {
+                var nameKey = owner.Entry.Name;
+                var key = (uie, nameKey);
+                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var trigger);
+                bool retained = false;
+                bool replayed = false;
+                // Playback reads and advances the trigger for every matching entry in order.
+                // Predict those replays without changing what playback will see.
+                foreach (var entry in current)
+                {
+                    if (entry.Name != nameKey) continue;
+                    retained = true;
+                    if (stage == KeyframeReleaseStage.BeforeSharedTarget) break;
+                    bool changed = KeyframeTriggerChanged(hasTrigger, trigger, entry.Trigger);
+                    hasTrigger = true;
+                    trigger = entry.Trigger;
+                    if (!changed) continue;
+                    replayed = true;
+                    if ((GetKeyframeProperties(entry.Definition) & property) != 0)
+                    {
+                        owners[property] = owner with { Scope = current };
+                        return;
+                    }
+                }
+                if (!retained) _keyframeTriggerValues.Remove(key);
+                else if (!replayed)
+                {
+                    owners[property] = owner with { Scope = current };
+                    return;
+                }
+            }
+            owners.Remove(property);
+            if ((state.DeferredModifierResets & property) != 0)
+                AnimationHelper.ResetCompositionModifier(uie, name,
+                    stage == KeyframeReleaseStage.BeforePlayback ? owner.DeferredController : null);
         }
     }
 
@@ -6668,7 +6754,13 @@ public sealed partial class Reconciler : IDisposable
             }
             if (root.Modifiers is { } inner && declares(inner)) return (root, inner);
             if (modifiers is not null && declares(modifiers)) return (root, modifiers);
-            var next = ReactorSourceMap.DecoratorTarget(root);
+            // Match Mount and Update dispatch: a per-host handler can shadow a global decorator.
+            var type = root.GetType();
+            Element? next = null;
+            if (_v1Handlers.TryGet(type, out var handler))
+                next = (handler as IV1SourceTargetResolver)?.GetSourceTarget(root);
+            else if (!_typeRegistry.ContainsKey(type))
+                next = ReactorSourceMap.DecoratorTarget(root);
             if (next is null && ModifierUpdate.Control?.GetValue(ReactorAttached.StateProperty)
                 is ReactorState { ModifierTargets: { } targets })
                 foreach (var target in targets)

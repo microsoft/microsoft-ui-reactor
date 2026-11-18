@@ -226,6 +226,237 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             });
             H.SetContent(null);
         }
+
+        using var loopingReconciler = new Reconciler();
+        var plainTarget = Border(TextBlock("Looping Scale"));
+        var animated = plainTarget.Animate(Curve.Linear(60000), AnimateProperty.Scale);
+        static KeyframeBuilder Pulse(KeyframeBuilder kf) => kf.Loop().Duration(60000)
+            .At(0, scale: Vector3.One).At(1, scale: new Vector3(1.5f, 1.5f, 1));
+        var looping = animated.Keyframes("pulse", 1, Pulse);
+        var initialScale = plainTarget.Scale(2);
+        var scaled = looping.Scale(2);
+        var loopingTarget = (Border)loopingReconciler.Mount(animated, () => { })!;
+        H.SetContent(loopingTarget);
+        await Harness.Render();
+        var loopingVisual = ElementCompositionPreview.GetElementVisual(loopingTarget);
+        // Leave a non-default base value behind the loop so a missing reset is observable.
+        loopingReconciler.Update(animated, initialScale, loopingTarget, () => { });
+        H.Check("TransformKeyframes_NonDefaultScaleBase", loopingVisual.Scale == new Vector3(2, 2, 1));
+        loopingReconciler.Update(initialScale, scaled, loopingTarget, () => { });
+        await Harness.Render();
+        var controller = loopingVisual.TryGetAnimationController("Scale");
+        H.Check("TransformKeyframes_ScaleLoopStarted", controller is not null);
+        if (controller is not null)
+        {
+            controller.Pause();
+            controller.Progress = 0.5f;
+        }
+        H.Check("TransformKeyframes_SameControl", loopingReconciler.Update(scaled, looping, loopingTarget, () => { }) is null);
+        var retained = loopingVisual.TryGetAnimationController("Scale");
+        H.Check("TransformKeyframes_ScaleLoopRetained",
+            retained is not null && Math.Abs(retained.Progress - 0.5f) < 0.001f,
+            $"progress={retained?.Progress}");
+        loopingReconciler.Update(looping, plainTarget, loopingTarget, () => { });
+        H.Check("TransformKeyframes_ScaleResetAfterLoopRemoval", loopingVisual.Scale == Vector3.One
+            && loopingVisual.TryGetAnimationController("Scale") is null, $"scale={loopingVisual.Scale}");
+
+        loopingReconciler.Update(plainTarget, scaled, loopingTarget, () => { });
+        var restarted = loopingVisual.TryGetAnimationController("Scale");
+        if (restarted is not null)
+        {
+            restarted.Pause();
+            restarted.Progress = 0.5f;
+        }
+        var rescaled = scaled.Scale(3);
+        loopingReconciler.Update(scaled, rescaled, loopingTarget, () => { });
+        var replacement = loopingVisual.TryGetAnimationController("Scale");
+        H.Check("TransformKeyframes_ScaleModifierReplacedLoop", restarted is not null
+            && replacement is not null && replacement.Progress < 0.1f, $"progress={replacement?.Progress}");
+        loopingReconciler.Update(rescaled, looping, loopingTarget, () => { });
+        bool hasModifierAnimation = loopingVisual.TryGetAnimationController("Scale") is not null;
+        H.Check("TransformKeyframes_ScaleModifierReset", loopingVisual.Scale == Vector3.One && !hasModifierAnimation,
+            $"scale={loopingVisual.Scale}, animation={hasModifierAnimation}");
+        loopingReconciler.Update(looping, plainTarget, loopingTarget, () => { });
+
+        var fading = animated.Keyframes("fade", 1, kf => kf.Loop().Duration(60000)
+            .At(0, opacity: 1).At(1, opacity: 0.5f));
+        foreach (bool deferReset in new[] { false, true })
+        {
+            string name = deferReset ? "TransformKeyframes_DeferredPartial" : "TransformKeyframes_Partial";
+            // The retained standby entry already lost the Scale channel to pulse.
+            var remaining = deferReset ? fading.Keyframes("standby", 1, Pulse) : fading;
+            var withPulse = remaining.Keyframes("pulse", 1, Pulse);
+            var before = withPulse.Scale(2);
+            loopingReconciler.Update(plainTarget, initialScale, loopingTarget, () => { });
+            H.Check(name + "NonDefaultScaleBase", loopingVisual.Scale == new Vector3(2, 2, 1));
+            loopingReconciler.Update(initialScale, before, loopingTarget, () => { });
+            await Harness.Render();
+            var fade = loopingVisual.TryGetAnimationController("Opacity");
+            H.Check(name + "LoopsStarted", loopingVisual.TryGetAnimationController("Scale") is not null && fade is not null);
+            if (fade is not null)
+            {
+                fade.Pause();
+                fade.Progress = 0.5f;
+            }
+            if (deferReset)
+            {
+                loopingReconciler.Update(before, withPulse, loopingTarget, () => { });
+                H.Check(name + "PulseStillPlaying", loopingVisual.TryGetAnimationController("Scale") is not null);
+                before = withPulse;
+                // Keyframe-only changes can be shallow-skipped (#1536). Drive Update through a layout change.
+                remaining = remaining.Width(120);
+            }
+            H.Check(name + "SameControl", loopingReconciler.Update(before, remaining, loopingTarget, () => { }) is null);
+            bool pulseRetained = loopingVisual.TryGetAnimationController("Scale") is not null;
+            H.Check(name + "ScaleReset", loopingVisual.Scale == Vector3.One && !pulseRetained,
+                $"scale={loopingVisual.Scale}, pulse={pulseRetained}");
+            var retainedFade = loopingVisual.TryGetAnimationController("Opacity");
+            H.Check(name + "FadeRetained", retainedFade is not null && Math.Abs(retainedFade.Progress - 0.5f) < 0.001f,
+                $"progress={retainedFade?.Progress}");
+            var readded = withPulse.Width(121);
+            loopingReconciler.Update(remaining, readded, loopingTarget, () => { });
+            await Harness.Render();
+            H.Check(name + "PulseRestartsWithSameTrigger", loopingVisual.TryGetAnimationController("Scale") is not null);
+            loopingReconciler.Update(readded, plainTarget, loopingTarget, () => { });
+        }
+
+        static KeyframeBuilder OpacityPulse(KeyframeBuilder kf) => kf.Loop().Duration(60000)
+            .At(0, opacity: 1).At(1, opacity: 0.5f);
+        var opacityAtOne = animated.Keyframes("pulse", 1, OpacityPulse);
+        var opacityAtTwo = animated.Keyframes("pulse", 2, OpacityPulse);
+        foreach (var (scenario, next, replaysOpacity) in new[]
+        {
+            ("PulseTriggerUnchanged", opacityAtOne, false),
+            ("PulseTriggerChanged", opacityAtTwo, true),
+            ("RepeatedPulseTriggerUnchanged", opacityAtOne.Keyframes("pulse", 1, OpacityPulse), false),
+            ("RepeatedPulseTriggerChanged", opacityAtOne.Keyframes("pulse", 2, OpacityPulse), true),
+            ("RepeatedPulseSkipsSameTriggerScale", opacityAtTwo.Keyframes("pulse", 2, Pulse), true),
+        })
+        {
+            string name = "TransformKeyframes_" + scenario;
+            loopingReconciler.Update(plainTarget, initialScale, loopingTarget, () => { });
+            H.Check(name + "_NonDefaultScaleBase", loopingVisual.Scale == new Vector3(2, 2, 1));
+            loopingReconciler.Update(initialScale, scaled, loopingTarget, () => { });
+            await Harness.Render();
+            var scaleLoop = loopingVisual.TryGetAnimationController("Scale");
+            H.Check(name + "_ScaleLoopStarted", scaleLoop is not null);
+            if (scaleLoop is not null)
+            {
+                scaleLoop.Pause();
+                scaleLoop.Progress = 0.5f;
+            }
+
+            H.Check(name + "_SameControl", loopingReconciler.Update(scaled, next, loopingTarget, () => { }) is null);
+            await Harness.Render();
+            var currentScale = loopingVisual.TryGetAnimationController("Scale");
+            if (replaysOpacity)
+                H.Check(name + "_ScaleReset", loopingVisual.Scale == Vector3.One && currentScale is null,
+                    $"scale={loopingVisual.Scale}, loop={currentScale is not null}");
+            else
+                H.Check(name + "_ScaleLoopRetained", currentScale is not null && Math.Abs(currentScale.Progress - 0.5f) < 0.001f,
+                    $"progress={currentScale?.Progress}");
+            H.Check(name + "_OpacityMatchesTrigger",
+                (loopingVisual.TryGetAnimationController("Opacity") is not null) == replaysOpacity);
+            loopingReconciler.Update(next, plainTarget, loopingTarget, () => { });
+        }
+        H.SetContent(null);
+
+        foreach (var (scenario, removeChildPulse, childWritesScale) in new[]
+        {
+            ("FlyoutChildAdvancesTrigger", false, false),
+            ("FlyoutChildDropsPulse", true, false),
+            ("FlyoutChildWritesScale", false, true),
+        })
+        {
+            using var reconciler = new Reconciler();
+            string name = "TransformKeyframes_" + scenario;
+            var leaf = Border(TextBlock("Shared Keyframes"));
+            var fadeOnly = leaf.Keyframes("fade", 0, OpacityPulse);
+            var beforeChild = removeChildPulse ? fadeOnly.Keyframes("pulse", 1, OpacityPulse) : leaf;
+            var afterChild = (removeChildPulse ? fadeOnly : leaf.Keyframes("pulse", 1, OpacityPulse)).Width(120);
+            if (childWritesScale)
+                afterChild = afterChild.Set(static control =>
+                {
+                    var childVisual = ElementCompositionPreview.GetElementVisual(control);
+                    var implicitAnimations = childVisual.ImplicitAnimations;
+                    childVisual.ImplicitAnimations = null;
+                    childVisual.Scale = new Vector3(3, 3, 1);
+                    childVisual.ImplicitAnimations = implicitAnimations;
+                });
+            var menu = TextBlock("Menu");
+            var curve = Curve.Linear(60000);
+            FlyoutElement Wrap(Element child) => Flyout(child, menu).Animate(curve, AnimateProperty.Scale);
+
+            var initial = Wrap(beforeChild);
+            var seed = Flyout(beforeChild, menu).Scale(2);
+            var before = initial.Scale(2).Keyframes("pulse", 2, Pulse);
+            var after = Wrap(afterChild).Keyframes("pulse", 2, removeChildPulse ? Pulse : OpacityPulse);
+            var target = (Border)reconciler.Mount(initial, () => { })!;
+            H.SetContent(target);
+            await Harness.Render();
+            var visual = ElementCompositionPreview.GetElementVisual(target);
+            reconciler.Update(initial, seed, target, () => { });
+            H.Check(name + "_NonDefaultScaleBase", visual.Scale == new Vector3(2, 2, 1));
+            reconciler.Update(seed, before, target, () => { });
+            await Harness.Render();
+            var scale = visual.TryGetAnimationController("Scale");
+            H.Check(name + "_ScaleLoopStarted", scale is not null);
+            if (scale is not null)
+            {
+                scale.Pause();
+                scale.Progress = 0.5f;
+            }
+            H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null && target.Width == 120);
+            await Harness.Render();
+            var currentScale = visual.TryGetAnimationController("Scale");
+            if (removeChildPulse)
+                H.Check(name + "_ScaleLoopRetained", currentScale is not null && Math.Abs(currentScale.Progress - 0.5f) < 0.001f,
+                    $"progress={currentScale?.Progress}");
+            else
+                H.Check(name + (childWritesScale ? "_SetterPreserved" : "_ScaleReset"),
+                    currentScale is null && visual.Scale == (childWritesScale ? new Vector3(3, 3, 1) : Vector3.One)
+                    && visual.TryGetAnimationController("Opacity") is not null,
+                    $"scale={visual.Scale}, loop={currentScale is not null}");
+            reconciler.Update(after, Flyout(leaf, menu), target, () => { });
+            H.SetContent(null);
+        }
+
+        using var opacityReconciler = new Reconciler();
+        var opacityTarget = Border(TextBlock("Looping Opacity"));
+        var opacityAnimated = opacityTarget.Animate(Curve.Linear(60000), AnimateProperty.Opacity);
+        var opacityLoop = opacityAnimated.Keyframes("fade", 1, OpacityPulse);
+        var withOpacity = opacityLoop.Opacity(0.4);
+        var opacityControl = (Border)opacityReconciler.Mount(opacityAnimated, () => { })!;
+        opacityControl.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.65d) } };
+        H.SetContent(opacityControl);
+        await Harness.Render();
+        var opacityVisual = ElementCompositionPreview.GetElementVisual(opacityControl);
+        // Seed a base value that differs from the style so the deferred reset is observable.
+        var opacityImplicit = opacityVisual.ImplicitAnimations;
+        opacityVisual.ImplicitAnimations = null;
+        opacityVisual.Opacity = 0.4f;
+        opacityVisual.ImplicitAnimations = opacityImplicit;
+        H.Check("TransformKeyframes_OpacityNonDefaultBase", Math.Abs(opacityVisual.Opacity - 0.4f) < 0.001f);
+        opacityReconciler.Update(opacityAnimated, withOpacity, opacityControl, () => { });
+        await Harness.Render();
+        var opacityController = opacityVisual.TryGetAnimationController("Opacity");
+        H.Check("TransformKeyframes_OpacityLoopStarted", opacityController is not null);
+        if (opacityController is not null)
+        {
+            opacityController.Pause();
+            opacityController.Progress = 0.5f;
+        }
+        opacityReconciler.Update(withOpacity, opacityLoop, opacityControl, () => { });
+        await Harness.Render();
+        var retainedOpacity = opacityVisual.TryGetAnimationController("Opacity");
+        H.Check("TransformKeyframes_OpacityLoopRetained", retainedOpacity is not null
+            && Math.Abs(retainedOpacity.Progress - 0.5f) < 0.001f, $"progress={retainedOpacity?.Progress}");
+        H.Check("TransformKeyframes_OpacityStyleReleased", opacityControl.ReadLocalValue(UIElement.OpacityProperty) == DependencyProperty.UnsetValue
+            && Math.Abs(opacityControl.Opacity - 0.65) < 0.001);
+        opacityReconciler.Update(opacityLoop, opacityTarget, opacityControl, () => { });
+        H.Check("TransformKeyframes_OpacityResetAfterLoopRemoval", opacityVisual.TryGetAnimationController("Opacity") is null
+            && Math.Abs(opacityVisual.Opacity - 0.65f) < 0.001f, $"opacity={opacityVisual.Opacity}");
+        H.SetContent(null);
     }
 }
 
@@ -304,6 +535,25 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
     {
         ControlRegistry.RegisterDecorator<Forwarder>(static () => new ForwarderHandler());
         ControlRegistry.RegisterDecorator<OpaqueForwarder>(static () => new OpaqueForwarderHandler());
+        foreach (bool legacy in new[] { false, true })
+        {
+            using var reconciler = new Reconciler();
+            var after = Flyout(Border(TextBlock("Unrelated target")).Scale(2), TextBlock("Menu"));
+            if (legacy)
+                reconciler.RegisterType<FlyoutElement, Border>(static (_, _, _) => new Border(), static (_, _, _, _, _) => null);
+            else
+                reconciler.RegisterHandler<FlyoutElement, Border>(new IndependentFlyoutHandler());
+
+            var before = after.Scale(3);
+            var target = (Border)reconciler.Mount(before, () => { })!;
+            H.SetContent(target);
+            await Harness.Render();
+            string name = $"TransformDecorator_PerHostFlyout_{(legacy ? "RegisterType" : "RegisterHandler")}";
+            H.Check(name + "_OuterScaleApplied", target.Child is null && target.Scale == new Vector3(3, 3, 1));
+            H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+            H.Check(name + "_ScaleReset", target.Scale == Vector3.One, $"scale={target.Scale}");
+            H.SetContent(null);
+        }
         using (var reconciler = new Reconciler())
         {
             var leaf = TextBlock("Plain memo output") with { CallSite = null };
@@ -569,6 +819,12 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
 
     private sealed record Forwarder(Element Target) : Element;
     private sealed record OpaqueForwarder(Element Target) : Element;
+    private sealed class IndependentFlyoutHandler : IElementHandler<FlyoutElement, Border>
+    {
+        public Border Mount(MountContext context, FlyoutElement element) => new();
+        public void Update(UpdateContext context, FlyoutElement oldElement, FlyoutElement newElement, Border control) { }
+    }
+
     private sealed class OpaqueForwarderHandler : IDecoratorElementHandler<OpaqueForwarder>
     {
         public UIElement Mount(MountContext context, OpaqueForwarder element) => context.MountChild(element.Target)!;

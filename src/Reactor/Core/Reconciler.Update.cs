@@ -226,6 +226,15 @@ public sealed partial class Reconciler
                 ClearPropertyAnimation(control, properties);
         }
 
+        var keyframes = newEl.KeyframeAnimations;
+        bool targetCanAdvanceTrigger = keyframes is not null && IsFlyoutDecorator(newEl)
+            && _v1Handlers.TryGet(newEl.GetType(), out var keyframeHandler) && keyframeHandler.PreservesTargetTag;
+        // Release removed declarations before setters. A shared target can change a
+        // retained name's trigger before the decorator reaches its own playback.
+        if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
+            ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
+                ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
+
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
 
@@ -406,8 +415,12 @@ public sealed partial class Reconciler
             ClearInteractionStates(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
-        if (newEl.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(target, newEl.KeyframeAnimations);
+        if (keyframes is not null)
+        {
+            if (targetCanAdvanceTrigger && result is null)
+                ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
+            ApplyKeyframeAnimations(target, keyframes);
+        }
         else if (oldEl.KeyframeAnimations is not null)
             ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
 
