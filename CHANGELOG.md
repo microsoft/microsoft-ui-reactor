@@ -90,6 +90,12 @@ Conventions for contributors:
   without rooting whole assemblies. Provider-free controls and explicit registration
   remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
 
+- Generated wrappers now support multiple controlled properties, including range endpoints
+  sharing one native event, without losing callbacks or notifying unchanged endpoints.
+  Controlled bindings also coexist with ordinary events, reassert parent values, and
+  suppress synchronous, deferred, silent-setter and coercion echoes. The obsolete
+  `REACTORGEN012` warning is retired (spec 058 §8.2, issue #1564).
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and

@@ -81,7 +81,8 @@ namespace Microsoft.UI.Reactor.Wrappers
     /// the <c>{Prop}Changed</c> convention (e.g. ToggleSwitch.IsOn ↔ Toggled); use <see cref="Events"/> when
     /// the two-way value is signalled by several events (e.g. CheckBox/RadioButton IsChecked ↔ Checked +
     /// Unchecked). With <see cref="Events"/> the new value is read back from the control property after any of
-    /// the events fire.</summary>
+    /// the events fire. Multiple controlled properties may share an event; composite wrappers
+    /// notify only properties whose native readback changed, using the current element's callbacks.</summary>
     [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Struct, AllowMultiple = true)]
     public sealed class WrapControlledAttribute : global::System.Attribute
     {
@@ -101,7 +102,10 @@ namespace Microsoft.UI.Reactor.Wrappers
         /// default synchronous value-diff <c>Controlled</c>. Required for controlled values whose change event is NOT a
         /// synchronous, exact-comparable round-trip — deferred / coercing string boxes such as
         /// <c>PasswordBox.Password</c>, <c>AutoSuggestBox.Text</c>, <c>RichEditBox</c>. The generated trampoline gates on
-        /// the public <c>ReactorBinding.ShouldSuppressEcho</c> primitive and re-reads the control value. Single <see cref="ChangedEvent"/> only.</summary>
+        /// the public <c>ReactorBinding.ShouldSuppressEcho</c> primitive and re-reads the control value.
+        /// This selects the single-controlled fast path (single <see cref="ChangedEvent"/> only).
+        /// Composite wrappers instead track each property's native readback and support all
+        /// declared events without requiring this flag.</summary>
         public bool Deferred { get; set; }
     }
 

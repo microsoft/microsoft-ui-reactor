@@ -1617,22 +1617,77 @@ public partial record GadgetElement;
         Assert.Empty(result.Diagnostics);
     }
 
-    [Fact]
-    public void Two_Controlled_Props_On_One_Control_Reports_REACTORGEN012()
+    [Theory]
+    [InlineData("Clicked")]
+    [InlineData("State")]
+    public void Two_Controlled_Props_Share_One_Dispatch_With_Independent_Observations(string changedEvent)
     {
-        // A control has a single per-control controlled-event state slot, so only
-        // one controlled/two-way prop works; a second silently never fires. Two
-        // [WrapControlled] props bound to the same event (RangeSelector pattern)
-        // must surface a REACTORGEN012 warning (source is still emitted).
-        var result = Run(Stubs + @"
+        var result = Run(Stubs.Replace("Clicked", changedEvent) + $@"
 [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.FakeControl))]
-[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", ChangedEvent = ""Clicked"")]
-[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""Clicked"")]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", ChangedEvent = ""{changedEvent}"")]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""{changedEvent}"")]
 public partial record FakeControlElement;
 ");
-        Assert.Contains(result.Diagnostics, d => d.Id == "REACTORGEN012");
-        // Source is still emitted (the warning doesn't block generation).
-        Assert.Contains(result.GeneratedTrees, t => t.FilePath.EndsWith("FakeControlElement.Wrapper.g.cs", StringComparison.Ordinal));
+        Assert.Empty(result.Diagnostics);
+        var src = WrapperFor(result, "FakeControlElement");
+        Assert.DoesNotContain(".Controlled<", src);
+        Assert.Equal(1, src.Split($"c.{changedEvent} += __Controlled{changedEvent}Handler;").Length - 1);
+        Assert.Equal(1, src.Split("ReactorBinding.ShouldSuppressEcho(c)").Length - 1);
+        Assert.Contains("OnCountChanged?.Invoke(__valueCount);", src);
+        Assert.Contains("OnRatioChanged?.Invoke(__valueRatio);", src);
+        Assert.Contains("state.VersionCount == __versionCount", src);
+        Assert.Contains("state.VersionRatio == __versionRatio", src);
+        Assert.Contains("EqualityComparer<int>.Default.Equals(state.LastCount, __valueCount)", src);
+        Assert.Contains("EqualityComparer<double>.Default.Equals(state.LastRatio, __valueRatio)", src);
+        Assert.Contains($"c.{changedEvent} -= __Controlled{changedEvent}Handler;", src);
+    }
+
+    [Fact]
+    public void Ordinary_Event_Alongside_Controlled_Value_Does_Not_Use_Competing_Payloads()
+    {
+        var result = Run(Stubs + @"
+namespace App
+{
+    public class ObservedControl : FakeControl
+    {
+        public event System.EventHandler<System.EventArgs> CountChanged;
+    }
+}
+[Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.ObservedControl))]
+public partial record ObservedElement;
+");
+        var src = WrapperFor(result, "ObservedElement");
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("c.CountChanged += __ControlledCountChangedHandler;", src);
+        Assert.Contains(".HandCodedEvent<__EventPayload,", src);
+        Assert.Contains("live.OnClicked?.Invoke();", src);
+        Assert.DoesNotContain(".Controlled<", src);
+    }
+
+    [Fact]
+    public void Multiple_Deferred_Props_Wire_Each_Distinct_Event_Exactly_Once()
+    {
+        var result = Run(Stubs + @"
+namespace App
+{
+    public class MultiEventControl : FakeControl
+    {
+        public event System.EventHandler<System.EventArgs> Released;
+    }
+}
+[Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.MultiEventControl))]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", Events = new[] { ""Clicked"", ""Released"" }, Deferred = true)]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""Clicked"", Deferred = true)]
+public partial record MultiEventElement;
+");
+        var src = WrapperFor(result, "MultiEventElement");
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(1, src.Split("c.Clicked += __ControlledClickedHandler;").Length - 1);
+        Assert.Equal(1, src.Split("c.Released += __ControlledReleasedHandler;").Length - 1);
+        Assert.Contains("global::System.EventHandler<global::System.EventArgs> __ControlledReleasedHandler", src);
+        Assert.DoesNotContain(".HandCodedControlled<", src);
+        Assert.Contains("state.WriteDepth++;", src);
+        Assert.Contains("__CaptureControlled(c, state);", src);
     }
 
     [Fact]

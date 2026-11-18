@@ -2037,6 +2037,13 @@ internal static class SelfTestFixtureRegistry
         // through the suppress-counter echo channel via the PUBLIC
         // ReactorBinding.ShouldSuppressEcho primitive.
         "Spec062DeferredControlled_Echo",
+        "MultipleControlled_Shared",
+        "MultipleControlled_TwoValuesOnly",
+        "MultipleControlled_Mixed",
+        "MultipleControlled_Distinct",
+        "MultipleControlled_Deferred",
+        "MultipleControlled_SingleWithEvent",
+        "MultipleControlled_Reentrant",
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity",
@@ -4360,6 +4367,13 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 062 §14 — external no-IVT generated deferred-controlled echo proof.
         "Spec062DeferredControlled_Echo" => new Spec062DeferredControlledFixtures.Echo(harness),
+        "MultipleControlled_Shared" => new MultipleControlledWrapperFixtures.Shared(harness),
+        "MultipleControlled_TwoValuesOnly" => new MultipleControlledWrapperFixtures.TwoValuesOnly(harness),
+        "MultipleControlled_Mixed" => new MultipleControlledWrapperFixtures.Mixed(harness),
+        "MultipleControlled_Distinct" => new MultipleControlledWrapperFixtures.Distinct(harness),
+        "MultipleControlled_Deferred" => new MultipleControlledWrapperFixtures.Deferred(harness),
+        "MultipleControlled_SingleWithEvent" => new MultipleControlledWrapperFixtures.SingleWithEvent(harness),
+        "MultipleControlled_Reentrant" => new MultipleControlledWrapperFixtures.Reentrant(harness),
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity" => new ToggleSwitchWrapperParityFixture.Execution(harness),
