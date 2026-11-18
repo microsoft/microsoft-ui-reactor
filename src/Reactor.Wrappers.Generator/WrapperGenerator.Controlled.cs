@@ -73,7 +73,7 @@ public sealed partial class WrapperGenerator
         sb.AppendLine("        if (state.Subscribed) return;");
         sb.AppendLine("        __CaptureControlled(c, state);");
         foreach (var ev in events)
-            sb.AppendLine($"        c.{ev.Key} += __Controlled{ev.Key};");
+            sb.AppendLine($"        c.{ev.Key} += __Controlled{ev.Key}Handler;");
         sb.AppendLine("        state.Subscribed = true;");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -83,7 +83,7 @@ public sealed partial class WrapperGenerator
         sb.AppendLine("        if (state.Subscribed)");
         sb.AppendLine("        {");
         foreach (var ev in events)
-            sb.AppendLine($"            c.{ev.Key} -= __Controlled{ev.Key};");
+            sb.AppendLine($"            c.{ev.Key} -= __Controlled{ev.Key}Handler;");
         sb.AppendLine("        }");
         sb.AppendLine("        c.ClearValue(__ControlledState.Property);");
         sb.AppendLine("    }");
@@ -91,7 +91,7 @@ public sealed partial class WrapperGenerator
 
         foreach (var ev in events)
         {
-            sb.AppendLine($"    private static readonly {ev.First().Delegate} __Controlled{ev.Key} = static (sender, _) =>");
+            sb.AppendLine($"    private static readonly {ev.First().Delegate} __Controlled{ev.Key}Handler = static (sender, _) =>");
             sb.AppendLine("    {");
             sb.AppendLine($"        if (sender is not {controlFqn} c || c.GetValue(__ControlledState.Property) is not __ControlledState state) return;");
             sb.AppendLine("        if (state.WriteDepth != 0) return;");

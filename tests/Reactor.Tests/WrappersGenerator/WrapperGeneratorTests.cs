@@ -1617,25 +1617,27 @@ public partial record GadgetElement;
         Assert.Empty(result.Diagnostics);
     }
 
-    [Fact]
-    public void Two_Controlled_Props_Share_One_Dispatch_With_Independent_Observations()
+    [Theory]
+    [InlineData("Clicked")]
+    [InlineData("State")]
+    public void Two_Controlled_Props_Share_One_Dispatch_With_Independent_Observations(string changedEvent)
     {
-        var result = Run(Stubs + @"
+        var result = Run(Stubs.Replace("Clicked", changedEvent) + $@"
 [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.FakeControl))]
-[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", ChangedEvent = ""Clicked"")]
-[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""Clicked"")]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", ChangedEvent = ""{changedEvent}"")]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""{changedEvent}"")]
 public partial record FakeControlElement;
 ");
         Assert.Empty(result.Diagnostics);
         var src = WrapperFor(result, "FakeControlElement");
         Assert.DoesNotContain(".Controlled<", src);
-        Assert.Equal(1, src.Split("c.Clicked += __ControlledClicked;").Length - 1);
+        Assert.Equal(1, src.Split($"c.{changedEvent} += __Controlled{changedEvent}Handler;").Length - 1);
         Assert.Equal(1, src.Split("ReactorBinding.ShouldSuppressEcho(c)").Length - 1);
         Assert.Contains("if (__changedCount) live.OnCountChanged?.Invoke(__valueCount);", src);
         Assert.Contains("if (__changedRatio) live.OnRatioChanged?.Invoke(__valueRatio);", src);
         Assert.Contains("EqualityComparer<int>.Default.Equals(state.LastCount, __valueCount)", src);
         Assert.Contains("EqualityComparer<double>.Default.Equals(state.LastRatio, __valueRatio)", src);
-        Assert.Contains("c.Clicked -= __ControlledClicked;", src);
+        Assert.Contains($"c.{changedEvent} -= __Controlled{changedEvent}Handler;", src);
     }
 
     [Fact]
@@ -1654,7 +1656,7 @@ public partial record ObservedElement;
 ");
         var src = WrapperFor(result, "ObservedElement");
         Assert.Empty(result.Diagnostics);
-        Assert.Contains("c.CountChanged += __ControlledCountChanged;", src);
+        Assert.Contains("c.CountChanged += __ControlledCountChangedHandler;", src);
         Assert.Contains(".HandCodedEvent<__EventPayload,", src);
         Assert.Contains("live.OnClicked?.Invoke();", src);
         Assert.DoesNotContain(".Controlled<", src);
@@ -1678,9 +1680,9 @@ public partial record MultiEventElement;
 ");
         var src = WrapperFor(result, "MultiEventElement");
         Assert.Empty(result.Diagnostics);
-        Assert.Equal(1, src.Split("c.Clicked += __ControlledClicked;").Length - 1);
-        Assert.Equal(1, src.Split("c.Released += __ControlledReleased;").Length - 1);
-        Assert.Contains("global::System.EventHandler<global::System.EventArgs> __ControlledReleased", src);
+        Assert.Equal(1, src.Split("c.Clicked += __ControlledClickedHandler;").Length - 1);
+        Assert.Equal(1, src.Split("c.Released += __ControlledReleasedHandler;").Length - 1);
+        Assert.Contains("global::System.EventHandler<global::System.EventArgs> __ControlledReleasedHandler", src);
         Assert.DoesNotContain(".HandCodedControlled<", src);
         Assert.Contains("state.WriteDepth++;", src);
         Assert.Contains("__CaptureControlled(c, state);", src);
