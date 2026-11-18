@@ -100,7 +100,9 @@ public sealed partial class WrapperGenerator
         {
             sb.AppendLine($"    private static readonly {ev.First().Delegate} __Controlled{ev.Key}Handler = static (sender, _) =>");
             sb.AppendLine("    {");
-            sb.AppendLine($"        if (sender is not {controlFqn} c || c.GetValue(__ControlledState.Property) is not __ControlledState state) return;");
+            // Some native delegates declare a different control as sender.
+            // Check the runtime type without emitting an impossible C# pattern.
+            sb.AppendLine($"        if ((object?)sender is not {controlFqn} c || c.GetValue(__ControlledState.Property) is not __ControlledState state) return;");
             sb.AppendLine("        if (state.WriteDepth != 0) return;");
             // Snapshot every affected value before invoking any callback. This
             // also makes reentrant events observe the new baseline.
