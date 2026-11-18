@@ -25,11 +25,7 @@ internal sealed class CameraPreviewLifetime
 
     public void Start() => _loaded.TrySetResult();
 
-    public Task FailAsync()
-    {
-        HasErrors = true;
-        return StopAsync();
-    }
+    public void RecordFailure() => HasErrors = true;
 
     public Task StopAsync()
     {
@@ -54,7 +50,6 @@ internal sealed class CameraPreviewLifetime
             catch (Exception error)
             {
                 Report("start", error);
-                _stopRequested.TrySetResult();
             }
 
             await _stopRequested.Task;

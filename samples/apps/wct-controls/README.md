@@ -154,8 +154,9 @@ callbacks. Completion of asynchronous cleanup still requires a running dispatche
 
 Toolkit failure results and lifecycle exceptions are written to stderr. While
 mounted, exceptions also reach the current `OnPreviewFailed` callback; callbacks
-are not invoked after unmount. A failed start releases any partially acquired
-resources. This adapter uses public Toolkit APIs, not a replacement capture
+are not invoked after unmount. A failed start remains owned until unmount, so
+native camera-switch retries remain covered by the same cleanup. This adapter
+uses public Toolkit APIs, not a replacement capture
 implementation, and does not change device permissions.
 
 Live validation requires a provisioned, permission-approved camera. Open the

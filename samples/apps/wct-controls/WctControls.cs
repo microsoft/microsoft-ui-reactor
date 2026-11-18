@@ -280,7 +280,7 @@ public partial record CameraPreviewElement
         private void OnPreviewFailed(object? sender, CommunityToolkit.WinUI.Controls.PreviewFailedEventArgs args)
         {
             Console.Error.WriteLine($"CameraPreview failed: {args.Error}");
-            _ = _lifetime.FailAsync();
+            _lifetime.RecordFailure();
         }
 
         private void Report(string operation, Exception error)

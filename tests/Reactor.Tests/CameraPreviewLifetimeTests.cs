@@ -101,7 +101,7 @@ public class CameraPreviewLifetimeTests
     }
 
     [Fact]
-    public async Task StartFailure_IsReportedAndCleanedUpWithoutWaitingForUnmount()
+    public async Task StartFailure_IsReportedAndStillCleanedUpOnUnmount()
     {
         var calls = new List<string>();
         var expected = new InvalidOperationException("start failed");
@@ -113,10 +113,13 @@ public class CameraPreviewLifetimeTests
             (operation, error) => errors.Add((operation, error)));
 
         lifetime.Start();
-        await lifetime.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.Equal([("start", expected)], errors);
         Assert.True(lifetime.HasErrors);
+        Assert.False(lifetime.Completion.IsCompleted);
+        Assert.Empty(calls);
+
+        await lifetime.StopAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Equal(["stop", "cleanup", "stop"], calls);
     }
 
@@ -146,26 +149,38 @@ public class CameraPreviewLifetimeTests
     }
 
     [Fact]
-    public async Task ToolkitFailureResult_MarksFailureAndReleasesWithoutAnException()
+    public async Task ToolkitFailureThenNativeRetry_RemainsOwnedUntilUnmount()
     {
         var calls = new List<string>();
+        bool captureActive = false;
         CameraPreviewLifetime? lifetime = null;
         lifetime = new CameraPreviewLifetime(Task.CompletedTask,
             () =>
             {
                 calls.Add("start");
-                _ = lifetime!.FailAsync();
+                lifetime!.RecordFailure();
                 Assert.Equal(["start"], calls);
                 return Task.CompletedTask;
             },
             () => calls.Add("stop"),
-            () => { calls.Add("cleanup"); return Task.CompletedTask; },
+            () =>
+            {
+                calls.Add("cleanup");
+                captureActive = false;
+                return Task.CompletedTask;
+            },
             (_, error) => Assert.Fail(error.ToString()));
 
         lifetime.Start();
-        await lifetime.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-
         Assert.True(lifetime.HasErrors);
+        Assert.False(lifetime.Completion.IsCompleted);
+        Assert.Equal(["start"], calls);
+
+        // Toolkit's switch button may initialize the same helper again after failure.
+        captureActive = true;
+        await lifetime.StopAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.False(captureActive);
         Assert.Equal(["start", "stop", "cleanup", "stop"], calls);
     }
 

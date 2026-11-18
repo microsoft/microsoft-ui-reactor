@@ -135,9 +135,9 @@ Conventions for contributors:
   and selection count while leaving token management to the Toolkit control.
 
 - The Toolkit `CameraPreview` sample now waits for startup before stopping playback
-  and awaiting capture/frame-reader cleanup on unmount. Rapid re-entry waits for
-  the preceding cleanup, and lifecycle failures are reported rather than swallowed
-  (issue #1571).
+  and awaiting capture/frame-reader cleanup on unmount, including after native
+  retries from a failed preview. Rapid re-entry waits for the preceding cleanup,
+  and lifecycle failures are reported rather than swallowed (issue #1571).
 
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
