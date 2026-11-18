@@ -31,6 +31,7 @@ The point of the sample is the **wrapper generator**. Each `[GenerateReactorWrap
 | `TokenizingTextBox`, `RichSuggestBox` | `Exclude = new[]{ "Items" }` | opt out of the auto items slot for an internally-managed collection |
 | `RadialGauge`, `ColorPicker` | (none) | the `{Prop}Changed` convention auto-pairs `Value` / `Color` as two-way controlled props |
 | `RangeSelector` | `[WrapControlled]` on `RangeStart` and `RangeEnd`, both using `ValueChanged` | observe pointer-driven endpoint changes and reassert supplied parent state without reconciliation echoes; keyboard limitation below |
+| `SwitchPresenter` | (none) | populate the native `SwitchCases` collection and drive `Value`; leave the generated content slot unset so Toolkit owns selection |
 | layout panels (`UniformGrid`, `DockPanel`, `WrapPanel`, `StaggeredPanel`) | (none) | children flow through the generated panel slot; the DockPanel example uses the Toolkit's default left docking |
 | `ConstrainedBox`, `LayoutTransformControl` | (none) | a single reconciled content child; both controls affect layout |
 
@@ -99,6 +100,28 @@ mapping. The horizontal bar changes the sibling's height, not the containing
 stack's explicit height (which remains automatic). The stack still measures to fit
 its resized content. No extra size limits or orientation switches are imposed by
 this sample.
+
+## SwitchPresenter
+
+Open `-- --page swp`. Both presenters receive the selected `Value` and real native
+`CaseCollection` entries through `SwitchCases`. Loading, Ready and Error match a
+`Case`; Unknown selects the first presenter's default case and clears the second
+presenter's content. Select Ready again to see both presenters update in place.
+
+The collections and their native `TextBlock` content are memoized for the page's
+lifetime. Toolkit alone chooses `CurrentCase` and assigns its `Content`; the page
+does not compute a selected Reactor child. Leave the generated `content` parameter
+unset. Reactor preserves native content when neither render declares a child;
+supplying a Reactor child would instead let its child strategy replace Toolkit's
+selection. No descriptor customization or presenter reimplementation is needed.
+
+## TokenizingTextBox
+
+The TokenizingTextBox page filters its existing action list by case-insensitive
+substring as text changes (`cal` offers only `Calendar`). An unmatched query has
+no suggestions but can still become a free-text token with a comma. Clearing the
+query restores the full list. Filtering changes `SuggestedItemsSource`, never the
+Toolkit-owned token `Items` collection.
 
 ## Layout
 
