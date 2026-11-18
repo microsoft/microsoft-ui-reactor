@@ -1383,7 +1383,6 @@ public sealed partial class WrapperGenerator : IIncrementalGenerator
     {
         const string Element = "global::Microsoft.UI.Reactor.Core.Element";
         const string Action = "global::System.Action";
-        const string FrameworkElement = "global::Microsoft.UI.Xaml.FrameworkElement";
         const string UIElement = "global::Microsoft.UI.Xaml.UIElement";
         const string Reconciler = "global::Microsoft.UI.Reactor.Core.Reconciler";
         const string ControlRegistry = "global::Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry";

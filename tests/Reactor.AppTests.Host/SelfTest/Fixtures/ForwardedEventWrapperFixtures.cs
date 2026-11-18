@@ -1,5 +1,8 @@
 using Microsoft.UI.Reactor.Core;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Reactor.External.TestControl;
+using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -9,6 +12,120 @@ internal static class ForwardedEventWrapperFixtures
     internal sealed class Deferred(Harness h) : Scenario(h, "Deferred");
     internal sealed class Ordinary(Harness h) : Scenario(h, "Ordinary");
     internal sealed class Combined(Harness h) : Scenario(h, "Combined");
+
+    internal sealed class NativeLifetime(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var log = new List<int>();
+            var generation = 0;
+            Action rerender = () => throw new InvalidOperationException("Not mounted");
+            using var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (tick, bump) = ctx.UseReducer(0);
+                rerender = () => bump(n => n + 1);
+                var current = generation;
+                return Factories.VStack(
+                    new ToggleSwitchWrapperElement { OnIsOnChanged = _ => log.Add(current) }.Width(200 + tick));
+            });
+            await Harness.Render();
+            var seen = new ConditionalWeakTable<WinUI.ToggleSwitch, object>();
+            MarkAndToggle(H, seen);
+            H.Check("ForwardedEvent_Native_InitialCallback", log.SequenceEqual(new[] { 0 }));
+            Collect();
+            H.Check("ForwardedEvent_Native_RcwWasCollected", ToggleAfterCollection(H, seen));
+            H.Check("ForwardedEvent_Native_CallbackAfterRcwCollection", log.SequenceEqual(new[] { 0, 0 }));
+            generation = 1;
+            rerender();
+            await Harness.Render();
+            ToggleAfterCollection(H, seen);
+            H.Check("ForwardedEvent_Native_UpdatedCallbackOnce", log.SequenceEqual(new[] { 0, 0, 1 }));
+
+            var reconciler = host.Reconciler;
+            var oldCalls = 0;
+            var newCalls = 0;
+            var first = (WinUI.ToggleSwitch)reconciler.Mount(
+                new ToggleSwitchWrapperElement { OnIsOnChanged = _ => oldCalls++ }, static () => { })!;
+            first.IsOn = !first.IsOn;
+            H.Check("ForwardedEvent_Pool_InitialCallback", oldCalls == 1);
+            reconciler.UnmountAndPool(first);
+            first.IsOn = !first.IsOn;
+            H.Check("ForwardedEvent_Pool_InactiveWhileReturned", oldCalls == 1);
+            var second = (WinUI.ToggleSwitch)reconciler.Mount(
+                new ToggleSwitchWrapperElement { OnIsOnChanged = _ => newCalls++ }, static () => { })!;
+            H.Check("ForwardedEvent_Pool_SameNativeControl", ReferenceEquals(first, second));
+            second.IsOn = !second.IsOn;
+            H.Check("ForwardedEvent_Pool_CurrentCallbackExactlyOnce", oldCalls == 1 && newCalls == 1);
+            reconciler.UnmountAndPool(second);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void MarkAndToggle(Harness h, ConditionalWeakTable<WinUI.ToggleSwitch, object> seen)
+        {
+            var c = h.FindControl<WinUI.ToggleSwitch>(_ => true)
+                ?? throw new InvalidOperationException("Native toggle did not mount");
+            seen.Add(c, new object());
+            c.IsOn = !c.IsOn;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool ToggleAfterCollection(Harness h, ConditionalWeakTable<WinUI.ToggleSwitch, object> seen)
+        {
+            var c = h.FindControl<WinUI.ToggleSwitch>(_ => true)
+                ?? throw new InvalidOperationException("Native toggle disappeared");
+            c.IsOn = !c.IsOn;
+            return !seen.TryGetValue(c, out _);
+        }
+    }
+
+    internal sealed class WeakLifetime(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            foreach (var kind in new[] { "Single", "Deferred", "Ordinary", "Combined" })
+            {
+                var (weak, handlers) = RetainHandlersOnly(kind);
+                try
+                {
+                    H.Check($"ForwardedEvent_Weak_{kind}_Subscribed", handlers.Length == (kind == "Combined" ? 2 : 1));
+                    Collect();
+                    await Harness.Render();
+                    Collect();
+                    H.Check($"ForwardedEvent_Weak_{kind}_OwnerCollected", weak.Target is null);
+                    foreach (var handler in handlers)
+                        ((EventHandler<ForwardedEventArgs>)handler)(null, new(99));
+                    GC.KeepAlive(handlers);
+                }
+                finally { weak.Free(); }
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static (GCHandle Weak, Delegate[] Handlers) RetainHandlersOnly(string kind)
+        {
+            Element element = kind switch
+            {
+                "Single" => new ForwardedSingleElement { OnValueChanged = static _ => { } },
+                "Deferred" => new ForwardedDeferredElement { OnValueChanged = static _ => { } },
+                "Ordinary" => new ForwardedOrdinaryElement { OnPinged = static _ => { } },
+                _ => new ForwardedCombinedElement
+                {
+                    OnValueChanged = static _ => { }, OnOtherChanged = static _ => { }, OnPinged = static _ => { },
+                },
+            };
+            var c = (ForwardedEventProbe)new Reconciler().Mount(element, static () => { })!;
+            return (GCHandle.Alloc(c, GCHandleType.Weak), c.SnapshotSubscriptions());
+        }
+    }
+
+    private static void Collect()
+    {
+        // The collection is the stimulus: prove native RCW recovery and no strong owner capture.
+        GC.Collect(); // CodeQL[cs/call-to-gc]: intentional lifetime regression.
+        GC.WaitForPendingFinalizers();
+        GC.Collect(); // CodeQL[cs/call-to-gc]: intentional lifetime regression.
+    }
 
     internal abstract class Scenario(Harness h, string kind) : SelfTestFixtureBase(h)
     {

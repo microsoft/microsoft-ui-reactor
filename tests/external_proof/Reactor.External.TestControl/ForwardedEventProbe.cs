@@ -52,6 +52,9 @@ public sealed partial class ForwardedEventProbe : Control
     }
 
     public void Ping(object? sender, ForwardedEventArgs args) => _pinged?.Invoke(sender, args);
+
+    public Delegate[] SnapshotSubscriptions() =>
+        (_changed?.GetInvocationList() ?? []).Concat(_pinged?.GetInvocationList() ?? []).ToArray();
 }
 
 [GenerateReactorWrapper(typeof(ForwardedEventProbe), AutoDiscover = false,
