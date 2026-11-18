@@ -267,15 +267,19 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     }
 
     internal Rect Viewport()
+        => Intersect(new Rect(0, 0, ActualWidth, ActualHeight), ScrollViewport());
+
+    internal Rect ScrollViewport()
     {
-        var rect = new Rect(0, 0, ActualWidth, ActualHeight);
+        // A message clips its selection visuals, not the surrounding chat's drag-scroll edges.
+        Rect? rect = null;
         for (DependencyObject? parent = VisualTreeHelper.GetParent(this); parent is not null;
             parent = VisualTreeHelper.GetParent(parent))
         {
             if (parent is ScrollView or ScrollViewer && parent is FrameworkElement viewport)
-                rect = Intersect(rect, Bounds(viewport));
+                rect = rect is { } clipped ? Intersect(clipped, Bounds(viewport)) : Bounds(viewport);
         }
-        return rect;
+        return rect ?? new Rect(0, 0, ActualWidth, ActualHeight);
     }
 
     internal static Rect Intersect(Rect a, Rect b)
@@ -395,9 +399,17 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void OnDragTick(object? sender, object e)
     {
         if (_pointer is null) return;
-        _dragPoint = LocalPoint(_rootDragPoint);
-        var viewport = Viewport();
-        double delta = _dragPoint.Y < viewport.Top ? -24 : _dragPoint.Y > viewport.Bottom ? 24 : 0;
+        ScrollDrag(_rootDragPoint);
+    }
+
+    internal static double DragScrollDelta(Rect viewport, Point point) =>
+        viewport.Width <= 0 || viewport.Height <= 0 ? 0 :
+        point.Y < viewport.Top ? -24 : point.Y > viewport.Bottom ? 24 : 0;
+
+    internal void ScrollDrag(Point rootPoint)
+    {
+        _dragPoint = LocalPoint(rootPoint);
+        double delta = DragScrollDelta(ScrollViewport(), _dragPoint);
         if (delta == 0) return;
         for (DependencyObject? parent = VisualTreeHelper.GetParent(this); parent is not null;
             parent = VisualTreeHelper.GetParent(parent))
@@ -414,7 +426,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 break;
             }
         }
-        _dragPoint = LocalPoint(_rootDragPoint);
+        _dragPoint = LocalPoint(rootPoint);
         Document.Select(Document.Anchor, HitTest(_dragPoint));
         DrawSelection();
     }

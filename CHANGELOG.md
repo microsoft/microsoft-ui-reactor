@@ -47,6 +47,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
+  not individual message boundaries. Dragging above or below a message while still
+  inside the chat no longer scrolls the timeline (openclaw/openclaw-windows-node#1844).
+
 - **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
   accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
   `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's

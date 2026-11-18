@@ -217,6 +217,17 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Console.WriteLine($"Stationary drag sample {sample}: pointer={stationary.X},{stationary.Y}; scrollPercent={previousScroll}; selectedLength={previousLength}");
             }
             Mouse(4); mouseHeld = false;
+            Thread.Sleep(SampleIntervalMs);
+            double releasedScroll = scroll.Current.VerticalScrollPercent;
+            var releasedRange = longText.GetSelection().Single().Clone();
+            for (int sample = 0; sample < 3; sample++)
+            {
+                Thread.Sleep(SampleIntervalMs);
+                Assert.AreEqual(releasedScroll, scroll.Current.VerticalScrollPercent,
+                    "Releasing the mouse stops stationary edge autoscroll");
+                Assert.IsTrue(releasedRange.Compare(longText.GetSelection().Single()),
+                    "Releasing the mouse stops extending the selection");
+            }
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link at end");
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
             Console.WriteLine($"Received TextChanged={string.Join("|", receivedText)}; TextSelectionChanged={string.Join("|", receivedSelection)}");
