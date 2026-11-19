@@ -248,7 +248,18 @@ public partial record CameraPreviewElement
         {
             _control = control;
             _lifetime = new(previousCleanup, StartAsync, control.Stop, CleanupAsync, Report,
-                () => _control.PreviewFailed -= OnPreviewFailed);
+                () => _control.PreviewFailed -= OnPreviewFailed, SettleAsync);
+        }
+
+        // Low priority runs after continuations already queued at normal priority,
+        // such as Toolkit's camera-switch UI work that the helper semaphore released.
+        private Task SettleAsync()
+        {
+            var settled = new TaskCompletionSource();
+            if (!_control.DispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, settled.SetResult))
+                settled.SetException(new InvalidOperationException("The camera preview dispatcher is shutting down."));
+            return settled.Task;
         }
 
         public void Attach()

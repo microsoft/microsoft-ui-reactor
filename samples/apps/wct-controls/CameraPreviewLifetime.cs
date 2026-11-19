@@ -10,15 +10,18 @@ internal sealed class CameraPreviewLifetime
     private readonly Func<Task> _cleanup;
     private readonly Action<string, Exception> _report;
     private readonly Action? _unsubscribe;
+    private readonly Func<Task>? _settle;
 
     public CameraPreviewLifetime(Task previousCleanup, Func<Task> start, Action stop,
-        Func<Task> cleanup, Action<string, Exception> report, Action? unsubscribe = null)
+        Func<Task> cleanup, Action<string, Exception> report, Action? unsubscribe = null,
+        Func<Task>? settle = null)
     {
         _start = start;
         _stop = stop;
         _cleanup = cleanup;
         _report = report;
         _unsubscribe = unsubscribe;
+        _settle = settle;
         Completion = RunAndUnsubscribeAsync(previousCleanup);
     }
 
@@ -107,11 +110,27 @@ internal sealed class CameraPreviewLifetime
                 finally
                 {
                     // A Toolkit camera-switch continuation can restore playback
-                    // while helper cleanup waits for its capture semaphore.
+                    // while helper cleanup waits for its capture semaphore. It is
+                    // queued before cleanup resumes, so settle lets it run first.
+                    await SettleAsync();
                     bool stopped = StopPlayback("stop after cleanup");
                     ReleaseSucceeded = cleanupSucceeded && stopped;
                 }
             }
+        }
+    }
+
+    private async Task SettleAsync()
+    {
+        if (_settle is null)
+            return;
+        try
+        {
+            await _settle();
+        }
+        catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException)
+        {
+            Report("settle", error);
         }
     }
 

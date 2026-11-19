@@ -48,6 +48,45 @@ public class CameraPreviewLifetimeTests
     }
 
     [Fact]
+    public async Task QueuedSwitchContinuation_SettlesBeforeFinalStopAndUnsubscribe()
+    {
+        var events = new List<string>();
+        bool playing = false;
+        var started = new TaskCompletionSource();
+        var lifetime = new CameraPreviewLifetime(Task.CompletedTask,
+            () => { playing = true; started.SetResult(); return Task.CompletedTask; },
+            () => { playing = false; events.Add("stop"); },
+            () => { events.Add("cleanup"); return Task.CompletedTask; },
+            (operation, _) => events.Add(operation),
+            () => events.Add("unsubscribe"),
+            () => { playing = true; events.Add("switch"); return Task.CompletedTask; });
+        lifetime.Start();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await lifetime.StopAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(["stop", "cleanup", "switch", "stop", "unsubscribe"], events);
+        Assert.False(playing);
+        Assert.True(lifetime.ReleaseSucceeded);
+    }
+
+    [Fact]
+    public async Task SettleFailure_IsReportedAndFinalStopStillRuns()
+    {
+        var events = new List<string>();
+        var started = new TaskCompletionSource();
+        var lifetime = new CameraPreviewLifetime(Task.CompletedTask,
+            () => { started.SetResult(); return Task.CompletedTask; },
+            () => events.Add("stop"),
+            () => Task.CompletedTask,
+            (operation, _) => events.Add(operation),
+            settle: () => Task.FromException(new InvalidOperationException("settle")));
+        lifetime.Start();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await lifetime.StopAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(["stop", "settle", "stop"], events);
+        Assert.True(lifetime.HasErrors);
+    }
+
+    [Fact]
     public async Task ReplacementMountedBeforePreviousRetires_WaitsForPreviousCleanup()
     {
         var queue = new CameraPreviewCleanupQueue();
