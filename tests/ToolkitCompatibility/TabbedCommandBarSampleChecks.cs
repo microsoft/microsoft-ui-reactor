@@ -121,10 +121,10 @@ internal static class TabbedCommandBarSampleChecks
         var body = CompatibilityRoot.Descendants(WindowRoot).OfType<Native.TextBlock>()
             .SingleOrDefault(t => t.Text.StartsWith("Document body", StringComparison.Ordinal));
         Program.Check(body is not null, "Actual sample document body is absent from the visual tree.");
-        CheckVisible(body!);
-        Program.Check(!CompatibilityRoot.Descendants(bar).Contains(body!),
+        CheckVisible(body);
+        Program.Check(!CompatibilityRoot.Descendants(bar).Contains(body),
             "Document must be composed outside the native command bar.");
-        var documentBounds = body!.TransformToVisual(WindowRoot)
+        var documentBounds = body.TransformToVisual(WindowRoot)
             .TransformBounds(new Windows.Foundation.Rect(0, 0, body.ActualWidth, body.ActualHeight));
         var barBounds = bar.TransformToVisual(WindowRoot)
             .TransformBounds(new Windows.Foundation.Rect(0, 0, bar.ActualWidth, bar.ActualHeight));

@@ -192,7 +192,10 @@ Pass `-PrepareMsixOnly` to build final archives without retrying an
 approval-blocked installation. Each archive gets an `installation-request.json`
 containing its hash, identity, alias, source revision, exact install command,
 administrator requirement and all-users installation/cleanup scope. Archive-only
-preparation does not perform an all-users package query or installation.
+preparation does not perform an all-users package query or installation; it also
+writes `blocker.json` with reason `approval`, which is the only way the summary
+reports an approval blocker. A lane that installed and then failed is reported
+by its actual failure, not as approval-blocked.
 
 The dependency-free script checks exercise synthetic result streams, mocked Appx
 commands and owned console child processes. They do not install packages, elevate,

@@ -123,6 +123,33 @@ try {
         if (@($summary | Where-Object status -eq 'passed').Count -ne 2) { throw 'Expected both valid scenario rows.' }
         Write-Output 'PASS summary failed-inventory-beside-valid-lane'
     } catch { $summaryFailures.Add("Partial inventory from a failed lane planned the summary: $_") }
+
+    # An MSIX archive request is written before every installation, so it is not an approval blocker.
+    @{
+        revision = 'synthetic-protocol-fixture'
+        controls = @('SettingsCard')
+        parameters = @{ Runtime = @('jit'); Deployment = @('unpackaged', 'msix') }
+    } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'run.json')
+    ConvertTo-Json -InputObject @(
+        @{ lane = 'jit-unpackaged'; status = 'passed'; detail = 'Synthetic fixture' },
+        @{ lane = 'jit-msix'; status = 'failed'; detail = 'Inventory process failed.' }) |
+        Set-Content (Join-Path $directory 'matrix.json')
+    $msixLane = Join-Path $directory 'jit-msix'
+    New-Item $msixLane -ItemType Directory | Out-Null
+    '{"archive":"synthetic.msix"}' | Set-Content (Join-Path $msixLane 'installation-request.json')
+    foreach ($blockerCase in @(@{ Name = 'installed-msix-inventory-failure'; Blocker = $false; Kind = 'not-executed' },
+                               @{ Name = 'approval-blocked-msix'; Blocker = $true; Kind = 'approval' })) {
+        if ($blockerCase.Blocker) {
+            @{ reasonKind = 'approval'; detail = 'Synthetic approval blocker' } | ConvertTo-Json |
+                Set-Content (Join-Path $msixLane 'blocker.json')
+        }
+        & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null
+        $msixRows = @(Get-Content (Join-Path $directory 'scenario-matrix.json') -Raw | ConvertFrom-Json |
+            Where-Object lane -EQ 'jit-msix')
+        if ($msixRows.Count -eq 0 -or @($msixRows | Where-Object reasonKind -NE $blockerCase.Kind).Count) {
+            $summaryFailures.Add("MSIX lane reason was not '$($blockerCase.Kind)': $($blockerCase.Name)")
+        } else { Write-Output "PASS summary $($blockerCase.Name)" }
+    }
 } finally {
     Remove-Item -LiteralPath $directory -Recurse -Force
 }

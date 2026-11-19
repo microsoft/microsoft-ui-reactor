@@ -49,6 +49,24 @@ internal static class ProtocolSelfTest
             });
             Expect(writer.Failed == 2, "a later render step in the same scenario does not erase an earlier error");
 
+            await writer.RunAsync("Fixture", "blocked-without-error", () =>
+                throw new ScenarioBlockedException("not exercised"));
+            Expect(writer.Failed == 2 && writer.Blocked == 1, "a blocked scenario with no render error stays blocked");
+
+            await writer.RunAsync("Fixture", "error-then-blocked", () =>
+            {
+                Report("before blocked", "Effect");
+                throw new ScenarioBlockedException("not exercised");
+            });
+            Expect(writer.Failed == 3 && writer.Blocked == 1, "a render error before a blocked classification fails the scenario");
+
+            await writer.RunAsync("Fixture", "error-then-inapplicable", () =>
+            {
+                Report("before inapplicable", "Render");
+                throw new NativeContractException("no native contract");
+            });
+            Expect(writer.Failed == 4, "a render error before an inapplicable classification fails the scenario");
+
             bool threw = false;
             try { await CompatibilityRoot.WaitAsync(() => true, "cleanup after a failed scenario"); }
             catch (InvalidOperationException) { threw = true; }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -86,7 +87,7 @@ internal static class Program
         return Results.ExitCode;
     }
 
-    internal static void Check(bool condition, string detail)
+    internal static void Check([DoesNotReturnIf(false)] bool condition, string detail)
     {
         if (!condition)
             throw new InvalidOperationException(detail);
@@ -194,9 +195,12 @@ internal sealed class CompatibilityRoot : Component
         ThrowRenderError();
     }
 
+    internal static bool HasScenarioRenderError =>
+        Program.RenderErrorCount > Program.ScenarioErrorBaseline && Program.LastRenderError is not null;
+
     internal static void ThrowRenderError()
     {
-        if (Program.RenderErrorCount > Program.ScenarioErrorBaseline && Program.LastRenderError is { } error)
+        if (HasScenarioRenderError && Program.LastRenderError is { } error)
             throw new InvalidOperationException(
                 $"Reactor {error.Source} failed ({Program.RenderErrorCount - Program.ScenarioErrorBaseline} error(s) in this scenario).",
                 error.Exception);
@@ -456,8 +460,17 @@ internal sealed class ResultWriter
         // between two renders, turn an otherwise satisfied result into a failure.
         Program.ScenarioErrorBaseline = Program.RenderErrorCount;
         try { await action(); CompatibilityRoot.ThrowRenderError(); Write(control, scenario, "passed", "Assertions satisfied."); }
-        catch (ScenarioBlockedException ex) { Block(control, scenario, ex.Message, ex.ReasonKind); }
-        catch (NativeContractException ex) { Inapplicable(control, scenario, ex.Message); }
+        // Blocked and inapplicable are only honest when Reactor reported no error meanwhile.
+        catch (ScenarioBlockedException ex) when (!CompatibilityRoot.HasScenarioRenderError)
+        { Block(control, scenario, ex.Message, ex.ReasonKind); }
+        catch (NativeContractException ex) when (!CompatibilityRoot.HasScenarioRenderError)
+        { Inapplicable(control, scenario, ex.Message); }
+        catch (Exception ex) when (ex is ScenarioBlockedException or NativeContractException)
+        {
+            Failure(control, scenario, new InvalidOperationException(
+                $"Reactor {Program.LastRenderError!.Source} failed before the scenario was classified as {ex.GetType().Name}: {ex.Message}",
+                Program.LastRenderError.Exception));
+        }
         catch (Exception ex) { Failure(control, scenario, ex); }
         finally { Program.ScenarioErrorBaseline = Program.RenderErrorCount; }
     }

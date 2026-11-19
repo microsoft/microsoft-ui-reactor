@@ -69,8 +69,9 @@ foreach ($laneName in $plannedLanes) {
                 }
             } else {
                 $status = if ($failure) { 'failed' } else { 'blocked' }
+                $blockerFile = Join-Path $laneDirectory 'blocker.json'
                 $kind = if ($failure) { 'incomplete-evidence' }
-                    elseif (Test-Path (Join-Path $laneDirectory 'installation-request.json')) { 'approval' }
+                    elseif (Test-Path $blockerFile) { (Get-Content $blockerFile -Raw | ConvertFrom-Json).reasonKind }
                     else { 'not-executed' }
                 $detail = if ($failure) { $failure }
                     elseif ($lane.Count) { $lane[0].detail }

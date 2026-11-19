@@ -261,6 +261,9 @@ foreach ($runtimeName in $Runtime) {
                         installCommand = "Add-AppxPackage -Path '$escapedArchive' -AllowUnsigned -ErrorAction Stop"
                     } | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $lane 'installation-request.json')
                     if ($PrepareMsixOnly) {
+                        # The only approval blocker; an archive alone does not mean installation was withheld.
+                        @{ reasonKind = 'approval'; detail = 'Real MSIX archive prepared; installation is approval-blocked and was not attempted.' } |
+                            ConvertTo-Json | Set-Content (Join-Path $lane 'blocker.json')
                         throw 'Real MSIX archive prepared. Installation is approval-blocked; no installation was attempted.'
                     }
                 }
