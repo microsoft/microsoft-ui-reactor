@@ -1,4 +1,9 @@
 
+# Animation Pipeline
+
+This page maps the four authoring surfaces onto the underlying compositor
+and explains the trade-offs that pick one surface over another.
+
 Microsoft.UI.Reactor (Reactor)'s animation surface looks deceptively simple — set
 `.Opacity(visible ? 1 : 0)` and attach `.OpacityTransition()`, and the
 property change animates on next render. Underneath, four distinct
@@ -16,12 +21,8 @@ on a layout property (Width, Height, Margin) and finding the animation
 stutters; those properties live in WinUI's layout system, not the
 compositor's, so they animate at layout rate instead of frame rate.
 
-# Animation Pipeline
-
-This page maps the four authoring surfaces onto the underlying
-compositor and explains the trade-offs that pick one surface over
-another. The user-facing API is on the
-[Animation](animation.md) page; this is the internals view.
+The user-facing API is on the [Animation](animation.md) page; this is the
+internals view.
 
 ## The four systems
 

@@ -1,19 +1,20 @@
 
 # Packaging
 
-A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK executable —
-`dotnet publish` produces the deployable artifact and the framework
-itself adds nothing exotic to the project file. What you choose at
-publish time is the **shape** of that artifact: a packaged MSIX
-(the [`dotnet new reactor`](getting-started.md) default), an unpackaged
-folder, a single-file bundle, or a Native AOT native binary — each
-combined with a `win-x64` or `win-arm64` runtime identifier. The
-trade-offs are the same ones any WinUI 3 app faces; the
-Reactor-specific notes on this page cover what changes when your
-codebase leans on the reflection-driven pieces of the framework
-([`AutoColumns<T>`](data-system.md), devtools component discovery
-when `Reactor.DevtoolsSupport` is enabled, and the `UseObservableTree`
-INPC walker).
+A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK
+executable — `dotnet publish` produces the deployable artifact and the
+framework itself adds nothing exotic to the project file.
+
+What you choose at publish time is the **shape** of that artifact: a
+packaged MSIX (the [`dotnet new reactor`](getting-started.md) default), an
+unpackaged folder, a single-file bundle, or a Native AOT native binary —
+each combined with a `win-x64` or `win-arm64` runtime identifier. The
+trade-offs are the same ones any WinUI 3 app faces; the Reactor-specific
+notes on this page cover what changes when your codebase leans on the
+reflection-driven pieces of the framework
+([`AutoColumns<T>`](data-system.md), devtools component discovery when
+`Reactor.DevtoolsSupport` is enabled, and the `UseObservableTree` INPC
+walker).
 
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|

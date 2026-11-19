@@ -1,4 +1,9 @@
 
+# Components
+
+Components are the building blocks of a Reactor app. Each component is a class
+with a `Render()` method that returns an element tree describing its UI.
+
 A component in Microsoft.UI.Reactor (Reactor) is a pure function from (state + props) to an element
 tree. `Render()` is called every time the component's state changes or its
 parent's render produces new props, and its only job is to return what the
@@ -15,11 +20,6 @@ becomes the unit of composition that the rest of the framework is built on
 — class components for stateful nodes, function components via `Memo` for
 inline shapes, both composed into trees by being instantiated inside their
 parent's `Render()` return value.
-
-# Components
-
-Components are the building blocks of a Reactor app. Each component is a class
-with a `Render()` method that returns an element tree describing its UI.
 
 ## Reference
 

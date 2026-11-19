@@ -108,7 +108,7 @@ internal static class TierLint
         if (!HasMentalModelLead(assembledBody))
             findings.Add(new TierLintFinding(
                 "REACTOR_DOC_TIER_008",
-                "no mental-model lead paragraph (≥80 words above the first heading)",
+                "no mental-model lead paragraph (≥80 words before the first section heading)",
                 file, 1, Severity(infoOnly)));
 
         if (template.Caveats.Count == 0)
@@ -251,16 +251,31 @@ internal static class TierLint
         return linkCount >= 3;
     }
 
+    /// <summary>
+    /// Counts prose words before the first section heading (level 2 or
+    /// deeper). The page title (<c># </c>), blockquotes, and fenced code are
+    /// skipped, so the lead may sit either above or below the title.
+    /// </summary>
     internal static bool HasMentalModelLead(string body)
     {
         var lines = body.Replace("\r\n", "\n").Split('\n');
         var words = 0;
+        string? fence = null;
         foreach (var raw in lines)
         {
             var line = raw.TrimStart();
-            if (line.StartsWith("#")) break;
-            // Skip front-matter / callout markers
-            if (line.StartsWith(">") || line.StartsWith("```")) continue;
+            if (fence is not null)
+            {
+                if (line.StartsWith(fence)) fence = null;
+                continue;
+            }
+            if (line.StartsWith("```") || line.StartsWith("~~~"))
+            {
+                fence = line[..3];
+                continue;
+            }
+            if (Regex.IsMatch(line, @"^#{2,6}(\s|$)")) break;
+            if (line.StartsWith("# ") || line.StartsWith(">")) continue;
             words += line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         }
         return words >= 80;

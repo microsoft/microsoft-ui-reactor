@@ -1,4 +1,3 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Windowing Overview](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/windowing/windowing-overview).
 
 # Windows
 
@@ -8,6 +7,8 @@ windows with `WindowSpec` and `ReactorApp.OpenWindow`, while keeping the same
 declarative component model used inside a page.
 
 ![Window lifecycle from WindowSpec to ReactorWindow host, native AppWindow chrome, display and taskbar integration, then close/dispose cleanup](images/windows/lifecycle.svg)
+
+> **WinUI reference:** For the full property surface and design guidance, see [Windowing Overview](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/windowing/windowing-overview).
 
 ## Lifecycle basics
 

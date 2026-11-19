@@ -12,6 +12,12 @@ goal: |
 tier: comprehensive
 ---
 
+# Accessibility
+
+Reactor provides accessibility modifiers on every component. They map
+directly to WinUI's automation properties, so screen readers, keyboard
+navigation, and test tools work out of the box.
+
 Microsoft.UI.Reactor (Reactor)'s accessibility surface is two layers: modifiers that map to
 WinUI automation properties (`.AutomationName`, `.HeadingLevel`,
 `.Landmark`, `.LiveRegion`, `.TabIndex`, `.AccessKey`) and hooks that
@@ -31,12 +37,8 @@ Modifiers](#tier-1-modifiers) first — those five modifiers cover most
 production cases; everything else on this page is for the
 non-trivial 20%.
 
-# Accessibility
-
-Reactor provides accessibility modifiers on every [component](components.md). They map directly to
-WinUI's automation properties, so screen readers, keyboard navigation, and
-test tools work out of the box. Modifiers are split into two tiers based on
-how often you need them.
+Modifiers are split into two tiers based on how often you need them. Both
+work on every [component](components.md).
 
 ## Reference
 

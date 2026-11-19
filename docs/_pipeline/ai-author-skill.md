@@ -50,7 +50,7 @@ to be; do not mark a page Comprehensive that doesn't meet the bar.
 |------|---------------------|-------------|
 | `stub` | front-matter + title + one paragraph | Placeholder for surface visibility while you draft. "Coming soon" content. |
 | `solid` | ≥3 resolved `snippet=` refs, ≥1 `screenshot://`, a Markdown reference table, `## Tips`, `## Next Steps` with ≥3 links | Default bar for any new page. Code-first, working examples, modifier table. |
-| `comprehensive` | All solid checks plus an ≥80-word mental-model lead paragraph, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
+| `comprehensive` | All solid checks plus a short link-free intro right after the `#` title (the site subtitle), an ≥80-word mental-model lead before the first `##`, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
 
 Stub example:
 

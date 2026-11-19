@@ -13,6 +13,12 @@ goal: |
 tier: comprehensive
 ---
 
+# Dev Tooling
+
+Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
+code, save, and see changes in a running window — no manual restart, no
+state-resetting class reload most of the time.
+
 Microsoft.UI.Reactor (Reactor)'s development workflow is built around fast feedback. The
 runtime is designed to surface the work it is doing — every render,
 every reconcile, every effect, every dispatcher hop — through a small
@@ -26,16 +32,11 @@ every devtools entry point lives behind a build-time capability switch
 (`Reactor.DevtoolsSupport`) plus a session-time opt-in (`--devtools app`)
 so end users never see anything you don't intend to ship.
 
-# Dev Tooling
-
-Reactor's inner loop centers on `dotnet watch` and preview mode: you edit
-code, save, and see changes in a running window — no manual restart, no
-state-resetting class reload most of the time. Surrounding that loop are
-five complementary surfaces — the [`mur` CLI](#the-mur-cli), the
-[MCP server](#mcp-server), the [VS Code panel](#vs-code-panel), the
-[in-app dev menu](#in-app-dev-menu), and the
-[runtime overlays](#runtime-overlays) — each of which lights up only
-when you ask for it.
+Surrounding that loop are five complementary surfaces — the [`mur`
+CLI](#the-mur-cli), the [MCP server](#mcp-server), the [VS Code
+panel](#vs-code-panel), the [in-app dev menu](#in-app-dev-menu), and the
+[runtime overlays](#runtime-overlays) — each of which lights up only when
+you ask for it.
 
 ## Preview Mode
 

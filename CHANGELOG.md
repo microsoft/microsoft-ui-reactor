@@ -195,6 +195,13 @@ Conventions for contributors:
   replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
   the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
 
+- **Guide pages now open with their title and a one-sentence summary.** Each page in
+  `docs/guide` starts with its `#` title, then a short summary that the site shows under the
+  title, then the longer overview. Before, many pages put the overview above the title, and
+  17 pages opened with the WinUI reference note; that note now sits just before the first
+  section. Lint rule `TIER_008` now counts the overview between the title and the first `##`
+  heading. The site build also rewrites links whose text wraps onto a second line.
+
 ### Deprecated
 
 ### Removed

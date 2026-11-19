@@ -337,18 +337,46 @@ export function rewriteTarget(target, pageDir, context) {
   return `${REPO_URL}/${kind}/${context.ref}/${encoded}${fragment}`;
 }
 
-function rewriteLine(line, pageDir, context) {
-  const refDef = REF_DEF.exec(line);
-  if (refDef) return refDef[1] + rewriteTarget(refDef[2], pageDir, context) + refDef[3];
-  return outsideCode(line, (text) =>
-    text.replace(
+function rewriteLinks(text, pageDir, context) {
+  return outsideCode(text, (prose) =>
+    prose.replace(
       LINK,
       (_, bang, label, target, title) => `${bang}[${label}](${rewriteTarget(target, pageDir, context)}${title})`
     )
   );
 }
 
+function rewriteLine(line, pageDir, context) {
+  const refDef = REF_DEF.exec(line);
+  if (refDef) return refDef[1] + rewriteTarget(refDef[2], pageDir, context) + refDef[3];
+  return rewriteLinks(line, pageDir, context);
+}
+
 const blank = (line) => !line.trim();
+
+/**
+ * Rewrites the links on every line outside fences. Prose is handled a paragraph
+ * at a time, because wrapped link text (`[Rules of\nReactor](x.md)`) is still
+ * one link. Headings, table rows and reference definitions stay line by line.
+ */
+function rewriteBody(lines, mask, headings, pageDir, context) {
+  const out = lines.slice();
+  const ownLine = (i) => headings.has(i) || REF_DEF.test(lines[i]) || /^\s*\|/.test(lines[i]);
+  const prose = (i) => i < lines.length && !mask[i] && !blank(lines[i]) && !ownLine(i);
+  for (let i = 0; i < lines.length; ) {
+    if (!prose(i)) {
+      if (!mask[i]) out[i] = rewriteLine(lines[i], pageDir, context);
+      i++;
+      continue;
+    }
+    let end = i;
+    while (prose(end)) end++;
+    const rewritten = rewriteLinks(lines.slice(i, end).join("\n"), pageDir, context).split("\n");
+    for (let k = 0; k < rewritten.length; k++) out[i + k] = rewritten[k];
+    i = end;
+  }
+  return out;
+}
 
 /** The [start, end) line range of the paragraph that begins at or after `from`. */
 function paragraphAt(lines, from) {
@@ -375,6 +403,7 @@ export function convertPage(source, { file, label, context }) {
   const mask = fenceMask(lines);
   const ids = headingIds(lines, mask);
   const pageDir = path.posix.dirname(file) === "." ? "" : path.posix.dirname(file);
+  const rewritten = rewriteBody(lines, mask, ids, pageDir, context);
 
   let title = null;
   let titleAt = null;
@@ -390,7 +419,7 @@ export function convertPage(source, { file, label, context }) {
       titleAt = body.length;
       return;
     }
-    let out = rewriteLine(line, pageDir, context);
+    let out = rewritten[i];
     if (heading && heading.level > 1) out = `${out.replace(/[ \t]+#+[ \t]*$/, "").trimEnd()} [#${heading.id}]`;
     body.push(out);
   });

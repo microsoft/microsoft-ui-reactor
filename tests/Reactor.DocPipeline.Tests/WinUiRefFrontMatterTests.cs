@@ -17,10 +17,41 @@ public class WinUiRefFrontMatterTests
             The Reactor `Button` factory wraps WinUI's `Button`.
             """;
 
-        var template = TemplateParser.ParseContent(content);
+        var body = TemplateParser.ParseContent(content).Body.Replace("\r\n", "\n");
 
-        Assert.StartsWith("> **WinUI reference:**", template.Body);
-        Assert.Contains("[Buttons](https://learn.microsoft.com/en-us/windows/apps/design/controls/buttons)", template.Body);
+        Assert.StartsWith("The Reactor `Button` factory", body.TrimStart());
+        Assert.EndsWith("\n\n> **WinUI reference:** For the full property surface and design guidance, see [Buttons](https://learn.microsoft.com/en-us/windows/apps/design/controls/buttons).\n", body);
+    }
+
+    [Fact]
+    public void Places_callout_before_first_section_outside_code()
+    {
+        var content = """
+            ---
+            title: "Buttons"
+            winui-ref: "https://learn.microsoft.com/en-us/windows/apps/design/controls/buttons"
+            ---
+
+            # Buttons
+
+            Intro.
+
+            ```csharp
+            ## not a heading
+            ```
+
+            ## Usage
+
+            Body.
+            """;
+
+        var body = TemplateParser.ParseContent(content).Body.Replace("\r\n", "\n");
+
+        var callout = body.IndexOf("> **WinUI reference:**", System.StringComparison.Ordinal);
+        Assert.True(callout > body.IndexOf("## not a heading", System.StringComparison.Ordinal));
+        Assert.Contains("```\n\n> **WinUI reference:**", body);
+        Assert.Contains("(https://learn.microsoft.com/en-us/windows/apps/design/controls/buttons).\n\n## Usage", body);
+        Assert.StartsWith("# Buttons\n\nIntro.", body.TrimStart());
     }
 
     [Fact]

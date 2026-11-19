@@ -186,6 +186,14 @@ describe("links", () => {
     });
     assert.match(page, /See \[hooks\]\(\/hooks\) and `\[hooks\]\(\.\.\/hooks\.md\)`/);
   });
+
+  test("link text that wraps onto the next line is still rewritten", () => {
+    const page = convertPage("# Page\n\nIntro.\n\nRead the [Hooks\nguide](../hooks.md) first, then `[a\nb](../hooks.md)`.\n", {
+      file: "a/page.md",
+      context: context(),
+    });
+    assert.match(page, /Read the \[Hooks\nguide\]\(\/hooks\) first, then `\[a\nb\]\(\.\.\/hooks\.md\)`\./);
+  });
 });
 
 describe("page conversion", () => {

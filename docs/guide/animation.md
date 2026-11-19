@@ -1,4 +1,8 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Motion](https://learn.microsoft.com/en-us/windows/apps/design/motion/).
+
+# Animation
+
+Reactor animations are declarative. You set the target value (opacity,
+scale, translation) and attach a transition modifier.
 
 Microsoft.UI.Reactor (Reactor) exposes four animation systems and one rule about which to pick.
 The rule first: the **compositor** can only animate five properties —
@@ -19,12 +23,8 @@ properties none of the above can touch. Read [Compositor animation](#animate-mod
 first if you're picking between `.Animate()` and `.WithAnimation()`,
 or [Choreography](#choreography) if you're trying to sequence steps.
 
-# Animation
-
-Reactor animations are declarative. You set the target value (opacity, scale,
-translation) and attach a transition modifier. When the value changes on the
-next render — driven by [hooks](hooks.md) and state — WinUI animates from
-the old value to the new one automatically.
+When the value changes on the next render — driven by [hooks](hooks.md) and
+state — WinUI animates from the old value to the new one automatically.
 
 Animation and transition configuration changes are also checked on each render,
 even when the element's other properties stay the same. For example, changing
@@ -35,6 +35,8 @@ Value-equivalent plain-data configurations such as `.Animate()` and
 reference equality: rebuilding `.OpacityTransition()`, `.WithTransitions()`,
 `.Keyframes()`, or `.ScrollLinked()` with fresh objects or arrays prevents
 skipping, even when the settings match.
+
+> **WinUI reference:** For the full property surface and design guidance, see [Motion](https://learn.microsoft.com/en-us/windows/apps/design/motion/).
 
 ## Reference
 

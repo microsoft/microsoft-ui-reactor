@@ -10,6 +10,12 @@ goal: |
 tier: comprehensive
 ---
 
+# Hooks
+
+Hooks are functions you call inside `Render()` to manage state, side
+effects, and memoization. They replace the need for view models, event
+handlers, and lifecycle methods.
+
 Hooks are the reactivity contract for a [component](components.md). A hook is a
 positional slot — when `Render()` runs, Microsoft.UI.Reactor (Reactor) walks each `Use*` call in order
 and looks up the matching cell in a per-component slot table held on the
@@ -25,12 +31,6 @@ across unmount/remount with [`UsePersisted`](persistence.md). Every hook on this
 page reads as a function call inside `Render()` and writes back through a
 setter closure; understanding that single shape makes the rest of Reactor
 fall out as composition.
-
-# Hooks
-
-Hooks are functions you call inside [`Render()`](components.md) to manage state, side effects,
-and memoization. They replace the need for view models, event handlers, and
-lifecycle methods.
 
 ## Reference
 

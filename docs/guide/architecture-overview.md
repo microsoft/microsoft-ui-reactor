@@ -1,4 +1,9 @@
 
+# Architecture Overview
+
+This page maps Reactor's runtime end-to-end so the rest of the
+Under-the-hood track has a shared diagram to point at.
+
 Microsoft.UI.Reactor (Reactor) is a declarative shell over WinUI. You write a `Component` whose
 `Render()` method returns an immutable tree of element records — value
 types that describe what you want on screen, not the WinUI controls that
@@ -14,14 +19,10 @@ reading this page as "Reactor wraps XAML" — the element tree is not a
 shadow XAML graph, it is a new authoring surface that happens to
 materialize WinUI.
 
-# Architecture Overview
-
-This page maps Reactor's runtime end-to-end so the rest of the
-Under-the-hood track has a shared diagram to point at. Read it once,
-then jump to the section you care about: [Reactivity
-Model](reactivity-model.md), [Reconciliation](reconciliation.md),
-[Hooks Internals](hooks-internals.md), or
-[Effects Scheduling](effects-scheduling.md).
+Read it once, then jump to the section you care about: [Reactivity
+Model](reactivity-model.md), [Reconciliation](reconciliation.md), [Hooks
+Internals](hooks-internals.md), or [Effects
+Scheduling](effects-scheduling.md).
 
 ## The render loop
 

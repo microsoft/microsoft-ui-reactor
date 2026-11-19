@@ -14,6 +14,10 @@ tier: comprehensive
 winui-ref: https://learn.microsoft.com/en-us/windows/apps/design/controls/dialogs-and-flyouts/
 ---
 
+# Dialogs and Flyouts
+
+Four primitives sit on this page. Pick by shape, not by aesthetic:
+
 Dialog and flyout surfaces interrupt the user. That makes them the most
 costly UI primitive in the app's attention budget — every modal dialog
 steals focus, every flyout dismisses on outside click, every popup
@@ -29,10 +33,6 @@ toolbar, or `Popup` for the bespoke overlay that none of the above
 covers. Pair every dialog with a corresponding entry in
 [commanding.md](commanding.md) — the same `Command` should usually back
 the trigger (button or menu) and the dialog's primary action.
-
-# Dialogs and Flyouts
-
-Four primitives sit on this page. Pick by shape, not by aesthetic:
 
 | Control | Shape | Dismiss | Use when |
 |---|---|---|---|

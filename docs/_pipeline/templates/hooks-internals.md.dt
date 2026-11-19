@@ -14,6 +14,12 @@ goal: |
 tier: comprehensive
 ---
 
+# Hooks Internals
+
+One description of the storage shape behind every hook — enough to debug a
+`HookOrderException`, predict whether `UseState` returns a stable setter,
+and know when reaching for `UseRef` is correct.
+
 A hook in Microsoft.UI.Reactor (Reactor) is a position. When `Render()` runs, the framework
 counts each hook call in order — `UseState` is slot 0, then `UseEffect`
 is slot 1, then `UseMemo` is slot 2 — and stores whatever each hook
@@ -31,14 +37,8 @@ type check on the slot throws `HookOrderException` because the slot
 that used to hold `ValueHookState<int>` now sees a `EffectHookState`
 asking for its bucket.
 
-# Hooks Internals
-
-This page absorbs the legacy `docs/reference/state-and-hooks.md` and
-sits underneath the surface-level [Hooks](hooks.md) reference. The
-goal is one description of the storage shape behind every hook —
-enough to debug a `HookOrderException`, predict whether `UseState`
-returns a stable setter, and know when reaching for `UseRef` is
-correct.
+This page absorbs the legacy `docs/reference/state-and-hooks.md` and sits
+underneath the surface-level [Hooks](hooks.md) reference.
 
 ## The slot table
 

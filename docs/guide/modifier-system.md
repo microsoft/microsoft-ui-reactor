@@ -1,4 +1,9 @@
 
+# Modifier System
+
+This page is the runtime view of the same fluent chain that Styling
+introduces from the surface.
+
 A modifier in Microsoft.UI.Reactor (Reactor) is not an operation — it is a value-bearing
 function `T -> T` that returns a new [`Element`](components.md) record
 with its `Modifiers` slot replaced. `.Bold().Margin(8).Background(Theme.Accent)`
@@ -17,12 +22,9 @@ expecting `.Padding().Background()` to paint differently than
 `.Background().Padding()`; in Reactor it doesn't, because both end up
 in the same merged `Padding` / `Background` slots.
 
-# Modifier System
-
-This page is the runtime view of the same fluent chain
-[Styling](styling.md) introduces from the surface. Both ride on top of
-`ElementExtensions` in `src/Reactor/Elements/`; the difference is which
-half of the call you care about — the API or the fold.
+[Styling](styling.md) covers the API. Both ride on top of
+`ElementExtensions` in `src/Reactor/Elements/`; the difference is which half
+of the call you care about — the API or the fold.
 
 ## Modifiers are flat records, not nested wrappers
 
