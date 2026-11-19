@@ -256,7 +256,11 @@ Border(VStack()).Height(1)
     .Background(Theme.DividerStroke)  // horizontal divider
 
 // System Signal
-Border(HStack(8, TextBlock(""\uE930"").Foreground(Theme.SystemSuccess), TextBlock(""Operation completed successfully"")))
+Border(HStack(8,
+    TextBlock(""\uE930"")
+        .FontFamily(""Segoe Fluent Icons, Segoe MDL2 Assets"")
+        .Foreground(Theme.SystemSuccess),
+    TextBlock(""Operation completed successfully"")))
     .Background(Theme.SystemSuccessBackground)");
 
     static Element BrushSection(string title, string description, BrushEntry[] entries)
