@@ -157,7 +157,10 @@ always follow the earlier revisions' fields of the same event.
     - an items host's item edits: rows inserted, removed or moved by its keyed diff (a diff
       that gives up and re-realizes the list counts once, as does a rebind of its source),
       raw items edited or reordered, and a typed `TreeView`'s nodes added, removed, moved or
-      expanded. A new list equal to the old one is no change.
+      expanded. A new list equal to the old one is no change;
+    - a menu flyout's items (patched natively): an item whose text, enabled or checked state,
+      icon, access key or description changed, or one added, removed or replaced. A new
+      click closure is not a change.
 
     Own properties are compared the way the reconcile-highlight overlay compares them. An
     element type that comparison does not know counts as changed, so some wasted renders report
