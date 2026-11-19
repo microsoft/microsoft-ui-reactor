@@ -126,6 +126,8 @@ policy is relaxed. The runner restores separately, then publishes Release.
 ```powershell
 pwsh tests\ToolkitCompatibility\Test-ResultProtocol.ps1
 pwsh tests\ToolkitCompatibility\Test-RunnerSafety.ps1
+# Headless, no window, after a JIT build of the consumer:
+<consumer output>\ToolkitCompatibility.exe --protocol-self-test
 pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\unique-run
 # Narrow diagnostic, not acceptance of the full inventory:
 pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\settings-run -Runtime jit -Filter SettingsCard
@@ -138,6 +140,8 @@ and are recorded and passed to the consumer using their canonical spelling.
 incrementally flushed `results.jsonl` and `matrix.json` retain the evidence.
 Exit 2 from the consumer means complete results with blocked scenarios; it is
 not success. The matrix runner returns nonzero for any non-passing lane.
+A Reactor render or effect error reported during a scenario fails it, even when
+its state assertions are satisfied; `--protocol-self-test` checks that headlessly.
 
 Generate a complete per-control/per-scenario report, including unexecuted
 approval-blocked lanes, with:

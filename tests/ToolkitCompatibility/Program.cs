@@ -20,7 +20,7 @@ internal static class Program
 #endif
     internal static RunOptions Options { get; private set; } = null!;
     internal static ResultWriter Results { get; private set; } = null!;
-    internal static RenderError? LastRenderError { get; set; }
+    internal static PendingRenderError? LastRenderError { get; set; }
 
     [STAThread]
     private static int Main(string[] args)
@@ -49,6 +49,8 @@ internal static class Program
                     Console.WriteLine($"{name}/{operation}");
             return 0;
         }
+        if (args.SequenceEqual(["--protocol-self-test"]))
+            return ProtocolSelfTest.Run().GetAwaiter().GetResult();
         Options = RunOptions.Parse(args);
         if (Options.List)
         {
@@ -61,7 +63,7 @@ internal static class Program
         Results.Start(Options);
         ReactorApp.DefaultRenderErrorHandler = error =>
         {
-            LastRenderError = error;
+            LastRenderError = new(error.Exception, error.Source.ToString());
             Results.Note($"Reactor {error.Source} error: {error.Exception}");
             return null;
         };
@@ -180,11 +182,13 @@ internal sealed class CompatibilityRoot : Component
                 throw new TimeoutException(description);
             await Task.Delay(25);
         }
+        // A satisfied predicate must not hide a render or effect error reported meanwhile.
+        ThrowRenderError();
     }
 
-    private static void ThrowRenderError()
+    internal static void ThrowRenderError(PendingRenderError? before = null)
     {
-        if (Program.LastRenderError is { } error)
+        if (Program.LastRenderError is { } error && !ReferenceEquals(error, before))
             throw new InvalidOperationException($"Reactor {error.Source} failed.", error.Exception);
     }
 
@@ -430,13 +434,17 @@ internal sealed class ResultWriter
 
     internal void Run(string control, string scenario, Action action)
     {
-        try { action(); Write(control, scenario, "passed", "Assertions satisfied."); }
+        var before = Program.LastRenderError;
+        try { action(); CompatibilityRoot.ThrowRenderError(before); Write(control, scenario, "passed", "Assertions satisfied."); }
         catch (Exception ex) { Failure(control, scenario, ex); }
     }
 
     internal async Task RunAsync(string control, string scenario, Func<Task> action)
     {
-        try { await action(); Write(control, scenario, "passed", "Assertions satisfied."); }
+        // An error left over from an earlier scenario is excluded; one reported during this
+        // scenario turns an otherwise satisfied result into a failure.
+        var before = Program.LastRenderError;
+        try { await action(); CompatibilityRoot.ThrowRenderError(before); Write(control, scenario, "passed", "Assertions satisfied."); }
         catch (ScenarioBlockedException ex) { Block(control, scenario, ex.Message, ex.ReasonKind); }
         catch (NativeContractException ex) { Inapplicable(control, scenario, ex.Message); }
         catch (Exception ex) { Failure(control, scenario, ex); }
