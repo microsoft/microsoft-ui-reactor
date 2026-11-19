@@ -197,16 +197,29 @@ internal sealed class CameraPage : Component
     public override Element Render()
     {
         var (camError, setCamError) = UseState<string?>(null);
+        var (history, updateHistory) = UseReducer<IReadOnlyList<string>>(Array.Empty<string>());
+        var lifetime = UseMemo(static () => new CameraPreviewPageLifetime<CommunityToolkit.WinUI.Controls.CameraPreview>(
+            CameraPreviewElement.StopPreview), Array.Empty<object>());
+        // Host disposal runs effect cleanup, but does not guarantee OnUnmount.
+        UseEffect(() => lifetime.Retire, Array.Empty<object>());
 
         return Gallery.Page(
             "CameraPreview",
-            "An imperative WCT control — its StartAsync-on-mount / Stop-on-unmount lifecycle is declared once via [WrapLifecycle], so the call site is a plain declarative element. PreviewFailed surfaces via OnPreviewFailed.",
-            SettingsCardElement.SettingsCard(
-                header: "Live camera",
-                description: camError is null ? "Streaming (or starting…)" : $"Unavailable — {camError}",
-                content: CameraPreviewElement.CameraPreview(
-                    isFrameSourceGroupButtonVisible: true,
-                    onPreviewFailed: setCamError).Size(440, 280)));
+            "An imperative WCT control — [WrapLifecycle] starts after Loaded, then awaits startup before stopping playback and cleaning up capture on unmount. Failures surface via OnPreviewFailed and stderr.",
+            VStack(12,
+                SettingsCardElement.SettingsCard(
+                    header: "Live camera",
+                    description: camError is null ? "Streaming (or starting…)" : $"Unavailable — {camError}",
+                    content: CameraPreviewElement.CameraPreview(
+                        isFrameSourceGroupButtonVisible: true,
+                        onPreviewFailed: error => lifetime.Report(error, setCamError,
+                            message => updateHistory(previous => [.. previous.TakeLast(19), message])))
+                        .WithKey(lifetime.Key)
+                        .OnMountAdd(control => lifetime.Attach((CommunityToolkit.WinUI.Controls.CameraPreview)control))
+                        .Size(440, 280)),
+                history.Count == 0
+                    ? Empty()
+                    : TextBlock("Camera diagnostics:\n" + string.Join("\n", history)).TextWrapping()));
     }
 }
 

@@ -27,7 +27,7 @@ The point of the sample is the **wrapper generator**. Each `[GenerateReactorWrap
 | `SettingsCard` | `[WrapElementSlot]` on `Description`, `HeaderIcon`; `[WrapManual]` for rich/text header precedence | reconcile rich header/description/icon Elements alongside the main content child |
 | `SettingsExpander` | `[WrapElementSlot]` on `Description`, `Content`, `HeaderIcon`; manual rich/text header; `[WrapControlled]` for `IsExpanded` | reconcile header children alongside items and keep expansion state in the parent via `Expanded` / `Collapsed` |
 | `Segmented` | `[WrapControlled("SelectedIndex", ChangedEvent = "SelectionChanged")]` | two-way bind a value whose change event doesn't follow the `{Prop}Changed` convention |
-| `CameraPreview` | `[WrapLifecycle]` + `[WrapEvent("PreviewFailed", Arg = "Error")]` | declare the imperative start/stop lifecycle once; project typed event args into a callback |
+| `CameraPreview` | `[WrapLifecycle]` + `[WrapEvent("PreviewFailed", Arg = "Error")]` | start after `Loaded`, serialize stop/capture cleanup with startup, and project failures into a callback |
 | `TokenizingTextBox`, `RichSuggestBox` | `Exclude = new[]{ "Items" }` | opt out of the auto items slot for an internally-managed collection |
 | `RadialGauge`, `ColorPicker` | (none) | the `{Prop}Changed` convention auto-pairs `Value` / `Color` as two-way controlled props |
 | `RangeSelector` | `[WrapControlled]` on `RangeStart` and `RangeEnd`, both using `ValueChanged` | observe pointer-driven endpoint changes and reassert supplied parent state without reconciliation echoes; keyboard limitation below |
@@ -138,11 +138,67 @@ adds the prefix) and updates the visible last-choice/count caption. The Toolkit
 still owns the rich document and token collection; the excluded `Items` slot is
 not written. Navigating away and back starts a fresh page.
 
+## Camera lifecycle
+
+The sample owns one Toolkit `CameraHelper` per preview. It starts only after
+`Loaded` has applied the template, so the task returned by `StartAsync(helper)`
+covers initial capture setup rather than leaving it to Toolkit's `async void`
+`OnApplyTemplate`. Unmount before loading never opens a camera. Unmount during
+startup waits for that task, calls `Stop()` to release playback, and awaits
+`CameraHelper.CleanUpAsync()` to release the frame reader and capture resources.
+A final `Stop()` also clears playback restored by an in-flight Toolkit camera
+switch. Before that final stop, cleanup waits for a low-priority dispatcher item,
+so the switch's already-queued UI continuation runs first rather than creating
+playback or raising `PreviewFailed` after the listener is removed.
+Rapid navigation back waits for the previous preview's cleanup. Each
+preview joins that queue when it mounts, not when it unmounts, so a replacement
+mounted before its predecessor unmounts still waits for the earlier release.
+The camera page also requests the same idempotent cleanup from `UseEffect`, since
+host disposal runs effect cleanup but does not guarantee native `OnUnmount`
+callbacks. Completion of asynchronous cleanup still requires a running dispatcher.
+The page lifetime guards late callbacks before requesting cleanup. Its preview
+key survives ordinary renders but changes when hot reload resets hook state, so
+recovery mounts a fresh preview instead of keeping a stopped native control.
+Teardown disables the abandoned native preview before cleanup, preventing its
+camera-switch button from restarting capture if a disposed host leaves it visible.
+
+Toolkit failure results and lifecycle exceptions are written to stderr. While
+mounted, exceptions also reach the current `OnPreviewFailed` callback; callbacks
+are not invoked after unmount. Errors that arrive after unmount are retained and
+handed to the next preview's `OnPreviewFailed` once the earlier cleanup finishes,
+since this `WinExe` may have no visible stderr. The page lists every message in a
+diagnostics history, but only the current preview's own failures mark it
+unavailable. A failed start remains owned
+until unmount, so
+native camera-switch retries remain covered by the same cleanup. This adapter
+uses public Toolkit APIs, not a replacement capture
+implementation, and does not change device permissions.
+The diagnostic failure listener remains attached until pending startup and cleanup
+complete, including when a denied/no-device result arrives after page disposal.
+Cleanup completion alone is not proof of release. If capture cleanup, dispatcher
+settling, final playback shutdown, or listener removal fails, the sample retains
+that lifetime and its failure listener, and blocks new previews with a reported
+error until the sample is restarted.
+Ordinary start/preview failures do not block re-entry after successful cleanup.
+
+Live validation requires a provisioned, permission-approved camera. Open the
+`camera` page, verify actual frames, navigate away during startup and after
+preview begins, verify release, then return and verify a fresh preview. Also
+exercise the camera-switch button while navigating away on multi-camera devices.
+No-device/denied results and headless lifecycle tests do **not** prove live
+preview, device release, or restart. The sample uses the Toolkit's default
+template; arbitrary re-templating while capture is active is not coordinated by
+its public API. Toolkit operations that never complete cannot be cancelled by
+this adapter.
+
 ## Layout
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).
+- `CameraPreviewLifetime.cs` — the camera's asynchronous lifecycle ordering,
+  source-linked into the headless unit tests.
 - `Program.cs` — launch options and application entry point.
 - `SamplePages.cs` — the gallery shell and pages, shared route inventory
   (`Id`, `NativeTypeName`) and `SamplePages.CreatePage(route)` selector. Validation
-  hosts can link this file together with `WctControls.cs` instead of maintaining
+  hosts can link this file together with `WctControls.cs` and
+  `CameraPreviewLifetime.cs` instead of maintaining
   test-only wrapper or page copies.
