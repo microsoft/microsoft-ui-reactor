@@ -588,52 +588,6 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>Hard depth cap — see <see cref="t_rerenderDepth"/>.</summary>
     private const int MaxRerenderReentrancy = 50;
 
-    // ── Style cache: avoids redundant XamlReader.Load() for identical theme binding sets ──
-    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _styleCache = new();
-
-    // Issue #522 — per-control marker holding the themed Style instance
-    // Reactor most recently applied via ApplyThemeBindings. Used by
-    // ClearThemeBindings to decide whether the control's current Style is
-    // still ours (vs. replaced by an author Setter) without depending on
-    // _styleCache contents — the cache can be cleared at any time and would
-    // otherwise create a window where the in-place clear silently fails.
-    // Attached DPs are RCW-safe (the value is stored in the underlying
-    // DependencyObject's effective value table, accessed via COM SetValue/
-    // GetValue) — unlike ConditionalWeakTable, which keys on managed
-    // instance identity and desyncs when WinUI hands out duplicate RCWs.
-    private static readonly DependencyProperty ReactorAppliedThemeStyleProperty =
-        DependencyProperty.RegisterAttached(
-            "ReactorAppliedThemeStyle",
-            typeof(Style),
-            typeof(Reconciler),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Builds a deterministic cache key for a style based on its target type and
-    /// the set of ThemeRef bindings. Keys are sorted by property name so that
-    /// dictionaries with the same entries in different enumeration order produce
-    /// the same key.
-    /// </summary>
-    internal static string BuildCacheKey(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
-    {
-        // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal
-        var sortedKeys = bindings.Keys.ToArray();
-        Array.Sort(sortedKeys, StringComparer.Ordinal);
-        var sb = new global::System.Text.StringBuilder(targetType);
-        foreach (var key in sortedKeys)
-        {
-            sb.Append('|').Append(key).Append('=').Append(bindings[key].ResourceKey);
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Clears the compiled style cache. Called on theme change as conservative
-    /// memory cleanup — not a correctness requirement since {ThemeResource}
-    /// setters are live-resolved by WinUI.
-    /// </summary>
-    internal static void ClearStyleCache() => _styleCache.Clear();
-
 
     /// <summary>
     /// Thread-static stagger context for enter transitions. When a parent with StaggerConfig
@@ -1795,6 +1749,18 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// The <see cref="ThemeRef"/> bindings this control currently carries, as property
+        /// name (<c>"Background"</c>, <c>"Foreground"</c>, …) to resource key. Written by
+        /// <c>ApplyThemeBindings</c> each time it installs a
+        /// <see cref="FrameworkElement.SetThemeResourceBinding"/>, so a later render leaves a
+        /// live binding alone and a dropped binding clears only the properties Reactor bound
+        /// (issue #522). Keyed by name rather than by <see cref="DependencyProperty"/> because a
+        /// static DP getter is not guaranteed to hand back the same managed wrapper twice.
+        /// Kept here for the same duplicate-RCW reason as <see cref="ManagedResourceKeys"/>.
+        /// </summary>
+        public Dictionary<string, string>? ThemeResourceBindings;
 
         /// <summary>
         /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last
@@ -6284,10 +6250,15 @@ public sealed partial class Reconciler : IDisposable
                 }
                 else if (tracker.BorderBrushOverrideApplied)
                 {
-                    if (tracker.NormalBorderBrushHasLocalValue)
-                        fe.SetValue(borderProperty, tracker.NormalBorderBrush);
-                    else
-                        fe.ClearValue(borderProperty);
+                    // A theme-bound border brush gets its binding back. The captured brush would
+                    // freeze it at the theme it had when the states were set up.
+                    if (!TryRestoreThemeBinding(fe, "BorderBrush"))
+                    {
+                        if (tracker.NormalBorderBrushHasLocalValue)
+                            fe.SetValue(borderProperty, tracker.NormalBorderBrush);
+                        else
+                            fe.ClearValue(borderProperty);
+                    }
                     tracker.BorderBrushOverrideApplied = false;
                 }
             }
@@ -8296,146 +8267,207 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Applies ThemeRef bindings by setting properties through WinUI's {ThemeResource}
-    /// mechanism. Builds a local Style with ThemeResource setters and applies it to the
-    /// element. WinUI then handles theme-reactive resolution natively — the live
-    /// {ThemeResource} Style setter re-resolves on the control's effective-theme change,
-    /// which tracks the per-element/inherited <c>ActualTheme</c> (an ancestor
-    /// <c>RequestedTheme</c> override included), not just the app-level theme. This native
-    /// self-heal is why a ThemeBindings-only element is safe to structurally skip
-    /// (#758; empirically verified in <c>ThemeBindingsSkipSelfHealFixtures</c> across
-    /// immediate and inherited ancestor <c>RequestedTheme</c> toggles). Contrast a
-    /// <c>ResourceOverrides.ThemeRef</c>, which resolves to a CONCRETE brush at reconcile
-    /// and does NOT self-heal (so it stays theme-sensitive for the skip gate).
+    /// Applies <see cref="ThemeRef"/> bindings with
+    /// <see cref="FrameworkElement.SetThemeResourceBinding"/>, which installs the same live
+    /// binding as a <c>{ThemeResource key}</c> markup extension. WinUI re-resolves it when the
+    /// control's effective theme changes (the per-element/inherited <c>ActualTheme</c>, an
+    /// ancestor <c>RequestedTheme</c> override included), on a high-contrast change, and when
+    /// the control is parented, so a binding installed at mount on a control that is not in
+    /// the tree yet picks up its ancestors' theme once it joins. That native self-heal is why
+    /// a ThemeBindings-only element is safe to structurally skip (#758; verified in
+    /// <c>ThemeBindingsSkipSelfHealFixtures</c> across immediate and inherited ancestor
+    /// <c>RequestedTheme</c> toggles). Contrast a <c>ResourceOverrides.ThemeRef</c>, which
+    /// resolves to a CONCRETE brush at reconcile and does NOT self-heal (so it stays
+    /// theme-sensitive for the skip gate).
     /// </summary>
-    /// <summary>
-    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
-    /// existing-api-surface.md). Applies <see cref="ThemeRef"/> bindings as
-    /// a synthesized <c>{ThemeResource}</c>-driven Style. Provisional API;
-    /// see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
+    /// <remarks>
+    /// <para>Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
+    /// existing-api-surface.md). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.</para>
+    /// <para>The binding sits at local-value precedence, where earlier releases used a
+    /// synthesized Style. To keep the old winner, a property that already holds a value Reactor
+    /// did not bind (a <c>.Set</c> setter, an element property, app code) is left alone, and
+    /// <c>fe.Style</c> is never touched.</para>
+    /// <para>Only the properties Reactor maps are bound: <c>Background</c>,
+    /// <c>Foreground</c> and <c>BorderBrush</c>, on the control types that declare them. A key
+    /// that cannot be resolved from the control at call time is logged and skipped.</para>
+    /// </remarks>
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
+        => ApplyThemeBindings(fe, bindings, modifiers: null);
+
+    /// <summary>
+    /// Reconciler form of <see cref="ApplyThemeBindings(FrameworkElement, IReadOnlyDictionary{string, ThemeRef})"/>.
+    /// <paramref name="modifiers"/> are the element's effective modifiers: an explicit brush
+    /// modifier for the same property (<c>.Background(brush)</c> next to
+    /// <c>.Background(ThemeRef)</c>) wins whatever the call order, as it did against the old
+    /// Style. A null <paramref name="bindings"/> drops every binding the control carries.
+    /// <paramref name="refresh"/> is set on a resource-refresh pass
+    /// (<c>Theme.NotifyResourcesChanged</c>): a binding resolves its key when installed and only
+    /// re-resolves on a theme change or reparent, so an edited dictionary entry is picked up by
+    /// installing it again.
+    /// </summary>
+    internal static void ApplyThemeBindings(
+        FrameworkElement fe,
+        IReadOnlyDictionary<string, ThemeRef>? bindings,
+        ElementModifiers? modifiers,
+        bool refresh = false)
     {
-        var targetType = GetStyleTargetType(fe);
-        if (targetType is null) return;
+        var state = TryGetReactorState(fe, out var existingState) ? existingState : null;
+        var bound = state?.ThemeResourceBindings;
 
-        var cacheKey = BuildCacheKey(targetType, bindings);
-
-        // Cache hit: reuse the previously compiled Style
-        if (_styleCache.TryGetValue(cacheKey, out var cachedStyle))
+        // Drop bindings the element no longer declares. ApplyModifiers runs first, so a
+        // property an explicit modifier now owns already holds the modifier's brush: keep it.
+        if (bound is { Count: > 0 })
         {
-            ApplyStyleToElement(fe, cachedStyle);
-            return;
+            List<string>? stale = null;
+            foreach (var name in bound.Keys)
+            {
+                if (bindings is null || !bindings.ContainsKey(name))
+                    (stale ??= new List<string>()).Add(name);
+            }
+            if (stale is not null)
+            {
+                foreach (var name in stale)
+                {
+                    bound.Remove(name);
+                    if (!HasExplicitBrushModifier(name, modifiers) && GetThemeBindingProperty(fe, name) is { } staleDp)
+                        fe.ClearValue(staleDp);
+                }
+            }
         }
 
-        // Cache miss: build XAML, parse, and cache
-        var setters = new global::System.Text.StringBuilder();
-        foreach (var (property, themeRef) in bindings)
+        if (bindings is null) return;
+
+        foreach (var (name, themeRef) in bindings)
         {
-            var dp = GetDependencyPropertyName(fe, property);
+            var dp = GetThemeBindingProperty(fe, name);
             if (dp is null) continue;
-            var escapedResourceKey = global::System.Security.SecurityElement.Escape(themeRef.ResourceKey);
-            setters.Append($"<Setter Property='{dp}' Value='{{ThemeResource {escapedResourceKey}}}'/>");
+
+            if (HasExplicitBrushModifier(name, modifiers))
+            {
+                // ApplyModifiers wrote the explicit brush over any binding we had.
+                bound?.Remove(name);
+                continue;
+            }
+
+            bool hasLocal = !ReferenceEquals(fe.ReadLocalValue(dp), DependencyProperty.UnsetValue);
+            if (bound is not null && bound.TryGetValue(name, out var boundKey))
+            {
+                // The binding is live. Installing it again would only replace a value written
+                // over it since (an InteractionStates brush, a setter), so re-bind only when the
+                // key changed, the value was cleared, or a refresh asks for re-resolution.
+                if (hasLocal && !refresh && string.Equals(boundKey, themeRef.ResourceKey, StringComparison.Ordinal))
+                    continue;
+            }
+            else if (hasLocal)
+            {
+                // A value Reactor did not bind beats the ThemeRef, as it beat the old Style.
+                continue;
+            }
+
+            try
+            {
+                fe.SetThemeResourceBinding(dp, themeRef.ResourceKey);
+                state ??= GetOrCreateReactorState(fe);
+                bound = state.ThemeResourceBindings ??= new Dictionary<string, string>(StringComparer.Ordinal);
+                bound[name] = themeRef.ResourceKey;
+            }
+            catch (Exception ex)
+            {
+                // An unknown key, or a value the property can't hold. Tracking is left as it
+                // was so the next render retries, and the rest of the render goes on.
+                Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                    "ApplyThemeBindings",
+                    ex);
+            }
         }
+    }
 
-        if (setters.Length == 0) return;
+    /// <summary>
+    /// Issue #522 — counterpart to <see cref="ApplyThemeBindings(FrameworkElement, IReadOnlyDictionary{string, ThemeRef})"/>.
+    /// When an element on a recycled control transitions from having
+    /// <see cref="Element.ThemeBindings"/> to none, clear the properties Reactor bound so
+    /// e.g. the red Foreground from an Error arm does not bleed into a subsequent
+    /// Loading / Data render. Only those properties are cleared: an author <c>Style</c>, and
+    /// properties Reactor never bound, are left alone.
+    ///
+    /// <para>Ownership lives in <see cref="ReactorState.ThemeResourceBindings"/> on the native
+    /// control, so it survives a collected managed wrapper, unlike a
+    /// <c>ConditionalWeakTable</c> keyed on the wrapper.</para>
+    /// </summary>
+    internal static void ClearThemeBindings(FrameworkElement fe)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { } bound)
+            return;
+        state.ThemeResourceBindings = null;
+        foreach (var name in bound.Keys)
+        {
+            if (GetThemeBindingProperty(fe, name) is { } dp)
+                fe.ClearValue(dp);
+        }
+    }
 
+    /// <summary>
+    /// Re-installs the theme binding on <paramref name="property"/> when Reactor bound it, for
+    /// code that wrote a temporary value over it (InteractionStates returning to Normal).
+    /// Returns false when the property is not theme-bound, so the caller restores its own way.
+    /// </summary>
+    private static bool TryRestoreThemeBinding(FrameworkElement fe, string property)
+    {
+        if (!TryGetReactorState(fe, out var state)
+            || state.ThemeResourceBindings is not { } bound
+            || !bound.TryGetValue(property, out var key)
+            || GetThemeBindingProperty(fe, property) is not { } dp)
+            return false;
         try
         {
-            var xaml =
-                $"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='{targetType}'>" +
-                setters.ToString() +
-                "</Style>";
-            var style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
-            _styleCache.TryAdd(cacheKey, style);
-            ApplyStyleToElement(fe, style);
+            fe.SetThemeResourceBinding(dp, key);
+            return true;
         }
         catch (Exception ex)
         {
             Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
-                "ApplyThemeBindings",
+                "RestoreThemeBinding",
                 ex);
+            return false;
         }
     }
 
-    /// <summary>
-    /// Issue #522 — counterpart to <see cref="ApplyThemeBindings"/>. When an
-    /// element on a recycled control transitions from having
-    /// <see cref="Element.ThemeBindings"/> to none, drop the previously
-    /// applied themed Style so e.g. the red Foreground from an Error arm
-    /// does not bleed into a subsequent Loading / Data render.
-    ///
-    /// <para>Ownership is tracked via the
-    /// <c>ReactorAppliedThemeStyleProperty</c> attached DP, which stores the
-    /// Style instance we wrote on the most recent <see cref="ApplyThemeBindings"/>
-    /// call. <see cref="DependencyObject.ClearValue(DependencyProperty)"/>
-    /// on <see cref="FrameworkElement.StyleProperty"/> fires only when
-    /// <c>fe.Style</c> still references the same instance — preserving an
-    /// author Setter (e.g. <c>.Set(c =&gt; c.Style = mine)</c>) that may have
-    /// replaced our Style in between.</para>
-    ///
-    /// <para>This avoids per-FrameworkElement tracking via
-    /// <c>ConditionalWeakTable</c> (fragile under RCW churn) and is robust to
-    /// the global <c>_styleCache</c> being cleared between apply and clear —
-    /// the marker holds the actual Style reference, not a cache lookup key.</para>
-    /// </summary>
-    internal static void ClearThemeBindings(FrameworkElement fe)
+    private static bool HasExplicitBrushModifier(string property, ElementModifiers? m) => m is not null && property switch
     {
-        if (fe.GetValue(ReactorAppliedThemeStyleProperty) is not Style ownedStyle)
-            return;
-        if (ReferenceEquals(fe.Style, ownedStyle))
-            fe.ClearValue(FrameworkElement.StyleProperty);
-        fe.ClearValue(ReactorAppliedThemeStyleProperty);
-    }
-
-    /// <summary>
-    /// Applies a cached style to an element. Clears any existing style first to
-    /// force WinUI to re-evaluate <c>{ThemeResource}</c> setters against the
-    /// element's current effective theme (which may have changed due to a parent's
-    /// <see cref="FrameworkElement.RequestedTheme"/> override).
-    /// </summary>
-    private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle)
-    {
-        // Clearing first forces WinUI to process the subsequent set as a
-        // genuine change, re-resolving {ThemeResource} values. Without this,
-        // re-applying the same cached Style reference is a no-op.
-        if (fe.Style is not null)
-            fe.Style = null;
-        fe.Style = cachedStyle;
-
-        // Track ownership for the symmetric ClearThemeBindings path (issue
-        // #522). Always overwrite so an A → B ThemeBindings transition
-        // updates the marker to the new Style.
-        fe.SetValue(ReactorAppliedThemeStyleProperty, cachedStyle);
-    }
-
-    private static string? GetStyleTargetType(FrameworkElement fe) => fe switch
-    {
-        WinUI.Border => "Border",
-        WinUI.StackPanel => "StackPanel",
-        WinUI.Grid => "Grid",
-        WinUI.RelativePanel => "RelativePanel",
-        WinUI.Button => "Button",
-        WinUI.TextBox => "TextBox",
-        TextBlock => "TextBlock",
-        WinUI.ContentControl => "ContentControl",
-        WinUI.Panel => "Panel",
-        WinUI.Control => "Control",
-        _ => fe.GetType().Name,
+        "Background" => m.Background is not null,
+        "Foreground" => m.Foreground is not null,
+        "BorderBrush" => m.BorderBrush is not null,
+        _ => false,
     };
 
-    private static string? GetDependencyPropertyName(FrameworkElement fe, string property)
+    private static DependencyProperty? GetThemeBindingProperty(FrameworkElement fe, string property) => property switch
     {
-        if (property == "Background" && (fe is WinUI.Panel || fe is WinUI.Control || fe is WinUI.Border))
-            return "Background";
-        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock))
-            return "Foreground";
-        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
-            || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
-            return "BorderBrush";
-        return null;
-    }
+        "Background" => fe switch
+        {
+            WinUI.Panel => WinUI.Panel.BackgroundProperty,
+            WinUI.Control => WinUI.Control.BackgroundProperty,
+            WinUI.Border => WinUI.Border.BackgroundProperty,
+            _ => null,
+        },
+        "Foreground" => fe switch
+        {
+            WinUI.Control => WinUI.Control.ForegroundProperty,
+            TextBlock => TextBlock.ForegroundProperty,
+            _ => null,
+        },
+        "BorderBrush" => fe switch
+        {
+            WinUI.Control => WinUI.Control.BorderBrushProperty,
+            WinUI.Border => WinUI.Border.BorderBrushProperty,
+            WinUI.Grid => WinUI.Grid.BorderBrushProperty,
+            WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
+            WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
+            _ => null,
+        },
+        _ => null,
+    };
 
     // ── Lightweight Styling: per-control resource overrides ────────────────
 

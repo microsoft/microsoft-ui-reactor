@@ -305,7 +305,7 @@ public static class UseMemoCellsExtensions
             // O(1); only on the first reuse after a full rebuild do we scan once.
             // "Theme-sensitive" = a ThemeRef-backed ResourceOverride ONLY (narrowed
             // per #758; see ChildDiffHints.IsThemeSensitive). ThemeBindings are NOT
-            // counted: their {ThemeResource} setters self-heal natively on a theme
+            // counted: their live theme-resource bindings self-heal natively on a theme
             // change even when the container structural-skips them. The ResourceOverrides
             // arm is load-bearing here and consistent with Element.CanSkipUpdate (which
             // also declines the child-skip only for a ThemeRef override), so the count
@@ -429,7 +429,7 @@ public static class UseMemoCellsExtensions
         // Gates the base full-cache-hit early-out: a reference-equal Children array would
         // let the container ShallowEquals-skip the subtree and strand such a resolved
         // brush, so the early-out only fires when this is false. ThemeBindings are
-        // excluded — their {ThemeResource} setters self-heal natively across a skip.
+        // excluded — their live theme-resource bindings self-heal natively across a skip.
         public bool AnyThemeSensitive { get; init; }
     }
 
