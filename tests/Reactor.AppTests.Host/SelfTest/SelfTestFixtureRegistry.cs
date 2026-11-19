@@ -349,6 +349,7 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_AuthorStyleKept",
         "ThemeResourceBinding_MountResolvesAncestorTheme",
         "ThemeResourceBinding_InteractionStatesRestoreKeepsBindingLive",
+        "ThemeResourceBinding_SplitViewPaneBackground",
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         "NamedStyle_TypeRampStylesResolve",
@@ -2743,6 +2744,7 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_AuthorStyleKept" => new ThemeResourceBindingFixtures.AuthorStyleKept(harness),
         "ThemeResourceBinding_MountResolvesAncestorTheme" => new ThemeResourceBindingFixtures.MountResolvesAncestorTheme(harness),
         "ThemeResourceBinding_InteractionStatesRestoreKeepsBindingLive" => new ThemeResourceBindingFixtures.InteractionStatesRestoreKeepsBindingLive(harness),
+        "ThemeResourceBinding_SplitViewPaneBackground" => new ThemeResourceBindingFixtures.SplitViewPaneBackground(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),

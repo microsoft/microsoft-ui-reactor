@@ -738,6 +738,8 @@ public class ModifierTableIntegrityTests
 
         foreach (var (prop, themeGate) in themeGates.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
+            if (ElementSpecificThemeProperties.Contains(prop))
+                continue;
 
             if (!applyGates.TryGetValue(prop, out var applyGate))
             {
@@ -767,12 +769,23 @@ public class ModifierTableIntegrityTests
             }
         }
 
+        foreach (var prop in ElementSpecificThemeProperties)
+        {
+            if (!themeGates.ContainsKey(prop))
+                problems.Add($"{prop}: listed as element-specific but GetThemeBindingProperty no longer maps it. Remove the row.");
+        }
 
         Assert.True(
             problems.Count == 0,
             "Reconciler's two applicability copies have drifted:\n  " + string.Join("\n  ", problems));
     }
 
+    /// <summary>
+    /// ThemeRef properties that come from one element's own extension rather than a common
+    /// modifier, so <c>ApplyModifiers</c> has no brush counterpart to agree with.
+    /// <c>PaneBackground</c> is <c>SplitViewElement.PaneBackground(ThemeRef)</c>.
+    /// </summary>
+    private static readonly HashSet<string> ElementSpecificThemeProperties = new(StringComparer.Ordinal) { "PaneBackground" };
 
     /// <summary>
     /// Property name → the WinUI type names <c>Reconciler.GetThemeBindingProperty</c> will bind a
@@ -809,7 +822,7 @@ public class ModifierTableIntegrityTests
             var property = literal.Token.ValueText;
 
             // `fe switch { WinUI.Panel => …, TextBlock => …, _ => null }` arms parse as type or
-            // constant patterns; an `fe is T ? … : null` arm is an is-expression.
+            // constant patterns; `fe is WinUI.SplitView ? … : null` is an is-expression.
             var fromPatterns = arm.Expression
                 .DescendantNodesAndSelf()
                 .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax>()

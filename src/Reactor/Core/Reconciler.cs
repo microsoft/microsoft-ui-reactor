@@ -8200,8 +8200,9 @@ public sealed partial class Reconciler : IDisposable
     /// did not bind (a <c>.Set</c> setter, an element property, app code) is left alone, and
     /// <c>fe.Style</c> is never touched.</para>
     /// <para>Only the properties Reactor maps are bound: <c>Background</c>,
-    /// <c>Foreground</c> and <c>BorderBrush</c>, on the control types that declare them. A key
-    /// that cannot be resolved from the control at call time is logged and skipped.</para>
+    /// <c>Foreground</c>, <c>BorderBrush</c> (on the control types that declare them) and
+    /// <c>SplitView.PaneBackground</c>. A key that cannot be resolved from the control at call
+    /// time is logged and skipped.</para>
     /// </remarks>
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
         => ApplyThemeBindings(fe, bindings, modifiers: null);
@@ -8378,6 +8379,7 @@ public sealed partial class Reconciler : IDisposable
             WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
             _ => null,
         },
+        "PaneBackground" => fe is WinUI.SplitView ? WinUI.SplitView.PaneBackgroundProperty : null,
         _ => null,
     };
 
