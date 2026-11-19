@@ -214,6 +214,7 @@ public partial record CameraPreviewElement
     private static void StartPreview(CommunityToolkit.WinUI.Controls.CameraPreview control)
     {
         var session = new PreviewSession(control, Cleanup.WaitAsync());
+        Cleanup.Track(session.Lifetime);
         Previews.Add(control, session);
         session.Attach();
     }

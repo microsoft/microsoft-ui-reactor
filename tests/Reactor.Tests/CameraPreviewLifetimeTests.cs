@@ -48,6 +48,38 @@ public class CameraPreviewLifetimeTests
     }
 
     [Fact]
+    public async Task ReplacementMountedBeforePreviousRetires_WaitsForPreviousCleanup()
+    {
+        var queue = new CameraPreviewCleanupQueue();
+        var events = new List<string>();
+        var previousStarted = new TaskCompletionSource();
+        var previous = new CameraPreviewLifetime(queue.WaitAsync(),
+            () => { events.Add("previous start"); previousStarted.SetResult(); return Task.CompletedTask; },
+            () => { },
+            () => { events.Add("previous cleanup"); return Task.CompletedTask; },
+            (operation, _) => events.Add(operation));
+        queue.Track(previous);
+        previous.Start();
+        await previousStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        var nextStarted = new TaskCompletionSource();
+        var next = new CameraPreviewLifetime(queue.WaitAsync(),
+            () => { events.Add("next start"); nextStarted.SetResult(); return Task.CompletedTask; },
+            () => { },
+            () => Task.CompletedTask,
+            (operation, _) => events.Add(operation));
+        queue.Track(next);
+        next.Start();
+        Assert.False(nextStarted.Task.IsCompleted);
+
+        queue.Retire(previous);
+        await nextStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Equal(["previous start", "previous cleanup", "next start"], events);
+        queue.Retire(next);
+        await next.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task UnsubscribeFailureAlone_BlocksReentry()
     {
         var queue = new CameraPreviewCleanupQueue();

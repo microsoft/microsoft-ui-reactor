@@ -140,9 +140,21 @@ internal sealed class CameraPreviewCleanupQueue
 {
     private Task _pending = Task.CompletedTask;
     private readonly List<CameraPreviewLifetime> _failed = new();
+    private readonly HashSet<CameraPreviewLifetime> _tracked = new();
 
-    public void Retire(CameraPreviewLifetime lifetime) =>
-        _pending = Task.WhenAll(_pending, RetireAsync(lifetime));
+    // Track from creation, so a later preview waits for this one's release even
+    // when the replacement mounts before this one unmounts.
+    public void Track(CameraPreviewLifetime lifetime)
+    {
+        if (_tracked.Add(lifetime))
+            _pending = Task.WhenAll(_pending, ObserveAsync(lifetime));
+    }
+
+    public void Retire(CameraPreviewLifetime lifetime)
+    {
+        Track(lifetime);
+        _ = lifetime.StopAsync();
+    }
 
     public async Task WaitAsync()
     {
@@ -152,14 +164,15 @@ internal sealed class CameraPreviewCleanupQueue
                 "A previous camera preview did not release its resources. Restart the sample before opening another preview.");
     }
 
-    private async Task RetireAsync(CameraPreviewLifetime lifetime)
+    private async Task ObserveAsync(CameraPreviewLifetime lifetime)
     {
         try
         {
-            await lifetime.StopAsync();
+            await lifetime.Completion;
         }
         finally
         {
+            _tracked.Remove(lifetime);
             // The delegates retain the native owner and helper when release fails.
             if (!lifetime.ReleaseSucceeded)
                 _failed.Add(lifetime);

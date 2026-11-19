@@ -147,7 +147,9 @@ covers initial capture setup rather than leaving it to Toolkit's `async void`
 startup waits for that task, calls `Stop()` to release playback, and awaits
 `CameraHelper.CleanUpAsync()` to release the frame reader and capture resources.
 A final `Stop()` also clears playback restored by an in-flight Toolkit camera
-switch. Rapid navigation back waits for the previous preview's cleanup.
+switch. Rapid navigation back waits for the previous preview's cleanup. Each
+preview joins that queue when it mounts, not when it unmounts, so a replacement
+mounted before its predecessor unmounts still waits for the earlier release.
 The camera page also requests the same idempotent cleanup from `UseEffect`, since
 host disposal runs effect cleanup but does not guarantee native `OnUnmount`
 callbacks. Completion of asynchronous cleanup still requires a running dispatcher.

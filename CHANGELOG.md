@@ -136,7 +136,8 @@ Conventions for contributors:
 
 - The Toolkit `CameraPreview` sample now waits for startup before stopping playback
   and awaiting capture/frame-reader cleanup on unmount, including after native
-  retries from a failed preview. Rapid re-entry waits for the preceding cleanup,
+  retries from a failed preview. Re-entry, including a replacement mounted before
+  its predecessor unmounts, waits for the preceding cleanup,
   and lifecycle failures are reported rather than swallowed (issue #1571).
 
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
