@@ -28,12 +28,18 @@ Conventions for contributors:
 
 ### Added
 
+- `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
+  element construction with `Size`. The code fix preserves argument evaluation order
+  and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
+
 ### Changed
 
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write
-  precedence with fewer allocations (spec 034 §A).
+  precedence with fewer allocations. D3 rectangle/circle builders and PropertyGrid
+  array-item buttons also combine width/height updates with `Size`, avoiding an
+  intermediate layout, modifier, and element copy per shape/button (spec 034 §A).
 
 - `VirtualList` with default positional keys no longer projects every key on
   unchanged-count updates; realized content and callbacks still refresh. Its memoized

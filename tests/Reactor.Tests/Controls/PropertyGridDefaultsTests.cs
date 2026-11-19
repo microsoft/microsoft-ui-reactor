@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Xunit;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Tests.Controls;
 
@@ -154,6 +155,58 @@ public class PropertyGridDefaultsTests
     // ══════════════════════════════════════════════════════════════
     //  ArrayItemTemplate — many conditional children
     // ══════════════════════════════════════════════════════════════
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void ArrayItem_Preserves_Button_Layout_And_Callbacks(int actions)
+    {
+        bool isExpanded = (actions & 1) != 0;
+        bool? expanded = null;
+        int upCalls = 0, downCalls = 0, removeCalls = 0;
+        Action? up = (actions & 1) != 0 ? () => upCalls++ : null;
+        Action? down = (actions & 2) != 0 ? () => downCalls++ : null;
+        Action? remove = (actions & 4) != 0 ? () => removeCalls++ : null;
+        var row = Assert.IsType<FlexElement>(PropertyGridDefaults.ArrayItemTemplate(
+            7, "summary", isExpanded, value => expanded = value, up, down, remove));
+
+        Assert.Equal(Microsoft.UI.Reactor.Layout.FlexAlign.Center, row.AlignItems);
+        Assert.Equal(4, row.ColumnGap);
+        var toggle = Assert.IsType<ButtonElement>(row.Children[0]);
+        Assert.Equal(Button(isExpanded ? "\u25BC" : "\u25B6", toggle.OnClick).Width(24).Height(24), toggle);
+        Assert.NotNull(toggle.OnClick);
+        toggle.OnClick();
+        Assert.Equal(!isExpanded, expanded);
+        Assert.Equal(TextBlock("[7]"), row.Children[1] with { Attached = null });
+        Assert.Equal(new FlexAttached(Basis: 40, Shrink: 0), row.Children[1].GetAttached<FlexAttached>());
+        Assert.Equal(TextBlock("summary"), row.Children[2] with { Attached = null });
+        Assert.Equal(new FlexAttached(Grow: 1), row.Children[2].GetAttached<FlexAttached>());
+
+        int childIndex = 3;
+        foreach (var (callback, glyph, name) in new[]
+        {
+            (up, "\u25B2", "Move item 7 up"),
+            (down, "\u25BC", "Move item 7 down"),
+            (remove, "\u2715", "Remove item 7"),
+        })
+        {
+            if (callback is null) continue;
+            var button = Assert.IsType<ButtonElement>(row.Children[childIndex++]);
+            Assert.Equal(Button(glyph, callback).Width(28).Height(28).AutomationName(name), button);
+            button.OnClick!();
+        }
+
+        Assert.Equal(childIndex, row.Children.Length);
+        Assert.Equal(up is null ? 0 : 1, upCalls);
+        Assert.Equal(down is null ? 0 : 1, downCalls);
+        Assert.Equal(remove is null ? 0 : 1, removeCalls);
+    }
 
     [Fact]
     public void ArrayItem_Collapsed_Uses_Right_Triangle_Glyph()
