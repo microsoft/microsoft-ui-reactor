@@ -14,6 +14,11 @@ Where `<dimension name>` is one of: `security`, `correctness`, `api-ergonomics`,
 `alternative-solution`, `test-coverage`, `docs-and-samples`, `packaging`,
 `multi-model`.
 
+If the diff has no surface your dimension covers, start instead with
+`# <dimension name>: not applicable` and give the reason, with the evidence you
+checked, in the trailing "What I checked" note. Use it only after looking; it
+is a verdict, not a way to skip the review.
+
 ## Per-finding block
 
 Each finding is a level-2 heading followed by labeled bullets:

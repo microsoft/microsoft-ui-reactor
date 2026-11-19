@@ -47,6 +47,10 @@ internal interface IV1HandlerEntry
     bool HasUnmount { get; }
     // Built-in flyouts share their target's control but keep a separate event identity.
     bool PreservesTargetTag => false;
+    // Whether the control this entry returns for `element` was created for it. A decorator that
+    // forwards a wrapped target's control (GetSourceTarget) does not own it: the target's own
+    // element applied its modifiers first.
+    bool OwnsControl(Element element) => true;
 }
 
 /// <summary>

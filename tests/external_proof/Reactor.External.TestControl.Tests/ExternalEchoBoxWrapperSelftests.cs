@@ -25,6 +25,22 @@ namespace Reactor.External.TestControl.Tests;
 public class ExternalEchoBoxWrapperSelftests
 {
     [Fact]
+    public void CompositeControlledWrapper_CanBeConstructedWithoutWinUI()
+    {
+        double observed = 0;
+        var el = new BareRangeProbeElement
+        {
+            RangeStart = 20,
+            RangeEnd = 80,
+            OnRangeStartChanged = value => observed = value,
+        };
+        Assert.Equal(20, el.RangeStart.Value);
+        Assert.Equal(80, el.RangeEnd.Value);
+        el.OnRangeStartChanged?.Invoke(30);
+        Assert.Equal(30, observed);
+    }
+
+    [Fact]
     public void GeneratedFactory_SurfacesControlledValue_AndCallback()
     {
         // The generated factory + init props exist and carry the controlled

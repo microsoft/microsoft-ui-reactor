@@ -132,6 +132,11 @@ stay constant.
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
+    // Keep the captured argument in a separate frame so inline/locked calls
+    // do not allocate a closure before deciding whether marshaling is needed.
+    bool MarshalSetter(T newValue)
+        => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
     void Setter(T newValue)
     {
         bool changed;
@@ -152,7 +157,7 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
         }
         else
         {
-            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -175,7 +180,11 @@ reaches its storage directly and never consults `_hooks` again. Calling
 it on a background thread takes the `MarshalIfOffUIThread` branch and
 re-enqueues the setter on the UI dispatcher; calling it from the UI
 thread runs the body inline. (The `threadSafe: true` flavour skips the
-marshal entirely and takes the slot's lock instead.) Either way, the
+marshal entirely and takes the slot's lock instead.) The marshaled
+argument closure is created in a separate slow-path function, only for
+off-thread calls. Inline setters, functional updaters, and reducer
+dispatches do not allocate that closure, including unchanged-value calls.
+Either way, the
 slot is written with the new value, an ETW
 `StateChange` event fires if state-keyword tracing is enabled, and
 `_requestRerender` triggers the host to render again on the next

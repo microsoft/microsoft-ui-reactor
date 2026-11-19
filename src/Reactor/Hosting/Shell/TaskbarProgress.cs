@@ -111,8 +111,8 @@ public sealed class TaskbarProgress
         if (taskbar is null) return;
         try
         {
-            // Quantize to 1000 units — matches WinUIEx convention and gives
-            // smooth-looking shell progress without floating-point edge cases.
+            // Quantize to 1000 units — gives smooth-looking shell progress
+            // without floating-point edge cases.
             const ulong total = 1000;
             ulong completed = (ulong)Math.Round(value * total);
             if (completed > total) completed = total;

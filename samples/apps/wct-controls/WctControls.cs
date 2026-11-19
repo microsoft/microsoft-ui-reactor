@@ -1,4 +1,9 @@
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Reactor.Wrappers;
+using Microsoft.UI.Xaml;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace WctControls;
 
@@ -11,28 +16,168 @@ namespace WctControls;
 //  that same partial: one init-property per surfaced control property, child /
 //  items slots, On{Event} callbacks, the ControlDescriptor, Pattern-A
 //  registration, and a parameterized factory method named after the control.
-//  No hand-written wrapper/handler code.
+//  The string-header helpers below preserve accessible naming for rich slots.
 // ─────────────────────────────────────────────────────────────────────────
 
 // A settings "row": Header + Description + an optional HeaderIcon, with a
 // content child (a control on the right) and an optional whole-card Click.
 // CommandParameter is an inherited ButtonBase prop with no declarative meaning.
 //
-// HeaderIcon is typed IconElement (UIElement-derived), so the generator treats
-// it as a content slot — and a control has only ONE content slot, already taken
-// by Content. [WrapElementSlot("HeaderIcon")] promotes it to a SECONDARY element
-// slot: the generator surfaces the Element? HeaderIcon init prop + factory param
-// and emits the state-preserving mount/reconcile wiring (ctx.MountChild on mount,
-// the public ctx.ReconcileChild on update). Authors pass any Reactor icon element
-// through the generated factory param, e.g. `SettingsCard(header: …, headerIcon: Icon(FontIcon("\uE701")))`.
+// Object-valued properties are NOT reconciled Element slots without annotations.
+// The string overload keeps a native string Header so the Toolkit retains its
+// own group/button/content naming rules. Rich-header callers supply names.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsCard),
     Exclude = new[] { "CommandParameter" })]
 [WrapElementSlot("HeaderIcon")]
-public partial record SettingsCardElement;
+[WrapElementSlot("Description")]
+[WrapManual("Header")]
+[WrapManual("HeaderText")]
+public partial record SettingsCardElement
+{
+    public Element? Header { get; init; }
+    public string? HeaderText { get; init; }
+
+    public static SettingsCardElement SettingsCard(
+        Element header, Element? description = null, Element? content = null,
+        Element? headerIcon = null, Optional<bool> isClickEnabled = default, Action? onClick = null) =>
+        SettingsCardElement.SettingsCard(
+            description: description, content: content, headerIcon: headerIcon,
+            isClickEnabled: isClickEnabled, onClick: onClick) with { Header = header };
+
+    public static SettingsCardElement SettingsCard(
+        string header, string? description = null, Element? content = null,
+        Element? headerIcon = null, Optional<bool> isClickEnabled = default, Action? onClick = null) =>
+        SettingsCardElement.SettingsCard(
+            description: description is null ? null : TextBlock(description),
+            content: content,
+            headerIcon: headerIcon, isClickEnabled: isClickEnabled, onClick: onClick)
+            with { HeaderText = header };
+
+    private static partial ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard>
+        Customize(ControlDescriptor<SettingsCardElement, CommunityToolkit.WinUI.Controls.SettingsCard> d) =>
+        d.WithSettingsHeader(static e => e.Header, static e => e.HeaderText,
+            static () => CommunityToolkit.WinUI.Controls.SettingsCard.HeaderProperty);
+}
 
 // A settings group that expands to reveal child SettingsCards (its Items).
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SettingsExpander))]
-public partial record SettingsExpanderElement;
+[WrapManual("Header")]
+[WrapElementSlot("Description")]
+[WrapElementSlot("Content")]
+[WrapElementSlot("HeaderIcon")]
+[WrapControlled("IsExpanded", Events = new[] { "Expanded", "Collapsed" })]
+[WrapManual("HeaderText")]
+public partial record SettingsExpanderElement
+{
+    public Element? Header { get; init; }
+    public string? HeaderText { get; init; }
+
+    public static SettingsExpanderElement SettingsExpander(
+        Element header, Element? description = null, Element? content = null,
+        Element? headerIcon = null, Optional<bool> isExpanded = default,
+        Action<bool>? onIsExpandedChanged = null, IReadOnlyList<object>? items = null) =>
+        SettingsExpanderElement.SettingsExpander(
+            description: description, content: content, headerIcon: headerIcon,
+            isExpanded: isExpanded, onIsExpandedChanged: onIsExpandedChanged,
+            items: items?.ToArray() ?? []) with { Header = header };
+
+    public static SettingsExpanderElement SettingsExpander(
+        string header, string? description = null, Element? content = null,
+        Element? headerIcon = null, Optional<bool> isExpanded = default,
+        Action<bool>? onIsExpandedChanged = null, IReadOnlyList<object>? items = null) =>
+        SettingsExpanderElement.SettingsExpander(
+            description: description is null ? null : TextBlock(description),
+            content: content,
+            headerIcon: headerIcon, isExpanded: isExpanded,
+            onIsExpandedChanged: onIsExpandedChanged, items: items?.ToArray() ?? [])
+            with { HeaderText = header };
+
+    private static partial ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander>
+        Customize(ControlDescriptor<SettingsExpanderElement, CommunityToolkit.WinUI.Controls.SettingsExpander> d) =>
+        d.WithSettingsHeader(static e => e.Header, static e => e.HeaderText,
+            static () => CommunityToolkit.WinUI.Controls.SettingsExpander.HeaderProperty);
+}
+
+internal static class SettingsHeaderBridge
+{
+    private sealed class HeaderState
+    {
+        internal UIElement? Child;
+        internal object? Value;
+    }
+
+    // Keep ownership on the native control even when Header is replaced or its RCW is collected.
+    // Register lazily so constructing a descriptor does not touch WinUI.
+    private static DependencyProperty? s_ownedHeaderProperty;
+    private static DependencyProperty OwnedHeaderProperty => s_ownedHeaderProperty ??=
+        DependencyProperty.RegisterAttached(
+            "ReactorOwnedSettingsHeader", typeof(object), typeof(SettingsHeaderBridge), new PropertyMetadata(null));
+
+    private static HeaderState? GetOwnedHeader(FrameworkElement control) =>
+        s_ownedHeaderProperty is { } property ? control.GetValue(property) as HeaderState : null;
+
+    internal static ControlDescriptor<TElement, TControl> WithSettingsHeader<TElement, TControl>(
+        this ControlDescriptor<TElement, TControl> descriptor,
+        Func<TElement, Element?> getHeader,
+        Func<TElement, string?> getText,
+        Func<DependencyProperty> getHeaderProperty)
+        where TElement : Element
+        where TControl : FrameworkElement, new() =>
+        descriptor.ImperativeBridged(
+            mount: (ctx, control, element) =>
+            {
+                var header = getHeader(element);
+                var text = getText(element);
+                if (header is null && text is null) return;
+                var state = new HeaderState();
+                control.SetValue(OwnedHeaderProperty, state);
+                state.Child = header is null ? null : ctx.MountChild(header);
+                state.Value = header is null ? text : state.Child;
+                control.SetValue(getHeaderProperty(), state.Value);
+            },
+            update: (ctx, control, oldElement, newElement) =>
+            {
+                var oldHeader = getHeader(oldElement);
+                var header = getHeader(newElement);
+                if (header is not null)
+                {
+                    var state = GetOwnedHeader(control);
+                    var hadHeader = state is not null;
+                    if (state is null)
+                    {
+                        state = new HeaderState();
+                        control.SetValue(OwnedHeaderProperty, state);
+                    }
+                    state.Child = ctx.ReconcileChild(hadHeader ? oldHeader : null, header, state.Child);
+                    state.Value = state.Child;
+                    if (!ReferenceEquals(control.GetValue(getHeaderProperty()), state.Value))
+                        control.SetValue(getHeaderProperty(), state.Value);
+                    return;
+                }
+                var text = getText(newElement);
+                if (oldHeader is null && getText(oldElement) == text) return;
+                ReleaseHeader(ctx.Reconciler, control, getHeaderProperty(), clearHeader: text is null);
+                if (text is not null)
+                {
+                    control.SetValue(OwnedHeaderProperty, new HeaderState { Value = text });
+                    control.SetValue(getHeaderProperty(), text);
+                }
+            },
+            unmount: (ctx, control) =>
+                ReleaseHeader(ctx.Reconciler, control, getHeaderProperty(), clearHeader: true));
+
+    private static void ReleaseHeader(
+        Reconciler reconciler, FrameworkElement control, DependencyProperty headerProperty, bool clearHeader)
+    {
+        if (GetOwnedHeader(control) is not { } state) return;
+        control.ClearValue(OwnedHeaderProperty);
+        if (state.Child is { } child) reconciler.UnmountChild(child);
+        var current = control.GetValue(headerProperty);
+        if (clearHeader && (ReferenceEquals(current, state.Value) ||
+            current is string text && state.Value is string ownedText && text == ownedText))
+            control.ClearValue(headerProperty);
+    }
+}
 
 // A circular gauge — pure value props (Value/Minimum/Maximum/Unit/…) plus a
 // ValueChanged event, so it surfaces as a two-way controlled Value.
@@ -103,14 +248,14 @@ public partial record TokenizingTextBoxElement;
 
 // ── Input ────────────────────────────────────────────────────────────────
 
-// A dual-thumb range slider. RangeStart/RangeEnd both change through the SINGLE
-// ValueChanged event (carrying which thumb moved via RangeChangedEventArgs), not
-// two {Prop}Changed events — and a control has only one controlled-event slot, so
-// they CANNOT both be [WrapControlled]. The idiomatic shape: one-way RangeStart/
-// RangeEnd (force-asserted from state) + the auto-surfaced OnValueChanged typed
-// event, which the sample uses to update the right end. (The generator warns,
-// REACTORGEN012, if two [WrapControlled] props share a control.)
+// Both endpoints use the same native ValueChanged event. The generated bindings
+// notify only the changed endpoint and reassert supplied parent values on update.
+// One-way props would leave native drift untouched when parent values stay equal.
+// The pinned Toolkit does not raise ValueChanged for keyboard edits, so this
+// sample's change notifications cover pointer interaction, not keyboard control.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.RangeSelector))]
+[WrapControlled("RangeStart", ChangedEvent = "ValueChanged")]
+[WrapControlled("RangeEnd", ChangedEvent = "ValueChanged")]
 public partial record RangeSelectorElement;
 
 // ── Layout (controls) ──────────────────────────────────────────────────────
@@ -124,8 +269,7 @@ public partial record HeaderedContentControlElement;
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.HeaderedItemsControl))]
 public partial record HeaderedItemsControlElement;
 
-// Applies an arbitrary render Transform to its single Child without affecting
-// layout. Child is the content slot; Transform is a value prop.
+// Applies a Transform to its single Child and includes it in layout measurement.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.LayoutTransformControl))]
 public partial record LayoutTransformControlElement;
 
@@ -160,8 +304,8 @@ public partial record ConstrainedBoxElement;
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.UniformGrid))]
 public partial record UniformGridElement;
 
-// A Panel that docks children to its edges (the per-child Dock is an attached
-// property set via the layout modifier, not generated). LastChildFill fills the rest.
+// A Panel that docks children to its edges. The sample uses the Toolkit's default
+// Dock.Left; non-default sides need the Toolkit's per-child Dock attached property.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.DockPanel))]
 public partial record DockPanelElement;
 
@@ -182,16 +326,15 @@ public partial record WrapPanelElement;
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.HeaderedTreeView))]
 public partial record HeaderedTreeViewElement;
 
-// SwitchPresenter shows exactly one matching SwitchCase based on Value. Cases are
-// SwitchCase objects (not UIElements), surfaced through the generated items slot;
-// Value is the discriminator (a one-way prop here — no {Prop}Changed event).
+// SwitchCases is a settable CaseCollection, generated as a one-way value prop.
+// Toolkit selects CurrentCase and owns Content. Leave the generated Content slot
+// unset so Reactor does not replace Toolkit's selected content.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.SwitchPresenter))]
 public partial record SwitchPresenterElement;
 
 // TabbedCommandBar derives from NavigationView: its tabs are TabbedCommandBarItem
 // objects in MenuItems (a NavigationView collection, not a flat Items), so the
-// generator surfaces only props/content here. Tabs are built declaratively via
-// the MenuItems value prop in the sample.
+// sample builds them once through a guarded native setter, not an Element slot.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.TabbedCommandBar))]
 public partial record TabbedCommandBarElement;
 

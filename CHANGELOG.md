@@ -30,9 +30,47 @@ Conventions for contributors:
 
 ### Changed
 
+- Layout fluent modifiers copy the existing layout bucket directly instead of
+  constructing a temporary delta to merge. Chained sizing, spacing, alignment,
+  visibility, and theme updates preserve immutable snapshots and last-write
+  precedence with fewer allocations (spec 034 §A).
+
+- `VirtualList` with default positional keys no longer projects every key on
+  unchanged-count updates; realized content and callbacks still refresh. Its memoized
+  index source is now an immutable range instead of an allocated integer list, reducing
+  mount/count-change storage. Custom key selectors retain keyed reconciliation (spec 042 §4).
+
+- `UseState` setters and both `UseReducer` callbacks defer marshaling closures
+  until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
+  invocations avoid those allocations, including unchanged values; callback identity,
+  equality checks, and cross-thread dispatch behavior are unchanged (issue #659).
+
+- Avoid redundant element copies when assigning keys in built-in component factories,
+  DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
+  supplied key is already the same string reference. Different key references still
+  produce a copy, and key values and formatting are unchanged (spec 042 §5).
+
+- **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
+  `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
+  unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
+  `PasswordBox` and `AutoSuggestBox`. Both are now checked. A `ToggleSwitch` is also labeled by
+  its on/off content, which WinUI uses as its name. A `ComboBox` placeholder is not, because
+  WinUI only exposes `PlaceholderText` as help text. Projects that build with warnings as errors
+  may see new `REACTOR_A11Y_003` errors on unlabeled combo boxes and switches; add `.Header(...)`
+  or `.AutomationName(...)`. A label on an enclosing container (`Expander(field).Header(...)`)
+  no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
+  (devtools) covers the same two controls.
+
 ### Deprecated
 
 ### Removed
+
+- **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
+  2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
+  toolchain CI builds it with. `Build-Vsix.ps1` and `Reinstall-Vsix.ps1` only use Visual
+  Studio 2026 instances, and `bootstrap.ps1` skips the extension when the newest instance is
+  Visual Studio 2022. The build's fallback to the `Microsoft.VSSDK.BuildTools`
+  package targets now follows the restored package instead of a hardcoded version.
 
 ### Fixed
 
@@ -41,6 +79,99 @@ Conventions for contributors:
   animations. Removing `.Opacity()` also releases its compositor override so styles
   take effect again; surviving declarations on shared-control wrappers are preserved
   (issue #1001).
+
+- Shallow comparison now checks all animation and transition declarations together,
+  so configuration-only changes reach direct updates and parent child-skip paths.
+  Value-equivalent plain-data configurations remain eligible for skipping; native
+  objects and arrays retain reference equality. This also restores `.Keyframes()`
+  playback when only the trigger changes (issue #1536; spec 014).
+
+- Generated wrapper callbacks now resolve the subscribed outer control when native events
+  forward an inner control, null, or unrelated sender. Current callbacks, original event
+  arguments, echo suppression, and native-identity subscription gates are preserved
+  (spec 058 §8.3, issue #1573).
+
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
+  rest of the button family remembered which child they owned by the control's managed wrapper.
+  When a collection replaced that wrapper between renders, the next update mounted a second copy
+  of the content instead of updating it, which dropped its state (an `AnimatedIcon`'s visual
+  state, focus, caret) and leaked the old copy without unmounting it. The record now lives on the
+  native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
+  selftest failures.
+
+- **Generated wrappers preserve their control library's XAML metadata under
+  trimming/NativeAOT (issue #1565, spec 058 §9a).** A unique publicly constructible
+  metadata provider is now registered through a static reference when the wrapper
+  is first used, fixing code-only Toolkit SettingsCard/SettingsExpander consumers
+  without rooting whole assemblies. Provider-free controls and explicit registration
+  remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
+
+- The Toolkit RangeSelector sample now controls both endpoints through the shared
+  native event. It demonstrates pointer-driven parent acceptance/rejection, independent callback
+  counts and echo-free parent resets instead of calling one-way values controlled
+  (issue #1566; depends on #1564). The pinned Toolkit's missing keyboard change
+  notifications are documented as an unsupported mapping scenario.
+
+- Generated wrappers now support multiple controlled properties, including range endpoints
+  sharing one native event, without losing callbacks or notifying unchanged endpoints.
+  Controlled bindings also coexist with ordinary events, reassert parent values, and
+  suppress synchronous, deferred, silent-setter and coercion echoes. The obsolete
+  `REACTORGEN012` warning is retired (spec 058 §8.2, issue #1564).
+
+- The Toolkit sample maps Settings headers, descriptions, icons and expander
+  content as reconciled Element slots while preserving accessible string-header
+  names and native-owned headers when the wrapper's header inputs stay unset.
+  Rich-header state and cleanup survive native or lifecycle-driven Header
+  replacement without unmounting or clearing the foreign replacement.
+  Explicit wrapper factory calls keep the sample on actual Toolkit controls
+  rather than similarly named built-ins (issues #1504, #1566).
+
+- The Toolkit ContentSizer sample explicitly targets the advertised sibling
+  instead of resizing its containing stack. The target is connected on mount and
+  cleared on unmount, including when navigating away and back (issue #1567).
+
+- The Toolkit `SwitchPresenter` sample now populates native `SwitchCases` and
+  drives `Value` declaratively, demonstrating matching, default and no-match
+  transitions without replacing Toolkit's selected content with a Reactor
+  switch expression (issue #1568).
+
+- The Toolkit `TokenizingTextBox` sample filters suggestions as advertised, using
+  case-insensitive substring matching while preserving native token creation and
+  removal (issue #1569).
+
+- **The Toolkit `RichSuggestBox` sample now filters and commits suggestions (issue #1570).**
+  Typing a mention filters the sample names case-insensitively; choosing a suggestion
+  inserts the full name instead of the query text. The page shows the last chosen name
+  and selection count while leaving token management to the Toolkit control.
+
+- The analyzers and source generators in the `Microsoft.UI.Reactor` package are
+  now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
+  the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
+  failed with CS8032 on anything older than VS 18.9 / SDK 10.0.400, which also
+  broke generator-dependent code. Visual Studio 2022 remains unsupported (#1558).
+
+- **The `Microsoft.UI.Reactor` and `Microsoft.UI.Reactor.Advanced` packages now include
+  `ThirdPartyNoticeText.txt` (issue #1535).** Both packages contain code ported from other
+  open-source projects (Yoga, md4c, D3, WinUI.Dock), but only shipped Reactor's own license.
+  Each package now carries a notice file at its root that lists only the code it ports (Yoga in
+  `Microsoft.UI.Reactor`, md4c, D3 and WinUI.Dock in `Microsoft.UI.Reactor.Advanced`), and the
+  package workflows fail if it is missing or out of date.
+
+- **`Microsoft.UI.Reactor` now credits WinUIEx in `ThirdPartyNoticeText.txt`.** Window-placement
+  persistence (`WindowPlacementCodec`) and the Win32 message monitor (`WindowMessageMonitor`) are
+  adapted from WinUIEx (MIT) but shipped without its notice. Comments that claimed Reactor reads
+  placements saved by WinUIEx were also corrected. It never did, because Reactor uses its own
+  settings container and keys. Behavior and the stored format are unchanged (spec 036 §5.1 and
+  §8, related issue #184).
+
+- **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
+  accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
+  `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
+  own guidance recommends), a field passed as the `content` of a Community Toolkit
+  `SettingsCard` with a string header, and a field passed to a helper declared in the project that
+  applies `.AutomationName`, `.Header` or `.LabeledBy` to it, such as a
+  `SettingsRow(label, control)` row helper.
 
 - Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
   restore null normal brushes and the latest normal value, including border modifier
@@ -68,6 +199,14 @@ Conventions for contributors:
   has just deployed. A tag run now publishes its version to `gh-pages` and hands the
   deployment to a `Publish docs` run it dispatches on `main`, whose `verify` job also probes
   the handed-off release directories.
+- **Inline margin, padding and border edges no longer keep the previous render's value
+  (issue #965).** With no physical value declared, `.MarginInlineStart`/`End`,
+  `.PaddingInlineStart`/`End` and `.BorderInlineStart` took the edges they do not set from
+  the control, which on an update still held the previous render's inline edge. Swapping
+  `.PaddingInlineStart(8)` for `.PaddingInlineEnd(4)` gave `8,0,4,0` instead of `0,0,4,0`,
+  and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
+  instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
+  also skip the write and leave the right-to-left value on the control.
 
 ### Security
 

@@ -253,6 +253,9 @@
     <None Include="..\Reactor.SourceMap.Generator\$(_ReactorAnalyzerBinDir)\Reactor.SourceMap.Generator.dll"
           Pack="true" PackagePath="buildTransitive/sourcemap" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <!-- License notices for the code this package ports (Yoga, WinUIEx), issue #1535. Only this
+         package's sections of the repo-root ThirdPartyNoticeText.txt (ThirdPartyNoticeTests). -->
+    <None Include="ThirdPartyNoticeText.txt" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
     <!-- Packed under the PackageId-matching name so NuGet auto-imports it into

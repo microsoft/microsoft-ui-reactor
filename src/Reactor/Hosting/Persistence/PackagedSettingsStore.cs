@@ -6,9 +6,10 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 
 /// <summary>
 /// Default packaged-app persistence store. Routes through
-/// <c>ApplicationData.Current.LocalSettings</c> using a "Reactor" container,
-/// matching <c>WinUIEx.WindowManager</c>'s key shape so existing apps that
-/// migrate keep their saved layouts. (spec 036 §8)
+/// <c>ApplicationData.Current.LocalSettings</c> using a "Reactor" container
+/// and <c>WindowPersistence_&lt;id&gt;</c> keys. These differ from WinUIEx's
+/// container and keys, so placements saved by WinUIEx are not picked up.
+/// (spec 036 §8)
 /// </summary>
 /// <remarks>
 /// <para>Constructing this store from an unpackaged process throws on first

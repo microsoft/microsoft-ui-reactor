@@ -155,8 +155,23 @@ Microsoft.UI.Reactor.1.0.0-preview.42.nupkg
 │   └── Microsoft.UI.Reactor.targets       # default props
 ├── README.md
 ├── LICENSE
+├── ThirdPartyNoticeText.txt               # notices for ported code (Yoga, WinUIEx), issue #1535
 └── Microsoft.UI.Reactor.nuspec
 ```
+
+### Third-party notices
+
+`Microsoft.UI.Reactor` (Yoga, WinUIEx) and `Microsoft.UI.Reactor.Advanced` (md4c, D3, WinUI.Dock) contain
+code ported from other open-source projects whose licenses require their notices to travel with
+the code. Each packs its own `ThirdPartyNoticeText.txt` (`src/Reactor/` and
+`src/Reactor.Advanced/`) at the package root, holding only the notices for the code that package
+ports. Both are cut verbatim from the repo-root `ThirdPartyNoticeText.txt`, which stays the
+repo-wide list, and `ThirdPartyNoticeTests` fails if a package file drifts from it or if a root
+section ships in no package. The "Check third-party notices are packed" step in `release.yml` and
+its mirror in `reactor-build-steps.yml` fail when either package is missing or lacks an identical
+copy of its project's file. A new ported dependency goes into the root file and the owning
+package's file. A new package that ships ported code must pack its own file and be added to the
+test and to both check steps.
 
 ### Exactly one `lib/` folder
 

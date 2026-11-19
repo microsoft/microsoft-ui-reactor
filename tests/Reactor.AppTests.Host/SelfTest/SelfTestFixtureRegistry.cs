@@ -270,6 +270,12 @@ internal static class SelfTestFixtureRegistry
         "KLR_LazyVStack_RemoveFromMiddle_EmitsSingleRemove",
         "KLR_LazyVStack_MoveOne_EmitsSingleMove",
         "KLR_LazyVStack_InsertAtZero_RealizedElementsKeepIdentity",
+        "VirtualListIdentity_ContentAndCallbacks",
+        "VirtualListIdentity_CountChanges",
+        "VirtualListIdentity_CustomKeys",
+        "VirtualListIdentity_CustomNumericToDefaultKeepsIdentity",
+        "VirtualListIdentity_DuplicateKeysToDefaultThenGrow",
+        "VirtualListIdentity_UpdateAllocations",
         "KLR_GridView_MoveOne_EmitsSingleMove",
         "KLR_FlexColumn_KeyedChildren_SurvivorIdentityPreserved",
         "KLR_FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity",
@@ -357,6 +363,9 @@ internal static class SelfTestFixtureRegistry
         "Issue950Panel_MountUpdateUnsetReturnsToStyle",
         "Issue950Panel_ValuesDoNotLeakAcrossPoolReuse",
         "Issue950Panel_GridCornerRadiusPaintsRoundedPixels",
+        // Issue #965 — inline Margin/Padding/Border edges must not read the previous
+        // render's overlay back as their base.
+        "Issue965_InlineEdgesDoNotReadBackPreviousOverlay",
         // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
         // Reactor subtrees (Flyout content, Popup child) the generic recursion
         // cannot reach.
@@ -853,6 +862,8 @@ internal static class SelfTestFixtureRegistry
         "ThreadSafe_RenderCoalescing",
         "ThreadSafe_RenderCoalescingDispatcherBatch",
         "ThreadSafe_NonThreadSafeAutoMarshal",
+        "ThreadSafe_QueuedCallbacksUseLiveState",
+        "ThreadSafe_CallbacksAfterDispatcherShutdown",
         // Thread-safe navigation (#234) — off-thread marshal on a real dispatcher
         "ThreadSafeNav_NavigateOffThreadMarshals",
         "ThreadSafeNav_MutatorsOffThreadMarshal",
@@ -872,6 +883,8 @@ internal static class SelfTestFixtureRegistry
         "Animate_MergesWithLayoutAnimation",
         "Animate_ConfigurationAcrossUpdates",
         "Animate_ConfigurationChildSkip",
+        "Animate_ExtrasAcrossUpdates",
+        "Animate_ExtrasChildSkip",
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions",
         "InterState_PressedInheritsPointerOver",
@@ -2043,6 +2056,19 @@ internal static class SelfTestFixtureRegistry
         // through the suppress-counter echo channel via the PUBLIC
         // ReactorBinding.ShouldSuppressEcho primitive.
         "Spec062DeferredControlled_Echo",
+        "ForwardedEvent_Single",
+        "ForwardedEvent_Deferred",
+        "ForwardedEvent_Ordinary",
+        "ForwardedEvent_Combined",
+        "ForwardedEvent_NativeLifetime",
+        "ForwardedEvent_WeakLifetime",
+        "MultipleControlled_Shared",
+        "MultipleControlled_TwoValuesOnly",
+        "MultipleControlled_Mixed",
+        "MultipleControlled_Distinct",
+        "MultipleControlled_Deferred",
+        "MultipleControlled_SingleWithEvent",
+        "MultipleControlled_Reentrant",
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity",
@@ -2643,6 +2669,12 @@ internal static class SelfTestFixtureRegistry
         "KLR_LazyVStack_RemoveFromMiddle_EmitsSingleRemove" => new KeyedListReconciliationFixtures.LazyVStack_RemoveFromMiddle_EmitsSingleRemove(harness),
         "KLR_LazyVStack_MoveOne_EmitsSingleMove" => new KeyedListReconciliationFixtures.LazyVStack_MoveOne_EmitsSingleMove(harness),
         "KLR_LazyVStack_InsertAtZero_RealizedElementsKeepIdentity" => new KeyedListReconciliationFixtures.LazyVStack_InsertAtZero_RealizedElementsKeepIdentity(harness),
+        "VirtualListIdentity_ContentAndCallbacks" => new VirtualListIdentityFixtures.ContentAndCallbacks(harness),
+        "VirtualListIdentity_CountChanges" => new VirtualListIdentityFixtures.CountChanges(harness),
+        "VirtualListIdentity_CustomKeys" => new VirtualListIdentityFixtures.CustomKeys(harness),
+        "VirtualListIdentity_CustomNumericToDefaultKeepsIdentity" => new VirtualListIdentityFixtures.CustomNumericToDefaultKeepsIdentity(harness),
+        "VirtualListIdentity_DuplicateKeysToDefaultThenGrow" => new VirtualListIdentityFixtures.DuplicateKeysToDefaultThenGrow(harness),
+        "VirtualListIdentity_UpdateAllocations" => new VirtualListIdentityFixtures.UpdateAllocations(harness),
         "KLR_GridView_MoveOne_EmitsSingleMove" => new KeyedListReconciliationFixtures.GridView_MoveOne_EmitsSingleMove(harness),
         "KLR_FlexColumn_KeyedChildren_SurvivorIdentityPreserved" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_SurvivorIdentityPreserved(harness),
         "KLR_FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity(harness),
@@ -2717,6 +2749,7 @@ internal static class SelfTestFixtureRegistry
         "Issue950Panel_MountUpdateUnsetReturnsToStyle" => new Issue950PanelBorderBoxFixture.MountUpdateUnsetReturnsToStyle(harness),
         "Issue950Panel_ValuesDoNotLeakAcrossPoolReuse" => new Issue950PanelBorderBoxFixture.ValuesDoNotLeakAcrossPoolReuse(harness),
         "Issue950Panel_GridCornerRadiusPaintsRoundedPixels" => new Issue950PanelBorderBoxFixture.GridCornerRadiusPaintsRoundedPixels(harness),
+        "Issue965_InlineEdgesDoNotReadBackPreviousOverlay" => new Issue965InlineEdgeFixture.InlineEdgesDoNotReadBackPreviousOverlay(harness),
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
@@ -3180,6 +3213,8 @@ internal static class SelfTestFixtureRegistry
         "ThreadSafe_RenderCoalescing" => new ThreadSafeHookFixtures.RenderCoalescing(harness),
         "ThreadSafe_RenderCoalescingDispatcherBatch" => new ThreadSafeHookFixtures.RenderCoalescingDispatcherBatch(harness),
         "ThreadSafe_NonThreadSafeAutoMarshal" => new ThreadSafeHookFixtures.NonThreadSafeAutoMarshal(harness),
+        "ThreadSafe_QueuedCallbacksUseLiveState" => new ThreadSafeHookFixtures.QueuedCallbacksUseLiveState(harness),
+        "ThreadSafe_CallbacksAfterDispatcherShutdown" => new ThreadSafeHookFixtures.CallbacksAfterDispatcherShutdown(harness),
         "ThreadSafeNav_NavigateOffThreadMarshals" => new ThreadSafeNavigationFixtures.NavigateOffThreadMarshals(harness),
         "ThreadSafeNav_MutatorsOffThreadMarshal" => new ThreadSafeNavigationFixtures.MutatorsOffThreadMarshal(harness),
         "ThreadSafeNav_SetStateOffThreadFreezesSnapshot" => new ThreadSafeNavigationFixtures.SetStateOffThreadFreezesSnapshot(harness),
@@ -3218,6 +3253,8 @@ internal static class SelfTestFixtureRegistry
         "Animate_MergesWithLayoutAnimation" => new AnimateModifierTests.MergesWithLayoutAnimation(harness),
         "Animate_ConfigurationAcrossUpdates" => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: false),
         "Animate_ConfigurationChildSkip" => new AnimateModifierTests.ConfigurationAcrossUpdates(harness, childSkip: true),
+        "Animate_ExtrasAcrossUpdates" => new AnimateModifierTests.ExtrasAcrossUpdates(harness, childSkip: false),
+        "Animate_ExtrasChildSkip" => new AnimateModifierTests.ExtrasAcrossUpdates(harness, childSkip: true),
         // Animation system — InteractionStates
         "InterState_StateMachineTransitions" => new InteractionStatesTests.StateMachineTransitions(harness),
         "InterState_PressedInheritsPointerOver" => new InteractionStatesTests.PressedInheritsFromPointerOver(harness),
@@ -4374,6 +4411,19 @@ internal static class SelfTestFixtureRegistry
 
         // Spec 062 §14 — external no-IVT generated deferred-controlled echo proof.
         "Spec062DeferredControlled_Echo" => new Spec062DeferredControlledFixtures.Echo(harness),
+        "ForwardedEvent_Single" => new ForwardedEventWrapperFixtures.Single(harness),
+        "ForwardedEvent_Deferred" => new ForwardedEventWrapperFixtures.Deferred(harness),
+        "ForwardedEvent_Ordinary" => new ForwardedEventWrapperFixtures.Ordinary(harness),
+        "ForwardedEvent_Combined" => new ForwardedEventWrapperFixtures.Combined(harness),
+        "ForwardedEvent_NativeLifetime" => new ForwardedEventWrapperFixtures.NativeLifetime(harness),
+        "ForwardedEvent_WeakLifetime" => new ForwardedEventWrapperFixtures.WeakLifetime(harness),
+        "MultipleControlled_Shared" => new MultipleControlledWrapperFixtures.Shared(harness),
+        "MultipleControlled_TwoValuesOnly" => new MultipleControlledWrapperFixtures.TwoValuesOnly(harness),
+        "MultipleControlled_Mixed" => new MultipleControlledWrapperFixtures.Mixed(harness),
+        "MultipleControlled_Distinct" => new MultipleControlledWrapperFixtures.Distinct(harness),
+        "MultipleControlled_Deferred" => new MultipleControlledWrapperFixtures.Deferred(harness),
+        "MultipleControlled_SingleWithEvent" => new MultipleControlledWrapperFixtures.SingleWithEvent(harness),
+        "MultipleControlled_Reentrant" => new MultipleControlledWrapperFixtures.Reentrant(harness),
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity" => new ToggleSwitchWrapperParityFixture.Execution(harness),

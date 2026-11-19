@@ -321,7 +321,7 @@ class ResponsiveDemo : Component
             SubHeading("Responsive Layout"),
             HStack(8,
                 TextBlock("Simulate wide screen:"),
-                ToggleSwitch(wide, setWide)
+                ToggleSwitch(wide, setWide).AutomationName("Simulate wide screen")
             ),
             If(wide,
                 () => HStack(12, content),
@@ -533,7 +533,7 @@ class ResponsiveSwitcherExample : Component
         return VStack(8,
             HStack(8,
                 TextBlock("Simulate wide window:"),
-                ToggleSwitch(simulated, setSimulated)),
+                ToggleSwitch(simulated, setSimulated).AutomationName("Simulate wide window")),
             If(simulated,
                 () => HStack(12, panels),
                 () => VStack(8, panels))

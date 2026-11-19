@@ -13,7 +13,7 @@
     "smoke": "node smoke.mjs"
   },
   "dependencies": {
-    "@apollo/server": "^5.5.1",
+    "@apollo/server": "^5.5.2",
     "@as-integrations/express5": "^1.1.2",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",

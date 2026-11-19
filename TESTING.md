@@ -643,6 +643,53 @@ before theorising:**
 
 Do not assume "quiet machine ⇒ passes": that holds only in the interactive case.
 
+### Generated-wrapper metadata consumer (issue #1565)
+
+`tests\aot_trim_proof\Reactor.WrapperMetadata` is a separate, code-only app:
+no `App.xaml`, no explicit provider construction, and no shared selftest bootstrap
+that could accidentally root metadata. It realizes SettingsCard/SettingsExpander,
+a second Toolkit library, and a provider-free control, then changes six texts and
+requires the native card header's identity to survive. It exits nonzero on failure
+or a 45-second timeout. It opens a window but does not inject foreground input.
+
+```powershell
+dotnet build tests\aot_trim_proof\Reactor.WrapperMetadata -p:Platform=x64 -p:RuntimeIdentifier=win-x64 -p:SkipSignaturesGen=true -m:1 -nr:false
+& .\tests\aot_trim_proof\Reactor.WrapperMetadata\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.WrapperMetadata.exe
+
+# In a Visual Studio Developer environment:
+dotnet publish tests\aot_trim_proof\Reactor.WrapperMetadata -c Release -p:Platform=x64 -r win-x64 -p:PublishAotInternal=true --self-contained -p:SkipSignaturesGen=true -m:1 -nr:false -o artifacts\wrapper-metadata-aot
+& .\artifacts\wrapper-metadata-aot\Reactor.WrapperMetadata.exe
+```
+
+The JIT run must log `dynamic-code=True`; the native run must log
+`dynamic-code=False`. Both must print `PASS updated six texts` and exit 0.
+The unused RadialGauge wrapper is a trimming sentinel: native output should contain
+the used `CardElement`/SettingsControls provider symbols but not `UnusedGaugeElement`
+or the RadialGauge metadata-provider namespace.
+
+The in-repo proof uses central package versions and Windows App SDK injection.
+For shipping-package coverage, pack `src\Reactor` at a unique local version and copy
+**only** this proof's `.csproj` and `Program.cs` into a fresh directory outside the
+repository and any inherited `Directory.Build.*` / `Directory.Packages.props`.
+Materialize its package versions in that **external copy**, where CPM is off by
+default and the repository's SDK injection is absent:
+
+```powershell
+# $consumer is the full path to the copied Reactor.WrapperMetadata.csproj.
+# Use the current central values from Directory.Build.props / Directory.Packages.props.
+dotnet add $consumer package Microsoft.WindowsAppSDK --version 2.2.0 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.SettingsControls --version 8.3.260402-preview2 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.HeaderedControls --version 8.3.260402-preview2 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.RadialGauge --version 8.3.260402-preview2 --no-restore
+```
+
+Then run the same build/publish commands against the external project with
+`-p:ReactorPackageVersion=<version>` and
+`-p:RestoreAdditionalProjectSources=<local-package-feed>`. That selects a
+`PackageReference` instead of all three Reactor project references, exercising the
+generator and authoring attributes shipped in the nupkg. Use separate output
+directories; never add explicit provider roots to this automatic-registration proof.
+
 ### Running selftests under NativeAOT
 
 The Host app supports an AOT-published build so the selftest suite doubles as Reactor's primary AOT regression gate. The framework itself is AOT-clean (see [`docs/aot-support.md`](docs/aot-support.md)) but a meaningful slice of selftest *fixtures* still trip over reflection paths the AOT compiler can't preserve. Those fixtures are pre-skipped via a baked-in pattern list so the run completes and the remaining failures are visible.
