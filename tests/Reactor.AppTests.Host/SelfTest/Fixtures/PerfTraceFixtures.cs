@@ -996,6 +996,8 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
         "PerfTrace_Outcome_TreeNodeCounted",
         "PerfTrace_Outcome_TreeChildCounted",
         "PerfTrace_Outcome_MenuItemCounted",
+        "PerfTrace_Outcome_KeyedMemoReplaced",
+        "PerfTrace_Outcome_ItemElementsCounted",
     ];
 
     private const string RootName = "render in PerfTrace_RenderOutcomes.RunAsync";
@@ -1021,6 +1023,8 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                     var (tree, setTree) = ctx.UseState(new[] { "t1", "t2" });
                     var (treeChild, setTreeChild) = ctx.UseState(false);
                     var (menuLabel, setMenuLabel) = ctx.UseState("outcome menu item");
+                    var (memoKey, setMemoKey) = ctx.UseState("outcome-keyed");
+                    var (itemElements, setItemElements) = ctx.UseState<Element[]>([TextBlock("outcome item 1"), TextBlock("outcome item 2")]);
                     // Two setState calls from the root's effects: one changes, one does not.
                     ctx.UseEffect(() =>
                     {
@@ -1052,7 +1056,7 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                         Memo(_ => TextBlock("outcome memo " + memoDep), memoDep),
                         // Re-created every render, yet nothing they show changes: a keyed Memo
                         // whose key holds, and a handler closure capturing the current tick.
-                        Memo("outcome-keyed", () => TextBlock("outcome keyed memo")),
+                        Memo(memoKey, () => TextBlock("outcome keyed memo " + memoKey)),
                         TextBlock("outcome tap").OnTapped((_, _) => setTick(tick + 1)),
                         // An unkeyed slot whose control type changes: replaced in place (the old
                         // control is unmounted, the new one mounted).
@@ -1072,7 +1076,14 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                             static t => TextBlock("outcome node " + t)).Height(120),
                         // A menu item patched natively; its click closure is new every render.
                         Button("outcome-menu", () => setMenuLabel("outcome menu item renamed")),
-                        MenuFlyout(TextBlock("outcome menu target"), MenuItem(menuLabel, () => setTick(tick + 1))));
+                        MenuFlyout(TextBlock("outcome menu target"), MenuItem(menuLabel, () => setTick(tick + 1))),
+                        // A keyed Memo whose key changes: one control unmounted, one mounted.
+                        Button("outcome-memo-key", () => setMemoKey("outcome-keyed-2")),
+                        // ComboBox item elements: removing two unmounts two controls; an Empty()
+                        // item mounts nothing, so it changes nothing.
+                        Button("outcome-items-remove", () => setItemElements([])),
+                        Button("outcome-items-empty", () => setItemElements([Empty()])),
+                        ComboBox(itemElements, default, null));
                 });
                 await Harness.Render();
                 await Harness.Render();
@@ -1083,7 +1094,8 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                 await Harness.Render();
                 foreach (var button in new[] { "outcome-move", "outcome-remove", "outcome-insert",
                     "outcome-combo-edit", "outcome-combo-grow", "outcome-combo-same",
-                    "outcome-memo", "outcome-replace", "outcome-exit", "outcome-tree", "outcome-tree-child", "outcome-menu" })
+                    "outcome-memo", "outcome-replace", "outcome-exit", "outcome-tree", "outcome-tree-child", "outcome-menu",
+                    "outcome-memo-key", "outcome-items-remove", "outcome-items-empty" })
                 {
                     H.ClickButton(button);
                     await Harness.Render();
@@ -1166,14 +1178,16 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
 
         H.Check("PerfTrace_Outcome_TallyClosed", ComponentPerfTally.OpenScopesForTests == 0);
 
-        // The last twelve root renders each made one kind of edit and nothing else, so the root's
+        // The last fifteen root renders each made one kind of edit and nothing else, so the root's
         // (inclusive) count is exactly that edit's: the moves the pass's Reconcile Stop reports,
         // one unmounted row, one mounted row, then one raw-items edit each for a changed and a
         // grown ComboBox list and nothing for an equal list in a new array, the Memo's text, a
         // replaced row (its unmount and the new control's mount), a row starting its exit
         // animation, a TreeView root node built (its container is realized later, during layout), a child
-        // node built under a retained root, and a menu item renamed in place.
-        var edits = root.TakeLast(12).Select(r =>
+        // node built under a retained root, a menu item renamed in place, a keyed Memo's key change
+        // (its control unmounted and its replacement mounted, never counted twice), two ComboBox
+        // item elements removed, and an Empty() item that mounts nothing.
+        var edits = root.TakeLast(15).Select(r =>
         {
             var stop = events.FirstOrDefault(e => e.Name == "Reconcile" && e.Opcode == 2
                 && e.Timestamp > r.Start.Timestamp && e.Timestamp < r.Stop.Timestamp);
@@ -1185,13 +1199,13 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
         }).ToList();
         Console.WriteLine("# perf outcomes: single-edit passes " + string.Join(" ", edits));
         H.Check("PerfTrace_Outcome_MovesCounted",
-            edits.Count == 12 && edits[0].Moved is >= 1 and < uint.MaxValue && edits[0].Changes == edits[0].Moved);
+            edits.Count == 15 && edits[0].Moved is >= 1 and < uint.MaxValue && edits[0].Changes == edits[0].Moved);
         H.Check("PerfTrace_Outcome_RemovalCounted",
-            edits.Count == 12 && edits[1].Removed == 1 && edits[1].Changes == 1);
+            edits.Count == 15 && edits[1].Removed == 1 && edits[1].Changes == 1);
         H.Check("PerfTrace_Outcome_InsertCounted",
-            edits.Count == 12 && edits[2].Inserted == 1 && edits[2].Changes == 1);
+            edits.Count == 15 && edits[2].Inserted == 1 && edits[2].Changes == 1);
         H.Check("PerfTrace_Outcome_RawItemsCounted",
-            edits.Count == 12 && edits[3].Changes == 1 && edits[4].Changes == 1 && edits[5].Changes == 0);
+            edits.Count == 15 && edits[3].Changes == 1 && edits[4].Changes == 1 && edits[5].Changes == 0);
 
         // The Memo(...) gate: it skipped while its dependency held (the tick), then rendered on the
         // dependency change as a memo miss that updated its text.
@@ -1203,17 +1217,21 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
             && (string)memo[1].Start.Fields["reason"] == "props" && (bool)memo[1].Start.Fields["memoMiss"]
             && (uint)memo[1].Stop.Fields["changes"] == 1
             && skips.Any(e => Name(e) == MemoName && Equals(e.Fields["componentId"], memoId))
-            && edits.Count == 12 && edits[6].Changes == 1);
+            && edits.Count == 15 && edits[6].Changes == 1);
         H.Check("PerfTrace_Outcome_ReplaceCounted",
-            edits.Count == 12 && edits[7].Replaced == 1 && edits[7].Changes == 2);
+            edits.Count == 15 && edits[7].Replaced == 1 && edits[7].Changes == 2);
         H.Check("PerfTrace_Outcome_ExitCounted",
-            edits.Count == 12 && edits[8].Changes == 1);
+            edits.Count == 15 && edits[8].Changes == 1);
         H.Check("PerfTrace_Outcome_TreeNodeCounted",
-            edits.Count == 12 && edits[9].Changes == 1);
+            edits.Count == 15 && edits[9].Changes == 1);
         H.Check("PerfTrace_Outcome_TreeChildCounted",
-            edits.Count == 12 && edits[10].Changes == 1);
+            edits.Count == 15 && edits[10].Changes == 1);
         H.Check("PerfTrace_Outcome_MenuItemCounted",
-            edits.Count == 12 && edits[11].Changes == 1);
+            edits.Count == 15 && edits[11].Changes == 1);
+        H.Check("PerfTrace_Outcome_KeyedMemoReplaced",
+            edits.Count == 15 && edits[12].Changes == 2);
+        H.Check("PerfTrace_Outcome_ItemElementsCounted",
+            edits.Count == 15 && edits[13].Changes == 2 && edits[14].Changes == 0);
     }
 }
 

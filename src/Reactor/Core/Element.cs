@@ -1280,7 +1280,14 @@ public abstract record Element
     private static bool ModifiersEqualCore(ElementModifiers? a, ElementModifiers? b, bool visibleOnly)
     {
         if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
+        if (a is null || b is null)
+        {
+            if (!visibleOnly) return false;
+            // A side without modifiers shows the defaults, so a callback-only bucket added or
+            // removed is no visible change.
+            a ??= _emptyModifiers;
+            b ??= _emptyModifiers;
+        }
 
         // #159 — hoist the Layout/Visual sub-record reads once instead of
         // dereferencing a.Layout?.X / a.Visual?.X ~20 times through the shim
@@ -1383,6 +1390,7 @@ public abstract record Element
     // against a set one without allocating (and without 20+ null-conditional shims).
     private static readonly LayoutModifiers _emptyLayout = new();
     private static readonly VisualModifiers _emptyVisual = new();
+    private static readonly ElementModifiers _emptyModifiers = new();
 
     /// <summary>
     /// Compare the Visual buckets by value. Brush fields (Background / Foreground /

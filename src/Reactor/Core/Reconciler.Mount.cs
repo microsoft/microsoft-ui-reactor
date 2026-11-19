@@ -148,7 +148,12 @@ public sealed partial class Reconciler
         if (control is not null)
         {
             DebugUIElementsCreated++;
-            CountPerfChanges();
+            // Count only a control created for this element: a transparent keyed Memo, a
+            // flyout decorator wrapping its target, or a RegisterType callback forwarding a
+            // child hands back a control its inner Mount already counted.
+            if (Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (ownsControl || registeredType && !ForwardsAnotherElement(control, element)))
+                Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep

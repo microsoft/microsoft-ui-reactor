@@ -928,6 +928,9 @@ public sealed class ReactorPerfTraceTests
         Element Tappable(string text) => TextBlock(text).OnTapped((_, _) => captured++);
         Assert.False(Changed(Tappable("a"), Tappable("a")));
         Assert.True(Changed(Tappable("a"), Tappable("b")));
+        // Adding or removing a callback-only modifier bucket shows nothing new either.
+        Assert.False(Changed(TextBlock("a"), Tappable("a")));
+        Assert.False(Changed(Tappable("a"), TextBlock("a")));
         Assert.True(Changed(VStack(TextBlock("a")), VStack(TextBlock("a")).OnTapped((_, _) => captured++).Margin(4)));
 
         // A keyed Memo whose key held keeps its control, unless the wrapper's own extras changed.
