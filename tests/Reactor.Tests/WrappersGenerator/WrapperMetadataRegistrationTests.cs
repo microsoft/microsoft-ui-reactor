@@ -133,6 +133,25 @@ public class WrapperMetadataRegistrationTests
     }
 
     [Fact]
+    public void FrameworkControl_RegistersTheCoreWinUIProvider()
+    {
+        // The real Microsoft.WinUI reference. On the experimental channel it also carries the
+        // Charts and Tabular providers, which must not make a built-in control's wrapper ambiguous.
+        Assert.NotNull(Compilation("Probe", "").GetTypeByMetadataName(
+            "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsChartsXamlMetaDataProvider"));
+
+        var result = Run("""
+            [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(Microsoft.UI.Xaml.Controls.StackPanel))]
+            public partial record TestElement;
+            """);
+
+        var source = Wrapper(result);
+        Assert.Contains("RegisterControlAssembly(new global::Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider())", source);
+        Assert.DoesNotContain("TryRegisterControlAssembly", source);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
     public void ExplicitOptOut_AndDescriptorOnly_DoNotRegisterOrWarn()
     {
         var result = Run("""
