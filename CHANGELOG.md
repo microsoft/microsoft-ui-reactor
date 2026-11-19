@@ -84,6 +84,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
+  (or estimate), and spacing after rerenders. Removing and re-adding the callback
+  preserves the native viewer and its single subscription, which is detached when
+  the component unmounts (spec 017, VirtualList).
+
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
   animations. Removing `.Opacity()` also releases its compositor override so styles
