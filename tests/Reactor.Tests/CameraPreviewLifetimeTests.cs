@@ -245,7 +245,7 @@ public class CameraPreviewLifetimeTests
         var first = Render();
         var control = new object();
         first.Attach(control);
-        first.Report("live", errors.Add);
+        first.Report("live", errors.Add, _ => { });
         Assert.Same(first, Render());
         Assert.Empty(stopped);
         if (hotReload)
@@ -265,10 +265,30 @@ public class CameraPreviewLifetimeTests
 
         var replacement = Render();
         Assert.NotEqual(first.Key, replacement.Key);
-        first.Report("late", errors.Add);
-        replacement.Report("replacement", errors.Add);
+        first.Report("late", errors.Add, _ => { });
+        replacement.Report("replacement", errors.Add, _ => { });
         Assert.Equal(["live", "replacement"], errors);
         context.RunCleanups();
+    }
+
+    [Fact]
+    public void PageReport_ReplayedErrorsJoinHistoryWithoutMarkingCurrentPreviewUnavailable()
+    {
+        var page = new CameraPreviewPageLifetime<object>(_ => { });
+        var current = new List<string?>();
+        var history = new List<string>();
+        page.Report($"{CameraPreviewDiagnostics.EarlierPreview}: preview: NoFrameSourceGroupAvailable", current.Add, history.Add);
+        page.Report($"{CameraPreviewDiagnostics.EarlierPreview}: cleanup: busy", current.Add, history.Add);
+        Assert.Empty(current);
+
+        page.Report("start: denied", current.Add, history.Add);
+        page.Report(null, current.Add, history.Add);
+        Assert.Equal(["start: denied", "unknown error"], current);
+        Assert.Equal(
+            [$"{CameraPreviewDiagnostics.EarlierPreview}: preview: NoFrameSourceGroupAvailable",
+             $"{CameraPreviewDiagnostics.EarlierPreview}: cleanup: busy",
+             "start: denied", "unknown error"],
+            history);
     }
 
     [Fact]

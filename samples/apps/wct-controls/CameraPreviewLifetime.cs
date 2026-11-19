@@ -242,9 +242,20 @@ internal sealed class CameraPreviewPageLifetime<TControl>(Action<TControl> stop)
         }
     }
 
-    public void Report(string? error, Action<string?> onError)
+    // Every message joins the history; only this preview's own failures decide
+    // whether it is currently available. Errors replayed from an earlier preview do not.
+    public void Report(string? error, Action<string?> setCurrent, Action<string> appendHistory)
     {
-        if (!_inactive)
-            onError(error);
+        if (_inactive)
+            return;
+        string message = error ?? "unknown error";
+        appendHistory(message);
+        if (!message.StartsWith(CameraPreviewDiagnostics.EarlierPreview + ":", StringComparison.Ordinal))
+            setCurrent(message);
     }
+}
+
+internal static class CameraPreviewDiagnostics
+{
+    public const string EarlierPreview = "previous preview";
 }

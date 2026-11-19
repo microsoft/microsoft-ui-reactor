@@ -255,7 +255,7 @@ public partial record CameraPreviewElement
         private async Task ReportEarlierAsync(Task<IReadOnlyList<string>> previousCleanup)
         {
             foreach (string message in await previousCleanup)
-                Report("previous preview", new InvalidOperationException(message));
+                Report(CameraPreviewDiagnostics.EarlierPreview, new InvalidOperationException(message));
         }
 
         // Low priority runs after continuations already queued at normal priority,

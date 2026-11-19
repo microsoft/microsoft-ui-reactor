@@ -166,7 +166,9 @@ Toolkit failure results and lifecycle exceptions are written to stderr. While
 mounted, exceptions also reach the current `OnPreviewFailed` callback; callbacks
 are not invoked after unmount. Errors that arrive after unmount are retained and
 handed to the next preview's `OnPreviewFailed` once the earlier cleanup finishes,
-since this `WinExe` may have no visible stderr. A failed start remains owned
+since this `WinExe` may have no visible stderr. The page lists every message in a
+diagnostics history, but only the current preview's own failures mark it
+unavailable. A failed start remains owned
 until unmount, so
 native camera-switch retries remain covered by the same cleanup. This adapter
 uses public Toolkit APIs, not a replacement capture
