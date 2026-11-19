@@ -129,6 +129,11 @@ Conventions for contributors:
   case-insensitive substring matching while preserving native token creation and
   removal (issue #1569).
 
+- **The Toolkit `RichSuggestBox` sample now filters and commits suggestions (issue #1570).**
+  Typing a mention filters the sample names case-insensitively; choosing a suggestion
+  inserts the full name instead of the query text. The page shows the last chosen name
+  and selection count while leaving token management to the Toolkit control.
+
 - The analyzers and source generators in the `Microsoft.UI.Reactor` package are
   now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
   the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and

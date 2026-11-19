@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;   // IBuffer.AsStream() for the ImageCropper sample bitmap
 using static Microsoft.UI.Reactor.Factories;
@@ -715,20 +716,43 @@ internal sealed class RichSuggestBoxPage : Component
         "Isaiah Langer", "Lee Gu", "Megan Bowen", "Patti Fernandez",
     };
 
-    public override Element Render() =>
-        Gallery.Page(
-            "RichSuggestBox",
-            "An ItemsControl wrapping a RichEditBox. Type the “@” prefix to mention someone — SuggestionRequested fires and the suggestion list (ItemsSource) is filtered. Tokens are managed internally, so the Items slot is excluded.",
-            RichSuggestBoxElement.RichSuggestBox(
-                header: "Message",
-                placeholderText: "Type @ to mention someone…",
-                prefixes: "@",
-                itemsSource: People,
-                onSuggestionRequested: OnSuggestion)
-                .Width(420).Height(160));
+    public override Element Render()
+    {
+        // Reactor roots this collection's WinRT projection for native ItemsSource under AOT.
+        var suggestions = UseMemo(() => new ObservableCollection<object>(People), []);
+        var (choice, updateChoice) = UseReducer((Name: "none", Count: 0));
 
-    // SuggestionRequested fires as the user types after a prefix; in a real app you
-    // filter and assign the box's ItemsSource from e.QueryText. Here the static list
-    // is already bound, so this is a no-op hook demonstrating the typed event arg.
-    private static void OnSuggestion(CommunityToolkit.WinUI.Controls.SuggestionRequestedEventArgs e) { }
+        return Gallery.Page(
+            "RichSuggestBox",
+            "Type @al, then press Down and Enter to mention Alex Wilber. Suggestions match names case-insensitively; unmatched queries show no suggestions. Tokens are managed internally, so the Items slot is excluded.",
+            VStack(12,
+                RichSuggestBoxElement.RichSuggestBox(
+                    header: "Message",
+                    placeholderText: "Type @ to mention someone…",
+                    prefixes: "@",
+                    itemsSource: suggestions,
+                    onSuggestionRequested: e =>
+                    {
+                        // Toolkit checks the source count when this callback returns,
+                        // before a state-driven reconciliation would update ItemsSource.
+                        suggestions.Clear();
+                        foreach (var person in People)
+                        {
+                            if (person.Contains(e.QueryText ?? "", StringComparison.OrdinalIgnoreCase))
+                                suggestions.Add(person);
+                        }
+                    },
+                    onSuggestionChosen: e =>
+                    {
+                        if (e.SelectedItem is not string person)
+                            throw new InvalidOperationException("The selected suggestion must be a sample name.");
+
+                        e.DisplayText = person;
+                        updateChoice(previous => (person, previous.Count + 1));
+                    })
+                    .AutomationId("Toolkit.RichSuggestBox")
+                    .Width(420).Height(160),
+                Caption($"Last chosen: {choice.Name} ({choice.Count} selections)")
+                    .AutomationId("RichSuggestBox.LastChoice")));
+    }
 }
