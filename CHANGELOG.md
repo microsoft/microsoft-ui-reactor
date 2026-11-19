@@ -74,6 +74,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- Idle Markdown text-selection scopes no longer enumerate native text or compute
+  transforms on unrelated window layout passes. Input and automation access refresh
+  stale documents lazily; active selections retain layout tracking and streaming
+  endpoint remapping. One scope per message remains supported (PR #1475).
+
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
   animations. Removing `.Opacity()` also releases its compositor override so styles
