@@ -205,6 +205,7 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_GRID_001` | Warning | Declared Grid column/row that no child occupies (unused track) | `UnusedGridTrackAnalyzer.cs` |
 | `REACTOR_INPUT_001` | Warning | Ctrl/Alt chord on .OnKeyDown is focus-scoped; use a Command accelerator | `OnKeyDownChordAnalyzer.cs` |
 | `REACTOR_PERF_FUNCREF` | Info | Command constructed inline in the render path is re-allocated every render; wrap it in UseMemo | `MemoizeCommandAnalyzer.cs` |
+| `REACTOR_PERF_001` | Info | Adjacent `Width`/`Height` calls on built-in element construction can use `Size` to avoid an intermediate layout, modifier, and element copy (ships a code fix) | `CombinedSizeModifierAnalyzer.cs` |
 | `REACTOR_ANIM_002` | Info | Unstable .Keyframes trigger (DateTime.Now / Guid.NewGuid / per-render allocation) restarts the animation every render | `KeyframeTriggerAnalyzer.cs` |
 | `REACTOR_INPUT_002` | Warning | Unsafe TryGetFiles in .OnDrop returns UNC/reparse/virtual files; use TryGetSafeLocalFiles | `UnsafeDropFilesAnalyzer.cs` |
 | `REACTOR_NAV_001` | Warning | UseNavigation handle captured into a static field or property outlives the page and pins its dispatcher | `StaticNavigationHandleAnalyzer.cs` |
@@ -228,6 +229,26 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 (variable hook counts across early returns, async boundaries inside `UseEffect`);
 they now ship — `_002` flags a hook after a single-guard early return, `_003`
 flags an `async`-void `UseEffect` body (spec 060 §4.1).
+
+## Combined sizing without extra copies
+
+`REACTOR_PERF_001` is allocation guidance, not a correctness warning or an FPS claim.
+For example, `Button("Save").Width(120).Height(32)` becomes
+`Button("Save").Size(width: 120, height: 32)`. The fix also handles height-first
+chains, keeping the arguments in their original evaluation order with named
+arguments, and preserves explicit generic type arguments.
+
+The rule binds both calls and the proposed `Size` call to Reactor's
+`ElementExtensions`. It only follows built-in factories or direct built-in element
+construction, optionally through Reactor's common modifiers. Unknown receivers and
+custom element records are excluded because their copy constructors can have side
+effects. Non-adjacent calls, expression trees, comments/directives in the rewritten
+portion, missing or shadowed `Size` methods, and incompatible result types are left
+alone. The original factory call and handler registration are preserved.
+
+There is no separate `mur check` Tier-3 mirror: those rules augment existing
+compiler diagnostics, whereas this pattern is valid C#. The suggestion ships in
+the bundled analyzer and can be configured through `.editorconfig`.
 
 ## Symbol-grounded matching — the WithKey case
 

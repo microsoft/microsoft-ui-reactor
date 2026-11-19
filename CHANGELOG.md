@@ -28,6 +28,10 @@ Conventions for contributors:
 
 ### Added
 
+- `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
+  element construction with `Size`. The code fix preserves argument evaluation order
+  and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
+
 ### Changed
 
 - Layout fluent modifiers copy the existing layout bucket directly instead of
