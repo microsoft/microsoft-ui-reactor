@@ -224,6 +224,10 @@ Conventions for contributors:
   instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
   also skip the write and leave the right-to-left value on the control.
 
+- Doc-pipeline tests locate the repository from their test output directory, so
+  snippet and documentation checks read the worktree that built them even when
+  the process working directory points into a sibling checkout (issue #1031).
+
 ### Security
 
 ## [0.1.0-preview.18] — 2026-11-12

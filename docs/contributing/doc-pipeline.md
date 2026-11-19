@@ -160,6 +160,30 @@ dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic archit
 dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overview overview
 ```
 
+### Running the doc pipeline tests
+
+Run the xUnit suite from the repository root.
+
+```powershell
+dotnet test tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64
+```
+
+Tests that read files from the checkout use [`TestRepo.Root`](../../tests/Reactor.DocPipeline.Tests/TestRepo.cs).
+It calls the shared [`RepoRootFinder`](../../src/Reactor.Cli/Pack/RepoRootFinder.cs),
+which walks up from `AppContext.BaseDirectory` until it finds a directory containing
+`src/Reactor/Reactor.csproj`. This selects the worktree containing the test output
+even when the process working directory is in a sibling checkout.
+
+To verify the checkout selection with two worktrees, build the tests in worktree A.
+Use a separate .NET probe process with its application base in A's test output and
+its working directory in worktree B to invoke
+`SourceSnippetSanityTests.Extracts_demo_region_from_UseMemoCells`. Record both paths
+inside the probe process, since a test runner can reset the working directory.
+Temporarily rename `SnapshotItems` in the `demo` region of
+`src/Reactor/Hooks/UseMemoCells.cs` in A while B's snippet stays valid. The test
+should fail on the missing `SnapshotItems` assertion and pass again after A's
+source is restored.
+
 ### Which `Reactor.xml` the reference phase reads
 
 Phase 5.7 generates `docs/guide/reference/**` from the XML doc comments the C#
