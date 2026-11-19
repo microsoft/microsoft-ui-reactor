@@ -168,8 +168,12 @@ public sealed class ToolkitInputTests : AppTestBase
     {
         var track = Bounds("Toolkit.RangeSelector");
         var thumb = Bounds($"ToolkitInput.{name}");
-        App.Drag($"ToolkitInput.{name}",
-            $"{(toMinimum ? track.X : track.X + track.Width - 1)},{thumb.Y + thumb.Height / 2}");
+        var destination = $"{(toMinimum ? track.X : track.X + track.Width - 1)},{thumb.Y + thumb.Height / 2}";
+        TestContext?.WriteLine(
+            $"drag-request source=ToolkitInput.{name}; source-bounds={thumb}; track-bounds={track}; " +
+            $"destination={destination}; dpi={App.GetValue("ToolkitInput.Dpi")} (endpoints use screen pixels)");
+        var result = App.Drag($"ToolkitInput.{name}", destination);
+        TestContext?.WriteLine($"drag-result-json={result}");
     }
 
     private void DragBy(string id, double dx, double dy)
@@ -179,7 +183,10 @@ public sealed class ToolkitInputTests : AppTestBase
         Assert.IsTrue(double.IsFinite(dpi) && dpi > 0, $"Invalid fixture DPI {dpi}.");
         int x = bounds.X + bounds.Width / 2 + (int)Math.Round(dx * dpi);
         int y = bounds.Y + bounds.Height / 2 + (int)Math.Round(dy * dpi);
-        App.Drag(id, $"{x},{y}");
+        TestContext?.WriteLine(FormattableString.Invariant(
+            $"drag-request source={id}; source-bounds={bounds}; dpi={dpi:R}; delta-dip={dx:R},{dy:R}; destination={x},{y}"));
+        var result = App.Drag(id, $"{x},{y}");
+        TestContext?.WriteLine($"drag-result-json={result}");
     }
 
     private UiRect Bounds(string id)

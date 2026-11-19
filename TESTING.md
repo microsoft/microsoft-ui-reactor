@@ -1036,6 +1036,10 @@ column widths, and forward/reverse focus traversal through the range thumbs.
 Keyboard tests use `App.SendKeys(..., viaSendInput: true)` without a focus target;
 pointer actions use `App.Click`/`App.Drag`. UIA Invoke is used only by the existing
 fixture navigator/reset infrastructure, never as the interaction under test.
+Drag diagnostics are captured in MSTest output/TRX: the pre-drag source bounds,
+DPI and requested destination, followed by the unmodified successful CLI JSON
+with its resolved endpoints. These are input geometry, not native manipulation
+deltas; do not infer the latter from pointer displacement alone.
 RangeSelector keyboard **value** changes remain unsupported by the sample's
 controlled mapping because this Toolkit version does not raise `ValueChanged`
 for them. Tab traversal does not claim to cover that limitation.
