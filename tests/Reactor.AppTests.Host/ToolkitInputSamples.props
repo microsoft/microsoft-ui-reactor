@@ -1,0 +1,25 @@
+<Project>
+  <!-- Reuse the actual gallery mappings and stateful pages, as ToolkitCompatibility does.
+       The source files cover the whole gallery, so their package dependencies travel together.
+       FixtureRegistry exposes only the input pages, never the camera page. -->
+  <ItemGroup>
+    <Compile Include="..\..\samples\apps\wct-controls\WctControls.cs" Link="ToolkitSamples\WctControls.cs" />
+    <Compile Include="..\..\samples\apps\wct-controls\SamplePages.cs" Link="ToolkitSamples\SamplePages.cs" />
+    <Compile Include="..\..\samples\apps\wct-controls\CameraPreviewLifetime.cs" Link="ToolkitSamples\CameraPreviewLifetime.cs" />
+    <!-- SettingsControls is already referenced by both hosts. -->
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RadialGauge" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.CameraPreview" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.ColorPicker" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.ImageCropper" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.TokenizingTextBox" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RangeSelector" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.HeaderedControls" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.LayoutTransformControl" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.TabbedCommandBar" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.MetadataControl" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.RichSuggestBox" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" />
+  </ItemGroup>
+</Project>

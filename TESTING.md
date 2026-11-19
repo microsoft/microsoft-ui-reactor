@@ -999,6 +999,7 @@ E2E test classes (across two host apps):
 | `AccessibilityInteractionTests` | WinUI | Keyboard nav, live regions, headings, semantic panels |
 | `EventHandlerTests` | WinUI | OnTapped, OnSizeChanged, OnPointerPressed, OnKeyDown, UseReducer |
 | `DataGridTests` | WinUI | Click-to-edit, keyboard commit |
+| `ToolkitInputTests` | WinUI | Toolkit range thumbs, suggestion/token input, sizer drags, actual Tab focus |
 | `WinFormsInteropTests` | WinForms | XAML Island rendering, tab navigation, UIA across boundaries |
 
 ```bash
@@ -1017,6 +1018,52 @@ enough that queue ordering makes a timing-sensitive race always won or always lo
 or `1`) for that environment and tool version. If the defect is *when* state is read rather than
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
+
+### Toolkit real-input cases (#1601)
+
+`ToolkitInputTests` hosts the actual `samples/apps/wct-controls` pages and mappings,
+not parallel test-only adapters. Both test hosts import the same sample sources and
+dependencies. The six `ToolkitInput_*` routes expose only range, rich suggestions,
+tokenizing text and the three sizers; they never navigate to the camera page.
+The host adds template-part automation IDs and read-only, sequenced native observations.
+Tests require an observation newer than the first post-action read, so a rejected
+range edit cannot pass on a stale pre-drag value.
+
+The eight cases cover accepted and rejected drags of both range thumbs, two
+Down/Enter rich-suggestion commits, typed token conversion/free text/removal,
+ContentSizer height, PropertySizer target width and both bounds, GridSplitter
+column widths, and forward/reverse focus traversal through the range thumbs.
+Keyboard tests use `App.SendKeys(..., viaSendInput: true)` without a focus target;
+pointer actions use `App.Click`/`App.Drag`. UIA Invoke is used only by the existing
+fixture navigator/reset infrastructure, never as the interaction under test.
+RangeSelector keyboard **value** changes remain unsupported by the sample's
+controlled mapping because this Toolkit version does not raise `ValueChanged`
+for them. Tab traversal does not claim to cover that limitation.
+
+Headless preparation (no host launch or package registration):
+
+```powershell
+dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+```
+
+Compilation and headless helper tests are **not runtime input passes**. To execute
+the new cases, obtain explicit authorization for an unlocked, interactive Windows
+desktop with input injection available, the pinned SDK/.NET runtime and a working
+`winapp ui` CLI. Reserve that desktop for the run, with no simultaneous user input,
+other UI automation or selftests. No camera access, OS settings changes, elevation
+or Appx installation/registration is needed. After authorization, the bounded run is:
+
+```powershell
+$env:REACTOR_E2E_RETRIES = '0'
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ToolkitInputTests" --report-trx --report-trx-filename toolkit-input.trx
+```
+
+Require eight executed passes, not skips/inconclusive results. Stop on detected
+human input and seek renewed authorization rather than trying another transport
+or host. Runtime checks and mutation checks remain necessary before closing #1601;
+the authored test inventory alone does not establish coverage.
 
 ### The suite runs as one named winapp workflow
 

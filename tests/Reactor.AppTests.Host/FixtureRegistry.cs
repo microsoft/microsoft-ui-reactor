@@ -174,6 +174,14 @@ internal static class FixtureRegistry
         "DragDrop_TypedReorder",
         "DragDrop_TextFormat",
 
+        // Toolkit gallery pages, with read-only native observations for real-input tests.
+        "ToolkitInput_RangeSelector",
+        "ToolkitInput_RichSuggestBox",
+        "ToolkitInput_TokenizingTextBox",
+        "ToolkitInput_ContentSizer",
+        "ToolkitInput_PropertySizer",
+        "ToolkitInput_GridSplitter",
+
         // Devtools UX (spec 028 — E2E validation)
         "DevtoolsUx_MenuAndToggle",
 
@@ -344,6 +352,13 @@ internal static class FixtureRegistry
         "Gesture_LongPress" => GestureE2EFixtures.LongPressTest(ctx),
         "DragDrop_TypedReorder" => DragDropE2EFixtures.TypedReorderTest(ctx),
         "DragDrop_TextFormat" => DragDropE2EFixtures.TextFormatTest(ctx),
+
+        "ToolkitInput_RangeSelector" => ToolkitInputFixtures.Build("range"),
+        "ToolkitInput_RichSuggestBox" => ToolkitInputFixtures.Build("rsb"),
+        "ToolkitInput_TokenizingTextBox" => ToolkitInputFixtures.Build("tokens"),
+        "ToolkitInput_ContentSizer" => ToolkitInputFixtures.Build("csz"),
+        "ToolkitInput_PropertySizer" => ToolkitInputFixtures.Build("psz"),
+        "ToolkitInput_GridSplitter" => ToolkitInputFixtures.Build("splitter"),
 
         // Docking input (spec 045 — E2E validation)
         "DockingInput_TwoPaneTextBoxes" => DockingInputE2EFixtures.TwoPaneTextBoxTest(ctx),

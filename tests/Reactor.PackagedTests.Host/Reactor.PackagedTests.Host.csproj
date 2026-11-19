@@ -99,4 +99,6 @@
     <ProjectReference Include="..\..\src\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj" />
   </ItemGroup>
 
+  <Import Project="..\Reactor.AppTests.Host\ToolkitInputSamples.props" />
+
 </Project>
