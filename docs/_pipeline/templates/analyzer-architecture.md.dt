@@ -196,14 +196,16 @@ flags an `async`-void `UseEffect` body (spec 060 §4.1).
 For example, `Button("Save").Width(120).Height(32)` becomes
 `Button("Save").Size(width: 120, height: 32)`. The fix also handles height-first
 chains, keeping the arguments in their original evaluation order with named
-arguments, and preserves explicit generic type arguments.
+arguments, and preserves explicit generic type arguments. Existing argument text
+is kept intact, including whitespace observed by nested `CallerArgumentExpression` calls.
 
 The rule binds both calls and the proposed `Size` call to Reactor's
 `ElementExtensions`. It only follows built-in factories or direct built-in element
 construction, optionally through Reactor's common modifiers. Unknown receivers and
 custom element records are excluded because their copy constructors can have side
-effects. Non-adjacent calls, expression trees, comments/directives in the rewritten
-portion, missing or shadowed `Size` methods, and incompatible result types are left
+effects. Object initializers are also excluded because they can supply custom modifier
+or layout records. Non-adjacent calls, expression trees, query expressions,
+comments/directives in the rewritten portion, missing or shadowed `Size` methods, and incompatible result types are left
 alone. The original factory call and handler registration are preserved.
 
 There is no separate `mur check` Tier-3 mirror: those rules augment existing

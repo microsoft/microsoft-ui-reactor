@@ -76,7 +76,8 @@ public sealed class CombinedSizeModifierAnalyzer : DiagnosticAnalyzer
             && !t.IsKind(SyntaxKind.WhitespaceTrivia) && !t.IsKind(SyntaxKind.EndOfLineTrivia)))
             return null;
 
-        if (outer.Ancestors().OfType<AnonymousFunctionExpressionSyntax>().Any(lambda =>
+        if (outer.Ancestors().Any(node => node is QueryExpressionSyntax)
+            || outer.Ancestors().OfType<AnonymousFunctionExpressionSyntax>().Any(lambda =>
             model.GetTypeInfo(lambda, ct).ConvertedType is INamedTypeSymbol type
             && type.OriginalDefinition.MetadataName == "Expression`1"
             && type.ContainingNamespace.ToDisplayString() == "System.Linq.Expressions"))
@@ -92,7 +93,8 @@ public sealed class CombinedSizeModifierAnalyzer : DiagnosticAnalyzer
             Named(outer.ArgumentList.Arguments[0], second == "Width" ? "width" : "height"),
         };
         var combined = outer.WithExpression(innerAccess.WithName(name))
-            .WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)))
+            .WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(
+                arguments, new[] { SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space) })))
             .WithTriviaFrom(outer);
         var replacement = model.GetSpeculativeSymbolInfo(
             outer.SpanStart, combined, SpeculativeBindingOption.BindAsExpression).Symbol as IMethodSymbol;
@@ -117,7 +119,8 @@ public sealed class CombinedSizeModifierAnalyzer : DiagnosticAnalyzer
         && SymbolEqualityComparer.Default.Equals(method.ReturnType, method.TypeArguments[0]);
 
     private static ArgumentSyntax Named(ArgumentSyntax argument, string name) =>
-        argument.WithNameColon(SyntaxFactory.NameColon(name));
+        argument.WithNameColon(SyntaxFactory.NameColon(name)
+            .WithColonToken(SyntaxFactory.Token(SyntaxKind.ColonToken).WithTrailingTrivia(SyntaxFactory.Space)));
 
     private static bool IsBuiltInConstruction(
         ExpressionSyntax expression, SemanticModel model, IAssemblySymbol assembly, CancellationToken ct)
@@ -140,7 +143,7 @@ public sealed class CombinedSizeModifierAnalyzer : DiagnosticAnalyzer
             return method.ContainingType.ToDisplayString() == "Microsoft.UI.Reactor.Factories"
                 && IsBuiltInElement(method.ReturnType, assembly);
         }
-        return expression is BaseObjectCreationExpressionSyntax
+        return expression is BaseObjectCreationExpressionSyntax { Initializer: null }
             && IsBuiltInElement(model.GetTypeInfo(expression, ct).Type, assembly);
     }
 

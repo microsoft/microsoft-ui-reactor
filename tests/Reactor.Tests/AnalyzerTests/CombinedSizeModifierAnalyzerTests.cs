@@ -13,10 +13,21 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 public class CombinedSizeModifierAnalyzerTests
 {
     private const string Stubs = """
-        namespace System.Runtime.CompilerServices { public static class IsExternalInit { } }
+        #nullable enable
+        namespace System.Runtime.CompilerServices
+        {
+            public static class IsExternalInit { }
+            [System.AttributeUsage(System.AttributeTargets.Parameter)]
+            public sealed class CallerArgumentExpressionAttribute : System.Attribute
+            {
+                public CallerArgumentExpressionAttribute(string parameterName) { }
+            }
+        }
         namespace Microsoft.UI.Reactor.Core
         {
-            public abstract record Element;
+            public abstract record Element { public ElementModifiers? Modifiers { get; init; } }
+            public record ElementModifiers { public LayoutModifiers? Layout { get; init; } }
+            public record LayoutModifiers;
             public record ButtonElement : Element;
             public record HasSizeElement : Element
             {
@@ -41,6 +52,7 @@ public class CombinedSizeModifierAnalyzerTests
         }
         namespace App
         {
+            using System.Linq;
             using Microsoft.UI.Reactor;
             using Microsoft.UI.Reactor.Core;
             using static Microsoft.UI.Reactor.Factories;
@@ -50,6 +62,18 @@ public class CombinedSizeModifierAnalyzerTests
                 public CustomElement() { }
                 protected CustomElement(CustomElement source) : base(source) { Copies++; }
             }
+            public record CustomModifiers : ElementModifiers
+            {
+                public static int Copies;
+                public CustomModifiers() { }
+                protected CustomModifiers(CustomModifiers source) : base(source) { Copies++; }
+            }
+            public record CustomLayout : LayoutModifiers
+            {
+                public static int Copies;
+                public CustomLayout() { }
+                protected CustomLayout(CustomLayout source) : base(source) { Copies++; }
+            }
             public class Widget
             {
                 public Widget Width(double width) => this;
@@ -58,6 +82,8 @@ public class CombinedSizeModifierAnalyzerTests
             public static class C
             {
                 public static double Next() => 5;
+                public static double Measure(int value,
+                    [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string text = "") => text.Length;
                 public static object Build(Element element, double w, double h) => BODY;
             }
         }
@@ -73,6 +99,8 @@ public class CombinedSizeModifierAnalyzerTests
     [InlineData("new ButtonElement().Width(w).Height(h)", true)]
     [InlineData("element.Width(w).Height(h)", false)]
     [InlineData("new CustomElement().Width(w).Height(h)", false)]
+    [InlineData("new ButtonElement { Modifiers = new CustomModifiers() }.Width(w).Height(h)", false)]
+    [InlineData("new ButtonElement { Modifiers = new ElementModifiers { Layout = new CustomLayout() } }.Width(w).Height(h)", false)]
     [InlineData("HasSize().Width(w).Height(h)", false)]
     [InlineData("Button().Width(w).Margin(4).Height(h)", false)]
     [InlineData("Button().Width(w).Width(h)", false)]
@@ -156,6 +184,15 @@ public class CombinedSizeModifierAnalyzerTests
         AssertNoMatches(source);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(".AsQueryable()")]
+    public void SemanticMatching_Rejects_Query_Selectors(string conversion)
+    {
+        AssertNoMatches(Stubs.Replace("BODY",
+            $"from x in new[] {{ 1, 2 }}{conversion} select Button().Width(x).Height(h)"));
+    }
+
     [Fact]
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000",
         Justification = "Roslyn test compilation binds against the built Reactor assembly; this host is not single-file published.")]
@@ -184,6 +221,8 @@ public class CombinedSizeModifierAnalyzerTests
     [InlineData("Button().Width(Next()).Height(Next())", "Button().Size(width: Next(), height: Next())")]
     [InlineData("Button().Height(Next()).Width(Next())", "Button().Size(height: Next(), width: Next())")]
     [InlineData("Button().Margin(4).Width(w).Height(h)", "Button().Margin(4).Size(width: w, height: h)")]
+    [InlineData("Button().Width(Measure(1+2)).Height(30)", "Button().Size(width: Measure(1+2), height: 30)")]
+    [InlineData("Button().Height(Measure(1+2)).Width(Measure(3*4))", "Button().Size(height: Measure(1+2), width: Measure(3*4))")]
     public async Task CodeFix_Combines_Without_Reordering_Arguments(string before, string after)
     {
         await new CSharpCodeFixTest<CombinedSizeModifierAnalyzer, CombinedSizeModifierCodeFix, DefaultVerifier>
@@ -262,6 +301,9 @@ public class CombinedSizeModifierAnalyzerTests
         if (compilation.GetTypeByMetadataName("System.Linq.Expressions.Expression`1") is null)
             compilation = compilation.AddReferences(MetadataReference.CreateFromFile(
                 typeof(global::System.Linq.Expressions.Expression).Assembly.Location));
+        if (compilation.GetTypeByMetadataName("System.Linq.Queryable") is null)
+            compilation = compilation.AddReferences(MetadataReference.CreateFromFile(
+                typeof(global::System.Linq.Queryable).Assembly.Location));
         Assert.Empty(compilation.GetDiagnostics(ct).Where(d => d.Severity == DiagnosticSeverity.Error));
         var tree = compilation.SyntaxTrees.Single();
         var model = compilation.GetSemanticModel(tree);

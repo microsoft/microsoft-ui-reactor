@@ -38,10 +38,11 @@ public sealed class CombinedSizeModifierCodeFix : CodeFixProvider
                 continue;
 
             // Change only the suffix, so BatchFixer can also apply a diagnostic
-            // inside the untouched receiver without overlapping text edits.
+            // inside the untouched receiver without overlapping text edits. Keep
+            // argument text intact for nested CallerArgumentExpression calls.
             var suffix = SyntaxFactory.InvocationExpression(
                 replacementAccess.Name.WithoutTrivia(), replacement.ArgumentList)
-                .NormalizeWhitespace().ToFullString();
+                .WithoutTrailingTrivia().ToFullString();
             var change = new TextChange(TextSpan.FromBounds(innerAccess.Name.SpanStart, invocation.Span.End), suffix);
             context.RegisterCodeFix(
                 CodeAction.Create(
