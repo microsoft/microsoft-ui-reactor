@@ -4929,7 +4929,7 @@ public sealed partial class Reconciler : IDisposable
 
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(control);
+            var visual = AnimationHelper.GetElementVisual(control);
             // As ApplyExitTransition: a control whose visual was handed out must not be pooled
             // (and so cannot be re-rented while its fade, and the removal after it, is pending).
             ElementPool.MarkCompositorTainted(control);
@@ -5634,7 +5634,7 @@ public sealed partial class Reconciler : IDisposable
     private static void ApplyTransitionsViaCompositor(UIElement uie, ImplicitTransitions implicitT)
     {
         ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var implicitAnimations = visual.ImplicitAnimations ?? compositor.CreateImplicitAnimationCollection();
 
@@ -5674,7 +5674,7 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyLayoutAnimation(UIElement uie, LayoutAnimationConfig config)
     {
         ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
         var implicitAnimations = compositor.CreateImplicitAnimationCollection();
@@ -5729,7 +5729,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearLayoutAnimation(UIElement uie)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         visual.ImplicitAnimations = null;
     }
 
@@ -5745,7 +5745,7 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyPropertyAnimation(UIElement uie, AnimationConfig config, LayoutAnimationConfig? layoutConfig)
     {
         ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
         // Start from existing implicit animations (layout may have set Offset/Size)
@@ -5782,7 +5782,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         if (visual.ImplicitAnimations is not { } animations) return;
         if (properties.HasFlag(AnimateProperty.Opacity)) animations.Remove("Opacity");
         if (properties.HasFlag(AnimateProperty.Offset)) animations.Remove("Offset");
@@ -5805,7 +5805,7 @@ public sealed partial class Reconciler : IDisposable
         if (enter is null) return;
         ElementPool.MarkCompositorTainted(uie);
 
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var curve = transition.Curve ?? Curve.Ease(300, Easing.Decelerate);
 
@@ -5830,7 +5830,7 @@ public sealed partial class Reconciler : IDisposable
         if (exit is null) { onComplete(); return; }
         ElementPool.MarkCompositorTainted(uie);
 
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var curve = transition.Curve ?? Curve.Ease(300, Easing.Decelerate);
 
@@ -5887,7 +5887,7 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyFadeTransition(UIElement uie, Compositor compositor, Curve curve, bool isEnter, TimeSpan delay)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         if (isEnter)
         {
             visual.Opacity = 0;
@@ -5932,16 +5932,19 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyScaleTransition(UIElement uie, Visual visual, Compositor compositor, float from, Curve curve, bool isEnter, TimeSpan delay)
     {
+        // Scale relative to the element's own .Scale(), which lives on the visual once it is handed out.
+        var rest = visual.Scale;
+        var scaled = new Vector3(rest.X * from, rest.Y * from, rest.Z);
         if (isEnter)
         {
-            visual.Scale = new Vector3(from, from, 1f);
-            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, Vector3.One, curve);
+            visual.Scale = scaled;
+            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, rest, curve);
             if (delay > TimeSpan.Zero) AnimationHelper.SetDelay(anim, delay);
             visual.StartAnimation("Scale", anim);
         }
         else
         {
-            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, new Vector3(from, from, 1f), curve);
+            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, scaled, curve);
             if (delay > TimeSpan.Zero) AnimationHelper.SetDelay(anim, delay);
             visual.StartAnimation("Scale", anim);
         }
@@ -6102,8 +6105,12 @@ public sealed partial class Reconciler : IDisposable
             _ => null, // Normal
         };
 
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
+
+        // Normal returns the transforms to the element's own .Scale/.Translation/.Rotation
+        // values, not to identity, so a hover-out does not discard them (#1613).
+        var rest = newState == InteractionState.Normal ? DeclaredTransform(uie) : default;
 
         // Compositor properties — animate via Visual
         var targetOpacity = values?.Opacity ?? 1.0f;
@@ -6112,7 +6119,7 @@ public sealed partial class Reconciler : IDisposable
 
         if (values?.Scale.HasValue == true || values?.ScaleV.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetScale = values?.ScaleV ?? (values?.Scale.HasValue == true ? new Vector3(values.Scale.Value, values.Scale.Value, 1f) : Vector3.One);
+            var targetScale = values?.ScaleV ?? (values?.Scale.HasValue == true ? new Vector3(values.Scale.Value, values.Scale.Value, 1f) : rest.Scale);
             var scaleAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetScale, curve);
             visual.StartAnimation("Scale", scaleAnim);
         }
@@ -6122,14 +6129,14 @@ public sealed partial class Reconciler : IDisposable
             // Animate Translation, not Offset: on a XAML element's handoff visual, Offset is the
             // layout position, so animating it to zero pulls the element to its parent's origin.
             ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
-            var targetTranslation = values?.Translation ?? Vector3.Zero;
+            var targetTranslation = values?.Translation ?? rest.Translation;
             var translationAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetTranslation, curve);
             visual.StartAnimation("Translation", translationAnim);
         }
 
         if (values?.Rotation.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetRotation = values?.Rotation ?? 0f;
+            var targetRotation = values?.Rotation ?? rest.Radians;
             var rotationAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetRotation, curve);
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
@@ -6186,6 +6193,23 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    private readonly record struct RestTransform(Vector3 Scale, Vector3 Translation, float Radians);
+
+    /// <summary>
+    /// The transform modifier values the mounted element (or a decorator over it) declares,
+    /// with identity for the ones it leaves unset.
+    /// </summary>
+    private static RestTransform DeclaredTransform(UIElement uie)
+    {
+        var scale = FindMountedElementValue(uie, static e => e.Modifiers?.Scale is { } s ? new global::System.Runtime.CompilerServices.StrongBox<Vector3>(s) : null);
+        var translation = FindMountedElementValue(uie, static e => e.Modifiers?.Translation is { } t ? new global::System.Runtime.CompilerServices.StrongBox<Vector3>(t) : null);
+        var rotation = FindMountedElementValue(uie, static e => e.Modifiers?.Rotation is { } r ? new global::System.Runtime.CompilerServices.StrongBox<float>(r) : null);
+        return new RestTransform(
+            scale?.Value ?? Vector3.One,
+            translation?.Value ?? Vector3.Zero,
+            (rotation?.Value ?? 0f) * MathF.PI / 180f);
+    }
+
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {
         if (pressed is null) return pointerOver;
@@ -6218,7 +6242,7 @@ public sealed partial class Reconciler : IDisposable
         for (int i = 0; i < panel.Children.Count; i++)
         {
             var child = panel.Children[i];
-            var visual = ElementCompositionPreview.GetElementVisual(child);
+            var visual = AnimationHelper.GetElementVisual(child);
             if (visual.ImplicitAnimations is null) continue;
 
             var delay = TimeSpan.FromTicks(config.Delay.Ticks * i);
@@ -6272,7 +6296,7 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
     {
         ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
         foreach (var entry in entries)
@@ -6465,7 +6489,7 @@ public sealed partial class Reconciler : IDisposable
         // targets were started — StopAnimation is a no-op if no animation is running on that property.
         try
         {
-            var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(uie);
+            var visual = AnimationHelper.GetElementVisual(uie);
             visual.StopAnimation("Opacity");
             visual.StopAnimation("Scale");
             visual.StopAnimation("Translation");
@@ -6485,7 +6509,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (config.ScrollViewer is null) return;
         ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var scrollPropertySet = ElementCompositionPreview.GetScrollViewerManipulationPropertySet(config.ScrollViewer);
 
@@ -6499,7 +6523,7 @@ public sealed partial class Reconciler : IDisposable
 
     internal static void ClearScrollAnimation(UIElement uie, ScrollAnimationConfig config)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         foreach (var expr in config.Expressions)
             visual.StopAnimation(expr.Property);
     }

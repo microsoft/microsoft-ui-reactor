@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
@@ -40,8 +41,82 @@ internal static class AnimationHelper
 
     private static Visual GetAnimationVisual(UIElement element)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var visual = GetElementVisual(element);
         ElementPool.MarkCompositorTainted(element);
+        return visual;
+    }
+
+    // Elements whose handoff visual this helper already returned. Facade writes throw from
+    // then on, so their facade transforms are known to be identity. Like the pool marker this
+    // follows wrapper identity; a fresh wrapper only costs one more read of identity values.
+    private static readonly ConditionalWeakTable<UIElement, object> _visualHandedOut = new();
+    private static readonly object HandedOut = new();
+
+    /// <summary>
+    /// Returns the element's handoff visual. Every Reactor feature that needs the visual of a
+    /// user element must take it here rather than from <see cref="ElementCompositionPreview"/>.
+    /// </summary>
+    /// <remarks>
+    /// WinUI refuses <c>GetElementVisual</c> while <see cref="UIElement.Scale"/>,
+    /// <see cref="UIElement.Rotation"/> or <see cref="UIElement.CenterPoint"/> holds a non-identity
+    /// value, and refuses facade writes after the handoff (#1613). The first call therefore resets
+    /// those facade values to identity, takes the visual, writes the same values to it, and marks
+    /// them as composition writes so later modifier updates and unsets follow them to the visual.
+    /// <see cref="UIElement.Translation"/> does not block the handoff but moves too, so that the
+    /// visual's Translation is the only one and features that animate it start from the right value.
+    /// </remarks>
+    internal static Visual GetElementVisual(UIElement element)
+    {
+        if (_visualHandedOut.TryGetValue(element, out _))
+            return ElementCompositionPreview.GetElementVisual(element);
+
+        var scale = element.Scale;
+        var rotation = element.Rotation;
+        var translation = element.Translation;
+        var center = element.CenterPoint;
+        bool moveScale = scale != Vector3.One, moveRotation = rotation != 0;
+        bool moveTranslation = translation != Vector3.Zero, moveCenter = center != Vector3.Zero;
+        if (!(moveScale || moveRotation || moveTranslation || moveCenter))
+        {
+            var plain = ElementCompositionPreview.GetElementVisual(element);
+            _visualHandedOut.AddOrUpdate(element, HandedOut);
+            return plain;
+        }
+
+        if (moveScale) element.Scale = Vector3.One;
+        if (moveRotation) element.Rotation = 0;
+        if (moveTranslation) element.Translation = Vector3.Zero;
+        if (moveCenter) element.CenterPoint = Vector3.Zero;
+
+        Visual visual;
+        try
+        {
+            visual = ElementCompositionPreview.GetElementVisual(element);
+        }
+        catch
+        {
+            // Something else still blocks the handoff; leave the element as it was.
+            if (moveScale) element.Scale = scale;
+            if (moveRotation) element.Rotation = rotation;
+            if (moveTranslation) element.Translation = translation;
+            if (moveCenter) element.CenterPoint = center;
+            throw;
+        }
+        _visualHandedOut.AddOrUpdate(element, HandedOut);
+
+        // Facade Rotation is in degrees; RotationAngle is in radians.
+        if (moveScale) visual.Scale = scale;
+        if (moveRotation) visual.RotationAngle = rotation * MathF.PI / 180f;
+        if (moveTranslation)
+        {
+            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+            visual.Properties.InsertVector3("Translation", translation);
+        }
+        if (moveCenter) visual.CenterPoint = center;
+        if (moveScale) MarkCompositionWrite(element, "Scale");
+        if (moveRotation) MarkCompositionWrite(element, "Rotation");
+        if (moveTranslation) MarkCompositionWrite(element, "Translation");
+        if (moveCenter) MarkCompositionWrite(element, "CenterPoint");
         return visual;
     }
 
@@ -499,7 +574,7 @@ public static class CompositorProvider
     public static Compositor EnsureCompositor(UIElement element)
     {
         if (_current is not null) return _current;
-        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var visual = AnimationHelper.GetElementVisual(element);
         _current = visual.Compositor;
         return _current;
     }

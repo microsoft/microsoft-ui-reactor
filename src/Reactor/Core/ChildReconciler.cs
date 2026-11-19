@@ -1351,7 +1351,7 @@ internal static class ChildReconciler
         if (curve is null) return;
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(ctrl);
+            var visual = Animation.AnimationHelper.GetElementVisual(ctrl);
             var compositor = visual.Compositor;
             var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
             var coll = compositor.CreateImplicitAnimationCollection();

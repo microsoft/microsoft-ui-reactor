@@ -826,7 +826,7 @@ public sealed partial class Reconciler
 
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+            var visual = AnimationHelper.GetElementVisual(container);
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the

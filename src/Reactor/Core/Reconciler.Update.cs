@@ -1660,7 +1660,7 @@ public sealed partial class Reconciler
     /// </summary>
     private static void StartMoveOffsetAnimation(UIElement container, Curve curve)
     {
-        var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+        var visual = AnimationHelper.GetElementVisual(container);
         var compositor = visual.Compositor;
         var anim = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
         // Implicit animations fire automatically when WinUI assigns the

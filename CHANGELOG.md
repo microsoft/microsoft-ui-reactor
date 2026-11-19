@@ -84,6 +84,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- `.CenterPoint()`, `.Rotation()`, `.Scale()` and `.Translation()` now work together with
+  `.InteractionStates()`, `.Transition()`, `.Keyframes()`, `.Animate()` and the other
+  features that animate an element on the compositor. Previously a non-default
+  `CenterPoint`, `Rotation` or `Scale` made those features throw
+  `UnauthorizedAccessException`, either at mount or from the pointer handler on hover.
+  The transform values now move to the element's composition visual when a feature first
+  needs it. Leaving an interaction state also returns to the element's own transform
+  values instead of identity, and `Transition.Scale` scales relative to the element's
+  `.Scale()` (issue #1613).
+
 - `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
   (or estimate), and spacing after rerenders. Removing and re-adding the callback
   preserves the native viewer and its single subscription, which is detached when
