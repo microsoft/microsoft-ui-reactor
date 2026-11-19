@@ -59,6 +59,9 @@ public sealed class ForceSimulation
     public double AlphaTarget { get => _alphaTarget; set => _alphaTarget = value; }
     public double AlphaMin { get => _alphaMin; set => _alphaMin = value; }
 
+    // Test seam: the centre last set through Center(x, y).
+    internal (double X, double Y) CenterPoint => (_centerX, _centerY);
+
     public ForceSimulation SetNodes(IEnumerable<ForceNode> nodes)
     {
         _nodes.Clear();

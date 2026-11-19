@@ -256,6 +256,9 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(UIElement.OpacityProperty);
         fe.ClearValue(UIElement.VisibilityProperty);
         fe.ClearValue(FrameworkElement.RenderTransformProperty);
+        // FitParent clips its host while committed content is stale (issue #174), and .Set()
+        // can write one too; a clip handed to the next renter would silently crop it.
+        fe.ClearValue(UIElement.ClipProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
         // A context flyout is a live object graph owned by the previous renter's component.
         // Without this, right-clicking a recycled control shows the *previous* element's menu.
