@@ -59,6 +59,7 @@ public class ReactorListStateTests
     public void LastKeys_Is_A_Live_View_During_Collection_Notifications()
     {
         var state = new ReactorListState();
+        state.SetKeySnapshotEnabled(false);
         state.Reset([(0, "a"), (1, "b"), (2, "c")]);
         var keys = state.LastKeys;
         var snapshot = keys.ToArray();
@@ -82,6 +83,7 @@ public class ReactorListStateTests
     public void LastKeys_Retained_View_Tracks_Reset_And_Empty_State()
     {
         var state = new ReactorListState();
+        state.SetKeySnapshotEnabled(false);
         var keys = state.LastKeys;
         state.Reset([(0, "before")]);
         Assert.Equal(["before"], keys);
@@ -93,6 +95,35 @@ public class ReactorListStateTests
         state.Reset([]);
         Assert.Empty(keys);
         Assert.Throws<ArgumentOutOfRangeException>(() => keys[0]);
+    }
+
+    [Fact]
+    public void Reenabling_Snapshot_Uses_Current_Order_And_Keeps_Custom_Diffs_Flat()
+    {
+        var state = new ReactorListState();
+        state.Reset([(0, "a"), (1, "b"), (2, "c")]);
+        var originalSnapshot = state.KeySnapshot;
+        state.SetKeySnapshotEnabled(false);
+        KeyedListDiff.Apply(state, new[] { "c", "a", "b" }, static (key, _) => key);
+        Assert.Null(state.KeySnapshot);
+        Assert.Equal(["c", "a", "b"], state.LastKeys);
+
+        state.SetKeySnapshotEnabled(true);
+        var snapshot = Assert.IsType<List<string>>(state.LastKeys);
+        Assert.NotSame(originalSnapshot, snapshot);
+        Assert.Equal(["c", "a", "b"], snapshot);
+        string[]? duringAdd = null;
+        state.Source.CollectionChanged += (_, _) => duringAdd = snapshot.ToArray();
+
+        KeyedListDiff.Apply(state, new[] { "c", "a", "b", "d" }, static (key, _) => key);
+
+        Assert.NotNull(duringAdd);
+        Assert.Equal(["c", "a", "b"], duringAdd);
+        Assert.Same(snapshot, state.LastKeys);
+        Assert.Equal(["c", "a", "b", "d"], snapshot);
+        state.SetKeySnapshotEnabled(false);
+        Assert.Null(state.KeySnapshot);
+        Assert.Equal(["c", "a", "b", "d"], state.LastKeys);
     }
 
     [Fact]

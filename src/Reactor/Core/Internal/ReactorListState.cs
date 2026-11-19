@@ -94,10 +94,29 @@ internal sealed class ReactorListState
     public Dictionary<string, ReactorRow> ByKey { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Read-only live view of the source keys in visual order. The rows
-    /// already own these references, so no second per-item array is retained.
+    /// Ordered keys from the last diff. Custom selectors retain a flat snapshot
+    /// for the all-item comparison; default VirtualList positions use a live
+    /// source view because their unchanged-count updates skip that comparison.
     /// </summary>
-    public IReadOnlyList<string> LastKeys { get; }
+    public IReadOnlyList<string> LastKeys => KeySnapshot ?? (IReadOnlyList<string>)(_sourceKeys ??= new RowKeys(Source));
+
+    internal List<string>? KeySnapshot { get; private set; } = new();
+    private RowKeys? _sourceKeys;
+
+    internal void SetKeySnapshotEnabled(bool enabled)
+    {
+        if (!enabled)
+        {
+            KeySnapshot = null;
+        }
+        else if (KeySnapshot is null)
+        {
+            var keys = new List<string>(Source.Count);
+            foreach (var row in Source)
+                keys.Add(row.Key);
+            KeySnapshot = keys;
+        }
+    }
 
     private sealed class RowKeys(ObservableCollection<ReactorRow> source) : IReadOnlyList<string>
     {
@@ -146,7 +165,6 @@ internal sealed class ReactorListState
 
     public ReactorListState()
     {
-        LastKeys = new RowKeys(Source);
         Source.CollectionChanged += (_, _) =>
         {
             StructureChanged = true;
@@ -168,6 +186,7 @@ internal sealed class ReactorListState
     {
         Source.Clear();
         ByKey.Clear();
+        KeySnapshot?.Clear();
 
         int i = 0;
         foreach (var (_, key) in rows)
@@ -180,6 +199,7 @@ internal sealed class ReactorListState
             // tolerant. ByKey then points at the canonical (first) row.
             if (!ByKey.ContainsKey(key))
                 ByKey.Add(key, row);
+            KeySnapshot?.Add(key);
             i++;
         }
     }

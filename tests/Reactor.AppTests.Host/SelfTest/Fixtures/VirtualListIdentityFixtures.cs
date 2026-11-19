@@ -33,6 +33,7 @@ internal static class VirtualListIdentityFixtures
             int changes = 0, oldRefs = refs;
             state.Source.CollectionChanged += (_, _) => changes++;
             H.Check("VirtualListIdentity_InitialContent", H.FindButton("row 0 v0") is not null);
+            H.Check("VirtualListIdentity_DefaultOmitsKeySnapshot", state.KeySnapshot is null);
             H.ClickButton("row 0 v0");
             H.Check("VirtualListIdentity_InitialCallback", clicked == 0);
 
@@ -80,6 +81,7 @@ internal static class VirtualListIdentityFixtures
                     events.Count == Math.Abs(next - previous) &&
                     events.All(e => e == (next > previous ? NotifyCollectionChangedAction.Add : NotifyCollectionChangedAction.Remove)));
                 H.Check($"VirtualListIdentity_SourceRetained_{previous}_{next}", ReferenceEquals(source, repeater.ItemsSource));
+                H.Check($"VirtualListIdentity_CountOmitsKeySnapshot_{previous}_{next}", state.KeySnapshot is null);
                 if (previous > 0 && next > 0)
                     H.Check($"VirtualListIdentity_Survivor_{previous}_{next}", ReferenceEquals(survivor, source[0]));
                 H.Check($"VirtualListIdentity_RealizedCount_{next}",
@@ -126,6 +128,7 @@ internal static class VirtualListIdentityFixtures
             }
 
             H.Check("VirtualListIdentity_CustomMount", state.LastKeys.SequenceEqual(keys) && calls == keys.Length);
+            H.Check("VirtualListIdentity_CustomKeepsKeySnapshot", state.KeySnapshot is not null);
             var bRow = state.ByKey["b"];
             var stationaryControl = repeater.TryGetElement(0);
             (keys[1], keys[2]) = (keys[2], keys[1]);
@@ -167,6 +170,7 @@ internal static class VirtualListIdentityFixtures
             custom = false;
             await Refresh();
             H.Check("VirtualListIdentity_CustomToDefault", calls == 0 &&
+                state.KeySnapshot is null &&
                 state.LastKeys.SequenceEqual(Enumerable.Range(0, keys.Length).Select(i => i.ToString())));
             var defaultRow = state.Source[0];
             await Refresh();
@@ -175,7 +179,8 @@ internal static class VirtualListIdentityFixtures
             keys[0] = "loaded";
             custom = true;
             await Refresh();
-            H.Check("VirtualListIdentity_DefaultToCustom", state.LastKeys.SequenceEqual(keys) && calls >= keys.Length);
+            H.Check("VirtualListIdentity_DefaultToCustom",
+                state.KeySnapshot is not null && state.LastKeys.SequenceEqual(keys) && calls >= keys.Length);
             ReactorDiagnostics.ClearRecentKeyedListWarnings();
         }
     }
@@ -225,6 +230,7 @@ internal static class VirtualListIdentityFixtures
             H.Check("VirtualListIdentity_HealthyTransitionRefreshesContent",
                 first is WinUI.TextBlock { Text: "numeric row 0 v1" });
             H.Check("VirtualListIdentity_HealthyTransitionDropsCustomSelector", calls == 0);
+            H.Check("VirtualListIdentity_HealthyTransitionDropsKeySnapshot", state.KeySnapshot is null);
 
             version = 2;
             host.RequestRender(force: true);
@@ -232,6 +238,20 @@ internal static class VirtualListIdentityFixtures
             H.Check("VirtualListIdentity_HealthyTransitionThenDefaultUpdate",
                 first is WinUI.TextBlock { Text: "numeric row 0 v2" }
                 && ReferenceEquals(first, repeater.TryGetElement(0)) && changes == 0 && calls == 0);
+
+            custom = true;
+            version = 3;
+            host.RequestRender(force: true);
+            await Harness.Render();
+            H.Check("VirtualListIdentity_HealthyReturnToCustomMaterializesKeys",
+                state.KeySnapshot is not null && calls == count
+                && state.LastKeys.SequenceEqual(Enumerable.Range(0, count).Select(i => i.ToString())));
+            H.Check("VirtualListIdentity_HealthyReturnToCustomKeepsIdentity",
+                changes == 0 && ReferenceEquals(factory, repeater.ItemTemplate)
+                && ReferenceEquals(first, repeater.TryGetElement(0))
+                && rows.Zip(state.Source, static (oldRow, newRow) => ReferenceEquals(oldRow, newRow)).All(same => same));
+            H.Check("VirtualListIdentity_HealthyReturnToCustomRefreshesContent",
+                first is WinUI.TextBlock { Text: "numeric row 0 v3" });
         }
     }
 

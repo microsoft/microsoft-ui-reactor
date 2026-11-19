@@ -115,6 +115,8 @@ internal static class LazyStackLifecycle
             return;
         }
 
+        state.SetKeySnapshotEnabled(!defaultKeys);
+
         // A prior duplicate-key bailout collapses ByKey. Reseed before switching
         // to default positions, preserving the existing collection binding.
         if (defaultKeys && state.ByKey.Count != state.LastKeys.Count)
@@ -178,9 +180,11 @@ internal static class LazyStackLifecycle
 
     private static void SeedListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy, ReactorListState state)
     {
+        bool defaultKeys = VirtualListIndices.IsDefaultKeySource(lazy);
+        state.SetKeySnapshotEnabled(!defaultKeys);
         state.Reset(KeyedListDiff.SeedKeys(
             lazy, lazy.ItemCount, static (l, i) => l.GetKeyAt(i),
             reconciler._logger, repeater.GetType().Name, repeater, reconciler.KeyedListAttributionFor(lazy)));
-        state.HasDefaultPositionalKeys = VirtualListIndices.IsDefaultKeySource(lazy);
+        state.HasDefaultPositionalKeys = defaultKeys;
     }
 }

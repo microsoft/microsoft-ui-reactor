@@ -112,7 +112,7 @@ internal sealed class ReactorListState
 {
     public ObservableCollection<ReactorRow> Source { get; } = new();
     public Dictionary<string, ReactorRow> ByKey { get; } = new();
-    public IReadOnlyList<string> LastKeys { get; } // live projection of Source row keys
+    public IReadOnlyList<string> LastKeys { get; } // flat snapshot, or default-position source view
 }
 
 internal sealed class ReactorRow
@@ -124,12 +124,19 @@ internal sealed class ReactorRow
 
 `ReactorRow` is a reference type by design. WinUI's `INotifyCollectionChanged` consumers use object identity to track items across the event stream; reusing the same `ReactorRow` instance for surviving keys lets WinUI distinguish "this item moved" from "removed + inserted." Boxed `int` values would not give this (each indexer access re-boxes).
 
-Ordered keys are read directly from `Source` before the diff mutates it. `LastKeys`
-is a read-only live view, not a second backing array or an old-order snapshot during
-collection notifications. The general diff builds its survivor map before emitting
-events, so it needs no retained copy of the old key order. Row objects, key strings,
-the key-to-row lookup and scratch-map capacity still scale with item count;
-virtualizing native controls does not make this managed state proportional to the viewport.
+Custom selectors keep a flat key snapshot for the all-item comparison on every
+render. Only the exact framework-owned default positional `VirtualList` source
+omits that array, since its unchanged-count updates skip the comparison. In that
+mode `LastKeys` is a read-only live view of `Source`, including during collection
+notifications. The diff consumes old keys before it mutates the source.
+
+Switching to custom keys materializes the current source order once, before running
+the normal diff. Switching to default keys drops the snapshot but still runs the
+normal transition diff, including duplicate recovery. Both representations use the
+same native collection operations. A blanket live view was rejected after screening
+showed slower cached custom-key scans; the flat custom-key path is intentional.
+Rows, strings, the key-to-row lookup and scratch-map capacity still scale with item
+count. Native virtualization does not make this state proportional to the viewport.
 
 ### Mount path
 
@@ -142,7 +149,7 @@ Replace the `ItemsSource = Enumerable.Range(...)` calls at:
 with:
 
 1. Allocate a `ReactorListState`.
-2. For each `i` in `0..ItemCount`: create `ReactorRow { Index = i, Key = el.KeySelector(items[i]) }`, append to `Source`, record in `ByKey`.
+2. For each `i` in `0..ItemCount`: create `ReactorRow { Index = i, Key = el.KeySelector(items[i]) }`, append to `Source`, record in `ByKey` and the key snapshot when enabled.
 3. `lv.ItemsSource = state.Source;`
 4. Stash `state` on the control.
 
@@ -158,7 +165,7 @@ Replace `Reconciler.Update.cs:2807-2808`, `:2833-2834`, and `:2906-2912` with a 
    - If key exists in the dict: it's a survivor. If its current OC index ≠ desired index, emit `Source.Move(currentIndex, desiredIndex)`. Update `ReactorRow.Index`. Remove from dict.
    - Else: new key. Emit `Source.Insert(desiredIndex, new ReactorRow { ... })`.
 4. After the loop, any keys still in the dict are removed: emit `Source.RemoveAt(currentIndex)`. Process in descending index order so earlier indexes stay stable.
-5. Keep `state.ByKey` in sync with insertions/removals. The source rows already carry the final key order.
+5. Keep `state.ByKey` and the optional flat key snapshot in sync with insertions/removals. Default positions need no separate key-order synchronization.
 
 This is O(n) wall-clock with one hash map. Matches React's algorithm. Does not always produce minimal move counts (e.g., reversing a list yields N moves, not 1), which is acceptable — the animation reads correctly either way.
 
