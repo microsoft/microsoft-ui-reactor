@@ -136,6 +136,13 @@ this; the next `Return` for that instance silently drops it. Reach for
 `.OpacityTransition()` and friends before `.Animate()` when both
 work.
 
+**Transform transitions are one-way too.** Attaching `.ScaleTransition()`,
+`.RotationTransition()` or `.TranslationTransition()` locks the control's
+`RenderTransform` for good, even if the transition is later removed, so
+`Return` drops a control that still carries one. The facade transforms
+themselves (`.Rotation()`, `.Scale()`, `.Translation()`, `.CenterPoint()`)
+are reset to identity on return and don't affect pooling.
+
 **The cap is 32 per type.** A burst of 100 list items mounts 32 from
 the pool and 68 fresh; the next render returns 32 to the pool and
 drops 36. That's fine for steady-state scrolling — the working set

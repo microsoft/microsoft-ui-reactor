@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -153,6 +154,12 @@ public sealed class ElementPool : IDisposable
         // lose XAML implicit transition API access (OpacityTransition, etc.).
         if (IsCompositorTainted(element)) return;
 
+        // Issue #1614: attaching an implicit transform transition permanently locks
+        // RenderTransform (nulling the transition does not release it), so such a control is
+        // no longer interchangeable with a fresh one. Same reasoning as the taint check above.
+        if (element.ScaleTransition is not null || element.RotationTransition is not null
+            || element.TranslationTransition is not null) return;
+
         if (!_pools.TryGetValue(type, out var stack))
         {
             stack = new Stack<FrameworkElement>();
@@ -255,7 +262,24 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(FrameworkElement.VerticalAlignmentProperty);
         fe.ClearValue(UIElement.OpacityProperty);
         fe.ClearValue(UIElement.VisibilityProperty);
-        fe.ClearValue(FrameworkElement.RenderTransformProperty);
+        // Issue #1614: WinUI treats RenderTransform and the facade transforms (Rotation, Scale,
+        // Translation, CenterPoint, RotationAxis, TransformMatrix) as mutually exclusive, and
+        // touching one while the other is engaged throws UnauthorizedAccessException. Reset the
+        // facades so a recycled control can't hand its previous renter's transform to the next
+        // one. They are plain properties, not DPs, so the reset assigns the identity value. Each
+        // write is guarded: an untransformed control pays no extra write, and one using
+        // RenderTransform (whose facades must read identity) is never written through a facade.
+        if (fe.Rotation != 0f) fe.Rotation = 0f;
+        if (fe.Scale != Vector3.One) fe.Scale = Vector3.One;
+        if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
+        if (fe.CenterPoint != Vector3.Zero) fe.CenterPoint = Vector3.Zero;
+        if (fe.RotationAxis != Vector3.UnitZ) fe.RotationAxis = Vector3.UnitZ;
+        if (!fe.TransformMatrix.IsIdentity) fe.TransformMatrix = Matrix4x4.Identity;
+        // Clear RenderTransform only when it holds a local value. Reading it is always allowed,
+        // but writing it is not once a facade transition has ever been attached: that lock
+        // survives nulling the transition. With no local value the clear is a no-op anyway.
+        if (fe.ReadLocalValue(FrameworkElement.RenderTransformProperty) != DependencyProperty.UnsetValue)
+            fe.ClearValue(FrameworkElement.RenderTransformProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
         // A context flyout is a live object graph owned by the previous renter's component.
         // Without this, right-clicking a recycled control shows the *previous* element's menu.

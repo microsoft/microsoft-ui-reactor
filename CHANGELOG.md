@@ -84,6 +84,14 @@ Conventions for contributors:
 
 ### Fixed
 
+- Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
+  non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no
+  longer throws during reconcile and replaces the host content with the error
+  fallback. The pool now resets those transforms to identity before the control is
+  reused, and no longer pools a control that carries `.ScaleTransition()`,
+  `.RotationTransition()` or `.TranslationTransition()`, since WinUI keeps its
+  `RenderTransform` locked (issue #1614).
+
 - `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
   (or estimate), and spacing after rerenders. Removing and re-adding the callback
   preserves the native viewer and its single subscription, which is detached when
