@@ -85,6 +85,11 @@ Conventions for contributors:
   arguments, echo suppression, and native-identity subscription gates are preserved
   (spec 058 §8.3, issue #1573).
 
+- The Toolkit `TabbedCommandBar` sample now composes its document below the native
+  ribbon instead of assigning the inherited `Content` property, which the Toolkit
+  template does not display. Native tabs and commands remain intact, with visible
+  command feedback that stays current across rerenders (issue #1577).
+
 - **A button whose content is an element no longer remounts that content after a garbage
   collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
   rest of the button family remembered which child they owned by the control's managed wrapper.
