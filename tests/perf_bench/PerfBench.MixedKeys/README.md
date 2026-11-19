@@ -26,8 +26,17 @@ dotnet build tests\perf_bench\PerfBench.MixedKeys --no-restore -c Release `
 ```
 
 Preserve the complete `bin\x64\Release\net10.0-windows10.0.22621.0\win-x64`
-directory from each build. Then run from the candidate checkout during a quiet
-machine window.
+directory from each build. Independent builds can embed different source paths
+or commit metadata even when the benchmark sources are identical. Reuse the
+baseline's compiled benchmark DLL and matching PDB in both preserved directories,
+leaving each side's `Reactor.dll` and other dependencies unchanged.
+
+```powershell
+Copy-Item C:\temp\mixed-base-bin\PerfBench.MixedKeys.dll C:\temp\mixed-candidate-bin\PerfBench.MixedKeys.dll
+Copy-Item C:\temp\mixed-base-bin\PerfBench.MixedKeys.pdb C:\temp\mixed-candidate-bin\PerfBench.MixedKeys.pdb
+```
+
+Then run from the candidate checkout during a quiet machine window.
 
 ```powershell
 pwsh tests\perf_bench\PerfBench.MixedKeys\Run-Comparison.ps1 `
@@ -48,6 +57,11 @@ argument is recorded metadata, not proof of a binary's origin.
 
 Four process pairs against the baseline above gave the following median managed
 bytes per update. All control-identity/content checks passed on both sides.
+The recorded experiment built baseline and candidate sequentially in the same
+worktree before committing, preserving the baseline output before the product
+edit. Their benchmark DLL hashes were already identical when the runner checked
+them. The explicit copy above is needed to reproduce that invariant across
+separate worktrees, not a correction to the recorded measurements.
 
 | Workload | Children | Baseline B/update | Candidate B/update |
 |---|---:|---:|---:|
@@ -69,7 +83,8 @@ activity was not controlled. Builds required `-p:WarningsNotAsErrors=NU1900`
 because the vulnerability feed was unreachable; they also emitted existing
 `MSB3277` dependency-version warnings.
 
-Measured SHA-256 fingerprints:
+Measured SHA-256 fingerprints (harness source at `9782f8ba1`; the later
+output-path initialization refactor is outside the measured operation):
 
 - Benchmark source `Program.cs` — `AFE067B3DE247B4B4C8D3F29C40368A42B493644BC65B06674892CEE68F3E67D`
 - Identical benchmark DLL — `2EA6C2B4C0E64929EA85AA0721C0F4A6383B9739CF82D448B5F136B479032060`

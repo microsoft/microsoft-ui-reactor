@@ -11,12 +11,14 @@ using static Microsoft.UI.Reactor.Factories;
 
 if (args.Length != 1)
     throw new ArgumentException("Expected an output JSON path.");
-BenchApp.Output = args[0];
-Application.Start(_ => new BenchApp());
+var output = args[0];
+Application.Start(_ => new BenchApp(output));
 
 internal sealed partial class BenchApp : Application
 {
-    internal static string Output = "";
+    private readonly string _output;
+
+    internal BenchApp(string output) => _output = output;
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -32,7 +34,7 @@ internal sealed partial class BenchApp : Application
         }
     }
 
-    private static void Run()
+    private void Run()
     {
         const int iterations = 200;
         const int repetitions = 6;
@@ -87,7 +89,7 @@ internal sealed partial class BenchApp : Application
                 reconciler.UnmountChild(panel);
             }
         }
-        File.WriteAllText(Output, JsonSerializer.Serialize(samples, BenchJson.Default.ListSample));
+        File.WriteAllText(_output, JsonSerializer.Serialize(samples, BenchJson.Default.ListSample));
         foreach (var group in samples.GroupBy(sample => (sample.Name, sample.Count)))
             Console.WriteLine($"{group.Key}: {group.Average(x => x.BytesPerOp):F0} B/op, {group.Average(x => x.NsPerOp):F0} ns/op");
     }
