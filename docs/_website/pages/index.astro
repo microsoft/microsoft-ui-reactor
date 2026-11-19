@@ -1,0 +1,590 @@
+---
+// The site's home page. A custom page at `/` wins over any docs page there.
+// The Guides, Controls, Recipes, API reference and How it works lists are read
+// from the navigation tree (nav.json), so they follow the docs when pages move.
+import data from "blume:data";
+import CodeBlock from "blume/components/content/CodeBlock.astro";
+import Icon from "blume/components/Icon.astro";
+import { stripBase, withBase } from "blume/components/islands/base-path.ts";
+import PageLayout from "blume/components/layout/PageLayout.astro";
+
+import Bloom from "../components/Bloom.astro";
+import { BLOOMS } from "../components/bloom-palettes";
+import { SHOWCASE_APPS } from "../components/showcase-apps";
+
+const { config, navigation, fontCssVars } = data;
+
+type NavNode = (typeof navigation.sidebar)[number];
+type NavGroup = Extract<NavNode, { kind: "group" }>;
+type NavPage = Extract<NavNode, { kind: "page" }>;
+
+const base = import.meta.env.BASE_URL ?? "/";
+const logical = (route: string | undefined) => (route ? stripBase(base, route) : undefined);
+
+const findGroup = (nodes: NavNode[], path: string): NavGroup | undefined => {
+  for (const node of nodes) {
+    if (node.kind !== "group") continue;
+    if (logical(node.path) === path || logical(node.route) === path) return node;
+    const nested = findGroup(node.children, path);
+    if (nested) return nested;
+  }
+  return undefined;
+};
+
+const section = (path: string): NavGroup => {
+  const group = findGroup(navigation.sidebar, path);
+  if (!group) throw new Error(`Home page: nav.json has no section at ${path}.`);
+  return group;
+};
+
+const pagesIn = (node: NavNode): NavPage[] =>
+  node.kind === "page" ? [node] : node.children.flatMap(pagesIn);
+
+// A section's pages, without the section's own index page.
+const pagesOf = (group: NavGroup) =>
+  pagesIn(group).filter((page) => logical(page.route) !== logical(group.route ?? group.path));
+
+// A section's sub-groups, each with its pages.
+const subsections = (group: NavGroup) =>
+  group.children
+    .filter((child): child is NavGroup => child.kind === "group")
+    .map((child) => ({ label: child.label, pages: pagesIn(child) }));
+
+const href = (route: string) => withBase(route);
+
+const guides = subsections(section("/guides"));
+const internals = subsections(section("/how-it-works"));
+const controls = pagesOf(section("/controls"));
+const recipes = pagesOf(section("/recipes"));
+const featuredHooks = ["UseState", "UseEffect", "UseReducer", "UseMemo", "UseContext", "UseResource", "UseNavigation", "UsePersisted"];
+const hookPages = pagesOf(section("/reference"));
+const hooks = featuredHooks
+  .map((name) => hookPages.find((page) => page.label === name))
+  .filter((page): page is NavPage => page !== undefined);
+const firstInternal = internals[0]?.pages[0];
+
+const blogPost = {
+  title: "WinUI Reactor: A New Approach to User Interfaces",
+  summary:
+    "Meet Reactor, a C#-first way to build WinUI apps: no XAML, no code-behind, no view models, and real WinUI controls.",
+  source: "#ifdef Windows",
+  date: "October 21, 2026",
+  url: "https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/",
+};
+
+const quickstart = `winget install Microsoft.WinAppCli
+winapp new -t reactor -n MyApp
+cd MyApp
+dotnet run`;
+
+const counter = `class Counter : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+
+        return HStack(8,
+            Button("- 1", () => setCount(count - 1)),
+            TextBlock($"{count}").FontSize(20).SemiBold(),
+            Button("+ 1", () => setCount(count + 1))
+        ).Padding(24);
+    }
+}`;
+
+const facts = [
+  { title: "Pure C#", text: "No XAML, no data binding, no view models. Your UI is code you can step through." },
+  { title: "Declarative", text: "Describe the UI for the current state. Reactor works out what changed." },
+  { title: "Hooks for state", text: "UseState, UseEffect, UseReducer and more keep state next to the UI that uses it." },
+  { title: "Native WinUI 3", text: "Real WinUI controls. No web view, no Electron, no interpreter." },
+];
+
+const startHere = [
+  { title: "Overview", text: "What Reactor is, and when to use it.", route: "/get-started" },
+  { title: "Coming from XAML", text: "Map XAML, bindings and code-behind to Reactor.", route: "/get-started/xaml-developers" },
+  { title: "Reactor vs XAML", text: "Why Reactor is designed the way it is.", route: "/get-started/reactor-vs-xaml" },
+  { title: "Cheat sheet", text: "The whole framework on one page.", route: "/get-started/cheat-sheet" },
+  { title: "Rules of Reactor", text: "The rules the render loop relies on, and the analyzers that check them.", route: "/get-started/rules-of-reactor" },
+];
+
+const pipeline = [
+  { name: "Render()", text: "Your component returns a tree of elements." },
+  { name: "Element tree", text: "Immutable C# records. Cheap to create and compare." },
+  { name: "Reconciler", text: "Diffs the new tree against the last one." },
+  { name: "WinUI controls", text: "Only the changed properties are set on real controls." },
+];
+
+const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
+---
+
+<PageLayout
+  site={{ title: config.title, description: config.description }}
+  logo={config.logo}
+  banner={config.banner}
+  navigation={navigation}
+  fontCssVars={fontCssVars}
+  favicon={config.favicon}
+  appleIcon={config.appleIcon}
+  themeMode={config.theme.mode}
+  searchEnabled={config.search.enabled}
+  page={{
+    title: "Reactor: native Windows apps in pure C#",
+    description:
+      "Build native Windows apps in pure C#. No XAML, no data binding, no view models. Describe your UI as a function of state, and Reactor keeps the screen in sync.",
+    route: "/",
+  }}
+>
+  <div class="mx-auto max-w-6xl px-4 pb-24 pt-8 sm:px-6 sm:pt-10 lg:px-8">
+    <!-- News and showcase -->
+    <div class="grid gap-4 lg:grid-cols-3 lg:gap-5">
+      <a
+        href={blogPost.url}
+        class="group relative isolate flex min-h-[320px] overflow-hidden rounded-3xl text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:min-h-[360px] lg:col-span-2"
+      >
+        <Bloom id="home-blog" variant="blue" x={0.84} y={0.5} turn={-8} class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.03]" />
+        <div class="absolute inset-0 bg-gradient-to-r from-[#06102a] via-[#06102a]/70 to-transparent" aria-hidden="true"></div>
+        <div class="relative mt-auto max-w-xl p-7 sm:p-10">
+          <p class="font-display text-2xl font-semibold leading-tight text-balance sm:text-[2rem]">
+            {blogPost.title}
+          </p>
+          <p class="mt-3 max-w-[48ch] text-white/80">{blogPost.summary}</p>
+          <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <span class="inline-flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-medium text-[#06102a]">
+              Read the post
+              <Icon name="arrow-up-right" size={16} />
+            </span>
+            <span class="text-sm text-white/75">Blog post · {blogPost.source} · {blogPost.date}</span>
+          </div>
+        </div>
+      </a>
+
+      <a
+        href={href("/showcase")}
+        class="group relative isolate flex min-h-[320px] overflow-hidden rounded-3xl text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:min-h-[360px]"
+      >
+        <Bloom id="home-showcase" variant="violet" x={0.62} y={0.2} turn={160} scale={0.9} class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.03]" />
+        <div class="absolute inset-0 bg-gradient-to-t from-[#0f0a26] via-[#0f0a26]/60 to-transparent" aria-hidden="true"></div>
+        <div class="relative mt-auto w-full p-7 sm:p-8">
+          <ul class="flex -space-x-2" aria-hidden="true">
+            {
+              showcaseIcons.map((app) => (
+                <li
+                  class="grid size-11 place-items-center rounded-xl bg-white shadow-[0_8px_20px_-8px_rgb(0_0_0/0.7)] ring-2 ring-[#0f0a26]/60"
+                  style={`color: ${BLOOMS[app.bloom].ink}`}
+                >
+                  <Icon name={app.icon} size={20} />
+                </li>
+              ))
+            }
+          </ul>
+          <p class="mt-6 font-display text-2xl font-semibold">Showcase</p>
+          <p class="mt-2 text-white/80">Apps built with Reactor, from a registry editor to a docking IDE. Each one is open source.</p>
+          <span class="mt-5 inline-flex items-center gap-1.5 text-sm font-medium">
+            See the apps
+            <Icon name="arrow-right" size={16} class="transition-transform motion-safe:group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      </a>
+    </div>
+
+    <!-- What Reactor is -->
+    <section class="mt-20 sm:mt-28" aria-labelledby="intro-title">
+      <div class="max-w-3xl">
+        <h1 id="intro-title" class="font-display text-4xl font-semibold tracking-tight text-balance text-foreground sm:text-5xl lg:text-6xl">
+          Native Windows apps, in pure C#.
+        </h1>
+        <p class="mt-5 max-w-[62ch] text-lg leading-relaxed text-muted-foreground">
+          Reactor is a declarative UI framework for WinUI 3. No XAML, no data binding, no view models.
+          Describe your UI as a function of state, and Reactor keeps the screen in sync.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a
+            href={href("/get-started/quickstart")}
+            class="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Get started
+            <Icon name="arrow-right" size={16} />
+          </a>
+          <a
+            href={href("/get-started/xaml-developers")}
+            class="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Coming from XAML
+          </a>
+        </div>
+      </div>
+
+      <div class="mt-12 grid overflow-hidden rounded-3xl border border-border lg:grid-cols-[1.1fr_1fr]">
+        <div class="min-w-0 bg-muted/40 p-3 sm:p-5 [&_.prose]:my-0 [&_figure]:my-0 [&_pre]:my-0">
+          <CodeBlock code={counter} lang="csharp" title="Counter.cs" />
+        </div>
+        <div class="relative isolate grid min-h-[340px] place-items-center p-6 sm:p-10" data-counter>
+          <Bloom id="home-demo" variant="blue" x={0.5} y={0.5} turn={24} scale={1.1} />
+          <div class="relative w-full max-w-[340px]">
+            <div
+              class="winui-window overflow-hidden rounded-lg bg-[#f3f3f3] text-[#1b1b1b] shadow-[0_32px_64px_-12px_rgb(0_0_0/0.55)] ring-1 ring-black/10 dark:bg-[#202020] dark:text-white dark:ring-white/10"
+              role="group"
+              aria-label="Preview of the Counter app"
+            >
+              <div class="flex h-8 items-center justify-between text-xs">
+                <span class="flex items-center gap-2 pl-3">
+                  <span class="grid size-4 place-items-center rounded-[4px] bg-[#0067c0] text-white" aria-hidden="true">
+                    <Icon name="app-window" size={11} />
+                  </span>
+                  Counter
+                </span>
+                <span class="flex text-[#1b1b1b]/70 dark:text-white/70" aria-hidden="true">
+                  <span class="grid h-8 w-11 place-items-center"><Icon name="minus" size={14} /></span>
+                  <span class="grid h-8 w-11 place-items-center"><Icon name="square" size={11} /></span>
+                  <span class="grid h-8 w-11 place-items-center"><Icon name="x" size={14} /></span>
+                </span>
+              </div>
+              <div class="flex items-center justify-center gap-2 px-6 pb-10 pt-8">
+                <button type="button" class="winui-button" data-step="-1">- 1</button>
+                <output class="counter-value min-w-12 rounded px-2 text-center text-xl font-semibold tabular-nums" data-count aria-live="polite">0</output>
+                <button type="button" class="winui-button" data-step="1">+ 1</button>
+              </div>
+            </div>
+            <p class="mt-4 text-center font-mono text-xs text-white/85" data-status>Render #1 · mounted 4 controls</p>
+          </div>
+        </div>
+      </div>
+
+      <ul class="mt-12 grid gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+        {
+          facts.map((fact) => (
+            <li class="border-t border-border pt-4">
+              <h2 class="text-sm font-semibold text-foreground">{fact.title}</h2>
+              <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">{fact.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <!-- Get started -->
+    <section class="mt-24 sm:mt-32" aria-labelledby="get-started-title">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <h2 id="get-started-title" class="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Get started</h2>
+        <a href={href("/get-started")} class="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:underline">
+          All get started pages <Icon name="arrow-right" size={14} />
+        </a>
+      </div>
+      <div class="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:gap-10">
+        <div class="relative isolate overflow-hidden rounded-3xl text-white">
+          <Bloom id="home-quickstart" variant="teal" x={0.9} y={0.1} turn={200} scale={0.85} />
+          <div class="absolute inset-0 bg-gradient-to-b from-[#031619]/40 to-[#031619]/85" aria-hidden="true"></div>
+          <div class="relative p-6 sm:p-8">
+            <h3 class="font-display text-xl font-semibold">Quickstart</h3>
+            <p class="mt-2 max-w-[52ch] text-white/80">
+              Install the tools, create an app and run it. Then grow it into a todo list and a calculator.
+            </p>
+            <div class="code-on-dark mt-6 [&_.prose]:my-0 [&_figure]:my-0 [&_pre]:my-0">
+              <CodeBlock code={quickstart} lang="powershell" title="Terminal" />
+            </div>
+            <a
+              href={href("/get-started/quickstart")}
+              class="mt-6 inline-flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-medium text-[#031619] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              Read the quickstart
+              <Icon name="arrow-right" size={16} />
+            </a>
+          </div>
+        </div>
+        <ul class="divide-y divide-border border-y border-border">
+          {
+            startHere.map((item) => (
+              <li>
+                <a href={href(item.route)} class="group flex items-center justify-between gap-6 py-4">
+                  <span>
+                    <span class="block font-medium text-foreground">{item.title}</span>
+                    <span class="mt-0.5 block text-sm text-muted-foreground">{item.text}</span>
+                  </span>
+                  <Icon name="arrow-right" size={16} class="shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-safe:group-hover:translate-x-0.5" />
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <!-- Guides -->
+    <section class="mt-24 sm:mt-32" aria-labelledby="guides-title">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 id="guides-title" class="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Guides</h2>
+          <p class="mt-2 max-w-[60ch] text-muted-foreground">Everything you need to build, polish and ship a real app.</p>
+        </div>
+        <a href={href("/guides")} class="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:underline">
+          All guides <Icon name="arrow-right" size={14} />
+        </a>
+      </div>
+      <div class="mt-10 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          guides.map((group) => (
+            <div>
+              <h3 class="text-sm font-semibold text-foreground">{group.label}</h3>
+              <ul class="mt-3 space-y-2 text-sm">
+                {group.pages.map((page) => (
+                  <li>
+                    <a href={href(page.route)} class="text-muted-foreground transition-colors hover:text-foreground">
+                      {page.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- Controls, recipes, API reference -->
+    <section class="mt-24 grid gap-5 sm:mt-32 lg:grid-cols-3" aria-label="Controls, recipes and API reference">
+      <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
+        <a href={href("/controls")} class="group relative isolate block h-28 overflow-hidden">
+          <Bloom id="home-controls" variant="amber" x={0.8} y={0.9} turn={-30} scale={0.7} class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
+          <span class="sr-only">Controls</span>
+        </a>
+        <div class="flex flex-1 flex-col p-6">
+          <h2 class="font-display text-lg font-semibold text-foreground">
+            <a href={href("/controls")} class="hover:underline">Controls</a>
+          </h2>
+          <p class="mt-1.5 text-sm text-muted-foreground">Every WinUI control as a C# factory, grouped by what it does.</p>
+          <ul class="mt-5 flex flex-wrap gap-2">
+            {
+              controls.map((page) => (
+                <li>
+                  <a href={href(page.route)} class="inline-flex rounded-full border border-border px-3 py-1 text-xs text-foreground transition-colors hover:bg-muted">
+                    {page.label}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+          <a href={href("/controls")} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
+            All controls <Icon name="arrow-right" size={14} />
+          </a>
+        </div>
+      </div>
+
+      <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
+        <a href={href("/recipes")} class="group relative isolate block h-28 overflow-hidden">
+          <Bloom id="home-recipes" variant="green" x={0.2} y={0.95} turn={40} scale={0.7} class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
+          <span class="sr-only">Recipes</span>
+        </a>
+        <div class="flex flex-1 flex-col p-6">
+          <h2 class="font-display text-lg font-semibold text-foreground">
+            <a href={href("/recipes")} class="hover:underline">Recipes</a>
+          </h2>
+          <p class="mt-1.5 text-sm text-muted-foreground">Complete, copyable answers to common UI tasks.</p>
+          <ul class="mt-4 divide-y divide-border text-sm">
+            {
+              recipes.map((page) => (
+                <li>
+                  <a href={href(page.route)} class="flex items-center justify-between py-2 text-foreground hover:underline">
+                    {page.label}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+          <a href={href("/recipes")} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
+            All recipes <Icon name="arrow-right" size={14} />
+          </a>
+        </div>
+      </div>
+
+      <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
+        <a href={href("/reference")} class="group relative isolate block h-28 overflow-hidden">
+          <Bloom id="home-reference" variant="rose" x={0.55} y={1} turn={90} scale={0.7} class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
+          <span class="sr-only">API reference</span>
+        </a>
+        <div class="flex flex-1 flex-col p-6">
+          <h2 class="font-display text-lg font-semibold text-foreground">
+            <a href={href("/reference")} class="hover:underline">API reference</a>
+          </h2>
+          <p class="mt-1.5 text-sm text-muted-foreground">Signatures and examples for every hook.</p>
+          <ul class="mt-5 flex flex-wrap gap-2">
+            {
+              hooks.map((page) => (
+                <li>
+                  <a href={href(page.route)} class="inline-flex rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground transition-colors hover:bg-muted/60">
+                    {page.label}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+          <a href={href("/reference/hooks")} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
+            All hooks <Icon name="arrow-right" size={14} />
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="mt-24 overflow-hidden rounded-3xl bg-[#0b0d12] p-6 text-white ring-1 ring-white/10 sm:mt-32 sm:p-10 lg:p-12" aria-labelledby="how-title">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 id="how-title" class="font-display text-2xl font-semibold tracking-tight sm:text-3xl">How it works</h2>
+          <p class="mt-2 max-w-[60ch] text-white/70">
+            Reactor keeps a tree of plain C# records, compares it on every render, and patches only the WinUI controls that changed.
+          </p>
+        </div>
+        {
+          firstInternal && (
+            <a href={href(firstInternal.route)} class="inline-flex items-center gap-1 text-sm font-medium text-white hover:underline">
+              Start with {firstInternal.label.toLowerCase()} <Icon name="arrow-right" size={14} />
+            </a>
+          )
+        }
+      </div>
+
+      <ol class="mt-10 grid gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-stretch">
+        {
+          pipeline.map((step, index) => (
+            <>
+              <li class="rounded-2xl bg-white/[0.06] p-4 ring-1 ring-white/10">
+                <span class="font-mono text-sm text-[#8cc8ff]">{step.name}</span>
+                <p class="mt-1.5 text-sm text-white/70">{step.text}</p>
+              </li>
+              {index < pipeline.length - 1 && (
+                <li class="grid place-items-center text-white/40" aria-hidden="true">
+                  <Icon name="arrow-right" size={18} class="rotate-90 lg:rotate-0" />
+                </li>
+              )}
+            </>
+          ))
+        }
+      </ol>
+
+      <div class="mt-12 grid gap-x-10 gap-y-10 border-t border-white/10 pt-10 sm:grid-cols-2 lg:grid-cols-4">
+        {
+          internals.map((group) => (
+            <div>
+              <h3 class="text-sm font-semibold">{group.label}</h3>
+              <ul class="mt-3 space-y-2 text-sm">
+                {group.pages.map((page) => (
+                  <li>
+                    <a href={href(page.route)} class="text-white/70 transition-colors hover:text-white">
+                      {page.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+  </div>
+</PageLayout>
+
+<style>
+  /* The Quickstart tile is dark in both themes, so its code always uses the dark Shiki colors. */
+  .code-on-dark {
+    --blume-foreground: #e6edf3;
+    --blume-muted-foreground: rgb(255 255 255 / 0.72);
+    --blume-border: rgb(255 255 255 / 0.2);
+  }
+
+  .code-on-dark :global(pre.astro-code),
+  .code-on-dark :global(pre.astro-code span) {
+    color: var(--shiki-dark, inherit) !important;
+  }
+
+  .winui-window {
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+
+  .winui-button {
+    height: 2rem;
+    min-width: 3.5rem;
+    padding: 0 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    background: #fdfdfd;
+    border: 1px solid rgb(0 0 0 / 0.06);
+    border-bottom-color: rgb(0 0 0 / 0.16);
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .winui-button:hover {
+    background: #f6f6f6;
+  }
+
+  .winui-button:active {
+    background: #f5f5f5;
+    color: rgb(0 0 0 / 0.62);
+    border-bottom-color: rgb(0 0 0 / 0.06);
+  }
+
+  .winui-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
+  }
+
+  :global([data-theme="dark"]) .winui-button {
+    background: #2d2d2d;
+    border-color: rgb(255 255 255 / 0.07);
+    border-top-color: rgb(255 255 255 / 0.09);
+  }
+
+  :global([data-theme="dark"]) .winui-button:hover {
+    background: #323232;
+  }
+
+  :global([data-theme="dark"]) .winui-button:active {
+    background: #272727;
+    color: rgb(255 255 255 / 0.78);
+  }
+
+  /* The devtools "highlight updates" outline, on the one control that changed. */
+  @media (prefers-reduced-motion: no-preference) {
+    .counter-value.is-updated {
+      animation: updated 700ms ease-out;
+    }
+  }
+
+  @keyframes updated {
+    from {
+      box-shadow: 0 0 0 2px #0067c0;
+      background: rgb(0 103 192 / 0.12);
+    }
+    to {
+      box-shadow: 0 0 0 2px rgb(0 103 192 / 0);
+      background: rgb(0 103 192 / 0);
+    }
+  }
+</style>
+
+<script>
+  const setUp = () => {
+    for (const root of document.querySelectorAll<HTMLElement>("[data-counter]")) {
+      if (root.dataset.ready) continue;
+      root.dataset.ready = "true";
+
+      const value = root.querySelector<HTMLElement>("[data-count]");
+      const status = root.querySelector<HTMLElement>("[data-status]");
+      if (!value || !status) continue;
+
+      let count = 0;
+      let renders = 1;
+      for (const button of root.querySelectorAll<HTMLButtonElement>("[data-step]")) {
+        button.addEventListener("click", () => {
+          count += Number(button.dataset.step);
+          renders += 1;
+          value.textContent = String(count);
+          status.textContent = `Render #${renders} · set TextBlock.Text = "${count}"`;
+          value.classList.remove("is-updated");
+          void value.offsetWidth;
+          value.classList.add("is-updated");
+        });
+      }
+    }
+  };
+
+  document.addEventListener("astro:page-load", setUp);
+</script>

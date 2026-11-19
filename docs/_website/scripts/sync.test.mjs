@@ -253,7 +253,7 @@ describe("page conversion", () => {
 });
 
 describe("sync", () => {
-  test("writes pages, groups, images and redirects, and keeps the home page", () => {
+  test("writes pages, groups, images and redirects, and clears everything else", () => {
     const repo = makeRepo(
       "ok",
       { "index.md": "# Intro\n\nHello.\n", "charting.md": "# Charts\n\nCharts.\n\nSee [intro](index.md#intro).\n", "images/a.png": "png" },
@@ -272,7 +272,7 @@ describe("sync", () => {
 
     assert.deepEqual(result.errors, []);
     const docs = path.join(repo.website, "docs");
-    assert.equal(fs.readFileSync(path.join(docs, "index.mdx"), "utf8"), "home");
+    assert.equal(fs.existsSync(path.join(docs, "index.mdx")), false);
     assert.equal(fs.existsSync(path.join(docs, "stale.md")), false);
     assert.match(fs.readFileSync(path.join(docs, "controls", "charting.md"), "utf8"), /\[intro\]\(\/introduction\)/);
     assert.match(fs.readFileSync(path.join(docs, "01-(start)", "meta.ts"), "utf8"), /pages: \["introduction"\]/);

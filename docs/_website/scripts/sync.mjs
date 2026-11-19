@@ -21,7 +21,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const WEBSITE_DIR = path.resolve(here, "..");
 export const REPO_URL = "https://github.com/microsoft/microsoft-ui-reactor";
 export const REDIRECTS_FILE = "redirects.generated.json";
-const HOME_PAGE = "index.mdx";
 const GUIDE_PREFIX = "docs/guide";
 const MORE_GROUP = { dir: "99-(more)", title: "More" };
 const MAX_DESCRIPTION = 420;
@@ -514,11 +513,8 @@ export function sync({ lenient, ref, guide, out }) {
   const context = { routes, titleIds, repoRoot, ref, unresolved: [] };
 
   const docs = path.join(out, "docs");
-  const homePath = path.join(docs, HOME_PAGE);
-  const home = fs.existsSync(homePath) ? fs.readFileSync(homePath) : null;
   fs.rmSync(docs, { recursive: true, force: true });
   fs.mkdirSync(docs, { recursive: true });
-  if (home) fs.writeFileSync(homePath, home);
 
   for (const [file, { dest, label }] of placements) {
     context.page = file;

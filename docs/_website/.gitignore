@@ -3,8 +3,8 @@ node_modules/
 dist/
 .env.local
 
-# Written by scripts/sync.mjs from docs/guide. Only the home page is authored here.
-/docs/*
-!/docs/index.mdx
+# Written by scripts/sync.mjs from docs/guide. The home page is pages/index.astro.
+/docs/
 /public/images/
 /redirects.generated.json
+.blume-verify/

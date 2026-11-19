@@ -74,12 +74,26 @@ export default defineConfig({
   redirects,
   navigation: {
     tabs: [
-      { label: "Docs", path: "/" },
+      { label: "Home", path: "/" },
+      { label: "Get started", path: "/get-started" },
+      { label: "Guides", path: "/guides" },
       { label: "Controls", path: "/controls" },
       { label: "Recipes", path: "/recipes" },
       { label: "API reference", path: "/reference" },
-      { label: "Internals", path: "/internals" },
+      { label: "How it works", path: "/how-it-works" },
     ],
     selectors: version ? [{ kind: "version", label: "Version", items: versionItems }] : [],
+  },
+  footer: {
+    copyright: "© Microsoft Corporation. Released under the MIT License.",
+    links: [
+      { label: "Showcase", href: "/showcase" },
+      {
+        label: "Blog",
+        href: "https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/",
+      },
+      { label: "Samples", href: "https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples" },
+      { label: "Changelog", href: "https://github.com/microsoft/microsoft-ui-reactor/blob/main/CHANGELOG.md" },
+    ],
   },
 });

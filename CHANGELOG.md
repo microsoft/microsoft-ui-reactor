@@ -202,6 +202,16 @@ Conventions for contributors:
   section. Lint rule `TIER_008` now counts the overview between the title and the first `##`
   heading. The site build also rewrites links whose text wraps onto a second line.
 
+- **The docs site has a new home page, a Showcase page and a clearer structure.** The home
+  page links to the latest Reactor post on the Windows developer blog and to the new
+  Showcase page, explains what Reactor is next to a live counter example, and leads into
+  Get started, Guides, Controls, Recipes, API reference and How it works. Showcase lists the
+  sample apps in the repo, each with a link to its source. The site tabs are now Get started,
+  Guides, Controls, Recipes, API reference and How it works ("Internals" is renamed). Get
+  started also holds the cheat sheet and the rules of Reactor, and Guides is grouped into
+  Core concepts, Layout and styling, Building apps, Ship your app, Developer tools, and
+  Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
+
 ### Deprecated
 
 ### Removed
