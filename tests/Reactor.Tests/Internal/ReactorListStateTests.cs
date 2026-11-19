@@ -56,6 +56,46 @@ public class ReactorListStateTests
     }
 
     [Fact]
+    public void LastKeys_Is_A_Live_View_During_Collection_Notifications()
+    {
+        var state = new ReactorListState();
+        state.Reset([(0, "a"), (1, "b"), (2, "c")]);
+        var keys = state.LastKeys;
+        var snapshot = keys.ToArray();
+        var observed = new List<string[]>();
+        state.Source.CollectionChanged += (_, _) =>
+        {
+            Assert.Equal(state.Source.Select(row => row.Key), keys);
+            observed.Add(keys.ToArray());
+        };
+
+        KeyedListDiff.Apply(state, new[] { "a", "c", "b", "d" }, static (key, _) => key);
+
+        Assert.Equal(2, observed.Count);
+        Assert.Equal(["a", "c", "b"], observed[0]);
+        Assert.Equal(["a", "c", "b", "d"], observed[1]);
+        Assert.Same(keys, state.LastKeys);
+        Assert.Equal(["a", "b", "c"], snapshot);
+    }
+
+    [Fact]
+    public void LastKeys_Retained_View_Tracks_Reset_And_Empty_State()
+    {
+        var state = new ReactorListState();
+        var keys = state.LastKeys;
+        state.Reset([(0, "before")]);
+        Assert.Equal(["before"], keys);
+
+        state.Reset([(0, "after"), (1, "tail")]);
+        Assert.Equal(["after", "tail"], keys);
+        Assert.Equal("tail", keys[1]);
+
+        state.Reset([]);
+        Assert.Empty(keys);
+        Assert.Throws<ArgumentOutOfRangeException>(() => keys[0]);
+    }
+
+    [Fact]
     public void Reset_ByKey_Maps_Each_Key_To_Its_Row()
     {
         var state = new ReactorListState();

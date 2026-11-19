@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.ObjectModel;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.UI.Reactor.Core.Internal;
@@ -109,7 +110,7 @@ internal static class KeyedListDiff
     /// <param name="state">Per-control diff state. The caller must have
     /// either called <see cref="ReactorListState.Reset"/> on mount or
     /// invoked <see cref="Apply{T}"/> on every prior update for the same
-    /// control, so <see cref="ReactorListState.LastKeys"/> is in sync with
+    /// control, so <see cref="ReactorListState.ByKey"/> is in sync with
     /// <see cref="ReactorListState.Source"/>.</param>
     /// <param name="newItems">New immutable user-visible list.</param>
     /// <param name="keySelector">Maps each item to a stable identity string.
@@ -202,7 +203,7 @@ internal static class KeyedListDiff
         // op path below shortcuts on this rather than re-checking the kind.
         AnimationKind? enterKind = (ambient is { HasEffect: true }) ? ambient.Kind : null;
 
-        int oldCount = state.LastKeys.Count;
+        int oldCount = state.Source.Count;
 
         // Materialize new keys into the rented buffer. We read them twice
         // (lockstep walk + survivor pass), so projecting once up front avoids
@@ -245,7 +246,7 @@ internal static class KeyedListDiff
         // so the common unique-key path pays nothing extra.
         if (oldCount == newCount
             && state.ByKey.Count == oldCount
-            && SequenceEqualOrdinal(state.LastKeys, newKeys, newCount))
+            && SequenceEqualOrdinal(state.Source, newKeys, newCount))
             return DiffStats.Empty;
 
         // ── Fast path 2: empty ↔ empty ─────────────────────────────────
@@ -283,7 +284,6 @@ internal static class KeyedListDiff
                 var row = new ReactorRow { Index = i, Key = newKeys[i], PendingEnterAnimation = enterKind };
                 state.Source.Add(row);
                 state.ByKey[newKeys[i]] = row;
-                state.LastKeys.Add(newKeys[i]);
             }
             return new DiffStats(Inserts: newCount, Removes: 0, Moves: 0, Survivors: 0, Bailout: false);
         }
@@ -296,7 +296,6 @@ internal static class KeyedListDiff
             for (int i = oldCount - 1; i >= 0; i--)
                 state.Source.RemoveAt(i);
             state.ByKey.Clear();
-            state.LastKeys.Clear();
             return new DiffStats(Inserts: 0, Removes: removes, Moves: 0, Survivors: 0, Bailout: false);
         }
 
@@ -305,48 +304,44 @@ internal static class KeyedListDiff
         // tiny lists (where 1 op is already >25%) never get punished by
         // the heuristic. We also save the scratch-dict allocation here.
         if (newCount == oldCount + 1
-            && SequenceEqualOrdinalPrefix(state.LastKeys, newKeys, oldCount))
+            && SequenceEqualOrdinalPrefix(state.Source, newKeys, oldCount))
         {
             var row = new ReactorRow { Index = oldCount, Key = newKeys[oldCount], PendingEnterAnimation = enterKind };
             state.Source.Insert(oldCount, row);
             state.ByKey[newKeys[oldCount]] = row;
-            state.LastKeys.Add(newKeys[oldCount]);
             return new DiffStats(Inserts: 1, Removes: 0, Moves: 0, Survivors: oldCount, Bailout: false);
         }
 
         // ── Fast path 6: single prepend ────────────────────────────────
         if (newCount == oldCount + 1
-            && SequenceEqualOrdinalSuffix(state.LastKeys, newKeys, oldCount, newOffset: 1))
+            && SequenceEqualOrdinalSuffix(state.Source, newKeys, oldCount, newOffset: 1))
         {
             var row = new ReactorRow { Index = 0, Key = newKeys[0], PendingEnterAnimation = enterKind };
             state.Source.Insert(0, row);
             // Shift remembered indices forward by one.
             for (int i = 1; i < state.Source.Count; i++) state.Source[i].Index = i;
             state.ByKey[newKeys[0]] = row;
-            state.LastKeys.Insert(0, newKeys[0]);
             return new DiffStats(Inserts: 1, Removes: 0, Moves: 0, Survivors: oldCount, Bailout: false);
         }
 
         // ── Fast path 7: single remove from end ────────────────────────
         if (newCount == oldCount - 1
-            && SequenceEqualOrdinalPrefix(state.LastKeys, newKeys, newCount))
+            && SequenceEqualOrdinalPrefix(state.Source, newKeys, newCount))
         {
-            var removedKey = state.LastKeys[oldCount - 1];
+            var removedKey = state.Source[oldCount - 1].Key;
             state.Source.RemoveAt(oldCount - 1);
             state.ByKey.Remove(removedKey);
-            state.LastKeys.RemoveAt(oldCount - 1);
             return new DiffStats(Inserts: 0, Removes: 1, Moves: 0, Survivors: newCount, Bailout: false);
         }
 
         // ── Fast path 8: single remove from front ──────────────────────
         if (newCount == oldCount - 1
-            && SequenceEqualOrdinalSuffix(state.LastKeys, newKeys, newCount, oldOffset: 1))
+            && SequenceEqualOrdinalSuffix(state.Source, newKeys, newCount, oldOffset: 1))
         {
-            var removedKey = state.LastKeys[0];
+            var removedKey = state.Source[0].Key;
             state.Source.RemoveAt(0);
             for (int i = 0; i < state.Source.Count; i++) state.Source[i].Index = i;
             state.ByKey.Remove(removedKey);
-            state.LastKeys.RemoveAt(0);
             return new DiffStats(Inserts: 0, Removes: 1, Moves: 0, Survivors: newCount, Bailout: false);
         }
 
@@ -380,7 +375,7 @@ internal static class KeyedListDiff
         // 1) Lockstep prefix walk — find where the lists first diverge.
         int prefix = 0;
         int sharedFromStart = global::System.Math.Min(oldCount, newCount);
-        while (prefix < sharedFromStart && string.Equals(state.LastKeys[prefix], newKeys[prefix], global::System.StringComparison.Ordinal))
+        while (prefix < sharedFromStart && string.Equals(state.Source[prefix].Key, newKeys[prefix], global::System.StringComparison.Ordinal))
             prefix++;
 
         // 2) Lockstep suffix walk from the end. Bounded by `prefix` so we
@@ -392,7 +387,7 @@ internal static class KeyedListDiff
         int suffix = 0;
         while (suffix < oldCount - prefix
             && suffix < newCount - prefix
-            && string.Equals(state.LastKeys[oldCount - 1 - suffix], newKeys[newCount - 1 - suffix], global::System.StringComparison.Ordinal))
+            && string.Equals(state.Source[oldCount - 1 - suffix].Key, newKeys[newCount - 1 - suffix], global::System.StringComparison.Ordinal))
             suffix++;
 
         // The diff range is [prefix .. (count - suffix)) on both sides.
@@ -402,7 +397,7 @@ internal static class KeyedListDiff
         // 3) Build the remaining-old map for the diff range only.
         state.Scratch.Clear();
         for (int i = prefix; i < oldDiffEnd; i++)
-            state.Scratch[state.LastKeys[i]] = state.Source[i];
+            state.Scratch[state.Source[i].Key] = state.Source[i];
 
         // 3a) Bulk-replace bailout (#34, folded in). Count how many new
         // diff-range keys survive (are present in the old diff-range map);
@@ -487,12 +482,6 @@ internal static class KeyedListDiff
 
         state.Scratch.Clear();
 
-        // 6) Sync LastKeys to match the final Source order in place (#10),
-        // overwriting shared slots and trimming/extending the tail rather
-        // than Clear()+Add — which would null the whole backing array and
-        // regrow it every diff.
-        SyncLastKeysToSource(state);
-
         return new DiffStats(
             Inserts: inserts,
             Removes: removes,
@@ -500,28 +489,6 @@ internal static class KeyedListDiff
             Survivors: survivors,
             Bailout: false,
             MovedRows: movedRows);
-    }
-
-    /// <summary>
-    /// Overwrites <see cref="ReactorListState.LastKeys"/> to match the current
-    /// <see cref="ReactorListState.Source"/> key order without the full
-    /// Clear()+Add churn. Shared leading slots are overwritten; the tail is
-    /// trimmed or extended as needed. Always leaves LastKeys exactly equal to
-    /// the Source key sequence, so it cannot desync.
-    /// </summary>
-    private static void SyncLastKeysToSource(ReactorListState state)
-    {
-        var lastKeys = state.LastKeys;
-        var source = state.Source;
-        int srcCount = source.Count;
-        int common = global::System.Math.Min(lastKeys.Count, srcCount);
-        for (int i = 0; i < common; i++)
-            lastKeys[i] = source[i].Key;
-        if (lastKeys.Count > srcCount)
-            lastKeys.RemoveRange(srcCount, lastKeys.Count - srcCount);
-        else
-            for (int i = lastKeys.Count; i < srcCount; i++)
-                lastKeys.Add(source[i].Key);
     }
 
     private static void RefreshIndices(ReactorListState state, int fromInclusive, int toInclusive)
@@ -590,32 +557,32 @@ internal static class KeyedListDiff
         return false;
     }
 
-    private static bool SequenceEqualOrdinal(List<string> a, string[] b, int count)
+    private static bool SequenceEqualOrdinal(ObservableCollection<ReactorRow> a, string[] b, int count)
     {
         if (a.Count != count) return false;
         for (int i = 0; i < count; i++)
-            if (!string.Equals(a[i], b[i], global::System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(a[i].Key, b[i], global::System.StringComparison.Ordinal)) return false;
         return true;
     }
 
-    private static bool SequenceEqualOrdinalPrefix(List<string> a, string[] b, int count)
+    private static bool SequenceEqualOrdinalPrefix(ObservableCollection<ReactorRow> a, string[] b, int count)
     {
         for (int i = 0; i < count; i++)
-            if (!string.Equals(a[i], b[i], global::System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(a[i].Key, b[i], global::System.StringComparison.Ordinal)) return false;
         return true;
     }
 
-    private static bool SequenceEqualOrdinalSuffix(List<string> a, string[] b, int count, int newOffset)
+    private static bool SequenceEqualOrdinalSuffix(ObservableCollection<ReactorRow> a, string[] b, int count, int newOffset)
     {
         for (int i = 0; i < count; i++)
-            if (!string.Equals(a[i], b[newOffset + i], global::System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(a[i].Key, b[newOffset + i], global::System.StringComparison.Ordinal)) return false;
         return true;
     }
 
-    private static bool SequenceEqualOrdinalSuffix(List<string> a, string[] b, int count, int oldOffset, int newOffset = 0)
+    private static bool SequenceEqualOrdinalSuffix(ObservableCollection<ReactorRow> a, string[] b, int count, int oldOffset, int newOffset = 0)
     {
         for (int i = 0; i < count; i++)
-            if (!string.Equals(a[oldOffset + i], b[newOffset + i], global::System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(a[oldOffset + i].Key, b[newOffset + i], global::System.StringComparison.Ordinal)) return false;
         return true;
     }
 

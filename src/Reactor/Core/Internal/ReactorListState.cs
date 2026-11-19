@@ -94,11 +94,22 @@ internal sealed class ReactorListState
     public Dictionary<string, ReactorRow> ByKey { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Snapshot of the keys present after the last successful diff (in
-    /// visual order). Used to drive the lockstep prefix walk in
-    /// <see cref="KeyedListDiff"/>.
+    /// Read-only live view of the source keys in visual order. The rows
+    /// already own these references, so no second per-item array is retained.
     /// </summary>
-    public List<string> LastKeys { get; } = new();
+    public IReadOnlyList<string> LastKeys { get; }
+
+    private sealed class RowKeys(ObservableCollection<ReactorRow> source) : IReadOnlyList<string>
+    {
+        public int Count => source.Count;
+        public string this[int index] => source[index].Key;
+        public IEnumerator<string> GetEnumerator()
+        {
+            foreach (var row in source)
+                yield return row.Key;
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 
     /// <summary>
     /// Reusable working dictionary for the diff's "remaining old rows"
@@ -133,11 +144,15 @@ internal sealed class ReactorListState
     /// </summary>
     internal Microsoft.UI.Xaml.RoutedEventHandler? LoadedWatch { get; set; }
 
-    public ReactorListState() => Source.CollectionChanged += (_, _) =>
+    public ReactorListState()
     {
-        StructureChanged = true;
-        HasDefaultPositionalKeys = false;
-    };
+        LastKeys = new RowKeys(Source);
+        Source.CollectionChanged += (_, _) =>
+        {
+            StructureChanged = true;
+            HasDefaultPositionalKeys = false;
+        };
+    }
 
     /// <summary>
     /// Reset the state to a fresh set of (index, key) pairs. Used during
@@ -153,7 +168,6 @@ internal sealed class ReactorListState
     {
         Source.Clear();
         ByKey.Clear();
-        LastKeys.Clear();
 
         int i = 0;
         foreach (var (_, key) in rows)
@@ -166,7 +180,6 @@ internal sealed class ReactorListState
             // tolerant. ByKey then points at the canonical (first) row.
             if (!ByKey.ContainsKey(key))
                 ByKey.Add(key, row);
-            LastKeys.Add(key);
             i++;
         }
     }

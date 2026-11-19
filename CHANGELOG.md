@@ -34,6 +34,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Keyed list state, including `VirtualList`, reads ordered keys from its existing
+  rows instead of retaining a second per-item key-reference array. Mounts and
+  capacity growth allocate less bookkeeping storage without changing row identity
+  or collection-change events (spec 042 §4).
+
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write
