@@ -20,7 +20,16 @@ internal static class Program
 #endif
     internal static RunOptions Options { get; private set; } = null!;
     internal static ResultWriter Results { get; private set; } = null!;
-    internal static PendingRenderError? LastRenderError { get; set; }
+    internal static PendingRenderError? LastRenderError { get; private set; }
+    // Errors are counted, never cleared, so a later render cannot erase one already reported.
+    internal static int RenderErrorCount { get; private set; }
+    internal static int ScenarioErrorBaseline { get; set; }
+
+    internal static void ReportRenderError(Exception exception, string source)
+    {
+        LastRenderError = new(exception, source);
+        RenderErrorCount++;
+    }
 
     [STAThread]
     private static int Main(string[] args)
@@ -63,7 +72,7 @@ internal static class Program
         Results.Start(Options);
         ReactorApp.DefaultRenderErrorHandler = error =>
         {
-            LastRenderError = new(error.Exception, error.Source.ToString());
+            ReportRenderError(error.Exception, error.Source.ToString());
             Results.Note($"Reactor {error.Source} error: {error.Exception}");
             return null;
         };
@@ -134,7 +143,6 @@ internal sealed class CompatibilityRoot : Component
 
     internal async Task ShowAsync(Element element)
     {
-        Program.LastRenderError = null;
         int revision = ++_revision;
         _setElement!((revision, element));
         await WaitAsync(() => RenderedRevision == revision, "render revision");
@@ -186,10 +194,12 @@ internal sealed class CompatibilityRoot : Component
         ThrowRenderError();
     }
 
-    internal static void ThrowRenderError(PendingRenderError? before = null)
+    internal static void ThrowRenderError()
     {
-        if (Program.LastRenderError is { } error && !ReferenceEquals(error, before))
-            throw new InvalidOperationException($"Reactor {error.Source} failed.", error.Exception);
+        if (Program.RenderErrorCount > Program.ScenarioErrorBaseline && Program.LastRenderError is { } error)
+            throw new InvalidOperationException(
+                $"Reactor {error.Source} failed ({Program.RenderErrorCount - Program.ScenarioErrorBaseline} error(s) in this scenario).",
+                error.Exception);
     }
 
     private async Task RunAsync()
@@ -434,20 +444,22 @@ internal sealed class ResultWriter
 
     internal void Run(string control, string scenario, Action action)
     {
-        var before = Program.LastRenderError;
-        try { action(); CompatibilityRoot.ThrowRenderError(before); Write(control, scenario, "passed", "Assertions satisfied."); }
+        Program.ScenarioErrorBaseline = Program.RenderErrorCount;
+        try { action(); CompatibilityRoot.ThrowRenderError(); Write(control, scenario, "passed", "Assertions satisfied."); }
         catch (Exception ex) { Failure(control, scenario, ex); }
+        finally { Program.ScenarioErrorBaseline = Program.RenderErrorCount; }
     }
 
     internal async Task RunAsync(string control, string scenario, Func<Task> action)
     {
-        // An error left over from an earlier scenario is excluded; one reported during this
-        // scenario turns an otherwise satisfied result into a failure.
-        var before = Program.LastRenderError;
-        try { await action(); CompatibilityRoot.ThrowRenderError(before); Write(control, scenario, "passed", "Assertions satisfied."); }
+        // Errors reported before this scenario are excluded; any reported during it, even
+        // between two renders, turn an otherwise satisfied result into a failure.
+        Program.ScenarioErrorBaseline = Program.RenderErrorCount;
+        try { await action(); CompatibilityRoot.ThrowRenderError(); Write(control, scenario, "passed", "Assertions satisfied."); }
         catch (ScenarioBlockedException ex) { Block(control, scenario, ex.Message, ex.ReasonKind); }
         catch (NativeContractException ex) { Inapplicable(control, scenario, ex.Message); }
         catch (Exception ex) { Failure(control, scenario, ex); }
+        finally { Program.ScenarioErrorBaseline = Program.RenderErrorCount; }
     }
 
     internal void Failure(string control, string scenario, Exception ex) =>

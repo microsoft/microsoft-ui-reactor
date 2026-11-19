@@ -22,36 +22,48 @@ internal static class ProtocolSelfTest
         var writer = new ResultWriter(path);
         try
         {
-            Program.LastRenderError = null;
+            static void Report(string message, string source) =>
+                Program.ReportRenderError(new InvalidOperationException(message), source);
+
             await writer.RunAsync("Fixture", "clean", () => Task.CompletedTask);
             Expect(writer.Failed == 0, "a clean scenario passes");
 
-            Program.LastRenderError = new(new InvalidOperationException("earlier scenario"), "Render");
+            Report("before any scenario", "Render");
             await writer.RunAsync("Fixture", "earlier-error", () => Task.CompletedTask);
-            Expect(writer.Failed == 0, "an error left by an earlier scenario does not fail a later one");
+            Expect(writer.Failed == 0, "an error reported before a scenario does not fail it");
 
             await writer.RunAsync("Fixture", "error-during-pass", () =>
             {
-                Program.LastRenderError = new(new InvalidOperationException("during scenario"), "Effect");
+                Report("during scenario", "Effect");
                 return Task.CompletedTask;
             });
             Expect(writer.Failed == 1, "an error reported during a satisfied scenario fails it");
 
-            Program.LastRenderError = new(new InvalidOperationException("during wait"), "Render");
-            bool threw = false;
-            try { await CompatibilityRoot.WaitAsync(() => true, "already satisfied"); }
-            catch (InvalidOperationException) { threw = true; }
-            Expect(threw, "a satisfied wait still reports a pending render error");
+            // ShowAsync ends with the same satisfied wait and error check, so this is the
+            // headless shape of "error, then another render" within one scenario.
+            await writer.RunAsync("Fixture", "error-then-render", async () =>
+            {
+                Report("before the next render", "Effect");
+                await CompatibilityRoot.WaitAsync(() => true, "next render revision");
+                CompatibilityRoot.ThrowRenderError();
+            });
+            Expect(writer.Failed == 2, "a later render step in the same scenario does not erase an earlier error");
 
-            Program.LastRenderError = null;
+            bool threw = false;
+            try { await CompatibilityRoot.WaitAsync(() => true, "cleanup after a failed scenario"); }
+            catch (InvalidOperationException) { threw = true; }
+            Expect(!threw, "an error already charged to a finished scenario does not fail later cleanup");
+
+            Program.ScenarioErrorBaseline = Program.RenderErrorCount;
+            Report("during wait", "Render");
             threw = false;
             try { await CompatibilityRoot.WaitAsync(() => true, "already satisfied"); }
             catch (InvalidOperationException) { threw = true; }
-            Expect(!threw, "a satisfied wait with no error succeeds");
+            Expect(threw, "a satisfied wait still reports a pending render error");
         }
         finally
         {
-            Program.LastRenderError = null;
+            Program.ScenarioErrorBaseline = Program.RenderErrorCount;
             writer.Complete();
             File.Delete(path);
         }
