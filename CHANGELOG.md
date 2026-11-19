@@ -95,6 +95,12 @@ Conventions for contributors:
   take effect again; surviving declarations on shared-control wrappers are preserved
   (issue #1001).
 
+- `.Rotation()` is now degrees when it animates, as it already was for static
+  writes. With `.Animate()` or `AnimationScope.WithAnimation(...)` the value was sent to the
+  compositor's radian channel, so `.Rotation(90)` settled at about 116.6°. A `.Rotation()`
+  change on an element whose visual was already handed out now also plays the
+  `.RotationTransition()` compositor fallback instead of jumping (issue #1615).
+
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.
   Value-equivalent plain-data configurations remain eligible for skipping; native
