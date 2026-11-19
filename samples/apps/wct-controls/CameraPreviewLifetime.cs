@@ -48,14 +48,19 @@ internal sealed class CameraPreviewLifetime
         }
         finally
         {
-            try
+            // After an incomplete release the failed queue retains this owner, so keep
+            // its listener too: late Toolkit failures stay visible on stderr.
+            if (ReleaseSucceeded)
             {
-                _unsubscribe?.Invoke();
-            }
-            catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException)
-            {
-                ReleaseSucceeded = false;
-                Report("unsubscribe", error);
+                try
+                {
+                    _unsubscribe?.Invoke();
+                }
+                catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException)
+                {
+                    ReleaseSucceeded = false;
+                    Report("unsubscribe", error);
+                }
             }
         }
     }
@@ -112,25 +117,28 @@ internal sealed class CameraPreviewLifetime
                     // A Toolkit camera-switch continuation can restore playback
                     // while helper cleanup waits for its capture semaphore. It is
                     // queued before cleanup resumes, so settle lets it run first.
-                    await SettleAsync();
+                    // Unsettled work may still restore playback, so release stays incomplete.
+                    bool settled = await SettleAsync();
                     bool stopped = StopPlayback("stop after cleanup");
-                    ReleaseSucceeded = cleanupSucceeded && stopped;
+                    ReleaseSucceeded = cleanupSucceeded && settled && stopped;
                 }
             }
         }
     }
 
-    private async Task SettleAsync()
+    private async Task<bool> SettleAsync()
     {
         if (_settle is null)
-            return;
+            return true;
         try
         {
             await _settle();
+            return true;
         }
         catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException)
         {
             Report("settle", error);
+            return false;
         }
     }
 

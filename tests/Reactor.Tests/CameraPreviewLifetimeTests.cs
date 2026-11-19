@@ -69,8 +69,9 @@ public class CameraPreviewLifetimeTests
     }
 
     [Fact]
-    public async Task SettleFailure_IsReportedAndFinalStopStillRuns()
+    public async Task SettleFailure_KeepsListenerAndBlocksReentry()
     {
+        var queue = new CameraPreviewCleanupQueue();
         var events = new List<string>();
         var started = new TaskCompletionSource();
         var lifetime = new CameraPreviewLifetime(Task.CompletedTask,
@@ -78,12 +79,17 @@ public class CameraPreviewLifetimeTests
             () => events.Add("stop"),
             () => Task.CompletedTask,
             (operation, _) => events.Add(operation),
-            settle: () => Task.FromException(new InvalidOperationException("settle")));
+            () => events.Add("unsubscribe"),
+            () => Task.FromException(new InvalidOperationException("settle")));
+        queue.Track(lifetime);
         lifetime.Start();
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-        await lifetime.StopAsync().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        queue.Retire(lifetime);
+        await lifetime.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Equal(["stop", "settle", "stop"], events);
         Assert.True(lifetime.HasErrors);
+        Assert.False(lifetime.ReleaseSucceeded);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => queue.WaitAsync());
     }
 
     [Fact]

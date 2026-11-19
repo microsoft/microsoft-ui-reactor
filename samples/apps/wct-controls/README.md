@@ -149,7 +149,8 @@ startup waits for that task, calls `Stop()` to release playback, and awaits
 A final `Stop()` also clears playback restored by an in-flight Toolkit camera
 switch. Before that final stop, cleanup waits for a low-priority dispatcher item,
 so the switch's already-queued UI continuation runs first rather than creating
-playback or raising `PreviewFailed` after the listener is removed. Rapid navigation back waits for the previous preview's cleanup. Each
+playback or raising `PreviewFailed` after the listener is removed.
+Rapid navigation back waits for the previous preview's cleanup. Each
 preview joins that queue when it mounts, not when it unmounts, so a replacement
 mounted before its predecessor unmounts still waits for the earlier release.
 The camera page also requests the same idempotent cleanup from `UseEffect`, since
@@ -169,9 +170,10 @@ uses public Toolkit APIs, not a replacement capture
 implementation, and does not change device permissions.
 The diagnostic failure listener remains attached until pending startup and cleanup
 complete, including when a denied/no-device result arrives after page disposal.
-Cleanup completion alone is not proof of release. If capture cleanup, final
-playback shutdown, or listener removal fails, the sample retains that lifetime
-and blocks new previews with a reported error until the sample is restarted.
+Cleanup completion alone is not proof of release. If capture cleanup, dispatcher
+settling, final playback shutdown, or listener removal fails, the sample retains
+that lifetime and its failure listener, and blocks new previews with a reported
+error until the sample is restarted.
 Ordinary start/preview failures do not block re-entry after successful cleanup.
 
 Live validation requires a provisioned, permission-approved camera. Open the
