@@ -118,6 +118,62 @@ Mode, alter accessibility settings or grant camera permission implicitly.
 Installation/signing/input blockers go to the coordinator for user decisions.
 Coordinate foreground input runs before starting them.
 
+### Segmented UIA comparison (#1599)
+
+`tests\ToolkitSegmentedUiaProbe` is a separate **native-only** WinUI application.
+It has no Reactor reference and does not use `NativeBaseline` (which still runs
+inside a Reactor host). It uses the centrally pinned Toolkit and WinUI packages,
+explicit native XAML metadata registration, and the same `SegmentedUiaDiagnostics`
+source as the Segmented arm of `LocalEvidenceChecks`.
+
+The probe first requires a stock ListView positive control to expose every item's
+selection identity for indices 0 and 1. It then records direct Toolkit Segmented
+instances with the harness's string items and with explicit SegmentedItem
+containers (the code-only equivalent of declarative native items). Both use the
+harness's labels, width, single-selection mode and accessible root name.
+This is not a literal XAML-authored application.
+
+The shared capture records the root, container and public child peers, their
+managed types as well as native class names, raw and typed Selection/SelectionItem
+patterns, container EventsSource peers, and per-item IsSelected at both indices.
+The child walk is bounded at depth 16 / 256 peers and reports truncation; absence
+in a truncated tree is not proof of absence. It does not construct a replacement
+peer, add an adapter, change the existing depth-4 acceptance search, or upgrade a
+blocked `uia-value-patterns` result. Selection is assigned programmatically and
+restored, not driven through physical input.
+
+Headless preparation (no application launch):
+
+```powershell
+dotnet build tests\ToolkitSegmentedUiaProbe\ToolkitSegmentedUiaProbe.csproj -p:Platform=x64
+dotnet build tests\ToolkitCompatibility\ToolkitCompatibility.csproj -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+```
+
+Only after a coordinated runtime slot, run these **sequentially**, using new
+evidence paths. Neither command is a headless test.
+
+```powershell
+tests\ToolkitSegmentedUiaProbe\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ToolkitSegmentedUiaProbe.exe --run C:\evidence\segmented-native.txt
+pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\segmented-reactor -Runtime jit -Deployment unpackaged -Filter Segmented
+```
+
+The native probe closes its one window automatically. Exit 0 plus `COMPLETE`
+means a complete diagnostic capture, **not** accessibility acceptance. A failed
+ListView positive control, timeout, exception or missing completion invalidates
+the comparison. The filtered Reactor run additionally executes its existing
+property, programmatic-focus and render-capture scenarios; it does not inject
+physical input. Exit 2 for blocked coverage remains non-success.
+
+Compare `native-segmented-strings` against `sample-mappings` at both indices.
+If only the deeper walk or EventsSource reveals providers, investigate that
+specific path before changing the harness. If only Reactor differs, investigate
+the mapping/host rather than the Toolkit contract. If both lack providers while
+ListView passes, the evidence supports an inherited native accessibility gap,
+but still needs a read-only cross-process UIA inspection before an upstream
+report. In-process peer enumeration alone does not establish what a screen reader
+can observe. Preserve the resolved assets, exact source revision and binary hashes
+with both captures. A future runtime result must not be inferred from a build.
+
 ## Running
 
 Use a Visual Studio x64 developer PowerShell for NativeAOT publishing. No warning
