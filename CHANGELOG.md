@@ -74,6 +74,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
+  (or estimate), and spacing after rerenders. Removing and re-adding the callback
+  preserves the native viewer and its single subscription, which is detached when
+  the component unmounts (spec 017, VirtualList).
+
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.
   Value-equivalent plain-data configurations remain eligible for skipping; native
