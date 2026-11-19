@@ -53,8 +53,9 @@ try {
     } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'run.json')
     @{ lane = 'jit-unpackaged'; status = 'blocked'; detail = 'Synthetic fixture' } |
         ConvertTo-Json | Set-Content (Join-Path $directory 'matrix.json')
-    @('environment/identity-runtime-location', 'SettingsCard/mount') |
-        Set-Content (Join-Path $lane 'inventory.stdout.txt')
+    $validInventory = @('environment/identity-runtime-location', 'SettingsCard/mount')
+    $validInventory | Set-Content (Join-Path $lane 'inventory.stdout.txt')
+    $validInventory | Set-Content (Join-Path $lane 'inventory.validated.txt')
     $summaryRows = @(
         [pscustomobject]@{ Control = 'environment'; Scenario = 'identity-runtime-location'; Status = 'passed'; Detail = 'Synthetic environment' },
         [pscustomobject]@{ Control = 'SettingsCard'; Scenario = 'mount'; Status = 'passed'; Detail = 'Synthetic mount' }
@@ -111,6 +112,17 @@ try {
         -not $report.Contains("jit-unpackaged: failed.") -or -not $report.Contains($cleanupError)) {
         $summaryFailures.Add('Summary hid a failed lane outcome behind valid scenario results.')
     } else { Write-Output 'PASS summary lane-cleanup-failure' }
+
+    # A failed inventory leaves partial raw output in another lane; it must not plan the summary.
+    $failedLane = Join-Path $directory 'aot-unpackaged'
+    New-Item $failedLane -ItemType Directory | Out-Null
+    'environment/identity-runtime-location' | Set-Content (Join-Path $failedLane 'inventory.stdout.txt')
+    try {
+        & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null
+        $summary = @(Get-Content (Join-Path $directory 'scenario-matrix.json') -Raw | ConvertFrom-Json)
+        if (@($summary | Where-Object status -eq 'passed').Count -ne 2) { throw 'Expected both valid scenario rows.' }
+        Write-Output 'PASS summary failed-inventory-beside-valid-lane'
+    } catch { $summaryFailures.Add("Partial inventory from a failed lane planned the summary: $_") }
 } finally {
     Remove-Item -LiteralPath $directory -Recurse -Force
 }

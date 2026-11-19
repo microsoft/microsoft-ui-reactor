@@ -9,10 +9,14 @@ $lanes = @(Get-Content (Join-Path $directory 'matrix.json') -Raw | ConvertFrom-J
 $runtime = if ($run.parameters.PSObject.Properties['Runtime']) { @($run.parameters.Runtime) } else { @('jit', 'aot') }
 $deployment = if ($run.parameters.PSObject.Properties['Deployment']) { @($run.parameters.Deployment) } else { @('unpackaged', 'loose', 'msix') }
 $plannedLanes = @($runtime | ForEach-Object { $r = $_; $deployment | ForEach-Object { "$r-$_" } })
-$inventoryFile = Get-ChildItem $directory -Filter 'inventory.stdout.txt' -File -Recurse |
-    Where-Object Length -GT 0 | Select-Object -First 1
-if (-not $inventoryFile) { throw 'No executable scenario inventory exists; cannot invent a per-scenario matrix.' }
-$inventory = @(Get-Content $inventoryFile.FullName | Where-Object { $_ })
+$inventoryFiles = @(Get-ChildItem $directory -Filter 'inventory.validated.txt' -File -Recurse | Where-Object Length -GT 0)
+if (-not $inventoryFiles) { throw 'No validated scenario inventory exists; cannot invent a per-scenario matrix.' }
+$inventory = @(Get-Content $inventoryFiles[0].FullName | Where-Object { $_ })
+foreach ($other in $inventoryFiles | Select-Object -Skip 1) {
+    if ((@(Get-Content $other.FullName | Where-Object { $_ }) -join "`n") -cne ($inventory -join "`n")) {
+        throw "Validated inventories differ: $($inventoryFiles[0].FullName) and $($other.FullName)."
+    }
+}
 if (@($inventory | Sort-Object -Unique).Count -ne $inventory.Count) { throw 'Duplicate planned scenario keys.' }
 $rows = [Collections.Generic.List[object]]::new()
 

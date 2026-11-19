@@ -310,6 +310,8 @@ foreach ($runtimeName in $Runtime) {
                     if ("$control/$phase" -cnotin $expectedKeys) { throw "Missing inventory operation $control/$phase." }
                 }
             }
+            # Only an inventory that completed and passed the coverage checks may plan the summary.
+            $expectedKeys | Set-Content -LiteralPath (Join-Path $lane 'inventory.validated.txt')
             $controlOutcomes = [Collections.Generic.List[object]]::new()
             foreach ($control in $controls) {
                 $controlKeys = @($expectedKeys | Where-Object {
