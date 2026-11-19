@@ -38,7 +38,7 @@ EventSource is unchanged and keeps serving its in-process consumers (EventListen
 | Keyword | Bit | Events | Level |
 |---|---|---|---|
 | `Pass` | `0x1` | `RenderPass`, `Reconcile`, `Effects` | Informational (4) |
-| `Component` | `0x2` | `ComponentRender` | Informational (4) |
+| `Component` | `0x2` | `ComponentRender`, `ComponentSkip` | Informational (4) |
 | `Children` | `0x4` | `ChildReconcile`, `KeyedListDiagnostic` | Verbose (5) |
 | `State` | `0x8` | `StateChange` | Verbose (5) |
 
@@ -52,23 +52,24 @@ Spans are a Start (opcode 1) / Stop (opcode 2) pair with the same event name and
 event ids** (their fields differ). Instant events use opcode 0. Field types are TraceLogging
 in-types: `UInt64` (10), `UInt32` (8), `String` = nul-terminated UTF-16 (1), `Bool32` (13,
 4 bytes). All events have version 0 and task 0. Fields marked ² were appended in schema
-revision 2 (see [Schema revisions](#schema-revisions)); they always follow the revision-1
-fields of the same event.
+revision 2 and fields marked ³ in revision 3 (see [Schema revisions](#schema-revisions)); they
+always follow the earlier revisions' fields of the same event.
 
 | Id | Name | Opcode | Level | Keyword | Fields |
 |---|---|---|---|---|---|
 | 1 | `RenderPass` | Start | 4 | `0x1` | `hostId: UInt64`, `requesterId: UInt64`², `requesterName: String`², `requestCount: UInt32`² |
 | 2 | `RenderPass` | Stop | 4 | `0x1` | `hostId: UInt64` |
-| 3 | `ComponentRender` | Start | 4 | `0x2` | `componentId: UInt64`, `name: String`, `reason: String`, `callSiteFile: String`², `callSiteLine: UInt32`², `callSiteColumn: UInt32`² |
-| 4 | `ComponentRender` | Stop | 4 | `0x2` | `componentId: UInt64` |
+| 3 | `ComponentRender` | Start | 4 | `0x2` | `componentId: UInt64`, `name: String`, `reason: String`, `callSiteFile: String`², `callSiteLine: UInt32`², `callSiteColumn: UInt32`², `memoMiss: Bool32`³ |
+| 4 | `ComponentRender` | Stop | 4 | `0x2` | `componentId: UInt64`, `changes: UInt32`³, `stateSets: UInt32`³ |
 | 5 | `Reconcile` | Start | 4 | `0x1` | `entry: String`, `element: String` |
 | 6 | `Reconcile` | Stop | 4 | `0x1` | `inserted: UInt32`², `removed: UInt32`², `moved: UInt32`², `replaced: UInt32`² |
 | 7 | `Effects` | Start | 4 | `0x1` | `componentId: UInt64` |
-| 8 | `Effects` | Stop | 4 | `0x1` | `componentId: UInt64` |
+| 8 | `Effects` | Stop | 4 | `0x1` | `componentId: UInt64`, `stateSets: UInt32`³ |
 | 9 | `ChildReconcile` | Start | 5 | `0x4` | `oldCount: UInt32`, `newCount: UInt32` |
 | 10 | `ChildReconcile` | Stop | 5 | `0x4` | `inserted: UInt32`, `removed: UInt32`, `moved: UInt32`, `replaced: UInt32` |
 | 11 | `StateChange` | Info | 5 | `0x8` | `componentId: UInt64`, `hook: String`, `changed: Bool32` |
 | 12 | `KeyedListDiagnostic` | Info | 5 | `0x4` | `kind: String`, `bailedOut: Bool32` |
+| 13 | `ComponentSkip`³ | Info | 4 | `0x2` | `componentId: UInt64`, `name: String` |
 
 ### What each span covers
 
@@ -135,6 +136,30 @@ fields of the same event.
     `0`. Turning source mapping on has its own cost (each stamped element carries its call
     site), so a profiler should not turn it on for a timing run it compares against one
     without.
+  - `memoMiss` — true when a memo gate was evaluated and let this render through: a class
+    component's props comparison (`Component<TProps>.ShouldUpdate(old, new)`, record equality
+    by default) or `ShouldUpdate()`, or a `Memo(…)` component's dependencies, found a change, or
+    a context it reads changed. False for a mount, a render its own state asked for, a forced
+    or hot-reload render, a host root, and a function component (`RenderEachTime`), which has no
+    gate. Together with [`ComponentSkip`](#instant-events) (a memo **hit**) it gives a
+    component's memo hit rate: hits ÷ (hits + renders with `memoMiss`).
+  - Stop `changes` — what the render achieved: the controls created, updated, removed or moved
+    while the span was open, **inclusive** of nested components (the same scope as the span's
+    time). `0` means the render, and everything it reconciled, changed nothing on screen: it
+    "rendered for nothing". An update counts when the element's own WinUI-mapped properties
+    or its modifiers changed (the reconcile-highlight overlay's rule, so a container whose
+    children changed does not count itself, its children do), and an items host counts when
+    it was handed a different item list or its raw items were edited. The count is
+    conservative: an element type the reconciler cannot compare counts as changed, so a `0` is
+    never a missed change, but some wasted renders report a small non-zero count. A removal
+    that plays an exit animation counts when the animation starts. For a mount it counts the
+    controls the component's output created (its own wrapper is created after its span).
+  - Stop `stateSets` — the state-setter calls (`UseState`, `UseReducer` updater or dispatch,
+    `UsePersisted`; changing the value or not) made on the UI thread while this span was the
+    innermost open one: the component's `Render()`, its effects, and the reconcile of its
+    output, **excluding** nested components' spans. A large count means one render or effect
+    pass fanned out into many state writes (spec 023's `REACTOR_PERF005`). Calls from event
+    handlers and other threads are outside every span and are not counted.
 - **`Reconcile`** — an outermost reconciler entry. Inside a `RenderPass` it is the pass's
   reconcile. Outside any pass it is a row an `ItemsRepeater` / `ListView` realizes or reuses
   during layout. `entry` is `reconcile` or `mount` (which reconciler entry point it was);
@@ -147,7 +172,8 @@ fields of the same event.
   why a reconcile was expensive. A nested `Reconcile` (another host's, inside this one) counts
   its own edits.
 - **`Effects`** — a host root's effects flush (`UseEffect` callbacks). `componentId` is the
-  root's. Child components' effects run inside their own `ComponentRender` span.
+  root's. Child components' effects run inside their own `ComponentRender` span. The Stop's
+  `stateSets` counts the state-setter calls the flush made, as `ComponentRender` Stop's does.
 - **`ChildReconcile`** — one container's child-list reconcile (keyed or positional), including
   applying the result to the WinUI collection. `oldCount` / `newCount` are the element counts;
   the Stop's counts are the edits made to **this** container's collection: `inserted`,
@@ -169,6 +195,27 @@ fields of the same event.
   the list is re-realized in full this render (costly); false when it was only reported.
   Written for every occurrence (the log and DevTools deduplicate; this does not). The owning
   component is the enclosing `ComponentRender` span.
+- **`ComponentSkip`** — a memo **hit**: a component's memo gate skipped its render because its
+  props (or a `Memo(…)` component's dependencies) and the contexts it reads were unchanged.
+  `componentId` and `name` are the ones its `ComponentRender` spans carry (join on
+  `componentId` for its call site). Written once per skipped component per reconcile, inside
+  the parent's `ComponentRender` span, so a list of memoized rows writes one per row when its
+  parent re-renders. A component skipped because its whole subtree was reference-equal (a
+  reused element instance) never reached its memo gate and writes nothing.
+
+### Spotting wasted work
+
+The revision 3 fields answer "was this render worth it?" without the verbose keywords:
+
+- **Rendered for nothing** — a `ComponentRender` Stop with `changes` `0` and a `reason` other
+  than `mount`. If its Start has `memoMiss` true, the memo gate saw a difference that did not
+  matter to the output (a lambda, array or new record instance in props is the usual cause).
+- **Memo hit rate** — per component, `ComponentSkip` count ÷ (`ComponentSkip` count +
+  `ComponentRender` Starts with `memoMiss` true).
+- **SetState fan-out** (spec 023's `REACTOR_PERF005`) — a `ComponentRender` or `Effects` Stop
+  whose `stateSets` exceeds a threshold of the tool's choosing. Several writes in one effect
+  pass still coalesce into one next pass; they cost a re-render each only when the writes are
+  spread over passes, so pair the count with the next `RenderPass`'s `requestCount`.
 
 ## Nesting
 
@@ -180,9 +227,12 @@ update pass:
 RenderPass (hostId, requester=Counter, requestCount=1)
   ComponentRender (root, reason=state, at App.cs:12)
     Reconcile (entry=reconcile) → (inserted=1, removed=1, moved=1, replaced=0)
+      ComponentSkip (Header)
       ComponentRender (Counter, reason=state, at MainPage.cs:40)
         ChildReconcile (old=3, new=3) → (inserted=1, removed=1, moved=1, replaced=0)
-  Effects (root componentId)
+      → Counter (changes=3, stateSets=0)
+  → root (changes=3, stateSets=0)
+  Effects (root componentId) → (stateSets=0)
 ```
 
 A row realized during layout, outside any pass:
@@ -227,18 +277,29 @@ file name is the tail of its path, sharing its terminator), so writing allocates
 one allocation is a function or memo component's `name`, built once per component on its
 first traced render (reading `Delegate.Method` and formatting the name).
 
+The revision 3 data follows the same rule. With no session, a state setter adds two static
+gate reads, and the reconciler adds one per control it mounts or unmounts, per panel child
+reconcile, per element update it does not skip, and per items-host edit; nothing is
+compared, counted or allocated. While `Pass` or `Component` is on, the counts live in a
+per-thread tally (one small object per UI thread, allocated once), and each update the
+reconciler does not skip also runs the own-property comparison the highlight overlay uses.
+`ComponentSkip` adds one event per memo-skipped component, which can outnumber the
+`ComponentRender` spans in an app that memoizes well.
+
 ## Schema revisions
 
 Fields are only ever **appended** to an event, after the ones it already has; an event keeps
 version 0. A decoder written for an earlier revision therefore keeps working as long as it
 looks fields up by name (or reads only the leading ones) and ignores fields and event ids it
 does not know. The revision is not on the wire: tell revision 2 from revision 1 by the
-presence of a field (for example `requesterId` on `RenderPass` Start).
+presence of a field (for example `requesterId` on `RenderPass` Start), and revision 3 from
+revision 2 the same way (`changes` on `ComponentRender` Stop).
 
 | Revision | Reactor | Change |
 |---|---|---|
 | 1 | issue #1484 | The provider and events 1–12. |
 | 2 | issue #1489 | Appended `requesterId`, `requesterName`, `requestCount` to `RenderPass` Start (1); `callSiteFile`, `callSiteLine`, `callSiteColumn` to `ComponentRender` Start (3); `inserted`, `removed`, `moved`, `replaced` to `Reconcile` Stop (6, which had no fields). Changed the `name` *value* of function and memo components from `FuncElement` / `MemoElement` to their render function's name; a consumer that matched those two strings must match the new names (or `RenderEachTime` / `Memo` / `render` prefixes) instead. |
+| 3 | issue #1538 (spec 023 §10.3–10.4) | Appended `memoMiss` to `ComponentRender` Start (3); `changes`, `stateSets` to `ComponentRender` Stop (4); `stateSets` to `Effects` Stop (8). Added `ComponentSkip` (13, `Component` keyword, level 4). Nothing existing changed meaning. |
 
 ## Stability
 

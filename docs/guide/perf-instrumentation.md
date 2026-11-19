@@ -208,7 +208,14 @@ host render pass, a `ComponentRender` span per component render
 naming the component whose setter ran. At the default level each pass
 also names the component whose request scheduled it, each component
 span carries the C# line that created the component (when source
-mapping is on), and each reconcile counts its child edits. Function and
+mapping is on), and each reconcile counts its child edits. Each
+component span also says whether the render was worth it: whether a
+memo gate let it through (`memoMiss`), how many controls it changed
+(`changes`, `0` for a render that changed nothing on screen), and how
+many state writes its render and effects made (`stateSets`, spec 023's
+setState fan-out check). A memo component its parent re-rendered but
+whose props held writes a `ComponentSkip` instead, so a tool can show a
+memo hit rate per component. Function and
 memo components are named by their render function, as DevTools names
 them. Its events are TraceLogging, so
 WPA and any TDH-based decoder read them without a manifest, and they
