@@ -309,8 +309,8 @@ Q1–Q8 and Q11 are **resolved** (see §Resolved decisions). Remaining:
 - **Member walk:** from the most-derived type up to, but excluding, `Microsoft.UI.Xaml.Controls.Control`. Captures control-specific members (`ButtonBase.Click`, `ContentControl.Content`, `SettingsCard.Header`) while skipping `Control`/`FrameworkElement` layout plumbing Reactor already models via modifiers.
 - **Value props:** public instance, public get+set, non-indexer. `string`/`object` → text; `bool`/`int`/`double`/enum → nullable-backed `OneWayConditional`; **value-type structs** (`Thickness`, `CornerRadius`, `Color`, …) → `T?` nullable one-way (write `.Value`); **reference types** (`Brush`, `FontFamily`, …) → `T?` one-way (write when non-null); **`Nullable<U>` tri-state** (`bool?`, `DateTimeOffset?`, …) → **spec-050 `Optional<U?>`** (Unset ⇒ don't touch, `Of(null)` ⇒ write null, `Of(v)` ⇒ write v — `Optional<T>` mirrors `Nullable<T>`'s `.Value`/`.HasValue` so the same one-way/controlled emit handles it). Skipped: delegates, interfaces, arrays, collections (`IEnumerable`), templates/styles, and `UIElement`-derived types (those are content, not value props).
 - **Content slot:** discovered from the control's WinUI `[ContentProperty]` attribute, with a `[WrapContent("Prop")]` override and a property-named-`Content` fallback. Auto-accepted only when unambiguously a child — a `UIElement`-derived property (`Border.Child`, `Viewbox.Child`) or an `object` named exactly `Content` (`ContentControl.Content`). An `object` `[ContentProperty]` with another name (WinUI declares `ToggleSwitch`'s as `Header`) is treated as a value prop, not a child slot; a `[WrapContent]` override forces any single-content-typed property. Collections (`Panel.Children`/`ItemsControl.Items`) are panel/items strategies (P3), not this. The `SingleContent` strategy writes the discovered property (`c.Child`), not a hardcoded `c.Content`.
-- **Two-way props:** a value prop `P` paired with a `{P}Changed` event (auto-pair), a `[WrapControlled(P, ChangedEvent)]` override (single non-conventional event), or a `[WrapControlled(P, Events = new[]{…})]` override (multiple events, e.g. `Checked`+`Unchecked`) ⇒ `Optional<T>` + `On{P}Changed` + public `.Controlled<TValue,TArgs>` (spec 050; §5.3). For multi-event the value is read back from the control after any event fires; `TArgs` is taken from the first event. `[WrapOneWay(P)]` opts a prop out of auto-pairing (keeps it one-way despite a `{P}Changed` event — e.g. `ProgressBar.Value`).
-- **Events:** fire-and-forget `RoutedEventHandler` and `TypedEventHandler<,>` events not consumed by a controlled prop ⇒ `Action On{Event}` + `HandCodedEvent` trampoline (typed to the event's delegate) that reads the live element via `Reconciler.GetElementTag`.
+- **Two-way props:** a value prop `P` paired with a `{P}Changed` event (auto-pair), a `[WrapControlled(P, ChangedEvent)]` override (single non-conventional event), or a `[WrapControlled(P, Events = new[]{…})]` override (multiple events, e.g. `Checked`+`Unchecked`) ⇒ `Optional<T>` + `On{P}Changed` (spec 050; §5.3). An isolated controlled property uses public `.Controlled<TValue,TArgs>`; composite wrappers use §8.2's grouped binding. For multi-event the value is read back from the control after any event fires. `[WrapOneWay(P)]` opts a prop out of auto-pairing (keeps it one-way despite a `{P}Changed` event — e.g. `ProgressBar.Value`).
+- **Events:** fire-and-forget `RoutedEventHandler` and `TypedEventHandler<,>` events not consumed by a controlled prop ⇒ `Action On{Event}` + `HandCodedEvent` trampoline that reads the subscribed owner's live element via `Reconciler.GetElementTag` (§8.3).
 - **Name-mapping:** `[WrapAlias("ElementName", "ControlProperty")]` surfaces a control property under a friendly element-facing name — the generated init-property and factory parameter use `ElementName`, while the descriptor reads/writes `ControlProperty` (e.g. `Min`→`Minimum`, `Content`→`Text`). **Aliasing the content property opts it out of the child slot:** when the aliased `ControlProperty` is the control's discovered `[ContentProperty]`, the generator treats it as a value prop (the string form of polymorphic content) rather than a `SingleContent` child — e.g. `[WrapAlias("Label", "Content")]` on `CheckBox`/`ToggleButton` surfaces `string? Label` writing `c.Content`, with no `Content` element child slot.
 - **One-way DP-backed props use spec-050 `Optional<T>` + `dp:` ClearValue.** When a one-way prop is backed by a public `{Prop}Property` dependency property, the element prop is `Optional<T>` and the descriptor uses `.OneWay(get, set, dp:)` — `Unset` ⇒ `ClearValue(dp)` releases the local value to the WinUI style/precedence chain (spec 050 §6.3), instead of the skip-write fallback. Props with no DP keep the nullable-`T?` `OneWayConditional` skip-write. Combined with controlled props (`Optional<T>`-enforced) and tri-state nullables (`Optional<U?>`), the generator is now fully Optional-native.
 - **Setters:** always emitted for the `.Set(...)` escape hatch.
@@ -334,6 +334,71 @@ inspected ≥20 migrated controls so it can't pass vacuously).
 > arbitrary third-party controls.
 
 
+### §8.2 Composite controlled bindings (issue #1564)
+
+Multiple controlled properties are supported, including two range endpoints sharing
+`ValueChanged`. The same path handles an ordinary controlled property alongside generated
+ordinary events. `REACTORGEN012` is retired; `Deferred = true` is not a workaround or a
+requirement for multiple values.
+
+The generator emits public `ImperativeBridged` descriptor hooks and a lazily registered
+native attached property holding one typed last-observed value per controlled property.
+This avoids both the single `ControlledPropEntry` payload collision and RCW-keyed side
+tables. No Reactor internals, reflection, or new public API is required, and constructing
+the element without a WinUI dispatcher does not register a dependency property.
+
+Each distinct native change event is subscribed once. Its handler snapshots its affected
+properties before callbacks, checks `ReactorBinding.ShouldSuppressEcho` once, and invokes
+only callbacks whose readback changed, resolving callbacks from the current element.
+Before each callback, per-property versions and native readback reject observations
+superseded by nested events or writes. Unrelated nested changes do not discard pending
+notifications. The binding must still be attached, and callbacks are resolved again so
+reentrant reconciliation cannot invoke a replaced callback.
+Ordinary events retain their existing `HandCodedEvent` behavior and payload. Controlled
+subscriptions are removed and their attached state cleared at unmount.
+
+A specified value is compared against native readback on every update, even if the parent
+value did not change. Unset skips the write without disabling observation. Controlled
+writes use a scoped depth guard and refresh the written property's actual readback after
+the setter attempt, even if coercion leaves it unchanged. Sibling observations advance
+only when the write changes them, including coercion; unchanged siblings retain pending
+native edits until their events arrive. Synchronous echoes cannot escape
+during the write; delayed echoes matching the
+snapshot and unchanged-endpoint events do not notify. Silent or guarded setters leave no
+suppression token to swallow later input. A user edit arriving before a delayed echo still
+notifies if its readback differs. This is value observation, not delivery of every native
+event; consumers requiring raw event arguments should use one-way properties and a typed
+event instead. Non-controlled writes that require bespoke coercion ordering still belong
+in the existing customization hooks.
+
+An isolated single-controlled binding keeps its existing `Controlled` / deferred
+`HandCodedControlled` path. The external no-IVT `ControlledRangeProbe` and
+`MultipleControlled_*` live fixtures exercise shared/distinct events, same/different value
+types, parent acceptance/rejection, callback replacement, omitted values, echo/coercion,
+ordinary events and teardown. Explicit `MoveStart`/`MoveEnd` events are the positive control;
+silent Toolkit property assignments are not event-wiring evidence.
+
+### §8.3 Event ownership (issue #1573)
+
+The sender of a native event need not be the control on which it was subscribed.
+For example, Toolkit `TokenizingTextBox.TextChanged` forwards its inner `AutoSuggestBox`.
+All generated subscription bridges resolve the subscribed owner, not the sender, before
+reading its current element, controlled value, or echo state. Typed ordinary events retain
+the original args object (including mutable/cancellable args); projected callbacks still
+project from that object. Null or unrelated senders do not invalidate an owner's event.
+
+The bridges capture a `System.WeakReference<TControl>`, not an element or a strong control
+reference. On the supported .NET runtime this is COM-aware and can recover a live native
+owner after its RCW is collected. Subscription gates remain in native attached state,
+not a managed-RCW-keyed table (issue #86). Single/deferred/ordinary descriptor payloads
+retain their one-time lifetime subscriptions, including across pool returns. A private
+native-attached owner record deactivates these bridges at unmount and reactivates them
+after remount's initial writes, so even a retained control with an old element tag stays
+silent outside its mount lifetime. The weak reference does not keep discarded controls
+alive. Composite bindings store their actual native delegates in their attached state, so
+unmount removes those exact delegates before clearing state. Their snapshot-before-callback
+and one-suppression-check-per-native-event rules are unchanged.
+
 ## §9 Trimming and AOT
 
 The generated factory holder is the spec-048 §6 Pattern-A trim-root: `ControlRegistry.Register` is called from the holder's static constructor, reachable only through `{Control}.Create()`. An app that never calls the factory lets the whole chain (element + descriptor + handler + control) be trimmed. The `static` lambda in `Register` keeps registration zero-closure. The generator must keep emitting this shape; the consuming app remains responsible for `IsAotCompatible` settings.
@@ -342,17 +407,40 @@ The generated factory holder is the spec-048 §6 Pattern-A trim-root: `ControlRe
 
 A third-party control's default style/template lives in its assembly's `Themes/Generic.xaml`. When the WinUI loader parses that dictionary it resolves type references through `Application.Current`'s `IXamlMetadataProvider` chain. A Reactor app with no XAML of its own has no compiler-generated provider for the referenced control library, so the lookup fails and the app **crashes at first realization** with `0xC000027B` (E_FAIL in `Microsoft.UI.Xaml.dll`) — observed with `SettingsCard` before the fix. The cure is `ReactorApp.RegisterControlAssembly(controlAssembly)` (issue #142).
 
-The generator emits this call automatically in the element type's **static constructor**, immediately before `ControlRegistry.Register`:
+For full wrappers with `RegisterAssembly = true` (the default), the generator resolves
+the control assembly's `IXamlMetadataProvider` at compile time. When there is one
+concrete, public, non-generic provider with a public parameterless constructor, it
+emits a direct construction in the element type's **static constructor**, immediately
+before `ControlRegistry.Register` (issue #1565):
 
 ```csharp
 static SettingsCardElement()
 {
-    global::Microsoft.UI.Reactor.ReactorApp.RegisterControlAssembly(typeof(SettingsCard).Assembly);
+    global::Microsoft.UI.Reactor.ReactorApp.RegisterControlAssembly(
+        new global::CommunityToolkit.WinUI.Controls.SettingsControlsRns.
+            CommunityToolkit_WinUI_Controls_SettingsControls_XamlTypeInfo.XamlMetaDataProvider());
     global::…ControlRegistry.Register<SettingsCardElement, SettingsCard>(static () => new …(Descriptor));
 }
 ```
 
-Because the static cctor runs the first time the factory is called (during `Render`, before the control is mounted and its `Generic.xaml` loads), the provider is registered in time. Authors therefore don't need a manual registration step — wrapping is self-contained.
+Because the static cctor runs when the element is first constructed (during `Render`,
+before the control is mounted and its `Generic.xaml` loads), the provider is registered
+in time and statically preserved under trimming/NativeAOT. Unused wrappers do not root
+their providers; no module initializer or whole-assembly root is emitted. A provider
+may itself reference other types as required by its control library.
+
+Code-only libraries with no provider retain the tolerant
+`TryRegisterControlAssembly(typeof(Control).Assembly)` fallback. That reflection path
+is also retained for compatibility with JIT-only or not-yet-visible generated providers,
+but is **not** a trimming guarantee. Providers produced later by another generator,
+providers in a different assembly, non-public/open-generic providers, providers that
+require constructor arguments or required-member initialization, and ambiguous
+multiple providers need explicit registration when XAML metadata is required.
+`REACTORGEN016` warns when visible candidates cannot be selected safely; no warning is
+issued merely because a code-only library has none. Application subclasses are not
+provider candidates. Use `RegisterAssembly = false` and the existing provider-instance
+overload for custom registration. Descriptor-only and decorator generation retain their
+existing registration behavior and do not gain automatic metadata registration.
 
 ## §10 Diagnostics
 

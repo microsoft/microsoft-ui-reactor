@@ -6,11 +6,14 @@ namespace Microsoft.UI.Reactor.Hosting.Persistence;
 
 /// <summary>
 /// Serializes and deserializes the persistence payload: monitor-layout
-/// fingerprint followed by a <c>WINDOWPLACEMENT</c> struct. Layout matches
-/// <c>WinUIEx.WindowManager.LoadPersistence</c> so existing on-disk data is
-/// forward-compatible. (spec 036 §8)
+/// fingerprint followed by a <c>WINDOWPLACEMENT</c> struct. (spec 036 §8)
 /// </summary>
 /// <remarks>
+/// <para>Adapted from WinUIEx (<c>WindowManager.SavePersistence</c> /
+/// <c>LoadPersistence</c>, https://github.com/dotMorten/WinUIEx), MIT License,
+/// Copyright (c) 2021 Morten Nielsen. See <c>ThirdPartyNoticeText.txt</c>.
+/// The payload layout follows WinUIEx's, but Reactor stores it under its own
+/// container and keys, so it does not read placements that WinUIEx saved.</para>
 /// Format (binary):
 /// <code>
 ///   int32   monitorCount

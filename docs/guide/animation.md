@@ -26,6 +26,16 @@ translation) and attach a transition modifier. When the value changes on the
 next render — driven by [hooks](hooks.md) and state — WinUI animates from
 the old value to the new one automatically.
 
+Animation and transition configuration changes are also checked on each render,
+even when the element's other properties stay the same. For example, changing
+only `.LayoutAnimation()`'s duration updates the layout animation on the next render.
+
+Value-equivalent plain-data configurations such as `.Animate()` and
+`.LayoutAnimation()` can still skip updates. Native objects and arrays use
+reference equality: rebuilding `.OpacityTransition()`, `.WithTransitions()`,
+`.Keyframes()`, or `.ScrollLinked()` with fresh objects or arrays prevents
+skipping, even when the settings match.
+
 ## Reference
 
 | API | Animates | Trigger | Use when |
@@ -670,8 +680,9 @@ reorder cascades.
 ## Keyframes
 
 `.Keyframes(name, trigger, configure)` runs a multi-property keyframe
-animation whenever `trigger` changes. Define keyframes at progress points
-from 0.0 to 1.0:
+animation whenever `trigger` changes, even if the element's other properties
+stay unchanged. Re-rendering with the same trigger does not restart it.
+Define keyframes at progress points from 0.0 to 1.0:
 
 ```csharp
 class KeyframeDemo : Component

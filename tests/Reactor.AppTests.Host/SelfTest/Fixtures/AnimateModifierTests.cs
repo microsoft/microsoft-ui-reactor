@@ -153,6 +153,65 @@ internal static class AnimateModifierTests
         }
     }
 
+    internal class ExtrasAcrossUpdates(Harness h, bool childSkip) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var child = TextBlock("Content");
+            Element Wrap(Element element) => childSkip ? VStack(element) : element;
+            BorderElement Render(TimeSpan duration) => Border(child).LayoutAnimation(duration);
+            var current = Wrap(Render(TimeSpan.FromMilliseconds(200)));
+            var root = reconciler.Mount(current, static () => { })!;
+            var border = childSkip ? (Border)((StackPanel)root).Children[0] : (Border)root;
+            var name = childSkip ? "AnimationExtras_Child" : "AnimationExtras_Direct";
+            H.SetContent(root);
+            try
+            {
+                await Harness.Render();
+                var visual = ElementCompositionPreview.GetElementVisual(border);
+                bool HasDuration(string property, int milliseconds) =>
+                    visual.ImplicitAnimations?.ContainsKey(property) == true
+                    && visual.ImplicitAnimations[property] is ScalarKeyFrameAnimation scalar
+                        && scalar.Duration == TimeSpan.FromMilliseconds(milliseconds);
+                bool HasOffsetDuration(int milliseconds) => visual.ImplicitAnimations?["Offset"]
+                    is Vector3KeyFrameAnimation offset && offset.Duration == TimeSpan.FromMilliseconds(milliseconds);
+                void Update(Element next)
+                {
+                    var wrapped = Wrap(next);
+                    H.Check(name + "_SameControl", reconciler.Update(current, wrapped, root, static () => { }) is null);
+                    current = wrapped;
+                }
+
+                H.Check(name + "_InitialLayout", HasOffsetDuration(200));
+                Update(Render(TimeSpan.FromMilliseconds(800)));
+                H.Check(name + "_ChangedLayout", HasOffsetDuration(800));
+                Update(Border(child));
+                H.Check(name + "_RemovedLayout", visual.ImplicitAnimations is null);
+
+                Update(Border(child).OpacityTransition(TimeSpan.FromMilliseconds(200)));
+                H.Check(name + "_InitialTransition", HasDuration("Opacity", 200));
+                Update(Border(child).OpacityTransition(TimeSpan.FromMilliseconds(800)));
+                H.Check(name + "_ChangedTransition", HasDuration("Opacity", 800));
+
+                // Only compare scroll declarations here; no headless native placeholders.
+                var viewer = new ScrollViewer();
+                var expressions = new[] { new ScrollExpression("Opacity", "1") };
+                var first = Border(child) with { ScrollAnimation = new ScrollAnimationConfig(viewer, expressions) };
+                var equal = Border(child) with { ScrollAnimation = new ScrollAnimationConfig(viewer, expressions) };
+                var changed = Border(child) with { ScrollAnimation = new ScrollAnimationConfig(viewer, [new("Opacity", "0")]) };
+                H.Check(name + "_EqualScrollSkips", Element.CanSkipUpdate(first, equal));
+                H.Check(name + "_ChangedScrollUpdates", !Element.CanSkipUpdate(first, changed));
+                H.Check(name + "_RemovedScrollUpdates", !Element.CanSkipUpdate(first, Border(child)));
+            }
+            finally
+            {
+                reconciler.UnmountChild(root);
+                H.SetContent(null);
+            }
+        }
+    }
+
     internal class MergesWithLayoutAnimation(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

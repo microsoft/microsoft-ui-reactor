@@ -218,6 +218,11 @@ public sealed class RenderContext
     // <snippet:set-state>
     private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
     {
+        // Keep the captured argument in a separate frame so inline/locked calls
+        // do not allocate a closure before deciding whether marshaling is needed.
+        bool MarshalSetter(T newValue)
+            => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
         void Setter(T newValue)
         {
             bool changed;
@@ -238,7 +243,7 @@ public sealed class RenderContext
             }
             else
             {
-                if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+                if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
                 changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
                 if (changed) h.Value = newValue;
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
@@ -299,6 +304,9 @@ public sealed class RenderContext
 
     private Action<Func<T, T>> MakeReducerUpdater<T>(ValueHookState<T> h)
     {
+        bool MarshalUpdater(Func<T, T> reducer)
+            => MarshalIfOffUIThread("UseReducer", () => Updater(reducer));
+
         void Updater(Func<T, T> reducer)
         {
             bool changed;
@@ -321,7 +329,7 @@ public sealed class RenderContext
             }
             else
             {
-                if (MarshalIfOffUIThread("UseReducer", () => Updater(reducer))) return;
+                if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalUpdater(reducer)) return;
                 var prev = h.Value;
                 var next = reducer(prev);
                 changed = !EqualityComparer<T>.Default.Equals(prev, next);
@@ -387,6 +395,9 @@ public sealed class RenderContext
 
     private Action<TAction> MakeReducerDispatch<TState, TAction>(ValueHookState<TState> h)
     {
+        bool MarshalDispatch(TAction action)
+            => MarshalIfOffUIThread("UseReducer", () => Dispatch(action));
+
         void Dispatch(TAction action)
         {
             var reducer = (Func<TState, TAction, TState>)h.Reducer!;
@@ -406,7 +417,7 @@ public sealed class RenderContext
             }
             else
             {
-                if (MarshalIfOffUIThread("UseReducer", () => Dispatch(action))) return;
+                if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalDispatch(action)) return;
                 var prev = h.Value;
                 var next = reducer(prev, action);
                 bool changed = !EqualityComparer<TState>.Default.Equals(prev, next);

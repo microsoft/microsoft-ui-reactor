@@ -60,6 +60,7 @@
   <ItemGroup>
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
     <Compile Include="..\_shared\EtwPrivateCapture.cs" Link="EtwPrivateCapture.cs" />
+    <Compile Include="..\..\samples\apps\wct-controls\CameraPreviewLifetime.cs" Link="Samples\CameraPreviewLifetime.cs" />
   </ItemGroup>
 
   <!--

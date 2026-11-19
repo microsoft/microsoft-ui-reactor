@@ -388,6 +388,8 @@ public static partial class ReactorApp
     /// registers it. Throws if no such provider is found — pass the
     /// <see cref="IXamlMetadataProvider"/> instance directly if your library
     /// uses a non-standard provider type.
+    /// Reflection discovery does not preserve the provider under trimming/NativeAOT;
+    /// use the instance overload with a statically constructed provider in that case.
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Caller-supplied assembly's XAML metadata provider is preserved by the XAML compiler that emits it.")]
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Parameterless ctor invoked on a freshly-discovered IXamlMetadataProvider type.")]
@@ -409,8 +411,9 @@ public static partial class ReactorApp
     /// does nothing (returning <c>false</c>) if it does not. A pure-code control
     /// library — e.g. code-only panels with no XAML files (and therefore no
     /// compiler-generated provider) — has nothing to register and needs nothing.
-    /// Used by generated control registrations, which cannot know in advance
-    /// whether a wrapped control's assembly ships XAML.
+    /// Reflection discovery does not preserve the provider under trimming/NativeAOT.
+    /// Generated wrappers use the instance overload when a suitable provider is
+    /// visible at compile time, and this method only as a best-effort fallback.
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See RegisterControlAssembly(Assembly).")]
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "See RegisterControlAssembly(Assembly).")]

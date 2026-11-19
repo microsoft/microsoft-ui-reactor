@@ -46,9 +46,21 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 ### Code-only apps wrapping toolkit controls
 
 An observable `ItemsHost` list has generated WinRT exposure, but that only covers
-the collection ABI, not the control library's XAML templates. A code-only AOT app
-may need to statically root and register the toolkit's generated metadata provider
-before mounting wrapped controls. For example, with WCT SettingsControls:
+the collection ABI, not the control library's XAML templates.
+Full `[GenerateReactorWrapper]` wrappers now register a **statically constructed**
+metadata provider when the control assembly exposes one concrete, public,
+non-generic `IXamlMetadataProvider` with a public parameterless constructor
+(issue #1565). This works without `App.xaml` or app-side provider roots, including
+WCT SettingsCard and SettingsExpander. Registration remains in the element's static
+constructor, so an unused wrapper does not root its provider or control library.
+
+Code-only controls without a provider still work. Ambiguous or nonconstructible
+providers produce `REACTORGEN016`; the fallback assembly scan remains best-effort
+and does **not** preserve metadata under trimming. Providers generated later in
+the same compilation, or supplied by another assembly, cannot be discovered by this
+mechanism. Descriptor-only/decorator generation is unchanged. For these cases,
+disable automatic registration with `RegisterAssembly = false` where applicable
+and pass the intended provider instance explicitly. For example:
 
 ```csharp
 ReactorApp.RegisterControlAssembly(
@@ -56,9 +68,10 @@ ReactorApp.RegisterControlAssembly(
         CommunityToolkit_WinUI_Controls_SettingsControls_XamlTypeInfo.XamlMetaDataProvider());
 ```
 
-The concrete provider name depends on the library. The SettingsExpander selftest
-uses this registration explicitly; passing it is not proof of automatic metadata
-discovery under trimming.
+The concrete provider name depends on the library. The separate code-only consumer
+in `tests/aot_trim_proof/Reactor.WrapperMetadata` verifies automatic registration
+without this explicit root. Its JIT and NativeAOT runs check realized text updates
+and retained header identity across two Toolkit libraries and a provider-free control.
 
 ## Devtools DependencyProperty discovery
 
