@@ -358,6 +358,8 @@ foreach ($runtimeName in $Runtime) {
         } catch {
             $detail = $_.Exception.ToString()
             $detail | Set-Content (Join-Path $lane 'error.txt')
+            # Only an explicitly recorded blocker keeps the lane blocked; anything else is an execution failure.
+            $status = if (Test-Path (Join-Path $lane 'blocker.json')) { 'blocked' } else { 'failed' }
         } finally {
             if ($deploymentSucceeded -and -not $ownedFullName) {
                 try {

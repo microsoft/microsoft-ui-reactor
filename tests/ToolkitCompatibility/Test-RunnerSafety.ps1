@@ -99,6 +99,8 @@ try {
             $run.parameters.Deployment[0] -ceq $case.Deployment.ToLowerInvariant() -and
             $laneResult[0].lane -ceq "$($case.Runtime.ToLowerInvariant())-$($case.Deployment.ToLowerInvariant())") `
             "$($case.Control) runtime and deployment are canonical in metadata and lane names"
+        Assert-Runner ($laneResult[0].status -ceq 'failed' -and -not (Test-Path (Join-Path $caseDirectory "$($laneResult[0].lane)\blocker.json"))) `
+            "$($case.Control) execution failure without a recorded blocker fails the lane"
     }
     $global:LASTEXITCODE = 0
 } finally {

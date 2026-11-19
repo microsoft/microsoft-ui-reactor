@@ -195,7 +195,9 @@ administrator requirement and all-users installation/cleanup scope. Archive-only
 preparation does not perform an all-users package query or installation; it also
 writes `blocker.json` with reason `approval`, which is the only way the summary
 reports an approval blocker. A lane that installed and then failed is reported
-by its actual failure, not as approval-blocked.
+by its actual failure, not as approval-blocked. Any lane exception without a
+recorded blocker marks the lane failed, and its unexecuted scenarios are reported
+as failed with reason `lane-failure`.
 
 The dependency-free script checks exercise synthetic result streams, mocked Appx
 commands and owned console child processes. They do not install packages, elevate,

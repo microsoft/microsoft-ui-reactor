@@ -137,8 +137,8 @@ try {
     $msixLane = Join-Path $directory 'jit-msix'
     New-Item $msixLane -ItemType Directory | Out-Null
     '{"archive":"synthetic.msix"}' | Set-Content (Join-Path $msixLane 'installation-request.json')
-    foreach ($blockerCase in @(@{ Name = 'installed-msix-inventory-failure'; Blocker = $false; Kind = 'not-executed' },
-                               @{ Name = 'approval-blocked-msix'; Blocker = $true; Kind = 'approval' })) {
+    foreach ($blockerCase in @(@{ Name = 'installed-msix-inventory-failure'; Blocker = $false; Kind = 'lane-failure'; Status = 'failed' },
+                               @{ Name = 'approval-blocked-msix'; Blocker = $true; Kind = 'approval'; Status = 'blocked' })) {
         if ($blockerCase.Blocker) {
             @{ reasonKind = 'approval'; detail = 'Synthetic approval blocker' } | ConvertTo-Json |
                 Set-Content (Join-Path $msixLane 'blocker.json')
@@ -146,8 +146,9 @@ try {
         & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null
         $msixRows = @(Get-Content (Join-Path $directory 'scenario-matrix.json') -Raw | ConvertFrom-Json |
             Where-Object lane -EQ 'jit-msix')
-        if ($msixRows.Count -eq 0 -or @($msixRows | Where-Object reasonKind -NE $blockerCase.Kind).Count) {
-            $summaryFailures.Add("MSIX lane reason was not '$($blockerCase.Kind)': $($blockerCase.Name)")
+        if ($msixRows.Count -eq 0 -or
+            @($msixRows | Where-Object { $_.reasonKind -ne $blockerCase.Kind -or $_.status -ne $blockerCase.Status }).Count) {
+            $summaryFailures.Add("MSIX lane rows were not $($blockerCase.Status)/$($blockerCase.Kind): $($blockerCase.Name)")
         } else { Write-Output "PASS summary $($blockerCase.Name)" }
     }
 } finally {

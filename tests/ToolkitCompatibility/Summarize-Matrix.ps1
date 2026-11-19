@@ -68,10 +68,14 @@ foreach ($laneName in $plannedLanes) {
                         else { 'unclassified' }
                 }
             } else {
-                $status = if ($failure) { 'failed' } else { 'blocked' }
                 $blockerFile = Join-Path $laneDirectory 'blocker.json'
+                $hasBlocker = Test-Path $blockerFile
+                # A lane that failed without a recorded blocker is an execution failure, not missing coverage.
+                $laneFailed = -not $hasBlocker -and $lane.Count -and $lane[0].status -eq 'failed'
+                $status = if ($failure -or $laneFailed) { 'failed' } else { 'blocked' }
                 $kind = if ($failure) { 'incomplete-evidence' }
-                    elseif (Test-Path $blockerFile) { (Get-Content $blockerFile -Raw | ConvertFrom-Json).reasonKind }
+                    elseif ($hasBlocker) { (Get-Content $blockerFile -Raw | ConvertFrom-Json).reasonKind }
+                    elseif ($laneFailed) { 'lane-failure' }
                     else { 'not-executed' }
                 $detail = if ($failure) { $failure }
                     elseif ($lane.Count) { $lane[0].detail }
