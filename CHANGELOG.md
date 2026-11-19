@@ -74,6 +74,12 @@ Conventions for contributors:
 
 ### Fixed
 
+- Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
+  declaration restores its identity value and releases modifier-owned composition
+  animations. Removing `.Opacity()` also releases its compositor override so styles
+  take effect again; surviving declarations on shared-control wrappers are preserved
+  (issue #1001).
+
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.
   Value-equivalent plain-data configurations remain eligible for skipping; native
