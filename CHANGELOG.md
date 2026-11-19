@@ -41,6 +41,11 @@ Conventions for contributors:
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
+- The Toolkit compatibility harness can capture and measure SettingsCard header
+  and description fit at an already-active OS text scale above 100%. Other
+  controls retain explicit unimplemented outcomes; no desktop settings are
+  changed, and runtime acceptance still requires an approved host (issue #1602).
+
 ### Changed
 
 - Opt-in Markdown text selection supports double-click to select a word and
