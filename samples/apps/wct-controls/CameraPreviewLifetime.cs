@@ -168,6 +168,11 @@ internal sealed class CameraPreviewCleanupQueue
     private Task _pending = Task.CompletedTask;
     private readonly List<CameraPreviewLifetime> _failed = new();
     private readonly HashSet<CameraPreviewLifetime> _tracked = new();
+    private readonly List<string> _late = new();
+
+    // Errors from an unmounted preview have no page callback, and a WinExe may have
+    // no visible stderr, so hand them to the next preview.
+    public void RecordLate(string message) => _late.Add(message);
 
     // Track from creation, so a later preview waits for this one's release even
     // when the replacement mounts before this one unmounts.
@@ -183,12 +188,16 @@ internal sealed class CameraPreviewCleanupQueue
         _ = lifetime.StopAsync();
     }
 
-    public async Task WaitAsync()
+    public async Task<IReadOnlyList<string>> WaitAsync()
     {
         await _pending;
+        string[] late = _late.ToArray();
+        _late.Clear();
         if (_failed.Count != 0)
             throw new InvalidOperationException(
-                "A previous camera preview did not release its resources. Restart the sample before opening another preview.");
+                "A previous camera preview did not release its resources. Restart the sample before opening another preview."
+                + (late.Length == 0 ? "" : " Earlier errors: " + string.Join(" | ", late)));
+        return late;
     }
 
     private async Task ObserveAsync(CameraPreviewLifetime lifetime)

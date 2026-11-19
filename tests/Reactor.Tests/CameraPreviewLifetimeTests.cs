@@ -124,6 +124,44 @@ public class CameraPreviewLifetimeTests
         await next.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LateErrors_AreHandedToTheNextPreviewOnce(bool failCleanup)
+    {
+        var queue = new CameraPreviewCleanupQueue();
+        var started = new TaskCompletionSource();
+        var previous = new CameraPreviewLifetime(Task.CompletedTask,
+            () => { started.SetResult(); return Task.CompletedTask; },
+            () => { },
+            () => failCleanup
+                ? Task.FromException(new InvalidOperationException("cleanup"))
+                : Task.CompletedTask,
+            (operation, error) => queue.RecordLate($"{operation}: {error.Message}"));
+        queue.Track(previous);
+        previous.Start();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        queue.Retire(previous);
+        queue.RecordLate("preview: NoFrameSourceGroupAvailable");
+        await previous.Completion.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        if (failCleanup)
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => queue.WaitAsync());
+            Assert.Contains("Restart the sample", error.Message);
+            Assert.Contains("Earlier errors:", error.Message);
+            Assert.Contains("preview: NoFrameSourceGroupAvailable", error.Message);
+            Assert.Contains("cleanup: cleanup", error.Message);
+            var again = await Assert.ThrowsAsync<InvalidOperationException>(() => queue.WaitAsync());
+            Assert.DoesNotContain("Earlier errors", again.Message);
+        }
+        else
+        {
+            Assert.Equal(["preview: NoFrameSourceGroupAvailable"], await queue.WaitAsync());
+            Assert.Empty(await queue.WaitAsync());
+        }
+    }
+
     [Fact]
     public async Task UnsubscribeFailureAlone_BlocksReentry()
     {

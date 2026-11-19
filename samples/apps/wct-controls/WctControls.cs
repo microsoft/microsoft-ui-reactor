@@ -244,11 +244,18 @@ public partial record CameraPreviewElement
 
         public CameraPreviewLifetime Lifetime => _lifetime;
 
-        public PreviewSession(CommunityToolkit.WinUI.Controls.CameraPreview control, Task previousCleanup)
+        public PreviewSession(CommunityToolkit.WinUI.Controls.CameraPreview control,
+            Task<IReadOnlyList<string>> previousCleanup)
         {
             _control = control;
-            _lifetime = new(previousCleanup, StartAsync, control.Stop, CleanupAsync, Report,
+            _lifetime = new(ReportEarlierAsync(previousCleanup), StartAsync, control.Stop, CleanupAsync, Report,
                 () => _control.PreviewFailed -= OnPreviewFailed, SettleAsync);
+        }
+
+        private async Task ReportEarlierAsync(Task<IReadOnlyList<string>> previousCleanup)
+        {
+            foreach (string message in await previousCleanup)
+                Report("previous preview", new InvalidOperationException(message));
         }
 
         // Low priority runs after continuations already queued at normal priority,
@@ -301,21 +308,26 @@ public partial record CameraPreviewElement
         {
             Console.Error.WriteLine($"CameraPreview failed: {args.Error}");
             _lifetime.RecordFailure();
+            // While mounted, the generated OnPreviewFailed projection delivers this.
+            if (_unmounted)
+                Cleanup.RecordLate($"preview: {args.Error}");
         }
 
         private void Report(string operation, Exception error)
         {
             Console.Error.WriteLine($"CameraPreview {operation} failed: {error}");
-            if (!_unmounted && Reconciler.GetElementTag(_control) is CameraPreviewElement element)
+            if (_unmounted || Reconciler.GetElementTag(_control) is not CameraPreviewElement element)
             {
-                try
-                {
-                    element.OnPreviewFailed?.Invoke($"{operation}: {error.Message}");
-                }
-                catch (Exception callbackError) when (callbackError is not OutOfMemoryException and not StackOverflowException)
-                {
-                    Console.Error.WriteLine($"CameraPreview error callback failed: {callbackError}");
-                }
+                Cleanup.RecordLate($"{operation}: {error.Message}");
+                return;
+            }
+            try
+            {
+                element.OnPreviewFailed?.Invoke($"{operation}: {error.Message}");
+            }
+            catch (Exception callbackError) when (callbackError is not OutOfMemoryException and not StackOverflowException)
+            {
+                Console.Error.WriteLine($"CameraPreview error callback failed: {callbackError}");
             }
         }
     }
