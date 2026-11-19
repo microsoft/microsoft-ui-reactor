@@ -308,7 +308,7 @@ internal sealed class GridSplitterPage : Component
 
     private static Element Pane(string label) =>
         Border(TextBlock(label).Center())
-            .Background("#F0F8FF")
+            .Background(Theme.CardBackground)
             .CornerRadius(8);
 }
 
@@ -427,7 +427,7 @@ internal sealed class HeaderedContentPage : Component
                     VStack(6,
                         TextBlock("1 Microsoft Way"),
                         TextBlock("Redmond, WA 98052")))
-                    .Background("#F0F8FF").CornerRadius(8).Margin(0))
+                    .Background(Theme.CardBackground).CornerRadius(8).Margin(0))
                 .Width(360));
 }
 
