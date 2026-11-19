@@ -16,13 +16,10 @@ public class VirtualListComponent : Component<VirtualListElement>
     {
         var el = Props;
 
-        // Build index list for ItemsRepeater's item source
-        var indices = UseMemo(() =>
-            Enumerable.Range(0, el.ItemCount).ToList() as IReadOnlyList<int>,
-            el.ItemCount);
+        var indices = UseMemo(() => new VirtualListIndices(el.ItemCount), el.ItemCount);
 
         // Key selector: use provided GetItemKey or default to index string
-        var keySelector = el.GetItemKey ?? (i => i.ToString());
+        var keySelector = el.GetItemKey ?? VirtualListIndices.DefaultKeySelector;
 
         // View builder: wrap the RenderItem callback, applying fixed height when set
         var fixedHeight = el.ItemHeight;
@@ -43,7 +40,7 @@ public class VirtualListComponent : Component<VirtualListElement>
 
         // Configure the LazyVStack with appropriate settings
         var estimatedSize = el.ItemHeight ?? el.EstimatedItemHeight;
-        var lazyStack = LazyVStack(indices, i => keySelector(i), viewBuilder) with
+        var lazyStack = LazyVStack(indices, keySelector, viewBuilder) with
         {
             Spacing = el.Spacing,
             EstimatedItemSize = estimatedSize,

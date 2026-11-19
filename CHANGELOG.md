@@ -35,6 +35,11 @@ Conventions for contributors:
   visibility, and theme updates preserve immutable snapshots and last-write
   precedence with fewer allocations (spec 034 §A).
 
+- `VirtualList` with default positional keys no longer projects every key on
+  unchanged-count updates; realized content and callbacks still refresh. Its memoized
+  index source is now an immutable range instead of an allocated integer list, reducing
+  mount/count-change storage. Custom key selectors retain keyed reconciliation (spec 042 §4).
+
 - `UseState` setters and both `UseReducer` callbacks defer marshaling closures
   until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
   invocations avoid those allocations, including unchanged values; callback identity,
