@@ -34,6 +34,10 @@ Conventions for contributors:
 
 ### Changed
 
+- Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
+  without allocating fallback key strings. Explicit keys resembling the legacy
+  fallback format retain their existing collision behavior (spec 042 §5).
+
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write

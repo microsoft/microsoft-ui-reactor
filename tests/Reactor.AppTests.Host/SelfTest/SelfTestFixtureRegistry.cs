@@ -283,6 +283,7 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity",
+        "MixedKeyFallback_Identity",
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert",
         // Keyed wrapper children (Component, RenderEachTime, Memo, ErrorBoundary,
         // Memo(key, …)) must stay findable in the keyed-middle pass when a Grid of
@@ -2684,6 +2685,7 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity(harness),
+        "MixedKeyFallback_Identity" => new MixedKeyFallbackFixtures.Identity(harness),
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert" => new KeyedListReconciliationFixtures.FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert(harness),
         // Keyed wrapper children through the keyed-middle pass.
         "KeyedWrapper_Component_GrowAndReverse" => new KeyedWrapperChildrenFixtures.ComponentChildren(harness),
