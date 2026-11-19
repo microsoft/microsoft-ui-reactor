@@ -167,6 +167,9 @@ Conventions for contributors:
   blockquotes, and code blocks. Ordered numbering is preserved across nesting
   levels, including in cross-block text selection (PR #1628).
 
+- `SplitView(...).PaneBackground(ThemeRef)` now sets the pane background. The old Style-based
+  ThemeRef path had no mapping for `PaneBackground` and silently did nothing.
+
 - A ThemeRef background or foreground on an element with `.InteractionStates(...)` keeps
   following the theme after the pointer leaves. Returning to the normal state used to write
   back the brush captured when the states were set up, which froze the color at that theme.

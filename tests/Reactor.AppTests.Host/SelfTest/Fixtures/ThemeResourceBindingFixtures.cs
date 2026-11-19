@@ -237,4 +237,28 @@ internal static class ThemeResourceBindingFixtures
                 $"bg={ColorOf(border.Background)}");
         });
     }
+
+    /// <summary>
+    /// <c>SplitView.PaneBackground(ThemeRef)</c> binds the pane background (the old Style path
+    /// had no mapping for it and silently did nothing).
+    /// </summary>
+    internal sealed class SplitViewPaneBackground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrbPaneBrush", async host =>
+        {
+            host.Mount(_ => VStack(
+                SplitView(TextBlock("trb-pane"), TextBlock("trb-content"))
+                    .PaneBackground(new ThemeRef("TrbPaneBrush"))
+                    .Height(80)).RequestedTheme(ElementTheme.Light));
+            await Harness.Render();
+
+            var sv = H.FindControl<WinUI.SplitView>(_ => true);
+            H.Check("ThemeResourceBinding_Pane_Bound", ColorOf(sv?.PaneBackground) == LightColor,
+                $"pane={ColorOf(sv?.PaneBackground)}");
+            if (sv is null) return;
+            ((FrameworkElement)VisualTreeHelper.GetParent(sv))!.RequestedTheme = ElementTheme.Dark;
+            H.Check("ThemeResourceBinding_Pane_FollowsTheme",
+                await Harness.WaitFor(() => ColorOf(sv.PaneBackground) == DarkColor));
+        });
+    }
 }
