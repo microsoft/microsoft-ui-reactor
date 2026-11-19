@@ -191,6 +191,20 @@ template; arbitrary re-templating while capture is active is not coordinated by
 its public API. Toolkit operations that never complete cannot be cancelled by
 this adapter.
 
+## Tabbed command bar
+
+Open `-- --page tcb` to select the native **Home** and **View** tabs and invoke
+their commands. The Toolkit template presents the selected `TabbedCommandBarItem`,
+not the inherited `Content` property. The document therefore sits below the bar
+in the surrounding layout, with theme-aware colors and visible command feedback.
+This is a command demonstration, not a document editor.
+
+The actual Toolkit tabs and `AppBarButton` objects are built once through `Set`
+and retained across rerenders. Click handlers read the current callback, and are
+detached when the page unmounts. A functional state updater counts each invocation
+even when multiple commands arrive before the next render. No Toolkit template or
+control is replaced.
+
 ## Layout
 
 - `WctControls.cs` — the wrapped-control declarations (the generator's input).

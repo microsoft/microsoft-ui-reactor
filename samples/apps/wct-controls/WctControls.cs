@@ -448,7 +448,8 @@ public partial record SwitchPresenterElement;
 
 // TabbedCommandBar derives from NavigationView: its tabs are TabbedCommandBarItem
 // objects in MenuItems (a NavigationView collection, not a flat Items), so the
-// sample builds them once through a guarded native setter, not an Element slot.
+// sample builds native tabs once through Set. The Toolkit template presents the
+// selected tab, not inherited Content; the document is composed outside the bar.
 [GenerateReactorWrapper(typeof(CommunityToolkit.WinUI.Controls.TabbedCommandBar))]
 public partial record TabbedCommandBarElement;
 

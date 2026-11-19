@@ -31,6 +31,9 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
+        var modifierTarget = newEl;
+        var mountedModifierTarget = modifierParent is null ? null : RecordModifierTarget(control, modifierParent, modifierTarget);
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
         // Inner modifiers override outer ones (via Merge: other wins where non-null).
         ElementModifiers? oldModifiers = oldEl.Modifiers;
@@ -60,6 +63,7 @@ public sealed partial class Reconciler
             oldModifiers = oldModifiers is not null ? oldModifiers.Merge(oldEl.Modifiers) : oldEl.Modifiers;
         if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
+        bool sharesModifierTarget = RefreshModifierTarget(control, mountedModifierTarget ?? oldEl, newEl);
 
         // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
         // resolution (mount-theme bug): the element's own RequestedTheme wins, else the
@@ -195,6 +199,9 @@ public sealed partial class Reconciler
 
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
+        var previousModifierUpdate = ModifierUpdate;
+        if (!ReferenceEquals(ModifierUpdate.Control, control))
+            ModifierUpdate = (control, newEl, modifiers);
 
         UIElement? result;
         bool registeredType = false;
@@ -220,6 +227,19 @@ public sealed partial class Reconciler
             if (properties != default)
                 ClearPropertyAnimation(control, properties);
         }
+
+        var keyframes = newEl.KeyframeAnimations;
+        bool targetCanAdvanceTrigger = keyframes is not null
+            && (sharesModifierTarget || (IsFlyoutDecorator(newEl)
+                && _v1Handlers.TryGet(newEl.GetType(), out var keyframeHandler) && keyframeHandler.PreservesTargetTag));
+        // Release removed declarations before setters. A shared target can change a
+        // retained name's trigger before the decorator reaches its own playback.
+        if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
+            ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
+                ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
+
+        if (control is FrameworkElement departingModifiers)
+            ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -297,6 +317,11 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // A nested update can replace the control or introduce its first
+        // restorable inner declaration. Publish the edge before outer restoration.
+        if (modifierParent is not null && (result is not null || mountedModifierTarget is null))
+            RecordModifierTarget(target, modifierParent, modifierTarget);
+        if (result is not null) ModifierUpdate.Control = target;
         // Re-publish only when the value can change: a replaced control (its mount already
         // published, but a handler may have swapped it without Mount) or a new call site /
         // key / kind. An in-place update of an unchanged element keeps its published value.
@@ -398,8 +423,12 @@ public sealed partial class Reconciler
             ClearInteractionStates(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
-        if (newEl.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(target, newEl.KeyframeAnimations);
+        if (keyframes is not null)
+        {
+            if (targetCanAdvanceTrigger && result is null)
+                ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
+            ApplyKeyframeAnimations(target, keyframes);
+        }
         else if (oldEl.KeyframeAnimations is not null)
             ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
 
@@ -416,6 +445,7 @@ public sealed partial class Reconciler
         }
         finally
         {
+            ModifierUpdate = previousModifierUpdate;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();

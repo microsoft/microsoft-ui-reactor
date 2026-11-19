@@ -79,6 +79,12 @@ Conventions for contributors:
   preserves the native viewer and its single subscription, which is detached when
   the component unmounts (spec 017, VirtualList).
 
+- Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
+  declaration restores its identity value and releases modifier-owned composition
+  animations. Removing `.Opacity()` also releases its compositor override so styles
+  take effect again; surviving declarations on shared-control wrappers are preserved
+  (issue #1001).
+
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.
   Value-equivalent plain-data configurations remain eligible for skipping; native
@@ -89,6 +95,16 @@ Conventions for contributors:
   forward an inner control, null, or unrelated sender. Current callbacks, original event
   arguments, echo suppression, and native-identity subscription gates are preserved
   (spec 058 §8.3, issue #1573).
+
+- The Toolkit `TabbedCommandBar` sample now composes its document below the native
+  ribbon instead of assigning the inherited `Content` property, which the Toolkit
+  template does not display. Native tabs and commands remain intact, with visible
+  command feedback that stays current across rerenders (issue #1577).
+
+- The Toolkit sample's GridSplitter panes and HeaderedContentControl card use
+  `Theme.CardBackground` instead of a hardcoded pale background, adapting to the app
+  theme and avoiding `REACTOR_THEME_001` errors in package consumers with warnings
+  treated as errors (issue #1578).
 
 - **A button whose content is an element no longer remounts that content after a garbage
   collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
