@@ -60,11 +60,11 @@ always follow the earlier revisions' fields of the same event.
 | 1 | `RenderPass` | Start | 4 | `0x1` | `hostId: UInt64`, `requesterId: UInt64`², `requesterName: String`², `requestCount: UInt32`² |
 | 2 | `RenderPass` | Stop | 4 | `0x1` | `hostId: UInt64` |
 | 3 | `ComponentRender` | Start | 4 | `0x2` | `componentId: UInt64`, `name: String`, `reason: String`, `callSiteFile: String`², `callSiteLine: UInt32`², `callSiteColumn: UInt32`², `memoMiss: Bool32`³ |
-| 4 | `ComponentRender` | Stop | 4 | `0x2` | `componentId: UInt64`, `changes: UInt32`³, `stateSets: UInt32`³ |
+| 4 | `ComponentRender` | Stop | 4 | `0x2` | `componentId: UInt64`, `changes: UInt32`³ (inclusive of nested components), `ownStateSets: UInt32`³ (exclusive: this component only) |
 | 5 | `Reconcile` | Start | 4 | `0x1` | `entry: String`, `element: String` |
 | 6 | `Reconcile` | Stop | 4 | `0x1` | `inserted: UInt32`², `removed: UInt32`², `moved: UInt32`², `replaced: UInt32`² |
 | 7 | `Effects` | Start | 4 | `0x1` | `componentId: UInt64` |
-| 8 | `Effects` | Stop | 4 | `0x1` | `componentId: UInt64`, `stateSets: UInt32`³ |
+| 8 | `Effects` | Stop | 4 | `0x1` | `componentId: UInt64`, `ownStateSets: UInt32`³ |
 | 9 | `ChildReconcile` | Start | 5 | `0x4` | `oldCount: UInt32`, `newCount: UInt32` |
 | 10 | `ChildReconcile` | Stop | 5 | `0x4` | `inserted: UInt32`, `removed: UInt32`, `moved: UInt32`, `replaced: UInt32` |
 | 11 | `StateChange` | Info | 5 | `0x8` | `componentId: UInt64`, `hook: String`, `changed: Bool32` |
@@ -145,21 +145,33 @@ always follow the earlier revisions' fields of the same event.
     component's memo hit rate: hits ÷ (hits + renders with `memoMiss`).
   - Stop `changes` — what the render achieved: the controls created, updated, removed or moved
     while the span was open, **inclusive** of nested components (the same scope as the span's
-    time). `0` means the render, and everything it reconciled, changed nothing on screen: it
-    "rendered for nothing". An update counts when the element's own WinUI-mapped properties
-    or its modifiers changed (the reconcile-highlight overlay's rule, so a container whose
-    children changed does not count itself, its children do), and an items host counts when
-    it was handed a different item list or its raw items were edited. The count is
-    conservative: an element type the reconciler cannot compare counts as changed, so a `0` is
-    never a missed change, but some wasted renders report a small non-zero count. A removal
-    that plays an exit animation counts when the animation starts. For a mount it counts the
-    controls the component's output created (its own wrapper is created after its span).
-  - Stop `stateSets` — the state-setter calls (`UseState`, `UseReducer` updater or dispatch,
+    time, so subtract the children's to get a component's own). `0` means the render, and
+    everything it reconciled, changed nothing on screen: it "rendered for nothing". What counts:
+    - a control created (mount), unmounted, or repositioned among its siblings; a removal that
+      plays an exit animation counts when the animation starts;
+    - an update whose element changed its own WinUI-mapped properties, attached layout values
+      (grid row, canvas position, flex), theme bindings, resource overrides or modifiers. A
+      container's children and an items host's items are not its own properties: they count
+      themselves. A new delegate in an event handler or `.Ref` / `.OnUnmount` / `.OnUpdate`
+      slot is not a change, and a flyout or rich tooltip counts only when added or removed;
+    - an items host's item edits: rows inserted, removed or moved by its keyed diff (a diff
+      that gives up and re-realizes the list counts once, as does a rebind of its source),
+      raw items edited or reordered, and a typed `TreeView`'s nodes added, removed, moved or
+      expanded. A new list equal to the old one is no change.
+
+    Own properties are compared the way the reconcile-highlight overlay compares them. An
+    element type that comparison does not know counts as changed, so some wasted renders report
+    a small non-zero count. A few collection hosts compare only their commonly used properties
+    there, so a render whose only effect is a rarely used property of one can report `0`. For a
+    mount it counts the controls the component's output created (its own wrapper is created
+    after its span).
+  - Stop `ownStateSets` — the state-setter calls (`UseState`, `UseReducer` updater or dispatch,
     `UsePersisted`; changing the value or not) made on the UI thread while this span was the
     innermost open one: the component's `Render()`, its effects, and the reconcile of its
-    output, **excluding** nested components' spans. A large count means one render or effect
-    pass fanned out into many state writes (spec 023's `REACTOR_PERF005`). Calls from event
-    handlers and other threads are outside every span and are not counted.
+    output, **excluding** nested components' spans (do not subtract the children's). A large
+    count means one render or effect pass fanned out into many state writes (spec 023 §10's
+    setState fan-out check, `PERF005` in the spec). Calls from event handlers and other threads
+    are outside every span and are not counted.
 - **`Reconcile`** — an outermost reconciler entry. Inside a `RenderPass` it is the pass's
   reconcile. Outside any pass it is a row an `ItemsRepeater` / `ListView` realizes or reuses
   during layout. `entry` is `reconcile` or `mount` (which reconciler entry point it was);
@@ -173,7 +185,7 @@ always follow the earlier revisions' fields of the same event.
   its own edits.
 - **`Effects`** — a host root's effects flush (`UseEffect` callbacks). `componentId` is the
   root's. Child components' effects run inside their own `ComponentRender` span. The Stop's
-  `stateSets` counts the state-setter calls the flush made, as `ComponentRender` Stop's does.
+  `ownStateSets` counts the state-setter calls the flush made, as `ComponentRender` Stop's does.
 - **`ChildReconcile`** — one container's child-list reconcile (keyed or positional), including
   applying the result to the WinUI collection. `oldCount` / `newCount` are the element counts;
   the Stop's counts are the edits made to **this** container's collection: `inserted`,
@@ -199,8 +211,9 @@ always follow the earlier revisions' fields of the same event.
   props (or a `Memo(…)` component's dependencies) and the contexts it reads were unchanged.
   `componentId` and `name` are the ones its `ComponentRender` spans carry (join on
   `componentId` for its call site). Written once per skipped component per reconcile, inside
-  the parent's `ComponentRender` span, so a list of memoized rows writes one per row when its
-  parent re-renders. A component skipped because its whole subtree was reference-equal (a
+  the enclosing span: the parent's `ComponentRender`, or the `Reconcile` span of a virtualized
+  row reconciled during layout. A list of memoized rows writes one per row when its parent
+  re-renders. A component skipped because its whole subtree was reference-equal (a
   reused element instance) never reached its memo gate and writes nothing.
 
 ### Spotting wasted work
@@ -209,11 +222,13 @@ The revision 3 fields answer "was this render worth it?" without the verbose key
 
 - **Rendered for nothing** — a `ComponentRender` Stop with `changes` `0` and a `reason` other
   than `mount`. If its Start has `memoMiss` true, the memo gate saw a difference that did not
-  matter to the output (a lambda, array or new record instance in props is the usual cause).
+  matter to the output. The usual cause is a value newly allocated each render in props that
+  compares by reference: a lambda, an array or collection, a class without `Equals`, or a
+  record holding one of those.
 - **Memo hit rate** — per component, `ComponentSkip` count ÷ (`ComponentSkip` count +
   `ComponentRender` Starts with `memoMiss` true).
-- **SetState fan-out** (spec 023's `REACTOR_PERF005`) — a `ComponentRender` or `Effects` Stop
-  whose `stateSets` exceeds a threshold of the tool's choosing. Several writes in one effect
+- **SetState fan-out** (spec 023 §10's `PERF005` check) — a `ComponentRender` or `Effects` Stop
+  whose `ownStateSets` exceeds a threshold of the tool's choosing. Several writes in one effect
   pass still coalesce into one next pass; they cost a re-render each only when the writes are
   spread over passes, so pair the count with the next `RenderPass`'s `requestCount`.
 
@@ -230,9 +245,9 @@ RenderPass (hostId, requester=Counter, requestCount=1)
       ComponentSkip (Header)
       ComponentRender (Counter, reason=state, at MainPage.cs:40)
         ChildReconcile (old=3, new=3) → (inserted=1, removed=1, moved=1, replaced=0)
-      → Counter (changes=3, stateSets=0)
-  → root (changes=3, stateSets=0)
-  Effects (root componentId) → (stateSets=0)
+      → Counter (changes=3, ownStateSets=0)
+  → root (changes=3, ownStateSets=0)
+  Effects (root componentId) → (ownStateSets=0)
 ```
 
 A row realized during layout, outside any pass:
@@ -280,9 +295,11 @@ first traced render (reading `Delegate.Method` and formatting the name).
 The revision 3 data follows the same rule. With no session, a state setter adds two static
 gate reads, and the reconciler adds one per control it mounts or unmounts, per panel child
 reconcile, per element update it does not skip, and per items-host edit; nothing is
-compared, counted or allocated. While `Pass` or `Component` is on, the counts live in a
-per-thread tally (one small object per UI thread, allocated once), and each update the
-reconciler does not skip also runs the own-property comparison the highlight overlay uses.
+compared, counted or allocated. While `Pass` or `Component` is on, state setters count into
+a per-thread tally (one small object per UI thread, allocated once). The `changes` count runs
+only while `Component` is on: then each update the reconciler does not skip also runs the
+own-property comparison the highlight overlay uses, and an element whose modifiers differ
+only in callback identity is compared once more without them (one element copy).
 `ComponentSkip` adds one event per memo-skipped component, which can outnumber the
 `ComponentRender` spans in an app that memoizes well.
 
@@ -299,7 +316,7 @@ revision 2 the same way (`changes` on `ComponentRender` Stop).
 |---|---|---|
 | 1 | issue #1484 | The provider and events 1–12. |
 | 2 | issue #1489 | Appended `requesterId`, `requesterName`, `requestCount` to `RenderPass` Start (1); `callSiteFile`, `callSiteLine`, `callSiteColumn` to `ComponentRender` Start (3); `inserted`, `removed`, `moved`, `replaced` to `Reconcile` Stop (6, which had no fields). Changed the `name` *value* of function and memo components from `FuncElement` / `MemoElement` to their render function's name; a consumer that matched those two strings must match the new names (or `RenderEachTime` / `Memo` / `render` prefixes) instead. |
-| 3 | issue #1538 (spec 023 §10.3–10.4) | Appended `memoMiss` to `ComponentRender` Start (3); `changes`, `stateSets` to `ComponentRender` Stop (4); `stateSets` to `Effects` Stop (8). Added `ComponentSkip` (13, `Component` keyword, level 4). Nothing existing changed meaning. |
+| 3 | issue #1538 (spec 023 §10.3–10.4) | Appended `memoMiss` to `ComponentRender` Start (3); `changes`, `ownStateSets` to `ComponentRender` Stop (4); `ownStateSets` to `Effects` Stop (8). Added `ComponentSkip` (13, `Component` keyword, level 4). Nothing existing changed meaning. |
 
 ## Stability
 

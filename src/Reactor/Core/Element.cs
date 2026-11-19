@@ -503,6 +503,21 @@ public abstract record Element
     /// Returns true only when the two elements are provably identical for rendering purposes.
     /// Conservative: returns false for unknown element types.
     /// </summary>
+    /// <summary>
+    /// Whether two elements carry equal extras that <see cref="OwnPropsEqual"/> does not read:
+    /// animations, attached layout values (grid row, canvas position, flex), theme bindings and
+    /// resource overrides. Context values are left out: a provider change re-renders its
+    /// consumers, which report their own changes. For the perf provider's <c>changes</c> count.
+    /// </summary>
+    internal static bool ExtrasEqual(Element a, Element b)
+    {
+        if (a.Extensions is null && b.Extensions is null) return true;
+        return (a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)
+            && AttachedEqual(a.Attached, b.Attached)
+            && ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)
+            && ResourceOverridesEqual(a.ResourceOverrides, b.ResourceOverrides);
+    }
+
     internal static bool ShallowEquals(Element a, Element b)
     {
         if (ReferenceEquals(a, b)) return true;
@@ -978,12 +993,16 @@ public abstract record Element
                 && ca.PlaceholderText == cb.PlaceholderText
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
+                && ca.Description == cb.Description
+                && ca.MaxDropDownHeight.Equals(cb.MaxDropDownHeight)
                 && SettersEqual(ca.Setters, cb.Setters),
 
             (ListViewElement la, ListViewElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
                 && la.SelectionMode == lb.SelectionMode
                 && la.Header == lb.Header
+                && ReferenceEquals(la.ItemContainerStyle, lb.ItemContainerStyle)
+                && la.IncrementalLoadingTrigger == lb.IncrementalLoadingTrigger
                 && SettersEqual(la.Setters, lb.Setters),
 
             (GridViewElement ga, GridViewElement gb) =>
@@ -1243,6 +1262,19 @@ public abstract record Element
     /// the skip.
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
+        => ModifiersEqualCore(a, b, visibleOnly: false);
+
+    /// <summary>
+    /// Like <see cref="ModifiersEqual"/>, but only for what the control shows: callback
+    /// slots (routed handlers, <c>.Ref</c>, <c>.OnUnmount</c>, <c>.OnUpdate</c>) are ignored,
+    /// and a flyout or rich tooltip compares by presence only (its content is reconciled
+    /// when it opens). For the perf provider's <c>changes</c> count (issue #1538), where a
+    /// fresh per-render closure must not make a render look productive.
+    /// </summary>
+    internal static bool ModifiersVisiblyEqual(ElementModifiers? a, ElementModifiers? b)
+        => ModifiersEqualCore(a, b, visibleOnly: true);
+
+    private static bool ModifiersEqualCore(ElementModifiers? a, ElementModifiers? b, bool visibleOnly)
     {
         if (ReferenceEquals(a, b)) return true;
         if (a is null || b is null) return false;
@@ -1288,11 +1320,15 @@ public abstract record Element
             // were ignored entirely. Gesture / drag-drop slots are deliberately
             // NOT compared here (see ModifierCallbacksEqual) so behavior matches
             // the historical diff exactly.
-            && ModifierCallbacksEqual(a, b)
+            && (visibleOnly || ModifierCallbacksEqual(a, b))
             // Skip RichToolTip, AttachedFlyout, ContextFlyout — rare, conservative false
-            && a.RichToolTip is null && b.RichToolTip is null
-            && a.AttachedFlyout is null && b.AttachedFlyout is null
-            && a.ContextFlyout is null && b.ContextFlyout is null
+            && (visibleOnly
+                ? (a.RichToolTip is null) == (b.RichToolTip is null)
+                    && (a.AttachedFlyout is null) == (b.AttachedFlyout is null)
+                    && (a.ContextFlyout is null) == (b.ContextFlyout is null)
+                : a.RichToolTip is null && b.RichToolTip is null
+                    && a.AttachedFlyout is null && b.AttachedFlyout is null
+                    && a.ContextFlyout is null && b.ContextFlyout is null)
             // Accessibility Tier 1
             && a.HeadingLevel == b.HeadingLevel
             && a.IsDragRegion == b.IsDragRegion
@@ -1307,7 +1343,7 @@ public abstract record Element
             // Imperative ref slot (.Ref). A ref-only change (add/remove/swap)
             // must force Update so ApplyModifiers clears the old cell and sets the
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
-            && ReferenceEquals(a.Ref, b.Ref)
+            && (visibleOnly || ReferenceEquals(a.Ref, b.Ref))
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
             // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
@@ -1319,7 +1355,7 @@ public abstract record Element
             // both null ⇒ equal (no teardown either render ⇒ zero skip-rate cost for
             // plain leaves), a reference-stable teardown still skips, a fresh closure
             // forces Update so the latest teardown is registered.
-            && ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction)
+            && (visibleOnly || ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction))
             // Imperative update slot (.OnUpdateAdd), for the same reason as OnUnmountAction
             // above: it is DEFINED to run on every in-place update, and this skip path is
             // the one thing that can make that false — a skipped element never reaches
@@ -1328,7 +1364,7 @@ public abstract record Element
             // unchanged in the common case, and a reference-stable action (the static
             // method group chart labels use) still skips. Only an added/removed/changed
             // action declines — which is exactly when the caller needs the callback.
-            && ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction)
+            && (visibleOnly || ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction))
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
@@ -6541,9 +6577,8 @@ public record TemplatedListViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListViewElementBase, Internal.IItemsSourceIdentity
+) : TemplatedListViewElementBase
 {
-    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<T>? OnItemClick { get; init; }
@@ -6588,9 +6623,8 @@ public record TemplatedGridViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedGridViewElementBase, Internal.IItemsSourceIdentity
+) : TemplatedGridViewElementBase
 {
-    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<T>? OnItemClick { get; init; }
@@ -6634,9 +6668,8 @@ public record TemplatedFlipViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedFlipViewElementBase, Internal.IItemsSourceIdentity
+) : TemplatedFlipViewElementBase
 {
-    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
@@ -6730,9 +6763,8 @@ public record TemplatedTreeViewElement<T>(
     Func<T, string> KeySelector,
     Func<T, IReadOnlyList<T>?> ChildrenSelector,
     Func<T, Element> ViewBuilder
-) : TemplatedTreeViewElementBase, Internal.IItemsSourceIdentity
+) : TemplatedTreeViewElementBase
 {
-    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     /// <summary>Invoked with the developer's <c>T</c> when a node is clicked/invoked.</summary>
     public Action<T>? OnItemInvoked { get; init; }
     /// <summary>Invoked with the developer's <c>T</c> just before a node expands.</summary>
@@ -6883,9 +6915,8 @@ public record LazyVStackElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : LazyStackElementBase, Internal.IItemsSourceIdentity
+) : LazyStackElementBase
 {
-    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public override Orientation Orientation => Orientation.Vertical;
     public override double Spacing { get; init; } = 8;
     public override double EstimatedItemSize { get; init; } = 40;
@@ -6920,9 +6951,8 @@ public record LazyHStackElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : LazyStackElementBase, Internal.IItemsSourceIdentity
+) : LazyStackElementBase
 {
-    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public override Orientation Orientation => Orientation.Horizontal;
     public override double Spacing { get; init; } = 8;
     public override double EstimatedItemSize { get; init; } = 100;

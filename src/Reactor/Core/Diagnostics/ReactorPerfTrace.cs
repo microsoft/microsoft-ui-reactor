@@ -152,7 +152,7 @@ internal static unsafe partial class ReactorPerfTrace
     }
 
     /// <summary>
-    /// Whether a state setter should count itself toward the open span's <c>stateSets</c>
+    /// Whether a state setter should count itself toward the open span's <c>ownStateSets</c>
     /// (<see cref="ComponentPerfTally"/>): the <c>ComponentRender</c> and <c>Effects</c> spans
     /// that report it are on with either keyword.
     /// </summary>
@@ -245,7 +245,7 @@ internal static unsafe partial class ReactorPerfTrace
     /// A started <c>ComponentRender</c> span (or an inactive one when the keyword is off);
     /// <see cref="Dispose"/> writes the Stop exactly when a Start was written. While open it is
     /// the thread's innermost <see cref="ComponentPerfTally"/> scope, which the Stop's
-    /// <c>changes</c> and <c>stateSets</c> come from. Dispose it once: each Dispose closes that scope.
+    /// <c>changes</c> and <c>ownStateSets</c> come from. Dispose it once: each Dispose closes that scope.
     /// </summary>
     internal readonly struct ComponentSpan : IDisposable
     {
@@ -285,7 +285,7 @@ internal static unsafe partial class ReactorPerfTrace
     /// <summary>
     /// A started <c>Effects</c> span (or an inactive one when the keyword is off). Like
     /// <see cref="ComponentSpan"/> it is a <see cref="ComponentPerfTally"/> scope while open, for
-    /// the Stop's <c>stateSets</c>.
+    /// the Stop's <c>ownStateSets</c>.
     /// </summary>
     internal readonly struct EffectsSpan : IDisposable
     {
@@ -391,17 +391,17 @@ internal static unsafe partial class ReactorPerfTrace
     /// Controls created, updated (own properties or modifiers changed), removed or moved during
     /// the span, nested components included; 0 means the render reconciled to no change.
     /// </param>
-    /// <param name="stateSets">
+    /// <param name="ownStateSets">
     /// State-setter calls made on this thread while the span was the innermost open one (its
     /// Render(), its effects and the reconcile of its output, not nested components' spans).
     /// </param>
-    internal static void ComponentRenderStop(ulong componentId, uint changes, uint stateSets)
+    internal static void ComponentRenderStop(ulong componentId, uint changes, uint ownStateSets)
     {
         EventData* data = stackalloc EventData[5];
         SetMetadata(data, Metadata.ComponentRenderStop);
         data[2] = EventData.Of(&componentId, sizeof(ulong));
         data[3] = EventData.Of(&changes, sizeof(uint));
-        data[4] = EventData.Of(&stateSets, sizeof(uint));
+        data[4] = EventData.Of(&ownStateSets, sizeof(uint));
         Write(EventIds.ComponentRenderStop, Levels.Informational, Opcodes.Stop, Keywords.Component, data, 5);
     }
 
@@ -453,13 +453,13 @@ internal static unsafe partial class ReactorPerfTrace
         => WriteU64(EventIds.EffectsStart, Levels.Informational, Opcodes.Start, Keywords.Pass, Metadata.EffectsStart, componentId);
 
     /// <param name="componentId">The root's componentId, as on the Start.</param>
-    /// <param name="stateSets">State-setter calls the flush made on this thread (revision 3).</param>
-    internal static void EffectsStop(ulong componentId, uint stateSets)
+    /// <param name="ownStateSets">State-setter calls the flush made on this thread (revision 3).</param>
+    internal static void EffectsStop(ulong componentId, uint ownStateSets)
     {
         EventData* data = stackalloc EventData[4];
         SetMetadata(data, Metadata.EffectsStop);
         data[2] = EventData.Of(&componentId, sizeof(ulong));
-        data[3] = EventData.Of(&stateSets, sizeof(uint));
+        data[3] = EventData.Of(&ownStateSets, sizeof(uint));
         Write(EventIds.EffectsStop, Levels.Informational, Opcodes.Stop, Keywords.Pass, data, 4);
     }
 
@@ -592,14 +592,14 @@ internal static unsafe partial class ReactorPerfTrace
             ("callSiteFile", InTypes.UnicodeString), ("callSiteLine", InTypes.UInt32), ("callSiteColumn", InTypes.UInt32),
             ("memoMiss", InTypes.Bool32));
         public static readonly Blob ComponentRenderStop = BuildEvent("ComponentRender", ("componentId", InTypes.UInt64),
-            ("changes", InTypes.UInt32), ("stateSets", InTypes.UInt32));
+            ("changes", InTypes.UInt32), ("ownStateSets", InTypes.UInt32));
         public static readonly Blob ReconcileStart = BuildEvent("Reconcile",
             ("entry", InTypes.UnicodeString), ("element", InTypes.UnicodeString));
         public static readonly Blob ReconcileStop = BuildEvent("Reconcile",
             ("inserted", InTypes.UInt32), ("removed", InTypes.UInt32), ("moved", InTypes.UInt32), ("replaced", InTypes.UInt32));
         public static readonly Blob EffectsStart = BuildEvent("Effects", ("componentId", InTypes.UInt64));
         public static readonly Blob EffectsStop = BuildEvent("Effects", ("componentId", InTypes.UInt64),
-            ("stateSets", InTypes.UInt32));
+            ("ownStateSets", InTypes.UInt32));
         public static readonly Blob ChildReconcileStart = BuildEvent("ChildReconcile",
             ("oldCount", InTypes.UInt32), ("newCount", InTypes.UInt32));
         public static readonly Blob ChildReconcileStop = BuildEvent("ChildReconcile",

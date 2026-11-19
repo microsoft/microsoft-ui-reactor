@@ -2,6 +2,7 @@ using System.Diagnostics.Tracing;
 using System.Text;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Core.Internal;
 using Reactor.Tests.Shared;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
@@ -35,11 +36,11 @@ public sealed class ReactorPerfTraceTests
         new(2, "RenderPass", 2, 4, 0x1, [new("hostId", UInt64)]),
         new(3, "ComponentRender", 1, 4, 0x2, [new("componentId", UInt64), new("name", UnicodeString), new("reason", UnicodeString),
             new("callSiteFile", UnicodeString), new("callSiteLine", UInt32), new("callSiteColumn", UInt32), new("memoMiss", Bool32)]),
-        new(4, "ComponentRender", 2, 4, 0x2, [new("componentId", UInt64), new("changes", UInt32), new("stateSets", UInt32)]),
+        new(4, "ComponentRender", 2, 4, 0x2, [new("componentId", UInt64), new("changes", UInt32), new("ownStateSets", UInt32)]),
         new(5, "Reconcile", 1, 4, 0x1, [new("entry", UnicodeString), new("element", UnicodeString)]),
         new(6, "Reconcile", 2, 4, 0x1, [new("inserted", UInt32), new("removed", UInt32), new("moved", UInt32), new("replaced", UInt32)]),
         new(7, "Effects", 1, 4, 0x1, [new("componentId", UInt64)]),
-        new(8, "Effects", 2, 4, 0x1, [new("componentId", UInt64), new("stateSets", UInt32)]),
+        new(8, "Effects", 2, 4, 0x1, [new("componentId", UInt64), new("ownStateSets", UInt32)]),
         new(9, "ChildReconcile", 1, 5, 0x4, [new("oldCount", UInt32), new("newCount", UInt32)]),
         new(10, "ChildReconcile", 2, 5, 0x4, [new("inserted", UInt32), new("removed", UInt32), new("moved", UInt32), new("replaced", UInt32)]),
         new(11, "StateChange", 0, 5, 0x8, [new("componentId", UInt64), new("hook", UnicodeString), new("changed", Bool32)]),
@@ -706,10 +707,10 @@ public sealed class ReactorPerfTraceTests
             new[] { "inserted", "removed", "moved", "replaced" }.Select(k => ours[7].Fields[k]));
         Assert.Equal(componentId, ours[8].Fields["componentId"]);
         Assert.Equal(9u, ours[8].Fields["changes"]);
-        Assert.Equal(10u, ours[8].Fields["stateSets"]);
+        Assert.Equal(10u, ours[8].Fields["ownStateSets"]);
         Assert.Equal(componentId, ours[9].Fields["componentId"]);
         Assert.Equal(componentId, ours[10].Fields["componentId"]);
-        Assert.Equal(11u, ours[10].Fields["stateSets"]);
+        Assert.Equal(11u, ours[10].Fields["ownStateSets"]);
         Assert.Equal(componentId, ours[11].Fields["componentId"]);
         Assert.Equal("UseState", ours[11].Fields["hook"]);
         Assert.Equal(true, ours[11].Fields["changed"]);
@@ -855,12 +856,12 @@ public sealed class ReactorPerfTraceTests
 
         (uint Changes, uint StateSets) Stop(ulong id) => events
             .Where(e => e.Id == 4 && Equals(e.Fields["componentId"], id))
-            .Select(e => ((uint)e.Fields["changes"], (uint)e.Fields["stateSets"])).Single();
+            .Select(e => ((uint)e.Fields["changes"], (uint)e.Fields["ownStateSets"])).Single();
         // Inner: its own three calls and one change. Outer: its three calls (the inner span's are
         // not its own), and every change made while it was open.
         Assert.Equal((1u, 3u), Stop(innerId));
         Assert.Equal((3u, 3u), Stop(outerId));
-        Assert.Equal(2u, events.Single(e => e.Id == 8 && Equals(e.Fields["componentId"], rootId)).Fields["stateSets"]);
+        Assert.Equal(2u, events.Single(e => e.Id == 8 && Equals(e.Fields["componentId"], rootId)).Fields["ownStateSets"]);
         Assert.Equal(true, events.Single(e => e.Id == 3 && Equals(e.Fields["componentId"], innerId)).Fields["memoMiss"]);
         Assert.Equal(false, events.Single(e => e.Id == 3 && Equals(e.Fields["componentId"], outerId)).Fields["memoMiss"]);
         Assert.Equal(0, ComponentPerfTally.OpenScopesForTests);
@@ -879,27 +880,32 @@ public sealed class ReactorPerfTraceTests
         ComponentPerfTally.Close(scope, out _, out uint untraced);
         Assert.Equal(0u, untraced);
 
-        // Positive control: the same calls count once the gate is open.
-        try
+        // Positive control: the same calls count once the gate is open, with either keyword
+        // whose spans report the count (Effects is a Pass span, ComponentRender a Component one).
+        foreach (var keyword in new[] { ReactorPerfTrace.Keywords.Component, ReactorPerfTrace.Keywords.Pass })
         {
-            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Component, 0);
-            scope = ComponentPerfTally.Open();
-            set(2);
-            set(2);
-            ComponentPerfTally.Close(scope, out _, out uint traced);
-            Assert.Equal(2u, traced);
-        }
-        finally
-        {
-            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            try
+            {
+                ReactorPerfTrace.ApplyControlCode(1, 4, keyword, 0);
+                scope = ComponentPerfTally.Open();
+                set(2);
+                set(2);
+                ComponentPerfTally.Close(scope, out _, out uint traced);
+                Assert.Equal(2u, traced);
+            }
+            finally
+            {
+                ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+            }
         }
         Assert.Equal(0, ComponentPerfTally.OpenScopesForTests);
     }
 
     [Fact]
-    public void PerfUpdateChanged_FollowsOwnPropsModifiersAndItemsSource()
+    public void PerfUpdateChanged_CountsWhatTheControlShows()
     {
-        static bool Changed(Element a, Element b) => Reconciler.PerfUpdateChanged(a, b, a.Modifiers, b.Modifiers);
+        static bool Changed(Element a, Element b)
+            => Reconciler.PerfUpdateChanged(a, b, a.Modifiers, b.Modifiers, Element.ShallowEquals(a, b));
 
         Assert.False(Changed(TextBlock("a"), TextBlock("a")));
         Assert.True(Changed(TextBlock("a"), TextBlock("b")));
@@ -908,15 +914,67 @@ public sealed class ReactorPerfTraceTests
         Assert.False(Changed(VStack(TextBlock("a")), VStack(TextBlock("b"))));
         Assert.True(Changed(VStack(TextBlock("a")), HStack(TextBlock("a"))));
 
-        // An items host: a new view builder over the same list is no change (realized rows are
-        // reconciled, and counted, on their own); a different list is.
+        // Extras the overlay's own-property comparison does not read still change the control.
+        Assert.False(Changed(VStack(TextBlock("a")).Grid(row: 1), VStack(TextBlock("b")).Grid(row: 1)));
+        Assert.True(Changed(VStack(TextBlock("a")).Grid(row: 0), VStack(TextBlock("b")).Grid(row: 1)));
+        Assert.False(Changed(VStack(TextBlock("a")).Background(Theme.Ref("LayerFillColorDefaultBrush")),
+            VStack(TextBlock("b")).Background(Theme.Ref("LayerFillColorDefaultBrush"))));
+        Assert.True(Changed(VStack(TextBlock("a")).Background(Theme.Ref("LayerFillColorDefaultBrush")),
+            VStack(TextBlock("b")).Background(Theme.Ref("SolidBackgroundFillColorBaseBrush"))));
+        Assert.True(Changed(ComboBox(["x"]) with { Description = "one" }, ComboBox(["x"]) with { Description = "two" }));
+
+        // A fresh handler closure each render is not a change; a changed property next to it is.
+        int captured = 0;
+        Element Tappable(string text) => TextBlock(text).OnTapped((_, _) => captured++);
+        Assert.False(Changed(Tappable("a"), Tappable("a")));
+        Assert.True(Changed(Tappable("a"), Tappable("b")));
+        Assert.True(Changed(VStack(TextBlock("a")), VStack(TextBlock("a")).OnTapped((_, _) => captured++).Margin(4)));
+
+        // A keyed Memo whose key held keeps its control.
+        Assert.False(Changed(Memo("k", () => TextBlock("a")), Memo("k", () => TextBlock("a"))));
+
+        // An items host's own properties exclude its items: their edits are counted by its diff.
         string[] items = ["x", "y"];
         Element Lazy(IReadOnlyList<string> source) => LazyVStack(source, static s => s, (s, _) => TextBlock(s));
-        Assert.False(Changed(Lazy(items), Lazy(items)));
-        Assert.True(Changed(Lazy(items), Lazy(["x", "y"])));
-        Element List(IReadOnlyList<string> source) => ListView(source, static s => s, (s, _) => TextBlock(s));
-        Assert.False(Changed(List(items), List(items)));
-        Assert.True(Changed(List(items), List(["x", "y"])));
+        Assert.False(Changed(Lazy(items), Lazy(["x", "y"])));
+        Element Tree(IReadOnlyList<string> source) => TreeView(source, static s => s, static _ => null, static s => TextBlock(s));
+        Assert.False(Changed(Tree(items), Tree(["x", "z"])));
+    }
+
+    [Fact]
+    public void KeyedListDiff_CountsTheRowsItEdits_OnlyWhileTraced()
+    {
+        static ReactorListState Seed(params string[] keys)
+        {
+            var state = new ReactorListState();
+            state.Reset(keys.Select((k, i) => (i, k)).ToArray());
+            return state;
+        }
+        static uint Diff(ReactorListState state, string[] keys)
+        {
+            var scope = ComponentPerfTally.Open();
+            KeyedListDiff.Apply(state, keys, static (k, _) => k);
+            ComponentPerfTally.Close(scope, out uint changes, out _);
+            return changes;
+        }
+
+        // Untraced: the diff still runs, and counts nothing.
+        Assert.Equal(0u, Diff(Seed("a", "b", "c"), ["c", "a", "d"]));
+        try
+        {
+            ReactorPerfTrace.ApplyControlCode(1, 4, ReactorPerfTrace.Keywords.Component, 0);
+            // b removed, d inserted, one of a / c moved; an equal list in a new array is nothing.
+            var state = Seed("a", "b", "c");
+            Assert.Equal(3u, Diff(state, ["c", "a", "d"]));
+            Assert.Equal(0u, Diff(state, ["c", "a", "d"]));
+            // Duplicate keys make the diff give up and re-realize the list: one change.
+            Assert.Equal(1u, Diff(state, ["c", "c"]));
+        }
+        finally
+        {
+            ReactorPerfTrace.ApplyControlCode(0, 0, 0, 0);
+        }
+        Assert.Equal(0, ComponentPerfTally.OpenScopesForTests);
     }
 
     [Fact]

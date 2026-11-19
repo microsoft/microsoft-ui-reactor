@@ -30,9 +30,9 @@ Conventions for contributors:
 
 - **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
   §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
-  `changes` and `stateSets` to `ComponentRender` Stop and `stateSets` to `Effects` Stop, and adds
+  `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds
   a `ComponentSkip` event (id 13) for each memo hit. `changes` is `0` for a render that changed
-  nothing on screen, and `stateSets` counts the state writes a component's render and effects
+  nothing on screen, and `ownStateSets` counts the state writes a component's render and effects
   made (spec 023's setState fan-out check). Everything is at level 4 under the `Pass` and
   `Component` keywords that `winapp perf` records, and only appends fields or adds an id, so
   existing decoders keep working. See `docs/reference/perf-trace-events.md`.

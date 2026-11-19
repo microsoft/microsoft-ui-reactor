@@ -990,9 +990,14 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
         "PerfTrace_Outcome_RemovalCounted",
         "PerfTrace_Outcome_InsertCounted",
         "PerfTrace_Outcome_RawItemsCounted",
+        "PerfTrace_Outcome_MemoFunctionGate",
+        "PerfTrace_Outcome_ReplaceCounted",
+        "PerfTrace_Outcome_ExitCounted",
+        "PerfTrace_Outcome_TreeNodeCounted",
     ];
 
     private const string RootName = "render in PerfTrace_RenderOutcomes.RunAsync";
+    private const string MemoName = "Memo in PerfTrace_RenderOutcomes.RunAsync";
 
     public override async Task RunAsync()
     {
@@ -1008,6 +1013,10 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                     var (mounted, setMounted) = ctx.UseState(false);
                     var (keys, setKeys) = ctx.UseState(new[] { "a", "b", "c" });
                     var (combo, setCombo) = ctx.UseState(new[] { "x", "y" });
+                    var (memoDep, setMemoDep) = ctx.UseState(0);
+                    var (replaced, setReplaced) = ctx.UseState(false);
+                    var (exitKeys, setExitKeys) = ctx.UseState(new[] { "e1", "e2" });
+                    var (tree, setTree) = ctx.UseState(new[] { "t1", "t2" });
                     // Two setState calls from the root's effects: one changes, one does not.
                     ctx.UseEffect(() =>
                     {
@@ -1033,7 +1042,27 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                         ComboBox(combo),
                         Component<PerfTraceOutcomeMemoChild, string>(label),
                         RenderEachTime(PerfTraceFunctions.Static),
-                        Component<PerfTraceOutcomeFanOut>());
+                        Component<PerfTraceOutcomeFanOut>(),
+                        // A Memo(...) function component: skipped while its dependency holds.
+                        Button("outcome-memo", () => setMemoDep(memoDep + 1)),
+                        Memo(_ => TextBlock("outcome memo " + memoDep), memoDep),
+                        // Re-created every render, yet nothing they show changes: a keyed Memo
+                        // whose key holds, and a handler closure capturing the current tick.
+                        Memo("outcome-keyed", () => TextBlock("outcome keyed memo")),
+                        TextBlock("outcome tap").OnTapped((_, _) => setTick(tick + 1)),
+                        // An unkeyed slot whose control type changes: replaced in place (the old
+                        // control is unmounted, the new one mounted).
+                        Button("outcome-replace", () => setReplaced(true)),
+                        VStack(replaced
+                            ? Button("outcome swapped")
+                            : TextBlock("outcome swap me")),
+                        // A row removed with an exit animation: its unmount runs after the pass.
+                        Button("outcome-exit", () => setExitKeys(["e1"])),
+                        VStack(exitKeys.Select(k => (Element)TextBlock("outcome exit " + k)
+                            .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade).WithKey(k)).ToArray()),
+                        // A typed TreeView gaining a root node.
+                        Button("outcome-tree", () => setTree(["t1", "t2", "t3"])),
+                        TreeView(tree, static t => t, static _ => null, static t => TextBlock("outcome node " + t)).Height(120));
                 });
                 await Harness.Render();
                 await Harness.Render();
@@ -1043,7 +1072,8 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
                 H.ClickButton("outcome-label");
                 await Harness.Render();
                 foreach (var button in new[] { "outcome-move", "outcome-remove", "outcome-insert",
-                    "outcome-combo-edit", "outcome-combo-grow", "outcome-combo-same" })
+                    "outcome-combo-edit", "outcome-combo-grow", "outcome-combo-same",
+                    "outcome-memo", "outcome-replace", "outcome-exit", "outcome-tree" })
                 {
                     H.ClickButton(button);
                     await Harness.Render();
@@ -1067,7 +1097,7 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
             else if (open.Count > 0) renders.Add((open.Pop(), e));
         }
         string Describe((CapturedEtwEvent Start, CapturedEtwEvent Stop) r)
-            => $"{Name(r.Start)}:{r.Start.Fields["reason"]}:miss={r.Start.Fields["memoMiss"]}:changes={r.Stop.Fields["changes"]}:sets={r.Stop.Fields["stateSets"]}";
+            => $"{Name(r.Start)}:{r.Start.Fields["reason"]}:miss={r.Start.Fields["memoMiss"]}:changes={r.Stop.Fields["changes"]}:sets={r.Stop.Fields["ownStateSets"]}";
         Console.WriteLine("# perf outcomes: " + string.Join(" | ", renders.OrderBy(r => r.Start.Timestamp).Select(Describe)));
         var skips = events.Where(e => e.Name == "ComponentSkip").ToList();
         Console.WriteLine("# perf outcomes: skips " + string.Join(",", skips.Select(e => $"{e.Fields["componentId"]}:{Name(e)}")));
@@ -1115,39 +1145,60 @@ internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
         // The fan-out child's mount effects made three setState calls; they are its own, not the
         // enclosing root's (whose own effects run after its span, on the Effects span).
         H.Check("PerfTrace_Outcome_StateSets",
-            fanOut.Count >= 1 && (string)fanOut[0].Start.Fields["reason"] == "mount" && (uint)fanOut[0].Stop.Fields["stateSets"] == 3
-            && fanOut.Skip(1).All(r => (uint)r.Stop.Fields["stateSets"] == 0)
-            && root.Count > 0 && (uint)root[0].Stop.Fields["stateSets"] == 0);
+            fanOut.Count >= 1 && (string)fanOut[0].Start.Fields["reason"] == "mount" && (uint)fanOut[0].Stop.Fields["ownStateSets"] == 3
+            && fanOut.Skip(1).All(r => (uint)r.Stop.Fields["ownStateSets"] == 0)
+            && root.Count > 0 && (uint)root[0].Stop.Fields["ownStateSets"] == 0);
 
-        var effectsStops = events.Where(e => e.Name == "Effects" && e.Opcode == 2).Select(e => (uint)e.Fields["stateSets"]).ToList();
+        var effectsStops = events.Where(e => e.Name == "Effects" && e.Opcode == 2).Select(e => (uint)e.Fields["ownStateSets"]).ToList();
         Console.WriteLine("# perf outcomes: root effects stateSets " + string.Join(",", effectsStops));
         H.Check("PerfTrace_Outcome_RootEffectsStateSets",
             effectsStops.Count >= 2 && effectsStops[0] == 2 && effectsStops.Skip(1).All(s => s == 0));
 
         H.Check("PerfTrace_Outcome_TallyClosed", ComponentPerfTally.OpenScopesForTests == 0);
 
-        // The last six root renders each made one kind of edit and nothing else, so the root's
+        // The last ten root renders each made one kind of edit and nothing else, so the root's
         // (inclusive) count is exactly that edit's: the moves the pass's Reconcile Stop reports,
         // one unmounted row, one mounted row, then one raw-items edit each for a changed and a
-        // grown ComboBox list, and nothing for an equal list in a new array.
-        var edits = root.TakeLast(6).Select(r =>
+        // grown ComboBox list and nothing for an equal list in a new array, the Memo's text, a
+        // replaced row (its unmount and the new control's mount), a row starting its exit
+        // animation, and a TreeView node built (its container is realized later, during layout).
+        var edits = root.TakeLast(10).Select(r =>
         {
             var stop = events.FirstOrDefault(e => e.Name == "Reconcile" && e.Opcode == 2
                 && e.Timestamp > r.Start.Timestamp && e.Timestamp < r.Stop.Timestamp);
             return (Changes: (uint)r.Stop.Fields["changes"],
                 Moved: stop is null ? uint.MaxValue : (uint)stop.Fields["moved"],
                 Removed: stop is null ? uint.MaxValue : (uint)stop.Fields["removed"],
-                Inserted: stop is null ? uint.MaxValue : (uint)stop.Fields["inserted"]);
+                Inserted: stop is null ? uint.MaxValue : (uint)stop.Fields["inserted"],
+                Replaced: stop is null ? uint.MaxValue : (uint)stop.Fields["replaced"]);
         }).ToList();
-        Console.WriteLine("# perf outcomes: keyed passes " + string.Join(" ", edits));
+        Console.WriteLine("# perf outcomes: single-edit passes " + string.Join(" ", edits));
         H.Check("PerfTrace_Outcome_MovesCounted",
-            edits.Count == 6 && edits[0].Moved is >= 1 and < uint.MaxValue && edits[0].Changes == edits[0].Moved);
+            edits.Count == 10 && edits[0].Moved is >= 1 and < uint.MaxValue && edits[0].Changes == edits[0].Moved);
         H.Check("PerfTrace_Outcome_RemovalCounted",
-            edits.Count == 6 && edits[1].Removed == 1 && edits[1].Changes == 1);
+            edits.Count == 10 && edits[1].Removed == 1 && edits[1].Changes == 1);
         H.Check("PerfTrace_Outcome_InsertCounted",
-            edits.Count == 6 && edits[2].Inserted == 1 && edits[2].Changes == 1);
+            edits.Count == 10 && edits[2].Inserted == 1 && edits[2].Changes == 1);
         H.Check("PerfTrace_Outcome_RawItemsCounted",
-            edits.Count == 6 && edits[3].Changes == 1 && edits[4].Changes == 1 && edits[5].Changes == 0);
+            edits.Count == 10 && edits[3].Changes == 1 && edits[4].Changes == 1 && edits[5].Changes == 0);
+
+        // The Memo(...) gate: it skipped while its dependency held (the tick), then rendered on the
+        // dependency change as a memo miss that updated its text.
+        var memo = Of(MemoName);
+        var memoId = memo.Count > 0 ? memo[0].Start.Fields["componentId"] : null;
+        Console.WriteLine("# perf outcomes: memo renders " + string.Join(" | ", memo.Select(Describe)));
+        H.Check("PerfTrace_Outcome_MemoFunctionGate",
+            memo.Count == 2 && (string)memo[0].Start.Fields["reason"] == "mount" && !(bool)memo[0].Start.Fields["memoMiss"]
+            && (string)memo[1].Start.Fields["reason"] == "props" && (bool)memo[1].Start.Fields["memoMiss"]
+            && (uint)memo[1].Stop.Fields["changes"] == 1
+            && skips.Any(e => Name(e) == MemoName && Equals(e.Fields["componentId"], memoId))
+            && edits.Count == 10 && edits[6].Changes == 1);
+        H.Check("PerfTrace_Outcome_ReplaceCounted",
+            edits.Count == 10 && edits[7].Replaced == 1 && edits[7].Changes == 2);
+        H.Check("PerfTrace_Outcome_ExitCounted",
+            edits.Count == 10 && edits[8].Changes == 1);
+        H.Check("PerfTrace_Outcome_TreeNodeCounted",
+            edits.Count == 10 && edits[9].Changes == 1);
     }
 }
 

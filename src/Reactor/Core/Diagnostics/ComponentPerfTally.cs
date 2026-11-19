@@ -3,7 +3,7 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <summary>
 /// Per-thread tallies behind the render-outcome fields of the <c>Microsoft-UI-Reactor-Perf</c>
 /// provider (schema revision 3, issue #1538): the <c>ComponentRender</c> Stop's <c>changes</c>
-/// and <c>stateSets</c>, and the <c>Effects</c> Stop's <c>stateSets</c>.
+/// and <c>ownStateSets</c>, and the <c>Effects</c> Stop's <c>ownStateSets</c>.
 /// </summary>
 /// <remarks>
 /// <para>A span opens a <see cref="Scope"/> on Start and closes it on Stop. Spans nest on the
@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <item><c>changes</c> is <b>inclusive</b>: a monotonic count of the controls the reconciler
 /// created, updated, removed or moved on this thread, read as a difference, so a component's
 /// count includes its nested components'.</item>
-/// <item><c>stateSets</c> is <b>exclusive</b>: opening a scope sets the count aside and closing
+/// <item><c>ownStateSets</c> is <b>exclusive</b>: opening a scope sets the count aside and closing
 /// it restores it, so a setter call counts only toward the innermost open span — the component
 /// whose Render(), effects or output reconcile made it.</item>
 /// </list>

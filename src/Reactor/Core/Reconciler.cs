@@ -506,24 +506,30 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Whether an in-place update changed what the control shows, for the perf <c>changes</c>
-    /// count: the element's own WinUI-mapped properties or its modifiers differ, or an items host
-    /// was handed a different item source. Own properties follow the reconcile-highlight
-    /// overlay's rule (<see cref="Element.OwnPropsEqual"/>, which ignores a container's children),
-    /// falling back to <see cref="Element.ShallowEquals"/> for leaf types it has no arm for; a
-    /// type neither can compare counts as changed, so a reported 0 is never a missed change.
+    /// count. <paramref name="shallowEqual"/> is <see cref="Element.ShallowEquals"/> of the two
+    /// elements, which <see cref="Update"/> already computed. Counts a change when the effective
+    /// modifiers differ in anything but callback identity
+    /// (<see cref="Element.ModifiersVisiblyEqual"/>), or the element's own properties differ.
+    /// Own properties ignore a container's or items host's children and items, which report
+    /// their own edits: <see cref="Element.OwnPropsEqual"/> (the reconcile-highlight overlay's
+    /// rule) plus the attached layout, theme bindings, resource overrides and animations it does
+    /// not read (<see cref="Element.ExtrasEqual"/>). A type neither comparison knows counts as
+    /// changed. A keyed <c>Memo</c> whose key held keeps its control (its inner update, if any,
+    /// counts itself).
     /// </summary>
-    internal static bool PerfUpdateChanged(Element oldEl, Element newEl, ElementModifiers? oldModifiers, ElementModifiers? modifiers)
-        => !(Element.OwnPropsEqual(oldEl, newEl) || Element.ShallowEquals(oldEl, newEl))
-            || !Element.ModifiersEqual(oldModifiers, modifiers)
-            || ItemsSourceChanged(oldEl, newEl);
-
-    // OwnPropsEqual ignores an items host's items (they drive child reconcile, not its own
-    // properties), but a new item list edits what the host shows, often in rows it realizes
-    // later, outside the span. Count it here unless both elements carry the very same list.
-    private static bool ItemsSourceChanged(Element oldEl, Element newEl)
-        => newEl is TemplatedListElementBase or TemplatedTreeViewElementBase or LazyStackElementBase
-            && !(oldEl is Internal.IItemsSourceIdentity oldItems && newEl is Internal.IItemsSourceIdentity newItems
-                && ReferenceEquals(oldItems.ItemsSource, newItems.ItemsSource));
+    internal static bool PerfUpdateChanged(Element oldEl, Element newEl,
+        ElementModifiers? oldModifiers, ElementModifiers? modifiers, bool shallowEqual)
+    {
+        if (!Element.ModifiersVisiblyEqual(oldModifiers, modifiers)) return true;
+        if (shallowEqual || oldEl is KeyedMemoElement && newEl is KeyedMemoElement) return false;
+        if (Element.OwnPropsEqual(oldEl, newEl) && Element.ExtrasEqual(oldEl, newEl)) return false;
+        // ShallowEquals also compares the element's own modifiers, callbacks included. The
+        // effective modifiers are visibly equal (checked above), so when they differ in identity
+        // only, compare the rest of the element without them.
+        return ReferenceEquals(oldEl.Modifiers, newEl.Modifiers)
+            || Element.ModifiersEqual(oldEl.Modifiers, newEl.Modifiers)
+            || !Element.ShallowEquals(oldEl, newEl with { Modifiers = oldEl.Modifiers });
+    }
 
     private struct PerfEdits
     {

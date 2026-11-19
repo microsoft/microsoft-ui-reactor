@@ -212,7 +212,7 @@ mapping is on), and each reconcile counts its child edits. Each
 component span also says whether the render was worth it: whether a
 memo gate let it through (`memoMiss`), how many controls it changed
 (`changes`, `0` for a render that changed nothing on screen), and how
-many state writes its render and effects made (`stateSets`, spec 023's
+many state writes its render and effects made (`ownStateSets`, spec 023's
 setState fan-out check). A memo component its parent re-rendered but
 whose props held writes a `ComponentSkip` instead, so a tool can show a
 memo hit rate per component. Function and

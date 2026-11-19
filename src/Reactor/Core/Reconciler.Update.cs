@@ -104,7 +104,8 @@ public sealed partial class Reconciler
         // be skipped (e.g. ShallowEquals false) never pay for the subtree traversal,
         // and HasActiveContextValues short-circuits it away entirely when no provider
         // is on the stack.
-        if (Element.ShallowEquals(oldEl, newEl)
+        bool shallowEqual = Element.ShallowEquals(oldEl, newEl);
+        if (shallowEqual
             && Element.ModifiersEqual(oldModifiers, modifiers)
             && oldEl.HasCallbacks == newEl.HasCallbacks
             && !ForceRenderThroughWrapper(newEl)
@@ -344,7 +345,7 @@ public sealed partial class Reconciler
         // The same rule feeds the perf ComponentRender spans' `changes` (a replacement was
         // counted by its Mount, and the control it replaces by its unmount).
         if (result is null && Diagnostics.ReactorPerfTrace.ComponentEnabled
-            && PerfUpdateChanged(oldEl, newEl, oldModifiers, modifiers))
+            && PerfUpdateChanged(oldEl, newEl, oldModifiers, modifiers, shallowEqual))
             Diagnostics.ComponentPerfTally.AddChanges(1);
         if (target is WinUI.TitleBar preModCtl)
         {
