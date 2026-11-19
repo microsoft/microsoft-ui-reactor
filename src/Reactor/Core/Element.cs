@@ -6541,8 +6541,9 @@ public record TemplatedListViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListViewElementBase
+) : TemplatedListViewElementBase, Internal.IItemsSourceIdentity
 {
+    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<T>? OnItemClick { get; init; }
@@ -6587,8 +6588,9 @@ public record TemplatedGridViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedGridViewElementBase
+) : TemplatedGridViewElementBase, Internal.IItemsSourceIdentity
 {
+    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<T>? OnItemClick { get; init; }
@@ -6632,8 +6634,9 @@ public record TemplatedFlipViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedFlipViewElementBase
+) : TemplatedFlipViewElementBase, Internal.IItemsSourceIdentity
 {
+    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional&lt;int&gt;.Of(-1)</c> to force no selection.</summary>
     public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
@@ -6727,8 +6730,9 @@ public record TemplatedTreeViewElement<T>(
     Func<T, string> KeySelector,
     Func<T, IReadOnlyList<T>?> ChildrenSelector,
     Func<T, Element> ViewBuilder
-) : TemplatedTreeViewElementBase
+) : TemplatedTreeViewElementBase, Internal.IItemsSourceIdentity
 {
+    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     /// <summary>Invoked with the developer's <c>T</c> when a node is clicked/invoked.</summary>
     public Action<T>? OnItemInvoked { get; init; }
     /// <summary>Invoked with the developer's <c>T</c> just before a node expands.</summary>
@@ -6879,8 +6883,9 @@ public record LazyVStackElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : LazyStackElementBase
+) : LazyStackElementBase, Internal.IItemsSourceIdentity
 {
+    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public override Orientation Orientation => Orientation.Vertical;
     public override double Spacing { get; init; } = 8;
     public override double EstimatedItemSize { get; init; } = 40;
@@ -6915,8 +6920,9 @@ public record LazyHStackElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : LazyStackElementBase
+) : LazyStackElementBase, Internal.IItemsSourceIdentity
 {
+    object Internal.IItemsSourceIdentity.ItemsSource => Items;
     public override Orientation Orientation => Orientation.Horizontal;
     public override double Spacing { get; init; } = 8;
     public override double EstimatedItemSize { get; init; } = 100;

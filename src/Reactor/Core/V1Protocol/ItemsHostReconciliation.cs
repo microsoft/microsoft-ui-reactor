@@ -141,6 +141,9 @@ internal static class ItemsHostReconciliation
         }
 
         collection ??= strategy.GetCollection(control);
+        // The list changed shape (a raw value or a key moved, appeared or went away): what the
+        // host shows changed, even where no item control is mounted or unmounted below.
+        if (!isMount) Reconciler.CountPerfChanges();
         var used = new bool[previous.Count];
         var next = new List<ItemsHostState.Item>(source.Count);
         Dictionary<string, Queue<int>>? keyed = null;
@@ -272,6 +275,7 @@ internal static class ItemsHostReconciliation
         {
             for (int i = 0; i < count; i++)
                 if (source[i] is Element) return false;
+            Reconciler.CountPerfChanges();
             var collection = strategy.GetCollection(control);
             int target = 0;
             for (int i = 0; i < count; i++)

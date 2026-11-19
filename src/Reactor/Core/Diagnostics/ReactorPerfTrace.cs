@@ -47,7 +47,7 @@ internal static unsafe partial class ReactorPerfTrace
     {
         /// <summary>RenderPass, Reconcile and Effects spans.</summary>
         public const ulong Pass = 0x1;
-        /// <summary>ComponentRender spans.</summary>
+        /// <summary>ComponentRender spans and ComponentSkip.</summary>
         public const ulong Component = 0x2;
         /// <summary>ChildReconcile spans and KeyedListDiagnostic.</summary>
         public const ulong Children = 0x4;
@@ -85,7 +85,8 @@ internal static unsafe partial class ReactorPerfTrace
         public const ushort ChildReconcileStop = 10;
         public const ushort StateChange = 11;
         public const ushort KeyedListDiagnostic = 12;
-        // Next free id: 13.
+        public const ushort ComponentSkip = 13;
+        // Next free id: 14.
     }
 
     /// <summary>Values of the Reconcile span's <c>entry</c> field.</summary>
@@ -148,6 +149,17 @@ internal static unsafe partial class ReactorPerfTrace
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => IsEnabled(Levels.Verbose, Keywords.State);
+    }
+
+    /// <summary>
+    /// Whether a state setter should count itself toward the open span's <c>stateSets</c>
+    /// (<see cref="ComponentPerfTally"/>): the <c>ComponentRender</c> and <c>Effects</c> spans
+    /// that report it are on with either keyword.
+    /// </summary>
+    internal static bool StateSetsEnabled
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => IsEnabled(Levels.Informational, Keywords.Pass | Keywords.Component);
     }
 
     /// <summary>Process-unique host id for <c>RenderPass</c>; never 0.</summary>
@@ -231,43 +243,60 @@ internal static unsafe partial class ReactorPerfTrace
 
     /// <summary>
     /// A started <c>ComponentRender</c> span (or an inactive one when the keyword is off);
-    /// <see cref="Dispose"/> writes the Stop exactly when a Start was written.
+    /// <see cref="Dispose"/> writes the Stop exactly when a Start was written. While open it is
+    /// the thread's innermost <see cref="ComponentPerfTally"/> scope, which the Stop's
+    /// <c>changes</c> and <c>stateSets</c> come from. Dispose it once: each Dispose closes that scope.
     /// </summary>
     internal readonly struct ComponentSpan : IDisposable
     {
         private readonly ulong _id;
+        private readonly ComponentPerfTally.Scope _tally;
         private readonly bool _active;
 
-        private ComponentSpan(ulong id)
+        private ComponentSpan(ulong id, ComponentPerfTally.Scope tally)
         {
             _id = id;
+            _tally = tally;
             _active = true;
         }
 
         /// <summary>Writes the Start. Callers check <see cref="ComponentEnabled"/> first.</summary>
-        internal static ComponentSpan Begin(ulong componentId, string name, string reason, SourceLocation? callSite)
+        /// <param name="componentId">The component's process-unique id.</param>
+        /// <param name="name">The component's name.</param>
+        /// <param name="reason">Why it rendered.</param>
+        /// <param name="callSite">Where its element was created, or null.</param>
+        /// <param name="memoMiss">A memo gate (props, dependencies, <c>ShouldUpdate</c>) was evaluated and let this render through.</param>
+        internal static ComponentSpan Begin(ulong componentId, string name, string reason, SourceLocation? callSite, bool memoMiss = false)
         {
-            ComponentRenderStart(componentId, name, reason, callSite);
-            return new ComponentSpan(componentId);
+            ComponentRenderStart(componentId, name, reason, callSite, memoMiss);
+            return new ComponentSpan(componentId, ComponentPerfTally.Open());
         }
 
         internal bool IsActive => _active;
 
         public void Dispose()
         {
-            if (_active) ComponentRenderStop(_id);
+            if (!_active) return;
+            ComponentPerfTally.Close(_tally, out uint changes, out uint stateSets);
+            ComponentRenderStop(_id, changes, stateSets);
         }
     }
 
-    /// <summary>A started <c>Effects</c> span (or an inactive one when the keyword is off).</summary>
+    /// <summary>
+    /// A started <c>Effects</c> span (or an inactive one when the keyword is off). Like
+    /// <see cref="ComponentSpan"/> it is a <see cref="ComponentPerfTally"/> scope while open, for
+    /// the Stop's <c>stateSets</c>.
+    /// </summary>
     internal readonly struct EffectsSpan : IDisposable
     {
         private readonly ulong _id;
+        private readonly ComponentPerfTally.Scope _tally;
         private readonly bool _active;
 
-        private EffectsSpan(ulong id)
+        private EffectsSpan(ulong id, ComponentPerfTally.Scope tally)
         {
             _id = id;
+            _tally = tally;
             _active = true;
         }
 
@@ -275,12 +304,14 @@ internal static unsafe partial class ReactorPerfTrace
         internal static EffectsSpan Begin(long componentId)
         {
             EffectsStart((ulong)componentId);
-            return new EffectsSpan((ulong)componentId);
+            return new EffectsSpan((ulong)componentId, ComponentPerfTally.Open());
         }
 
         public void Dispose()
         {
-            if (_active) EffectsStop(_id);
+            if (!_active) return;
+            ComponentPerfTally.Close(_tally, out _, out uint stateSets);
+            EffectsStop(_id, stateSets);
         }
     }
 
@@ -318,7 +349,8 @@ internal static unsafe partial class ReactorPerfTrace
     /// Where the component's element was created (the source map's stamp), or null. Only the
     /// file name is written: a compile-time path can carry a user name (spec 044 §6.2.1).
     /// </param>
-    internal static void ComponentRenderStart(ulong componentId, string name, string reason, SourceLocation? callSite)
+    /// <param name="memoMiss">A memo gate was evaluated and let this render through (revision 3).</param>
+    internal static void ComponentRenderStart(ulong componentId, string name, string reason, SourceLocation? callSite, bool memoMiss = false)
     {
         string path = "";
         uint line = 0, column = 0;
@@ -329,11 +361,12 @@ internal static unsafe partial class ReactorPerfTrace
             column = (uint)Math.Max(0, site.ColumnNumber);
         }
         int fileStart = FileNameStart(path);
+        int memoMiss32 = memoMiss ? 1 : 0;
         fixed (char* pName = name)
         fixed (char* pReason = reason)
         fixed (char* pPath = path)
         {
-            EventData* data = stackalloc EventData[8];
+            EventData* data = stackalloc EventData[9];
             SetMetadata(data, Metadata.ComponentRenderStart);
             data[2] = EventData.Of(&componentId, sizeof(ulong));
             data[3] = EventData.Of(pName, (name.Length + 1) * sizeof(char));
@@ -342,7 +375,8 @@ internal static unsafe partial class ReactorPerfTrace
             data[5] = EventData.Of(pPath + fileStart, (path.Length - fileStart + 1) * sizeof(char));
             data[6] = EventData.Of(&line, sizeof(uint));
             data[7] = EventData.Of(&column, sizeof(uint));
-            Write(EventIds.ComponentRenderStart, Levels.Informational, Opcodes.Start, Keywords.Component, data, 8);
+            data[8] = EventData.Of(&memoMiss32, sizeof(int));
+            Write(EventIds.ComponentRenderStart, Levels.Informational, Opcodes.Start, Keywords.Component, data, 9);
         }
     }
 
@@ -352,8 +386,40 @@ internal static unsafe partial class ReactorPerfTrace
     /// </summary>
     internal static int FileNameStart(string path) => path.AsSpan().LastIndexOfAny('/', '\\') + 1;
 
-    internal static void ComponentRenderStop(ulong componentId)
-        => WriteU64(EventIds.ComponentRenderStop, Levels.Informational, Opcodes.Stop, Keywords.Component, Metadata.ComponentRenderStop, componentId);
+    /// <param name="componentId">The Start's componentId.</param>
+    /// <param name="changes">
+    /// Controls created, updated (own properties or modifiers changed), removed or moved during
+    /// the span, nested components included; 0 means the render reconciled to no change.
+    /// </param>
+    /// <param name="stateSets">
+    /// State-setter calls made on this thread while the span was the innermost open one (its
+    /// Render(), its effects and the reconcile of its output, not nested components' spans).
+    /// </param>
+    internal static void ComponentRenderStop(ulong componentId, uint changes, uint stateSets)
+    {
+        EventData* data = stackalloc EventData[5];
+        SetMetadata(data, Metadata.ComponentRenderStop);
+        data[2] = EventData.Of(&componentId, sizeof(ulong));
+        data[3] = EventData.Of(&changes, sizeof(uint));
+        data[4] = EventData.Of(&stateSets, sizeof(uint));
+        Write(EventIds.ComponentRenderStop, Levels.Informational, Opcodes.Stop, Keywords.Component, data, 5);
+    }
+
+    /// <summary>
+    /// A component's memo gate skipped its render (a memo hit): its props, dependencies or
+    /// <c>ShouldUpdate</c> said nothing changed, and no consumed context changed.
+    /// </summary>
+    internal static void ComponentSkip(ulong componentId, string name)
+    {
+        fixed (char* pName = name)
+        {
+            EventData* data = stackalloc EventData[4];
+            SetMetadata(data, Metadata.ComponentSkip);
+            data[2] = EventData.Of(&componentId, sizeof(ulong));
+            data[3] = EventData.Of(pName, (name.Length + 1) * sizeof(char));
+            Write(EventIds.ComponentSkip, Levels.Informational, Opcodes.Info, Keywords.Component, data, 4);
+        }
+    }
 
     internal static void ReconcileStart(string entry, string element)
     {
@@ -386,8 +452,16 @@ internal static unsafe partial class ReactorPerfTrace
     internal static void EffectsStart(ulong componentId)
         => WriteU64(EventIds.EffectsStart, Levels.Informational, Opcodes.Start, Keywords.Pass, Metadata.EffectsStart, componentId);
 
-    internal static void EffectsStop(ulong componentId)
-        => WriteU64(EventIds.EffectsStop, Levels.Informational, Opcodes.Stop, Keywords.Pass, Metadata.EffectsStop, componentId);
+    /// <param name="componentId">The root's componentId, as on the Start.</param>
+    /// <param name="stateSets">State-setter calls the flush made on this thread (revision 3).</param>
+    internal static void EffectsStop(ulong componentId, uint stateSets)
+    {
+        EventData* data = stackalloc EventData[4];
+        SetMetadata(data, Metadata.EffectsStop);
+        data[2] = EventData.Of(&componentId, sizeof(ulong));
+        data[3] = EventData.Of(&stateSets, sizeof(uint));
+        Write(EventIds.EffectsStop, Levels.Informational, Opcodes.Stop, Keywords.Pass, data, 4);
+    }
 
     internal static void ChildReconcileStart(uint oldCount, uint newCount)
     {
@@ -508,20 +582,24 @@ internal static unsafe partial class ReactorPerfTrace
     {
         public static readonly Blob Provider = BuildProvider(ProviderName);
 
-        // Fields after the first group were appended in schema revision 2 (see the contract doc).
+        // Fields after the first group were appended in schema revision 2, and those after the
+        // second in revision 3 (see the contract doc).
         public static readonly Blob RenderPassStart = BuildEvent("RenderPass", ("hostId", InTypes.UInt64),
             ("requesterId", InTypes.UInt64), ("requesterName", InTypes.UnicodeString), ("requestCount", InTypes.UInt32));
         public static readonly Blob RenderPassStop = BuildEvent("RenderPass", ("hostId", InTypes.UInt64));
         public static readonly Blob ComponentRenderStart = BuildEvent("ComponentRender",
             ("componentId", InTypes.UInt64), ("name", InTypes.UnicodeString), ("reason", InTypes.UnicodeString),
-            ("callSiteFile", InTypes.UnicodeString), ("callSiteLine", InTypes.UInt32), ("callSiteColumn", InTypes.UInt32));
-        public static readonly Blob ComponentRenderStop = BuildEvent("ComponentRender", ("componentId", InTypes.UInt64));
+            ("callSiteFile", InTypes.UnicodeString), ("callSiteLine", InTypes.UInt32), ("callSiteColumn", InTypes.UInt32),
+            ("memoMiss", InTypes.Bool32));
+        public static readonly Blob ComponentRenderStop = BuildEvent("ComponentRender", ("componentId", InTypes.UInt64),
+            ("changes", InTypes.UInt32), ("stateSets", InTypes.UInt32));
         public static readonly Blob ReconcileStart = BuildEvent("Reconcile",
             ("entry", InTypes.UnicodeString), ("element", InTypes.UnicodeString));
         public static readonly Blob ReconcileStop = BuildEvent("Reconcile",
             ("inserted", InTypes.UInt32), ("removed", InTypes.UInt32), ("moved", InTypes.UInt32), ("replaced", InTypes.UInt32));
         public static readonly Blob EffectsStart = BuildEvent("Effects", ("componentId", InTypes.UInt64));
-        public static readonly Blob EffectsStop = BuildEvent("Effects", ("componentId", InTypes.UInt64));
+        public static readonly Blob EffectsStop = BuildEvent("Effects", ("componentId", InTypes.UInt64),
+            ("stateSets", InTypes.UInt32));
         public static readonly Blob ChildReconcileStart = BuildEvent("ChildReconcile",
             ("oldCount", InTypes.UInt32), ("newCount", InTypes.UInt32));
         public static readonly Blob ChildReconcileStop = BuildEvent("ChildReconcile",
@@ -530,6 +608,8 @@ internal static unsafe partial class ReactorPerfTrace
             ("componentId", InTypes.UInt64), ("hook", InTypes.UnicodeString), ("changed", InTypes.Bool32));
         public static readonly Blob KeyedListDiagnostic = BuildEvent("KeyedListDiagnostic",
             ("kind", InTypes.UnicodeString), ("bailedOut", InTypes.Bool32));
+        public static readonly Blob ComponentSkip = BuildEvent("ComponentSkip",
+            ("componentId", InTypes.UInt64), ("name", InTypes.UnicodeString));
 
         // Provider traits: UINT16 size (counting itself), then the nul-terminated UTF-8 name.
         private static Blob BuildProvider(string name)

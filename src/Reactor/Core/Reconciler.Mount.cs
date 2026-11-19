@@ -148,6 +148,7 @@ public sealed partial class Reconciler
         if (control is not null)
         {
             DebugUIElementsCreated++;
+            CountPerfChanges();
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep

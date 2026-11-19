@@ -341,6 +341,11 @@ public sealed partial class Reconciler
             && _highlightModified is not null
             && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
+        // The same rule feeds the perf ComponentRender spans' `changes` (a replacement was
+        // counted by its Mount, and the control it replaces by its unmount).
+        if (result is null && Diagnostics.ReactorPerfTrace.ComponentEnabled
+            && PerfUpdateChanged(oldEl, newEl, oldModifiers, modifiers))
+            Diagnostics.ComponentPerfTally.AddChanges(1);
         if (target is WinUI.TitleBar preModCtl)
         {
             // Setters have already run (inside the descriptor handler) but modifiers have
