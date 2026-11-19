@@ -3662,7 +3662,7 @@ public partial record TextBoxElement(
     /// <summary>Help text rendered below the box. WinUI 3 1.2+ feature.</summary>
     public string? Description { get; init; }
     internal Action<WinUI.TextBox>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnChanged is not null || OnSelectionChanged is not null;
+    internal override bool HasCallbacks => OnChanged is not null || OnSelectionChanged is not null || OnSubmitted is not null;
 
     private static readonly WinUI.TextChangedEventHandler __TextChangedTrampoline = (s, _) =>
     {
@@ -3685,7 +3685,10 @@ public partial record TextBoxElement(
     // hand-written descriptor (one shared TextBoxEventPayload across both events).
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<TextBoxElement, WinUI.TextBox> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<TextBoxElement, WinUI.TextBox> d)
-        => d.OneWayConditional(
+        => d.Imperative(
+                static (c, e) => TextBoxSubmitBehavior.Ensure(c, e),
+                static (c, _, e) => TextBoxSubmitBehavior.Ensure(c, e))
+            .OneWayConditional(
                 get:         static e => e.AcceptsReturn,
                 set:         static (c, v) => c.AcceptsReturn = v!.Value,
                 shouldWrite: static e => e.AcceptsReturn.HasValue)
@@ -5034,7 +5037,7 @@ public partial record SplitViewElement(
     /// <summary>How the light-dismiss overlay reacts to taps in Overlay mode. Defaults to <c>Auto</c>.</summary>
     public LightDismissOverlayMode LightDismissOverlayMode { get; init; } = LightDismissOverlayMode.Auto;
     internal Action<WinUI.SplitView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnPaneOpenChanged is not null;
+    internal override bool HasCallbacks => OnPaneOpenChanged is not null || OnPaneLengthChanged is not null;
 
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.SplitView, object>
         __PaneOpeningTrampoline = (s, _) =>
@@ -5052,9 +5055,9 @@ public partial record SplitViewElement(
             new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<SplitViewElement, WinUI.SplitView>(
                 Name: "Pane",
                 GetChild: static e => e.Pane,
-                SetChild: static (c, ui) => c.Pane = ui)
+                SetChild: static (c, ui) => SplitViewResizeBehavior.SetPane(c, ui))
             {
-                GetCurrentChild = static c => c.Pane as global::Microsoft.UI.Xaml.UIElement,
+                GetCurrentChild = static c => SplitViewResizeBehavior.GetPane(c),
             },
             new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<SplitViewElement, WinUI.SplitView>(
                 Name: "Content",
@@ -5065,6 +5068,10 @@ public partial record SplitViewElement(
             },
         });
         return d
+            .ImperativeBridged(
+                static (_, c, e) => SplitViewResizeBehavior.Update(c, e),
+                static (_, c, _, e) => SplitViewResizeBehavior.Update(c, e),
+                static (_, c) => SplitViewResizeBehavior.Detach(c))
             .OneWayConditional(
                 get:         static e => e.PaneBackground,
                 set:         static (c, v) => c.PaneBackground = v!,
@@ -8001,7 +8008,7 @@ public enum ItemsViewLayoutKind
 /// shape: virtual hooks for factory creation, in-place update,
 /// per-row reconcile, and event callback dispatch.
 /// </summary>
-public abstract record ItemsViewElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource
+public abstract partial record ItemsViewElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource
 {
     int global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource.ItemCount => ItemCount;
     Element global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource.BuildItemView(int index) => BuildItemViewAt(index);
@@ -8128,5 +8135,5 @@ public record ItemsViewElement<T>(
     }
 
     internal override bool HasCallbacks =>
-        OnItemInvoked is not null || OnSelectionChanged is not null;
+        OnItemInvoked is not null || OnSelectionChanged is not null || OnTailFollowingChanged is not null;
 }

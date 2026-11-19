@@ -28,6 +28,17 @@ Conventions for contributors:
 
 ### Added
 
+- **Reusable feed and composer behaviors on existing controls:** ItemsView tail
+  following, keyed navigation, and opt-in bottom content alignment through
+  `VerticalContentAlignment`, AnnotatedScrollBar labels/previews and scroll
+  controller binding, TextBox Enter-to-submit, and keyboard/pointer resizing for
+  SplitView panes. The Gallery's **Chat feed** composition demonstrates them
+  together, with the original native OpenClaw chat styling and independent
+  input, annotation, and pane examples. Ported from
+  the [OpenClaw Windows chat surface](https://github.com/openclaw/openclaw-windows-node);
+  see the [control guide](docs/guide/controls.md#reusable-feed-composer-and-pane-behaviors)
+  for lifecycle and interaction semantics (spec 047 control protocol).
+
 ### Changed
 
 - Layout fluent modifiers copy the existing layout bucket directly instead of

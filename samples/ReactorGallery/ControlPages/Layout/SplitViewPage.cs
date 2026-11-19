@@ -14,6 +14,8 @@ class SplitViewPage : Component
     {
         var (isOpen, setIsOpen) = UseState(true);
         var (modeIndex, setModeIndex) = UseState(0);
+        var (paneLength, setPaneLength) = UseState(200.0);
+        var (resizable, setResizable) = UseState(true);
         var modes = new[] { "Overlay", "Inline", "CompactOverlay", "CompactInline" };
 
         var displayMode = modeIndex switch
@@ -55,7 +57,24 @@ class SplitViewPage : Component
                         TextBlock("Display Mode"),
                         ComboBox(modes, modeIndex, setModeIndex),
                         ToggleSwitch(isOpen, setIsOpen, header: "Pane Open")
-                    ))
+                    )),
+
+                SampleCard("Resizable pane",
+                    (SplitView(
+                        pane: VStack(8, TextBlock("Details").Bold(),
+                            TextBlock("Drag the divider, or focus it and use Left/Right/Home/End.")
+                                .TextWrapping(TextWrapping.Wrap)).Padding(12),
+                        content: TextBlock($"Pane width: {paneLength:0}").Margin(16)) with
+                        { DisplayMode = SplitViewDisplayMode.Inline, OpenPaneLength = paneLength })
+                        .ResizablePane(120, 360, setPaneLength, enabled: resizable)
+                        .Height(240),
+                    """
+                    (SplitView(pane: TextBlock("Details"),
+                        content: TextBlock($"Pane width: {paneLength:0}")) with
+                        { DisplayMode = SplitViewDisplayMode.Inline, OpenPaneLength = paneLength })
+                        .ResizablePane(120, 360, setPaneLength, enabled: resizable)
+                    """,
+                    OptionPanel(ToggleSwitch(resizable, setResizable, header: "Allow resizing")))
             ).Margin(36, 24, 36, 36)
         );
     }

@@ -317,6 +317,98 @@ class LayoutGroup : Component
 
 Detail page: [Layout](layout.md); flex specifics in [Flex Layout](flex-layout.md).
 
+### Reusable feed, composer, and pane behaviors
+
+These are opt-in behaviors on existing controls, not chat-specific controls.
+The Gallery's **Collections > Chat feed** page composes all four; the TextBox,
+SplitView, and AnnotatedScrollBar pages also show independent examples.
+
+The chat sample uses the native presentation from
+[OpenClaw Windows](https://github.com/openclaw/openclaw-windows-node/tree/0d74aee5f7235472c85298d51af974dc08e29297/src/OpenClaw.Tray.WinUI/Chat):
+the 768-DIP reading column, 14/21 Segoe UI Variable prose, light/dark accent
+tints for user messages, 20-DIP composer corners, borderless editor, compact
+send disc, 32-DIP transcript alpha fade, and the original annotated-rail
+template with expanding hover ticks. Styling helpers live beside `ChatFeedPage.cs`
+as `OpenClawChatStyles`, `OpenClawHistoryRail`, and `OpenClawTranscriptFade`;
+their MIT notice ships with the Gallery. The shared Reactor controls remain
+unstyled, opt-in building blocks. The sample's messages, model choices, and
+attachment action are local demonstration data, not a gateway connection.
+
+```csharp
+ItemsView(messages, message => message.Id,
+    (message, _) => ItemContainer(TextBlock(message.Text)))
+    .VerticalContentAlignment(VerticalAlignment.Bottom)
+    .FollowTail(onFollowingChanged: setFollowing)
+    .ScrollToTail(tailRequest)
+    .ScrollIntoView(selectedKey, navigationRequest);
+
+TextBox(draft, setDraft, "Write a message")
+    .AutomationName("Message")
+    .AcceptsReturn()
+    .TextWrapping(TextWrapping.Wrap)
+    .SubmitOnEnter(Send);
+
+(SplitView(pane: details, content: conversation) with
+    { DisplayMode = SplitViewDisplayMode.Inline, OpenPaneLength = paneWidth })
+    .ResizablePane(minimum: 160, maximum: 360, onLengthChanged: setPaneWidth);
+```
+
+**Content alignment.** `VerticalContentAlignment(VerticalAlignment.Bottom)` places
+short ItemsView feeds at the bottom of their viewport. Content that grows taller
+than the viewport scrolls normally, retaining native virtualization and source
+order; this does not reverse the items or scroll to the tail by itself.
+Omitting the modifier keeps the native top-aligned layout. Changing it to `Top`
+or removing it restores top alignment with the stock template. Alignment follows
+viewport resizing and is independent of `FollowTail`. The Gallery's ItemsView
+page includes a two-message example that can grow into a scrollable feed.
+
+**Tail following.** Give the ItemsView a bounded viewport and stable item keys.
+`FollowTail` initially shows the last row, follows appended rows and changing
+row heights, and pauses when the reader moves away. Scrolling back within
+`threshold` DIPs of the bottom (60 by default) resumes following. Increment
+`tailRequest` to jump back explicitly, even without adding an item. Disabling
+following leaves native scrolling intact. `ScrollIntoView` uses a stable key,
+not an index that can become stale when history is prepended. Increment
+`navigationRequest` to revisit the same key; navigation does not steal focus.
+Pending navigation is canceled by reader input and unmount.
+
+**Annotations.** Use `AnnotatedScrollBar().Annotations(...)` with
+`ScrollAnnotation(offset, label, detail)`. A detail appears on hover; omitting it
+uses the label. For pixel-based scrolling, connect the bar to a modern
+`ScrollView` or an `ItemsView` using `.VerticalScrollBar(barRef)` and
+`.Ref(barRef)` on the bar. Obtain the reference with
+`this.UseElementRef<Microsoft.UI.Xaml.Controls.AnnotatedScrollBar>()`.
+Place the two controls in sibling Grid columns and hide the viewport's
+native vertical scrollbar if both would otherwise be visible. The connection
+tracks reference changes and releases its controller when removed.
+The classic `ScrollViewer` does not expose the modern scroll-controller
+contract; use `ScrollView` for this composition.
+
+For a history navigator over variable-height virtual rows, leave the rail
+disconnected and use `.ScrollRange(maximum, value)` plus
+`.ScrollRequested(offset => ...)`. Offsets can then represent message ordinals
+instead of changing pixel estimates. Map the chosen ordinal back to a stable
+key for `ScrollIntoView`. Use a short glyph such as `"\u2501"` as the annotation
+label for ticks, and meaningful preview text as the detail. Up/Down,
+Home/End, and Enter/Space navigate the annotations when the rail is focused.
+Connected pixel scrolling and standalone ordinal ranges are alternative modes.
+
+**Submitting text.** `SubmitOnEnter` passes the current native text, not a
+possibly stale state snapshot. Only unmodified Enter submits; Shift+Enter
+retains multiline editing, other modifiers retain native behavior, and IME
+composition and held-key repeats do not submit. The callback decides whether
+to validate, clear, or keep the text. Removing it restores ordinary Enter
+behavior. Sending never moves focus.
+
+**Resizing panes.** `ResizablePane` adds a native focusable handle inside the
+SplitView pane, without a toolkit dependency. Drag it or use Left/Right and
+Home/End. It supports both `PanePlacement` values and right-to-left layouts.
+The callback reports user resizing; feed it into `OpenPaneLength` for controlled
+sizing. In narrow viewports, the bounds yield to preserve 48 DIPs for content.
+Set `enabled: false` to remove the handle without remounting pane content.
+The `automationName` argument names the handle and its tooltip; localize it
+in applications. `PaneResizeOptions.KeyboardStep` defaults to 16 DIPs.
+
 ## Navigation
 
 Controls that move the user between screens or sections. Pair them with

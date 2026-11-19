@@ -180,6 +180,10 @@ public static partial class ElementExtensions
             ? layout with { HorizontalContentAlignment = alignment }
             : new LayoutModifiers { HorizontalContentAlignment = alignment });
 
+    /// <summary>
+    /// Aligns content inside a control. On ItemsView, Bottom places a short feed at
+    /// the viewport's bottom without reversing its items or enabling tail following.
+    /// </summary>
     public static T VerticalContentAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
         WithLayout(el, el.Modifiers?.Layout is { } layout
             ? layout with { VerticalContentAlignment = alignment }

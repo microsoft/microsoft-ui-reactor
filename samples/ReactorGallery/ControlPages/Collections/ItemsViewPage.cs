@@ -14,6 +14,9 @@ class ItemsViewPage : Component
 
     public override Element Render()
     {
+        var (bottomAligned, setBottomAligned) = UseState(true);
+        var (messageCount, setMessageCount) = UseState(2);
+        var messages = Enumerable.Range(1, messageCount).Select(index => $"Message {index}").ToArray();
         var products = new Product[]
         {
             new("Laptop", "Electronics", 999.99),
@@ -56,6 +59,28 @@ class ItemsViewPage : Component
                         )
                     )
                     """),
+
+                SampleCard("Bottom-aligned short feed",
+                    VStack(8,
+                        Border(ItemsView(messages, message => message,
+                            (message, _) => ItemContainer(TextBlock(message).Margin(12, 8)))
+                            .VerticalContentAlignment(bottomAligned ? VerticalAlignment.Bottom : VerticalAlignment.Top)
+                            .FollowTail()
+                            .Height(240))
+                            .WithBorder(Theme.CardStroke),
+                        HStack(8,
+                            Button("Add message", () => setMessageCount(messageCount + 1)),
+                            Button("Reset to two", () => setMessageCount(2)))),
+                    """
+                    ItemsView(messages, message => message,
+                        (message, _) => ItemContainer(TextBlock(message).Margin(12, 8)))
+                        .VerticalContentAlignment(bottomAligned ? VerticalAlignment.Bottom : VerticalAlignment.Top)
+                        .FollowTail()
+                        .Height(240)
+                    """,
+                    OptionPanel(
+                        ToggleSwitch(bottomAligned, setBottomAligned, header: "Align content to bottom"),
+                        Caption("Short feeds sit at the bottom. Add messages to overflow the viewport; order stays oldest to newest."))),
 
                 SampleCard("Compact ItemsView",
                     ItemsView(

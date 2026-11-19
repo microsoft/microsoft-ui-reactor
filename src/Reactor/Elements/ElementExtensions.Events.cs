@@ -71,6 +71,10 @@ public static partial class ElementExtensions
     public static TextBoxElement Changed(this TextBoxElement el, Action<string>? handler) =>
         el with { OnChanged = handler };
 
+    /// <summary>Submits native text on unmodified Enter. Passing <c>null</c> restores normal Enter behavior.</summary>
+    public static TextBoxElement Submitted(this TextBoxElement el, Action<string>? handler) =>
+        el with { OnSubmitted = handler };
+
     /// <summary>Wires the selection-changed handler. Receives (selectedText, selectionStart, selectionLength). Passing <c>null</c> clears.</summary>
     public static TextBoxElement SelectionChanged(this TextBoxElement el, Action<string, int, int>? handler) =>
         el with { OnSelectionChanged = handler };
@@ -192,6 +196,10 @@ public static partial class ElementExtensions
     /// <summary>Wires the pane-open-state-changed handler. Passing <c>null</c> clears.</summary>
     public static SplitViewElement PaneOpenChanged(this SplitViewElement el, Action<bool>? handler) =>
         el with { OnPaneOpenChanged = handler };
+
+    /// <summary>Reports user resizing of a resizable pane. Passing <c>null</c> clears.</summary>
+    public static SplitViewElement PaneLengthChanged(this SplitViewElement el, Action<double>? handler) =>
+        el with { OnPaneLengthChanged = handler };
 
     /// <summary>Wires the view-changed handler. Inspect <c>args.IsIntermediate</c> to debounce until the scroll settles. Passing <c>null</c> clears.</summary>
     public static ScrollViewerElement ViewChanged(this ScrollViewerElement el, Action<Microsoft.UI.Xaml.Controls.ScrollViewerViewChangedEventArgs>? handler) =>
@@ -351,6 +359,10 @@ public static partial class ElementExtensions
     /// <summary>Wires the item-invoked handler. Passing <c>null</c> clears.</summary>
     public static ItemsViewElement<T> ItemInvoked<T>(this ItemsViewElement<T> el, Action<T>? handler) =>
         el with { OnItemInvoked = handler };
+
+    /// <summary>Reports tail-following state transitions. Passing <c>null</c> clears.</summary>
+    public static ItemsViewElement<T> TailFollowingChanged<T>(this ItemsViewElement<T> el, Action<bool>? handler) =>
+        el with { OnTailFollowingChanged = handler };
 
     /// <summary>
     /// Wires the multi-select snapshot handler. Receives the full list of
