@@ -230,10 +230,29 @@ Some tests here parse repo *sources* with Roslyn rather than exercising Reactor 
 | Test | Fails when |
 |---|---|
 | `GallerySnippetAgreementTests` | A `SampleCard` snippet uses a lowerCamelCase name that does not exist in the live code beside it — the snippet renamed, or the card did and the snippet did not. Direction is snippet → live only: a snippet may omit, it may not invent. |
-| `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. |
+| `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. Also checks [PUA glyph fonts](#pua-glyph-fonts-in-gallery-samples) in live gallery code and displayed snippets. |
 | `SearchIndexGeneratorTests` | `samples/ReactorGallery/reactor-search-index.json` is stale. Regenerate with `dotnet run --project tools/Reactor.SearchIndex`. |
 
 A snippet-agreement failure names the page, line, card title and identifier, and says which of the two sides to move. There is no allowlist: fix the snippet or fix the card.
+
+#### PUA glyph fonts in gallery samples
+
+`PuaStringContent_HasFontFamily` checks string content in `TextBlock`, named
+text styles such as `Body` and `Caption`, and button factories such as
+`Button`, `ToggleButton`, and `HyperlinkButton`. It checks live `ControlPages`
+code and compile-time `SampleCard` snippets for `.FontFamily(...)` on the
+element's own fluent chain. See the [Gallery authoring notes](samples/ReactorGallery/README.md#editing-sample-snippets).
+
+Roslyn resolves compile-time constants in the page's context and skips
+unreachable content in constant conditionals and simple switches. The lint
+checks source, so runtime-generated snippets, runtime font values, and font
+changes through record assignments are outside its scope.
+
+After building the unit-test project, run the PUA checks with:
+
+```powershell
+dotnet test tests/Reactor.Tests --no-build -p:Platform=x64 --filter-class '*GallerySampleLintTests' --filter-method '*Pua*'
+```
 
 ---
 

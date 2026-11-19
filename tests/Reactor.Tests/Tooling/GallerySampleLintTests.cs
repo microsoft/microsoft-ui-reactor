@@ -1,10 +1,13 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Text;
 using Xunit;
 
@@ -12,7 +15,7 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 
 /// <summary>
 /// Source lint for the ReactorGallery sample pages. The gallery is the reference app, so a
-/// card that silently renders nothing teaches the wrong pattern — and the six mistakes
+/// card that silently renders nothing teaches the wrong pattern — and the seven mistakes
 /// guarded here are all statically detectable and all shipped at least once:
 ///
 /// <list type="bullet">
@@ -32,6 +35,8 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// <item>one <c>UseState</c> slot read by two <c>SampleCard</c>s, which makes the cards a
 /// single control mirrored twice — driving one silently retargets the other, and the reader
 /// copying either card out gets a snippet that never worked on its own.</item>
+/// <item>Private Use Area glyphs in text and button factory string content without
+/// <c>.FontFamily(...)</c> on their own chain, including displayed code snippets.</item>
 /// </list>
 ///
 /// Roslyn parses the page sources directly — no gallery build, no WinUI objects, so this
@@ -398,6 +403,418 @@ public sealed class GallerySampleLintTests
         Assert.True(inspectedShapeChains > 0,
             "no shape fluent chains were inspected — the lint would pass vacuously.");
         Assert.True(offenders.Count == 0, string.Join("\n", offenders));
+    }
+
+    // ── PUA text content needs an explicit font, in live code and snippets ───
+
+    [Fact]
+    public void PuaStringContent_HasFontFamily()
+    {
+        var prefix = GallerySources.ControlPagesDir() + global::System.IO.Path.DirectorySeparatorChar;
+        var scan = ScanPuaSources(GallerySources.AllSources(),
+            path => path.StartsWith(prefix, global::System.StringComparison.OrdinalIgnoreCase));
+
+        Assert.True(scan.LiveGlyphs > 0, "no live PUA content was inspected — the lint would pass vacuously.");
+        Assert.True(scan.SnippetGlyphs > 0, "no snippet PUA content was inspected — the lint would miss issue #1019.");
+        Assert.True(scan.Offenders.Count == 0, string.Join("\n", scan.Offenders));
+    }
+
+    static (int LiveGlyphs, int SnippetGlyphs, List<string> Offenders) ScanPuaSources(
+        IReadOnlyList<(string Path, SyntaxNode Root)> sources, Func<string, bool>? inspectPath = null)
+    {
+        var offenders = new List<string>();
+        var liveGlyphs = 0;
+        var snippetGlyphs = 0;
+        int Inspect(SyntaxNode sourceRoot, SemanticModel model, Func<InvocationExpressionSyntax, string> location)
+        {
+            var count = 0;
+            foreach (var (call, isTextBlock) in PuaContentCalls(sourceRoot, model))
+            {
+                count++;
+                if (!HasFontFamilyOnChain(call, isTextBlock, model))
+                    offenders.Add($"{location(call)}: {InvokedName(call)}(...) has PUA string content but no font set by " +
+                                  ".FontFamily(...) on its own chain (issue #1019).");
+            }
+            return count;
+        }
+
+        // Bind supporting files for constants and partial types. Only the selected
+        // pages produce diagnostics.
+        var compilation = PuaCompilation.Value.AddSyntaxTrees(sources.Select(source => source.Root.SyntaxTree));
+        foreach (var (path, root) in sources)
+        {
+            if (inspectPath is not null && !inspectPath(path)) continue;
+            var pageModel = compilation.GetSemanticModel(root.SyntaxTree);
+            liveGlyphs += Inspect(root, pageModel, call => Where(path, call));
+
+            foreach (var card in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                         .Where(call => InvokedName(call) == "SampleCard"))
+            {
+                var args = card.ArgumentList.Arguments;
+                var snippet = args.FirstOrDefault(arg => arg.NameColon?.Name.Identifier.Text == "sourceCode")?.Expression
+                              ?? (args.Count >= 3 && args[2].NameColon is null ? args[2].Expression : null);
+                if (snippet is null || pageModel.GetConstantValue(snippet, TestContext.Current.CancellationToken).Value is not string code)
+                    continue;
+
+                // A typed lambda binds statements at the original argument site,
+                // preserving the page's namespace, imports, types, and locals.
+                var marker = new SyntaxAnnotation();
+                var replacement = SyntaxFactory.ParseExpression("(global::System.Action)(() => {\n" + code + "\n})")
+                    .WithAdditionalAnnotations(marker);
+                var tree = root.SyntaxTree.WithRootAndOptions(root.ReplaceNode(snippet, replacement), root.SyntaxTree.Options);
+                var snippetRoot = tree.GetRoot(TestContext.Current.CancellationToken).GetAnnotatedNodes(marker).Single()
+                    .DescendantNodes().OfType<ParenthesizedLambdaExpressionSyntax>().First().Block!;
+                var snippetModel = compilation.ReplaceSyntaxTree(root.SyntaxTree, tree).GetSemanticModel(tree);
+                var bodyLine = snippetRoot.GetLocation().GetLineSpan().StartLinePosition.Line;
+                snippetGlyphs += Inspect(snippetRoot, snippetModel, call => $"{Where(path, snippet)} (snippet line " +
+                    $"{call.GetLocation().GetLineSpan().StartLinePosition.Line - bodyLine})");
+            }
+        }
+
+        return (liveGlyphs, snippetGlyphs, offenders);
+    }
+
+    static readonly Lazy<CSharpCompilation> PuaCompilation = new(CreatePuaCompilation);
+
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the core library's on-disk Location for Roslyn constant binding. This metadata-based source lint runs in the non-single-file JIT test host, like the source-generator tests.")]
+    static CSharpCompilation CreatePuaCompilation() => CSharpCompilation.Create(
+        "GalleryPuaLint",
+        references: [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+        options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+    static IEnumerable<(InvocationExpressionSyntax Call, bool IsTextBlock)> PuaContentCalls(SyntaxNode root, SemanticModel model)
+    {
+        foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            // Gallery code uses static imports or Factories.Name(...). A fluent
+            // modifier with the same name, such as .Caption(...), is not a factory.
+            var name = call.Expression switch
+            {
+                IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                MemberAccessExpressionSyntax member when RightmostName(member.Expression) == "Factories"
+                    => member.Name.Identifier.ValueText,
+                _ => null,
+            };
+            // String overloads in Dsl.cs and Factories.NamedStyles.cs.
+            (string? contentName, bool isTextBlock) = name switch
+            {
+                "TextBlock" or "Heading" or "SubHeading" or "Caption" or
+                "Title" or "Subtitle" or "Body" or "BodyStrong" or "BodyLarge" or "TitleLarge" or "Display" => ("content", true),
+                "HyperlinkButton" => ("content", false),
+                "Button" or "ToggleButton" or "RepeatButton" or "ThreeStateToggleButton" or
+                "DropDownButton" or "SplitButton" or "ToggleSplitButton" or "RadioButton" => ("label", false),
+                _ => (null, false),
+            };
+            if (contentName is null) continue;
+
+            var args = call.ArgumentList.Arguments;
+            var content = args.FirstOrDefault(arg => arg.NameColon?.Name.Identifier.Text == contentName)?.Expression
+                          ?? (args.Count > 0 && args[0].NameColon is null ? args[0].Expression : null);
+            if (content is not null && HasPuaContent(content, model)) yield return (call, isTextBlock);
+        }
+    }
+
+    // Only follow expressions that contribute text to the content value: a glyph in a
+    // callback, a conditional's test, or Icon(FontIcon(...)) is not raw text content.
+    // Roslyn resolves const references using actual lexical scope, including shadowing.
+    // Runtime variables / helper return values still require data flow and are outside this lint.
+    static bool HasPuaContent(ExpressionSyntax expression, SemanticModel model)
+    {
+        var constant = model.GetConstantValue(expression, TestContext.Current.CancellationToken);
+        if (constant.HasValue)
+        {
+            return constant.Value switch
+            {
+                string text => ContainsPua(text),
+                char glyph => ContainsPua(glyph.ToString()),
+                _ => false,
+            };
+        }
+
+        return expression switch
+        {
+            ParenthesizedExpressionSyntax paren => HasPuaContent(paren.Expression, model),
+            CastExpressionSyntax cast => HasPuaContent(cast.Expression, model),
+            ConditionalExpressionSyntax conditional => ConstantValue(conditional.Condition, model).Value switch
+            {
+                true => HasPuaContent(conditional.WhenTrue, model),
+                false => HasPuaContent(conditional.WhenFalse, model),
+                _ => HasPuaContent(conditional.WhenTrue, model) || HasPuaContent(conditional.WhenFalse, model),
+            },
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.AddExpression)
+                => HasPuaContent(binary.Left, model) || HasPuaContent(binary.Right, model),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.CoalesceExpression)
+                => HasPuaContent(binary.Left, model) ||
+                   (ConstantValue(binary.Left, model).Value is null && HasPuaContent(binary.Right, model)),
+            SwitchExpressionSyntax choice => ReachableSwitchValues(choice, model).Any(value => HasPuaContent(value, model)),
+            InterpolatedStringExpressionSyntax interpolated => interpolated.Contents.Any(part => part switch
+            {
+                InterpolatedStringTextSyntax text => ContainsPua(text.TextToken.ValueText),
+                InterpolationSyntax interpolation => HasPuaContent(interpolation.Expression, model),
+                _ => false,
+            }),
+            _ => false,
+        };
+    }
+
+    static bool ContainsPua(string text) =>
+        text.EnumerateRunes().Any(rune => Rune.GetUnicodeCategory(rune) == UnicodeCategory.PrivateUse);
+
+    static IEnumerable<ExpressionSyntax> ReachableSwitchValues(SwitchExpressionSyntax expression, SemanticModel model)
+    {
+        var input = ConstantValue(expression.GoverningExpression, model);
+        foreach (var arm in expression.Arms)
+        {
+            bool? guard = arm.WhenClause is null ? true : ConstantValue(arm.WhenClause.Condition, model).Value as bool?;
+            if (guard == false) continue;
+
+            var matches = arm.Pattern switch
+            {
+                DiscardPatternSyntax or VarPatternSyntax => true,
+                ConstantPatternSyntax constant when input.HasValue => MatchesConstantPattern(constant, input.Value, model),
+                _ => null, // Keep possible arms when a pattern cannot be decided here.
+            };
+            if (matches == false) continue;
+            yield return arm.Expression;
+            if (matches == true && guard == true) yield break;
+        }
+    }
+
+    static bool? MatchesConstantPattern(ConstantPatternSyntax pattern, object? input, SemanticModel model)
+    {
+        // If Roslyn bound the pattern, use its converted value. In an incomplete
+        // snippet, only compare unconverted literals of matching types.
+        var value = model.GetOperation(pattern, TestContext.Current.CancellationToken) is
+            IConstantPatternOperation { Value.ConstantValue: { HasValue: true } converted }
+            ? converted
+            : ConstantValue(pattern.Expression, model);
+        if (!value.HasValue || (input is not null && value.Value is not null && input.GetType() != value.Value.GetType()))
+            return null;
+        return Equals(input, value.Value);
+    }
+
+    static Microsoft.CodeAnalysis.Optional<object?> ConstantValue(ExpressionSyntax expression, SemanticModel model) => expression switch
+    {
+        LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.NullLiteralExpression) => new Microsoft.CodeAnalysis.Optional<object?>(null),
+        LiteralExpressionSyntax literal when !literal.IsKind(SyntaxKind.DefaultLiteralExpression) => new Microsoft.CodeAnalysis.Optional<object?>(literal.Token.Value),
+        ParenthesizedExpressionSyntax paren => ConstantValue(paren.Expression, model),
+        _ => model.GetConstantValue(expression, TestContext.Current.CancellationToken),
+    };
+
+    static bool HasFontFamilyOnChain(InvocationExpressionSyntax call, bool isTextBlockReceiver, SemanticModel model)
+    {
+        var textBlockFont = false;
+        var modifierFont = false;
+        ExpressionSyntax current = call;
+        while (true)
+        {
+            // Only follow the receiver chain. Fonts on siblings or in arguments
+            // (including callbacks) do not apply to this element.
+            var receiver = AscendTypePreserving(current);
+            if (isTextBlockReceiver && !ReferenceEquals(receiver, current) && HasElementResultType(receiver, model))
+                isTextBlockReceiver = false;
+            current = receiver;
+            switch (current.Parent)
+            {
+                case MemberAccessExpressionSyntax { Parent: InvocationExpressionSyntax invocation } member
+                    when ReferenceEquals(member.Expression, current) && ReferenceEquals(invocation.Expression, member):
+                    if (member.Name.Identifier.ValueText == "FontFamily" && invocation.ArgumentList.Arguments.Count == 1)
+                    {
+                        var hasFont = !IsNullOrDefault(invocation.ArgumentList.Arguments[0].Expression, model);
+                        // The TextBlock overload replaces the font. The generic modifier keeps it on null.
+                        if (isTextBlockReceiver && member.Name is IdentifierNameSyntax)
+                            textBlockFont = hasFont;
+                        else
+                            modifierFont |= hasFont;
+                    }
+                    current = invocation;
+                    break;
+                case WithExpressionSyntax with when ReferenceEquals(with.Expression, current):
+                    current = with;
+                    break;
+                case PostfixUnaryExpressionSyntax suppress when suppress.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    current = suppress;
+                    break;
+                case CastExpressionSyntax cast when ReferenceEquals(cast.Expression, current):
+                    isTextBlockReceiver = RightmostName(cast.Type) == "TextBlockElement";
+                    current = cast;
+                    break;
+                default:
+                    return textBlockFont || modifierFont;
+            }
+        }
+    }
+
+    // A branch typed as Element widens the shared receiver to the base type.
+    static bool HasElementResultType(ExpressionSyntax expression, SemanticModel model) => expression switch
+    {
+        ParenthesizedExpressionSyntax paren => HasElementResultType(paren.Expression, model),
+        CastExpressionSyntax cast => RightmostName(cast.Type) == "Element",
+        ConditionalExpressionSyntax conditional
+            => HasElementResultType(conditional.WhenTrue, model) || HasElementResultType(conditional.WhenFalse, model),
+        BinaryExpressionSyntax coalesce when coalesce.IsKind(SyntaxKind.CoalesceExpression)
+            => HasElementResultType(coalesce.Left, model) || HasElementResultType(coalesce.Right, model),
+        SwitchExpressionSyntax choice => choice.Arms.Any(arm => HasElementResultType(arm.Expression, model)),
+        _ => model.GetTypeInfo(expression, TestContext.Current.CancellationToken).Type?.Name == "Element",
+    };
+
+    static bool IsNullOrDefault(ExpressionSyntax expression, SemanticModel model) => expression switch
+    {
+        ParenthesizedExpressionSyntax paren => IsNullOrDefault(paren.Expression, model),
+        CastExpressionSyntax cast => IsNullOrDefault(cast.Expression, model),
+        PostfixUnaryExpressionSyntax suppress when suppress.IsKind(SyntaxKind.SuppressNullableWarningExpression)
+            => IsNullOrDefault(suppress.Operand, model),
+        ConditionalExpressionSyntax conditional when ConstantValue(conditional.Condition, model).Value is bool condition
+            => IsNullOrDefault(condition ? conditional.WhenTrue : conditional.WhenFalse, model),
+        DefaultExpressionSyntax => true,
+        _ => expression.IsKind(SyntaxKind.NullLiteralExpression) || expression.IsKind(SyntaxKind.DefaultLiteralExpression),
+    };
+
+    [Theory]
+    [InlineData("""TextBlock("\uE930")""", 1)]
+    [InlineData("""TextBlock("")""", 1)]
+    [InlineData("""Button("\uE713", () => {})""", 1)]
+    [InlineData("""Button(onClick: () => {}, label: "\uE713")""", 1)]
+    [InlineData("""Factories.TextBlock(content: "\uE930")""", 1)]
+    [InlineData("""Body("\uE930")""", 1)]
+    [InlineData("""BodyStrong(content: "\uE930")""", 1)]
+    [InlineData("""BodyLarge("\uE930")""", 1)]
+    [InlineData("""Caption("\uE930")""", 1)]
+    [InlineData("""Heading("\uE930")""", 1)]
+    [InlineData("""SubHeading("\uE930")""", 1)]
+    [InlineData("""Title("\uE930")""", 1)]
+    [InlineData("""TitleLarge("\uE930")""", 1)]
+    [InlineData("""Subtitle("\uE930")""", 1)]
+    [InlineData("""Display("\uE930")""", 1)]
+    [InlineData("""ToggleButton(isChecked: true, label: "\uE930")""", 1)]
+    [InlineData("""RepeatButton("\uE930")""", 1)]
+    [InlineData("""Factories.HyperlinkButton(content: "\uE930")""", 1)]
+    [InlineData("""ThreeStateToggleButton("\uE930")""", 1)]
+    [InlineData("""DropDownButton("\uE930")""", 1)]
+    [InlineData("""SplitButton("\uE930")""", 1)]
+    [InlineData("""ToggleSplitButton("\uE930")""", 1)]
+    [InlineData("""RadioButton("\uE930")""", 1)]
+    [InlineData("""Body("\uE930").Margin(4).FontFamily(IconFont)""", 0)]
+    [InlineData("""RepeatButton(Icon(FontIcon("\uE930")))""", 0)]
+    [InlineData("""RatingControl().Caption("\uE930")""", 0)]
+    [InlineData("""TitleBar("Example").Subtitle("\uE930")""", 0)]
+    [InlineData("""TextBlock(flag ? "\uE930" : "OK")""", 1)]
+    [InlineData("""TextBlock(false ? "\uE930" : value)""", 0)]
+    [InlineData("""TextBlock(true ? value : "\uE930")""", 0)]
+    [InlineData("""TextBlock(true ? "\uE930" : value)""", 1)]
+    [InlineData("""TextBlock("OK " + "\uE930")""", 1)]
+    [InlineData("""TextBlock(value ?? "\uE930")""", 1)]
+    [InlineData("""TextBlock("OK" ?? "\uE930")""", 0)]
+    [InlineData("""TextBlock(null ?? "\uE930")""", 1)]
+    [InlineData("""TextBlock($"\uE930 {value}")""", 1)]
+    [InlineData("""TextBlock($"Icon {"\uE930"}")""", 1)]
+    [InlineData("""TextBlock(value switch { true => "\uE930", _ => "OK" })""", 1)]
+    [InlineData("""TextBlock(true switch { true => "OK", _ => "\uE930" })""", 0)]
+    [InlineData("""TextBlock(1L switch { 1 => value, _ => "\uE930" })""", 0)]
+    [InlineData("""TextBlock(false switch { true => "\uE930", _ => value })""", 0)]
+    [InlineData("""TextBlock(false switch { true => "OK", _ => "\uE930" })""", 1)]
+    [InlineData("""TextBlock(true switch { true when flag => value, _ => "\uE930" })""", 1)]
+    [InlineData("""TextBlock(true switch { true when false => "\uE930", _ => value })""", 0)]
+    [InlineData("""TextBlock(@"\uE930")""", 0)] // A verbatim backslash-u is ordinary text.
+    [InlineData("""TextBlock("⚙")""", 0)]
+    [InlineData("""TextBlock("\uDFFF\uF900\U000FFFFE\U0010FFFE")""", 0)]
+    [InlineData("""TextBlock("\uE000")""", 1)]
+    [InlineData("""TextBlock("\uF8FF")""", 1)]
+    [InlineData("""TextBlock("\U000F0000")""", 1)]
+    [InlineData("""TextBlock("\U000FFFFD")""", 1)]
+    [InlineData("""TextBlock("\U00100000")""", 1)]
+    [InlineData("""TextBlock("\U0010FFFD")""", 1)]
+    [InlineData("""TextBlock("\uE930").FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")""", 0)]
+    [InlineData("""TextBlock("\uE930").FontFamily((FontFamily)null!)""", 1)]
+    [InlineData("""TextBlock("\uE930").FontFamily("Segoe Fluent Icons").FontFamily((FontFamily)null!)""", 1)]
+    [InlineData("""Button("\uE930").FontFamily("Segoe Fluent Icons").FontFamily((FontFamily)null!)""", 0)]
+    [InlineData("""TextBlock("\uE930").FontFamily(true ? (FontFamily)null! : new FontFamily("Segoe Fluent Icons"))""", 1)]
+    [InlineData("""TextBlock("\uE930").FontFamily(false ? (FontFamily)null! : new FontFamily("Segoe Fluent Icons"))""", 0)]
+    [InlineData("TextBlock(\"\\uE930\")\n.Margin(4)\n.Foreground(Theme.Accent)\n.FontFamily(IconFont)", 0)]
+    [InlineData("""(TextBlock("\uE930") with { Key = "icon" }).Margin(4).FontFamily(IconFont)""", 0)]
+    [InlineData("""Button(Icon(FontIcon("\uE713")), () => {})""", 0)]
+    [InlineData("""TextBlock(value == "\uE930" ? "Yes" : "No")""", 0)]
+    [InlineData("""Button("OK", () => Log("\uE930"))""", 0)]
+    [InlineData("""HStack(TextBlock("\uE930"), TextBlock("OK").FontFamily(IconFont))""", 1)]
+    [InlineData("""TextBlock("\uE930").ToolTip(TextBlock("OK").FontFamily(IconFont))""", 1)]
+    [InlineData("""TextBlock("\uE930").Set(x => Other().FontFamily(IconFont))""", 1)]
+    public void PuaFontRule_RecognisesContent_AndScopesFontToItsChain(string expression, int expected)
+    {
+        var scan = ScanPuaTestSources($"class C {{ void M() {{ var x = {expression}; }} }}");
+        Assert.Equal(expected, scan.Offenders.Count);
+    }
+
+    const string NamespacedPuaGlyph = """namespace N; static class Icons { public const string Glyph = "\uE930"; }""";
+
+    [Theory]
+    [InlineData("snippet parentheses", """class P { object R() => SampleCard("Card", TextBlock("OK"), (@"TextBlock(""\uE930"")")); }""", 0, 1, 1)]
+    [InlineData("snippet concatenation", """class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(""\uE930"")" + ".Margin(4)"); }""", 0, 1, 1)]
+    [InlineData("snippet constant", """class P { const string Code = @"TextBlock(""\uE930"")"; object R() => SampleCard(sourceCode: Code, title: "Card", sample: TextBlock("OK")); }""", 0, 1, 1)]
+    [InlineData("safe composed snippet", """class P { object R() => SampleCard("Card", TextBlock("OK"), (@"TextBlock(""\uE930"")" + ".FontFamily(IconFont)")); }""", 0, 1, 0)]
+    [InlineData("const inside snippet", """class P { object R() => SampleCard("Card", TextBlock("OK"), @"const string Glyph = ""\uE930""; TextBlock(Glyph);"); }""", 0, 1, 1)]
+    [InlineData("runtime snippet", """class P { object R(string code) => SampleCard("Card", TextBlock("OK"), code); }""", 0, 0, 0)]
+    [InlineData("named style in snippet", """class P { object R() => SampleCard("Card", TextBlock("OK"), @"Body(""\uE930"")"); }""", 0, 1, 1)]
+    [InlineData("untaken glyph in snippet", """class P { object R(string value) => SampleCard("Card", TextBlock("OK"), @"TextBlock(false ? ""\uE930"" : value)"); }""", 0, 0, 0)]
+    [InlineData("constant condition selects the text", """class P { object R(string value) { const bool ShowIcon = false; return TextBlock(ShowIcon ? "\uE930" : value); } }""", 0, 0, 0)]
+    [InlineData("field constant", """class P { const string Glyph = "\uE930"; object R() => TextBlock(Glyph); }""", 1, 0, 1)]
+    [InlineData("local constant", """class P { object R() { const string Glyph = "\uE930"; return TextBlock(Glyph); } }""", 1, 0, 1)]
+    [InlineData("qualified constant chain", """class Icons { public const string Glyph = Mail; const string Mail = "\uE930"; } class P { object R() => TextBlock(Icons.Glyph); }""", 1, 0, 1)]
+    [InlineData("enclosing local constant", """class P { object R() { const string Glyph = "\uE930"; { return TextBlock(Glyph); } } }""", 1, 0, 1)]
+    [InlineData("safe constant font", """class P { const string Glyph = "\uE930"; object R() => TextBlock(Glyph).FontFamily(IconFont); }""", 1, 0, 0)]
+    [InlineData("parameter shadows field", """class P { const string Glyph = "\uE930"; object R(string Glyph) => TextBlock(Glyph); }""", 0, 0, 0)]
+    [InlineData("local shadows field", """class P { const string Glyph = "\uE930"; object R() { const string Glyph = "OK"; return TextBlock(Glyph); } }""", 0, 0, 0)]
+    [InlineData("runtime local shadows field", """class P { const string Glyph = "\uE930"; object R(string value) { var Glyph = value; return TextBlock(Glyph); } }""", 0, 0, 0)]
+    [InlineData("sibling constant is invisible", """class P { const string Glyph = "OK"; object R() { { const string Glyph = "\uE930"; } return TextBlock(Glyph); } }""", 0, 0, 0)]
+    [InlineData("lambda parameter shadows field", """class P { const string Glyph = "\uE930"; System.Func<string, object> R() => Glyph => TextBlock(Glyph); }""", 0, 0, 0)]
+    [InlineData("conditional shared font", """class P { object R(bool flag) => (flag ? TextBlock("\uE930") : TextBlock("OK")).FontFamily(IconFont); }""", 1, 0, 0)]
+    [InlineData("conditional Element receiver keeps its font on null", """class P { object R(bool flag) => (flag ? TextBlock("\uE930").FontFamily("Segoe Fluent Icons") : (Element)Button("OK")).FontFamily((FontFamily)null!); }""", 1, 0, 0)]
+    [InlineData("coalesce shared font", """class P { object R() => (Other() ?? TextBlock("\uE930")).FontFamily(IconFont); }""", 1, 0, 0)]
+    [InlineData("switch shared font", """class P { object R(bool flag) => (flag switch { true => TextBlock("\uE930"), _ => TextBlock("OK") }).FontFamily(IconFont); }""", 1, 0, 0)]
+    [InlineData("conditional sibling font", """class P { object R(bool flag) => flag ? TextBlock("\uE930") : TextBlock("OK").FontFamily(IconFont); }""", 1, 0, 1)]
+    [InlineData("condition is not a result", """class P { object R() => (Check(TextBlock("\uE930")) ? TextBlock("Yes") : TextBlock("No")).FontFamily(IconFont); }""", 1, 0, 1)]
+    // Supporting files and partial types.
+    [InlineData("external glyph", """namespace N; class P { object R() => TextBlock(Icons.Glyph); }""", 1, 0, 1, NamespacedPuaGlyph)]
+    [InlineData("partial glyph", """partial class P { object R() => TextBlock(Glyph); }""", 1, 0, 1, """partial class P { const string Glyph = "\uE930"; }""")]
+    [InlineData("external constant chain", """class P { const string Glyph = Icons.Glyph; object R() => TextBlock(Glyph); }""", 1, 0, 1, """static class Icons { public const string Glyph = "\uE930"; }""")]
+    [InlineData("external snippet", """class P { object R() => SampleCard("Card", TextBlock("OK"), Snippets.Code); }""", 0, 1, 1, """static class Snippets { public const string Code = @"TextBlock(""\uE930"")"; }""")]
+    [InlineData("partial snippet", """partial class P { object R() => SampleCard("Card", TextBlock("OK"), Code); }""", 0, 1, 1, """partial class P { const string Code = @"TextBlock(""\uE930"")"; }""")]
+    [InlineData("ordinary external constant", """class P { object R() => TextBlock(Icons.Glyph); }""", 0, 0, 0, """static class Icons { public const string Glyph = "OK"; }""")]
+    [InlineData("partial field is shadowed", """partial class P { object R(string Glyph) => TextBlock(Glyph); }""", 0, 0, 0, """partial class P { const string Glyph = "\uE930"; }""")]
+    [InlineData("partial field is locally shadowed", """partial class P { object R() { const string Glyph = "OK"; return TextBlock(Glyph); } }""", 0, 0, 0, """partial class P { const string Glyph = "\uE930"; }""")]
+    [InlineData("external glyph has font", """class P { object R() => TextBlock(Icons.Glyph).FontFamily(IconFont); }""", 1, 0, 0, """static class Icons { public const string Glyph = "\uE930"; }""")]
+    // The snippet binds in the enclosing page's scope.
+    [InlineData("namespace context", """namespace N; class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Icons.Glyph)"); }""", 0, 1, 1, NamespacedPuaGlyph)]
+    [InlineData("using context", """using N; class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Icons.Glyph)"); }""", 0, 1, 1, NamespacedPuaGlyph)]
+    [InlineData("alias context", """using Glyphs = N.Icons; class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyphs.Glyph)"); }""", 0, 1, 1, NamespacedPuaGlyph)]
+    [InlineData("static using context", """using static N.Icons; class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyph)"); }""", 0, 1, 1, NamespacedPuaGlyph)]
+    [InlineData("private field context", """class P { const string Glyph = "\uE930"; object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyph)"); }""", 0, 1, 1)]
+    [InlineData("partial type context", """namespace N; partial class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyph)"); }""", 0, 1, 1, """namespace N; partial class P { const string Glyph = "\uE930"; }""")]
+    [InlineData("enclosing type context", """class Outer { const string Glyph = "\uE930"; class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyph)"); } }""", 0, 1, 1)]
+    [InlineData("local constant context", """class P { object R() { const string Glyph = "\uE930"; return SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyph)"); } }""", 0, 1, 1)]
+    [InlineData("snippet local shadows field", """class P { const string Glyph = "\uE930"; object R() => SampleCard("Card", TextBlock("OK"), @"const string Glyph = ""OK""; TextBlock(Glyph);"); }""", 0, 0, 0)]
+    [InlineData("page parameter shadows field", """class P { const string Glyph = "\uE930"; object R(string Glyph) => SampleCard("Card", TextBlock("OK"), @"TextBlock(Glyph)"); }""", 0, 0, 0)]
+    [InlineData("snippet parameter shadows field", """class P { const string Glyph = "\uE930"; object R() => SampleCard("Card", TextBlock("OK"), @"System.Func<string, object> f = Glyph => TextBlock(Glyph);"); }""", 0, 0, 0)]
+    [InlineData("contextual glyph has font", """namespace N; class P { object R() => SampleCard("Card", TextBlock("OK"), @"TextBlock(Icons.Glyph).FontFamily(IconFont)"); }""", 0, 1, 0, NamespacedPuaGlyph)]
+    public void PuaFontRule_UsesPageAndSnippetContext(string scenario, string page, int live, int snippets, int offenders,
+        string? supportingSource = null)
+    {
+        var scan = ScanPuaTestSources(page, supportingSource);
+        Assert.True((live, snippets, offenders) == (scan.LiveGlyphs, scan.SnippetGlyphs, scan.Offenders.Count),
+            $"{scenario}: expected {(live, snippets, offenders)}, got {(scan.LiveGlyphs, scan.SnippetGlyphs, scan.Offenders.Count)}");
+    }
+
+    static (int LiveGlyphs, int SnippetGlyphs, List<string> Offenders) ScanPuaTestSources(string page, string? supportingSource = null)
+    {
+        var sources = supportingSource is null ? new[] { page } : new[] { supportingSource, page };
+        var repoRoot = GallerySources.RepoRoot();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        return ScanPuaSources(sources.Select((source, index) =>
+        {
+            var path = global::System.IO.Path.Join(repoRoot, $"PuaTestSource{index}.cs");
+            var tree = CSharpSyntaxTree.ParseText(source, path: path, cancellationToken: cancellationToken);
+            Assert.Empty(tree.GetDiagnostics(cancellationToken));
+            return (path, tree.GetRoot(cancellationToken));
+        }).ToArray());
     }
 
     // ── AnimatedIcon must actually be driven ─────────────────────────────────

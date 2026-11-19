@@ -52,7 +52,7 @@ class CardPage : Component
                 ).Width(360),
                 sourceCode: @"Card(
     HStack(12,
-        Border(TextBlock("""")...)   // 1. icon
+        Border(TextBlock("""").FontFamily(""Segoe Fluent Icons, Segoe MDL2 Assets"")...)   // 1. icon
             .Background(Theme.SubtleFill)
             .CornerRadius(20).Width(40).Height(40),
         VStack(4,
