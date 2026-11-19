@@ -24,6 +24,10 @@ namespace Microsoft.UI.Reactor.Core;
 /// <c>Default</c> dictionary and the Windows contrast themes.</para>
 /// <para>UI thread only. The styles are cached per thread because XAML objects belong to the
 /// thread that created them.</para>
+/// <para>The XamlReader-parsed style is there because stable WinUI has no code API for a
+/// <c>{ThemeResource}</c> reference. <c>FrameworkElement.SetThemeResourceBinding</c>
+/// (microsoft/microsoft-ui-xaml#11229) is that API, but it is still experimental. Once a stable
+/// Windows App SDK ships it, call it on the probe border instead and drop the style cache.</para>
 /// </remarks>
 internal static class ThemeResourceProbe
 {
