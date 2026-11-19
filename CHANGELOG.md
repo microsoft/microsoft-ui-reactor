@@ -45,6 +45,10 @@ Conventions for contributors:
   invocations avoid those allocations, including unchanged values; callback identity,
   equality checks, and cross-thread dispatch behavior are unchanged (issue #659).
 
+- `UsePersisted` setters also defer marshaling closures until an off-thread call
+  needs the UI dispatcher. UI-thread writes avoid these allocations without changing
+  equality checks, callback identity, or save-on-unmount scope behavior (issue #659).
+
 - Avoid redundant element copies when assigning keys in built-in component factories,
   DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
   supplied key is already the same string reference. Different key references still
