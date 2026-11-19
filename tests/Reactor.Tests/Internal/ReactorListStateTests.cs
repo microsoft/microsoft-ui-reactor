@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using Microsoft.UI.Reactor.Core.Internal;
 using Xunit;
 
@@ -124,6 +125,64 @@ public class ReactorListStateTests
         state.SetKeySnapshotEnabled(false);
         Assert.Null(state.KeySnapshot);
         Assert.Equal(["c", "a", "b", "d"], state.LastKeys);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Live_Keys_Remove_And_Reinsert_At_Either_End(bool removeHead)
+    {
+        string[] initial = ["a", "b", "c"];
+        string[] survivors = removeHead ? ["b", "c"] : ["a", "b"];
+        int removedIndex = removeHead ? 0 : 2;
+        string removedKey = initial[removedIndex];
+        var state = new ReactorListState();
+        state.SetKeySnapshotEnabled(false);
+        state.Reset(initial.Select((key, index) => (index, key)));
+        var originalRows = state.ByKey.ToDictionary();
+        var events = new List<NotifyCollectionChangedEventArgs>();
+        state.Source.CollectionChanged += (_, e) => events.Add(e);
+
+        var removed = KeyedListDiff.Apply(state, survivors, static (key, _) => key);
+
+        Assert.False(removed.Bailout);
+        Assert.Equal((0, 1, 0), (removed.Inserts, removed.Removes, removed.Moves));
+        Assert.False(state.ByKey.ContainsKey(removedKey));
+        Assert.Equal(survivors, state.LastKeys);
+        var removeEvent = Assert.Single(events);
+        Assert.Equal(NotifyCollectionChangedAction.Remove, removeEvent.Action);
+        Assert.Equal(removedIndex, removeEvent.OldStartingIndex);
+        Assert.NotNull(removeEvent.OldItems);
+        Assert.Same(originalRows[removedKey], Assert.Single(removeEvent.OldItems.Cast<ReactorRow>()));
+        for (int i = 0; i < survivors.Length; i++)
+        {
+            Assert.Same(originalRows[survivors[i]], state.Source[i]);
+            Assert.Same(state.Source[i], state.ByKey[survivors[i]]);
+            Assert.Equal(i, state.Source[i].Index);
+        }
+
+        events.Clear();
+        var inserted = KeyedListDiff.Apply(state, initial, static (key, _) => key);
+
+        Assert.False(inserted.Bailout);
+        Assert.Equal((1, 0, 0), (inserted.Inserts, inserted.Removes, inserted.Moves));
+        Assert.Equal(initial, state.LastKeys);
+        Assert.Equal(initial.Length, state.ByKey.Count);
+        Assert.NotSame(originalRows[removedKey], state.ByKey[removedKey]);
+        var addEvent = Assert.Single(events);
+        Assert.Equal(NotifyCollectionChangedAction.Add, addEvent.Action);
+        Assert.Equal(removedIndex, addEvent.NewStartingIndex);
+        Assert.NotNull(addEvent.NewItems);
+        Assert.Same(state.ByKey[removedKey], Assert.Single(addEvent.NewItems.Cast<ReactorRow>()));
+        for (int i = 0; i < initial.Length; i++)
+        {
+            Assert.Equal(initial[i], state.Source[i].Key);
+            Assert.Equal(i, state.Source[i].Index);
+            Assert.Same(state.Source[i], state.ByKey[initial[i]]);
+            if (initial[i] != removedKey)
+                Assert.Same(originalRows[initial[i]], state.Source[i]);
+        }
+        Assert.Null(state.KeySnapshot);
     }
 
     [Fact]
