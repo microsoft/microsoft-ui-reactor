@@ -140,7 +140,8 @@ The child walk is bounded at depth 16 / 256 peers and reports truncation; absenc
 in a truncated tree is not proof of absence. It does not construct a replacement
 peer, add an adapter, change the existing depth-4 acceptance search, or upgrade a
 blocked `uia-value-patterns` result. Selection is assigned programmatically and
-restored, not driven through physical input.
+restored, not driven through physical input. The Reactor capture is also saved
+as `segmented-uia.txt` beside its `results.jsonl`, independently of console capture.
 
 Headless preparation (no application launch):
 
@@ -164,6 +165,14 @@ the comparison. The filtered Reactor run additionally executes its existing
 property, programmatic-focus and render-capture scenarios; it does not inject
 physical input. Exit 2 for blocked coverage remains non-success.
 
+For independent cross-process inspection, use `--inspect <new-log-path>` instead
+of `--run`. After the same automatic capture and ListView positive control, it
+keeps all three controls visible with distinct automation IDs. Its two buttons
+assign index 0 / List or index 1 / Grid to every control and log the actual native
+indices. Observe the selection state through the independent UIA client, not the
+status label alone. Close the diagnostic window to finish and release the slot.
+This mode remains open until closed and is not an unattended matrix lane.
+
 Compare `native-segmented-strings` against `sample-mappings` at both indices.
 If only the deeper walk or EventsSource reveals providers, investigate that
 specific path before changing the harness. If only Reactor differs, investigate
@@ -173,6 +182,26 @@ but still needs a read-only cross-process UIA inspection before an upstream
 report. In-process peer enumeration alone does not establish what a screen reader
 can observe. Preserve the resolved assets, exact source revision and binary hashes
 with both captures. A future runtime result must not be inferred from a build.
+
+The November 18-19, 2026 JIT/unpackaged comparison for #1599 resolved Toolkit
+`8.3.260402-preview2` and WinUI `2.2.1` (Windows App SDK `2.2.0`). Stock ListView
+exposed `ListViewAutomationPeer` Selection and `ListViewItemDataAutomationPeer`
+SelectionItem; all three item identities matched at both indices. Both direct
+Segmented forms and the Reactor mapping instead exposed a
+`FrameworkElementAutomationPeer` with class `NamedContainerAutomationPeer` /
+role Group and `ListViewItemAutomationPeer` children. No Selection or
+SelectionItem provider or container EventsSource was present. Each public tree
+contained seven peers with no truncation.
+
+An independent Computer Use UIA read then showed ListView's selected row changing
+List -> Grid -> List while neither native Segmented form exposed selected-item
+state. The diagnostic log confirmed all three native indices changed together.
+This identifies a native accessibility gap for those versions, rather than a
+Reactor mapping failure. The SDK Inspect executable required elevation and was
+not run; no Inspect property export or screen-reader announcement is claimed.
+The issue artifact preserves the version-pinned evidence. The compatibility
+scenario remains **blocked**, not passed or inapplicable; no replacement peer is
+installed. Retest the native comparison after a Toolkit/WinUI upgrade.
 
 ## Running
 

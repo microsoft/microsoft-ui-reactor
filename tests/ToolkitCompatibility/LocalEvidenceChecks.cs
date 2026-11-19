@@ -62,8 +62,10 @@ internal static class LocalEvidenceChecks
                 break;
             case Wct.Segmented segmented:
                 // Diagnostic parity with the standalone native probe does not clear this scenario.
-                await SegmentedUiaDiagnostics.CaptureAsync(segmented, "sample-mappings",
-                    Program.Results.Note, CompatibilityRoot.WaitAsync);
+                using (var diagnostic = new StreamWriter(
+                    Path.Combine(Path.GetDirectoryName(Program.Options.Output)!, "segmented-uia.txt")) { AutoFlush = true })
+                    await SegmentedUiaDiagnostics.CaptureAsync(segmented, "sample-mappings",
+                        message => { Program.Results.Note(message); diagnostic.WriteLine(message); }, CompatibilityRoot.WaitAsync);
                 // The root peer can be a named container without a Selection pattern, so selection
                 // identity is read from each item's SelectionItem provider.
                 var selection = peer?.GetPattern(PatternInterface.Selection) as ISelectionProvider;
