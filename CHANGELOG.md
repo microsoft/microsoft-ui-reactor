@@ -185,6 +185,16 @@ Conventions for contributors:
   `Chart()` builder's line and area charts skip non-finite points, leaving a gap.
   Malformed `PathIcon(...)` markup still throws, as before (PR #1622).
 
+- **The documentation site is now built with Blume instead of MkDocs.** Material for MkDocs
+  is no longer developed, so the site at <https://microsoft.github.io/microsoft-ui-reactor/>
+  moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
+  project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
+  Old page URLs redirect to their new location and every heading keeps its anchor, so
+  existing links keep working. Versions published before the move stay as they were, and
+  their version selector still lists newer versions. `docs/_website/scripts/publish.mjs`
+  replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
+  the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
+
 ### Deprecated
 
 ### Removed

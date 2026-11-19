@@ -501,11 +501,13 @@ these rules:
   by order number so readers can follow the learning path linearly.
 - **Link format.** Use relative `.md` paths: `[Getting Started](getting-started.md)`.
   Do not use absolute paths or `screenshot://` syntax for page links.
-- **Validate with `--strict`.** Before submitting, run `python -m mkdocs build --strict`
-  locally. The GitHub Pages publish *and* the PR CI both build with `--strict`, so any
-  broken cross-link or missing heading anchor aborts the build. Always link to a target
-  that exists; never rely on the non-strict build tolerating a dangling link, and never
-  silence the check — fix the link or the anchor.
+- **Build the site strictly.** Before submitting, run `npm ci` once, then
+  `npm run site` and `npm run validate` in `docs/_website` (Node 22.23.4 or newer).
+  The GitHub Pages publish *and* the PR CI both build strictly, so any broken
+  cross-link, missing heading anchor, or page missing from `docs/_website/nav.json`
+  aborts the build. Always link to a target that exists; never rely on a lenient
+  build tolerating a dangling link, and never silence the check — fix the link or
+  the anchor.
 
 **Topic order for sequential navigation:** see the full 64-page index in
 the "Topic Ideas" table at the bottom of this file. Authors should always
@@ -922,4 +924,4 @@ doc to link from a reference page into the conceptual guide.
 - [ ] Page has a `## Next Steps` section with links to related and sequential topics
 - [ ] Readme links to all topic pages; all pages are reachable via link traversal
 - [ ] Run `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only` to check all references resolve
-- [ ] Run `python -m mkdocs build --strict` — the publish step and PR CI both use it; a broken cross-link or missing heading anchor aborts the build. Fix the link, don't silence the check.
+- [ ] Run `npm run site` and `npm run validate` in `docs/_website` — the publish step and PR CI both build strictly; a broken cross-link, missing heading anchor, or page missing from `nav.json` aborts the build. Fix the link, don't silence the check.

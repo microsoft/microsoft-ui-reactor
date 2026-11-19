@@ -142,10 +142,10 @@ export function selectProbeTargets(expectedVersions, publishedVersions = []) {
 }
 
 /**
- * The version or alias a mike-generated site root forwards to, or null when the
+ * The version or alias the generated site root forwards to, or null when the
  * document does not look like one.
  *
- * Parsed rather than substring-matched. `set-default` writes the target into a
+ * Parsed rather than substring-matched. The publish script writes the target into a
  * `location.replace(...)` call and a `<noscript>` meta refresh, but the same
  * document also contains a human-visible `<a href="...">`. A contains() check
  * would accept a root that redirects to `not-latest/` (which contains
@@ -172,7 +172,7 @@ function normaliseTarget(target) {
 /**
  * The version or alias the site root should redirect to.
  *
- * mike's `set-default` writes a root index.html that forwards to whichever
+ * docs/_website/scripts/publish.mjs writes a root index.html that forwards to whichever
  * version or alias is default — `latest` once any release exists, and `main`
  * during the window before the first one. Returns null when neither is
  * published, because the workflow's own fallback is ambiguous there and a
@@ -204,7 +204,7 @@ export function evaluate({
 
   // --- The per-run oracle. ---------------------------------------------
   // Comparing the live version list alone is vacuous for a `main` push:
-  // `mike deploy main` republishes an existing version, so the version *set*
+  // publishing `main` again republishes an existing version, so the version *set*
   // is unchanged and the comparison passes whether or not this run's
   // deployment ever landed. The stamp is what makes the check mean something
   // on every trigger.
@@ -294,7 +294,8 @@ export function evaluate({
     }
   }
 
-  // The publishing steps and mike produce these two lists independently, so a
+  // The workflow's publishing steps and the versions.json the publish script
+  // writes produce these two lists independently, so a
   // name in one and not the other means the run does not know what it wrote.
   // The workflow fails earlier on this, which makes reaching it here a sign
   // that the earlier guard was bypassed rather than a routine outcome.
@@ -309,7 +310,7 @@ export function evaluate({
     });
   }
 
-  // The URL readers actually land on. mike writes it only via `set-default`,
+  // The URL readers actually land on. Only the publish script writes it,
   // and it is the one page no version directory covers, so a stale or broken
   // root is invisible to every other check here.
   const rootTarget = expectedRootTarget(expectedVersions);
@@ -328,7 +329,7 @@ export function evaluate({
             kind: "root-unparseable",
             message:
               "The site root responded 200 but carries no recognisable redirect. " +
-              "`mike set-default` writes one, so a root without it sends readers nowhere.",
+              "The publish script writes one, so a root without it sends readers nowhere.",
           });
         } else if (actual !== rootTarget) {
           failures.push({
@@ -452,7 +453,7 @@ async function observe(baseUrl, expectedVersions, publishedVersions, deps) {
     { key: "stamp", path: STAMP_PATH },
     { key: "versions", path: VERSIONS_PATH },
     { key: "root", path: ROOT_INDEX_PATH },
-    // `mike deploy --alias-type copy` publishes `latest/` as its own tree, and
+    // The publish script builds `latest/` as its own tree, and
     // the site root forwards there, so a missing `latest/index.html` 404s every
     // reader arriving at the bare URL. Probing the version that *owns* the
     // alias does not cover it: they are separate directories.

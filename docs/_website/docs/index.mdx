@@ -1,0 +1,64 @@
+---
+title: Reactor
+description: Build native Windows apps in pure C#. No XAML, no data binding, no view models. Describe your UI as a function of state, and Reactor keeps the screen in sync.
+sidebar:
+  label: Overview
+  icon: house
+---
+
+<CardGroup cols={2}>
+  <Card title="Get started" href="/getting-started" icon="rocket" cta="Build your first app">
+    Create a project, add state, and ship a small todo app in about ten minutes.
+  </Card>
+  <Card title="Coming from XAML" href="/xaml-developers" icon="arrow-left-right" cta="Read the guide">
+    Map bindings, MVVM, styles, and navigation to their Reactor versions.
+  </Card>
+</CardGroup>
+
+## A complete app in one file
+
+```csharp
+class Counter : Component
+{
+    public override Element Render()
+    {
+        var (count, setCount) = UseState(0);
+
+        return HStack(8,
+            Button("- 1", () => setCount(count - 1)),
+            TextBlock($"{count}").FontSize(20).SemiBold(),
+            Button("+ 1", () => setCount(count + 1))
+        ).Padding(24);
+    }
+}
+```
+
+When `count` changes, Reactor calls `Render()` again, compares the new tree with the old one, and updates only the WinUI controls that changed.
+
+## Why Reactor
+
+<CardGroup cols={2}>
+  <Card title="Pure C#" icon="code">
+    Layout, styling, state, and logic all live in `.cs` files. No markup, no code-behind.
+  </Card>
+  <Card title="Declarative rendering" icon="layers">
+    Return your UI from `Render()`. Reactor diffs the tree and patches only what changed.
+  </Card>
+  <Card title="Hooks for state" icon="anchor">
+    `UseState`, `UseReducer`, and `UseEffect` give you React-style state in C#.
+  </Card>
+  <Card title="Native WinUI 3" icon="monitor">
+    Real WinUI controls. No web view, no Electron, no interpreter.
+  </Card>
+</CardGroup>
+
+## Explore the docs
+
+<CardGroup cols={3}>
+  <Card title="Components" href="/components" icon="box">Props, composition, and function components.</Card>
+  <Card title="Hooks" href="/hooks" icon="anchor">State, effects, memoization, and refs.</Card>
+  <Card title="Layout" href="/layout" icon="layout-grid">Stacks, grids, flex, and responsive layout.</Card>
+  <Card title="Controls" href="/controls" icon="mouse-pointer-click">Every WinUI control, with a picture of each.</Card>
+  <Card title="Recipes" href="/recipes" icon="chef-hat">Login, master-detail, command palette, and more.</Card>
+  <Card title="Under the hood" href="/internals/architecture-overview" icon="cpu">How the reconciler and runtime work.</Card>
+</CardGroup>
