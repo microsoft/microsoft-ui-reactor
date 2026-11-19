@@ -83,10 +83,10 @@ public sealed partial class Reconciler
         // re-applies a ThemeRef-backed ResourceOverride — its CONCRETE brush depends on
         // the effective theme, which can change independently of the element tree (e.g.
         // a parent RequestedTheme toggle), so it must be re-resolved. ThemeBindings are
-        // ALSO re-applied here but no longer strictly need to be: their {ThemeResource}
-        // setters self-heal natively (which is why the CHILD-level CanSkipUpdate /
-        // container-skip gates no longer decline for them) — the re-apply is a cheap
-        // cached-Style no-op retained for the element-level path.
+        // ALSO re-applied here but no longer strictly need to be: their live theme-resource
+        // bindings self-heal natively (which is why the CHILD-level CanSkipUpdate /
+        // container-skip gates no longer decline for them) — the re-apply is a no-op while
+        // the binding is still in place, retained for the element-level path.
         // ReferenceEquals would fail constantly because fluent chains like
         // .Width(200).Margin(10) produce a fresh ElementModifiers each render —
         // identical values, new instance. Use structural equality so we skip
@@ -122,7 +122,7 @@ public sealed partial class Reconciler
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
-                ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
+                ApplyThemeBindings(thFeSE, newEl.ThemeBindings, modifiers, _resourceRefreshActive);
             // Re-resolve ThemeRef-based resource overrides on theme change, against the
             // ancestor-aware effective theme (lag-free vs. fe's own ActualTheme view).
             if (newEl.ResourceOverrides is { ThemeRefs.Count: > 0 } && control is FrameworkElement resFeSE)
@@ -149,17 +149,16 @@ public sealed partial class Reconciler
         }
 
         // Issue #522 — when the element transitions away from ThemeBindings,
-        // drop the synthesized themed Style we wrote on the previous render.
+        // clear the theme bindings we installed on the previous render.
         // Without this, e.g. the red Foreground from .Foreground(ThemeRef(
         // "SystemFillColorCriticalBrush")) on an AsyncValue Error arm bleeds
         // into the next Loading / Data arm on the recycled control.
         //
-        // Ownership is tracked via an attached DP storing the Style instance
-        // we wrote (see ReactorAppliedThemeStyleProperty); we deliberately
-        // avoid ConditionalWeakTable per-FrameworkElement tracking (fragile
-        // under RCW churn) and we avoid forcing a fresh Mount (would
-        // needlessly lose subtree state for container elements like
-        // .Background(ThemeRef(...)) on a VStack).
+        // Ownership is tracked on the control's ReactorState (the properties
+        // and keys we bound); we deliberately avoid ConditionalWeakTable
+        // per-FrameworkElement tracking (fragile under RCW churn) and we avoid
+        // forcing a fresh Mount (would needlessly lose subtree state for
+        // container elements like .Background(ThemeRef(...)) on a VStack).
         if (oldEl.ThemeBindings is not null && newEl.ThemeBindings is null
             && control is FrameworkElement clearThFe)
         {
@@ -394,9 +393,10 @@ public sealed partial class Reconciler
                 ResolveCaptionForElement(oldEl),
                 ResolveCaptionForElement(newEl));
 
-        // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
+        // Apply theme-resource bindings (ThemeRef → live {ThemeResource}-equivalent binding).
+        // After modifiers and setters, which it must not override (see ApplyThemeBindings).
         if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, newEl.ThemeBindings);
+            ApplyThemeBindings(thFe, newEl.ThemeBindings, modifiers, _resourceRefreshActive);
 
         // Apply per-control resource overrides (lightweight styling)
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)

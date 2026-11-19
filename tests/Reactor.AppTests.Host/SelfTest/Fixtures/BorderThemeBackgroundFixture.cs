@@ -215,9 +215,11 @@ internal sealed class BorderThemeBackgroundFixture(Harness h, bool reuse) : Self
                 var current = Find();
                 var local = current.ReadLocalValue(WinUI.Border.BackgroundProperty);
                 Console.WriteLine($"# {prefix}_{phase}: background={ColorOf(current)}; local={local ?? "null"}; theme={current.ActualTheme}");
+                // The ThemeRef is a live theme-resource binding at local precedence, so the local
+                // value is the brush it resolved; the color tells it apart from the concrete brushes.
                 H.Check(prefix + "_" + phase, ReferenceEquals(current, original)
-                    && ColorOf(current) == expected && current.Style is not null
-                    && ReferenceEquals(local, DependencyProperty.UnsetValue));
+                    && ColorOf(current) == expected
+                    && local is SolidColorBrush bound && bound.Color == expected);
             }
         }
         finally

@@ -61,6 +61,16 @@ Conventions for contributors:
   no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
   (devtools) covers the same two controls.
 
+- **`ThemeRef` bindings (`.Background(ThemeRef)`, `.Foreground(ThemeRef)`, `.BorderBrush(ThemeRef)`,
+  `.WithBorder(ThemeRef)`) no longer replace the control's `Style`.** Reactor used to build a
+  `{ThemeResource}` Style from a XAML string and assign it, which overwrote any Style the app set.
+  It now binds each property with `FrameworkElement.SetThemeResourceBinding`, the code
+  equivalent of `{ThemeResource}`, so an app Style keeps applying its other setters. The binding
+  still follows Light/Dark, high contrast and an ancestor `RequestedTheme`, and an explicit brush
+  (`.Background(brush)`, a `.Set` setter, an element property) still wins over the ThemeRef. The
+  bound value is now a local value, so `ReadLocalValue` reports the resolved brush where it used
+  to report unset. Requires the experimental Windows App SDK channel, like #1125.
+
 ### Deprecated
 
 ### Removed
