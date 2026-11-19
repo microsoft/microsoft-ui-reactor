@@ -204,4 +204,37 @@ internal static class ThemeResourceBindingFixtures
                 $"fg={ColorOf(light?.Foreground)} actual={light?.ActualTheme}");
         });
     }
+
+    /// <summary>
+    /// InteractionStates writes the hover brush over the binding; returning to Normal must
+    /// re-install the binding rather than the brush captured at setup, which would freeze the
+    /// background at the theme it had then.
+    /// </summary>
+    internal sealed class InteractionStatesRestoreKeepsBindingLive(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrbHoverBrush", async host =>
+        {
+            var hover = new SolidColorBrush(HoverColor);
+            host.Mount(_ => VStack(
+                Border(TextBlock("trb-hover"))
+                    .Background(new ThemeRef("TrbHoverBrush"))
+                    .InteractionStates(s => s.PointerOver(background: hover))).RequestedTheme(ElementTheme.Light));
+            await Harness.Render();
+
+            var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-hover" });
+            H.Check("ThemeResourceBinding_Hover_Present", border is not null);
+            if (border is null) return;
+            H.Check("ThemeResourceBinding_Hover_NormalIsTheme", ColorOf(border.Background) == LightColor);
+
+            Reconciler.SimulatePointerOverForTests(border, isOver: true);
+            H.Check("ThemeResourceBinding_Hover_HoverBrush", ReferenceEquals(border.Background, hover));
+            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            H.Check("ThemeResourceBinding_Hover_NormalRestored", ColorOf(border.Background) == LightColor);
+
+            ((FrameworkElement)VisualTreeHelper.GetParent(border))!.RequestedTheme = ElementTheme.Dark;
+            H.Check("ThemeResourceBinding_Hover_BindingLiveAfterRestore",
+                await Harness.WaitFor(() => ColorOf(border.Background) == DarkColor),
+                $"bg={ColorOf(border.Background)}");
+        });
+    }
 }

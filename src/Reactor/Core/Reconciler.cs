@@ -6126,22 +6126,32 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
 
-        // Brush properties — direct set
+        // Brush properties — direct set. A property returning to its normal value that Reactor
+        // theme-binds gets its binding back rather than the brush captured at setup, which would
+        // freeze it at the theme it had then.
         if (uie is FrameworkElement fe)
         {
-            var bg = values?.Background ?? tracker.NormalBackground;
-            if (bg is not null)
+            var bg = values?.Background;
+            if (bg is not null || !TryRestoreThemeBinding(fe, "Background"))
             {
-                if (fe is WinUI.Panel p) p.Background = bg;
-                else if (fe is WinUI.Control c) c.Background = bg;
-                else if (fe is WinUI.Border b) b.Background = bg;
+                bg ??= tracker.NormalBackground;
+                if (bg is not null)
+                {
+                    if (fe is WinUI.Panel p) p.Background = bg;
+                    else if (fe is WinUI.Control c) c.Background = bg;
+                    else if (fe is WinUI.Border b) b.Background = bg;
+                }
             }
 
-            var fg = values?.Foreground ?? tracker.NormalForeground;
-            if (fg is not null)
+            var fg = values?.Foreground;
+            if (fg is not null || !TryRestoreThemeBinding(fe, "Foreground"))
             {
-                if (fe is WinUI.Control c) c.Foreground = fg;
-                else if (fe is TextBlock tb) tb.Foreground = fg;
+                fg ??= tracker.NormalForeground;
+                if (fg is not null)
+                {
+                    if (fe is WinUI.Control c) c.Foreground = fg;
+                    else if (fe is TextBlock tb) tb.Foreground = fg;
+                }
             }
 
             var borderProperty = fe switch
@@ -6168,8 +6178,6 @@ public sealed partial class Reconciler : IDisposable
                 }
                 else if (tracker.BorderBrushOverrideApplied)
                 {
-                    // A theme-bound border brush gets its binding back. The captured brush would
-                    // freeze it at the theme it had when the states were set up.
                     if (!TryRestoreThemeBinding(fe, "BorderBrush"))
                     {
                         if (tracker.NormalBorderBrushHasLocalValue)

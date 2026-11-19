@@ -84,6 +84,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- A ThemeRef background or foreground on an element with `.InteractionStates(...)` keeps
+  following the theme after the pointer leaves. Returning to the normal state used to write
+  back the brush captured when the states were set up, which froze the color at that theme.
+
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
   animations. Removing `.Opacity()` also releases its compositor override so styles
