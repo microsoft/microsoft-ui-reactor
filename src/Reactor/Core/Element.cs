@@ -922,7 +922,10 @@ public abstract record Element
                 && SettersEqual(fa.Setters, fb.Setters),
 
             (CanvasElement ca, CanvasElement cb) =>
-                SettersEqual(ca.Setters, cb.Setters),
+                ca.Width == cb.Width
+                && ca.Height == cb.Height
+                && BrushesEqual(ca.Background, cb.Background)
+                && SettersEqual(ca.Setters, cb.Setters),
 
             (WrapGridElement wa, WrapGridElement wb) =>
                 wa.Orientation == wb.Orientation

@@ -930,8 +930,14 @@ public sealed class ReactorPerfTraceTests
         Assert.True(Changed(Tappable("a"), Tappable("b")));
         Assert.True(Changed(VStack(TextBlock("a")), VStack(TextBlock("a")).OnTapped((_, _) => captured++).Margin(4)));
 
-        // A keyed Memo whose key held keeps its control.
+        // A keyed Memo whose key held keeps its control, unless the wrapper's own extras changed.
         Assert.False(Changed(Memo("k", () => TextBlock("a")), Memo("k", () => TextBlock("a"))));
+        Assert.True(Changed(Memo("k", () => TextBlock("a")).Background(Theme.Ref("LayerFillColorDefaultBrush")),
+            Memo("k", () => TextBlock("a")).Background(Theme.Ref("SolidBackgroundFillColorBaseBrush"))));
+
+        // Canvas: its own size and background, not its children.
+        Assert.False(Changed(Canvas(TextBlock("a")) with { Width = 10 }, Canvas(TextBlock("b")) with { Width = 10 }));
+        Assert.True(Changed(Canvas(TextBlock("a")) with { Width = 10 }, Canvas(TextBlock("a")) with { Width = 20 }));
 
         // An items host's own properties exclude its items: their edits are counted by its diff.
         string[] items = ["x", "y"];

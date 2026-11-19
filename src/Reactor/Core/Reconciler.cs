@@ -521,7 +521,10 @@ public sealed partial class Reconciler : IDisposable
         ElementModifiers? oldModifiers, ElementModifiers? modifiers, bool shallowEqual)
     {
         if (!Element.ModifiersVisiblyEqual(oldModifiers, modifiers)) return true;
-        if (shallowEqual || oldEl is KeyedMemoElement && newEl is KeyedMemoElement) return false;
+        if (shallowEqual) return false;
+        // Only a keyed Memo's factory output is stable under its key; the wrapper's own extras
+        // (theme bindings, overrides, attached values) are applied on every update.
+        if (oldEl is KeyedMemoElement && newEl is KeyedMemoElement) return !Element.ExtrasEqual(oldEl, newEl);
         if (Element.OwnPropsEqual(oldEl, newEl) && Element.ExtrasEqual(oldEl, newEl)) return false;
         // ShallowEquals also compares the element's own modifiers, callbacks included. The
         // effective modifiers are visibly equal (checked above), so when they differ in identity
