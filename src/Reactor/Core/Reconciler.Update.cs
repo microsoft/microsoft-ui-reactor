@@ -238,6 +238,10 @@ public sealed partial class Reconciler
         if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
             ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
                 ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
+        // Stop removed keyframes before the handler and modifiers run, so the cleanup cannot
+        // cancel an animation a shared target or a changed modifier starts in this update (#1641).
+        if (keyframes is null && oldEl.KeyframeAnimations is not null)
+            ClearKeyframeAnimations(control, oldEl.KeyframeAnimations, declaredOnly: true);
 
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
@@ -359,10 +363,6 @@ public sealed partial class Reconciler
         // Background modifier before native setters ran; clearing here would discard both.
         var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
             && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
-        // Stop removed keyframes before modifiers run, so the cleanup cannot cancel an
-        // animation a changed modifier starts in this update (#1641).
-        if (keyframes is null && oldEl.KeyframeAnimations is not null)
-            ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
                 ownsControl: ownsControl && result is null);

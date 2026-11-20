@@ -790,6 +790,77 @@ internal static class AnimationCombinationTests
             await RunCase("KFUnmountStops_RotationOnly", withTranslation: false);
             await RunRemovalCase("KFRemoveStops_RotationOnly", rotationKeyframes: true);
             await RunRemovalCase("KFRemoveKeepsModifierRotation", rotationKeyframes: false);
+            await RunRetainedRotationCase("KFRemoveKeepsRunningRotation");
+            await RunFlyoutTargetCase("KFRemoveKeepsTargetKeyframes");
+        }
+
+        // A .Rotation() animation started by an earlier update keeps running when the
+        // opacity-only keyframes are removed and the modifier value is unchanged.
+        async Task RunRetainedRotationCase(string name)
+        {
+            var plain = Border(TextBlock(name)).Rotation(0);
+            var rotated = Border(TextBlock(name)).Rotation(90);
+            static Element Fade(Element element) => element.Keyframes("kf", 1, kf => kf
+                .Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            var mounted = Fade(plain);
+            var before = Fade(rotated);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(mounted, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                AnimationScope.WithAnimation(Curve.Linear(60000), () =>
+                    reconciler.Update(mounted, before, target, () => { }));
+                H.Check(name + "_RotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+                H.Check(name + "_KeyframesRunning", visual.TryGetAnimationController("Opacity") is not null);
+
+                H.Check(name + "_SameControl", reconciler.Update(before, rotated, target, () => { }) is null);
+
+                H.Check(name + "_KeyframesStopped", visual.TryGetAnimationController("Opacity") is null);
+                H.Check(name + "_RotationStillRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // Removing a Flyout's rotation keyframes in the update that adds rotation keyframes to
+        // its target must not stop the target's freshly started animation.
+        async Task RunFlyoutTargetCase(string name)
+        {
+            var menu = TextBlock("Menu");
+            var child = Border(TextBlock(name));
+            static Element Spin(Element element, string key) => element.Keyframes(key, 1, kf => kf
+                .Duration(5000).Loop().At(0f, rotation: 0f).At(1f, rotation: 360f));
+            var before = Spin(Flyout(child, menu), "outer");
+            var after = Flyout(Spin(child, "inner"), menu);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                H.Check(name + "_OuterRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+
+                H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+
+                H.Check(name + "_TargetRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         // Removes the keyframes from a retained control in an animated update. Rotation

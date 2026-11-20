@@ -6551,27 +6551,35 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
+    // declaredOnly stops only the channels the entries declare. A retained control passes
+    // true so removing keyframes doesn't stop an unrelated animation on another channel.
+    // Unmount passes false and stops every channel a keyframe can animate.
+    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool declaredOnly = false)
     {
+        var channels = declaredOnly ? default
+            : AnimateProperty.Opacity | AnimateProperty.Scale | AnimateProperty.Offset | AnimateProperty.Rotation;
         foreach (var entry in entries)
+        {
             _keyframeTriggerValues.Remove((uie, entry.Name));
+            if (declaredOnly) channels |= GetKeyframeProperties(entry.Definition);
+        }
+        if (channels == default) return;
 
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
-        // KeyframeAnimationDef doesn't track which targets were started, so stop every target
-        // a keyframe can animate. StopAnimation is a no-op on an existing property with no
-        // running animation.
+        // StopAnimation is a no-op on an existing property with no running animation.
         Visual visual;
         try { visual = AnimationHelper.GetElementVisual(uie); }
         catch { return; /* No compositor (e.g. unit tests) */ }
 
         // Each stop is independent, so one failure can't leave a later channel running (#1641).
-        StopKeyframeTarget(visual, "Opacity");
-        StopKeyframeTarget(visual, "Scale");
+        if ((channels & AnimateProperty.Opacity) != 0) StopKeyframeTarget(visual, "Opacity");
+        if ((channels & AnimateProperty.Scale) != 0) StopKeyframeTarget(visual, "Scale");
         // Translation is a property-set entry that exists only once translation was enabled.
         // StopAnimation on a missing entry throws ArgumentException (spec 066 §7.3 step 1).
-        if (visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
+        if ((channels & AnimateProperty.Offset) != 0
+            && visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
             StopKeyframeTarget(visual, "Translation");
-        StopKeyframeTarget(visual, "RotationAngle");
+        if ((channels & AnimateProperty.Rotation) != 0) StopKeyframeTarget(visual, "RotationAngle");
     }
 
     private static void StopKeyframeTarget(Visual visual, string property)
