@@ -539,6 +539,24 @@ const [frontShot, backShot] = showcaseShots;
     color: var(--shiki-dark, inherit) !important;
   }
 
+  /* Blume's copy button uses the page background, which is white in light mode. On this dark tile it is frosted glass instead; the blur hides code that scrolls under it. */
+  .code-on-dark :global([data-blume-copy]) {
+    background: rgb(255 255 255 / 0.1);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+    color: rgb(255 255 255 / 0.8);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .code-on-dark :global([data-blume-copy]:hover) {
+    background: rgb(255 255 255 / 0.18);
+    color: #fff;
+  }
+
+  .code-on-dark :global([data-blume-copy] > svg:first-child) {
+    color: #4ade80;
+  }
+
   .winui-window {
     font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   }
