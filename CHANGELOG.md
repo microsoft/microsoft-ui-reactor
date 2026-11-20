@@ -71,6 +71,13 @@ Conventions for contributors:
   no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
   (devtools) covers the same two controls.
 
+- **The `rotation:` parameter of `.InteractionStates(...)` and `.Keyframes(...)` is now in
+  degrees, like `.Rotation()` (issue #1615).** It used to be passed to the compositor as
+  radians, which was never documented. Existing values written in radians now turn by less
+  than a degree, so multiply them by 180/π (for example `rotation: 0.1f` becomes about
+  `rotation: 6f`). `InteractionStateValues.Rotation` and `KeyframeDef.Rotation` follow the
+  same unit.
+
 ### Deprecated
 
 ### Removed

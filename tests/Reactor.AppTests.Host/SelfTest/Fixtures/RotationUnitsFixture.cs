@@ -12,7 +12,8 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// <c>.Rotation()</c> is degrees on every path that reaches the element (#1615).
+/// <c>.Rotation()</c> and the <c>rotation:</c> parameters of <c>.Keyframes()</c> and
+/// <c>.InteractionStates()</c> are degrees on every path that reaches the element (#1615).
 /// The oracle is the rendered bounding box, because composition getters return the
 /// base value rather than the animated one.
 /// </summary>
@@ -20,6 +21,8 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
 {
     // A 100x40 red rect at (100,130) on a 300x300 canvas, pivoting on its centre (150,150).
     // At 90 degrees it covers x[130,170] y[100,200]. At 90 radians (~116.6 degrees) it is ~80x107.
+    // Keyframes and InteractionStates have no pivot of their own and turn about the top-left
+    // corner (100,130), so at 90 degrees they cover x[60,100] y[130,230].
     private const double Left = 100, Top = 130;
     private static readonly Vector3 Pivot = new(50, 20, 0);
 
@@ -45,6 +48,16 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
         // Reactor then falls back to compositor implicit animations.
         var initial = compositorTransition ? plain.Rotation(0).Transition(Transition.Fade) : Decorate(plain.Rotation(0));
         var rotated = Decorate(plain.CenterPoint(Pivot).Rotation(90));
+        bool topLeftPivot = mode is "Keyframes" or "InteractionStates";
+        if (mode == "Keyframes")
+        {
+            Element Spin(int trigger) => plain.Keyframes("spin", trigger, kf => kf.Duration(50).At(0, rotation: 0).At(1, rotation: 90));
+            (initial, rotated) = (Spin(0), Spin(1));
+        }
+        else if (mode == "InteractionStates")
+        {
+            initial = rotated = plain.InteractionStates(s => s.PointerOver(rotation: 90), curve);
+        }
 
         var target = (FrameworkElement)reconciler.Mount(initial, () => { })!;
         var canvas = new Microsoft.UI.Xaml.Controls.Canvas
@@ -77,12 +90,13 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
 
             void Apply() => reconciler.Update(initial, rotated, target, () => { });
             if (mode == "Ambient") AnimationScope.WithAnimation(curve, Apply);
+            else if (mode == "InteractionStates") Reconciler.SimulatePointerOverForTests(target, isOver: true);
             else Apply();
             await Settle();
 
             var bbox = await RedBoundsAsync(canvas);
             // Under way, a 60 s transition has turned well under a degree from the unrotated rect.
-            var (x0, x1, y0, y1) = running ? (100, 200, 130, 170) : (130, 170, 100, 200);
+            var (x0, x1, y0, y1) = running ? (100, 200, 130, 170) : topLeftPivot ? (60, 100, 130, 230) : (130, 170, 100, 200);
             bool placed = bbox is { } b && Near(b.MinX, x0) && Near(b.MaxX, x1) && Near(b.MinY, y0) && Near(b.MaxY, y1);
             H.Check(name + (running ? "_TransitionInFlight" : "_RotatedNinetyDegrees"), placed, bbox is { } r
                 ? $"bbox=x[{r.MinX:F0},{r.MaxX:F0}] y[{r.MinY:F0},{r.MaxY:F0}] expected x[{x0},{x1}] y[{y0},{y1}]"

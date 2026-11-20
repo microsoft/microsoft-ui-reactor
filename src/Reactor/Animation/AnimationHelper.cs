@@ -430,7 +430,7 @@ internal static class AnimationHelper
         _ => property,
     };
 
-    private static float DegreesToRadians(float degrees) => degrees * (MathF.PI / 180f);
+    internal static float DegreesToRadians(float degrees) => degrees * (MathF.PI / 180f);
 
     private static void SetScalarDirect(UIElement element, string property, float value)
     {

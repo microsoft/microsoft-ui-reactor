@@ -6129,7 +6129,7 @@ public sealed partial class Reconciler : IDisposable
 
         if (values?.Rotation.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetRotation = values?.Rotation ?? 0f;
+            var targetRotation = AnimationHelper.DegreesToRadians(values?.Rotation ?? 0f);
             var rotationAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetRotation, curve);
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
@@ -6361,14 +6361,15 @@ public sealed partial class Reconciler : IDisposable
                 foreach (var kf in def.Keyframes)
                 {
                     if (!kf.Rotation.HasValue) continue;
+                    var radians = AnimationHelper.DegreesToRadians(kf.Rotation.Value);
                     if (kf.Easing.HasValue)
                     {
                         var e = kf.Easing.Value;
                         var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(e.X1, e.Y1), new Vector2(e.X2, e.Y2));
-                        anim.InsertKeyFrame(kf.Progress, kf.Rotation.Value, easing);
+                        anim.InsertKeyFrame(kf.Progress, radians, easing);
                     }
                     else
-                        anim.InsertKeyFrame(kf.Progress, kf.Rotation.Value);
+                        anim.InsertKeyFrame(kf.Progress, radians);
                 }
                 group.Add(anim);
             }
