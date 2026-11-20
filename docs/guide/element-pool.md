@@ -9,7 +9,8 @@ fixed-size stack (cap 32) inside `ElementPool`; the
 and `Return(element)` on unmount. This page documents the rental
 contract, the cleanup pass that resets a returned element, and the
 exclusions that keep pooling safe — composition-tainted visuals,
-non-poolable types, and parent-state corner cases.
+transform-transition locks, non-poolable types, and parent-state
+corner cases.
 
 ## Renting on mount
 
@@ -74,6 +75,14 @@ public void Return(FrameworkElement element)
     // lose XAML implicit transition API access (OpacityTransition, etc.).
     if (IsCompositorTainted(element)) return;
 
+    // Issue #1614: attaching an implicit transform transition permanently locks
+    // RenderTransform (nulling the transition does not release it), so such a control is
+    // no longer interchangeable with a fresh one. Same reasoning as the taint check above.
+    // This is the fast path; the catch around CleanElement below is the backstop for a
+    // control whose transition was attached and later removed.
+    if (element.ScaleTransition is not null || element.RotationTransition is not null
+        || element.TranslationTransition is not null) return;
+
     if (!_pools.TryGetValue(type, out var stack))
     {
         stack = new Stack<FrameworkElement>();
@@ -83,13 +92,15 @@ public void Return(FrameworkElement element)
     if (stack.Count >= MaxPerType) return;
 ```
 
-The path runs in five steps after the type check: composition-taint
+The path runs in six steps after the type check: composition-taint
 check (a visual that has had `GetElementVisual()` called permanently
 loses access to XAML implicit transitions like `OpacityTransition`,
-so it must not be pooled), per-type stack lookup, per-type cap check
-(stop accepting at 32 instances), then — past the snippet boundary —
-the detach-from-parent dance and `CleanElement(...)` reset before the
-control finally pushes onto the stack. The scratch-panel round-trip
+so it must not be pooled), transform-transition check (see the tips
+below), per-type stack lookup, per-type cap check (stop accepting at
+32 instances), then — past the snippet boundary — the
+detach-from-parent dance and `CleanElement(...)` reset before the
+control finally pushes onto the stack. If WinUI refuses a transform
+reset during `CleanElement`, the control is dropped instead. The scratch-panel round-trip
 in `ForceDetach` is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws `COMException` when the
 control is later re-parented, and `_scratchPanel.Children.Add` +
@@ -174,9 +185,9 @@ work.
 **Transform transitions are one-way too.** Attaching `.ScaleTransition()`,
 `.RotationTransition()` or `.TranslationTransition()` locks the control's
 `RenderTransform` for good, even if the transition is later removed, so
-`Return` drops a control that still carries one. The facade transforms
-themselves (`.Rotation()`, `.Scale()`, `.Translation()`, `.CenterPoint()`)
-are reset to identity on return and don't affect pooling.
+`Return` drops the control. The facade transforms themselves
+(`.Rotation()`, `.Scale()`, `.Translation()`, `.CenterPoint()`) are reset
+to identity on return and don't affect pooling.
 
 **The cap is 32 per type.** A burst of 100 list items mounts 32 from
 the pool and 68 fresh; the next render returns 32 to the pool and

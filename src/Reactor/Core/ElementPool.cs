@@ -157,6 +157,8 @@ public sealed class ElementPool : IDisposable
         // Issue #1614: attaching an implicit transform transition permanently locks
         // RenderTransform (nulling the transition does not release it), so such a control is
         // no longer interchangeable with a fresh one. Same reasoning as the taint check above.
+        // This is the fast path; the catch around CleanElement below is the backstop for a
+        // control whose transition was attached and later removed.
         if (element.ScaleTransition is not null || element.RotationTransition is not null
             || element.TranslationTransition is not null) return;
 
@@ -182,7 +184,17 @@ public sealed class ElementPool : IDisposable
             return;
         }
 
-        CleanElement(element);
+        try
+        {
+            CleanElement(element);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Issue #1614: WinUI refused a transform reset (RenderTransform or a facade is
+            // still locked). The control can't be made interchangeable with a fresh one, so
+            // drop it rather than fail the reconcile that is unmounting it.
+            return;
+        }
         stack.Push(element);
     }
 
@@ -275,11 +287,10 @@ public sealed class ElementPool : IDisposable
         if (fe.CenterPoint != Vector3.Zero) fe.CenterPoint = Vector3.Zero;
         if (fe.RotationAxis != Vector3.UnitZ) fe.RotationAxis = Vector3.UnitZ;
         if (!fe.TransformMatrix.IsIdentity) fe.TransformMatrix = Matrix4x4.Identity;
-        // Clear RenderTransform only when it holds a local value. Reading it is always allowed,
-        // but writing it is not once a facade transition has ever been attached: that lock
-        // survives nulling the transition. With no local value the clear is a no-op anyway.
-        if (fe.ReadLocalValue(FrameworkElement.RenderTransformProperty) != DependencyProperty.UnsetValue)
-            fe.ClearValue(FrameworkElement.RenderTransformProperty);
+        // The facades must be released first: RenderTransform rejects a write while one is
+        // engaged. If it is still locked (a transform transition was attached at some point),
+        // the clear throws and Return drops the control.
+        fe.ClearValue(FrameworkElement.RenderTransformProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
         // A context flyout is a live object graph owned by the previous renter's component.
         // Without this, right-clicking a recycled control shows the *previous* element's menu.

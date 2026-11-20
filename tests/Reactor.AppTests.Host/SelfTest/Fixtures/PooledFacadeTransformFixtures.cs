@@ -24,7 +24,7 @@ internal static class PooledFacadeTransformFixtures
 {
     internal sealed class Removal(Harness h) : SelfTestFixtureBase(h)
     {
-        private sealed record Expect(bool Facade = true, bool Recycled = true, bool RenderTransformWritable = true);
+        private sealed record Expect(bool Facade = true, bool Recycled = true, bool LocalRenderTransform = false);
 
         public override async Task RunAsync()
         {
@@ -54,17 +54,35 @@ internal static class PooledFacadeTransformFixtures
                 IsBorderWith, new Expect(Recycled: false));
             await RunCase<WinUI.Border>("BorderTransitionOnly", BorderOf, e => e.ScaleTransition(),
                 IsBorderWith, new Expect(Facade: false, Recycled: false));
+            await RunCase<WinUI.Border>("BorderRotationTransitionOnly", BorderOf, e => e.RotationTransition(),
+                IsBorderWith, new Expect(Facade: false, Recycled: false));
+            await RunCase<WinUI.Border>("BorderTranslationTransitionOnly", BorderOf, e => e.TranslationTransition(),
+                IsBorderWith, new Expect(Facade: false, Recycled: false));
 
             // The lock outlives the transition, so a control whose transition was attached and
-            // then removed passes the pool's transition check and is recycled. CleanElement must
-            // still not touch its RenderTransform, which has no local value to clear.
+            // then removed passes the pool's transition check. Clearing its RenderTransform then
+            // throws, and the pool must drop the control instead of failing the reconcile.
             await RunCase<WinUI.Border>("BorderTransitionRemoved", BorderOf,
                 e => ((BorderElement)e).Scale(1.2f).Set(b =>
                 {
                     b.ScaleTransition = new Vector3Transition();
                     b.ScaleTransition = null;
                 }),
-                IsBorderWith, new Expect(RenderTransformWritable: false));
+                IsBorderWith, new Expect(Recycled: false));
+
+            // No modifier writes these two facades, so only .Set can leave them non-identity.
+            await RunCase<WinUI.Border>("BorderTransformMatrix", BorderOf,
+                e => ((BorderElement)e).Set(b =>
+                {
+                    b.TransformMatrix = Matrix4x4.CreateTranslation(5, 5, 0);
+                    b.RotationAxis = Vector3.UnitX;
+                }),
+                IsBorderWith, plain);
+
+            // A local RenderTransform (only reachable through .Set) is cleared on return.
+            await RunCase<WinUI.Border>("BorderRenderTransform", BorderOf,
+                e => ((BorderElement)e).Set(b => b.RenderTransform = new RotateTransform { Angle = 10 }),
+                IsBorderWith, new Expect(Facade: false, LocalRenderTransform: true));
         }
 
         private static Element BorderOf(string text) => Border(TextBlock(text));
@@ -101,6 +119,8 @@ internal static class PooledFacadeTransformFixtures
             H.Check(prefix + "_Mounted", first is not null);
             if (first is null) return;
             if (expect.Facade) H.Check(prefix + "_FacadeEngaged", !IsIdentity(first), Describe(first));
+            if (expect.LocalRenderTransform)
+                H.Check(prefix + "_RenderTransformSet", first.ReadLocalValue(UIElement.RenderTransformProperty) is RotateTransform);
             H.Check(prefix + "_NotTainted", !ElementPool.IsCompositorTainted(first));
 
             // Removal is the pool return. Before the fix CleanElement threw here and the host
@@ -128,7 +148,8 @@ internal static class PooledFacadeTransformFixtures
             // freshly constructed control.
             H.Check(prefix + "_Recycled", ReferenceEquals(first, second));
             H.Check(prefix + "_IdentityAfterRent", IsIdentity(second), Describe(second));
-            if (!expect.RenderTransformWritable) return;
+            H.Check(prefix + "_RenderTransformCleared",
+                ReferenceEquals(second.ReadLocalValue(UIElement.RenderTransformProperty), DependencyProperty.UnsetValue));
 
             // Resetting the facades released the lock: RenderTransform is writable again.
             bool writable;
