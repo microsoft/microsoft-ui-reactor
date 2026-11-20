@@ -3667,21 +3667,17 @@ parses the TAP and surfaces one test method per fixture.</p>
 <li>Add a new fixture file under
    <code>tests/Reactor.AppTests.Host/SelfTest/Fixtures/</code> returning the component
    under test wrapped in a small assertion harness.</li>
-<li>Register it in <strong>two</strong> places in
-   <code>tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs</code> — the
-   <code>AllFixtures</code> list <em>and</em> the <code>Create()</code> switch. Miss the second and
-   <code>--list-fixtures</code> reports a name the run cannot produce, which shows up
-   as a confusing "missing fixture" failure rather than a compile error.</li>
+<li>Add one name-and-factory entry to the ordered <code>Registrations</code> table in
+   <code>tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs</code>. The
+   order determines fixture execution and shard assignment.</li>
 <li>The MSTest wrapper picks it up at discovery time via
    <code>--list-fixtures</code>; no code change needed on the test runner side.</li>
 </ol>
-<p>E2E fixtures have the same two-place split, in
-<code>tests/Reactor.AppTests.Host/FixtureRegistry.cs</code> (<code>AllFixtures</code> plus the
-<code>Build()</code> switch).</p>
+<p>Register each E2E fixture in the ordered <code>Registrations</code> table in
+<code>tests/Reactor.AppTests.Host/FixtureRegistry.cs</code>. The table order determines
+the host navigator order.</p>
 <p><code>--list-fixtures</code> lists only SelfTest fixtures for the current host tier.
-<code>FixtureRegistryConsistencyTests</code> in <code>Reactor.Tests</code> compares <code>AllFixtures</code> with the factory
-switch for both SelfTest and E2E. It reports each fixture registered on just one side and
-identifies where the registration is missing.</p>
+<code>FixtureRegistryConsistencyTests</code> in <code>Reactor.Tests</code> checks both tables for duplicate fixture names, and that an entry carries <code>SelfTestTier.Packaged</code> exactly when its name has the <code>Packaged_</code> prefix.</p>
 <p>Reach for a self-test when the unit layer can't see the answer — e.g.
 when the WinUI control's measured size affects the component's
 behavior, or when an automation peer's role depends on the
