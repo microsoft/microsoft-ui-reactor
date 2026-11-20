@@ -123,7 +123,10 @@ public class DevtoolsRemovedTests
     {
         var message = DevtoolsRemoved.BuildRemovedMessage(args);
 
-        Assert.Contains($"`{murForm}` has been removed; use: ", message);
+        var row = DevtoolsRemoved.Resolve(args);
+        // Rows with no replacement don't say "use:" before "not needed" / "no tool equivalent".
+        Assert.Contains(row.HasEquivalent ? $"`{murForm}` has been removed; use: " : $"`{murForm}` has been removed; ", message);
+        Assert.Equal(row.HasEquivalent, message.Contains("; use: ", StringComparison.Ordinal));
         Assert.Contains(expected, message);
         Assert.Contains("winui-devtools", message);
         Assert.All(message.Split('\n', StringSplitOptions.RemoveEmptyEntries),

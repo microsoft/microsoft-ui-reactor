@@ -576,6 +576,46 @@ public class DevtoolsHostCliTests
         Assert.DoesNotContain("RuntimeHostConfigurationOption", text);
     }
 
+    [Theory]
+    [InlineData(new[] { "app.exe", "--devtools", "on", "--preview", "X" }, "'--devtools on' is a winapp option")]
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--preview", "X" }, "pass either --devtools or --preview, not both.")]
+    public void TryRunDevtoolsForTest_WithPreview_ReportsTheSpecificError_AndExits2(string[] args, string message)
+    {
+        // A removed value wins over the generic --devtools/--preview conflict, and the conflict
+        // itself is an error (exit 2), not a silent exit 0.
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+        bool handled;
+        int exitCode;
+        try
+        {
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+            handled = ReactorApp.TryRunDevtoolsForTest(args, title: "App", width: 800, height: 600);
+            exitCode = Environment.ExitCode;
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+        }
+
+        Assert.True(handled);
+        Assert.Equal(2, exitCode);
+        Assert.Contains($"[reactor] {message}", stderr.ToString());
+    }
+
+    [Fact]
+    public void AppVerb_WithPreview_IsIgnored_AndThePreviewRuns()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "app", "--preview", "Counter"]);
+
+        Assert.False(opts.PreviewAndDevtoolsConflict);
+        Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
+        Assert.Equal("Counter", opts.ComponentName);
+    }
+
     [Fact]
     public void TryRunDevtoolsForTest_AppVerb_PrintsANotice_AndLetsTheAppRun()
     {
@@ -697,34 +737,17 @@ public class DevtoolsHostCliTests
         public override Element Render() => Factories.TextBlock("other");
     }
 
-    // The preview mounts (and reports Run's call site for) the app's own root only when that is
-    // what was asked for: Run's component type, or its factory when no component was named. Any
-    // other --component was never mounted by that call.
-    [Fact]
-    public void PreviewsAppRoot_OnlyForRunsOwnRoot()
-    {
-        Func<Component> factory = () => new AppRoot();
-
-        Assert.True(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), factory, componentNamed: false, typeof(AppRoot)));
-        Assert.True(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), factory, componentNamed: true, typeof(AppRoot)));
-        Assert.True(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), hostRootFactory: null, componentNamed: false, typeof(AppRoot)));
-        Assert.True(DevtoolsHost.PreviewsAppRoot(hostRoot: null, factory, componentNamed: false, typeof(OtherComponent)));
-        Assert.False(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), factory, componentNamed: true, typeof(OtherComponent)));
-        Assert.False(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), hostRootFactory: null, componentNamed: true, typeof(OtherComponent)));
-        Assert.False(DevtoolsHost.PreviewsAppRoot(hostRoot: null, hostRootFactory: null, componentNamed: false, typeof(OtherComponent)));
-    }
-
-    // Run<T> always passes its own factory. `--preview Other` must mount Other, not T.
+    // Run<T> always passes its own factory. `--preview Other` must mount Other, not T; only T
+    // itself uses Run's factory (and reports Run's mount site).
     [Fact]
     public void PreviewRootFactory_MountsTheNamedComponent_NotRunsRoot()
     {
         Func<Component> factory = () => new AppRoot();
 
 #pragma warning disable IL2026
-        Assert.IsType<OtherComponent>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, componentNamed: true, typeof(OtherComponent))());
-        Assert.Same(factory, DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, componentNamed: true, typeof(AppRoot)));
-        Assert.Same(factory, DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, componentNamed: false, typeof(AppRoot)));
-        Assert.IsType<AppRoot>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), hostRootFactory: null, componentNamed: true, typeof(AppRoot))());
+        Assert.IsType<OtherComponent>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, typeof(OtherComponent))());
+        Assert.Same(factory, DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, typeof(AppRoot)));
+        Assert.IsType<AppRoot>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), hostRootFactory: null, typeof(AppRoot))());
 #pragma warning restore IL2026
     }
 

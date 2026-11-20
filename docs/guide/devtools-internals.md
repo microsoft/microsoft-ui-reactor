@@ -43,13 +43,9 @@ view.
 ```csharp
 var options = DevtoolsCliParser.Parse(args);
 
-if (options.PreviewAndDevtoolsConflict)
-{
-    Console.Error.WriteLine("[devtools] Error: pass either --devtools or --preview, not both.");
-    return true;
-}
-
-var error = DevtoolsCliParser.RemovedSubverbMessage(args) ?? options.EmbedValidationError;
+var error = DevtoolsCliParser.RemovedSubverbMessage(args)
+    ?? (options.PreviewAndDevtoolsConflict ? "pass either --devtools or --preview, not both." : null)
+    ?? options.EmbedValidationError;
 if (!string.IsNullOrEmpty(error))
 {
     Console.Error.WriteLine($"[reactor] {error}");

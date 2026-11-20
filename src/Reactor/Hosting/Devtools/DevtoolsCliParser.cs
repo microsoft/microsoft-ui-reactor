@@ -46,6 +46,9 @@ internal static class DevtoolsCliParser
     public static DevtoolsCliOptions Parse(string[] args)
     {
         int devtoolsIdx = IndexOf(args, "--devtools");
+        // `--devtools app` is ignored (the runtime prints RemovedAppVerbNotice), so it neither
+        // conflicts with --preview nor starts the preview host.
+        if (RemovedAppVerbNotice(args) is not null) devtoolsIdx = -1;
         int previewIdx = IndexOf(args, "--preview");
         int previewListIdx = IndexOf(args, "--preview-list");
         int devtoolsListIdx = IndexOf(args, "--devtools-list");
@@ -86,7 +89,7 @@ internal static class DevtoolsCliParser
                 EmbedAutoEnabledVsCode: embedOnlyRequested && !args.Contains("--vscode"));
         }
 
-        if (devtoolsIdx >= 0 && (RemovedSubverbMessage(args) is not null || RemovedAppVerbNotice(args) is not null))
+        if (devtoolsIdx >= 0 && RemovedSubverbMessage(args) is not null)
         {
             return new DevtoolsCliOptions(
                 Subverb: null,

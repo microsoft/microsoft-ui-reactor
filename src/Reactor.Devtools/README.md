@@ -13,8 +13,7 @@
 > winapp has its own previewer. Builds that reference it outside Debug show
 > warning `REACTOR_DEVTOOLS_001`
 > (suppress with `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
-> `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`;
-> under `TreatWarningsAsErrors`, also add it to `WarningsNotAsErrors` or the build fails).
+> `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
 >
 > **Migrate:**
 > 1. If you don't use the VS Code live preview or the Visual Studio embedded preview, remove
@@ -67,12 +66,13 @@ below.
 
 ## How to Use
 
-Reference the package Debug-only, with the build-time capability switch:
+Reference the package Debug-only, at the same version as `Microsoft.UI.Reactor` (omit `Version`
+under Central Package Management). The `Reactor.DevtoolsSupport` switch it also needs is on in
+Debug by default (through `ReactorDiagnostics`):
 
 ```xml
 <ItemGroup Condition="'$(Configuration)' == 'Debug'">
-  <PackageReference Include="Microsoft.UI.Reactor.Devtools" />
-  <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+  <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="<same as Microsoft.UI.Reactor>" />
 </ItemGroup>
 ```
 

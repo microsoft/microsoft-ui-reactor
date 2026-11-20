@@ -1305,13 +1305,9 @@ public static partial class ReactorApp
         // <snippet:devtools-gate>
         var options = DevtoolsCliParser.Parse(args);
 
-        if (options.PreviewAndDevtoolsConflict)
-        {
-            Console.Error.WriteLine("[devtools] Error: pass either --devtools or --preview, not both.");
-            return true;
-        }
-
-        var error = DevtoolsCliParser.RemovedSubverbMessage(args) ?? options.EmbedValidationError;
+        var error = DevtoolsCliParser.RemovedSubverbMessage(args)
+            ?? (options.PreviewAndDevtoolsConflict ? "pass either --devtools or --preview, not both." : null)
+            ?? options.EmbedValidationError;
         if (!string.IsNullOrEmpty(error))
         {
             Console.Error.WriteLine($"[reactor] {error}");
@@ -1358,21 +1354,30 @@ public static partial class ReactorApp
         if (!ReactorFeatures.IsDevtoolsSupported)
         {
             Console.Error.WriteLine(
-                "[reactor] --devtools requested but this binary was built without the Reactor.DevtoolsSupport switch. " +
-                "It is on by default in Debug (through ReactorDiagnostics); for this configuration, add the following to your csproj and rebuild:");
+                "[reactor] The in-app preview host (--devtools run / --preview) needs the Reactor.DevtoolsSupport switch, which this build has off. " +
+                "It is on by default in Debug; for this configuration, add the following to your csproj and rebuild:");
+            Console.Error.WriteLine("  <ReactorDiagnostics>true</ReactorDiagnostics>");
             Console.Error.WriteLine(
-                "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+                "  (or <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />, which an explicit ReactorDiagnostics=false overrides)");
         }
         else
         {
             Console.Error.WriteLine(
-                "[reactor] --devtools requested but this app does not reference the Microsoft.UI.Reactor.Devtools package, which hosts the in-app preview. " +
-                "Add it for Debug builds and rebuild:");
+                "[reactor] The in-app preview host (--devtools run / --preview) needs the Microsoft.UI.Reactor.Devtools package, which this app does not reference. " +
+                "Add it for Debug builds, at the same version as Microsoft.UI.Reactor, and rebuild:");
             Console.Error.WriteLine(
-                "  <PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Condition=\"'$(Configuration)' == 'Debug'\" />");
+                $"  <PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Version=\"{ReactorPackageVersion()}\" Condition=\"'$(Configuration)' == 'Debug'\" />");
         }
         Console.Error.WriteLine(
-            "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");
+            "[reactor] The in-app preview host is deprecated and kept for component previews (--preview <Name>) and the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");
+    }
+
+    /// <summary>The package version of Microsoft.UI.Reactor (informational version without the commit suffix).</summary>
+    private static string ReactorPackageVersion()
+    {
+        var version = global::System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<global::System.Reflection.AssemblyInformationalVersionAttribute>(typeof(ReactorApp).Assembly)?.InformationalVersion;
+        return string.IsNullOrEmpty(version) ? "<Microsoft.UI.Reactor version>" : version.Split('+')[0];
     }
 
     internal static void ResetDevtoolsEnabledForTests()

@@ -58,9 +58,10 @@ preview workflow:
 
 The app entry point is an ordinary `ReactorApp.Run` call; there is no
 `preview:` or `devtools:` argument. The in-app preview host (the VS Code
-panel and the Visual Studio embedded preview use it) is enabled by the app
-project's `Reactor.DevtoolsSupport` switch and activated at launch with
-`--devtools run`.
+panel and the Visual Studio embedded preview use it) needs the deprecated
+`Microsoft.UI.Reactor.Devtools` package, referenced in Debug only, and the
+`Reactor.DevtoolsSupport` switch, which is on in Debug by default. It is
+activated at launch with `--devtools run`.
 
 ## Running with Hot Reload
 
@@ -349,16 +350,16 @@ via `ctx.UseObservable(...)`. Flipping the flag re-renders every
 subscribed component — no event-wiring boilerplate. The pattern scales
 to a dozen flags without a config UI.
 
-### Headless screenshot capture for docs
+### Screenshots of your own app
 
-The same devtools plumbing the doc pipeline uses is available to
-your own app: enable `Reactor.DevtoolsSupport` in the app project and
-launch the app with `--devtools run` so the screenshot harness can
-capture the window. See
+To capture a running app from a script, launch it with
+`winapp run . --devtools on --detach` and take the picture with
+`winapp ui screenshot -a <app>`; neither needs anything in the project.
+Reactor's own doc pipeline works differently: it launches each doc app
+under the in-app preview host (`--preview`, which needs the deprecated
+package) to switch components, and captures the window in-process. See
 [`docs/contributing/doc-pipeline.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
-for the harness contract. This is how every page in the docset gets
-its screenshots automatically without an author launching the app by
-hand.
+for that harness.
 
 ## Common Mistakes
 

@@ -129,7 +129,7 @@ internal static class DevtoolsRemoved
         var m = Resolve(args);
         var form = m.MurForm.StartsWith("mur ", StringComparison.Ordinal) ? m.MurForm : "mur devtools " + m.MurForm;
         var sb = new StringBuilder();
-        sb.Append(Prefix).Append('`').Append(form).Append("` has been removed; use: ").AppendLine(m.WinappForm);
+        sb.Append(Prefix).Append('`').Append(form).Append(m.HasEquivalent ? "` has been removed; use: " : "` has been removed; ").AppendLine(m.WinappForm);
         sb.Append(Prefix).AppendLine($"Reactor's developer tools are the WinUI DevTools in the winapp CLI (`{LaunchEquivalent}`); AI agents use the `{AgentSkill}` skill.");
         sb.Append(Prefix).AppendLine("Full mapping: `mur devtools --help`.");
         return sb.ToString();

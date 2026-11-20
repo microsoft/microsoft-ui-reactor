@@ -47,6 +47,10 @@ public class ReactorFeaturesTests
         // The switch is on by default in Debug, so there the missing piece is the package.
         var originalError = Console.Error;
         using var stderr = new StringWriter();
+        // Spend the one-time lazy load of the Devtools package first. Otherwise, when this test
+        // is the first to read Current, the load would register the real host after the null
+        // below, and it would try to start a WinUI preview.
+        _ = ReactorDevtoolsBootstrap.Current;
         var previousHost = ReactorDevtoolsBootstrap.CurrentForTests;
         var originalExitCode = Environment.ExitCode;
 
@@ -67,7 +71,7 @@ public class ReactorFeaturesTests
             ReactorApp.ResetDevtoolsEnabledForTests();
         }
 
-        Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"", stderr.ToString());
+        Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Version=\"", stderr.ToString());
         Assert.DoesNotContain("RuntimeHostConfigurationOption", stderr.ToString());
     }
 

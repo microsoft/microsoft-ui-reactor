@@ -42,8 +42,13 @@ public sealed class DevtoolsDeprecationTargetsTests : IDisposable
 
     private static string DevtoolsDir() => global::System.IO.Path.Join(RepoRoot(), "src", "Reactor.Devtools");
 
-    /// <summary>Runs a stand-in <c>CoreCompile</c> and returns the build output.</summary>
-    private string Build(string configuration, string body = "", params string[] properties)
+    private const string DirectReference = """<ItemGroup><PackageReference Include="Microsoft.UI.Reactor.Devtools" /></ItemGroup>""";
+
+    /// <summary>
+    /// Runs a stand-in <c>CoreCompile</c> and returns the build output. The project references
+    /// the package directly unless <paramref name="body"/> says otherwise.
+    /// </summary>
+    private string Build(string configuration, string body = DirectReference, params string[] properties)
     {
         var targets = global::System.IO.Path.Join(DevtoolsDir(), "build", "Microsoft.UI.Reactor.Devtools.targets");
         var project = $"""
@@ -81,7 +86,7 @@ public sealed class DevtoolsDeprecationTargetsTests : IDisposable
 
     private static bool Warns(string output) => output.Contains($"warning {Code}", StringComparison.Ordinal);
 
-    private static string NoWarn(string value) => $"<PropertyGroup><NoWarn>{value}</NoWarn></PropertyGroup>";
+    private static string NoWarn(string value) => DirectReference + $"<PropertyGroup><NoWarn>{value}</NoWarn></PropertyGroup>";
 
     [Fact]
     public void Release_Warns_WithCopyPasteableSuppression()
@@ -117,6 +122,15 @@ public sealed class DevtoolsDeprecationTargetsTests : IDisposable
         // Positive control for the NoWarn match: only the exact code suppresses.
         var output = Build("Release", NoWarn("CS1591;REACTOR_DEVTOOLS_0010"));
         Assert.True(Warns(output), output);
+    }
+
+    [Fact]
+    public void Release_AfterADebugRestore_DebugOnlyReference_DoesNotWarn()
+    {
+        // NuGet imports the targets whenever the restore resolved the package, even for a
+        // configuration whose evaluation has no PackageReference (restore in Debug, build -c Release).
+        var output = Build("Release", """<ItemGroup Condition="'$(Configuration)' == 'Debug'"><PackageReference Include="Microsoft.UI.Reactor.Devtools" /></ItemGroup>""");
+        Assert.False(Warns(output), output);
     }
 
     [Fact]

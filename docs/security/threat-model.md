@@ -25,7 +25,7 @@ This document is the high-level threat model for the Microsoft.UI.Reactor framew
 
 Reactor is a managed-only C# framework for building WinUI 3 desktop apps. **It has no production network surface, no privilege boundary, no cross-machine reach, no kernel surface, and no secret handling.** It runs inside the consuming app's process at the consuming app's trust level.
 
-The only socket Reactor's packages ever open is one **opt-in, loopback-only, bearer-token-gated dev-time HTTP server** (`PreviewCaptureServer`, in the deprecated `Microsoft.UI.Reactor.Devtools` package, kept for the VS Code and Visual Studio previews). It is off by default and absent from production builds; a consuming app must reference the package, enable the `Reactor.DevtoolsSupport` switch and be launched with `--preview` / `--devtools run` plus `--vscode` or `--embed` to expose it, it binds to `127.0.0.1` only, and every request is authenticated by a 256-bit per-launch random token. The former in-app MCP server (`DevtoolsMcpServer`, HTTP and stdio) has been removed. The dev CLI (`mur`) is developer-invoked; its only outbound call is `mur figma`'s HTTPS client to the Figma API (§7.6).
+The only socket Reactor's packages ever open is one **opt-in, loopback-only, bearer-token-gated dev-time HTTP server** (`PreviewCaptureServer`, in the deprecated `Microsoft.UI.Reactor.Devtools` package, kept for the VS Code and Visual Studio previews). It is off by default and absent from production builds; a consuming app must reference the package, enable the `Reactor.DevtoolsSupport` switch and be launched with `--preview` / `--devtools run` plus `--vscode` or `--embed` to expose it, it binds to `127.0.0.1` only, and every request is authenticated by a 256-bit per-launch random token. The former in-app MCP server (`DevtoolsMcpServer`, HTTP and stdio) has been removed. The dev CLI (`mur`) is developer-invoked; its outbound calls are `mur figma` (the Figma API) and `mur loc translate` (GitHub Copilot, through the Copilot SDK) (§7.6).
 
 There is no auto-updater, no telemetry endpoint, no license check, no crypto stored at rest, no key management, and no PKI implementation. `System.Security.Cryptography.RandomNumberGenerator` is used exclusively to generate the per-launch bearer tokens above.
 
@@ -125,7 +125,7 @@ Crossing requires:
 
 - A connection to `127.0.0.1:<random port>` (Host header must match `127.0.0.1` or `localhost` — DNS rebinding rejected with 421).
 - A valid `Authorization: Bearer <token>` header (constant-time comparison against per-launch 256-bit random).
-- For state mutations: `POST` only + `Content-Type: application/json` (blocks `<form>`-shaped CSRF).
+- For state mutations: `POST` only; `/preview` and `/embed/*` also require `Content-Type: application/json` (blocks `<form>`-shaped CSRF). `/focus` relies on `POST` plus the required `Authorization` header, which already makes any cross-origin request non-simple.
 - Origin (if present) must parse via `Uri` and be one of: `http://127.0.0.1`, `http://localhost`, `https://localhost`, or `vscode-webview://*`.
 
 ### 6.2 Boundary B (removed): External MCP client ↔ DevtoolsMcpServer
@@ -232,7 +232,10 @@ The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-p
 **Mitigations:**
 
 - `mur` no longer connects to any in-app server.
-- The only outbound network call is `mur figma`, which calls `https://api.figma.com/` over HTTPS with the developer's Figma API key (from `FIGMA_API_KEY`, or the Figma entry of an MCP config the developer already has) in the `X-Figma-Token` header. No auto-update.
+- Two commands make outbound calls, both developer-invoked:
+  - `mur figma` calls `https://api.figma.com/` over HTTPS with the developer's Figma API key (from `FIGMA_API_KEY`, or the Figma entry of an MCP config the developer already has) in the `X-Figma-Token` header.
+  - `mur loc translate` sends the `.resw` source strings it translates to GitHub Copilot through the Copilot SDK and its bundled `copilot.exe` runtime (§11), signed in as the developer.
+- No auto-update.
 - No SUID/elevation; runs as the invoking developer.
 
 **Residual risk:** if `mur` were ever extended to follow URL-style attach targets (e.g., `mur attach https://...`), the threat model expands to cover network identity. **As of the audit date, no such target exists.** Adding one would require revisiting this document.
@@ -274,7 +277,7 @@ The Microsoft-internal security-review intake form gave succinct answers about R
 | "Library code executes in the consuming-domain WinUI/.NET app process, typically unelevated user-mode" | Code review of `ReactorApp.Run` and `ReactorWindow` lifecycle | No `RunAs`, no manifest requesting elevation. Reactor inherits the host process's integrity level. |
 | "CLI/debug tooling runs as developer-invoked user-mode process" | Manifest review of `mur.exe`, install script behavior | No elevation, no scheduled-task install. |
 | "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" (the MCP server has since been removed; the preview server remains) | `PreviewCaptureServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
-| "No outbound network communication beyond the above" | Repo-wide grep | In the framework packages (`src/Reactor*/`), the only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`). Outside them: `mur figma`'s `HttpClient` to `https://api.figma.com/` (developer-invoked, §7.6), and an `HttpClient` in the internal doc pipeline (`tools/Reactor.DocPipeline`, not shipped) that targets `127.0.0.1:<port>` of a preview server it spawned itself. |
+| "No outbound network communication beyond the above" | Repo-wide grep, plus the Copilot SDK call sites (SDK-mediated calls don't show up in a `System.Net.*` grep) | In the framework packages (`Microsoft.UI.Reactor`, `.Advanced`, `.Devtools`), the only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`). The `mur` CLI makes two developer-invoked outbound calls (§7.6): `mur figma`'s `HttpClient` to `https://api.figma.com/`, and `mur loc translate` through the Copilot SDK to GitHub Copilot. The internal doc pipeline (`tools/Reactor.DocPipeline`, not shipped) has an `HttpClient` that targets `127.0.0.1:<port>` of a preview server it spawned itself. |
 | "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; four source-ported MIT/ISC OSS components (Yoga, md4c, D3, WinUIEx window hosting); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
 | "No prior threat models / security reviews" | Repo audit | This document is the first formal one. README references a 275-finding internal code review — engineering review, not a threat model. |
 

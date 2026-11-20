@@ -13,14 +13,17 @@
     Packed to build\ only (not buildTransitive\), so it warns the project that
     references the package directly and not every project above it.
 
+    It also checks the PackageReference itself: NuGet imports this file whenever the
+    restore resolved the package, so a Release build that reuses a Debug restore would
+    otherwise warn a reference that only exists in Debug.
+
     Suppress with either:
       <NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>
       <ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>
-    Under TreatWarningsAsErrors it is an error unless it is also in WarningsNotAsErrors.
   -->
   <Target Name="_ReactorWarnDevtoolsPackageDeprecated"
           BeforeTargets="CoreCompile"
-          Condition="'$(Configuration)' != 'Debug' and '$(Configuration)' != '' and '$(ReactorSuppressDevtoolsDeprecationWarning)' != 'true' and '$(DesignTimeBuild)' != 'true' and !$([System.String]::Copy(';$(NoWarn);').Replace(',', ';').Replace(' ', '').Contains(';REACTOR_DEVTOOLS_001;'))">
+          Condition="'$(Configuration)' != 'Debug' and '$(Configuration)' != '' and '@(PackageReference->AnyHaveMetadataValue('Identity', 'Microsoft.UI.Reactor.Devtools'))' == 'true' and '$(ReactorSuppressDevtoolsDeprecationWarning)' != 'true' and '$(DesignTimeBuild)' != 'true' and !$([System.String]::Copy(';$(NoWarn);').Replace(',', ';').Replace(' ', '').Contains(';REACTOR_DEVTOOLS_001;'))">
     <Warning Code="REACTOR_DEVTOOLS_001"
              Text="Microsoft.UI.Reactor.Devtools is deprecated: inspect and drive the app with the WinUI DevTools in the winapp CLI ('winapp run . --devtools on'), which need no package. Keep this package only for the VS Code live preview or the Visual Studio embedded preview, and reference it only in Debug; it stays until winapp has its own previewer. Otherwise remove the PackageReference. Suppress with &lt;NoWarn&gt;%24(NoWarn);REACTOR_DEVTOOLS_001&lt;/NoWarn&gt; or &lt;ReactorSuppressDevtoolsDeprecationWarning&gt;true&lt;/ReactorSuppressDevtoolsDeprecationWarning&gt;."
              HelpLink="https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor.Devtools/README.md" />

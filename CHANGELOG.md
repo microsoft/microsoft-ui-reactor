@@ -90,8 +90,7 @@ Conventions for contributors:
   the winapp CLI (`winapp run . --devtools on`), which need no package. A project that references it
   outside Debug gets build warning `REACTOR_DEVTOOLS_001` (suppress with
   `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
-  `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`;
-  under `TreatWarningsAsErrors` it fails the build unless you also add it to `WarningsNotAsErrors`).
+  `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
   The package still works and **stays until winapp has its own previewer**: its in-app component
   preview host (`winapp run . --devtools on -- --preview <Name>`) and capture server run the VS Code live
   preview panel and the Visual Studio embedded preview, which have no winapp equivalent yet. Keep it
@@ -130,7 +129,8 @@ Conventions for contributors:
     a launch profile that still passes it keeps working; `screenshot` and `tree` print the winapp
     command (`winapp ui screenshot`, `winapp devtools inspect`) and exit 2, as does winapp's own
     `--devtools on|off|headless` when it is passed to the app instead of to `winapp run`;
-  - the public `Factories.DevtoolsMenu(...)` and `RenderContext.UseDevtools()` APIs, the
+  - the public `Factories.DevtoolsMenu(...)`, `RenderContext.UseDevtools()` and
+    `IReactorDevtoolsHost.BuildDevtoolsMenu(...)` APIs, the
     `DevtoolsSubverb.App` / `Screenshot` / `Tree` values, the `McpTransport` enum, and the
     corresponding `DevtoolsCliOptions` members (`McpPort`, `Transport`, `LogLevel`,
     `ScreenshotOutputPath`, `ProjectIdentifier`, `LogsDisabled`, `LogsCapacityMb`, and `UsedDeprecatedPreview`, since `--preview` is no longer deprecated).
