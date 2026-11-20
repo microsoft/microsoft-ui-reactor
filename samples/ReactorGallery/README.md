@@ -135,7 +135,7 @@ dotnet run --project tools/Reactor.SearchIndex
 
 A `Reactor.Tests` gate byte-compares the committed file, so a stale index fails CI.
 `SearchIndexCoverageTests` also checks for cards that are missing from a regenerated
-index. Record deliberate omissions and replacements in the
+index. Record deliberate omissions in the
 [coverage manifest](../../tests/Reactor.Tests/Tooling/SearchIndexCoverageTests.cs).
 Remove an omission entry when its card becomes a complete sample.
 

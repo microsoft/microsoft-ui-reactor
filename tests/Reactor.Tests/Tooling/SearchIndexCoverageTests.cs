@@ -9,34 +9,27 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 
 public sealed class SearchIndexCoverageTests
 {
-    enum Action { Skip, Replace }
-
     readonly record struct CardKey(string Control, string Title, int Occurrence = 1);
-    readonly record struct CardChange(Action Action, string Reason);
 
     // This manifest is reviewed against the page source. A new omission fails the test even
     // if the generated JSON was refreshed. Remove an entry when its card starts shipping.
-    static readonly Dictionary<CardKey, CardChange> Changes = new()
+    static readonly Dictionary<CardKey, string> Omissions = new()
     {
-        [new("auto-suggest-box", "Filtered Results Display")] = new(Action.Skip, "The Select projection is elided."),
-        [new("card", "Card with icon, heading, and body")] = new(Action.Skip, "The icon Border is abbreviated."),
-        [new("color", "<title>")] = new(Action.Skip, "BrushSection computes the card title and code at runtime."),
-        [new("expander", "Basic Expander")] = new(Action.Skip, "Additional content children are elided."),
-        [new("flex", "Grow & Shrink")] = new(Action.Skip, "The child Borders have abbreviated content."),
-        [new("flip-view", "Data-Driven FlipView")] = new(Action.Skip, "The item template's VStack children are elided."),
-        [new("grid", "Basic Grid")] = new(Action.Skip, "Remaining grid cells are elided."),
-        [new("list-view", "Basic ListView")] = new(Action.Skip, "Additional list items are elided."),
-        [new("list-view", "Animated edit (spec 042)")] = new(Action.Skip, "The mutation signature and item template are elided."),
-        [new("map-control", "Interactive map")] = new(Action.Replace, "Editorial code supplies the complete no-token branch."),
-        [new("media-player-element", "Video with transport controls")] = new(Action.Replace, "Editorial code supplies the complete fallback."),
-        [new("rich-text-block", "Inline hyperlinks & embedded UI")] = new(Action.Skip, "The embedded button callback is elided."),
-        [new("scroll-view", "Horizontal ScrollView (modern)")] = new(Action.Skip, "The HStack content is elided."),
-        [new("scroll-view", "Classic ScrollViewer (legacy)")] = new(Action.Skip, "The VStack content is elided."),
-        [new("spacing", "Spacing Scale")] = new(Action.Skip, "The card's snippet is a comment describing the scale."),
-        [new("split-view", "Basic SplitView")] = new(Action.Replace, "Editorial code supplies the complete pane and content."),
-        [new("tree-view", "Basic TreeView")] = new(Action.Skip, "The Pictures subtree is elided."),
-        [new("type-ramp", "Factories")] = new(Action.Replace, "Editorial header names the factories; the original code is retained."),
-        [new("typography", "Type Ramp")] = new(Action.Skip, "The code is assembled from the type ramp at runtime."),
+        [new("auto-suggest-box", "Filtered Results Display")] = "The Select projection is elided.",
+        [new("card", "Card with icon, heading, and body")] = "The icon Border is abbreviated.",
+        [new("color", "<title>")] = "BrushSection computes the card title and code at runtime.",
+        [new("expander", "Basic Expander")] = "Additional content children are elided.",
+        [new("flex", "Grow & Shrink")] = "The child Borders have abbreviated content.",
+        [new("flip-view", "Data-Driven FlipView")] = "The item template's VStack children are elided.",
+        [new("grid", "Basic Grid")] = "Remaining grid cells are elided.",
+        [new("list-view", "Basic ListView")] = "Additional list items are elided.",
+        [new("list-view", "Animated edit (spec 042)")] = "The mutation signature and item template are elided.",
+        [new("rich-text-block", "Inline hyperlinks & embedded UI")] = "The embedded button callback is elided.",
+        [new("scroll-view", "Horizontal ScrollView (modern)")] = "The HStack content is elided.",
+        [new("scroll-view", "Classic ScrollViewer (legacy)")] = "The VStack content is elided.",
+        [new("spacing", "Spacing Scale")] = "The card's snippet is a comment describing the scale.",
+        [new("tree-view", "Basic TreeView")] = "The Pictures subtree is elided.",
+        [new("typography", "Type Ramp")] = "The code is assembled from the type ramp at runtime.",
     };
 
     [Fact]
@@ -48,8 +41,36 @@ public sealed class SearchIndexCoverageTests
             File.ReadAllText(Path.Join(root, "tools", "Reactor.SearchIndex", "editorial.json")),
             new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
         using var index = JsonDocument.Parse(File.ReadAllText(Path.Join(gallery, "reactor-search-index.json")));
-        var problems = CoverageProblems(gallery, editorial.RootElement, index.RootElement, Changes);
+        var problems = CoverageProblems(gallery, editorial.RootElement, index.RootElement, Omissions);
         Assert.True(problems.Count == 0, string.Join(Environment.NewLine, problems));
+    }
+
+    [Theory]
+    [InlineData("bin")]
+    [InlineData("obj")]
+    public void RegeneratedIndex_IgnoresBuildOutputPages(string outputDirectory)
+    {
+        using var gallery = new MiniGallery(betaRouted: true);
+        var editorialPath = gallery.WriteEditorial("""
+            { "alpha": { "keywords": ["one", "two", "three"] },
+              "beta": { "keywords": ["one", "two", "three"] } }
+            """);
+        using var editorial = JsonDocument.Parse(File.ReadAllText(editorialPath));
+        using var index = JsonDocument.Parse(SearchIndexGenerator.Generate(gallery.GalleryDir, editorialPath).Json);
+        var omissions = new Dictionary<CardKey, string>();
+
+        Assert.Empty(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement, omissions));
+
+        var generatedDirectory = Path.Join(gallery.GalleryDir, "ControlPages", "Nested", outputDirectory);
+        Directory.CreateDirectory(generatedDirectory);
+        File.WriteAllText(Path.Join(generatedDirectory, "AlphaPage.g.cs"), """
+            class AlphaPage
+            {
+                object Render() => SampleCard("Generated", null, "Alpha().Generated();");
+            }
+            """);
+
+        Assert.Empty(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement, omissions));
     }
 
     [Fact]
@@ -75,7 +96,7 @@ public sealed class SearchIndexCoverageTests
                 """);
             using var index = JsonDocument.Parse(SearchIndexGenerator.Generate(gallery.GalleryDir, editorialPath).Json);
             return CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement,
-                new Dictionary<CardKey, CardChange>());
+                new Dictionary<CardKey, string>());
         }
 
         // Generate a fresh index in both cases. The coverage check must still see a dropped card.
@@ -83,8 +104,104 @@ public sealed class SearchIndexCoverageTests
         Assert.Contains(Check("Alpha(a, ...);"), problem => problem.Contains("Missing: [Probe]", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RegeneratedIndex_ReportsStaleManifestEntry()
+    {
+        using var gallery = new MiniGallery(betaRouted: true);
+        var editorialPath = gallery.WriteEditorial("""
+            { "alpha": { "keywords": ["one", "two", "three"] },
+              "beta": { "keywords": ["one", "two", "three"] } }
+            """);
+        using var editorial = JsonDocument.Parse(File.ReadAllText(editorialPath));
+        using var index = JsonDocument.Parse(SearchIndexGenerator.Generate(gallery.GalleryDir, editorialPath).Json);
+        var omissions = new Dictionary<CardKey, string>();
+
+        Assert.Empty(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement, omissions));
+
+        omissions.Add(new("alpha", "Removed card"), "The card was removed");
+        var problem = Assert.Single(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement, omissions));
+        Assert.Equal("alpha / Removed card (1): stale manifest entry (The card was removed).", problem);
+    }
+
+    [Theory]
+    [InlineData("""{ "header": "Curated" }""", "Curated")]
+    [InlineData("""{ "code": "Alpha().Configured();" }""", "Alpha basic")]
+    [InlineData("""{ "header": "Curated", "code": "Alpha().Configured();" }""", "Curated")]
+    public void RegeneratedIndex_AppliesEditorialOverride(string sampleOverride, string expectedHeader)
+    {
+        using var gallery = new MiniGallery(betaRouted: true);
+        var editorialPath = gallery.WriteEditorial($$"""
+            { "alpha": { "keywords": ["one", "two", "three"], "sampleOverride": {{sampleOverride}} },
+              "beta": { "keywords": ["one", "two", "three"] } }
+            """);
+        using var editorial = JsonDocument.Parse(File.ReadAllText(editorialPath));
+        using var index = JsonDocument.Parse(SearchIndexGenerator.Generate(gallery.GalleryDir, editorialPath).Json);
+        var samples = index.RootElement.GetProperty("controls")[0].GetProperty("samples");
+
+        Assert.Equal(expectedHeader, Assert.Single(samples.EnumerateArray()).GetProperty("header").GetString());
+        Assert.Empty(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement,
+            new Dictionary<CardKey, string>()));
+    }
+
+    [Fact]
+    public void RegeneratedIndex_AppliesOverrideAfterSkippedCard()
+    {
+        using var gallery = new MiniGallery(betaRouted: true);
+        gallery.OverwriteAlphaPage("""
+            class AlphaPage
+            {
+                object Render() => VStack(
+                    SampleCard("Guidance", null, "// Guidance only"),
+                    SampleCard("First", null, "Alpha();"),
+                    SampleCard("curated", null, "Alpha().Alternate();"),
+                    SampleCard("Later", null, "Alpha().Tuned();"));
+            }
+            """);
+        var editorialPath = gallery.WriteEditorial("""
+            { "alpha": { "keywords": ["one", "two", "three"], "sampleOverride": { "header": "Curated" } },
+              "beta": { "keywords": ["one", "two", "three"] } }
+            """);
+        using var editorial = JsonDocument.Parse(File.ReadAllText(editorialPath));
+        using var index = JsonDocument.Parse(SearchIndexGenerator.Generate(gallery.GalleryDir, editorialPath).Json);
+        var omissions = new Dictionary<CardKey, string>
+        {
+            [new("alpha", "Guidance")] = "The snippet is comment-only",
+        };
+        var samples = index.RootElement.GetProperty("controls")[0].GetProperty("samples");
+
+        Assert.Equal(new[] { "Curated", "Later" }, samples.EnumerateArray().Select(s => s.GetProperty("header").GetString()));
+        Assert.Empty(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement, omissions));
+    }
+
+    [Fact]
+    public void RegeneratedIndex_UsesStandaloneEditorialOverride()
+    {
+        using var gallery = new MiniGallery(betaRouted: true);
+        gallery.OverwriteAlphaPage("""
+            class AlphaPage
+            {
+                object Render() => SampleCard("Guidance", null, "// Guidance only");
+            }
+            """);
+        var editorialPath = gallery.WriteEditorial("""
+            { "alpha": { "keywords": ["one", "two", "three"],
+                         "sampleOverride": { "header": "Curated", "code": "Alpha();" } },
+              "beta": { "keywords": ["one", "two", "three"] } }
+            """);
+        using var editorial = JsonDocument.Parse(File.ReadAllText(editorialPath));
+        using var index = JsonDocument.Parse(SearchIndexGenerator.Generate(gallery.GalleryDir, editorialPath).Json);
+        var omissions = new Dictionary<CardKey, string>
+        {
+            [new("alpha", "Guidance")] = "The snippet is comment-only",
+        };
+        var samples = index.RootElement.GetProperty("controls")[0].GetProperty("samples");
+
+        Assert.Equal("Curated", Assert.Single(samples.EnumerateArray()).GetProperty("header").GetString());
+        Assert.Empty(CoverageProblems(gallery.GalleryDir, editorial.RootElement, index.RootElement, omissions));
+    }
+
     static List<string> CoverageProblems(string gallery, JsonElement editorial, JsonElement index,
-        IReadOnlyDictionary<CardKey, CardChange> changes)
+        IReadOnlyDictionary<CardKey, string> omissions)
     {
         var registered = RegistryIds(gallery);
         Assert.NotEmpty(registered);
@@ -95,19 +212,17 @@ public sealed class SearchIndexCoverageTests
 
         var routes = Routes(gallery);
         var pageNames = included.Select(id => routes[id]).ToHashSet(StringComparer.Ordinal);
-        var pageFiles = Directory.EnumerateFiles(Path.Join(gallery, "ControlPages"), "*.cs", SearchOption.AllDirectories);
-        var pages = pageFiles.SelectMany(file => ReadSource(file).DescendantNodes().OfType<ClassDeclarationSyntax>())
+        var pages = GallerySources.ReadSources(Path.Join(gallery, "ControlPages"))
+            .SelectMany(source => source.Root.DescendantNodes().OfType<ClassDeclarationSyntax>())
             .Where(page => pageNames.Contains(page.Identifier.ValueText))
             .ToDictionary(page => page.Identifier.ValueText, page => CardInvocations(page).ToArray(), StringComparer.Ordinal);
 
-        var remainingChanges = new Dictionary<CardKey, CardChange>(changes);
+        var remainingOmissions = new Dictionary<CardKey, string>(omissions);
         var problems = new List<string>();
         foreach (var id in included)
         {
             var expected = new List<string>();
             var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
-            var overrideFields = ReadOverride(editorial, id);
-            var replaced = false;
             foreach (var card in pages[routes[id]])
             {
                 var args = card.ArgumentList.Arguments;
@@ -120,18 +235,7 @@ public sealed class SearchIndexCoverageTests
                 var sourceExpression = Argument(args, "sourceCode", 2);
                 var sourceCode = ReadOptionalLiteral(sourceExpression);
 
-                if (remainingChanges.Remove(key, out var change))
-                {
-                    if (change.Action == Action.Skip) continue;
-
-                    Assert.False(replaced, $"{id} has more than one expected override.");
-                    Assert.Empty(expected);
-                    Assert.True(overrideFields.Header is not null || overrideFields.Code is not null,
-                        $"{id} / {title}: expected an editorial override ({change.Reason}).");
-                    expected.Add(overrideFields.Header ?? title);
-                    replaced = true;
-                    continue;
-                }
+                if (remainingOmissions.Remove(key)) continue;
 
                 if (literalTitle is null || sourceCode is null)
                 {
@@ -143,8 +247,13 @@ public sealed class SearchIndexCoverageTests
                 expected.Add(title);
             }
 
-            if (!replaced && (overrideFields.Header is not null || overrideFields.Code is not null))
-                problems.Add($"{id}: editorial override is missing a manifest entry.");
+            var overrideHeader = ReadOverrideHeader(editorial, id);
+            if (overrideHeader is not null)
+            {
+                expected = expected.Skip(1)
+                    .Where(header => !string.Equals(header, overrideHeader, StringComparison.OrdinalIgnoreCase))
+                    .Prepend(overrideHeader).ToList();
+            }
 
             var actual = indexed[id].EnumerateArray().Select(s => s.GetProperty("header").GetString()!).ToArray();
             if (expected.SequenceEqual(actual)) continue;
@@ -157,8 +266,8 @@ public sealed class SearchIndexCoverageTests
                 + "If both lists are empty, check the order or duplicate count.");
         }
 
-        problems.AddRange(remainingChanges.Select(entry =>
-            $"{entry.Key.Control} / {entry.Key.Title} ({entry.Key.Occurrence}): stale manifest entry ({entry.Value.Reason})."));
+        problems.AddRange(remainingOmissions.Select(entry =>
+            $"{entry.Key.Control} / {entry.Key.Title} ({entry.Key.Occurrence}): stale manifest entry ({entry.Value})."));
         return problems;
     }
 
@@ -206,12 +315,11 @@ public sealed class SearchIndexCoverageTests
         editorial.TryGetProperty(id, out var entry)
             && EditorialProperty(entry, "exclude").ValueKind == JsonValueKind.True;
 
-    static (string? Header, string? Code) ReadOverride(JsonElement editorial, string id)
+    static string? ReadOverrideHeader(JsonElement editorial, string id)
     {
-        if (!editorial.TryGetProperty(id, out var entry)) return default;
+        if (!editorial.TryGetProperty(id, out var entry)) return null;
         var sample = EditorialProperty(entry, "sampleOverride");
-        var code = ReadField(sample, "code");
-        return (ReadField(sample, "header")?.Trim(), code);
+        return ReadField(sample, "header")?.Trim();
     }
 
     static string? ReadField(JsonElement element, string field)

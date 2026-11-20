@@ -47,6 +47,12 @@ static partial class SampleCode
         // another legitimate use of angle brackets, even if the type name starts with 'your'.
         foreach (var token in root.DescendantTokens(descendIntoTrivia: true))
         {
+            // URI-shaped literals carry the same placeholder policy in every call or assignment.
+            var value = token.ValueText;
+            if (token.Parent is LiteralExpressionSyntax && UriScheme().IsMatch(value)
+                && (ConfigurationPlaceholder().IsMatch(value) || HasAbbreviatedUriPath(value)))
+                return true;
+
             if (IsTextToken(token) || (token.IsKind(SyntaxKind.LessThanToken) && token.Parent is TypeArgumentListSyntax))
                 Mask(codeOnly, token.SpanStart, token.Span.Length);
         }
@@ -58,8 +64,7 @@ static partial class SampleCode
         return root.DescendantNodes().OfType<ArgumentSyntax>().Any(HasDirectPlaceholder);
     }
 
-    // Keep the existing map-token and URI fill-in policy at these explicit syntax positions.
-    // Other argument shapes can use an omission comment without inferring symbols or types.
+    // Map-token fill-ins and relative URI paths still need these explicit syntax positions.
     static bool HasDirectPlaceholder(ArgumentSyntax argument)
     {
         if (argument.Expression is not LiteralExpressionSyntax literal || !literal.IsKind(SyntaxKind.StringLiteralExpression)
@@ -67,9 +72,9 @@ static partial class SampleCode
             return false;
 
         var uri = list.Parent is ObjectCreationExpressionSyntax creation
-            && creation.Type.ToString() is "Uri" or "System.Uri" or "global::System.Uri";
+            && NameText(creation.Type) is "Uri" or "System.Uri" or "global::System.Uri";
         var mapToken = list.Parent is InvocationExpressionSyntax call
-            && call.Expression.ToString() is "MapControl" or "Factories.MapControl"
+            && NameText(call.Expression) is "MapControl" or "Factories.MapControl"
             && (argument.NameColon is { } named
                 ? named.Name.Identifier.ValueText == "mapServiceToken"
                 : list.Arguments.IndexOf(argument) == 0);
@@ -77,8 +82,17 @@ static partial class SampleCode
 
         var value = literal.Token.ValueText;
         if (ConfigurationPlaceholder().IsMatch(value)) return true;
-        var pathEnd = value.AsSpan().IndexOfAny('?', '#');
-        return uri && AbbreviatedPath().IsMatch(pathEnd < 0 ? value.AsSpan() : value.AsSpan(0, pathEnd));
+        return uri && HasAbbreviatedUriPath(value);
+    }
+
+    static string NameText(SyntaxNode name) =>
+        string.Concat(name.DescendantTokens().Select(token => token.ValueText));
+
+    static bool HasAbbreviatedUriPath(string value)
+    {
+        var path = value.AsSpan(UriScheme().Match(value).Length);
+        var pathEnd = path.IndexOfAny('?', '#');
+        return AbbreviatedPath().IsMatch(pathEnd < 0 ? path : path[..pathEnd]);
     }
 
     static bool IsTextToken(SyntaxToken token) => token.Kind() is
@@ -105,6 +119,9 @@ static partial class SampleCode
 
     [GeneratedRegex(@"<your[\w .-]+>")]
     private static partial Regex ConfigurationPlaceholder();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9+.-]*:(?=\S)")]
+    private static partial Regex UriScheme();
 
     [GeneratedRegex(@"(?:^|[/\\])(?:\.\.\.|\([ \t]*\.\.\.[ \t]*\))(?=$|[/\\])")]
     private static partial Regex AbbreviatedPath();

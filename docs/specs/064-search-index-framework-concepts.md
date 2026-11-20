@@ -110,8 +110,8 @@ one snippet, and the contract's `samples` array was always plural.
   header, its code, or both, or standing alone when no card qualifies); the
   page's remaining clean cards follow it.
 - The per-card REAL-CODE-ONLY rule skips code elisions, comment-only snippets,
-  explicit omission comments, and direct map-token or URI placeholders. Ordinary
-  comments and display strings can contain ellipses. See the
+  explicit omission comments, map-token fill-ins, and placeholders in URI-shaped
+  literals. Ordinary comments and display strings can contain ellipses. See the
   [generator's rules](../../tools/Reactor.SearchIndex/README.md#guarantees--gate)
   for the supported literal arguments and omission markers. A page without a usable
   sample still requires an editorial override.
@@ -121,9 +121,10 @@ one snippet, and the contract's `samples` array was always plural.
 The byte-comparison gate checks freshness. As a separate coverage check for
 [#1020](https://github.com/microsoft/microsoft-ui-reactor/issues/1020),
 `SearchIndexCoverageTests` enumerates the routed source cards and compares their
-headers and order with the index. Its manifest records deliberate omissions and
-replacements by card with a reason. A missing card fails this test even when the
-index has already been regenerated.
+headers and order with the index. Its manifest records deliberate omissions by
+card with a reason. Override headers come directly from `editorial.json` and apply
+to the first non-skipped card, or provide a standalone sample header. A missing
+card fails this test even when the index has already been regenerated.
 
 ### 3.3 Prose is lifted from the skills by marker
 

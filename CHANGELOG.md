@@ -226,8 +226,9 @@ Conventions for contributors:
 
 - ReactorGallery search keeps complete samples that contain ellipses in comments
   or display text, restoring the Pan and `OpacityTransition` examples in
-  `winapp find-ui --source reactor`. Code elisions and direct map-token or URI
-  placeholders are still filtered. An independent coverage check catches missing
+  `winapp find-ui --source reactor`. Code elisions, map-token fill-ins, and placeholders
+  in URI-shaped string literals are filtered, including Image and MediaPlayerElement
+  sources and displayed URI templates. An independent coverage check catches missing
   cards even after index regeneration
   ([issue #1020](https://github.com/microsoft/microsoft-ui-reactor/issues/1020),
   [spec 064 §3.2](docs/specs/064-search-index-framework-concepts.md#32-every-clean-card-is-emitted)).
