@@ -42,6 +42,7 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
         foreach (string transform in Transforms)
             foreach (string order in orders)
                 await RunCase(transform, order);
+        if (feature == "InteractionStates") await RunWrappedCases();
         H.SetContent(null);
     }
 
@@ -197,7 +198,45 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
         }
         finally
         {
+            // Unmount so the interaction trackers release the target and the stage.
+            reconciler.UnmountChild(stage);
             H.SetContent(null);
+        }
+    }
+
+    // A transform declared on a wrapper (a keyed Memo or a legacy ModifiedElement) is applied to
+    // the inner control without being on its tagged element. Hover-out must still return to it.
+    private async Task RunWrappedCases()
+    {
+        foreach (string wrapper in new[] { "Memo", "ModifiedElement" })
+        {
+            string name = $"TransformHandoff_InteractionStates_Wrapped{wrapper}";
+            var inner = WithFeature(Target(), "Scale", false);
+            Element wrapped = wrapper == "Memo"
+                ? Memo(1, () => inner).Scale(1.5f)
+                : new ModifiedElement(inner, TextBlock("").Scale(1.5f).Modifiers!);
+            using var reconciler = new Reconciler();
+            StackPanel? stage = null;
+            try
+            {
+                stage = (StackPanel)reconciler.Mount(Stage(wrapped), static () => { })!;
+                H.SetContent(stage);
+                await Settle();
+                var target = (Border)stage.Children[0];
+                Reconciler.SimulatePointerOverForTests(target, isOver: true);
+                await CheckPose(name + "_HoverIn", stage, Pose.Identity with { Scale = new Vector3(2, 2, 1) });
+                Reconciler.SimulatePointerOverForTests(target, isOver: false);
+                await CheckPose(name + "_HoverOut", stage, Declared("Scale"));
+            }
+            catch (Exception ex)
+            {
+                H.Check(name + "_NoThrow", false, $"{ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                if (stage is not null) reconciler.UnmountChild(stage);
+                H.SetContent(null);
+            }
         }
     }
 

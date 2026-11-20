@@ -1595,6 +1595,9 @@ public sealed partial class Reconciler : IDisposable
         // Properties written on the handed-out Visual by a modifier. Kept on native
         // attached state so a replacement WinRT wrapper cannot lose cleanup ownership.
         internal AnimateProperty CompositionModifierProperties;
+        // The transform the modifiers last wrote to the handed-out Visual. Interaction states
+        // and Transition.Scale return to it, whichever element or wrapper declared it.
+        internal TransformRest? TransformRest;
         // Track the entry that took over each modifier's Visual channel so
         // removing one named animation can release its deferred reset.
         internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
@@ -5934,7 +5937,7 @@ public sealed partial class Reconciler : IDisposable
     {
         // Scale relative to the element's own .Scale(). The visual's Scale getter returns the
         // last assigned value, which after an enter is its start value, so it is not the rest.
-        var rest = DeclaredTransform(uie).Scale;
+        var rest = RestTransformOf(uie).Scale;
         var scaled = new Vector3(rest.X * from, rest.Y * from, rest.Z);
         if (isEnter)
         {
@@ -6109,9 +6112,10 @@ public sealed partial class Reconciler : IDisposable
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
-        // Normal returns the transforms to the element's own .Scale/.Translation/.Rotation
-        // values, not to identity, so a hover-out does not discard them (#1613).
-        var rest = newState == InteractionState.Normal ? DeclaredTransform(uie) : default;
+        // Normal returns the transforms to the values the element's modifiers wrote, not to
+        // identity, so a hover-out does not discard them (#1613). The visual was taken above,
+        // so a facade transform has already moved and been recorded.
+        var rest = RestTransformOf(uie);
 
         // Compositor properties — animate via Visual
         var targetOpacity = values?.Opacity ?? 1.0f;
@@ -6120,7 +6124,7 @@ public sealed partial class Reconciler : IDisposable
 
         if (values?.Scale.HasValue == true || values?.ScaleV.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetScale = values?.ScaleV ?? (values?.Scale.HasValue == true ? new Vector3(values.Scale.Value, values.Scale.Value, 1f) : rest.Scale);
+            var targetScale = values?.ScaleV ?? (values?.Scale is { } uniform ? new Vector3(uniform, uniform, 1f) : rest.Scale);
             var scaleAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetScale, curve);
             visual.StartAnimation("Scale", scaleAnim);
         }
@@ -6137,7 +6141,7 @@ public sealed partial class Reconciler : IDisposable
 
         if (values?.Rotation.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetRotation = values?.Rotation ?? rest.Radians;
+            var targetRotation = values?.Rotation ?? rest.RotationDegrees * MathF.PI / 180f;
             var rotationAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetRotation, curve);
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
@@ -6194,22 +6198,18 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private readonly record struct RestTransform(Vector3 Scale, Vector3 Translation, float Radians);
-
-    /// <summary>
-    /// The transform modifier values the mounted element (or a decorator over it) declares,
-    /// with identity for the ones it leaves unset.
-    /// </summary>
-    private static RestTransform DeclaredTransform(UIElement uie)
+    /// <summary>The transform modifier values last written to an element's handed-out Visual.</summary>
+    internal sealed class TransformRest
     {
-        var scale = FindMountedElementValue(uie, static e => e.Modifiers?.Scale is { } s ? new global::System.Runtime.CompilerServices.StrongBox<Vector3>(s) : null);
-        var translation = FindMountedElementValue(uie, static e => e.Modifiers?.Translation is { } t ? new global::System.Runtime.CompilerServices.StrongBox<Vector3>(t) : null);
-        var rotation = FindMountedElementValue(uie, static e => e.Modifiers?.Rotation is { } r ? new global::System.Runtime.CompilerServices.StrongBox<float>(r) : null);
-        return new RestTransform(
-            scale?.Value ?? Vector3.One,
-            translation?.Value ?? Vector3.Zero,
-            (rotation?.Value ?? 0f) * MathF.PI / 180f);
+        public Vector3 Scale = Vector3.One;
+        public Vector3 Translation;
+        public float RotationDegrees;
     }
+
+    private static TransformRest RestTransformOf(UIElement uie)
+        => (uie.GetValue(ReactorAttached.StateProperty) as ReactorState)?.TransformRest ?? IdentityRest;
+
+    private static readonly TransformRest IdentityRest = new();
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {

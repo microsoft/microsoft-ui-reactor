@@ -29,13 +29,27 @@ internal static class AnimationHelper
             || (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
                 && (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
 
-    private static void MarkCompositionWrite(UIElement element, string property)
+    private static void MarkCompositionWrite(UIElement element, string property, float value)
+    {
+        var state = MarkCompositionWrite(element, property);
+        if (property == "Rotation") (state.TransformRest ??= new()).RotationDegrees = value;
+    }
+
+    private static void MarkCompositionWrite(UIElement element, string property, Vector3 value)
+    {
+        var state = MarkCompositionWrite(element, property);
+        if (property == "Scale") (state.TransformRest ??= new()).Scale = value;
+        else if (property == "Translation") (state.TransformRest ??= new()).Translation = value;
+    }
+
+    private static Reconciler.ReactorState MarkCompositionWrite(UIElement element, string property)
     {
         var state = Reconciler.GetOrCreateReactorState(element);
         var flag = PropertyFlag(property);
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
+        return state;
     }
 
     private static Visual GetAnimationVisual(UIElement element)
@@ -103,9 +117,9 @@ internal static class AnimationHelper
             visual.Properties.InsertVector3("Translation", translation);
         }
         if (moveCenter) visual.CenterPoint = center;
-        if (moveScale) MarkCompositionWrite(element, "Scale");
-        if (moveRotation) MarkCompositionWrite(element, "Rotation");
-        if (moveTranslation) MarkCompositionWrite(element, "Translation");
+        if (moveScale) MarkCompositionWrite(element, "Scale", scale);
+        if (moveRotation) MarkCompositionWrite(element, "Rotation", rotation);
+        if (moveTranslation) MarkCompositionWrite(element, "Translation", translation);
         if (moveCenter) MarkCompositionWrite(element, "CenterPoint");
         return visual;
     }
@@ -119,6 +133,15 @@ internal static class AnimationHelper
     {
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
         var flag = PropertyFlag(property);
+        if (state?.TransformRest is { } rest)
+        {
+            switch (property)
+            {
+                case "Scale": rest.Scale = Vector3.One; break;
+                case "Rotation": rest.RotationDegrees = 0; break;
+                case "Translation": rest.Translation = Vector3.Zero; break;
+            }
+        }
         if (state is null || (state.CompositionModifierProperties & flag) == 0)
         {
             if (property == "Opacity") return;
@@ -241,7 +264,7 @@ internal static class AnimationHelper
                 SetScalarDirect(element, property, value);
                 return;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 
     /// <summary>
@@ -464,7 +487,7 @@ internal static class AnimationHelper
                 SetVector3Direct(element, property, value);
                 return;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 
     private static Curve? ResolveCurve(UIElement element, string property, Element? source, bool respectPropertyFlags)
@@ -514,7 +537,7 @@ internal static class AnimationHelper
             element.Opacity = value;
             visual.Opacity = value;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 
     private static void SetVector3Direct(UIElement element, string property, Vector3 value)
@@ -544,7 +567,7 @@ internal static class AnimationHelper
                 break;
             case "CenterPoint": visual.CenterPoint = value; break;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 }
 
