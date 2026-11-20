@@ -117,6 +117,7 @@ internal sealed record MarkdownSelectionElement(Element Content, SelectionRole R
 
 internal sealed partial class MarkdownSelectionMarker : UserControl
 {
+    private MarkdownSelectionHost? _owner;
     internal MarkdownSelectionElement Metadata { get; set; } = null!;
     internal UIElement? Child { get => Content; set => Content = value; }
     internal bool HasSelectionScope
@@ -134,10 +135,19 @@ internal sealed partial class MarkdownSelectionMarker : UserControl
     {
         Loaded += (_, _) =>
         {
+            for (DependencyObject? parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(this);
+                parent is not null; parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+                if (parent is MarkdownSelectionHost owner) { _owner = owner; break; }
+            _owner?.InvalidateDocument();
             if (Metadata.Role == SelectionRole.Surface && !HasSelectionScope)
                 DiagnosticLog.Warning(LogCategory.Markdown, "TextSelection",
                     "A selectable Markdown surface has no enclosing MarkdownTextSelection.Scope. " +
                     "Wrap the complete message in Scope; TextSelection alone does not provide selection.");
+        };
+        Unloaded += (_, _) =>
+        {
+            _owner?.InvalidateDocument();
+            _owner = null;
         };
     }
 }
@@ -170,19 +180,19 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
         }
         if (control is MarkdownSelectionHost host)
         {
-            host.Options = newEl.Options!;
+            if (host.Options != newEl.Options) host.Options = newEl.Options!;
             host.SetContent(ctx.ReconcileChild(oldEl.Content, newEl.Content, host.Body));
-            host.InvalidateDocument();
-            // LayoutUpdated refreshes after the native text tree settles, not mid-reconciliation.
         }
         else
         {
             var marker = (MarkdownSelectionMarker)control;
             marker.Metadata = newEl;
             marker.Child = ctx.ReconcileChild(oldEl.Content, newEl.Content, marker.Child);
-            for (DependencyObject? parent = marker; parent is not null;
-                parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
-                if (parent is MarkdownSelectionHost owner) { owner.InvalidateDocument(); break; }
+            if (oldEl.Text != newEl.Text || oldEl.SeparatorAfter != newEl.SeparatorAfter
+                || oldEl.Role != newEl.Role || oldEl.IsVisible != newEl.IsVisible)
+                for (DependencyObject? parent = marker; parent is not null;
+                    parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+                    if (parent is MarkdownSelectionHost owner) { owner.InvalidateDocument(); break; }
         }
         return control;
     }

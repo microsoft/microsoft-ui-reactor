@@ -177,9 +177,16 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Assert.AreEqual(0, innerText.GetSelection().Single().CompareEndpoints(
                 TextPatternRangeEndpoint.Start, shiftAnchor, TextPatternRangeEndpoint.Start), "Shift+click keeps anchor");
             Console.WriteLine($"Shift+click selected={innerText.GetSelection().Single().GetText(-1)}");
-            ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
-            Wait(() => innerText.DocumentRange.GetText(-1) == "inner text streamed" &&
-                receivedText.Contains("inner text streamed"), "streaming exact text-change event");
+            Key(0x1B, false); Key(0x1B, true);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "", "Escape clears inner selection");
+            var streamButton = Find("SelectionStream");
+            streamButton.SetFocus();
+            Wait(() => streamButton.Current.HasKeyboardFocus, "inner scope is idle before streaming");
+            ((InvokePattern)streamButton.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            // Do not poll DocumentRange: that would refresh the idle scope and
+            // manufacture the very text-change event this check must observe.
+            Wait(() => receivedText.Contains("inner text streamed"), "idle streaming exact text-change event");
+            Assert.AreEqual("inner text streamed", innerText.DocumentRange.GetText(-1));
             Console.WriteLine($"Streaming text={innerText.DocumentRange.GetText(-1)} selected={innerText.GetSelection().Single().GetText(-1)}; textEvents={textEvents}");
 
             var longElement = Find("SelectionLong");

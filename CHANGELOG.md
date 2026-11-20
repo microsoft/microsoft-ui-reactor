@@ -84,6 +84,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- Idle Markdown text-selection scopes no longer enumerate native text or compute
+  transforms on unrelated window layout passes. Input and automation access refresh
+  stale documents lazily; active selections retain layout tracking and streaming
+  endpoint remapping. One scope per message remains supported (PR #1475).
+
 - `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
   (or estimate), and spacing after rerenders. Removing and re-adding the callback
   preserves the native viewer and its single subscription, which is detached when
