@@ -6340,7 +6340,13 @@ public sealed partial class Reconciler : IDisposable
             // is what the element now carries, so it is what leaving the states puts back.
             if (!overrideApplied || !ReferenceEquals(fe.ReadLocalValue(dp), activeBrush))
             {
-                normalLocal = fe.ReadLocalValue(dp);
+                // A binding is kept as its Binding, read through the typed GetBindingExpression:
+                // the raw local value does not reliably project as a BindingExpression under
+                // NativeAOT, so testing it with `is` would lose the binding there.
+                var local = fe.ReadLocalValue(dp);
+                normalLocal = local is null or Brush || ReferenceEquals(local, DependencyProperty.UnsetValue)
+                    ? local
+                    : (object?)fe.GetBindingExpression(dp)?.ParentBinding ?? local;
                 overrideApplied = true;
             }
             fe.SetValue(dp, stateBrush);
@@ -6362,7 +6368,7 @@ public sealed partial class Reconciler : IDisposable
         // property to what styles supply.
         if (normal is null or Brush)
             fe.SetValue(dp, normal);
-        else if (normal is Microsoft.UI.Xaml.Data.BindingExpression { ParentBinding: { } binding })
+        else if (normal is Microsoft.UI.Xaml.Data.BindingBase binding)
             fe.SetBinding(dp, binding);
         else
             fe.ClearValue(dp);
