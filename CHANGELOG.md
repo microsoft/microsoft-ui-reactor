@@ -141,7 +141,7 @@ Conventions for contributors:
   enabled, so the rotation stop was skipped and the animation kept running on the control.
   Each stop is now independent, and `Translation` is stopped only when the property exists.
   When an update removes keyframes from a control that stays mounted, only the channels those
-  keyframes declare are stopped, and they are stopped before the control's handler and
+  keyframes declare or have started are stopped, and they are stopped before the control's handler and
   modifiers run. Animations on other channels, a Flyout target's own keyframes, and a modifier
   animation started in the same update keep running (spec 066 §7.3, issue #1641).
 

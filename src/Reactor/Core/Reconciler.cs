@@ -6336,9 +6336,11 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name).
+    /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name),
+    /// and the channels each entry has started. An unchanged trigger skips playback, so the
+    /// started channels can differ from the entry's latest definition.
     /// </summary>
-    private static readonly Dictionary<(UIElement, string), object?> _keyframeTriggerValues = new();
+    private static readonly Dictionary<(UIElement, string), (object? Trigger, AnimateProperty Started)> _keyframeTriggerValues = new();
 
     internal readonly record struct KeyframeChannelOwner(
         KeyframeEntry[] Scope, KeyframeEntry Entry, AnimationController? DeferredController = null);
@@ -6374,13 +6376,14 @@ public sealed partial class Reconciler : IDisposable
         {
             var key = (uie, entry.Name);
             bool hasPrevious = _keyframeTriggerValues.TryGetValue(key, out var previous);
-            bool changed = KeyframeTriggerChanged(hasPrevious, previous, entry.Trigger);
-            _keyframeTriggerValues[key] = entry.Trigger;
+            bool changed = KeyframeTriggerChanged(hasPrevious, previous.Trigger, entry.Trigger);
+            _keyframeTriggerValues[key] = (entry.Trigger, previous.Started);
             if (!changed) continue;
 
             var def = entry.Definition;
             var group = compositor.CreateAnimationGroup();
             var properties = GetKeyframeProperties(def);
+            _keyframeTriggerValues[key] = (entry.Trigger, previous.Started | properties);
 
             if ((properties & AnimateProperty.Opacity) != 0)
             {
@@ -6516,7 +6519,8 @@ public sealed partial class Reconciler : IDisposable
             {
                 var nameKey = owner.Entry.Name;
                 var key = (uie, nameKey);
-                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var trigger);
+                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var triggerState);
+                var trigger = triggerState.Trigger;
                 bool retained = false;
                 bool replayed = false;
                 // Playback reads and advances the trigger for every matching entry in order.
@@ -6551,17 +6555,17 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    // declaredOnly stops only the channels the entries declare. A retained control passes
-    // true so removing keyframes doesn't stop an unrelated animation on another channel.
-    // Unmount passes false and stops every channel a keyframe can animate.
+    // declaredOnly stops only the channels the entries declare or have started. A retained
+    // control passes true so removing keyframes doesn't stop an unrelated animation on another
+    // channel. Unmount passes false and stops every channel a keyframe can animate.
     internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool declaredOnly = false)
     {
         var channels = declaredOnly ? default
             : AnimateProperty.Opacity | AnimateProperty.Scale | AnimateProperty.Offset | AnimateProperty.Rotation;
         foreach (var entry in entries)
         {
-            _keyframeTriggerValues.Remove((uie, entry.Name));
-            if (declaredOnly) channels |= GetKeyframeProperties(entry.Definition);
+            _keyframeTriggerValues.Remove((uie, entry.Name), out var triggerState);
+            if (declaredOnly) channels |= GetKeyframeProperties(entry.Definition) | triggerState.Started;
         }
         if (channels == default) return;
 

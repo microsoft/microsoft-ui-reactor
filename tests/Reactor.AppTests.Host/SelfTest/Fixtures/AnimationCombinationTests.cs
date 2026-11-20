@@ -792,6 +792,39 @@ internal static class AnimationCombinationTests
             await RunRemovalCase("KFRemoveKeepsModifierRotation", rotationKeyframes: false);
             await RunRetainedRotationCase("KFRemoveKeepsRunningRotation");
             await RunFlyoutTargetCase("KFRemoveKeepsTargetKeyframes");
+            await RunSkippedPlaybackCase("KFRemoveStopsStartedChannel");
+        }
+
+        // An unchanged trigger skips playback, so switching a looping entry from scale to
+        // opacity leaves the scale loop running. Removing the keyframes must still stop it.
+        async Task RunSkippedPlaybackCase(string name)
+        {
+            var plain = Border(TextBlock(name));
+            var scaleLoop = plain.Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, scale: Vector3.One).At(1f, scale: new Vector3(1.5f, 1.5f, 1f)));
+            var opacityLoop = plain.Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(scaleLoop, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                reconciler.Update(scaleLoop, opacityLoop, target, () => { });
+                H.Check(name + "_ScaleLoopStillRunning", visual.TryGetAnimationController("Scale") is not null);
+
+                H.Check(name + "_SameControl", reconciler.Update(opacityLoop, plain, target, () => { }) is null);
+
+                H.Check(name + "_ScaleLoopStopped", visual.TryGetAnimationController("Scale") is null);
+            }
+            finally
+            {
+                visual?.StopAnimation("Scale");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         // A .Rotation() animation started by an earlier update keeps running when the
