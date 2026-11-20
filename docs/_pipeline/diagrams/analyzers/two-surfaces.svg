@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .box-aot { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .box-aot { fill: #341a00; stroke: #d29922; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Source -->
+  <rect class="box-accent" x="20" y="113" width="180" height="74" rx="6"/>
+  <text class="label" x="110" y="137" text-anchor="middle">Your C# code</text>
+  <text class="sub" x="110" y="155" text-anchor="middle">components, hooks,</text>
+  <text class="sub" x="110" y="171" text-anchor="middle">element factories</text>
+
+  <!-- Analyzers -->
+  <rect class="box" x="250" y="113" width="230" height="74" rx="6"/>
+  <text class="label" x="365" y="137" text-anchor="middle">REACTOR_* analyzers</text>
+  <text class="sub" x="365" y="155" text-anchor="middle">Roslyn, shipped inside the</text>
+  <text class="sub" x="365" y="171" text-anchor="middle">Microsoft.UI.Reactor package</text>
+
+  <!-- Editor -->
+  <rect class="box-out" x="540" y="30" width="220" height="74" rx="6"/>
+  <text class="label" x="650" y="54" text-anchor="middle">Editor</text>
+  <text class="sub" x="650" y="72" text-anchor="middle">squiggles while you type,</text>
+  <text class="sub" x="650" y="88" text-anchor="middle">light-bulb code fixes</text>
+
+  <!-- Build -->
+  <rect class="box-out" x="540" y="196" width="220" height="74" rx="6"/>
+  <text class="label" x="650" y="220" text-anchor="middle">dotnet build and CI</text>
+  <text class="sub" x="650" y="238" text-anchor="middle">warnings and errors</text>
+  <text class="sub" x="650" y="254" text-anchor="middle">in the build output</text>
+
+  <!-- mur check -->
+  <rect class="box-aot" x="800" y="196" width="180" height="74" rx="6"/>
+  <text class="label" x="890" y="220" text-anchor="middle">mur check</text>
+  <text class="sub" x="890" y="238" text-anchor="middle">same diagnostics, plus</text>
+  <text class="sub" x="890" y="254" text-anchor="middle">fix hints and suggestions</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M200 150 L248 150" marker-end="url(#arr)"/>
+  <path class="edge" d="M480 140 Q 510 70 538 67" marker-end="url(#arr)"/>
+  <path class="edge" d="M480 160 Q 510 230 538 233" marker-end="url(#arr)"/>
+  <path class="edge-dashed" d="M760 233 L798 233" marker-end="url(#arr)"/>
+  <text class="edge-label" x="880" y="182" text-anchor="middle">runs the build, then reads it</text>
+</svg>
