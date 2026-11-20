@@ -313,7 +313,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Click(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "" &&
                 blank.Current.HelpText == "Blank clicks 1", "blank chat click dismisses selection and reaches target");
-            var currentInnerGlyph = Glyph(innerText.DocumentRange, 1);
+            var currentInnerGlyph = Glyph(innerText.DocumentRange, 5);
             double currentInnerX = currentInnerGlyph[0] + currentInnerGlyph[2] / 2;
             double currentInnerY = currentInnerGlyph[1] + currentInnerGlyph[3] / 2;
             var innerMove = MoveInput(currentInnerX, currentInnerY);

@@ -70,7 +70,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
                     Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
                     .AutomationId("SelectionLong")))
                     .Height(180).AutomationId("SelectionTimeline"),
-            Border(null).Height(48).Background("#00000000").AutomationId("SelectionBlank")
+            Border(TextBlock("\u00A0").AutomationId("SelectionBlank").AutomationName("Blank chat"))
+                    .Height(48).Background("#00000000")
                     .OnMountAdd(fe => ((Border)fe).Tapped += OnBlankTapped)
                     .OnUnmountAdd(fe => ((Border)fe).Tapped -= OnBlankTapped),
             TextBox().Width(420).AutomationId("SelectionComposer")).Width(450);
@@ -78,8 +79,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
 
     private void OnBlankTapped(object sender, TappedRoutedEventArgs args)
     {
-        if (sender is Border border)
-            AutomationProperties.SetHelpText(border, $"Blank clicks {++_blankClicks}");
+        if (sender is Border { Child: TextBlock blank })
+            AutomationProperties.SetHelpText(blank, $"Blank clicks {++_blankClicks}");
     }
 
     private void OnCustomLinkClick(object sender, RoutedEventArgs args)
