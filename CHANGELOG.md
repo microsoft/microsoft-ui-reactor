@@ -130,6 +130,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
+  not individual message boundaries. Dragging above or below a message while still
+  inside the chat no longer scrolls the timeline (openclaw/openclaw-windows-node#1844).
+
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no
   longer throws during reconcile and replaces the host content with the error

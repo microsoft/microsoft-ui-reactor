@@ -10,6 +10,27 @@ namespace Microsoft.UI.Reactor.Tests;
 public class MarkdownTextSelectionTests
 {
     [Theory]
+    [InlineData(-121, -24)]
+    [InlineData(-120, 0)]
+    [InlineData(-12, 0)]
+    [InlineData(0, 0)]
+    [InlineData(60, 0)]
+    [InlineData(120, 0)]
+    [InlineData(121, 24)]
+    public void DragScroll_UsesViewportEdges_NotMessageEdges(double y, double expected) =>
+        Assert.Equal(expected, MarkdownSelectionHost.DragScrollDelta(
+            new global::Windows.Foundation.Rect(0, -120, 400, 240),
+            new global::Windows.Foundation.Point(100, y)));
+
+    [Theory]
+    [InlineData(0, 200, -1)]
+    [InlineData(400, 0, 201)]
+    public void DragScroll_EmptyViewportDoesNotScroll(double width, double height, double y) =>
+        Assert.Equal(0, MarkdownSelectionHost.DragScrollDelta(
+            new global::Windows.Foundation.Rect(0, 0, width, height),
+            new global::Windows.Foundation.Point(100, y)));
+
+    [Theory]
     [InlineData(global::Windows.System.VirtualKeyModifiers.None, 7)]
     [InlineData(global::Windows.System.VirtualKeyModifiers.Shift, 2)]
     [InlineData(global::Windows.System.VirtualKeyModifiers.Shift | global::Windows.System.VirtualKeyModifiers.Control, 2)]

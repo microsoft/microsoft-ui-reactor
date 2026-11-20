@@ -79,48 +79,11 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             textRegistered = true;
             Automation.AddAutomationEventHandler(TextPattern.TextSelectionChangedEvent, inner, TreeScope.Element, selectionHandler);
             selectionRegistered = true;
-            void Point(double x, double y)
-            {
-                GuardForeground();
-                int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
-                int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
-                Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
-                Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
-                    "Pointer target is inside the virtual desktop");
-                Send(new Input
-                {
-                    Union = new InputUnion
-                    {
-                        Mouse = new MouseInput
-                        {
-                            X = (int)Math.Clamp(Math.Floor((Math.Round(x) - left + .5) * 65536 / width), 0, 65535),
-                            Y = (int)Math.Clamp(Math.Floor((Math.Round(y) - top + .5) * 65536 / height), 0, 65535),
-                            Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
-                        }
-                    }
-                });
-                Thread.Sleep(PointerSettleMs);
-            }
-            void Mouse(uint flags)
-            {
-                GuardForeground();
-                Send(new Input { Type = 0, Union = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
-            }
             void Click(double x, double y)
             {
                 Point(x, y);
                 Mouse(2); mouseHeld = true;
                 Mouse(4); mouseHeld = false;
-            }
-            static double[] Glyph(TextPatternRange document, int start)
-            {
-                var range = document.Clone();
-                range.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, start);
-                range.MoveEndpointByRange(TextPatternRangeEndpoint.End, range, TextPatternRangeEndpoint.Start);
-                range.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 1);
-                var bounds = range.GetBoundingRectangles();
-                Assert.IsTrue(bounds.Length > 0 && bounds[0].Width > 0 && bounds[0].Height > 0);
-                return [bounds[0].X, bounds[0].Y, bounds[0].Width, bounds[0].Height];
             }
             var link = outerText.DocumentRange.FindText("native link", false, false);
             Assert.IsNotNull(link);
@@ -217,6 +180,17 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Console.WriteLine($"Stationary drag sample {sample}: pointer={stationary.X},{stationary.Y}; scrollPercent={previousScroll}; selectedLength={previousLength}");
             }
             Mouse(4); mouseHeld = false;
+            Thread.Sleep(SampleIntervalMs);
+            double releasedScroll = scroll.Current.VerticalScrollPercent;
+            var releasedRange = longText.GetSelection().Single().Clone();
+            for (int sample = 0; sample < 3; sample++)
+            {
+                Thread.Sleep(SampleIntervalMs);
+                Assert.AreEqual(releasedScroll, scroll.Current.VerticalScrollPercent,
+                    "Releasing the mouse stops stationary edge autoscroll");
+                Assert.IsTrue(releasedRange.Compare(longText.GetSelection().Single()),
+                    "Releasing the mouse stops extending the selection");
+            }
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link at end");
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
             Console.WriteLine($"Received TextChanged={string.Join("|", receivedText)}; TextSelectionChanged={string.Join("|", receivedSelection)}");
@@ -250,6 +224,171 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 throw new AggregateException("Test and cleanup failures", cleanupFailures);
             }
         }
+    }
+
+    [TestMethod]
+    [E2eRetry(3)]
+    public void Selection_ViewportEdges_Modern() => VerifyViewportEdges("Markdown_Selection_Edges_Modern");
+
+    [TestMethod]
+    [E2eRetry(3)]
+    public void Selection_ViewportEdges_Legacy() => VerifyViewportEdges("Markdown_Selection_Edges_Legacy");
+
+    private static void VerifyViewportEdges(string fixture)
+    {
+        SessionInteractivityGuard.EnsureInputInjectable(fixture);
+        GetWindowThreadProcessId((nint)TestSession.HostHwnd, out uint windowPid);
+        Assert.AreEqual((uint)TestSession.HostPid, windowPid, "Only drive the owned host window");
+        AcquireForeground();
+        var window = AutomationElement.FromHandle((nint)TestSession.HostHwnd);
+        AutomationElement Find(string id) => window.FindFirst(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty, id))
+            ?? throw new InvalidOperationException($"Missing {id}");
+        GuardForeground();
+        ((InvokePattern)Find("ResetFixture").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Wait(() => Find("FixtureStatus").Current.Name == "Ready", "fresh fixture reset");
+        ((InvokePattern)Find("Nav_" + fixture).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Wait(() => Find("FixtureStatus").Current.Name == "Loaded: " + fixture, "edge fixture navigation");
+        var message = Find("SelectionEdgeMessage");
+        var text = (TextPattern)message.GetCurrentPattern(TextPattern.Pattern);
+        AutomationElement? scrollElement = TreeWalker.ControlViewWalker.GetParent(message);
+        while (scrollElement is not null && !scrollElement.TryGetCurrentPattern(ScrollPattern.Pattern, out _))
+            scrollElement = TreeWalker.ControlViewWalker.GetParent(scrollElement);
+        Assert.IsNotNull(scrollElement);
+        var scroll = (ScrollPattern)scrollElement.GetCurrentPattern(ScrollPattern.Pattern);
+        Assert.IsTrue(scroll.Current.VerticallyScrollable, "A nonzero scrolling extent is required");
+        bool mouseHeld = false;
+        nint previousDpi = SetThreadDpiAwarenessContext(-4);
+        Assert.AreNotEqual((nint)0, previousDpi, "Per-monitor-aware input coordinates");
+        try
+        {
+            void Begin()
+            {
+                GuardForeground();
+                scroll.SetScrollPercent(ScrollPattern.NoScroll, 50);
+                Wait(() => Math.Abs(scroll.Current.VerticalScrollPercent - 50) < .1, "interior scroll baseline");
+                var viewport = scrollElement.Current.BoundingRectangle;
+                var bounds = message.Current.BoundingRectangle;
+                Assert.IsTrue(bounds.Top > viewport.Top + 20 && bounds.Bottom < viewport.Bottom - 20,
+                    $"Message must sit inside viewport: message={bounds}; viewport={viewport}");
+                var glyph = Glyph(text.DocumentRange, 7);
+                Point(glyph[0] + glyph[2] / 2, glyph[1] + glyph[3] / 2);
+                Mouse(2); mouseHeld = true;
+                Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
+                    .Contains("captures=1", StringComparison.Ordinal),
+                    "real pointer press captured by the message");
+            }
+            void Stable(double before, string operation)
+            {
+                Assert.IsTrue(GetCursorPos(out var stationary));
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    Thread.Sleep(SampleIntervalMs);
+                    GuardForeground();
+                    Assert.IsTrue(GetCursorPos(out var current));
+                    Assert.AreEqual(stationary.X, current.X, "Stationary pointer X unchanged");
+                    Assert.AreEqual(stationary.Y, current.Y, "Stationary pointer Y unchanged");
+                    Assert.AreEqual(before, scroll.Current.VerticalScrollPercent, .01, operation);
+                }
+                Console.WriteLine($"{fixture}: {operation}; scrollPercent={before}");
+            }
+            void End()
+            {
+                Mouse(4); mouseHeld = false;
+                Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
+                    .Contains("captures=0", StringComparison.Ordinal),
+                    "pointer capture released");
+            }
+            Begin();
+            var viewport = scrollElement.Current.BoundingRectangle;
+            var bounds = message.Current.BoundingRectangle;
+            double x = bounds.Left + bounds.Width / 2;
+            double before = scroll.Current.VerticalScrollPercent;
+            Point(x, bounds.Top - 12);
+            Stable(before, "drag above message inside viewport stays still");
+            Point(x, bounds.Bottom + 12);
+            Stable(before, "drag below message inside viewport stays still");
+            Point(x, viewport.Top - 12);
+            Wait(() => scroll.Current.VerticalScrollPercent < before - .1, "top viewport edge scrolls up");
+            Point(x, viewport.Top + viewport.Height / 2);
+            Thread.Sleep(SampleIntervalMs);
+            Stable(scroll.Current.VerticalScrollPercent, "reentry stops edge scrolling");
+            before = scroll.Current.VerticalScrollPercent;
+            Point(x, viewport.Bottom + 12);
+            Wait(() => scroll.Current.VerticalScrollPercent > before + .1, "bottom viewport edge scrolls down");
+            End();
+            Thread.Sleep(SampleIntervalMs);
+            Stable(scroll.Current.VerticalScrollPercent, "release outside viewport stops scrolling");
+
+            Begin();
+            viewport = scrollElement.Current.BoundingRectangle;
+            before = scroll.Current.VerticalScrollPercent;
+            Point(x, viewport.Top - 12);
+            Wait(() => scroll.Current.VerticalScrollPercent < before - .1, "edge scroll active before capture loss");
+            GuardForeground();
+            Assert.AreEqual("Capture not released", Find("SelectionCaptureStatus").Current.Name,
+                "Capture-loss positive control has not already run");
+            ((InvokePattern)Find("SelectionReleaseCapture").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
+                is var latest && latest.Contains("capture-lost", StringComparison.Ordinal)
+                && latest.Contains("left=True", StringComparison.Ordinal)
+                && Find("SelectionCaptureStatus").Current.Name == "Released captures=0",
+                "native capture-lost event delivered while button remains held");
+            Thread.Sleep(SampleIntervalMs);
+            Stable(scroll.Current.VerticalScrollPercent, "capture loss stops edge scrolling");
+            Mouse(4); mouseHeld = false;
+        }
+        finally
+        {
+            try
+            {
+                if (mouseHeld) Mouse(4);
+            }
+            finally
+            {
+                Assert.AreNotEqual((nint)0, SetThreadDpiAwarenessContext(previousDpi));
+            }
+        }
+    }
+
+    private static void Point(double x, double y)
+    {
+        GuardForeground();
+        int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
+        int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
+        Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
+        Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
+            "Pointer target is inside the virtual desktop");
+        Send(new Input
+        {
+            Union = new InputUnion
+            {
+                Mouse = new MouseInput
+                {
+                    X = (int)Math.Clamp(Math.Floor((Math.Round(x) - left + .5) * 65536 / width), 0, 65535),
+                    Y = (int)Math.Clamp(Math.Floor((Math.Round(y) - top + .5) * 65536 / height), 0, 65535),
+                    Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
+                }
+            }
+        });
+        Thread.Sleep(PointerSettleMs);
+    }
+
+    private static void Mouse(uint flags)
+    {
+        GuardForeground();
+        Send(new Input { Type = 0, Union = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
+    }
+
+    private static double[] Glyph(TextPatternRange document, int start)
+    {
+        var range = document.Clone();
+        range.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, start);
+        range.MoveEndpointByRange(TextPatternRangeEndpoint.End, range, TextPatternRangeEndpoint.Start);
+        range.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 1);
+        var bounds = range.GetBoundingRectangles();
+        Assert.IsTrue(bounds.Length > 0 && bounds[0].Width > 0 && bounds[0].Height > 0);
+        return [bounds[0].X, bounds[0].Y, bounds[0].Width, bounds[0].Height];
     }
 
     private static string ReadClipboard()
