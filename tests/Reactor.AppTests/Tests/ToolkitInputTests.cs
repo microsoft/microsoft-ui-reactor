@@ -119,7 +119,7 @@ public sealed class ToolkitInputTests : AppTestBase
         {
             var before = Numbers(ReadObservation().Value);
             var drag = DragBy("ContentSizer.Sizer", dx: 0, dy);
-            var trace = WaitForContentSizerTrace(++gesture);
+            var trace = WaitForNativeSizerTrace("ContentSizer.Sizer", ++gesture);
             TestContext?.WriteLine($"native-manipulation-trace={trace}");
             double expected = ContentSizerOracle.ExpectedHeight(trace, gesture, Math.Sign(dy),
                 (before[0], before[1], before[2]), drag, HostHwnd, Bounds("ContentSizer.Sizer"));
@@ -148,10 +148,24 @@ public sealed class ToolkitInputTests : AppTestBase
     {
         NavigateToFixtureFresh("ToolkitInput_GridSplitter");
         var before = Numbers(WaitForObservation(value =>
-            value != "Waiting" && Numbers(value) is [> 100, var middle, > 100] &&
-            Math.Abs(middle - 11) <= 1, "three laid-out columns"));
-        DragBy("ToolkitInput.GridSplitter", dx: 60, dy: 0);
-        WaitForSizes([before[0] + 60, before[1], before[2] - 60]);
+            value != "Waiting" && Numbers(value) is [> 100, var middle, > 100, > 100, > 100, > 0, > 0] &&
+            Math.Abs(middle - 11) <= 1, "advertised grid, three columns and two panes"));
+        var drag = DragBy("ToolkitInput.GridSplitter", dx: 60, dy: 0);
+        var trace = WaitForNativeSizerTrace("ToolkitInput.GridSplitter", 1);
+        TestContext?.WriteLine($"native-grid-manipulation-trace={trace}");
+        var expected = GridSplitterOracle.ExpectedWidths(trace, 1, 1, before, drag, HostHwnd);
+        WaitForObservation(value =>
+        {
+            var actual = Numbers(value);
+            return actual.Length == 7 && actual.All(double.IsFinite) &&
+                Math.Abs(actual[0] - expected.Left) <= 2 && Math.Abs(actual[2] - expected.Right) <= 2 &&
+                Math.Abs(actual[3] - expected.Left) <= 2 && Math.Abs(actual[4] - expected.Right) <= 2 &&
+                Math.Abs(actual[1] - before[1]) <= 2 &&
+                Math.Abs(actual[0] + actual[2] - before[0] - before[2]) <= 2 &&
+                actual[5] == before[5] && actual[6] == before[6] &&
+                Math.Sign(actual[3] - before[3]) == Math.Sign(expected.Left - before[0]) &&
+                Math.Sign(actual[4] - before[4]) == Math.Sign(expected.Right - before[2]);
+        }, $"native star allocation {expected.Left:R}/{expected.Right:R}, matching advertised panes and fixed sibling");
     }
 
     [TestMethod]
@@ -239,19 +253,19 @@ public sealed class ToolkitInputTests : AppTestBase
     private static double[] Numbers(string value) =>
         value.Split('|').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
 
-    private string WaitForContentSizerTrace(int gesture)
+    private string WaitForNativeSizerTrace(string id, int gesture)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);
         string? trace;
         do
         {
-            trace = App.GetProperty("ContentSizer.Sizer", "HelpText");
+            trace = App.GetProperty(id, "HelpText");
             if (trace is not null && trace.StartsWith($"gesture={gesture};", StringComparison.Ordinal) &&
                 trace.Contains("phase=completed;", StringComparison.Ordinal))
                 return trace;
             Thread.Sleep(100);
         } while (DateTime.UtcNow < deadline);
-        throw new AssertFailedException($"No fresh completed native gesture {gesture}. Last trace: {trace ?? "<unavailable>"}");
+        throw new AssertFailedException($"No fresh completed native gesture {gesture} for {id}. Last trace: {trace ?? "<unavailable>"}");
     }
 
     private void WaitForSizes(double[] expected) => WaitForObservation(value =>

@@ -1052,6 +1052,13 @@ layout retains the existing two-DIP rounding tolerance; declared height must mat
 exactly. The observers do not mark events handled, change manipulation settings or
 request renders during input. `ContentSizerOracleTests` exercises this validation
 headlessly without starting the host.
+GridSplitter has a separate oracle for its native Columns/PreviousAndNext,
+two-star-column contract. It captures the advertised grid/panes independently,
+checks stable definition identities and exact native star weights from initial
+ActualWidths plus/minus the signed cumulative delta, then checks settled pane
+geometry and the unchanged pixel middle column/grid/row. Native bounds reject
+invalid candidate pairs; this is not PropertySizer's clamp contract.
+`GridSplitterOracleTests` covers the pure calculation and evidence validation.
 RangeSelector keyboard **value** changes remain unsupported by the sample's
 controlled mapping because this Toolkit version does not raise `ValueChanged`
 for them. Tab traversal does not claim to cover that limitation.
@@ -1061,7 +1068,7 @@ Headless preparation (no host launch or package registration):
 ```powershell
 dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
 dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
-dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
 ```
 
 Compilation and headless helper tests are **not runtime input passes**. To execute

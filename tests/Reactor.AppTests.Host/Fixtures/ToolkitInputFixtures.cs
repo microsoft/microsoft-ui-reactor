@@ -22,6 +22,7 @@ internal static class ToolkitInputFixtures
         private FrameworkElement? _root;
         private DispatcherTimer? _timer;
         private ContentSizerTrace? _contentSizerTrace;
+        private GridSplitterTrace? _gridSplitterTrace;
         private long _sequence;
 
         public override Element Render() =>
@@ -48,6 +49,8 @@ internal static class ToolkitInputFixtures
         {
             _contentSizerTrace?.Dispose();
             _contentSizerTrace = null;
+            _gridSplitterTrace?.Dispose();
+            _gridSplitterTrace = null;
             root.Loaded -= Start;
             root.Unloaded -= Stop;
             if (_timer is { } timer)
@@ -70,6 +73,11 @@ internal static class ToolkitInputFixtures
                 _contentSizerTrace = new ContentSizerTrace(
                     elements.OfType<Wct.ContentSizer>().Single(),
                     elements.Single(e => AutomationProperties.GetAutomationId(e) == "ContentSizer.Target"));
+            if (Props == "splitter" && _gridSplitterTrace is null)
+            {
+                var (grid, left, right) = FindAdvertisedGrid(elements);
+                _gridSplitterTrace = new GridSplitterTrace(elements.OfType<Wct.GridSplitter>().Single(), grid, left, right);
+            }
             var observation = Read(Props, elements);
             // A fresh sequence lets tests reject a pre-input snapshot, especially when
             // the controlled parent rejects an edit and the expected value is unchanged.
@@ -141,14 +149,112 @@ internal static class ToolkitInputFixtures
         {
             var target = _sizer.TargetControl as FrameworkElement;
             _events.Add(FormattableString.Invariant($"""
-                phase={phase}; delta={Point(delta)}; cumulative={Point(cumulative)}
+                phase={phase}; delta={FormatPoint(delta)}; cumulative={FormatPoint(cumulative)}
                 target-height={target?.Height:R}; target-actual-height={target?.ActualHeight:R}; advertised-height={_advertisedTarget.Height:R}; advertised-actual-height={_advertisedTarget.ActualHeight:R}
                 sibling-height={_sizer.ActualHeight:R}; sibling-width={_sizer.ActualWidth:R}
                 """));
         }
 
-        private static string Point(global::Windows.Foundation.Point? point) =>
-            point is { } value ? FormattableString.Invariant($"{value.X:R},{value.Y:R}") : "<not supplied>";
+    }
+
+    private sealed class GridSplitterTrace : IDisposable
+    {
+        private readonly Wct.GridSplitter _splitter;
+        private readonly Grid _grid;
+        private readonly Border _left;
+        private readonly Border _right;
+        private readonly ColumnDefinition[] _columns;
+        private readonly RowDefinition _row;
+        private readonly List<string> _events = [];
+        private int _gesture;
+
+        public GridSplitterTrace(Wct.GridSplitter splitter, Grid grid, Border left, Border right)
+        {
+            if (grid.ColumnDefinitions.Count != 3 || grid.RowDefinitions.Count != 1)
+                throw new InvalidOperationException("The advertised splitter grid must have three columns and one row.");
+            _splitter = splitter;
+            _grid = grid;
+            _left = left;
+            _right = right;
+            _columns = grid.ColumnDefinitions.ToArray();
+            _row = grid.RowDefinitions[0];
+            splitter.ManipulationStarting += Starting;
+            splitter.ManipulationStarted += Started;
+            splitter.ManipulationDelta += Delta;
+            splitter.ManipulationCompleted += Completed;
+            AutomationProperties.SetHelpText(splitter, "No completed native manipulation.");
+        }
+
+        public void Dispose()
+        {
+            _splitter.ManipulationStarting -= Starting;
+            _splitter.ManipulationStarted -= Started;
+            _splitter.ManipulationDelta -= Delta;
+            _splitter.ManipulationCompleted -= Completed;
+        }
+
+        private void Starting(object sender, ManipulationStartingRoutedEventArgs args)
+        {
+            _events.Clear();
+            _events.Add(FormattableString.Invariant($"""
+                gesture={++_gesture}; resize-direction={_splitter.ResizeDirection}; resize-behavior={_splitter.ResizeBehavior}; parent-level={_splitter.ParentLevel}
+                orientation={_splitter.Orientation}; horizontal-alignment={_splitter.HorizontalAlignment}; vertical-alignment={_splitter.VerticalAlignment}
+                flow={_splitter.FlowDirection}; drag-increment={_splitter.DragIncrement:R}; splitter-width={_splitter.ActualWidth:R}; splitter-height={_splitter.ActualHeight:R}
+                """) + "\n" + Snapshot());
+            Record("starting");
+        }
+
+        private void Started(object sender, ManipulationStartedRoutedEventArgs args) =>
+            Record("started", cumulative: args.Cumulative.Translation);
+
+        private void Delta(object sender, ManipulationDeltaRoutedEventArgs args) =>
+            Record("delta", args.Delta.Translation, args.Cumulative.Translation);
+
+        private void Completed(object sender, ManipulationCompletedRoutedEventArgs args)
+        {
+            Record("completed", cumulative: args.Cumulative.Translation);
+            AutomationProperties.SetHelpText(_splitter, string.Join("\n", _events));
+        }
+
+        private void Record(string phase, global::Windows.Foundation.Point? delta = null,
+            global::Windows.Foundation.Point? cumulative = null) =>
+            _events.Add($"phase={phase}; delta={FormatPoint(delta)}; cumulative={FormatPoint(cumulative)}\n{Snapshot()}");
+
+        private string Snapshot()
+        {
+            bool definitionsUnchanged = _grid.ColumnDefinitions.Count == 3 && _grid.RowDefinitions.Count == 1 &&
+                ReferenceEquals(_grid.RowDefinitions[0], _row) &&
+                Enumerable.Range(0, 3).All(i => ReferenceEquals(_grid.ColumnDefinitions[i], _columns[i]));
+            var lines = new List<string>
+            {
+                FormattableString.Invariant($"""
+                    parent-is-advertised={ReferenceEquals(_splitter.Parent, _grid)}; panes-associated={ReferenceEquals(_left.Parent, _grid) && ReferenceEquals(_right.Parent, _grid)}; definitions-unchanged={definitionsUnchanged}
+                    splitter-column={Grid.GetColumn(_splitter)}; splitter-row={Grid.GetRow(_splitter)}; left-column={Grid.GetColumn(_left)}; left-row={Grid.GetRow(_left)}; right-column={Grid.GetColumn(_right)}; right-row={Grid.GetRow(_right)}
+                    grid-width={_grid.ActualWidth:R}; grid-height={_grid.ActualHeight:R}; left-pane-width={_left.ActualWidth:R}; right-pane-width={_right.ActualWidth:R}
+                    row-unit={_row.Height.GridUnitType}; row-value={_row.Height.Value:R}; row-actual={_row.ActualHeight:R}
+                    """)
+            };
+            for (int i = 0; i < _columns.Length; i++)
+            {
+                var column = _columns[i];
+                lines.Add(FormattableString.Invariant(
+                    $"column-{i}-unit={column.Width.GridUnitType}; column-{i}-value={column.Width.Value:R}; column-{i}-actual={column.ActualWidth:R}; column-{i}-min={column.MinWidth:R}; column-{i}-max={column.MaxWidth:R}"));
+            }
+            return string.Join("\n", lines);
+        }
+    }
+
+    private static string FormatPoint(global::Windows.Foundation.Point? point) =>
+        point is { } value ? FormattableString.Invariant($"{value.X:R},{value.Y:R}") : "<not supplied>";
+
+    private static (Grid Grid, Border Left, Border Right) FindAdvertisedGrid(FrameworkElement[] elements)
+    {
+        static bool IsPane(Border pane, string label) => pane.Child is TextBlock text && text.Text == label;
+        var grid = elements.OfType<Grid>().Single(g =>
+            g.Children.OfType<Border>().Any(b => IsPane(b, "Left")) &&
+            g.Children.OfType<Border>().Any(b => IsPane(b, "Right")));
+        return (grid, grid.Children.OfType<Border>().Single(b => IsPane(b, "Left")),
+            grid.Children.OfType<Border>().Single(b => IsPane(b, "Right")));
     }
 
     // Only instrumentation is written here: IDs on native template parts and observation
@@ -207,10 +313,10 @@ internal static class ToolkitInputFixtures
             {
                 var splitter = elements.OfType<Wct.GridSplitter>().Single();
                 Identify(splitter, "ToolkitInput.GridSplitter");
-                var grid = (Grid)splitter.Parent;
+                var (grid, left, right) = FindAdvertisedGrid(elements);
                 var columns = grid.ColumnDefinitions;
                 return FormattableString.Invariant(
-                    $"{columns[0].ActualWidth:R}|{columns[1].ActualWidth:R}|{columns[2].ActualWidth:R}");
+                    $"{columns[0].ActualWidth:R}|{columns[1].ActualWidth:R}|{columns[2].ActualWidth:R}|{left.ActualWidth:R}|{right.ActualWidth:R}|{grid.ActualWidth:R}|{grid.ActualHeight:R}");
             }
             default:
                 throw new ArgumentOutOfRangeException(nameof(route), route, "Not a Toolkit input fixture.");
