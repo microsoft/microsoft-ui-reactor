@@ -359,6 +359,10 @@ public sealed partial class Reconciler
         // Background modifier before native setters ran; clearing here would discard both.
         var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
             && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
+        // Stop removed keyframes before modifiers run, so the cleanup cannot cancel an
+        // animation a changed modifier starts in this update (#1641).
+        if (keyframes is null && oldEl.KeyframeAnimations is not null)
+            ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
                 ownsControl: ownsControl && result is null);
@@ -435,8 +439,6 @@ public sealed partial class Reconciler
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
             ApplyKeyframeAnimations(target, keyframes);
         }
-        else if (oldEl.KeyframeAnimations is not null)
-            ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
 
         // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
         if (newEl.ScrollAnimation is not null)

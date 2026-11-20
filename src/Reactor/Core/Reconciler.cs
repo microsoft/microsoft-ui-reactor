@@ -6557,8 +6557,9 @@ public sealed partial class Reconciler : IDisposable
             _keyframeTriggerValues.Remove((uie, entry.Name));
 
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
-        // We stop all four possible targets since KeyframeAnimationDef doesn't track which
-        // targets were started — StopAnimation is a no-op if no animation is running on that property.
+        // KeyframeAnimationDef doesn't track which targets were started, so stop every target
+        // a keyframe can animate. StopAnimation is a no-op on an existing property with no
+        // running animation.
         Visual visual;
         try { visual = AnimationHelper.GetElementVisual(uie); }
         catch { return; /* No compositor (e.g. unit tests) */ }

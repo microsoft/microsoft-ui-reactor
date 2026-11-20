@@ -777,8 +777,8 @@ internal static class AnimationCombinationTests
     }
 
     /// <summary>
-    /// Unmounting a keyframed element stops every channel it may have started, even when
-    /// the visual has no Translation property (#1641). StopAnimation("Translation") throws on
+    /// Unmounting a keyframed element, or removing its keyframes, stops every channel it may
+    /// have started, even when the visual has no Translation property (#1641). StopAnimation("Translation") throws on
     /// such a visual, and it used to share one try with the RotationAngle stop.
     /// </summary>
     internal class KeyframesUnmountStopsRotation(Harness h) : SelfTestFixtureBase(h)
@@ -788,6 +788,53 @@ internal static class AnimationCombinationTests
             // Positive control first: with translation enabled, the same oracle sees both stops.
             await RunCase("KFUnmountStops_WithTranslation", withTranslation: true);
             await RunCase("KFUnmountStops_RotationOnly", withTranslation: false);
+            await RunRemovalCase("KFRemoveStops_RotationOnly", rotationKeyframes: true);
+            await RunRemovalCase("KFRemoveKeepsModifierRotation", rotationKeyframes: false);
+        }
+
+        // Removes the keyframes from a retained control in an animated update. Rotation
+        // keyframes must stop. Opacity-only keyframes must not cancel the rotation a changed
+        // .Rotation() modifier starts in the same update.
+        async Task RunRemovalCase(string name, bool rotationKeyframes)
+        {
+            var id = name + "-target";
+            var before = Border(TextBlock(name))
+                .Keyframes("kf", 1, kf => rotationKeyframes
+                    ? kf.Duration(5000).Loop().At(0f, rotation: 0f).At(1f, rotation: 360f)
+                    : kf.Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f))
+                .AutomationId(id);
+            var after = rotationKeyframes
+                ? Border(TextBlock(name)).AutomationId(id)
+                : Border(TextBlock(name)).Rotation(90).AutomationId(id);
+            var keyframeChannel = rotationKeyframes ? "RotationAngle" : "Opacity";
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+                H.Check(name + "_NoTranslationProperty", !hasTranslation);
+                H.Check(name + "_KeyframesRunning", visual.TryGetAnimationController(keyframeChannel) is not null);
+                if (!rotationKeyframes)
+                    H.Check(name + "_NoRotationBefore", visual.TryGetAnimationController("RotationAngle") is null);
+
+                AnimationScope.WithAnimation(Curve.Linear(60000), () =>
+                    H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null));
+
+                H.Check(name + "_KeyframesStopped", visual.TryGetAnimationController(keyframeChannel) is null);
+                if (!rotationKeyframes)
+                    H.Check(name + "_ModifierRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         async Task RunCase(string name, bool withTranslation)
