@@ -671,6 +671,121 @@ Re-run the raw benchmark on the layer-4 PR, and `/perf` to confirm the untransfo
 Every new oracle gets a positive control that fails when the mechanism is removed. Each layer
 mutation-checks its gating assertion (delete or no-op the code, confirm the check fails, revert).
 
+### §12.1 Validation strategy
+
+The fixtures in §12.2 test each fix. This section answers three broader questions for the whole
+stack.
+
+1. **Do the animations actually run?** Every case observes motion in flight, not just the end state.
+2. **Do features compound correctly?** A combinatorial matrix checks each case against an analytic
+   composition model.
+3. **Are we only breaking things on purpose?** A behaviour ledger captured on `main` before any
+   change is diffed on every layer. Each difference must be declared and tied to a §9 row or an issue.
+
+#### A. What each case records
+
+| Field | Oracle |
+|---|---|
+| `threw` | Exception type and lifecycle step, or none |
+| `pose` | RTB bounding box of the red target at rest, ±2 px, compared with the model in B |
+| `motion` | Per animated channel: `JUMPED` / `ANIMATING` / `NOT-APPLIED`, plus progress at 0/50/100%. Deterministic where possible. The harness pauses the channel's `AnimationController` (`Visual.TryGetAnimationController`) and sets `Progress`, as `TransformVisualHandoffFixture` already does. Layer V checks whether implicit animations expose a controller. If not, it uses wall-clock sampling with ≥ 1.5 s durations and §11's three-way verdict |
+| `curve` | For transition cases: progress at 25/50/75% within ±0.05 of (0.8,0,0.2,1) |
+| `hit`, `uia`, `ttv` | Hit-test at three probe points, the UIA bounding rectangle, and `TransformToVisual` of one corner |
+| `channel` | Which channel holds each value (facade getters vs visual properties). Layer 4 flips this on purpose |
+| `pool` | Recycled or not, which lane, pixel diff of the rented control against a fresh one, and residual implicit keys or running animations (`TryGetAnimationController` for every channel) |
+| `diag` | `DiagnosticLog` warnings emitted |
+
+#### B. The matrix and the composition model
+
+| Dimension | Values |
+|---|---|
+| Transforms | none, `Scale`, `Rotation`, `Translation`, `CenterPoint`, `Scale+Rotation+CenterPoint`, and `TransformOrigin` from layer 5 |
+| Implicit transition | none, Opacity, Scale, Rotation, Translation (also `Components = X`), Background |
+| Compositor feature | none, `.Animate(curve)`, `WithAnimation`, `InteractionStates` hover, `.Transition` enter and exit, `.Keyframes` (scale, opacity, translation, rotation; one-shot and looping), `.LayoutAnimation` (offset + size), `.Stagger` parent |
+| Wrapper | direct, keyed `Memo`, `ModifiedElement` decorator |
+| Environment | LTR / RTL, animations enabled / disabled (`TransitionEngine.OverrideAnimationsEnabled`) |
+| User code | none, a `.Set` facade write (the §9 cases), a `fe.Translation` drag write |
+
+Each case runs one scripted lifecycle. Mount, change the declared values, add a feature, remove a
+feature, remove a modifier, then unmount, rent from the pool as a plain element and as a transformed
+one. One case covers every step. The full product is far too large, so the generator combines two
+sets. One is **all triples of Transforms × Transition × Feature**, the axis behind every bug so far
+(#1613, #1623, #1625): 7 × 6 × 9 = 378 cases (Keyframes counts once, with one-shot and looping as sub-variants). The other is **pairwise coverage** of the remaining dimensions on top. The
+generator is seeded and case ids are stable, so ledger diffs stay readable. Budget: about 20 minutes. It
+runs in full on every layer PR (label-triggered job) and nightly. Every PR's normal CI runs a fixed
+10% seeded sample plus the §12.2 fixtures.
+
+The model writes down what "compounds properly" means, so the oracle has something to check
+against:
+
+- **Pose.** `Translation · T(pivot) · R(rotation, axis) · S(scale) · T(−pivot)`, where
+  `pivot = Size × origin + CenterPoint`. The transform space is flow-relative (Q9).
+- **Per-channel precedence**, highest first. A playing `.Keyframes` entry on that channel, then the active
+  `InteractionStates` state, then a running `.Transition` enter or exit (scale relative to the
+  declared value, #1627), then the declared modifier. When a temporary owner ends, the channel returns to
+  the declared value (`TransformRest`). How the declared value moves is decided by `WithAnimation`,
+  then `.Animate()`, then the implicit transition, else it jumps (§5.3).
+- **Opacity** is a single channel (§3 invariant 4).
+- **Implicit keys.** `LayoutAnimation` beats `.Animate` beats transitions, per key. Releasing the winner
+  restores the next (§6.1).
+- **Reduced motion.** Transitions jump. Other compositor features are unchanged (§5.5).
+
+If `main` already disagrees with the model in some case, that's recorded in the ledger as a known
+pre-existing difference with an issue link. The model isn't bent to fit it.
+
+#### C. The behaviour ledger
+
+1. **Layer V** lands first. It adds the harness and
+   `tests/Reactor.AppTests.Host/SelfTest/Baselines/transforms-ledger.json`, which holds one record per
+   case, captured on `main` with no product change.
+2. Every later layer reruns the matrix and diffs it against the ledger. Every differing field must match
+   an entry in `transforms-ledger.expected.json`
+   (`{ case selector, field, before, after, reason: "§9 row N" | "fixes #NNNN" }`). An unmatched
+   difference fails. So does an expectation that matches nothing, because it's stale. The PR then
+   regenerates the ledger, and the ledger's own diff shows reviewers exactly which behaviours changed.
+3. **Control group.** Cases with no transform, transition or compositor feature must stay
+   byte-identical across every layer.
+4. Expected changes per layer:
+   - **L1:** the #1625 and #1626 cases go from not animating, or still animating after removal, to correct.
+   - **L2:** the #1623 cases go from `threw` to passing, the fallback curve changes, and Translation-transition semantics change.
+   - **L3:** `pool.recycled` flips for compositor-feature cases.
+   - **L4:** `channel` flips for every transform case, and the §9 row 1 setter cases start to throw.
+   - **L5:** only additions.
+5. **Noise.** Poses compare within ±2 px and motion compares by verdict, not raw progress. A
+   mismatch reruns three times before it fails. Quarantining a case needs an explicit ledger entry.
+
+#### D. Validating the instruments
+
+- Before recording, a run executes the positive and negative controls for every oracle (PC0/PC1 style
+  from §11). If one fails, the run aborts instead of writing a ledger. One example is a pose oracle that
+  can't see a known transform.
+- **XAML transitions on `main` are invisible to RTB in flight** (§11). The baseline therefore records
+  their motion as `unobservable` and compares only their end state. Layer V attaches a one-time
+  PrintWindow capture, with animations enabled, of the transition cases on `main`, as evidence for the
+  §5.1 parity claims that layer 2 relies on.
+- **Mutation checks.** Each layer breaks its key lines, reruns the matrix, and records in the PR which
+  cases turned red. Examples: skip a `Claim`, drop the easing, skip one reset step, write the facade
+  instead of the visual. A mutation that no case catches gets a new case before the layer merges.
+
+#### E. Beyond the matrix
+
+- **Pool soak.** A seeded random churn of 500 elements with random features over 2,000
+  mount/update/unmount steps. After every step it asserts: no exception, every rented control passes
+  the §7.3 reset invariants (identity visual properties, no implicit keys, no running animation on any
+  channel), and the lane rules of §7.2 hold.
+- **Real-world pixels.** Before and after each layer, the docs pipeline captures screenshots of the
+  gallery pages that use transforms and animations (Animation, Interaction states, Pointer input,
+  Transitions) at rest, and diffs them pixel for pixel. Any difference needs a ledger reason.
+- **Real input.** The E2E test in §12.2.
+- **Perf.** §12.2.
+- **Review.** Each layer gets a `pr-review` pass, plus a cross-model check where one is available.
+
+**Exit criteria for every layer.** The matrix passes with only declared differences. The control
+group is unchanged. Mutation results are recorded. The soak is clean (layers 3–5). Perf is re-measured
+(layers 3–4). CHANGELOG lines cite the §9 rows they introduce.
+
+### §12.2 Fixtures per layer
+
 **Unit (`tests/Reactor.Tests`, headless).**
 - `ImplicitAnimationSlots` claim/release precedence as a pure-managed state machine. The collection
   writes go behind an interface so the logic can be tested without WinUI. Cases: lower owner hidden
@@ -732,6 +847,7 @@ this spec and the issue). Sizes are product lines excluding tests and docs.
 
 | # | Layer | Fixes | Size | Depends on |
 |---|---|---|---|---|
+| V | Validation harness (§12.1): matrix generator, observation recorder, composition model, positive controls, pool soak, and the ledger captured on `main`. Test-only, no product change | — | M (~900, tests only) | — |
 | 0 | `REACTOR_ANIM_004` with today's trigger set and its code fix (§9.1). Independent, valid on `main` now | #1613/#1623-shaped user code | S (~250 incl. fix) | — |
 | 1 | `ImplicitAnimationSlots`. Route LayoutAnimation, Animate and the transition fallback through it, and widen the Update gate for removals | #1625, #1626 (the fallback and XAML removal arms) | S (~200) | — |
 | 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, the §9 handoff diagnostic, and `.XxxTransition()` added to `VisualOwningModifiers` | #1623, #1624 (Opacity, Background) | M (~350) | 1 |
@@ -739,8 +855,11 @@ this spec and the issue). Sizes are product lines excluding tests and docs.
 | 4 | Transforms always on the visual. Remove the facade branches, lazy handoff with the effective-identity rule, stop zeroing `UIElement.Translation`, extend the diagnostic to setter facade writes, transform modifiers added to `VisualOwningModifiers`, and the `REACTOR_MOD_002` widening | #1630 | M (~200 net, mostly deletions) | 3 (so transformed elements never lose pooling) |
 | 5 | `.TransformOrigin(x, y)`, the origin property set and `CenterPoint` ownership, navigation reuses it, api.txt ×2, docs templates, gallery samples | #773 | M (~300) | 4 |
 
-The `Curve.Linear` fix (§16) is independent and can land at any point. So can layer 0, whose
-`VisualOwningModifiers` table then grows in layers 2, 4 and 5.
+The `Curve.Linear` fix (§16) doesn't depend on any layer (but see the ledger note below). Neither does layer 0, whose
+`VisualOwningModifiers` table then grows in layers 2, 4 and 5. Layers 1–5 all depend on layer V. Its
+ledger must be captured on `main` before the first behaviour change, otherwise the "only on purpose"
+check has no baseline. The `Curve.Linear` fix changes curves that the ledger records, so it must land
+either before layer V or with its own declared ledger entries.
 
 ## §14 Rejected alternatives
 
