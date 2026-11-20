@@ -365,6 +365,9 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_ExplicitBorderBrushReplacingThemeRefDuringHover",
         "ThemeResourceBinding_SetterTakeoverWithOwnThemeChange",
         "ThemeResourceBinding_UnrelatedStateDoesNotResurrectRemovedBinding",
+        "ThemeResourceBinding_WrapperThemeRefBeatsInnerThemeRef",
+        "ThemeResourceBinding_ExplicitBackgroundReplacingThemeRefBeforeHover",
+        "ThemeResourceBinding_FailedHoverRestoreIsRetried",
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         "NamedStyle_TypeRampStylesResolve",
@@ -2790,6 +2793,9 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_ExplicitBorderBrushReplacingThemeRefDuringHover" => new ThemeResourceBindingFixtures.ExplicitBorderBrushReplacingThemeRefDuringHover(harness),
         "ThemeResourceBinding_SetterTakeoverWithOwnThemeChange" => new ThemeResourceBindingFixtures.SetterTakeoverWithOwnThemeChange(harness),
         "ThemeResourceBinding_UnrelatedStateDoesNotResurrectRemovedBinding" => new ThemeResourceBindingFixtures.UnrelatedStateDoesNotResurrectRemovedBinding(harness),
+        "ThemeResourceBinding_WrapperThemeRefBeatsInnerThemeRef" => new ThemeResourceBindingFixtures.WrapperThemeRefBeatsInnerThemeRef(harness),
+        "ThemeResourceBinding_ExplicitBackgroundReplacingThemeRefBeforeHover" => new ThemeResourceBindingFixtures.ExplicitBackgroundReplacingThemeRefBeforeHover(harness),
+        "ThemeResourceBinding_FailedHoverRestoreIsRetried" => new ThemeResourceBindingFixtures.FailedHoverRestoreIsRetried(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),
