@@ -396,6 +396,10 @@ context as a new argument. The **visual lane** is eligible only when both of the
   `TranslationTransition`-only or `.Scale()`-only element doesn't count as demand until the layer that
   moves it to the visual has landed. Before that, it would get a visual-taken control while fresh
   controls still take the XAML path, and it would pick up the readback and setter restrictions early.
+  A transform counts only when its effective value isn't identity, the same rule as §3 invariant 2.
+  An identity-only chain such as `Border().Scale(1).Ref(r)` would never take the visual on a fresh
+  control, so it must not get a visual-lane control that would throw on a later facade write
+  through the ref.
 - *Compatibility.* No declaration in the chain carries setters (`.Set`, `.OnMount`-style callbacks) and
   the control isn't a custom or third-party handler. A setter could write a facade that throws on a
   rented visual-taken control but works on a fresh one. Example: `.Set(b => b.Rotation = 10).Scale(2)`
@@ -435,7 +439,8 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
    `Offset` and `Size` are left to layout (P2).
 4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
-   origin property set (§8), and the keyframe trigger table entries for the control.
+   origin bookkeeping, and the keyframe trigger table entries for the control. The origin itself is put
+   into the §8.2 inactive state, because the property set can't drop its entries.
 5. The plain-lane steps stay as they are (#1620 facade resets, `RenderTransform`, `FlowDirection`, …). The
    `Rotation`, `Scale`, `CenterPoint`, `RotationAxis` and `TransformMatrix` facade writes are skipped
    for `VisualTaken` controls, because they would throw (Q8a). `Translation` is reset in step 3.
@@ -505,8 +510,13 @@ Measured (the earlier #773 investigation and this spike, see Appendix A):
   content 300 px). At rest it's exact (Q12c). This is documented, not fixed. The alternative, binding
   to a `SizeChanged`-fed property, costs a managed callback per resize and lags a frame.
 
-Unset: `StopAnimation("CenterPoint")`, remove the two properties, then write the static `.CenterPoint`
-value or Zero.
+**Inactive state.** `CompositionPropertySet` has no delete operation, so the two properties can't be
+removed once inserted. Unset and pool cleanup instead put the origin into a defined inactive state.
+`visual.Properties.StopAnimation("ReactorOriginOffset")` stops an offset animation started under a curve.
+Then `StopAnimation("CenterPoint")` on the visual stops the expression, `ReactorOrigin = (0,0)` and
+`ReactorOriginOffset = Zero` are written, and the static `.CenterPoint` value (or Zero) is written to
+`Visual.CenterPoint`. `ReactorState` records whether the origin is active, so a later `.TransformOrigin`
+restarts the expression rather than assuming it runs. §7.3 step 4 uses the same sequence.
 
 ### §8.3 Seams
 
@@ -544,7 +554,8 @@ element that uses the composition visual.**
 - *Matches.* A `.Set(...)` lambda, expression-bodied or block, that does one of these:
   - assigns `Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix`, `OpacityTransition`,
     `ScaleTransition`, `RotationTransition` or `TranslationTransition`;
-  - calls `StartAnimation`/`StopAnimation`;
+  - calls `StartAnimation` on the facade (`StopAnimation` is excluded, because WinUI exempts it from
+    facade strictness, so cleanup such as `.Set(b => b.StopAnimation(a)).LayoutAnimation()` is valid);
   - assigns `Translation`, but only when the chain also declares `.Translation()` (§4.3: the write would be silently ignored).
 
   The target must be the lambda's parameter, and the member must resolve through the semantic model to
@@ -807,11 +818,17 @@ pre-existing difference with an issue link. The model isn't bent to fit it.
 1. **Layer V** lands first. It adds the harness and
    `tests/Reactor.AppTests.Host/SelfTest/Baselines/transforms-ledger.json`, which holds one record per
    case, captured on `main` with no product change.
-2. Every later layer reruns the matrix and diffs it against the ledger. Every differing field must match
-   an entry in `transforms-ledger.expected.json`
+2. **Baseline.** CI always diffs against the ledger committed on the PR's **base** commit. That file is
+   immutable for the PR, and the PR's own regenerated ledger is never the comparison baseline.
+   Every differing field must match an entry in `transforms-ledger.expected.json`
    (`{ case selector, field, before, after, reason: "§9 row N" | "fixes #NNNN" }`). An unmatched
-   difference fails. So does an expectation that matches nothing, because it's stale. The PR then
-   regenerates the ledger, and the ledger's own diff shows reviewers exactly which behaviours changed.
+   difference fails, and so does an expectation that matches no base-to-head difference, because it's
+   stale. Separately, CI checks that the PR's committed ledger equals the head's observations. The
+   ledger's own diff in the PR then shows reviewers exactly which behaviours changed.
+   **Expectations are per PR.** Once the PR merges, the new ledger becomes the next PR's base, and that
+   PR starts with an empty expectations file. Expectations that haven't been cleared fail as stale
+   against the new base. **Nightly** runs on `main` compare observations with `main`'s committed ledger
+   and allow no expectations: any difference there is a regression or a flaky case.
 3. **Control group.** Cases with no transform, transition or compositor feature must stay
    byte-identical across every layer. That covers every step except the "rent as a transformed
    element" step, whose fields are excluded from the control group because layer 4 changes them on
@@ -879,9 +896,17 @@ RTB and at 0.00 on screen, with animations off in both runs. Cases that write fa
 (§4.3, §9 row 3, #1642) therefore use PrintWindow with an interactive-desktop guard (`H.Skip` without
 one), and its positive control must reproduce Q1f's `NOT-APPLIED`.
 - `VisualOwningModifiers` parity: for each modifier in `ModifierTable`, mount a fresh `Border` with a
-  non-identity value and read the `VisualTaken` flag. The observed set must equal the table. The
+  non-identity value, **run the feature's acquisition lifecycle**, and only then read the `VisualTaken`
+  flag. Some features take the visual lazily. `InteractionStates` takes it in `TransitionToState`
+  (`Reconciler.cs` ~6064-6100, 6182), so the fixture simulates pointer-over
+  (`SimulatePointerOverForTests`). Keyframes need their trigger, an exit `.Transition()` needs a
+  removal, and `.ScrollLinked` needs a scroll. The observed set must equal the table. The
   mutation check removes one table entry and expects red. This is a selftest, because the call is
   runtime behaviour that headless tests can't observe.
+- Visual-lane demand: an identity-only renter (`Border().Scale(1).Ref(r)`) with the visual lane
+  pre-populated gets a plain-lane or fresh control, and a facade write through the ref succeeds.
+- `.TransformOrigin` unset and pool cleanup leave the inactive state from §8.2: no running animation on
+  `CenterPoint` or `ReactorOriginOffset`, and a later `.TransformOrigin` works again.
 - Opacity lifecycle (H1 of the PR review): `.Opacity(1)`, then a `WithAnimation` fade to 0, then a static
   `.Opacity(1)`. The control must render fully opaque. Run it once more with the static write as an
   unset.
