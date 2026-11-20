@@ -151,8 +151,9 @@ public readonly record struct ThemeRef(string ResourceKey)
         // WinUI did not find the key for this theme. That covers keys missing everywhere and
         // keys an app dictionary defines only for some themes (for example only in Dark, or
         // only in Default next to Light and Dark), which the dictionary walk below has always
-        // found. The walk skips XamlControlsResources: reading its entries from code is what
-        // caused issue #1534, and every key WinUI can resolve has already been answered above.
+        // found. The walk never reads XamlControlsResources' own theme dictionaries: reading them
+        // from code is what caused issue #1534, and every key WinUI can resolve has already been
+        // answered above.
         return ResolveFromDictionaries(resources, resourceKey, themeName);
     }
 
@@ -223,11 +224,11 @@ public readonly record struct ThemeRef(string ResourceKey)
             return true;
         }
 
-        // Check MergedDictionaries: app dictionaries merged into the root are still searched.
+        // Check MergedDictionaries, including those of a XamlControlsResources: the guard above
+        // skips WinUI's own theme entries at every level, and app dictionaries merged into it
+        // are still searched.
         foreach (var merged in resources.MergedDictionaries)
         {
-            if (merged is Microsoft.UI.Xaml.Controls.XamlControlsResources)
-                continue;
             if (TryResolveFromThemeDictionaries(merged, key, themeName, out brush))
                 return true;
         }
