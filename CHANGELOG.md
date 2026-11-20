@@ -86,7 +86,7 @@ Conventions for contributors:
   coordinate from corrupt chart data, is not drawn and emits a warning on the
   `Microsoft-UI-Reactor` ETW event source; it used to draw the bad point at (0,0). The
   `Chart()` builder's line and area charts skip non-finite points, leaving a gap.
-  Malformed `PathIcon(...)` markup still throws, as before.
+  Malformed `PathIcon(...)` markup still throws, as before (PR #1622).
 
 ### Deprecated
 
@@ -99,7 +99,7 @@ Conventions for contributors:
   `XamlBindingHelper.ConvertValue(typeof(Geometry), data)`. Unlike `Parse`, it throws on
   markup the platform rejects (including `NaN` coordinates), and its result is a
   `PathGeometry` whose figures can't be read back from code. Its SharpFuzz target is removed
-  with it.
+  with it (PR #1622).
 
 - **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
   2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
@@ -270,7 +270,7 @@ Conventions for contributors:
 - **`PathIcon(...)` data is no longer interpolated into XAML.** It used to be spliced
   unescaped into a `<Geometry>` document passed to `XamlReader.Load`, so icon data could
   inject markup. It is now passed as a single value to WinUI's path-markup converter (see
-  [threat model §7.5](docs/security/threat-model.md#75-path-markup)).
+  [threat model §7.5](docs/security/threat-model.md#75-path-markup), PR #1622).
 
 ## [0.1.0-preview.18] — 2026-11-12
 
