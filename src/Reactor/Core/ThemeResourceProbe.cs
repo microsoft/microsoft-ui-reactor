@@ -20,9 +20,9 @@ namespace Microsoft.UI.Reactor.Core;
 /// <see cref="FrameworkElement.SetThemeResourceBinding"/> for <see cref="FrameworkElement.Tag"/>
 /// on a new, unparented <see cref="Border"/> with the requested
 /// <see cref="FrameworkElement.RequestedTheme"/>, and reads the value back (the API has no Get
-/// method). <c>Tag</c> holds a value of any type, and the key needs no quoting. The lookup
-/// follows WinUI's own rules, including the fallback to the <c>Default</c> dictionary and the
-/// Windows contrast themes, and returns the dictionary's own instance (issue #1634).</para>
+/// method). <c>Tag</c> holds a value of any type, and the key needs no quoting. WinUI does the
+/// lookup, so its rules apply, including the fallback to the <c>Default</c> dictionary, and it
+/// returns the dictionary's own instance (issue #1634).</para>
 /// <para>UI thread only, like every other read of the application resources.</para>
 /// </remarks>
 internal static class ThemeResourceProbe

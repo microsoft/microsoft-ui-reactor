@@ -94,9 +94,8 @@ Conventions for contributors:
   backed `.Resources(...)` overrides with theme tokens under an element with the other
   `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
   the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
-  only reads the dictionaries itself when WinUI cannot find the key for that theme. Because the
-  lookup is WinUI's `{ThemeResource}` resolution, a Windows contrast theme applies to
-  `ThemeRef.Resolve` the way it applies to `{ThemeResource}`. The lookup uses
+  only reads the dictionaries itself when WinUI cannot find the key for that theme, never
+  reading WinUI's own `XamlControlsResources` that way. The lookup uses
   `FrameworkElement.SetThemeResourceBinding`, so keys with characters that markup cannot hold
   resolve through WinUI too (issue #1634).
 

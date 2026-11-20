@@ -78,8 +78,19 @@ public class ThemeRefProbeProcessTests
     {
         var (stdout, exitCode, keyLines, detail) = RunProbe("raw-read");
         foreach (Match line in keyLines)
-            StringAssert.Contains(line.Value, "distinct=False",
+        {
+            // Assert the poisoning itself, not just "not distinct": a border that was never
+            // found also reads as not distinct. Both borders must show the same, measured brush,
+            // and the code read must have returned it.
+            var colors = Regex.Match(line.Value, @"read=(\S+) opposite=(\S+) app=(\S+)");
+            Assert.IsTrue(colors.Success, $"Unexpected key line: {line.Value}\n{detail}");
+            var (read, opposite, app) = (colors.Groups[1].Value, colors.Groups[2].Value, colors.Groups[3].Value);
+            Assert.AreNotEqual("null", opposite, $"The opposite-theme border was not measured.\n{detail}");
+            Assert.AreNotEqual("null", app, $"The app-theme border was not measured.\n{detail}");
+            Assert.AreEqual(app, opposite,
                 $"Reading the other theme's dictionary from code no longer changes WinUI's entry, so this probe can no longer detect issue #1534.\n{detail}");
+            Assert.AreEqual(app, read, $"The code read did not return the app theme's brush.\n{detail}");
+        }
         StringAssert.Contains(stdout, FailMarker, detail);
         Assert.AreEqual(FailExitCode, exitCode, detail);
     }
