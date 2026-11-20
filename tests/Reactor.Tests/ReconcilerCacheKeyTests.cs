@@ -84,6 +84,24 @@ public class ReconcilerCacheKeyTests
     }
 
     [Fact]
+    public void BuildCacheKey_SeparatorsInResourceKey_DoNotCollideWithAnotherBindingSet()
+    {
+        var oneBinding = new Dictionary<string, ThemeRef> { { "Background", new ThemeRef("A|Foreground=B") } };
+        var twoBindings = new Dictionary<string, ThemeRef>
+        {
+            { "Background", new ThemeRef("A") },
+            { "Foreground", new ThemeRef("B") },
+        };
+        Assert.NotEqual(
+            Reconciler.BuildCacheKey("Button", oneBinding),
+            Reconciler.BuildCacheKey("Button", twoBindings));
+        // The escape character itself is escaped, so "A\" + "|..." can't pose as "A" + "\|...".
+        Assert.NotEqual(
+            Reconciler.BuildCacheKey("Button", new Dictionary<string, ThemeRef> { { "Background", new ThemeRef("A\\|B") } }),
+            Reconciler.BuildCacheKey("Button", new Dictionary<string, ThemeRef> { { "Background", new ThemeRef("A|B") } }));
+    }
+
+    [Fact]
     public void ClearStyleCache_DoesNotThrow()
     {
         // Just verifying the static method is callable

@@ -357,6 +357,9 @@ internal static class SelfTestFixtureRegistry
         "ThemeRefStyle_AuthorStyleDerivedTargetType",
         "ThemeRefStyle_AuthorTemplateNotRebuilt",
         "ThemeRefStyle_KeyNeedsQuoting",
+        "ThemeRefStyle_UnrepresentableKeySkipsOnlyItsProperty",
+        "ThemeRefStyle_CacheKeyDoesNotCollide",
+        "ThemeRefStyle_ThirdPartyStyleFallsBack",
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         "NamedStyle_TypeRampStylesResolve",
@@ -2772,6 +2775,9 @@ internal static class SelfTestFixtureRegistry
         "ThemeRefStyle_AuthorStyleDerivedTargetType" => new ThemeRefStyleFixtures.AuthorStyleDerivedTargetType(harness),
         "ThemeRefStyle_AuthorTemplateNotRebuilt" => new ThemeRefStyleFixtures.AuthorTemplateNotRebuilt(harness),
         "ThemeRefStyle_KeyNeedsQuoting" => new ThemeRefStyleFixtures.ThemeRefKeyNeedsQuoting(harness),
+        "ThemeRefStyle_UnrepresentableKeySkipsOnlyItsProperty" => new ThemeRefStyleFixtures.UnrepresentableKeySkipsOnlyItsProperty(harness),
+        "ThemeRefStyle_CacheKeyDoesNotCollide" => new ThemeRefStyleFixtures.CacheKeyDoesNotCollide(harness),
+        "ThemeRefStyle_ThirdPartyStyleFallsBack" => new ThemeRefStyleFixtures.ThirdPartyStyleFallsBack(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),

@@ -89,13 +89,18 @@ internal static class ThemeRefStyleFixtures
             {
                 var (phase, setter) = ctx.UseState(0);
                 setPhase = setter;
-                var sv = SplitView(TextBlock("trs-pane"), TextBlock("trs-content")).Height(80);
-                return VStack(phase switch
-                {
-                    0 => sv.PaneBackground(explicitBrush),
-                    1 => sv.PaneBackground(new ThemeRef("TrsPaneBrush")),
-                    _ => sv,
-                }).RequestedTheme(ElementTheme.Light);
+                // Phase 2 changes the SplitView itself (update arm); phase 3 changes only a sibling,
+                // so the unchanged SplitView takes the skip arm. Both re-apply the themed Style to
+                // the loaded control.
+                var sv = SplitView(TextBlock("trs-pane"), TextBlock("trs-content")).Height(phase >= 2 ? 81 : 80);
+                return VStack(
+                    TextBlock(phase == 3 ? "trs-pane-sibling-3" : "trs-pane-sibling"),
+                    phase switch
+                    {
+                        0 => sv.PaneBackground(explicitBrush),
+                        1 or 2 or 3 => sv.PaneBackground(new ThemeRef("TrsPaneBrush")),
+                        _ => sv,
+                    }).RequestedTheme(ElementTheme.Light);
             });
             await Harness.Render();
 
@@ -113,7 +118,17 @@ internal static class ThemeRefStyleFixtures
                 await FlipToDark(sv, () => ColorOf(sv.PaneBackground) == DarkColor),
                 $"pane={ColorOf(sv.PaneBackground)}");
 
-            setPhase!(2);
+            foreach (var (phase, name) in new[] { (2, "Update"), (3, "Skip") })
+            {
+                setPhase!(phase);
+                await Harness.Render();
+                H.Check($"ThemeRefStyle_Pane_{name}_SameControl", ReferenceEquals(H.FindControl<WinUI.SplitView>(_ => true), sv));
+                H.Check($"ThemeRefStyle_Pane_{name}_StillThemed", ColorOf(sv.PaneBackground) is { } c && (c == DarkColor || c == LightColor),
+                    $"pane={ColorOf(sv.PaneBackground)} height={sv.Height}");
+            }
+            H.Check("ThemeRefStyle_Pane_UpdateApplied", Math.Abs(sv.Height - 81) < 0.01 && H.FindText("trs-pane-sibling-3") is not null);
+
+            setPhase!(4);
             await Harness.Render();
             H.Check("ThemeRefStyle_Pane_Removed_SameControl", ReferenceEquals(H.FindControl<WinUI.SplitView>(_ => true), sv));
             H.Check("ThemeRefStyle_Pane_Removed_NotThemed",
@@ -130,14 +145,15 @@ internal static class ThemeRefStyleFixtures
         public override Task RunAsync() => WithThemeKey(H, "TrsHoverBrush", async host =>
         {
             var hover = new SolidColorBrush(HoverColor);
+            var pressed = new SolidColorBrush(ExplicitColor);
             var key = new ThemeRef("TrsHoverBrush");
             host.Mount(_ => VStack(
                 VStack(Border(TextBlock("trs-hover-bg")).Background(key)
-                    .InteractionStates(s => s.PointerOver(background: hover))),
+                    .InteractionStates(s => s.PointerOver(background: hover).Pressed(background: pressed))),
                 VStack(TextBlock("trs-hover-fg").Foreground(key)
-                    .InteractionStates(s => s.PointerOver(foreground: hover))),
+                    .InteractionStates(s => s.PointerOver(foreground: hover).Pressed(foreground: pressed))),
                 VStack(Button("trs-hover-button").Foreground(key)
-                    .InteractionStates(s => s.PointerOver(foreground: hover)))).RequestedTheme(ElementTheme.Light));
+                    .InteractionStates(s => s.PointerOver(foreground: hover).Pressed(foreground: pressed)))).RequestedTheme(ElementTheme.Light));
             await Harness.Render();
 
             var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-hover-bg" });
@@ -158,6 +174,11 @@ internal static class ThemeRefStyleFixtures
                     $"value={ColorOf(control.GetValue(property))}");
                 Reconciler.SimulatePointerOverForTests(control, isOver: true);
                 H.Check($"ThemeRefStyle_Hover_{name}_HoverBrush", ReferenceEquals(control.GetValue(property), hover));
+                // Pressed sets its own brush: the press must not capture the hover brush as the
+                // value to restore.
+                Reconciler.SimulatePressedForTests(control, isPressed: true);
+                H.Check($"ThemeRefStyle_Hover_{name}_PressedBrush", ReferenceEquals(control.GetValue(property), pressed));
+                Reconciler.SimulatePressedForTests(control, isPressed: false);
                 Reconciler.SimulatePointerOverForTests(control, isOver: false);
                 H.Check($"ThemeRefStyle_Hover_{name}_LocalReleased", !HasLocal(control, property),
                     $"local={control.ReadLocalValue(property)}");
@@ -195,44 +216,72 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
-    /// An explicit <c>.Background(brush)</c> is still put back after a hover, and it is the brush
-    /// the element carries when the hover starts, not the one it had when InteractionStates was
-    /// first set up.
+    /// An explicit <c>.Background(brush)</c> is put back after a hover, and it is the brush the
+    /// element carries when the states end: not the one it had when InteractionStates was first
+    /// set up, not the hover brush when a press follows the hover, and the brush a re-render set
+    /// while the pointer was over it.
     /// </summary>
     internal sealed class InteractionStatesRestoresCurrentExplicitBrush(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var hover = new SolidColorBrush(HoverColor);
+            var pressed = new SolidColorBrush(DarkColor);
             var first = new SolidColorBrush(ExplicitColor);
             var second = new SolidColorBrush(OtherExplicitColor);
-            Action<bool>? setSecond = null;
+            var third = new SolidColorBrush(LightColor);
+            Action<int>? setPhase = null;
             using var host = H.CreateHost();
             try
             {
                 host.Mount(ctx =>
                 {
-                    var (useSecond, setter) = ctx.UseState(false);
-                    setSecond = setter;
-                    return VStack(Border(TextBlock("trs-explicit")).Background(useSecond ? second : first)
-                        .InteractionStates(s => s.PointerOver(background: hover)));
+                    var (phase, setter) = ctx.UseState(0);
+                    setPhase = setter;
+                    var brush = phase switch { 0 => first, 1 => second, _ => third };
+                    return VStack(Border(TextBlock("trs-explicit")).Background(brush)
+                        .InteractionStates(s => s.PointerOver(background: hover).Pressed(background: pressed)));
                 });
                 await Harness.Render();
 
                 var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-explicit" });
                 H.Check("ThemeRefStyle_Explicit_Present", border is not null);
                 if (border is null) return;
-                Reconciler.SimulatePointerOverForTests(border, isOver: true);
-                Reconciler.SimulatePointerOverForTests(border, isOver: false);
-                H.Check("ThemeRefStyle_Explicit_FirstRestored", ReferenceEquals(border.ReadLocalValue(WinUI.Border.BackgroundProperty), first));
+                object Local() => border.ReadLocalValue(WinUI.Border.BackgroundProperty);
 
-                setSecond!(true);
+                // Over → Pressed → Over → Normal: the press must not recapture the hover brush.
+                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                H.Check("ThemeRefStyle_Explicit_PressedBrush", ReferenceEquals(border.Background, pressed));
+                Reconciler.SimulatePressedForTests(border, isPressed: false);
+                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                H.Check("ThemeRefStyle_Explicit_FirstRestoredAfterPress", ReferenceEquals(Local(), first),
+                    $"bg={ColorOf(border.Background)}");
+
+                // A brush set between hovers is the one the next hover restores.
+                setPhase!(1);
                 await Harness.Render();
                 H.Check("ThemeRefStyle_Explicit_SecondApplied", ReferenceEquals(border.Background, second));
                 Reconciler.SimulatePointerOverForTests(border, isOver: true);
                 H.Check("ThemeRefStyle_Explicit_HoverBrush", ReferenceEquals(border.Background, hover));
+
+                // A re-render during the hover writes a new brush: it stands, and leaving the hover
+                // keeps it instead of writing back the brush from when the hover started.
+                setPhase!(2);
+                await Harness.Render();
+                H.Check("ThemeRefStyle_Explicit_ThirdAppliedDuringHover", ReferenceEquals(Local(), third));
                 Reconciler.SimulatePointerOverForTests(border, isOver: false);
-                H.Check("ThemeRefStyle_Explicit_SecondRestored", ReferenceEquals(border.ReadLocalValue(WinUI.Border.BackgroundProperty), second),
+                H.Check("ThemeRefStyle_Explicit_ThirdKeptOnExit", ReferenceEquals(Local(), third),
+                    $"bg={ColorOf(border.Background)}");
+
+                // And once the hover starts over that brush, a press and release still come back to it.
+                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                setPhase!(1);
+                await Harness.Render();
+                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                Reconciler.SimulatePressedForTests(border, isPressed: false);
+                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                H.Check("ThemeRefStyle_Explicit_MidHoverBrushRestoredAfterPress", ReferenceEquals(Local(), second),
                     $"bg={ColorOf(border.Background)}");
             }
             finally
@@ -293,11 +342,16 @@ internal static class ThemeRefStyleFixtures
             }
 
             CheckThemed("Mount");
+            var mountedThemed = (bySet.Style, byNamed.Style);
             setPhase!(1);
             await Harness.Render();
             H.Check("ThemeRefStyle_Author_Update_SameControls",
                 ReferenceEquals(H.FindText("trs-style-set!"), bySet) && ReferenceEquals(H.FindText("trs-style-named!"), byNamed));
             CheckThemed("Update");
+            // The themed Style built on a base is cached per base: a re-render reuses it rather than
+            // parsing a new one.
+            H.Check("ThemeRefStyle_Author_Update_ThemedStyleReused",
+                ReferenceEquals(bySet.Style, mountedThemed.Item1) && ReferenceEquals(byNamed.Style, mountedThemed.Item2));
 
             setPhase!(2);
             await Harness.Render();
@@ -443,6 +497,139 @@ internal static class ThemeRefStyleFixtures
                     await FlipToDark(border, () => ColorOf(border.Background) == DarkColor),
                     $"key={Keys[i]} bg={ColorOf(border.Background)}");
             }
+        });
+    }
+
+    private sealed class ThemeWarningListener : global::System.Diagnostics.Tracing.EventListener
+    {
+        private readonly List<string> _messages = new();
+        internal string[] Messages { get { lock (_messages) return _messages.ToArray(); } }
+        protected override void OnEventSourceCreated(global::System.Diagnostics.Tracing.EventSource source)
+        {
+            if (source.Name == "Microsoft-UI-Reactor")
+                EnableEvents(source, global::System.Diagnostics.Tracing.EventLevel.Warning);
+        }
+        protected override void OnEventWritten(global::System.Diagnostics.Tracing.EventWrittenEventArgs args)
+        {
+            if (args.EventName != "Warning" || args.Payload is not { Count: >= 3 }) return;
+            if (Equals(args.Payload[0], "Theme") && Equals(args.Payload[1], "ApplyThemeBindings"))
+                lock (_messages) _messages.Add(args.Payload[2] as string ?? "");
+        }
+    }
+
+    /// <summary>
+    /// A ThemeRef key that cannot be written as a <c>{ThemeResource}</c> reference skips only its
+    /// own property (the element's other ThemeRefs still apply) and is reported once, not on every
+    /// render.
+    /// </summary>
+    internal sealed class UnrepresentableKeySkipsOnlyItsProperty(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsGoodBrush", async host =>
+        {
+            const string BadKey = "TrsBad\tKey";
+            using var listener = new ThemeWarningListener();
+            Action<int>? setCount = null;
+            host.Mount(ctx =>
+            {
+                var (count, setter) = ctx.UseState(0);
+                setCount = setter;
+                return VStack(Button($"trs-bad-key-{count}")
+                    .Background(new ThemeRef(BadKey))
+                    .Foreground(new ThemeRef("TrsGoodBrush"))).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+
+            var button = H.FindControl<WinUI.Button>(b => b.Content is "trs-bad-key-0");
+            H.Check("ThemeRefStyle_BadKey_OtherPropertyThemed", ColorOf(button?.Foreground) == LightColor,
+                $"fg={ColorOf(button?.Foreground)}");
+            H.Check("ThemeRefStyle_BadKey_OwnPropertyNotSet",
+                button is not null && ColorOf(button.Background) != LightColor && !HasLocal(button, WinUI.Control.BackgroundProperty),
+                $"bg={ColorOf(button?.Background)}");
+
+            setCount!(1);
+            await Harness.Render();
+            H.Check("ThemeRefStyle_BadKey_ReRenderStillThemed", ColorOf(button?.Foreground) == LightColor);
+
+            // EventListener callbacks do not flow under NativeAOT publish; the JIT run covers it.
+            if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                var mine = listener.Messages.Where(m => m.Contains("TrsBad\\u0009Key", StringComparison.Ordinal)).ToArray();
+                H.Check("ThemeRefStyle_BadKey_WarnedOnce", mine.Length == 1 && mine[0].Contains("Background", StringComparison.Ordinal),
+                    $"count={mine.Length} all={string.Join(" || ", listener.Messages)}");
+            }
+            else
+            {
+                H.Skip("ThemeRefStyle_BadKey_WarnedOnce", "EventListener callbacks do not flow under NativeAOT publish");
+            }
+        });
+    }
+
+    /// <summary>
+    /// The themed-Style cache key keeps a resource key containing '|' or '=' apart from a
+    /// different binding set that would otherwise spell the same key, so the second element does
+    /// not get the first element's cached Style.
+    /// </summary>
+    internal sealed class CacheKeyDoesNotCollide(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKeys(H, ["TrsColA|Foreground=TrsColB", "TrsColA", "TrsColB"], async (host, _) =>
+        {
+            host.Mount(_ => VStack(
+                Button("trs-collide-one").Background(new ThemeRef("TrsColA|Foreground=TrsColB")),
+                Button("trs-collide-two").Background(new ThemeRef("TrsColA")).Foreground(new ThemeRef("TrsColB")))
+                .RequestedTheme(ElementTheme.Light));
+            await Harness.Render();
+
+            var one = H.FindControl<WinUI.Button>(b => b.Content is "trs-collide-one");
+            var two = H.FindControl<WinUI.Button>(b => b.Content is "trs-collide-two");
+            H.Check("ThemeRefStyle_Collide_FirstThemed", ColorOf(one?.Background) == LightColor);
+            H.Check("ThemeRefStyle_Collide_SecondHasOwnStyle",
+                two is not null && !ReferenceEquals(two.Style, one?.Style)
+                && ColorOf(two.Background) == LightColor && ColorOf(two.Foreground) == LightColor,
+                $"fg={ColorOf(two?.Foreground)} sameStyle={ReferenceEquals(two?.Style, one?.Style)}");
+        });
+    }
+
+    /// <summary>
+    /// A Style for a third-party control type (one that ships XAML metadata) cannot be the
+    /// BasedOn of a themed Style targeting a WinUI type. The ThemeRef must still apply (the themed
+    /// Style replaces the app's, as before Styles were kept), and later renders must reuse that
+    /// result rather than build on the incompatible base again.
+    /// </summary>
+    internal sealed class ThirdPartyStyleFallsBack(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsThirdPartyBrush", async host =>
+        {
+            ReactorApp.RegisterControlAssembly(typeof(global::Reactor.AppTests.ThirdPartyControls.ThirdPartyControlWithPrivateDp).Assembly);
+            var style = (Style)XamlReader.Load(
+                $"<Style xmlns='{XamlNs}' xmlns:tp='using:Reactor.AppTests.ThirdPartyControls' " +
+                "TargetType='tp:ThirdPartyControlWithPrivateDp'><Setter Property='MinWidth' Value='177'/></Style>");
+
+            Action<int>? setCount = null;
+            host.Mount(ctx =>
+            {
+                var (count, setter) = ctx.UseState(0);
+                setCount = setter;
+                return VStack(
+                    TextBlock($"trs-third-party-{count}"),
+                    new XamlHostElement(() => new global::Reactor.AppTests.ThirdPartyControls.ThirdPartyControlWithPrivateDp { Style = style })
+                        .Background(new ThemeRef("TrsThirdPartyBrush"))).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+
+            var control = H.FindControl<global::Reactor.AppTests.ThirdPartyControls.ThirdPartyControlWithPrivateDp>(_ => true);
+            var errorText = H.FindControl<WinUI.TextBlock>(t => t.Text?.Contains("xception", StringComparison.Ordinal) == true)?.Text;
+            H.Check("ThemeRefStyle_ThirdParty_Mounted", control is not null && errorText is null, $"error={errorText}");
+            H.Check("ThemeRefStyle_ThirdParty_Themed", ColorOf(control?.Background) == LightColor,
+                $"bg={ColorOf(control?.Background)} styleIsAuthor={ReferenceEquals(control?.Style, style)}");
+            var themed = control?.Style;
+
+            setCount!(1);
+            await Harness.Render();
+            H.Check("ThemeRefStyle_ThirdParty_ReRender_SameControl",
+                ReferenceEquals(H.FindControl<global::Reactor.AppTests.ThirdPartyControls.ThirdPartyControlWithPrivateDp>(_ => true), control)
+                && H.FindText("trs-third-party-1") is not null);
+            H.Check("ThemeRefStyle_ThirdParty_ReRender_Themed", ColorOf(control?.Background) == LightColor);
+            H.Check("ThemeRefStyle_ThirdParty_ReRender_StyleReused", control is not null && ReferenceEquals(control.Style, themed));
         });
     }
 }
