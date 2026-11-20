@@ -68,10 +68,8 @@ const firstInternal = internals[0]?.pages[0];
 
 const blogPost = {
   title: "Microsoft.UI.Reactor: a C#-first way to build WinUI apps",
-  summary: "No XAML, no code-behind, no view models. Just C#.",
   date: "Oct 21, 2026",
   dateTime: "2026-10-21",
-  image: "/blog/reactor-part-1.webp",
   url: "https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/",
 };
 
@@ -148,30 +146,18 @@ const [frontShot, backShot] = showcaseShots;
       <div class="max-w-3xl">
         <a
           href={blogPost.url}
-          class="group flex max-w-2xl items-center gap-3 rounded-2xl border border-border bg-background p-2 pr-4 text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.05)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:gap-4 sm:pr-5"
+          class="group inline-flex max-w-full items-center gap-3 rounded-full border border-border bg-background py-2 pl-2 pr-4 text-sm text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.05)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          <img
-            src={href(blogPost.image)}
-            width="768"
-            height="403"
-            alt=""
-            decoding="async"
-            class="h-16 w-[122px] shrink-0 rounded-xl bg-muted object-cover sm:h-[84px] sm:w-40"
-          />
-          <span class="min-w-0 flex-1">
-            <span class="flex items-center gap-2 text-xs text-muted-foreground">
-              <span
-                class="shrink-0 rounded-full px-2 py-0.5 font-semibold text-white"
-                style={`background: linear-gradient(110deg, ${BLOOMS.blue.ink}, ${BLOOMS.violet.ink})`}
-              >
-                Blog
-              </span>
-              <span class="truncate">Latest post · <time datetime={blogPost.dateTime}>{blogPost.date}</time></span>
-            </span>
-            <span class="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug sm:line-clamp-1 sm:text-base">{blogPost.title}</span>
-            <span class="mt-0.5 hidden truncate text-sm text-muted-foreground sm:block">{blogPost.summary}</span>
+          <span
+            class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold text-white"
+            style={`background: linear-gradient(110deg, ${BLOOMS.blue.ink}, ${BLOOMS.violet.ink})`}
+          >
+            Blog
           </span>
-          <Icon name="arrow-up-right" size={16} class="hidden shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-safe:group-hover:-translate-y-px motion-safe:group-hover:translate-x-px sm:block" />
+          <span class="min-w-0 truncate">
+            <span class="font-medium">{blogPost.title}</span><span class="hidden text-muted-foreground md:inline">{" · "}<time datetime={blogPost.dateTime}>{blogPost.date}</time></span>
+          </span>
+          <Icon name="arrow-up-right" size={14} class="shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-safe:group-hover:-translate-y-px motion-safe:group-hover:translate-x-px" />
         </a>
         <h1 id="intro-title" class="mt-8 font-display text-4xl font-semibold tracking-tight text-balance text-foreground sm:text-5xl lg:text-6xl">
           <span class="sm:whitespace-nowrap">Native Windows apps,</span> in pure C#.

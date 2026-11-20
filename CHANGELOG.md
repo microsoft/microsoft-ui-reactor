@@ -203,7 +203,7 @@ Conventions for contributors:
   heading. The site build also rewrites links whose text wraps onto a second line.
 
 - **The docs site has a new home page, a Showcase page and a clearer structure.** The home
-  page opens with a card for the latest Reactor post on the Windows developer blog, links to
+  page opens with a banner for the latest Reactor post on the Windows developer blog, links to
   the new Showcase page, and explains that Reactor builds native WinUI 3 apps in C# next to a
   live counter example. It then leads into
   Get started, Guides, Controls, Recipes, API reference and How it works. Showcase lists the
