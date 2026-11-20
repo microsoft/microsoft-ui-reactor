@@ -775,4 +775,65 @@ internal static class AnimationCombinationTests
             H.Check("KFTranslation_OffsetKeptLayoutPosition", visual.Offset.Y >= 40, $"offset={visual.Offset}");
         }
     }
+
+    /// <summary>
+    /// Unmounting a keyframed element stops every channel it may have started, even when
+    /// the visual has no Translation property (#1641). StopAnimation("Translation") throws on
+    /// such a visual, and it used to share one try with the RotationAngle stop.
+    /// </summary>
+    internal class KeyframesUnmountStopsRotation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Positive control first: with translation enabled, the same oracle sees both stops.
+            await RunCase("KFUnmountStops_WithTranslation", withTranslation: true);
+            await RunCase("KFUnmountStops_RotationOnly", withTranslation: false);
+        }
+
+        async Task RunCase(string name, bool withTranslation)
+        {
+            var id = name + "-target";
+            using var reconciler = new Reconciler();
+            var panel = (StackPanel)reconciler.Mount(VStack(
+                Border(TextBlock(name))
+                    .Keyframes("spin", 1, kf => withTranslation
+                        ? kf.Duration(5000).Loop()
+                            .At(0f, rotation: 0f, translation: Vector3.Zero)
+                            .At(1f, rotation: 360f, translation: new Vector3(8, 0, 0))
+                        : kf.Duration(5000).Loop()
+                            .At(0f, rotation: 0f)
+                            .At(1f, rotation: 360f))
+                    .AutomationId(id)), static () => { })!;
+            H.SetContent(panel);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                var target = FindById(H, id);
+                H.Check(name + "_Mounted", target is not null);
+                if (target is null) return;
+                visual = ElementCompositionPreview.GetElementVisual(target);
+
+                bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+                H.Check(name + "_TranslationProperty", hasTranslation == withTranslation, $"hasTranslation={hasTranslation}");
+                H.Check(name + "_RotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+                if (withTranslation)
+                    H.Check(name + "_TranslationRunning", visual.TryGetAnimationController("Translation") is not null);
+
+                reconciler.UnmountChild(target);
+                panel.Children.Remove(target);
+
+                H.Check(name + "_RotationStopped", visual.TryGetAnimationController("RotationAngle") is null);
+                if (withTranslation)
+                    H.Check(name + "_TranslationStopped", visual.TryGetAnimationController("Translation") is null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                if (withTranslation) visual?.StopAnimation("Translation");
+                reconciler.UnmountChild(panel);
+                H.SetContent(null);
+            }
+        }
+    }
 }

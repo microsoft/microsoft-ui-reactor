@@ -6559,15 +6559,24 @@ public sealed partial class Reconciler : IDisposable
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
         // We stop all four possible targets since KeyframeAnimationDef doesn't track which
         // targets were started — StopAnimation is a no-op if no animation is running on that property.
-        try
-        {
-            var visual = AnimationHelper.GetElementVisual(uie);
-            visual.StopAnimation("Opacity");
-            visual.StopAnimation("Scale");
-            visual.StopAnimation("Translation");
-            visual.StopAnimation("RotationAngle");
-        }
-        catch { /* No compositor (e.g. unit tests) */ }
+        Visual visual;
+        try { visual = AnimationHelper.GetElementVisual(uie); }
+        catch { return; /* No compositor (e.g. unit tests) */ }
+
+        // Each stop is independent, so one failure can't leave a later channel running (#1641).
+        StopKeyframeTarget(visual, "Opacity");
+        StopKeyframeTarget(visual, "Scale");
+        // Translation is a property-set entry that exists only once translation was enabled.
+        // StopAnimation on a missing entry throws ArgumentException (spec 066 §7.3 step 1).
+        if (visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
+            StopKeyframeTarget(visual, "Translation");
+        StopKeyframeTarget(visual, "RotationAngle");
+    }
+
+    private static void StopKeyframeTarget(Visual visual, string property)
+    {
+        try { visual.StopAnimation(property); }
+        catch { /* One failed stop must not skip the others. */ }
     }
 
     // ════════════════════════════════════════════════════════════════

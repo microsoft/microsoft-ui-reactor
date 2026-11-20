@@ -135,6 +135,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
+  `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
+  channel inside one `try`, and stopping `Translation` throws when translation was never
+  enabled, so the rotation stop was skipped and the animation kept running on the unmounted
+  control. Each stop is now independent, and `Translation` is stopped only when the property
+  exists (spec 066 §7.3, issue #1641).
+
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no
   longer throws during reconcile and replaces the host content with the error

@@ -962,6 +962,7 @@ internal static class SelfTestFixtureRegistry
         "AnimCombo_InteractionSetup",
         "AnimCombo_KeyframesOnMount",
         "AnimCombo_KeyframesTranslationChannel",
+        "AnimCombo_KeyframesUnmountStopsRotation",
         "AnimCombo_StaggerOnContainer",
         // Animation combination tests — pairs
         "AnimCombo_AnimatePlusLayout",
@@ -3350,6 +3351,7 @@ internal static class SelfTestFixtureRegistry
         "AnimCombo_InteractionSetup" => new AnimationCombinationTests.InteractionStatesSetup(harness),
         "AnimCombo_KeyframesOnMount" => new AnimationCombinationTests.KeyframesOnMount(harness),
         "AnimCombo_KeyframesTranslationChannel" => new AnimationCombinationTests.KeyframesTranslationChannel(harness),
+        "AnimCombo_KeyframesUnmountStopsRotation" => new AnimationCombinationTests.KeyframesUnmountStopsRotation(harness),
         "AnimCombo_StaggerOnContainer" => new AnimationCombinationTests.StaggerOnContainer(harness),
         // Animation combination tests — pairs
         "AnimCombo_AnimatePlusLayout" => new AnimationCombinationTests.AnimatePlusLayout(harness),
