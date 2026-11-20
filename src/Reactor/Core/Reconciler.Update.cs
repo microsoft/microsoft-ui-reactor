@@ -31,6 +31,9 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
+        var modifierTarget = newEl;
+        var mountedModifierTarget = modifierParent is null ? null : RecordModifierTarget(control, modifierParent, modifierTarget);
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
         // Inner modifiers override outer ones (via Merge: other wins where non-null).
         ElementModifiers? oldModifiers = oldEl.Modifiers;
@@ -60,6 +63,7 @@ public sealed partial class Reconciler
             oldModifiers = oldModifiers is not null ? oldModifiers.Merge(oldEl.Modifiers) : oldEl.Modifiers;
         if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
+        bool sharesModifierTarget = RefreshModifierTarget(control, mountedModifierTarget ?? oldEl, newEl);
 
         // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
         // resolution (mount-theme bug): the element's own RequestedTheme wins, else the
@@ -100,7 +104,8 @@ public sealed partial class Reconciler
         // be skipped (e.g. ShallowEquals false) never pay for the subtree traversal,
         // and HasActiveContextValues short-circuits it away entirely when no provider
         // is on the stack.
-        if (Element.ShallowEquals(oldEl, newEl)
+        bool shallowEqual = Element.ShallowEquals(oldEl, newEl);
+        if (shallowEqual
             && Element.ModifiersEqual(oldModifiers, modifiers)
             && oldEl.HasCallbacks == newEl.HasCallbacks
             && !ForceRenderThroughWrapper(newEl)
@@ -108,14 +113,12 @@ public sealed partial class Reconciler
             && !ShouldDeclineSkip(control))
         {
             DebugElementsSkipped++;
-            // Refresh Tag so the event trampoline dispatches into the new element's
-            // closure on next click/value-change. Gated on HasCallbacks so we skip
-            // the DependencyProperty write entirely for leaves with no handlers
-            // (TextBlock, Image, Border, etc.) — which is most of them.
-            if (newEl.HasCallbacks && control is FrameworkElement tagFeSE)
-                SetElementTag(tagFeSE, newEl);
+            // Refresh live callbacks and native flyout ownership. Inert display
+            // leaves (TextBlock, Image, Border, etc.) still avoid the DP write.
+            if ((newEl.HasCallbacks || IsFlyoutDecorator(newEl)) && control is FrameworkElement tagFeSE)
+                RefreshElementTagOnSkip(tagFeSE, oldEl, newEl);
             else if (CallSiteChangedOnSkip(oldEl, newEl) && control is FrameworkElement srcFeSE)
-                RefreshCallSiteTagOnSkip(srcFeSE, newEl);   // spec 010 — keep the reported line live
+                RefreshElementTagOnSkip(srcFeSE, oldEl, newEl);   // spec 010 — keep the reported line live
             if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);
@@ -197,9 +200,14 @@ public sealed partial class Reconciler
 
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
+        var previousModifierUpdate = ModifierUpdate;
+        if (!ReferenceEquals(ModifierUpdate.Control, control))
+            ModifierUpdate = (control, newEl, modifiers);
 
         UIElement? result;
         bool registeredType = false;
+        // Issue #965 — whether the control was created for this element (see ApplyModifiers).
+        bool ownsControl = false;
         try
         {
         // Publish the effective theme for the subtree now that we're committed to the
@@ -208,6 +216,31 @@ public sealed partial class Reconciler
         // UpdateXxx (and any fresh subtree this Update mounts) resolve ThemeRef
         // ResourceOverrides against it.
         _ambientRequestedTheme = effectiveTheme;
+
+        // Setters and nested targets run inside handlers, before ApplyModifiers.
+        // Release outgoing implicit channels before any of them can write a value.
+        if (oldEl.AnimationConfig is { } previousAnimation)
+        {
+            var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
+            // Offset belongs to layout when both renders retain that declaration.
+            if (oldEl.LayoutAnimation?.AnimateOffset == true && newEl.LayoutAnimation?.AnimateOffset == true)
+                properties &= ~AnimateProperty.Offset;
+            if (properties != default)
+                ClearPropertyAnimation(control, properties);
+        }
+
+        var keyframes = newEl.KeyframeAnimations;
+        bool targetCanAdvanceTrigger = keyframes is not null
+            && (sharesModifierTarget || (IsFlyoutDecorator(newEl)
+                && _v1Handlers.TryGet(newEl.GetType(), out var keyframeHandler) && keyframeHandler.PreservesTargetTag));
+        // Release removed declarations before setters. A shared target can change a
+        // retained name's trigger before the decorator reaches its own playback.
+        if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
+            ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
+                ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
+
+        if (control is FrameworkElement departingModifiers)
+            ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -223,6 +256,7 @@ public sealed partial class Reconciler
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
+            ownsControl = v1Entry.OwnsControl(newEl);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
@@ -234,6 +268,7 @@ public sealed partial class Reconciler
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;
+            ownsControl = v1Entry.OwnsControl(newEl);
         }
         else
         {
@@ -266,6 +301,8 @@ public sealed partial class Reconciler
             (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
+        // Composition primitives own their Border wrapper; a keyed memo is transparent.
+        ownsControl = newEl is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
 
         // A transparent layer (a keyed Memo, a flyout wrapping its target) shares its inner
@@ -281,6 +318,11 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // A nested update can replace the control or introduce its first
+        // restorable inner declaration. Publish the edge before outer restoration.
+        if (modifierParent is not null && (result is not null || mountedModifierTarget is null))
+            RecordModifierTarget(target, modifierParent, modifierTarget);
+        if (result is not null) ModifierUpdate.Control = target;
         // Re-publish only when the value can change: a replaced control (its mount already
         // published, but a handler may have swapped it without Mount) or a new call site /
         // key / kind. An in-place update of an unchanged element keeps its published value.
@@ -300,6 +342,11 @@ public sealed partial class Reconciler
             && _highlightModified is not null
             && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
+        // The same rule feeds the perf ComponentRender spans' `changes` (a replacement was
+        // counted by its Mount, and the control it replaces by its unmount).
+        if (result is null && Diagnostics.ReactorPerfTrace.ComponentEnabled
+            && PerfUpdateChanged(oldEl, newEl, oldModifiers, modifiers, shallowEqual))
+            Diagnostics.ComponentPerfTally.AddChanges(1);
         if (target is WinUI.TitleBar preModCtl)
         {
             // Setters have already run (inside the descriptor handler) but modifiers have
@@ -313,7 +360,8 @@ public sealed partial class Reconciler
         var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
             && _backgroundRemovalHandled.Remove(control) && ReferenceEquals(target, control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
-            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground);
+            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender, keepRemovedBackground,
+                ownsControl: ownsControl && result is null);
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
         // Issue #1262 — re-bind (or withdraw) the attached verdict. The old element is
@@ -346,7 +394,7 @@ public sealed partial class Reconciler
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never
         // set an explicit name. No-ops when the author did.
-        if (target is FrameworkElement captionFe)
+        if (target is FrameworkElement captionFe && modifiers?.AutomationName is null)
             UpdateDefaultAutomationName(
                 captionFe,
                 ResolveCaptionForElement(oldEl),
@@ -370,11 +418,9 @@ public sealed partial class Reconciler
         else if (oldEl.LayoutAnimation is not null)
             ClearLayoutAnimation(target);
 
-        // Apply or clear compositor property animation (.Animate() modifier)
+        // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, newEl.LayoutAnimation);
-        else if (oldEl.AnimationConfig is not null)
-            ClearPropertyAnimation(target, newEl.LayoutAnimation);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
@@ -383,8 +429,12 @@ public sealed partial class Reconciler
             ClearInteractionStates(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
-        if (newEl.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(target, newEl.KeyframeAnimations);
+        if (keyframes is not null)
+        {
+            if (targetCanAdvanceTrigger && result is null)
+                ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
+            ApplyKeyframeAnimations(target, keyframes);
+        }
         else if (oldEl.KeyframeAnimations is not null)
             ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
 
@@ -401,6 +451,7 @@ public sealed partial class Reconciler
         }
         finally
         {
+            ModifierUpdate = previousModifierUpdate;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();
@@ -1318,7 +1369,7 @@ public sealed partial class Reconciler
             }
             if (index >= viewSource.ItemCount) continue;
 
-            var oldItemElement = GetElementTag(cc);
+            var oldItemElement = GetMountedElement(cc);
             var newItemElement = BuildKeyedItemView(viewSource, index);
 
             // ReconcileV1Child updates in place when it can and remounts otherwise, and either way
@@ -1326,7 +1377,7 @@ public sealed partial class Reconciler
             // during a resource refresh), so the old item's effects and refs are cleaned up.
             // Untagged content was already unmounted by an orphan or parked-container sweep: replace it,
             // never unmount it again.
-            var priorKey = cc.Content is FrameworkElement priorFe ? GetElementTag(priorFe)?.Key : null;
+            var priorKey = cc.Content is FrameworkElement priorFe ? GetMountedElement(priorFe)?.Key : null;
             var next = ReconcileV1Child(oldItemElement, newItemElement,
                 oldItemElement is null ? null : cc.Content as UIElement, requestRerender);
             EnsureItemIdentity(next, newItemElement, priorKey, updated: true);
@@ -1486,7 +1537,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal void UnmountOrphanedContainer(WinUI.ListViewBase listViewBase, WinPrim.SelectorItem container, ContentControl cc)
     {
-        if (GetElementTag(cc) is null) return;
+        if (GetMountedElement(cc) is null) return;
         if (container.Content is ReactorRow row)
         {
             bool inList = GetListState(listViewBase) is { } state

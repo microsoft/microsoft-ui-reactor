@@ -208,6 +208,51 @@ public class UseInfiniteResourceTests
         Assert.Equal(10, r2.Items.Count);
     }
 
+    [Fact]
+    public void Page_Cache_Keeps_Initial_Size_Across_Options_And_Prefix_Changes()
+    {
+        using var cache = NewCache();
+        var ctx = new RenderContext();
+        var returning = new RenderContext();
+        int calls = 0;
+        var inner = FakeFetcher(101, 10, reportedTotal: 101);
+        Task<Page<int, string>> Fetch(string? cursor, CancellationToken token)
+        {
+            calls++;
+            return inner(cursor, token);
+        }
+
+        InfiniteResource<int> Render(RenderContext target, int pageSize, string prefix)
+        {
+            target.BeginRender(() => { });
+            var resource = target.UseInfiniteResource<int, string>(Fetch, cache, [],
+                new InfiniteResourceOptions(PageSize: pageSize, CacheKeyPrefix: prefix), new InlineDispatcher());
+            target.FlushEffects();
+            return resource;
+        }
+
+        try
+        {
+            var first = Render(ctx, 10, "first");
+            Assert.Same(first, Render(ctx, 20, "first"));
+            Assert.Equal(1, calls);
+
+            var restarted = Render(ctx, 20, "second");
+            Assert.NotSame(first, restarted);
+            Assert.Equal(9, restarted.ItemAt(9));
+            restarted.EnsureRange(0, 19);
+            Assert.Equal(19, restarted.ItemAt(19));
+            Assert.Equal(3, calls);
+
+            // A fresh size-10 hook must reuse the restarted hook's size-10 pages.
+            var shared = Render(returning, 10, "second");
+            shared.EnsureRange(0, 19);
+            Assert.Equal(19, shared.ItemAt(19));
+            Assert.Equal(3, calls);
+        }
+        finally { ctx.RunCleanups(); returning.RunCleanups(); }
+    }
+
     // ────────── LRU eviction ──────────
 
     [Fact]

@@ -171,17 +171,16 @@ public class AsyncValueTests
     [Fact]
     public void Exhaustive_Switch_Covers_All_Arms()
     {
-        // C# 12 does not model private-protected-sealed hierarchies as closed,
-        // so a bare four-arm switch still produces CS8509. The idiomatic pattern
-        // is a switch expression with an explicit fallthrow, matching the one
-        // used inside AsyncValue.Match.
+        // AsyncValue<T> is a C# 15 `closed` hierarchy, so the four arms are
+        // exhaustive with no discard. Dropping an arm is CS8509 — a build error
+        // under Release's TreatWarningsAsErrors — so this method is a
+        // compile-time gate on the closed-ness, not just a runtime check.
         static string Render(AsyncValue<int> v) => v switch
         {
             AsyncValue<int>.Loading => "L",
             AsyncValue<int>.Data d => $"D{d.Value}",
             AsyncValue<int>.Error e => $"E{e.Exception.Message}",
             AsyncValue<int>.Reloading r => $"R{r.Previous}",
-            _ => throw new global::System.Diagnostics.UnreachableException(),
         };
 
         Assert.Equal("L", Render(AsyncValue<int>.Loading.Instance));
@@ -217,7 +216,6 @@ public class AsyncValueTests
             LoadState.Idle => "I",
             LoadState.EndOfList => "E",
             LoadState.Error e => $"X:{e.Exception.Message}",
-            _ => throw new global::System.Diagnostics.UnreachableException(),
         };
 
         Assert.Equal("L", Label(LoadState.Loading.Instance));

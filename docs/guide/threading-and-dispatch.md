@@ -54,6 +54,11 @@ captured dispatcher:
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
+    // Keep the captured argument in a separate frame so inline/locked calls
+    // do not allocate a closure before deciding whether marshaling is needed.
+    bool MarshalSetter(T newValue)
+        => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
     void Setter(T newValue)
     {
         bool changed;
@@ -68,17 +73,19 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            ReportPerfStateChange("UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
         else
         {
-            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            ReportPerfStateChange("UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
     }
@@ -168,24 +175,30 @@ echoes with a documented hybrid — two mechanisms, both parked on the
 same attached `ReactorState`.
 
 **Value-diff (the arm).** For controlled round-trips that are single
-valued, exactly comparable, and synchronous — `ComboBox`, `FlipView`,
-`GridView`, `ListBox`, `Pivot`, `PipsPager`, `RadioButtons`,
-`SelectorBar`, `TabView`, `TemplatedFlipView`, `ToggleSwitch`,
-`TextBox` — the engine arms `ReactorState.PendingEchoMatch` with a
-one-shot predicate describing the value it is about to write
-(`ArmExpectedEcho`), then writes bare. The change trampoline calls
-`ShouldSuppressEcho`, which consumes the arm and drops the single event
-whose readback matches. A mismatch means a real user change superseded
-the pending write, so the arm is cleared and the event falls through.
-Descriptor authors opt in via `.Controlled` / `.HandCodedControlled`
-(`valueDiffEcho`).
+valued and exactly comparable — `ComboBox`, `FlipView`, `GridView`,
+`ListBox`, `Pivot`, `PipsPager`, `RadioButtons`, `SelectorBar`,
+`TabView`, `TemplatedFlipView`, `ToggleSwitch`, `TextBox`, plus
+`RichEditBox` and `AutoSuggestBox`, whose echo comes later — the engine
+arms `ReactorState.PendingEchoMatch` with a one-shot predicate
+describing the value it is about to write (`ArmExpectedEcho`), then
+writes bare. The change trampoline calls `ShouldSuppressEcho`, which
+consumes the arm on the next event and drops it only when its readback
+matches. A mismatch means a real user change superseded the pending
+write, so the event falls through. A deferred echo keeps the arm until
+it lands; if it never comes, or merges with the user's edit, the next
+event still consumes the arm and a mismatch lets it through, so nothing
+stays reserved. Descriptor authors opt in via `.Controlled` /
+`.HandCodedControlled` (`valueDiffEcho`). Mount writes stay bare, since
+a synchronous echo fires before the trampoline is wired; pass
+`armOnMount: true` as well when the Mount write's echo is deferred and
+would otherwise reach the callback (`RichEditBox`'s `Document.SetText`).
 
 **Counter (the fallback).** `ChangeEchoSuppressor` is retained for
 everything value-diff cannot model: doubles (`Slider` / `NumberBox`
 value), `NumberBox` coercion, `CalendarView`'s collection diff,
-deferred or coercing strings (AutoSuggest / Password / RichEdit),
-`Expander`, `CheckBox` path B, the `ApplySetters` suppression scope,
-and the public `WriteSuppressed` primitive.
+coercing strings (`PasswordBox`), `Expander`, `CheckBox` path B, the
+`ApplySetters` suppression scope, and the public `WriteSuppressed`
+primitive.
 
 ```csharp
 internal static void BeginSuppress(UIElement control)

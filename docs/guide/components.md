@@ -248,7 +248,7 @@ class FunctionComponentDemo : Component
             {
                 var (on, setOn) = ctx.UseState(false);
                 return HStack(8,
-                    ToggleSwitch(on, setOn),
+                    ToggleSwitch(on, setOn).AutomationName("Active"),
                     TextBlock(on ? "Active" : "Inactive")
                 );
             }),

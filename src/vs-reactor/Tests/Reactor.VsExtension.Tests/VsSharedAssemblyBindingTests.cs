@@ -77,6 +77,9 @@ namespace Reactor.VsExtension.Tests
         /// </remarks>
         private static Version MinimumSupportedVsHost => VisualStudioSdkVersion();
 
+        // Visual Studio 2026 (18.0) is the oldest host the extension supports (issue #1557).
+        private static readonly Version MinimumVsHostPolicy = new Version(18, 0);
+
         private static Version VisualStudioSdkVersion()
         {
             var props = FindRepoFile("Directory.Packages.props");
@@ -102,8 +105,7 @@ namespace Reactor.VsExtension.Tests
             return new Version(version.Major, version.Minor);
         }
 
-        [Fact]
-        public void VsixManifest_DoesNotAdvertiseHostsOlderThanThePinnedBaseline()
+        private static (string Element, string? Id, string Version)[] ReadManifestHostDeclarations()
         {
             var manifest = FindRepoFile("src/vs-reactor/Reactor.VsExtension/source.extension.vsixmanifest");
 
@@ -111,26 +113,49 @@ namespace Reactor.VsExtension.Tests
             // the raw text: a regex over version literals silently skips any shape it did not
             // anticipate (a patch component such as [17.8.1,19.0) being the obvious one), and a
             // skipped range reads exactly like a compliant one.
-            var doc = XDocument.Load(manifest);
-            var declarations = doc.Descendants()
+            var declarations = XDocument.Load(manifest).Descendants()
                 .Where(e => e.Name.LocalName == "InstallationTarget" || e.Name.LocalName == "Prerequisite")
-                .Select(e => new
-                {
-                    Element = e.Name.LocalName,
-                    Id = (string?)e.Attribute("Id"),
-                    Version = (string?)e.Attribute("Version"),
-                })
+                .Select(e => (Element: e.Name.LocalName, Id: (string?)e.Attribute("Id"), Version: (string?)e.Attribute("Version")))
                 .Where(d => !string.IsNullOrWhiteSpace(d.Version))
+                .Select(d => (d.Element, d.Id, d.Version!))
                 .ToArray();
 
             // Positive control: a manifest we failed to read must not report "no violations".
             Assert.NotEmpty(declarations);
+            return declarations;
+        }
 
+        /// <summary>
+        /// The extension supports Visual Studio 2026 (18.x) only (issue #1557). The SDK gate below
+        /// cannot hold that line on its own: Microsoft.VisualStudio.SDK deliberately stays on 17.14,
+        /// so a manifest reverted to [17.14,19.0) would still satisfy it.
+        /// </summary>
+        [Fact]
+        public void VsixManifest_TargetsVisualStudio2026Only()
+        {
+            var declarations = ReadManifestHostDeclarations();
+            Assert.Contains(declarations, d => d.Element == "Prerequisite");
+
+            var tooOld = declarations
+                .Where(d => ParseRangeMinimum(d.Version) < MinimumVsHostPolicy)
+                .Select(d => $"{d.Element} {d.Id} {d.Version}")
+                .ToArray();
+
+            Assert.True(
+                tooOld.Length == 0,
+                $"source.extension.vsixmanifest advertises Visual Studio hosts older than {MinimumVsHostPolicy}. "
+                + "The extension supports Visual Studio 2026 only and is only built and tested with VS 18 MSBuild. "
+                + "Offending declarations: " + string.Join("; ", tooOld));
+        }
+
+        [Fact]
+        public void VsixManifest_DoesNotAdvertiseHostsOlderThanThePinnedBaseline()
+        {
             var tooOld = new List<string>();
-            foreach (var declaration in declarations)
+            foreach (var declaration in ReadManifestHostDeclarations())
             {
                 // Unparseable is a failure, never a skip — that is the hole this replaced.
-                var minimum = ParseRangeMinimum(declaration.Version!);
+                var minimum = ParseRangeMinimum(declaration.Version);
                 if (minimum < MinimumSupportedVsHost)
                 {
                     tooOld.Add($"{declaration.Element} {declaration.Id} {declaration.Version}");

@@ -1,22 +1,19 @@
-using System.Diagnostics;
-
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
 /// Algebraic data type representing the four observable states of an async fetch:
 /// <see cref="Loading"/>, <see cref="Data"/>, <see cref="Error"/>, and <see cref="Reloading"/>.
-/// Designed for exhaustive pattern matching with C# switch expressions.
+/// Designed for exhaustive pattern matching with C# switch expressions: the hierarchy is
+/// <c>closed</c>, so a C# 15+ <c>switch</c> that handles all four cases needs no discard arm,
+/// and omitting a case is a CS8509 warning naming the missing case.
 /// </summary>
 /// <remarks>
 /// See spec <c>docs/specs/020-async-resources-design.md</c> §5 for the design rationale
 /// and §6.2 for the transition rules driven by <c>UseResource</c>.
 /// </remarks>
 /// <typeparam name="T">The value type produced by the fetcher.</typeparam>
-public abstract record AsyncValue<T>
+public closed record AsyncValue<T>
 {
-    // Keep the hierarchy closed to prevent third-party cases that break exhaustive matching.
-    private protected AsyncValue() { }
-
     /// <summary>
     /// First fetch in flight; no prior data is available.
     /// Transitions to <see cref="Data"/> or <see cref="Error"/>.
@@ -76,6 +73,5 @@ public abstract record AsyncValue<T>
             Data d => loaded(d.Value),
             Error e => error(e.Exception),
             Reloading r => reloading is not null ? reloading(r.Previous) : loading(),
-            _ => throw new UnreachableException()
         };
 }

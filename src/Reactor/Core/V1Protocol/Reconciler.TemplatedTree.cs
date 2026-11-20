@@ -248,7 +248,7 @@ public sealed partial class Reconciler
 
             using var realizationTheme = EnterRealizationTheme(container);
             var newView = n.BuildView(data);
-            if (cc.Content is UIElement existing && GetElementTag(cc) is Element oldView && CanUpdate(oldView, newView))
+            if (cc.Content is UIElement existing && GetMountedElement(cc) is Element oldView && CanUpdate(oldView, newView))
             {
                 var replacement = UpdateHostedChild(oldView, newView, existing, requestRerender);
                 if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
@@ -299,7 +299,11 @@ public sealed partial class Reconciler
                 node.Content = newItem;
 
                 bool expanded = newEl.GetIsExpanded(newItem);
-                if (node.IsExpanded != expanded) node.IsExpanded = expanded;
+                if (node.IsExpanded != expanded)
+                {
+                    node.IsExpanded = expanded;
+                    CountPerfChanges();
+                }
 
                 DiffTemplatedTreeNodes(
                     node.Children,
@@ -311,6 +315,7 @@ public sealed partial class Reconciler
             else
             {
                 target.Add(BuildTemplatedTreeNode(newEl, newItem));
+                CountPerfChanges();
             }
         }
 
@@ -318,7 +323,10 @@ public sealed partial class Reconciler
         // containers recycle → the ContainerContentChanging recycle path tears
         // their views down.
         foreach (var leftover in oldByKey.Values)
+        {
             liveNodes.Remove(leftover.Node);
+            CountPerfChanges();
+        }
 
         // Reorder/insert so liveNodes matches `target`. Reused nodes already in
         // the right slot mean zero collection mutations (the common case).
@@ -327,7 +335,11 @@ public sealed partial class Reconciler
             if (j < liveNodes.Count && ReferenceEquals(liveNodes[j], target[j])) continue;
 
             int current = IndexOfNode(liveNodes, target[j], j);
-            if (current >= 0) liveNodes.RemoveAt(current);
+            if (current >= 0)
+            {
+                liveNodes.RemoveAt(current);
+                CountPerfChanges(); // a reused node moved (a new one was counted when built)
+            }
             liveNodes.Insert(j, target[j]);
         }
         // Trim any stragglers beyond the target length (defensive — removals

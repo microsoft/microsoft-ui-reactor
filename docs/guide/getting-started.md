@@ -19,7 +19,7 @@ the rest of the docset elaborates.
 <!-- /ai:lock -->
 
 > **Public preview package available.** Reactor ships `Microsoft.UI.Reactor`
-> `0.1.0-preview.17` on NuGet.org, and the project templates ship in the
+> `0.1.0-preview.18` on NuGet.org, and the project templates ship in the
 > official Windows App SDK `dotnet new` pack
 > (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`) — so `dotnet new reactor`
 > works from a plain .NET SDK install, no source checkout required.
@@ -55,10 +55,11 @@ dotnet run
 demand (and offers to update a stale one), so there is no separate install step
 and no version to pin.
 
-That gives you four starting points — `reactor` (blank), `reactor-mvu`
-(Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell)
-and `reactor-tabview` (`TabView` shell). `winapp new --list` prints them all, and
-omitting `-t` picks one interactively.
+That gives you five starting points — `reactor` (blank), `reactor-mvu`
+(Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell),
+`reactor-tabview` (`TabView` shell), and `reactor-singlefile`, a single `.cs` file
+with no project (see [One file, no project](#one-file-no-project)).
+`winapp new --list` prints them all, and omitting `-t` picks one interactively.
 
 Prefer plain .NET tooling? Install the pack yourself, then scaffold with
 `dotnet new`:
@@ -71,11 +72,17 @@ dotnet new reactor -n MyApp
 The pack is prerelease-only today, and `dotnet new install` resolves stable
 versions unless you pin one explicitly — which is the step `winapp new` removes.
 
-Scaffolded apps are **packaged** (single-project MSIX), so `dotnet run`
+Scaffolded apps are **packaged** (single-project MSIX) by default, so `dotnet run`
 registers a loose-layout package and launches the app with full package
 identity — the same thing F5 does in Visual Studio. That requires **Developer
-Mode** (Settings → System → For developers). See [Packaging](packaging.md) for
-the unpackaged alternative.
+Mode** (Settings → System → For developers). For a plain unpackaged `.exe`
+instead, add `--packaging Unpackaged` to any of the four project templates:
+`dotnet new reactor -n MyApp --packaging Unpackaged` (`winapp new` has no
+equivalent switch). See [Packaging](packaging.md) for how the two shapes differ.
+
+If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the
+installed pack predates them; `winapp new --list --template-version latest`
+updates it.
 
 ## One file, no project
 
@@ -84,7 +91,7 @@ directly, and file-level `#:` directives supply the configuration a project file
 otherwise would:
 
 ```csharp
-#:package Microsoft.UI.Reactor@0.1.0-preview.17
+#:package Microsoft.UI.Reactor@0.1.0-preview.18
 #:package Microsoft.Windows.SDK.BuildTools.WinApp@0.7.0
 #:property OutputType=WinExe
 #:property TargetFramework=net10.0-windows10.0.22621.0
@@ -137,6 +144,13 @@ the [minimal `.csproj`](index.md#minimal-project-setup). The rest of the header:
 | `OutputType=WinExe` | Links the app for the Windows GUI subsystem. Without it the build still succeeds, but the `.exe` is a console binary, so Windows opens a console window alongside your UI for as long as the app runs. |
 | `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
 | `UseWinUI=true` | Brings in the WinUI 3 targets. |
+
+You don't have to type the header: `dotnet new reactor-singlefile -n Counter`
+scaffolds `Counter/Counter.cs` with the same five directives and a starter
+component, and `dotnet run Counter.cs` from that folder launches it. The
+template's pins differ from the block above — it targets a newer Windows SDK
+(`windows10.0.26100.0`) and lets the `Microsoft.Windows.SDK.BuildTools.WinApp`
+version float (`@*`) — and both headers work.
 
 ### Running it unpackaged
 
@@ -386,7 +400,8 @@ dotnet run
 ```
 
 The template wires up the `Microsoft.UI.Reactor` package reference, the
-WinUI 3 target framework, MSIX packaging, and a working `App.cs` that mounts a
+WinUI 3 target framework, MSIX packaging (unless you pass
+`--packaging Unpackaged`), and a working `App.cs` that mounts a
 single Reactor component. No `App.xaml`, no `MainWindow.xaml.cs` — just one C#
 file. Swap `reactor` for `reactor-mvu`, `reactor-navview` or `reactor-tabview`
 to start from a richer shell.

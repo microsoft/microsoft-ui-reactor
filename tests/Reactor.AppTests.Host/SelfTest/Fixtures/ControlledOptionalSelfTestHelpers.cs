@@ -212,6 +212,265 @@ internal static class ControlledOptionalSelfTestHelpers
             callbackObserved);
     }
 
+    // A state write that CHANGES the controlled value, followed by a user edit.
+    // The engine's echo suppression for that write must be spent by the write's
+    // own echo (or never reserved, when the write is skipped); a leftover
+    // suppress-counter token would swallow the user's next real edit.
+    // RunEchoNoStrandAsync only covers a write equal to the current value, and
+    // RunBoundUpdatesControlAsync stops before any user edit. The Mount write is
+    // checked the same way first: its echo must not reach the callback either
+    // (RichEditBox raises it after the trampoline is wired, so the engine arms it).
+    internal static async Task RunUserEditAfterStateWriteAsync<TControl, TValue>(
+        Harness h,
+        string fixtureName,
+        Scenario<TControl, TValue> scenario,
+        string caseName,
+        TValue writtenValue)
+        where TControl : DependencyObject
+    {
+        var callbacks = new List<TValue>();
+        using var host = h.CreateHost();
+        var prefix = $"{fixtureName}_{scenario.Name}_{caseName}";
+        var writeLabel = $"{prefix}_Write";
+        host.Mount(ctx =>
+        {
+            var (value, setValue) = ctx.UseState(scenario.FirstValue);
+            return VStack(
+                Button(writeLabel, () => setValue(writtenValue)),
+                ControlledElement(scenario, value, callbacks, setValue));
+        });
+
+        await Harness.Render();
+        var control = scenario.FindControl(h);
+        h.Check($"{prefix}_ControlFound", control is not null);
+        if (control is null) return;
+
+        var (tokens, armPending) = await WaitForEchoSettledAsync(control, callbacks);
+        h.Check(
+            $"{prefix}_NoEchoSuppressionLeftAfterMount",
+            tokens == 0 && !armPending,
+            $"EchoSuppressCount={tokens}, valueDiffArmPending={armPending}");
+        h.Check(
+            $"{prefix}_MountEchoSuppressed",
+            callbacks.Count == 0,
+            $"callbacks=[{string.Join(", ", callbacks)}]");
+        callbacks.Clear();
+
+        h.ClickButton(writeLabel);
+        await Harness.Render();
+
+        (tokens, armPending) = await WaitForEchoSettledAsync(control, callbacks);
+        h.Check(
+            $"{prefix}_NoEchoSuppressionLeftAfterWrite",
+            tokens == 0 && !armPending,
+            $"EchoSuppressCount={tokens}, valueDiffArmPending={armPending}");
+        h.Check(
+            $"{prefix}_WriteEchoSuppressed",
+            callbacks.Count == 0,
+            $"callbacks=[{string.Join(", ", callbacks)}]");
+
+        callbacks.Clear();
+        scenario.SetValue(control, scenario.UserValue);
+        h.Check(
+            $"{prefix}_UserEditReachesCallback",
+            await WaitForCallbackAsync(callbacks, scenario.UserValue),
+            $"callbacks=[{string.Join(", ", callbacks)}]");
+    }
+
+    // A user edit that lands right after a state write, before the write's echo
+    // has (RichEditBox raises it on a later dispatcher pass, AutoSuggestBox about
+    // 150 ms later, debounced). The edit is made from an effect of the render
+    // that wrote, so it runs before any later dispatcher pass. The echo then
+    // reads back the user's text, so it must not be dropped as the write's echo,
+    // and nothing may stay reserved.
+    internal static async Task RunUserEditBeforeEchoAsync<TControl, TValue>(
+        Harness h,
+        string fixtureName,
+        Scenario<TControl, TValue> scenario,
+        string caseName,
+        TValue writtenValue)
+        where TControl : DependencyObject
+    {
+        var callbacks = new List<TValue>();
+        using var host = h.CreateHost();
+        var prefix = $"{fixtureName}_{scenario.Name}_{caseName}";
+        var writeLabel = $"{prefix}_Write";
+        TControl? target = null;
+        string? atEdit = null;
+        host.Mount(ctx =>
+        {
+            var (value, setValue) = ctx.UseState(scenario.FirstValue);
+            ctx.UseEffect(() =>
+            {
+                if (target is null || atEdit is not null || !ValuesEqual(value, writtenValue)) return;
+                var (tokens, arm) = ReadEchoState(target);
+                atEdit = $"writeApplied={ValuesEqual(scenario.GetValue(target), writtenValue)}, " +
+                    $"atEdit: EchoSuppressCount={tokens}, valueDiffArmPending={arm}";
+                scenario.SetValue(target, scenario.UserValue);
+            }, value);
+            return VStack(
+                Button(writeLabel, () => setValue(writtenValue)),
+                ControlledElement(scenario, value, callbacks, setValue));
+        });
+
+        await Harness.Render();
+        var control = scenario.FindControl(h);
+        h.Check($"{prefix}_ControlFound", control is not null);
+        if (control is null) return;
+        await WaitForEchoSettledAsync(control, callbacks);
+        callbacks.Clear();
+        target = control;
+
+        h.ClickButton(writeLabel);
+        await Harness.Render();
+        h.Check($"{prefix}_EditMadeAfterWrite", atEdit is not null);
+        if (atEdit is null) return;
+
+        var observed = await WaitForCallbackAsync(callbacks, scenario.UserValue);
+        var (tokensLeft, armLeft) = await WaitForEchoSettledAsync(control, callbacks);
+        h.Check(
+            $"{prefix}_UserEditReachesCallback",
+            observed,
+            $"{atEdit}; callbacks=[{string.Join(", ", callbacks)}]");
+        h.Check(
+            $"{prefix}_NoEchoSuppressionLeft",
+            tokensLeft == 0 && !armLeft,
+            $"{atEdit}; now: EchoSuppressCount={tokensLeft}, valueDiffArmPending={armLeft}");
+        h.Check(
+            $"{prefix}_ControlKeepsUserEdit",
+            ValuesEqual(scenario.GetValue(control), scenario.UserValue),
+            $"{atEdit}; control=[{scenario.GetValue(control)}]");
+    }
+
+    // Two state writes in a row, the second before the first's echo has landed
+    // (AutoSuggestBox's debounce merges both into one TextChanged carrying the
+    // second value). The second write re-arms the single pending slot, so the
+    // merged echo must still be dropped, nothing may stay reserved, and a later
+    // user edit must still get through.
+    internal static async Task RunTwoQuickStateWritesAsync<TControl, TValue>(
+        Harness h,
+        string fixtureName,
+        Scenario<TControl, TValue> scenario,
+        string caseName,
+        TValue firstWrite,
+        TValue secondWrite,
+        int? mergeWithinMs = null)
+        where TControl : DependencyObject
+    {
+        // mergeWithinMs: for a control that merges writes into one echo, the
+        // widest gap between the two writes that still surely merges. Wider
+        // than that (a slow runner), the echo checks would pass without
+        // testing a merged echo, so they are skipped instead.
+        var callbacks = new List<TValue>();
+        using var host = h.CreateHost();
+        var prefix = $"{fixtureName}_{scenario.Name}_{caseName}";
+        var firstLabel = $"{prefix}_WriteFirst";
+        var secondLabel = $"{prefix}_WriteSecond";
+        host.Mount(ctx =>
+        {
+            var (value, setValue) = ctx.UseState(scenario.FirstValue);
+            return VStack(
+                Button(firstLabel, () => setValue(firstWrite)),
+                Button(secondLabel, () => setValue(secondWrite)),
+                ControlledElement(scenario, value, callbacks, setValue));
+        });
+
+        await Harness.Render();
+        var control = scenario.FindControl(h);
+        h.Check($"{prefix}_ControlFound", control is not null);
+        if (control is null) return;
+        await WaitForEchoSettledAsync(control, callbacks);
+        callbacks.Clear();
+
+        var clock = global::System.Diagnostics.Stopwatch.StartNew();
+        h.ClickButton(firstLabel);
+        await Harness.Render();
+        h.ClickButton(secondLabel);
+        var betweenWritesMs = clock.ElapsedMilliseconds;
+        await Harness.Render();
+
+        var (tokens, armPending) = await WaitForEchoSettledAsync(control, callbacks);
+        var detail = $"writes {betweenWritesMs} ms apart";
+        if (mergeWithinMs is int limit && betweenWritesMs > limit)
+        {
+            var reason = $"{detail}, wider than the {limit} ms that surely merges into one echo";
+            h.Skip($"{prefix}_NoEchoSuppressionLeftAfterWrites", reason);
+            h.Skip($"{prefix}_WritesEchoSuppressed", reason);
+        }
+        else
+        {
+            h.Check(
+                $"{prefix}_NoEchoSuppressionLeftAfterWrites",
+                tokens == 0 && !armPending,
+                $"{detail}; EchoSuppressCount={tokens}, valueDiffArmPending={armPending}");
+            h.Check(
+                $"{prefix}_WritesEchoSuppressed",
+                callbacks.Count == 0,
+                $"{detail}; callbacks=[{string.Join(", ", callbacks)}]");
+        }
+        h.Check(
+            $"{prefix}_SecondWriteApplied",
+            ValuesEqual(scenario.GetValue(control), secondWrite),
+            $"control=[{scenario.GetValue(control)}]");
+
+        callbacks.Clear();
+        scenario.SetValue(control, scenario.UserValue);
+        h.Check(
+            $"{prefix}_UserEditReachesCallback",
+            await WaitForCallbackAsync(callbacks, scenario.UserValue),
+            $"callbacks=[{string.Join(", ", callbacks)}]");
+    }
+
+    private static Element ControlledElement<TControl, TValue>(
+        Scenario<TControl, TValue> scenario,
+        TValue value,
+        List<TValue> callbacks,
+        Action<TValue> setValue)
+        where TControl : DependencyObject =>
+        scenario.CreateElement(
+            Optional<TValue>.Of(value),
+            v =>
+            {
+                callbacks.Add(v);
+                setValue(v);
+            });
+
+    private static (int Tokens, bool ArmPending) ReadEchoState(DependencyObject control)
+    {
+        var state = control is FrameworkElement fe && Reconciler.TryGetReactorState(fe, out var s) ? s : null;
+        return (state?.EchoSuppressCount ?? 0, state?.PendingEchoMatch is not null);
+    }
+
+    // Lets a programmatic write's echo land (some controls raise it
+    // asynchronously): waits until no counter token and no value-diff arm is
+    // pending. A write that should have armed but didn't leaves nothing to wait
+    // for while its deferred echo is still on the way, so then give that echo a
+    // few passes to show up in the callbacks before the caller checks them.
+    private static async Task<(int Tokens, bool ArmPending)> WaitForEchoSettledAsync<TValue>(
+        DependencyObject control,
+        List<TValue> callbacks)
+    {
+        var echo = (Tokens: -1, ArmPending: false);
+        await Harness.WaitFor(
+            () =>
+            {
+                echo = ReadEchoState(control);
+                return echo.Tokens == 0 && !echo.ArmPending;
+            },
+            maxPasses: 25,
+            perPassMs: 20);
+        await Harness.WaitFor(() => callbacks.Count > 0, maxPasses: 5, perPassMs: 20);
+        return echo;
+    }
+
+    // AutoSuggestBox reports a text change about 150 ms after it happens, so
+    // allow well past that.
+    private static Task<bool> WaitForCallbackAsync<TValue>(List<TValue> callbacks, TValue expected) =>
+        Harness.WaitFor(
+            () => callbacks.Count > 0 && ValuesEqual(callbacks[^1], expected),
+            maxPasses: 40,
+            perPassMs: 20);
+
     internal static async Task RunForceClearSentinelAsync<TControl>(
         Harness h,
         string fixtureName,

@@ -262,6 +262,11 @@
           "header": "Subtle style — .SubtleButton()",
           "language": "csharp",
           "code": "Button(\"Cancel\").Click(() => setSubtleOutput(\"Cancelled.\")).SubtleButton()"
+        },
+        {
+          "header": "Text-link style — .TextLink()",
+          "language": "csharp",
+          "code": "Button(\"Learn more\").Click(() => setLinkOutput(\"Link clicked.\")).TextLink()"
         }
       ]
     },
@@ -448,7 +453,7 @@
         {
           "header": "Applying Theme Colors",
           "language": "csharp",
-          "code": "// Foreground\nTextBlock(\"Accent text\").Foreground(Theme.Accent)\nTextBlock(\"Primary\").Foreground(Theme.PrimaryText)\nTextBlock(\"Secondary\").Foreground(Theme.SecondaryText)\nTextBlock(\"Hyperlink\").Foreground(Theme.AccentText)\n\n// Background\nBorder(TextBlock(\"Card surface\"))\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.CardStroke)\n    .CornerRadius(6)\n\nBorder(TextBlock(\"Accent surface\"))\n    .Background(Theme.Accent)  // accent-filled button\n\n// Border & Stroke\nBorder(TextBlock(\"ControlStroke border\"))\n    .WithBorder(Theme.ControlStroke)\n\nBorder(VStack()).Height(1)\n    .Background(Theme.DividerStroke)  // horizontal divider\n\n// System Signal\nBorder(HStack(8, TextBlock(\"\\uE930\").Foreground(Theme.SystemSuccess), TextBlock(\"Operation completed successfully\")))\n    .Background(Theme.SystemSuccessBackground)"
+          "code": "// Foreground\nTextBlock(\"Accent text\").Foreground(Theme.Accent)\nTextBlock(\"Primary\").Foreground(Theme.PrimaryText)\nTextBlock(\"Secondary\").Foreground(Theme.SecondaryText)\nTextBlock(\"Hyperlink\").Foreground(Theme.AccentText)\n\n// Background\nBorder(TextBlock(\"Card surface\"))\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.CardStroke)\n    .CornerRadius(6)\n\nBorder(TextBlock(\"Accent surface\"))\n    .Background(Theme.Accent)  // accent-filled button\n\n// Border & Stroke\nBorder(TextBlock(\"ControlStroke border\"))\n    .WithBorder(Theme.ControlStroke)\n\nBorder(VStack()).Height(1)\n    .Background(Theme.DividerStroke)  // horizontal divider\n\n// System Signal\nBorder(HStack(8,\n    TextBlock(\"\\uE930\")\n        .FontFamily(\"Segoe Fluent Icons, Segoe MDL2 Assets\")\n        .Foreground(Theme.SystemSuccess),\n    TextBlock(\"Operation completed successfully\")))\n    .Background(Theme.SystemSuccessBackground)"
         }
       ]
     },
@@ -780,7 +785,7 @@
         {
           "header": "Row edit mode",
           "language": "csharp",
-          "code": "// `rowEditSource` and `Columns()` are the same list source and five columns\n// the card above uses — this card differs only in editMode.\nDataGrid(\n    source: rowEditSource,\n    columns: Columns(),\n    editable: true,\n    editMode: EditMode.Row,   // whole row edits and commits together\n    onRowChanged: (key, item) => { /* persist the row */ return Task.CompletedTask; },\n    rowHeight: 36)"
+          "code": "var (lastRowEdit, setLastRowEdit) = UseState(\"(none yet)\");\n\n// `rowEditSource` and `Columns()` are the same list source and five columns\n// the card above uses — this card differs only in editMode.\nVStack(8,\n    DataGrid(\n        source: rowEditSource,\n        columns: Columns(),\n        editable: true,\n        editMode: EditMode.Row,   // whole row edits and commits together\n        onRowChanged: (key, item) =>\n        {\n            setLastRowEdit($\"row {key.Value} → {item.Name} / {item.Category} / {item.Price:C2}\");\n            return Task.CompletedTask;\n        },\n        rowHeight: 36),\n    TextBlock($\"Last committed row: {lastRowEdit}\"))"
         }
       ]
     },
@@ -1740,19 +1745,30 @@
         "md",
         "rich text render",
         "commonmark",
-        "formatted text"
+        "formatted text",
+        "cross-block selection",
+        "message selection"
       ],
       "relatedControls": [
         "RichTextBlock"
       ],
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor.Advanced",
+      "usings": [
+        "Microsoft.UI.Reactor.Markdown",
+        "Microsoft.UI.Reactor.Advanced.Factories"
+      ],
       "galleryRoute": "markdown",
       "samples": [
         {
           "header": "Formatted markdown",
           "language": "csharp",
           "code": "var markdown = @\"# Markdown sample\n\nMarkdown renders **bold** text, *italic* text, and `inline code`.\n\n- Create declarative UI\n- Compose reusable components\n- Keep samples readable\";\n\nBorder(Markdown(markdown))\n    .Padding(16)\n    .Background(Theme.SubtleFill)\n    .CornerRadius(8)"
+        },
+        {
+          "header": "Message-wide selection (opt-in)",
+          "language": "csharp",
+          "code": "var selection = new MarkdownTextSelectionOptions();\nvar options = new MarkdownOptions { TextSelection = selection };\nMarkdownTextSelection.Scope(selection, VStack(\n    Markdown(\"# Answer\\n\\nFirst paragraph.\", options),\n    Markdown(\"- First item\\n- Second item\\n\\n```cs\\nvar x = 1;\\n```\", options),\n    MarkdownTextSelection.Surface(\"Custom visible text\", TextBlock(\"Custom visible text\"))\n))"
         },
         {
           "header": "Links and lists",
@@ -1881,7 +1897,7 @@
         {
           "header": "Top-Mode NavigationView",
           "language": "csharp",
-          "code": "NavigationView(items, content: TextBlock($\"Content area for: {topTag}\")) with {\n    PaneDisplayMode = NavigationViewPaneDisplayMode.Top\n}"
+          "code": "var (topTag, setTopTag) = UseState(\"page1\");\n\nNavigationView(items, content: TextBlock($\"Content area for: {topTag}\")) with {\n    SelectedTag = topTag,\n    OnSelectedTagChanged = tag => { if (tag != null) setTopTag(tag); },\n    PaneDisplayMode = NavigationViewPaneDisplayMode.Top,\n    IsSettingsVisible = false,\n}"
         }
       ]
     },

@@ -174,7 +174,7 @@ public static partial class ReactorDiagnostics
     {
         ArgumentNullException.ThrowIfNull(control);
         EnsureUIThread(control);
-        var tag = Reconciler.GetElementTag(control);
+        var tag = Reconciler.GetMountedElement(control);
         if (tag is null) return global::System.Array.Empty<AppliedProperty>();
         var chain = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag);
         if (Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, chain[^1]))
@@ -283,7 +283,7 @@ internal sealed class ComponentHandle
             _ => null,
         };
         return new ComponentHandle(memo ? "memo" : "function", isRoot: false,
-            DiagnosticText.DelegateName(render, memo ? "Memo" : "RenderEachTime"),
+            DiagnosticText.DelegateName(render, memo ? ComponentNames.MemoFallback : ComponentNames.FuncFallback),
             context, props: null, propsType: null, isAlive);
     }
 
@@ -298,7 +298,7 @@ internal sealed class ComponentHandle
             return new ComponentHandle("class", isRoot: true, DiagnosticText.TypeName(component.GetType()),
                 context, receiver?.PropsBoxed, receiver?.PropsType, root.IsAlive);
         }
-        return new ComponentHandle("function", isRoot: true, DiagnosticText.DelegateName(root.RenderFunc, "render"),
+        return new ComponentHandle("function", isRoot: true, DiagnosticText.DelegateName(root.RenderFunc, ComponentNames.RootRenderFunctionFallback),
             context, props: null, propsType: null, root.IsAlive);
     }
 

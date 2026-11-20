@@ -168,6 +168,34 @@ public class IReactorKeyedTests
     // ════════════════════════════════════════════════════════════════════
 
     [Fact]
+    public void WithKey_Reuses_Element_Only_For_The_Same_Key_Reference()
+    {
+        var key = new string("row-42".AsSpan());
+        var original = TextBlock("hello").WithKey(key);
+        Assert.Same(original, original.WithKey(key));
+        Assert.Same(original, original.WithKey(new KeyedItem(key, "hello")));
+
+        var equalKey = new string(key.AsSpan());
+        var copied = original.WithKey(equalKey);
+        Assert.NotSame(original, copied);
+        Assert.Same(equalKey, copied.Key);
+        Assert.Same(key, original.Key);
+        Assert.Equal(original.Content, copied.Content);
+    }
+
+    [Fact]
+    public void WithKey_Changing_Key_Preserves_The_Original_Snapshot()
+    {
+        var original = TextBlock("hello").WithKey("before");
+        var changed = original.WithKey(new KeyedItem("after", "ignored"));
+
+        Assert.NotSame(original, changed);
+        Assert.Equal("before", original.Key);
+        Assert.Equal("after", changed.Key);
+        Assert.Equal("hello", changed.Content);
+    }
+
+    [Fact]
     public void WithKey_IReactorKeyed_Sets_Element_Key_To_Item_Key()
     {
         var item = new KeyedItem("k-42", "Hello");

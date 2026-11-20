@@ -203,8 +203,12 @@ To add a self-test:
 
 E2E fixtures have the same two-place split, in
 `tests/Reactor.AppTests.Host/FixtureRegistry.cs` (`AllFixtures` plus the
-`Build` switch). `--list-fixtures` is self-test-only, so nothing warns
-you about the E2E half.
+`Build()` switch).
+
+`--list-fixtures` lists only SelfTest fixtures for the current host tier.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` compares `AllFixtures` with the factory
+switch for both SelfTest and E2E. It reports each fixture registered on just one side and
+identifies where the registration is missing.
 
 Reach for a self-test when the unit layer can't see the answer — e.g.
 when the WinUI control's measured size affects the component's

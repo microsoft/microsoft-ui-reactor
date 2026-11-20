@@ -11,8 +11,8 @@
 // Two user-visible differences from the legacy `reactorapp` template:
 //   • the short name is `reactor` (plus `reactor-mvu` / `reactor-navview` /
 //     `reactor-tabview` for the richer shells), and
-//   • scaffolded apps are **packaged** (single-project MSIX) rather than
-//     unpackaged, so `dotnet run` launches them with package identity.
+//   • scaffolded apps are **packaged** (single-project MSIX) by default rather
+//     than unpackaged, so `dotnet run` launches them with package identity.
 //
 // This type only *probes* — it answers "is the pack installed?" and "will
 // `dotnet new reactor` resolve?" for `mur doctor` and `mur templates status`.
@@ -48,6 +48,9 @@ public static class WinAppSdkTemplates
     /// alias), so the pack registers nine names for four templates. Listing all
     /// nine as "scaffold an app with" would be noise; callers that need to
     /// recognise an arbitrary alias should match the listing, not this array.
+    /// The single-file <c>reactor-singlefile</c> template is deliberately absent
+    /// too: it arrived in a later pack, so listing it would describe a name the
+    /// still-supported 0.0.7-alpha pack lacks.
     /// </remarks>
     public static readonly string[] ShortNames =
     [

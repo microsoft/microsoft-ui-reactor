@@ -128,7 +128,7 @@ void ShowHelp()
     Console.WriteLine("  --version, -v    Show version information");
     Console.WriteLine("  --skill          Print the SKILL.md AI reference to stdout");
     Console.WriteLine("  --api            Print the reactor.api.txt signatures index to stdout");
-    Console.WriteLine("  --regen-api      Regenerate skills/reactor.api.txt from the built Reactor.dll");
+    Console.WriteLine("  --regen-api      Regenerate both API indexes from the built Reactor.dll and Reactor.Advanced.dll");
     Console.WriteLine("  --create <name>  Scaffold a new Reactor project");
     Console.WriteLine();
     Console.WriteLine("Commands:");

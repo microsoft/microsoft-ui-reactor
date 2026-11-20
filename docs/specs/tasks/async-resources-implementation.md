@@ -189,7 +189,7 @@ Scope: new files `Reactor/Core/Hooks/UseInfiniteResource.cs`, `Reactor/Data/Data
 - [x] Page completion: append items, update NextCursor, flip LoadState to Idle/EndOfList
 - [x] Deps change: cancel in-flight, clear page table, restart (prior pages remain in QueryCache under old key)
 - [x] Unmount: cancel in-flight, unsubscribe all page keys
-- [x] Per-page cache keys of shape `{prefix}/{depsHash}/page:{pageIndex}`
+- [x] Per-page cache keys of shape `{prefix}/{depsHash}/size:{initialPageSize}/page:{pageIndex}`
 - [x] QueryCache subscriber tracking (each UseInfiniteResource subscribes to N page keys)
 
 ### 2.4 `DataSourceResource.UseDataSource` adapter (§7.3)

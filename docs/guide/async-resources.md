@@ -116,6 +116,11 @@ still available). Omitting the `reloading` arm makes it fall through to the
 visible while revalidating (stale-while-revalidate), pass a `reloading:` handler
 explicitly.
 
+`AsyncValue<T>` is a `closed` hierarchy, so with C# 15 (the default for `net11.0`
+apps, or `<LangVersion>15</LangVersion>` on `net10.0`) a plain `switch` over the four
+cases is exhaustive without a `_` arm, and forgetting a case is warning CS8509. Older
+compilers still work; they just need the `_` arm. `LoadState` below is closed the same way.
+
 ## Infinite Scroll with UseInfiniteResource
 
 `UseInfiniteResource` models a cursor-paginated read. Drive fetches from
@@ -167,6 +172,9 @@ Pull-to-refresh is `commits.Refresh()`: it cancels in-flight fetches,
 clears the page table, and refetches page 0. Retry after error is
 `commits.Retry()` — only the failed page is re-requested.
 
+Hooks sharing a `CacheKeyPrefix` can reuse cached pages when their dependencies
+and initial `PageSize` match. Different page sizes use separate cache entries.
+
 ## Migrating from a DataPageCache-Style Cache
 
 If you've rolled a block-cache over `IDataSource<T>` — the pre-Phase-3
@@ -179,6 +187,11 @@ mechanical steps:
    using `request.ContinuationToken` as the cursor. On the initial call,
    `options.PageSize` takes precedence over `request.PageSize`; the size is
    clamped to at least 1 and used for requests, cursors, and row positions.
+   This initial size is retained for the hook's lifetime, including query
+   restarts. To use a different size, remount the calling component by changing
+   its key from the parent, e.g. `.WithKey($"tasks:{pageSize}")`.
+   Alternatively, increment a parent-owned reset version used by
+   `.WithKey($"tasks:{resetVersion}")`.
 2. **Read from `resource.Items[i]`.** The sparse `IReadOnlyList<T?>` has
    null placeholders for in-flight slots. This replaces `cache.PeekItem(i)`
    plus the `LoadingBlock` sentinel.

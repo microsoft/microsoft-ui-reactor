@@ -46,6 +46,15 @@ updates:
       # has already happened twice: #814 merged with CSharp.Workspaces stranded
       # a version behind, and #1113 repeated it. Group them so a Roslyn bump
       # always moves the whole set in a single PR.
+      #
+      # CSharp(.Workspaces) are also the Roslyn floor the shipped analyzers impose on
+      # consumers, pinned by hand in Directory.Packages.props, so Dependabot only
+      # proposes their patches (see the ignore rules below) and this group is
+      # patch-only. Microsoft.CodeAnalysis.Analyzers moves by hand with them and is
+      # ignored entirely: Dependabot's NuGet updater runs a "peer dependencies" step
+      # when it bumps Analyzers, and that step raised CSharp 5.0.0 -> 5.12.0 without
+      # applying CSharp's ignore rule (#1560, #1572), stranding Workspaces on 5.0.0
+      # (NU1608). A separate group for the floor did not prevent it.
       roslyn:
         patterns:
           - "Microsoft.CodeAnalysis*"
@@ -53,6 +62,8 @@ updates:
         # independent 1.1.x line, so it must not be dragged into a 5.x bump.
         exclude-patterns:
           - "Microsoft.CodeAnalysis*Testing"
+        update-types:
+          - "patch"
 
       # The roslyn-sdk test harness is its own version-locked set, one line down:
       # Microsoft.CodeAnalysis.CSharp.CodeFix.Testing 1.1.4 exact-pins
@@ -64,6 +75,28 @@ updates:
       roslyn-testing:
         patterns:
           - "Microsoft.CodeAnalysis*Testing"
+
+      # The VS SDK packages the extension compiles against. Microsoft.VisualStudio.SDK
+      # raises its floors on the others every release (18.12.1606 requires
+      # Microsoft.VisualStudio.Composition >= 18.9.89 and Interop/Shell.15.0 >=
+      # 18.12.1603), so ungrouped, Dependabot opens one overlapping PR per package
+      # that each drags in the rest (#1526, #1528, #1529). Majors are ignored below.
+      visual-studio-sdk:
+        patterns:
+          - "Microsoft.VisualStudio.SDK"
+          - "Microsoft.VisualStudio.Interop"
+          - "Microsoft.VisualStudio.Shell.15.0"
+          - "Microsoft.VisualStudio.Utilities"
+          - "Microsoft.VisualStudio.Composition"
+
+      # Build-time only. Microsoft.VSSDK.BuildTools raises its floor on
+      # Microsoft.VisualStudio.SDK.Analyzers (18.12.1606 requires >= 17.7.179), the
+      # pair #1530 had to bump together. Neither ships in the VSIX, so they follow
+      # the newest release, majors included.
+      visual-studio-build-tools:
+        patterns:
+          - "Microsoft.VSSDK.BuildTools"
+          - "Microsoft.VisualStudio.SDK.Analyzers"
     ignore:
       # Windows App SDK and Win2D are pinned via Directory.Build.props
       # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion / Win2DVersion) and bumped
@@ -74,6 +107,17 @@ updates:
       - dependency-name: "Microsoft.WindowsAppSDK.WinUI"
       - dependency-name: "Microsoft.WindowsAppSDK.Runtime"
       - dependency-name: "Microsoft.Graphics.Win2D"
+      # The Roslyn the shipped analyzers/generators compile against is the minimum
+      # VS / .NET SDK for every Reactor app (see Directory.Packages.props). Patches stay
+      # allowed. Also held back via IGNORE_PACKAGES in
+      # .github/workflows/windows-nuget-updates.yml.
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp.Workspaces"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Moves by hand with the Roslyn floor above; any Dependabot bump of it drags
+      # Microsoft.CodeAnalysis.CSharp along (see the `roslyn` group comment).
+      - dependency-name: "Microsoft.CodeAnalysis.Analyzers"
       # A floor Microsoft.UI.Reactor ships to its consumers; it moves by hand with the
       # Windows App SDK (src/Reactor/Reactor.csproj). Also held back via IGNORE_PACKAGES
       # in .github/workflows/windows-nuget-updates.yml.
@@ -85,6 +129,29 @@ updates:
       # additions (upstream PR #2269) that v2.5.301 omitted. Block breaking
       # major (3.x) bumps; 2.x security patches are still allowed.
       - dependency-name: "MessagePack"
+        update-types: ["version-update:semver-major"]
+      # The extension must compile against the oldest VS it supports (VS 2026 18.0,
+      # the lower bound in source.extension.vsixmanifest). VS 2026 runs extensions
+      # built against the 17.x API, so the 17.x SDK still covers it. A newer SDK
+      # raises the assembly versions the extension binds to past what older VS 18
+      # updates ship, and VS binding redirects only unify upward, so it can fail to
+      # load on hosts the manifest still promises (the same ceiling the
+      # System.Text.Json override in Reactor.VsExtension.csproj documents). Move these
+      # to 18.x by hand, to a version no newer than the manifest's minimum. The SDK
+      # test framework follows the same VS version line. Also held back via
+      # IGNORE_PACKAGES in .github/workflows/windows-nuget-updates.yml.
+      # https://learn.microsoft.com/visualstudio/extensibility/migration/extension-compatibility
+      - dependency-name: "Microsoft.VisualStudio.SDK"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Interop"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Shell.15.0"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Utilities"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Composition"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"

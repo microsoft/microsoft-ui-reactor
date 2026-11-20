@@ -22,7 +22,7 @@ The doc pipeline needs:
 
 | Tool             | Purpose                                | Required for                |
 |------------------|----------------------------------------|-----------------------------|
-| .NET 10 SDK      | Building the pipeline + doc apps       | Always                      |
+| .NET 11 SDK + .NET 10 runtime | Building the pipeline + doc apps (`net10.0`) | Always |
 | Windows App SDK  | Doc apps render WinUI controls         | Screenshot capture          |
 | Windows Graphics Capture | Captures the doc app window (Windows 10 2004 / build 19041+, interactive desktop) | Screenshot capture |
 | Node.js 20+      | Hosts `mermaid-cli`                    | `.mmd` → `.svg` diagrams    |

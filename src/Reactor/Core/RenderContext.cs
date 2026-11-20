@@ -26,6 +26,28 @@ public sealed class RenderContext
     // retained delegate can say so instead of reporting a context that never rendered.
     private bool _ownerReleased;
 
+    // This component's diagnostic id: the componentId of ReactorEventSource.ComponentRendered
+    // and of the Microsoft-UI-Reactor-Perf spans and StateChange. 0 until first asked for; then
+    // fixed for the context's lifetime (a hot-reload instance swap moves the context, so it keeps
+    // the id). Assigned lazily so a process nobody traces never takes one.
+    private long _diagnosticId;
+
+    /// <summary>The diagnostic id, or 0 when none was assigned yet.</summary>
+    internal long DiagnosticId => Volatile.Read(ref _diagnosticId);
+
+    /// <summary>
+    /// The diagnostic id, assigning one on first use. Thread-safe: a state setter can ask from a
+    /// worker thread while the UI thread renders.
+    /// </summary>
+    internal long EnsureDiagnosticId()
+    {
+        long id = Volatile.Read(ref _diagnosticId);
+        if (id != 0) return id;
+        long fresh = ComponentRenderTrace.NextId();
+        long prior = Interlocked.CompareExchange(ref _diagnosticId, fresh, 0);
+        return prior == 0 ? fresh : prior;
+    }
+
     /// <summary>
     /// The <see cref="Microsoft.UI.Reactor.ReactorWindow"/> whose host renders this context, as
     /// recorded by that host's reconciler at the last <c>BeginRender</c>; <c>null</c> when the
@@ -196,6 +218,11 @@ public sealed class RenderContext
     // <snippet:set-state>
     private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
     {
+        // Keep the captured argument in a separate frame so inline/locked calls
+        // do not allocate a closure before deciding whether marshaling is needed.
+        bool MarshalSetter(T newValue)
+            => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
         void Setter(T newValue)
         {
             bool changed;
@@ -210,23 +237,38 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+                ReportPerfStateChange("UseState", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
             {
-                if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+                if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
                 changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
                 if (changed) h.Value = newValue;
                 if (Diagnostics.ReactorEventSource.Log.IsEnabled(
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+                ReportPerfStateChange("UseState", changed);
                 if (changed) _requestRerender?.Invoke();
             }
         }
         return Setter;
     }
     // </snippet:set-state>
+
+    /// <summary>
+    /// Reports a state-hook write on the <c>Microsoft-UI-Reactor-Perf</c> provider: the verbose
+    /// <c>StateChange</c> event, and the call toward the open render or effects span's
+    /// <c>stateSets</c> (<see cref="ComponentPerfTally"/>). Two static gate reads when nobody listens.
+    /// </summary>
+    private void ReportPerfStateChange(string hook, bool changed)
+    {
+        if (Diagnostics.ReactorPerfTrace.StateEnabled)
+            Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), hook, changed);
+        if (Diagnostics.ReactorPerfTrace.StateSetsEnabled)
+            ComponentPerfTally.NoteStateSet();
+    }
 
     /// <summary>
     /// Declares a piece of state with a functional updater variant.
@@ -273,6 +315,9 @@ public sealed class RenderContext
 
     private Action<Func<T, T>> MakeReducerUpdater<T>(ValueHookState<T> h)
     {
+        bool MarshalUpdater(Func<T, T> reducer)
+            => MarshalIfOffUIThread("UseReducer", () => Updater(reducer));
+
         void Updater(Func<T, T> reducer)
         {
             bool changed;
@@ -289,11 +334,12 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
             {
-                if (MarshalIfOffUIThread("UseReducer", () => Updater(reducer))) return;
+                if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalUpdater(reducer)) return;
                 var prev = h.Value;
                 var next = reducer(prev);
                 changed = !EqualityComparer<T>.Default.Equals(prev, next);
@@ -302,6 +348,7 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
         }
@@ -357,6 +404,9 @@ public sealed class RenderContext
 
     private Action<TAction> MakeReducerDispatch<TState, TAction>(ValueHookState<TState> h)
     {
+        bool MarshalDispatch(TAction action)
+            => MarshalIfOffUIThread("UseReducer", () => Dispatch(action));
+
         void Dispatch(TAction action)
         {
             var reducer = (Func<TState, TAction, TState>)h.Reducer!;
@@ -370,14 +420,17 @@ public sealed class RenderContext
                     changed = !EqualityComparer<TState>.Default.Equals(prev, next);
                     if (changed) h.Value = next;
                 }
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
             {
-                if (MarshalIfOffUIThread("UseReducer", () => Dispatch(action))) return;
+                if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalDispatch(action)) return;
                 var prev = h.Value;
                 var next = reducer(prev, action);
-                if (!EqualityComparer<TState>.Default.Equals(prev, next))
+                bool changed = !EqualityComparer<TState>.Default.Equals(prev, next);
+                ReportPerfStateChange("UseReducer", changed);
+                if (changed)
                 {
                     h.Value = next;
                     _requestRerender?.Invoke();
@@ -919,10 +972,15 @@ public sealed class RenderContext
 
     private Action<T> MakePersistedSetter<T>(PersistedHookState<T> h)
     {
+        bool MarshalSetter(T newValue)
+            => MarshalIfOffUIThread("UsePersisted", () => Setter(newValue));
+
         void Setter(T newValue)
         {
-            if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
-            if (!EqualityComparer<T>.Default.Equals(h.Value, newValue))
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
+            bool changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
+            ReportPerfStateChange("UsePersisted", changed);
+            if (changed)
             {
                 h.Value = newValue;
                 _requestRerender?.Invoke();

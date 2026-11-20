@@ -2,13 +2,13 @@
 
 A Reactor (WinUI 3) desktop app that turns a one-line prompt into a **single-file
 Reactor app**, builds it, and launches the result inside an **MXC sandbox** with
-UI + remote network but **no local filesystem** — a web-like, run-untrusted-UI
+UI, opt-in network, and **no local filesystem** — a web-like, run-untrusted-UI
 experience. The creator itself is, of course, a Reactor app.
 
 ```
 prompt ─▶ GitHub Copilot SDK ─▶ single-file Reactor app (.cs)
        ─▶ dotnet build          ─▶ widget.exe
-       ─▶ MXC wxc-exec          ─▶ sandboxed window (UI ✓, network ✓, local files ✗)
+       ─▶ MXC SDK (in-process)  ─▶ sandboxed window (UI ✓, network opt-in, local files ✗)
 ```
 
 ## What it demonstrates
@@ -22,12 +22,13 @@ prompt ─▶ GitHub Copilot SDK ─▶ single-file Reactor app (.cs)
   self-contained Reactor project and built with the same platform-shaped output
   layout as the Reactor app template.
 - **Sandboxed run** — the built `widget.exe` is launched by
-  [MXC](https://github.com/microsoft/mxc) (Microsoft eXecution Containers) via the
-  native `wxc-exec` binary under a policy that allows a visible window and
-  outbound network but denies the local filesystem. MXC grants the sandbox
-  read+execute on **only the app's own directory** (from
-  `filesystem.readonlyPaths`); the user's profile, Documents, etc. are
-  unreachable. We never touch filesystem ACLs ourselves.
+  [MXC](https://github.com/microsoft/mxc) (Microsoft eXecution Containers) through
+  the in-process [`Microsoft.Mxc.Sdk`](https://www.nuget.org/packages/Microsoft.Mxc.Sdk)
+  (stable 1.0.x, Windows ProcessContainer backend) under a least-privilege policy:
+  a visible window, **no** network unless granted per widget, and no local
+  filesystem. MXC grants the sandbox read+execute on **only the app's own
+  directory** (from `filesystem.readonlyPaths`); the user's profile, Documents,
+  etc. are unreachable. We never touch filesystem ACLs ourselves.
 - **Runtime repair** — each saved widget persists the Copilot session ID that
   created it. If the sandboxed app exits non-zero later, Widget Creator resumes
   that session, sends the crash code/output plus the current source back to the
@@ -86,16 +87,13 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
    `WIDGET_CREATOR_MIN_WINAPPRUNTIME` (minimum version) and
    `WIDGET_CREATOR_WINAPPRUNTIME_FAMILY` (package family).
 
-3. **MXC** — a build of `wxc-exec.exe`. By default the app uses the **pinned,
-   vendored** copy shipped next to it (`…\mxc\<rid>\wxc-exec.exe`), which is known
-   to auto-fall back off BaseContainer. Override with:
-   - `WIDGET_CREATOR_WXC_EXEC` — full path to `wxc-exec.exe`,
-   - `WIDGET_CREATOR_MXC_BIN` — a `sdk\bin` dir (the app appends `arm64`/`x64`),
-   - `WIDGET_CREATOR_USE_LOCAL_MXC=1` — prefer a local mxc checkout
-     (`…\mxc\src\target\<triple>\release\` then `…\mxc\sdk\bin\<arch>\`) over the
-     vendored copy, for developers iterating on the MXC CLI itself, or
-   - `WIDGET_CREATOR_MXC_ROOT` — the MXC checkout root used by the opt-in above
-     (default `%USERPROFILE%\Code\mxc`).
+3. **MXC** — nothing to install. The sandbox comes from the
+   `Microsoft.Mxc.Sdk` NuGet package, which carries the native `mxc_ffi` runtime
+   for win-x64 and win-arm64 and runs in-process (no MXC executable is vendored or
+   launched). The ProcessContainer backend needs a current Windows 11 build — see
+   MXC's [Windows OS-version support](https://github.com/microsoft/mxc/blob/v1.0.1/docs/backends/process-container/os-version-support.md)
+   table. If the host can't run it, the title bar shows *MXC sandbox unavailable*
+   and launches fail with the reason MXC reports.
 
 4. **Local Reactor package** — generated widgets reference
    `Microsoft.UI.Reactor 0.0.0-local`, resolved from this repo's `local-nupkgs`
@@ -106,8 +104,26 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
    `Directory.Build.props`, because a widget that pins a different version fails
    its build in `Microsoft.WindowsAppSDK.ComponentReference.targets`.
 
+### The Copilot CLI
+
+`GitHub.Copilot.SDK` downloads its native Copilot CLI at **build** time from the
+`github/copilot-cli` releases and verifies it against the release's
+`SHA256SUMS.txt`. On a restricted network, use the SDK's own hooks: point
+`CopilotCliReleaseBaseUrl` (or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment
+variable) at a mirror, or supply a pre-downloaded binary with
+`CopilotCliBinaryPath` (see the repo `README.md` and `Directory.Build.props`).
+
+If Widget Creator was built without a bundled CLI (for example with
+`-p:CopilotSkipCliDownload=true`), it resolves one at **run** time instead: set
+`COPILOT_CLI_PATH` to a local `copilot.exe`, or install the standalone Copilot CLI
+(`winget install GitHub.Copilot`, user or machine scope, or the `gh`-managed copy
+under `%LOCALAPPDATA%\GitHub CLI\copilot`); those fixed install locations are
+checked. It deliberately never searches `PATH`. Note that
+`gh auth` only supplies Copilot credentials — it is not itself a runnable
+`copilot.exe`.
+
 Type a prompt, click **Generate & Run**. The generated source streams into the
-right panel; the build + `wxc-exec` log streams below it. The widget window opens
+right panel; the build + sandbox log streams below it. The widget window opens
 sandboxed — close it to finish the run. If it crashes instead, the creator keeps
 watching the sandbox process, restores the widget's saved Copilot session, and
 asks the agent to repair the app from the crash details.
@@ -129,7 +145,8 @@ dotnet publish samples/apps/widget-creator/widget-creator.csproj `
 - `PublishAotInternal=true` is the repo-canonical AOT opt-in gate (the same property
   the other AOT samples/hosts use); it flips `PublishAot` on only for this publish.
 - `-p:IlcTreatWarningsAsErrors=false` only relaxes ILC trim/AOT warnings from
-  third-party dependencies we don't own (the Copilot SDK / Windows App SDK). This
+  third-party dependencies we don't own (the Copilot SDK / Windows App SDK / MXC
+  SDK). This
   project's **own** code stays analyzed-as-errors at build time — the repo's
   IL2\*/IL3\* analyzer is on for this sample (it no longer sets
   `ReactorSkipAotAnalysis`), so the two `System.Text.Json` sidecars use source
@@ -142,34 +159,87 @@ The published `WidgetCreator.exe` lands under
 
 > **Validated scope.** The native build has been verified to publish and to launch
 > the Widget Creator window, and its source-generated `meta.json` loader runs in
-> the native image. The end-to-end generate → build → MXC-sandbox workflow still
-> shells out to the bundled Copilot CLI and the vendored `wxc-exec` binaries exactly
-> as the framework-dependent build does; those child processes are unaffected by AOT
-> and the native publish does not itself re-exercise that full pipeline.
+> the native image. `Microsoft.Mxc.Sdk` is itself marked AOT-compatible (it
+> P/Invokes its bundled native `mxc_ffi` and uses source-generated JSON), so the
+> sandbox runs in-process in the native image too. Generation still shells out to
+> the bundled Copilot CLI, and the native publish does not itself re-exercise the
+> full generate → build → sandbox pipeline.
 
 ## How the sandbox policy works
 
-The app emits an MXC `ContainerConfig` (schema `0.6.0-alpha`, `processcontainer`
-backend) and runs `wxc-exec <config>.json`:
+Each widget's policy is a small JSON document using the field names of the stable
+MXC 1.0 containment contract. `MxcPolicy.ToContainerRequest` maps it onto the typed
+`Microsoft.Mxc.Sdk.V1.ContainerRequest` (the SDK owns the wire schema version) and
+`MxcSandbox` launches it with `MxcContainer.SpawnAsync` on the
+`Containment.ProcessContainer` backend, streaming the widget's stdout/stderr into
+the log. The default policy:
 
 | Surface | Setting | Effect |
 |---|---|---|
-| UI / display | `ui.disable = false` | the widget renders a real WinUI window |
-| Network | `network.defaultPolicy = allow` + `internetClient` capability | outbound HTTP(S) works |
-| Filesystem | `filesystem.readonlyPaths = [appDir]` | MXC grants read+exec to **only** the app's own dir; everything else under the user profile is default-deny |
-| Clipboard / input | `clipboard = none`, `injection = false` | no clipboard, no synthetic input |
+| UI / display | `ui.disable = false` | the widget renders a real WinUI window (MXC disables UI by default) |
+| Network | `network.egress.default = deny`, `network.ingress.default = deny`, `hostLoopback = deny` | no network; "Internet access" in Permissions sets `egress.default = allow` |
+| Filesystem | `filesystem.readonlyPaths = [appDir]` (always added) | MXC grants read+exec to **only** the app's own dir; everything else under the user profile is default-deny |
+| Clipboard / input | `ui.clipboard = none`, `ui.injection = false` | no clipboard, no synthetic input |
 
-MXC's tier detector chooses how to enforce that grant (BaseContainer, AppContainer
-+ BFS, or AppContainer + DACL). The app never edits ACLs — declaring the app
-directory in `readonlyPaths` is enough; MXC's DACL manager stamps the grant.
+MXC derives the AppContainer network capabilities from the directional policy:
+`egress` allow ⇒ `internetClient`, `ingress.default` allow ("Also allow the local
+network") ⇒ `privateNetworkClientServer`. The dialog only offers local-network
+access together with internet access: MXC's AppContainer fallback tier rejects
+inbound/private-network access while outbound is denied, because that capability
+is bidirectional there. Other capabilities can be listed under
+`processContainer.capabilities` in the Advanced editor. The policy document is
+closed like the MXC contract — unknown fields and explicit `null` values are
+rejected (a `null` would read as "unset" and silently widen access) — and policies saved by
+older Widget Creator builds (the pre-1.0 `wxc-exec` `ContainerConfig` shape) are
+migrated automatically when read. A legacy policy that uses settings MXC 1.0
+can't express (for example `network.blockedHosts` or `leastPrivilege: true`), or
+whose known fields have unexpected values (so a denial such as `deniedPaths` can't
+be silently dropped while its grants carry over), is not migrated — it is reported as invalid, the run log warns that the saved
+permissions were not applied, and the widget runs with the default policy until
+you review and save it again. Advanced network rules are validated with MXC 1.0's
+syntax before they can be saved: CIDRs must parse (host bits zero, each `except`
+inside its `cidr`), `to` / `ports` lists can't be empty (omit them to match
+everything), `endPort` needs a `port` no larger than it, and ICMP selectors take
+no ports. Choosing **No network access** also clears any
+`egress.allow` / `egress.deny` rules, which MXC's AppContainer fallback rejects.
 
-> **Host note.** The app lets `wxc-exec` select the strongest available
-> containment tier: it tries **BaseContainer** first and falls back to
-> **AppContainer + DACL** on hosts where BaseContainer is gated by the OS build
-> (`Experimental_CreateProcessInSandbox → E_NOTIMPL`). The app no longer forces
-> the weaker tier — trusting the vendored `wxc-exec` (0.7.0+) to handle fallback.
-> To pin the DACL tier for debugging, set `MXC_DISABLE_BASE_CONTAINER=1` in the
-> environment yourself; it is inherited into the `wxc-exec` process.
+MXC picks the strongest isolation tier the host supports (BaseContainer, then
+AppContainer + BFS, then AppContainer + DACL) and enforces the grants itself. The
+app never edits ACLs.
+
+### Containment checks (threat-model C-2)
+
+- **Out-of-band token check** — after launch, the host inspects the access token
+  of the contained process (`MxcProcess.Id`). If it is positively running at
+  medium+ integrity outside an AppContainer, the widget is killed and the run is
+  reported as a sandbox failure (never sent to the repair agent).
+- **Strict mode** — set `WIDGET_CREATOR_REQUIRE_BASE_CONTAINER=1` to refuse to
+  launch unless `MxcContainer.Probe` confirms the strong **BaseContainer** tier for
+  the request, instead of accepting the AppContainer fallback.
+- **Runtime integrity (C-3)** — the MXC runtime ships in the Microsoft-signed
+  `Microsoft.Mxc.Sdk` package (author-signed by Microsoft and countersigned by
+  nuget.org; NuGet verifies both on restore). Package signing doesn't cover the
+  deployed files at run time, and the SDK would otherwise also honor an
+  `MXC_FFI_DIR` override, so at startup — before any MXC call — the host claims
+  the SDK's native-library resolver, requires `mxc_ffi.dll` and all its packaged
+  companion natives to be present as regular files in the app (a symbolic link,
+  junction or redirected path is rejected — so the app must not be launched
+  through one), opens them read-share-only (they, and the folders above them,
+  can't be swapped afterwards), requires a
+  valid Authenticode signature from Microsoft Corporation whose chain ends in a
+  genuine Microsoft root — checked by public key with the Windows Microsoft-root
+  chain policy, so a look-alike CA in a user root store can't pass — and loads
+  exactly that file. Any failure leaves the sandbox unavailable;
+  there are no vendored binaries or hash pins to maintain. The native runtime
+  version is logged at startup and shown in the title bar.
+- **Trust boundary** — the app's own folder (including `runtimes\`) must not be
+  writable by untrusted users, as for any .NET app. Someone who can write there can
+  replace `WidgetCreator.dll` itself, and the .NET runtime probes the app folder
+  for bare-named native libraries (`crypt32.dll`, `advapi32.dll`, …) before any app
+  code runs, so no in-app check can defend against it. The C-3 gate covers
+  substitution from *outside* that folder (the `MXC_FFI_DIR` override and
+  developer build paths) and tampering with, linking, or removing the shipped MXC
+  files.
 
 ## Layout
 
@@ -183,7 +253,9 @@ samples/apps/widget-creator/
     WidgetGenerator.cs       ← system prompt + stream + ```csharp fence extraction
     WidgetWorkspace.cs       ← scaffolds widget.cs + widget.csproj + nuget.config
     WidgetBuilder.cs         ← dotnet publish (no ACL edits — MXC grants the app dir)
-    MxcSandbox.cs            ← builds the ContainerConfig + runs wxc-exec
+    MxcPolicy.cs             ← per-widget policy JSON → Microsoft.Mxc.Sdk ContainerRequest
+    MxcSandbox.cs            ← launches the widget via MxcContainer.SpawnAsync
+    MxcContainmentVerifier.cs ← tier probe + out-of-band token check (C-2)
     WindowsAppRuntimeCheck.cs ← probes the machine-wide Windows App Runtime
     SessionLog.cs
   Resources/SystemPrompt.txt ← instructs the model to emit one single-file Reactor app
@@ -191,9 +263,11 @@ samples/apps/widget-creator/
 
 ## Notes & caveats
 
-- This is a demo wired against a local MXC checkout and the repo's `local-nupkgs`
-  feed — paths and schema choices are host-specific and meant to be cleaned up
-  before any real submission.
-- MXC is an early preview; its sandbox profiles are **not** a security boundary
-  yet (see the MXC README).
+- This is a demo wired against the repo's `local-nupkgs` feed — paths are
+  host-specific and meant to be cleaned up before any real submission.
+- MXC enforcement is backend- and host-dependent: a schema-valid policy can still
+  be rejected if the host can't enforce it, and some features (e.g. `deniedPaths`)
+  are best-effort on some tiers. See the
+  [MXC 1.0 containment policy](https://github.com/microsoft/mxc/blob/v1.0.1/docs/containment-policy/1.0.0/policy.md)
+  before relying on a policy for untrusted code.
 - A real generation call opens an interactive Copilot CLI auth flow on first use.

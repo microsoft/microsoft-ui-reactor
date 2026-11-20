@@ -200,28 +200,53 @@ Write-Step 'Pre-flight checks'
 
 Write-Dbg "PowerShell $($PSVersionTable.PSVersion); OS arch $env:PROCESSOR_ARCHITECTURE; repo $repoRoot"
 
-function Test-DotnetSdk10 {
+function Test-DotnetSdk11 {
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return $false }
     foreach ($line in (& dotnet --list-sdks)) {
         Write-Dbg "  dotnet SDK: $line"
-        if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 10) { return $true }
+        # global.json pins 11.0.100 with rollForward latestFeature: only a stable 11.0.x
+        # SDK satisfies it (not an 11 preview, and not 12+, which is a major roll).
+        if ($line -match '^11\.0\.\d+ \[') { return $true }
     }
     return $false
 }
 
-if (-not (Test-DotnetSdk10)) {
+# Reactor builds with the .NET 11 SDK (C# 15, see global.json) but targets net10.0,
+# so running its apps and tests also needs the .NET 10 runtime, which the 11 SDK
+# does not carry. The Desktop runtime includes Microsoft.NETCore.App as well as the
+# WindowsDesktop.App the WinForms/WPF interop samples need.
+function Test-DotnetRuntime10 {
+    if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { return $false }
+    $core = $false; $desktop = $false
+    foreach ($line in (& dotnet --list-runtimes)) {
+        # Stable 10.0.x only: release-built apps don't roll forward onto prerelease runtimes.
+        if ($line -match '^Microsoft\.NETCore\.App 10\.0\.\d+ \[') { $core = $true }
+        if ($line -match '^Microsoft\.WindowsDesktop\.App 10\.0\.\d+ \[') { $desktop = $true }
+    }
+    return ($core -and $desktop)
+}
+
+if (-not (Test-DotnetSdk11)) {
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
         Write-Host "    [info] dotnet not found on PATH." -ForegroundColor Yellow
     } else {
-        Write-Host "    [info] dotnet present but no .NET 10+ SDK detected. Installed:" -ForegroundColor Yellow
+        Write-Host "    [info] dotnet present but no .NET 11+ SDK detected. Installed:" -ForegroundColor Yellow
         & dotnet --list-sdks | ForEach-Object { Write-Host "          $_" -ForegroundColor Yellow }
     }
-    Install-WithWinget -Id 'Microsoft.DotNet.SDK.10' -Reason '.NET 10 SDK'
-    if (-not (Test-DotnetSdk10)) {
-        Fail '.NET 10 SDK install reported success but `dotnet --list-sdks` still does not show a 10.x entry. Open a new shell and re-run ./bootstrap.ps1.'
+    Install-WithWinget -Id 'Microsoft.DotNet.SDK.11' -Reason '.NET 11 SDK'
+    if (-not (Test-DotnetSdk11)) {
+        Fail '.NET 11 SDK install reported success but `dotnet --list-sdks` still does not show an 11.x entry. Open a new shell and re-run ./bootstrap.ps1.'
     }
 }
 Write-Ok ".NET SDK present"
+
+if (-not (Test-DotnetRuntime10)) {
+    Install-WithWinget -Id 'Microsoft.DotNet.DesktopRuntime.10' -Reason '.NET 10 Desktop runtime (Reactor targets net10.0)'
+    if (-not (Test-DotnetRuntime10)) {
+        Fail '.NET 10 Desktop runtime install reported success but `dotnet --list-runtimes` still does not show Microsoft.NETCore.App 10.x and Microsoft.WindowsDesktop.App 10.x. Open a new shell and re-run ./bootstrap.ps1.'
+    }
+}
+Write-Ok ".NET 10 runtime present"
 
 $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
 
@@ -249,32 +274,17 @@ if ($nugetSelection) {
     Write-Dbg 'No reachable configured NuGet proxy detected; using the repo nuget.config'
 }
 
-function Get-ResolvedDotnetSdkVersion {
-    $sdkVersion = (& dotnet --version 2>$null | Select-Object -First 1)
-    $rc = $LASTEXITCODE
-    $global:LASTEXITCODE = 0
-    if ($rc -ne 0 -or [string]::IsNullOrWhiteSpace($sdkVersion)) { return $null }
-    return $sdkVersion.Trim()
-}
-
 function Get-VsExtensionSkipReason {
     param([Parameter(Mandatory)]$VsInstance)
 
-    $sdkVersion = Get-ResolvedDotnetSdkVersion
-    if (-not $sdkVersion -or $sdkVersion -notmatch '^(\d+)\.(\d+)\.(\d+)') { return $null }
-
-    $sdkMajor = [int]$Matches[1]
-    $sdkPatch = [int]$Matches[3]
-    $sdkRequiresMsBuild18 = ($sdkMajor -gt 10) -or ($sdkMajor -eq 10 -and $sdkPatch -ge 300)
-    if (-not $sdkRequiresMsBuild18) { return $null }
-
+    # The VSIX manifest targets [18.0,19.0): the extension supports Visual Studio 2026 only.
     $vsVersion = [string]$VsInstance.installationVersion
     if ($vsVersion -notmatch '^(\d+)\.') { return $null }
 
     $vsMajor = [int]$Matches[1]
     if ($vsMajor -ge 18) { return $null }
 
-    return "Visual Studio $vsVersion uses MSBuild 17.x, but this checkout resolves .NET SDK $sdkVersion, which requires MSBuild 18+ for desktop VSIX builds."
+    return "The Reactor Preview extension supports Visual Studio 2026 (18.0+) only, but the newest instance with the 'Visual Studio extension development' workload is $vsVersion."
 }
 
 # Windows App SDK runtime — recommended for samples, perf-tests, and any
@@ -658,17 +668,17 @@ if ($packLocalExit -ne 0) { Fail 'mur pack-local failed' }
 # ---------------------------------------------------------------------------
 # Reactor's app templates ship inside the Windows App SDK template pack
 # (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), next to the WinUI 3 XAML
-# ones. That pack owns the `reactor`, `reactor-mvu`, `reactor-navview`, and
-# `reactor-tabview` short names, and the apps it scaffolds are **packaged**
-# (single-project MSIX) — so `dotnet run` launches them with package identity,
-# equivalent to F5 in Visual Studio.
+# ones. That pack owns the `reactor`, `reactor-mvu`, `reactor-navview`,
+# `reactor-tabview` and (from 0.0.8-alpha) `reactor-singlefile` short names, and
+# the apps it scaffolds are **packaged** (single-project MSIX) by default — so
+# `dotnet run` launches them with package identity, equivalent to F5 in Visual
+# Studio.
 #
 # This repo used to ship its own `Microsoft.UI.Reactor.ProjectTemplates` pack
 # (`dotnet new reactorapp`, unpackaged). It was removed once the Windows App SDK
 # pack shipped the Reactor templates; the published versions are deprecated on
 # NuGet.org with a pointer here. For an unpackaged app, scaffold with
-# `dotnet new reactor` and set `<WindowsPackageType>None</WindowsPackageType>`
-# (see docs/guide/packaging.md).
+# `dotnet new reactor --packaging Unpackaged` (see docs/guide/packaging.md).
 #
 # Hoisted so the closing "Next:" guidance can gate on it: printing
 # `dotnet new reactor` after verification failed would hand the user the exact
@@ -850,7 +860,7 @@ if ($SkipVsExtension) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
         Write-Host '    [skip] vswhere.exe not found - Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
-        Write-Host "           To install the preview extension later, install VS 2022/2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
+        Write-Host "           To install the preview extension later, install Visual Studio 2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
     } else {
         # `-requires Microsoft.VisualStudio.Workload.VisualStudioExtension` filters to
         # instances that have the VSIX-development workload (desktop MSBuild + VSSDK
@@ -877,7 +887,7 @@ if ($SkipVsExtension) {
                 $skipReason = Get-VsExtensionSkipReason $target
                 if ($skipReason) {
                     Write-Host "    [skip] $skipReason" -ForegroundColor Yellow
-                    Write-Host "           Install Visual Studio 2026 / MSBuild 18+ to build and install the optional Reactor Preview VSIX from bootstrap."
+                    Write-Host "           Install Visual Studio 2026 with that workload to build and install the optional Reactor Preview VSIX from bootstrap."
                 } else {
                     # Reinstall-Vsix.ps1 chains Build-Vsix.ps1 (desktop MSBuild build) then
                     # the VSIXInstaller against the per-user data dir, plus a synchronous
@@ -951,7 +961,28 @@ if ($SkipTemplates) {
     Write-Host '    cd MyApp'
     Write-Host '    dotnet run'
     Write-Host ''
-    Write-Host 'Other Reactor templates: reactor-mvu, reactor-navview, reactor-tabview'
+    # `reactor-singlefile` arrived in a later pack than the other four, and step
+    # 5 keeps an already-installed older pack, so name it only when this
+    # machine's pack provides it — the same false-promise rule as above. Same
+    # whole-token, case-sensitive match as step 5 and bootstrap.yml: a plain
+    # substring also hits `winui-reactor-singlefile` and the no-match hint.
+    #
+    # With no match, `dotnet new list` writes to stderr and exits 103. Windows
+    # PowerShell 5.1 turns redirected native stderr into error records, which
+    # the script-wide 'Stop' makes terminating: bootstrap would die after
+    # printing "Bootstrap complete." So the probe runs under 'Continue', scoped
+    # to its own script block.
+    $otherTemplates = @('reactor-mvu', 'reactor-navview', 'reactor-tabview')
+    $singleFileListing = & {
+        $ErrorActionPreference = 'Continue'
+        & dotnet new list reactor-singlefile 2>&1 | Out-String
+    }
+    if ($LASTEXITCODE -eq 0 -and
+        $singleFileListing -notmatch 'No templates found' -and
+        $singleFileListing -cmatch '(?<![^\s,])reactor-singlefile(?![^\s,])') {
+        $otherTemplates += 'reactor-singlefile'
+    }
+    Write-Host "Other Reactor templates: $($otherTemplates -join ', ')"
     Write-Host '    dotnet new list reactor'
 }
 Write-Host ''

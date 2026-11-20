@@ -33,6 +33,7 @@ public sealed partial class Reconciler
     // <snippet:mount-phase>
     public UIElement? Mount(Element element, Action requestRerender)
     {
+        var modifierTarget = element;
         // Unwrap legacy ModifiedElement (backward compat)
         ElementModifiers? modifiers = element.Modifiers;
         if (element is ModifiedElement mod)
@@ -46,7 +47,7 @@ public sealed partial class Reconciler
 
         // A direct Mount from outside is an outermost frame for render-error propagation
         // (issue #1291), like a top-level Reconcile; recursive mounts just count.
-        using var entryFrame = EnterFrame();
+        using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Mount, element);
         // Where this mount's completed roots start, while an ErrorBoundary records them.
         int boundaryRootsStart = _boundaryMountRoots?.Count ?? -1;
 
@@ -69,6 +70,8 @@ public sealed partial class Reconciler
             ? ownTheme : prevAmbientTheme;
 
         UIElement? control;
+        // Issue #965 — whether the control was created for this element (see ApplyModifiers).
+        bool ownsControl = false;
         // A per-host RegisterType callback may return the control it mounted for a child
         // element; that control already describes the child (see ForwardsAnotherElement).
         bool registeredType = false;
@@ -100,6 +103,7 @@ public sealed partial class Reconciler
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl(element);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
@@ -110,6 +114,7 @@ public sealed partial class Reconciler
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl(element);
         }
         else
         {
@@ -127,7 +132,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
+            KeyedMemoElement km => MountKeyedMemo(km, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -136,11 +141,24 @@ public sealed partial class Reconciler
             EmptyElement => null,
             _ => ThrowNoHandlerRegistered(element),
         };
+        // Composition primitives mount their own Border wrapper; a keyed memo is transparent.
+        ownsControl = element is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
 
         if (control is not null)
         {
             DebugUIElementsCreated++;
+            // Count only a control created for this element: a transparent keyed Memo, a
+            // flyout decorator wrapping its target, or a RegisterType callback forwarding a
+            // child hands back a control its inner Mount already counted. Forwarding is only
+            // detectable while source publishing is on; guarded inline (as below) so ILC folds
+            // the publisher out of a build without Reactor.DevtoolsSupport.
+            if (Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (ownsControl || registeredType
+                    && !(global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                        && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && ForwardsAnotherElement(control, element))))
+                Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep
@@ -166,7 +184,7 @@ public sealed partial class Reconciler
 
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
-            ApplyModifiers(fe, modifiers, requestRerender);
+            ApplyModifiers(fe, modifiers, requestRerender, ownsControl);
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
         // Issue #1262 — bind a `.Validate(field, value, …)` verdict to the control's
@@ -264,6 +282,17 @@ public sealed partial class Reconciler
         }
 
         NoteMountCompleted(boundaryRootsStart, control);
+        if (control is not null && _modifierMountParent is not null
+            && ReferenceEquals(prevReconcilingElement, _modifierMountParent))
+            (_modifierMounts ??= []).Add((control, modifierTarget));
+        return control;
+    }
+
+    private UIElement? MountKeyedMemo(KeyedMemoElement memo, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        var control = Mount(inner, requestRerender);
+        if (control is not null) RecordModifierTarget(control, memo, inner);
         return control;
     }
 
@@ -909,6 +938,8 @@ public sealed partial class Reconciler
         };
         _componentNodes[wrapper] = node;
         _boundaryMountJournal?.Add(wrapper);
+        // Perf span: Render(), effects and the subtree mount (spans close on every exit).
+        using var perfSpan = BeginPerfComponentSpan(node, compElement, Diagnostics.ComponentRenderTrace.Reasons.Mount);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
@@ -994,6 +1025,8 @@ public sealed partial class Reconciler
         };
         _componentNodes[wrapper] = node;
         _boundaryMountJournal?.Add(wrapper);
+        // Perf span: Render(), effects and the subtree mount (spans close on every exit).
+        using var perfSpan = BeginPerfComponentSpan(node, funcElement, Diagnostics.ComponentRenderTrace.Reasons.Mount);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
@@ -1078,6 +1111,8 @@ public sealed partial class Reconciler
         };
         _componentNodes[wrapper] = node;
         _boundaryMountJournal?.Add(wrapper);
+        // Perf span: Render(), effects and the subtree mount (spans close on every exit).
+        using var perfSpan = BeginPerfComponentSpan(node, memoElement, Diagnostics.ComponentRenderTrace.Reasons.Mount);
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.

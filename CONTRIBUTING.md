@@ -22,11 +22,17 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0) to build (pinned in
+  `global.json`; Reactor uses C# 15) and the
+  [.NET 10 Desktop runtime](https://dotnet.microsoft.com/download/dotnet/10.0) to run the
+  `net10.0` apps and tests. `./bootstrap.ps1` installs both. Apps that *consume* Reactor
+  still only need the .NET 10 SDK: `Directory.Build.targets` pins `WindowsSdkPackageVersion`
+  so the build SDK doesn't change the Windows SDK projection the shipped libraries compile
+  against (a newer one makes .NET 10 SDK consumers fail with NETSDK1148).
 - Windows App SDK 2.2 or newer — restored automatically from NuGet, no manual install required
   (the pinned floor lives in `WindowsAppSDKVersion` / `WindowsAppSDKWinUIVersion` in
   `Directory.Build.props`)
-- Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
+- Visual Studio 2026 or VS Code with C# Dev Kit
 
 > **Windows App SDK packages:** The right package is injected centrally by `Directory.Build.targets` based on each project's shape: framework-dependent projects — **libraries and apps alike**, including the shipped `Microsoft.UI.Reactor` — reference the lean `Microsoft.WindowsAppSDK.WinUI` sub-package plus `Microsoft.WindowsAppSDK.Runtime` (a library's dependencies become its consumers', and without Runtime the SDK silently builds a consumer app self-contained); **self-contained / MSIX** projects keep the full `Microsoft.WindowsAppSDK` metapackage (it bundles the runtime + DWriteCore redist). The metapackage's AI/ML/Widgets/DWrite slices are otherwise unused. Versions are pinned in `Directory.Build.props` (`WindowsAppSDKWinUIVersion` and `WindowsAppSDKVersion`) — update them there to change the version for every project at once.
 
@@ -75,7 +81,7 @@ Keep those as two steps, the way the `Restore` and `Build` steps of the `build-s
 
 ### From Visual Studio
 
-1. Open `Reactor.slnx` in Visual Studio 2022 (17.8+)
+1. Open `Reactor.slnx` in Visual Studio 2026
 2. Select the **x64** or **ARM64** platform from the toolbar
 3. Build the solution (Ctrl+Shift+B)
 
@@ -97,6 +103,11 @@ dotnet test  tests/Reactor.Tests -p:Platform=x64
 ## Running tests
 
 See [`TESTING.md`](TESTING.md) for the full guide — four suites (unit / selftest / packaged selftest / E2E), how to pick a tier, NativeAOT runs, and the code-coverage workflow.
+
+For timing-sensitive selftests, distinguish eventual completion from survival across
+a timer window. See [timer lifetime tests](TESTING.md#timer-lifetime-tests) for completion
+callbacks with bounded timeouts, controlled expiry schedules, and mutation checks
+that preserve the original assertion's meaning.
 
 Quick reference:
 

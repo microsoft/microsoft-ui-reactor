@@ -103,6 +103,32 @@ class MarkdownDemo : Component
 }
 // </snippet:markdown>
 
+// <snippet:markdown-selection>
+class MarkdownSelectionDemo : Component
+{
+    public override Element Render()
+    {
+        var (expanded, setExpanded) = UseState(false);
+        var (feedback, setFeedback) = UseState("");
+        var selection = new MarkdownTextSelectionOptions
+        {
+            OnCopyResult = (_, succeeded) => setFeedback(succeeded ? "Copied." : "Copy failed.")
+        };
+        var options = new MarkdownOptions { TextSelection = selection };
+        var message = VStack(
+            Markdown("# Answer\n\nFirst paragraph.", options),
+            MarkdownTextSelection.Surface("Details", TextBlock("Details")),
+            Expander("Show details", MarkdownTextSelection.Visibility(expanded,
+                Markdown("- First item\n- Second item", options)),
+                expanded, setExpanded),
+            Markdown("Final paragraph.", options));
+        return VStack(8,
+            MarkdownTextSelection.Scope(selection, message),
+            TextBlock(feedback)).Padding(24);
+    }
+}
+// </snippet:markdown-selection>
+
 // <snippet:markdown-link-builder>
 class ReviewedLinksDemo : Component
 {
@@ -250,6 +276,7 @@ class TextAndMediaApp : Component
             Component<RichTextDemo>(),
             Component<RichEditDemo>(),
             Component<MarkdownDemo>(),
+            Component<MarkdownSelectionDemo>(),
             Component<ImageDemo>(),
             Component<MediaPlayerDemo>(),
             Component<WebViewDemo>(),

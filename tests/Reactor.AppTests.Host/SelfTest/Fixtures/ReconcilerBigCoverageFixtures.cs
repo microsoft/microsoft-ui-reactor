@@ -25,6 +25,27 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// </summary>
 internal static class ReconcilerBigCoverageFixtures
 {
+    /// <summary>
+    /// Waits for an element leaving through an exit transition (issue #1037). Removal is
+    /// driven by the compositor's <c>ScopedBatch.Completed</c>, whose latency on a
+    /// software-rendered CI VM has a multi-second tail, so the wait is a wall-clock
+    /// deadline rather than a pass count. On a miss it keeps watching and records which
+    /// failure it was — late completion (a budget problem) or none (a lost completion) —
+    /// since the two produce identical <c>not ok</c> lines otherwise.
+    /// </summary>
+    private static async Task<bool> WaitForExitRemoval(string checkName, Func<bool> removed)
+    {
+        const int budgetMs = 5000;
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        if (await Harness.WaitForWithin(removed, budgetMs, perPassMs: 30))
+            return true;
+        bool late = await Harness.WaitForWithin(removed, 10_000, perPassMs: 50);
+        Console.WriteLine(late
+            ? $"# {checkName}: exit removal completed late, after {sw.ElapsedMilliseconds}ms (budget {budgetMs}ms)"
+            : $"# {checkName}: exit removal never completed ({sw.ElapsedMilliseconds}ms), the transition's completion was lost");
+        return false;
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  1. Every Ensure*Subscribed branch — mount once with all handlers
     // ════════════════════════════════════════════════════════════════════
@@ -1383,6 +1404,10 @@ internal static class ReconcilerBigCoverageFixtures
     // ════════════════════════════════════════════════════════════════════
     internal class ExitTransitionOnRemove(Harness h) : SelfTestFixtureBase(h)
     {
+        // Two removals, each allowed up to 15 s (budget plus the late-completion watch) when
+        // the compositor never completes, which would overrun the 30 s default and stop the run.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
@@ -1404,17 +1429,14 @@ internal static class ReconcilerBigCoverageFixtures
 
             H.ClickButton("ExitRemove");
             // The child plays a Fade exit transition (~300ms) before it leaves
-            // the tree; poll with per-pass wall-clock time so we converge as soon
-            // as the transition completes rather than betting on one fixed wait
-            // (which flakes under NativeAOT cold-start jitter — see issue #715).
+            // the tree. Removal waits on the compositor batch completing, so wait
+            // against a wall-clock deadline (see WaitForExitRemoval, issues #715/#1037).
             H.Check("ExitTr_Removed",
-                await Harness.WaitFor(() => H.FindText("ex-item-2") is null,
-                    maxPasses: 12, perPassMs: 100));
+                await WaitForExitRemoval("ExitTr_Removed", () => H.FindText("ex-item-2") is null));
 
             H.ClickButton("ExitRemove");
             H.Check("ExitTr_RemovedAgain",
-                await Harness.WaitFor(() => H.FindText("ex-item-1") is null,
-                    maxPasses: 12, perPassMs: 100));
+                await WaitForExitRemoval("ExitTr_RemovedAgain", () => H.FindText("ex-item-1") is null));
         }
     }
 
@@ -1693,12 +1715,9 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("CondExit_Initial", H.FindText("cond-exit-child") is not null);
 
             H.ClickButton("CondExit");
-            // The child plays a Fade exit transition before it leaves the
-            // tree; poll with per-pass wall-clock time so we converge as soon
-            // as the transition completes rather than betting on one fixed wait.
+            // The child plays a Fade exit transition before it leaves the tree.
             H.Check("CondExit_Removed",
-                await Harness.WaitFor(() => H.FindText("cond-exit-child") is null,
-                    maxPasses: 12, perPassMs: 100));
+                await WaitForExitRemoval("CondExit_Removed", () => H.FindText("cond-exit-child") is null));
         }
     }
 
@@ -1731,8 +1750,7 @@ internal static class ReconcilerBigCoverageFixtures
 
             H.ClickButton("AsymExit");
             H.Check("Asym_Removed",
-                await Harness.WaitFor(() => H.FindText("asym-target") is null,
-                    maxPasses: 20, perPassMs: 30));
+                await WaitForExitRemoval("Asym_Removed", () => H.FindText("asym-target") is null));
         }
     }
 
@@ -2206,11 +2224,11 @@ internal static class ReconcilerBigCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
-    //  25o. Expander update paths: string header -> HeaderTemplate, content
+    //  25o. Expander update paths: string header -> HeaderContent, content
     //       replacement, ContentTransitions assignment, and callbacks wired
     //       during UpdateExpander.
     // ════════════════════════════════════════════════════════════════════
-    internal class ExpanderTemplateTransitionEvents(Harness h) : SelfTestFixtureBase(h)
+    internal class ExpanderHeaderContentTransitionEvents(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
@@ -2225,7 +2243,7 @@ internal static class ReconcilerBigCoverageFixtures
                     ? Expander("plain-header", TextBlock("plain-content"), isExpanded: false)
                     : Expander("fallback-header", TextBlock("templated-content"), isExpanded: true,
                             onIsExpandedChanged: v => { expandHits++; lastExpanded = v; })
-                        .HeaderTemplate(TextBlock("templated-header"))
+                        .HeaderContent(TextBlock("templated-header"))
                         .ContentTransitions(new Microsoft.UI.Xaml.Media.Animation.TransitionCollection())
                         .Direction(ExpandDirection.Up);
 
@@ -2240,7 +2258,7 @@ internal static class ReconcilerBigCoverageFixtures
 
             var expander = H.FindControl<Expander>(e => e.Name == "updateExpander");
             H.Check("ExpanderUpdate_Mounted", expander is not null);
-            H.Check("ExpanderUpdate_HeaderTemplate",
+            H.Check("ExpanderUpdate_HeaderContent",
                 expander?.Header is TextBlock header && header.Text == "templated-header");
             H.Check("ExpanderUpdate_ContentReplaced",
                 expander?.Content is TextBlock content && content.Text == "templated-content");

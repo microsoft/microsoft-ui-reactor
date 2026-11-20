@@ -1,0 +1,1350 @@
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
+using Reactor.Tests.Shared;
+using static Microsoft.UI.Reactor.Factories;
+
+namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
+
+/// <summary>
+/// End to end for the <c>Microsoft-UI-Reactor-Perf</c> spans: a live host renders while a
+/// <b>non-elevated private ETW session</b> scoped to this process — <c>winapp perf</c>'s attach
+/// mode — records the provider, and the ETL is decoded through TDH. Proves the spans a real
+/// render produces arrive, pair up, nest, and carry the ids and counts the schema promises:
+/// the pass, the root and child components (mount and update), the setState owner, the keyed
+/// child edits, and rows a virtualized list realizes during layout, outside any pass.
+///
+/// <para>A selftest because the spans come from the reconciler and hosts driving real WinUI
+/// controls; the headless unit tests cover the provider and its wire schema.</para>
+/// </summary>
+internal class PerfTrace_PrivateSessionRecordsRenderSpans(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly string[] Checks =
+    [
+        "PerfTrace_Captured",
+        "PerfTrace_SpansBalanced",
+        "PerfTrace_PassPerRender",
+        "PerfTrace_RootMountedInsidePass",
+        "PerfTrace_ChildMountReason",
+        "PerfTrace_StateChangeOwner",
+        "PerfTrace_ChildUpdateAfterState",
+        "PerfTrace_ComponentInsidePassAndReconcile",
+        "PerfTrace_RootEffectsSpan",
+        "PerfTrace_KeyedEditCounts",
+        "PerfTrace_RowsRealizedOutsidePass",
+        "PerfTrace_KeyedListDiagnostic",
+        "PerfTrace_PropsAndContextReasons",
+        "PerfTrace_ThrowingRenderClosesItsSpan",
+        "PerfTrace_ReplacedCount",
+        "PerfTrace_FunctionComponentsNamed",
+        "PerfTrace_PassRequesters",
+        "PerfTrace_EffectRequestNamesTheNextPass",
+        "PerfTrace_ReconcileEditTotals",
+    ];
+
+    public override async Task RunAsync()
+    {
+        var run = await PerfTraceScenario.RunAsync(H, level: 5, keywords: 0xF);
+        if (run is null)
+        {
+            foreach (var check in Checks)
+                H.Skip(check, PerfTraceScenario.SkipReason);
+            return;
+        }
+        var events = run.Value.Events;
+        Console.WriteLine($"# perf trace: {events.Count} events, decode errors={events.Count(e => e.DecodeError is not null)}");
+        H.Check("PerfTrace_Captured", events.Count > 0 && events.All(e => e.DecodeError is null && e.IsTraceLogging));
+
+        var spans = Pair(events, out bool balanced);
+        Console.WriteLine($"# perf trace: {spans.Count} spans; " + string.Join(", ",
+            spans.GroupBy(s => s.Name).Select(g => $"{g.Key}={g.Count()}")));
+        // A Stop's componentId is its Start's.
+        H.Check("PerfTrace_SpansBalanced", balanced && spans
+            .Where(s => s.Name is "ComponentRender" or "Effects")
+            .All(s => Equals(s.Start.Fields["componentId"], s.Stop.Fields["componentId"])));
+
+        var passes = spans.Where(s => s.Name == "RenderPass").ToList();
+        // Mount, the counter's own update and the shuffle each ran a pass (Harness.Render may
+        // flush more, never fewer); every pass names this host.
+        H.Check("PerfTrace_PassPerRender",
+            passes.Count >= 3 && passes.Select(p => p.Start.Fields["hostId"]).Distinct().Count() == 1);
+
+        var components = spans.Where(s => s.Name == "ComponentRender").ToList();
+        var root = components.FirstOrDefault(c => (string)c.Start.Fields["name"] == PerfTraceScenario.RootName);
+        H.Check("PerfTrace_RootMountedInsidePass",
+            root is not null && (string)root.Start.Fields["reason"] == "mount" && root.Parent?.Name == "RenderPass");
+
+        var counter = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceCounter)).ToList();
+        Console.WriteLine("# perf trace: counter renders " + string.Join(", ",
+            counter.Select(c => $"{c.Start.Fields["componentId"]}:{c.Start.Fields["reason"]}")));
+        ulong counterId = counter.Count > 0 ? (ulong)counter[0].Start.Fields["componentId"] : 0;
+        H.Check("PerfTrace_ChildMountReason",
+            counter.Count > 0 && counterId != 0 && (string)counter[0].Start.Fields["reason"] == "mount");
+
+        // The click's setState names the counter (the "updater"), and the counter's next
+        // render reports "state" under the same id.
+        var stateChange = events.FirstOrDefault(e => e.Name == "StateChange" && Equals(e.Fields["componentId"], counterId));
+        H.Check("PerfTrace_StateChangeOwner",
+            stateChange is not null && (string)stateChange.Fields["hook"] == "UseState" && (bool)stateChange.Fields["changed"]);
+        var update = counter.FirstOrDefault(c => stateChange is not null && c.Start.Timestamp > stateChange.Timestamp);
+        H.Check("PerfTrace_ChildUpdateAfterState",
+            update is not null && (ulong)update.Start.Fields["componentId"] == counterId
+            && (string)update.Start.Fields["reason"] == "state");
+
+        // Inclusive nesting: pass > root component > reconcile > child component.
+        H.Check("PerfTrace_ComponentInsidePassAndReconcile",
+            update is not null && update.Ancestors().Any(a => a.Name == "Reconcile")
+            && update.Ancestors().Any(a => a.Name == "RenderPass"));
+
+        H.Check("PerfTrace_RootEffectsSpan",
+            spans.Any(s => s.Name == "Effects" && s.Parent?.Name == "RenderPass"
+                && root is not null && Equals(s.Start.Fields["componentId"], root.Start.Fields["componentId"])));
+
+        // [a, b, c] -> [c, a, d]: b removed, d inserted, and one of a / c moved.
+        var shuffle = spans.FirstOrDefault(s => s.Name == "ChildReconcile"
+            && Equals(s.Start.Fields["oldCount"], 3u) && Equals(s.Start.Fields["newCount"], 3u)
+            && !Equals(s.Stop.Fields["inserted"], 0u));
+        Console.WriteLine(shuffle is null ? "# perf trace: no keyed shuffle span" :
+            $"# perf trace: shuffle inserted={shuffle.Stop.Fields["inserted"]} removed={shuffle.Stop.Fields["removed"]} moved={shuffle.Stop.Fields["moved"]} replaced={shuffle.Stop.Fields["replaced"]}");
+        H.Check("PerfTrace_KeyedEditCounts",
+            shuffle is not null && Equals(shuffle.Stop.Fields["inserted"], 1u) && Equals(shuffle.Stop.Fields["removed"], 1u)
+            && Equals(shuffle.Stop.Fields["moved"], 1u) && Equals(shuffle.Stop.Fields["replaced"], 0u));
+
+        // Rows the repeater realizes during layout run outside any pass, yet each still gets a
+        // mount span inside its own outermost Reconcile span.
+        var rows = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceRow)).ToList();
+        var outside = rows.Where(r => r.Ancestors().All(a => a.Name != "RenderPass")).ToList();
+        var rowEntries = outside.Select(r => r.Ancestors().LastOrDefault(a => a.Name == "Reconcile"))
+            .Select(e => e is null ? "none" : $"{e.Start.Fields["entry"]}/{e.Start.Fields["element"]}").Distinct().ToList();
+        Console.WriteLine($"# perf trace: rows={rows.Count} realized outside a pass={outside.Count} entries={string.Join(",", rowEntries)}");
+        H.Check("PerfTrace_RowsRealizedOutsidePass",
+            outside.Count > 0 && outside.All(r => (string)r.Start.Fields["reason"] == "mount")
+            && rowEntries.SequenceEqual(["mount/ComponentElement<String>"]));
+
+        // Duplicate sibling keys are reported (not a bailout: the panel still reconciles).
+        H.Check("PerfTrace_KeyedListDiagnostic",
+            events.Any(e => e.Name == "KeyedListDiagnostic" && (string)e.Fields["kind"] == "duplicateKey"
+                && !(bool)e.Fields["bailedOut"]));
+
+        // The EventSource is off here, so these reasons come from the perf spans' own
+        // classification (the context one from the FuncElement refinement it also enables).
+        string[] Reasons(string name) => components.Where(c => (string)c.Start.Fields["name"] == name)
+            .Select(c => (string)c.Start.Fields["reason"]).ToArray();
+        var propsReasons = Reasons(nameof(PerfTracePropsChild));
+        var funcReasons = Reasons(PerfTraceScenario.ThemedFunctionName);
+        Console.WriteLine($"# perf trace: props child={string.Join(",", propsReasons)} func={string.Join(",", funcReasons)}"
+            + $" eventSourceOn={ComponentRenderTrace.IsEnabled}");
+        H.Check("PerfTrace_PropsAndContextReasons",
+            !ComponentRenderTrace.IsEnabled && propsReasons.Contains("props") && funcReasons.Contains("context"));
+
+        // The child that throws inside an error boundary still closes its span (Pair drops a
+        // span whose Stop never came, and SpansBalanced checks it closed under the same id).
+        var thrower = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceThrower)).ToList();
+        Console.WriteLine("# perf trace: thrower renders " + string.Join(",", thrower.Select(c => c.Start.Fields["reason"])));
+        H.Check("PerfTrace_ThrowingRenderClosesItsSpan",
+            thrower.Any(c => (string)c.Start.Fields["reason"] == "props") && balanced);
+
+        // TextBlock -> Button in the same slot replaces that control in place.
+        H.Check("PerfTrace_ReplacedCount",
+            spans.Any(s => s.Name == "ChildReconcile" && Equals(s.Start.Fields["oldCount"], 1u)
+                && Equals(s.Start.Fields["newCount"], 1u) && Equals(s.Stop.Fields["replaced"], 1u)));
+
+        // Function and memo components are named by their render function (as DevTools names
+        // them), so they no longer all aggregate under FuncElement / MemoElement.
+        var names = components.Select(c => (string)c.Start.Fields["name"]).Distinct().ToList();
+        Console.WriteLine("# perf trace: component names " + string.Join(", ", names));
+        H.Check("PerfTrace_FunctionComponentsNamed",
+            names.Contains(PerfTraceScenario.RootName) && names.Contains(PerfTraceScenario.ThemedFunctionName)
+            && names.Contains("PerfTraceFunctions.Badge") && names.Contains(PerfTraceScenario.MemoName)
+            && !names.Contains(nameof(FuncElement)) && !names.Contains(nameof(MemoElement)));
+
+        // Each pass names whoever requested it: nobody for the first mount, the counter for its
+        // click, the root for the shuffle (the root's own state). The ids are the components'.
+        var firstPass = passes.OrderBy(p => p.Start.Timestamp).FirstOrDefault();
+        var counterPass = update?.Ancestors().FirstOrDefault(a => a.Name == "RenderPass");
+        var shufflePass = shuffle?.Ancestors().FirstOrDefault(a => a.Name == "RenderPass");
+        string Requester(Span? pass) => pass is null ? "none"
+            : $"{pass.Start.Fields["requesterId"]}/{pass.Start.Fields["requesterName"]}/{pass.Start.Fields["requestCount"]}";
+        Console.WriteLine($"# perf trace: requesters first={Requester(firstPass)} counter={Requester(counterPass)} shuffle={Requester(shufflePass)}");
+        // A request made during a pass (an effect's setState) belongs to the next pass.
+        var effectRenders = components.Where(c => (string)c.Start.Fields["name"] == nameof(PerfTraceEffectSetter)).ToList();
+        var effectUpdate = effectRenders.FirstOrDefault(c => (string)c.Start.Fields["reason"] == "state");
+        var effectPass = effectUpdate?.Ancestors().FirstOrDefault(a => a.Name == "RenderPass");
+        var effectMountPass = effectRenders.FirstOrDefault()?.Ancestors().FirstOrDefault(a => a.Name == "RenderPass");
+        Console.WriteLine($"# perf trace: effect setter renders={string.Join(",", effectRenders.Select(c => c.Start.Fields["reason"]))} pass={Requester(effectPass)}");
+        H.Check("PerfTrace_EffectRequestNamesTheNextPass",
+            effectUpdate is not null && effectPass is not null && !ReferenceEquals(effectPass, effectMountPass)
+            && Equals(effectPass.Start.Fields["requesterId"], effectUpdate.Start.Fields["componentId"])
+            && (string)effectPass.Start.Fields["requesterName"] == nameof(PerfTraceEffectSetter));
+        H.Check("PerfTrace_PassRequesters",
+            firstPass is not null && Equals(firstPass.Start.Fields["requesterId"], 0UL) && (string)firstPass.Start.Fields["requesterName"] == ""
+            && counterPass is not null && Equals(counterPass.Start.Fields["requesterId"], counterId)
+            && (string)counterPass.Start.Fields["requesterName"] == nameof(PerfTraceCounter)
+            && (uint)counterPass.Start.Fields["requestCount"] >= 1
+            && shufflePass is not null && root is not null
+            && Equals(shufflePass.Start.Fields["requesterId"], root.Start.Fields["componentId"])
+            && (string)shufflePass.Start.Fields["requesterName"] == PerfTraceScenario.RootName);
+
+        // A Reconcile Stop's edits are the sum of the ChildReconcile Stops it encloses (its
+        // nearest Reconcile ancestor), and the shuffle's pass shows its insert / remove / move.
+        string[] editKeys = ["inserted", "removed", "moved", "replaced"];
+        var reconciles = spans.Where(s => s.Name == "Reconcile").ToList();
+        var mismatched = reconciles.Where(r =>
+        {
+            var children = spans.Where(s => s.Name == "ChildReconcile"
+                && ReferenceEquals(s.Ancestors().FirstOrDefault(a => a.Name == "Reconcile"), r)).ToList();
+            return editKeys.Any(k => (uint)r.Stop.Fields[k] != (uint)children.Sum(c => (long)(uint)c.Stop.Fields[k]));
+        }).ToList();
+        var shuffleReconcile = shuffle?.Ancestors().FirstOrDefault(a => a.Name == "Reconcile");
+        Console.WriteLine($"# perf trace: reconciles={reconciles.Count} mismatched={mismatched.Count} shuffle edits="
+            + (shuffleReconcile is null ? "none" : string.Join(",", editKeys.Select(k => shuffleReconcile.Stop.Fields[k]))));
+        H.Check("PerfTrace_ReconcileEditTotals",
+            reconciles.Count > 0 && mismatched.Count == 0 && shuffleReconcile is not null
+            && (uint)shuffleReconcile.Stop.Fields["inserted"] >= 1 && (uint)shuffleReconcile.Stop.Fields["removed"] >= 1
+            && (uint)shuffleReconcile.Stop.Fields["moved"] >= 1);
+    }
+
+    /// <summary>A span reconstructed from a Start/Stop pair on one thread.</summary>
+    private sealed class Span(CapturedEtwEvent start, Span? parent)
+    {
+        public CapturedEtwEvent Start { get; } = start;
+        public CapturedEtwEvent Stop { get; set; } = null!;
+        public Span? Parent { get; } = parent;
+        public string Name => Start.Name!;
+
+        public IEnumerable<Span> Ancestors()
+        {
+            for (var p = Parent; p is not null; p = p.Parent) yield return p;
+        }
+    }
+
+    // Per-thread stack pairing — how winapp nests scopes across providers. Balanced when every
+    // Stop closes the innermost open span of the same name and nothing is left open.
+    private static List<Span> Pair(List<CapturedEtwEvent> events, out bool balanced)
+    {
+        balanced = true;
+        var spans = new List<Span>();
+        var stacks = new Dictionary<int, Stack<Span>>();
+        foreach (var e in events.Where(e => e.Opcode is 1 or 2).OrderBy(e => e.Timestamp))
+        {
+            if (!stacks.TryGetValue(e.ThreadId, out var stack))
+                stacks[e.ThreadId] = stack = new Stack<Span>();
+            if (e.Opcode == 1)
+            {
+                var span = new Span(e, stack.Count > 0 ? stack.Peek() : null);
+                stack.Push(span);
+                spans.Add(span);
+            }
+            else if (stack.Count > 0 && stack.Peek().Name == e.Name)
+            {
+                stack.Pop().Stop = e;
+            }
+            else
+            {
+                Console.WriteLine($"# perf trace: unmatched stop {e.Name} (open: {(stack.Count > 0 ? stack.Peek().Name : "none")})");
+                balanced = false;
+            }
+        }
+        if (stacks.Values.Any(s => s.Count > 0))
+        {
+            Console.WriteLine("# perf trace: left open: " + string.Join(", ", stacks.Values.SelectMany(s => s).Select(s => s.Name)));
+            balanced = false;
+        }
+        spans.RemoveAll(s => s.Stop is null);
+        return spans;
+    }
+}
+
+/// <summary>
+/// The emit sites' enable checks: a session that asks for some keywords must cost the app
+/// only those. Each round records a full render scenario under a keyword subset and compares
+/// what the provider handed ETW with what the session recorded — a write the session did not
+/// ask for is dropped by ETW, so it shows up only as a surplus here. The rounds
+/// (<see cref="PerfTraceScenario.GateRounds"/>) turn each keyword on alone, so an emit site
+/// checking the wrong keyword or level is caught, not just one with no check at all.
+/// </summary>
+internal class PerfTrace_UnrequestedKeywordsWriteNothing(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        foreach (var (label, level, keywords) in PerfTraceScenario.GateRounds)
+        {
+            var run = await PerfTraceScenario.RunAsync(H, level, keywords);
+            if (run is null)
+            {
+                H.Skip($"PerfTrace_OnlyRequestedWrites_{label}", PerfTraceScenario.SkipReason);
+                if (label == "Pass")
+                {
+                    H.Skip("PerfTrace_PassOnly_ReconcileEdits", PerfTraceScenario.SkipReason);
+                    H.Skip("PerfTrace_PassOnly_Requesters", PerfTraceScenario.SkipReason);
+                }
+                continue;
+            }
+            var (events, written) = run.Value;
+            var keywordsSeen = events.Select(e => e.Keyword).Distinct().ToList();
+            Console.WriteLine($"# perf gate {label}: written={written} recorded={events.Count} keywords=" +
+                string.Join("|", keywordsSeen.Select(k => "0x" + k.ToString("X"))));
+            H.Check($"PerfTrace_OnlyRequestedWrites_{label}",
+                events.Count > 0 && written == events.Count && keywordsSeen.All(k => (k & keywords) != 0));
+
+            if (label == "Pass")
+            {
+                // With Children and State off, the pass still says who asked for it and the
+                // reconcile still counts its edits (the shuffle's insert / remove / move).
+                var edits = events.Where(e => e.Name == "Reconcile" && e.Opcode == 2)
+                    .Select(e => ((uint)e.Fields["inserted"], (uint)e.Fields["removed"], (uint)e.Fields["moved"])).ToList();
+                var requesters = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+                    .Select(e => (string)e.Fields["requesterName"]).ToList();
+                Console.WriteLine($"# perf gate Pass: reconcile edits={string.Join(" ", edits)} requesters={string.Join(",", requesters)}");
+                H.Check("PerfTrace_PassOnly_ReconcileEdits", edits.Any(e => e.Item1 >= 1 && e.Item2 >= 1 && e.Item3 >= 1));
+                H.Check("PerfTrace_PassOnly_Requesters",
+                    requesters.Contains(nameof(PerfTraceCounter)) && requesters.Contains(PerfTraceScenario.RootName));
+            }
+        }
+    }
+}
+
+/// <summary>
+/// The selftests' recording harness: runs a render scenario under a private, PID-scoped
+/// session (winapp's attach mode) and returns what was recorded and what was written.
+/// </summary>
+internal static class PerfTraceScenario
+{
+    /// <summary>
+    /// The keyword subsets the gating fixtures record under: each keyword alone (so an emit
+    /// site checking the wrong keyword writes in a round that did not ask for it), every
+    /// keyword but Pass, and everything at level 4 (so a Verbose site checking an
+    /// Informational gate shows up too).
+    /// </summary>
+    public static readonly (string Label, byte Level, ulong Keywords)[] GateRounds =
+    [
+        ("Pass", 5, ReactorPerfTrace.Keywords.Pass),
+        ("Component", 5, ReactorPerfTrace.Keywords.Component),
+        ("Children", 5, ReactorPerfTrace.Keywords.Children),
+        ("State", 5, ReactorPerfTrace.Keywords.State),
+        ("NotPass", 5, ReactorPerfTrace.Keywords.Component | ReactorPerfTrace.Keywords.Children | ReactorPerfTrace.Keywords.State),
+        ("AllLevel4", 4, 0xF),
+    ];
+
+    public const string SkipReason = "this account may not start an ETW session (not elevated, not in Performance Log Users)";
+
+    // The perf names of RunAsync's function components: the lambdas are written in RunAsync,
+    // so they read "<factory> in PerfTraceScenario.RunAsync" (DevTools' form).
+    public const string RootName = "render in PerfTraceScenario.RunAsync";
+    public const string ThemedFunctionName = "RenderEachTime in PerfTraceScenario.RunAsync";
+    public const string MemoName = "Memo in PerfTraceScenario.RunAsync";
+
+    private static readonly string[] Rows = Enumerable.Range(0, 200).Select(i => "row" + i).ToArray();
+
+    /// <summary>
+    /// A <c>ReactorHost</c> scenario: mount, a child component's own setState, a keyed reorder,
+    /// duplicate sibling keys, and rows a virtualized list realizes during layout.
+    /// </summary>
+    public static Task<(List<CapturedEtwEvent> Events, long Written)?> RunAsync(Harness h, byte level, ulong keywords)
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        return CaptureAsync(h, level, keywords,
+            async () =>
+            {
+                host = h.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (keys, setKeys) = ctx.UseState(new[] { "a", "b", "c" });
+                    bool shuffled = keys[0] == "c";
+                    return VStack(
+                        Button("perf-shuffle", () => setKeys(["c", "a", "d"])),
+                        Component<PerfTraceCounter>(),
+                        VStack(keys.Select(k => (Element)TextBlock("key " + k).WithKey(k)).ToArray()),
+                        VStack(TextBlock("dup 1").WithKey("dup"), TextBlock("dup 2").WithKey("dup")),
+                        LazyVStack(Rows, static r => r, static (r, _) => Component<PerfTraceRow, string>(r)).Height(120),
+                        // The shuffle also changes a child's props, a consumed context, a slot's
+                        // control type, and makes a child throw inside an error boundary.
+                        Component<PerfTracePropsChild, string>(keys[0]),
+                        Component<PerfTraceEffectSetter>(),
+                        RenderEachTime(c => TextBlock("theme " + c.UseContext(PerfTracePropsChild.Theme))),
+                        RenderEachTime(PerfTraceFunctions.Badge),
+                        Memo(_ => TextBlock("perf memo"), keys.Length),
+                        VStack(shuffled ? Button("perf-swapped") : TextBlock("perf swap me")),
+                        ErrorBoundary(Component<PerfTraceThrower, bool>(shuffled), TextBlock("perf caught")))
+                        .Provide(PerfTracePropsChild.Theme, keys[0]);
+                });
+                await Harness.Render();
+                await Harness.Render();
+
+                h.ClickButton("perf-inc");
+                await Harness.Render();
+                h.ClickButton("perf-shuffle");
+                await Harness.Render();
+                await Harness.Render();
+                // A reconcile after the shuffle: its edit totals must not carry the shuffle's.
+                h.ClickButton("perf-inc");
+                await Harness.Render();
+            },
+            () => host?.Dispose());
+    }
+
+    /// <summary>A <c>ReactorHostControl</c> scenario: mount, then a root setState.</summary>
+    public static Task<(List<CapturedEtwEvent> Events, long Written)?> RunHostControlAsync(Harness h, byte level, ulong keywords)
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
+        return CaptureAsync(h, level, keywords,
+            async () =>
+            {
+                control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                var root = new PerfTraceControlRoot();
+                control.Mount(root);
+                h.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                // A standalone control is not the active host, so Harness.Render() cannot await it.
+                await Harness.WaitFor(() => root.Bump is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                root.Bump?.Invoke();
+                await Harness.WaitFor(() => root.Renders >= 2, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                // Off the UI thread: the root's thread-safe setter, then a child's.
+                await Task.Run(() => root.WorkerBump!());
+                await Harness.WaitFor(() => root.Renders >= 3, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                int childRenders = root.Worker.Renders;
+                await Task.Run(() => root.Worker.WorkerBump!());
+                await Harness.WaitFor(() => root.Worker.Renders > childRenders, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+            },
+            () => control?.Dispose());
+    }
+
+    /// <summary>
+    /// A root whose first Render() is left by an app-requested propagation, then re-renders
+    /// from its own state — with only this provider listening (the EventSource is off).
+    /// </summary>
+    public static Task<(List<CapturedEtwEvent> Events, long Written)?> RunPropagatedRootAsync(Harness h)
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        NestedWindowScope? scope = null;
+        var previousCallback = ReactorApplication.OnUnhandledException;
+        return CaptureAsync(h, level: 4, ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                ReactorApplication.OnUnhandledException = _ => false;
+                scope = new NestedWindowScope("PerfTrace propagated root");
+                host = h.CreateHost();
+                var root = new RenderedNestedPropagatingRoot(scope.Window, scope.Hosts) { PropagateOnce = true };
+                try { host.Mount(root); }
+                catch (InvalidOperationException ex)
+                {
+                    // Expected: the app asked the nested failure to propagate out of Mount.
+                    Console.WriteLine("# perf propagated root: escaped " + ex.Message);
+                }
+                await Harness.Render();
+                root.Bump?.Invoke();
+                await Harness.Render();
+                await Harness.WaitFor(() => h.FindTextContaining("propagated root recovered") is not null, maxPasses: 32, perPassMs: 10);
+            },
+            () =>
+            {
+                ReactorApplication.OnUnhandledException = previousCallback;
+                host?.Dispose();
+                scope?.Dispose();
+            });
+    }
+
+    /// <summary>A function root that mounts a class-component replacement from its first render.</summary>
+    public static Task<(List<CapturedEtwEvent> Events, long Written)?> RunReentrantMountAsync(Harness h)
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        return CaptureAsync(h, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                host = h.CreateHost();
+                bool replaced = false;
+                host.Mount(ctx =>
+                {
+                    var (_, setTicks) = ctx.UseState(0);
+                    if (!replaced)
+                    {
+                        replaced = true;
+                        host.Mount(new PerfTraceReplacementRoot());
+                        // The outgoing root asks for a render after it was replaced: the pass
+                        // it lands in must not name the replacement, which never asked.
+                        setTicks(1);
+                    }
+                    return TextBlock("perf outgoing root");
+                });
+                await Harness.Render();
+                await Harness.WaitFor(() => h.FindText("perf replacement root") is not null, maxPasses: 32, perPassMs: 10);
+                await Harness.Render();
+            },
+            () => host?.Dispose());
+    }
+
+    internal static async Task<(List<CapturedEtwEvent> Events, long Written)?> CaptureAsync(
+        Harness h, byte level, ulong keywords, Func<Task> drive, Action dispose)
+    {
+        string etl = global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(),
+            "reactor-perf-selftest-" + Guid.NewGuid().ToString("N") + ".etl");
+        EtwPrivateCapture capture;
+        try
+        {
+            capture = EtwPrivateCapture.Start(etl);
+        }
+        catch (global::System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 5)
+        {
+            return null;
+        }
+
+        try
+        {
+            long written;
+            using (capture)
+            {
+                capture.Enable(ReactorPerfTrace.ProviderId, level, keywords);
+                // Read on this (UI) thread right after the enable and right before the stop, with
+                // no await in between either pair, so nothing else writes inside the window.
+                long before = ReactorPerfTrace.WriteCountForTests;
+                await drive();
+                written = ReactorPerfTrace.WriteCountForTests - before;
+                capture.Stop();
+            }
+            var events = EtwPrivateCapture.Read(etl, ReactorPerfTrace.ProviderId)
+                .Where(e => e.ProcessId == Environment.ProcessId)
+                .ToList();
+            return (events, written);
+        }
+        finally
+        {
+            dispose();
+            h.SetContent(null);
+            try { global::System.IO.File.Delete(etl); }
+            catch (global::System.IO.IOException ex)
+            {
+                // Best effort: a leftover temp ETL must not fail the test.
+                Console.WriteLine("# could not delete " + etl + ": " + ex.Message);
+            }
+        }
+    }
+}
+
+/// <summary>
+/// The other host: a <c>ReactorHostControl</c>'s passes, root span and root effects, and the
+/// same keyword gating (its render loop is a separate copy of <c>ReactorHost</c>'s).
+/// </summary>
+internal class PerfTrace_HostControlSpansAndGating(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var run = await PerfTraceScenario.RunHostControlAsync(H, level: 5, keywords: 0xF);
+        if (run is null)
+        {
+            foreach (var check in PerfTraceScenario.GateRounds.Select(r => "PerfTrace_HostControl_OnlyRequestedWrites_" + r.Label)
+                .Prepend("PerfTrace_HostControl_RootRequester").Prepend("PerfTrace_HostControl_RootSpans"))
+                H.Skip(check, PerfTraceScenario.SkipReason);
+            return;
+        }
+        var events = run.Value.Events;
+        string Name(CapturedEtwEvent e) => e.Fields.TryGetValue("name", out var n) ? (string)n : "";
+        var rootStarts = events.Where(e => e.Name == "ComponentRender" && e.Opcode == 1 && Name(e) == nameof(PerfTraceControlRoot)).ToList();
+        var passStarts = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1).ToList();
+        var effects = events.Where(e => e.Name == "Effects" && e.Opcode == 1).ToList();
+        Console.WriteLine($"# perf host control: root renders=" + string.Join(",", rootStarts.Select(e => e.Fields["reason"]))
+            + $" passes={passStarts.Count} effects={effects.Count}");
+        H.Check("PerfTrace_HostControl_RootSpans",
+            rootStarts.Count == 4 && (string)rootStarts[0].Fields["reason"] == "mount"
+            && rootStarts.Skip(1).All(e => (string)e.Fields["reason"] == "state")
+            && rootStarts.Select(e => e.Fields["componentId"]).Distinct().Count() == 1
+            && passStarts.Count >= 4
+            && effects.Any(e => Equals(e.Fields["componentId"], rootStarts[0].Fields["componentId"])));
+
+        // Requesters, in order: the root's setState on the UI thread, the root's thread-safe
+        // setState from a worker (claimed and noted there), then a child's thread-safe setState
+        // from a worker (queued to the UI thread, where its wrapper claims).
+        var child = events.FirstOrDefault(e => e.Name == "ComponentRender" && e.Opcode == 1 && Name(e) == nameof(PerfTraceWorkerChild));
+        var requested = passStarts.Where(e => (ulong)e.Fields["requesterId"] != 0)
+            .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}").ToList();
+        Console.WriteLine("# perf host control: requesters " + string.Join(",", requested));
+        H.Check("PerfTrace_HostControl_RootRequester",
+            rootStarts.Count > 0 && child is not null && requested.SequenceEqual([
+                $"{rootStarts[0].Fields["componentId"]}/{nameof(PerfTraceControlRoot)}",
+                $"{rootStarts[0].Fields["componentId"]}/{nameof(PerfTraceControlRoot)}",
+                $"{child.Fields["componentId"]}/{nameof(PerfTraceWorkerChild)}"]));
+
+        foreach (var (label, level, keywords) in PerfTraceScenario.GateRounds)
+        {
+            var gated = await PerfTraceScenario.RunHostControlAsync(H, level, keywords);
+            var (recorded, written) = gated!.Value;
+            Console.WriteLine($"# perf host control gate {label}: written={written} recorded={recorded.Count}");
+            H.Check($"PerfTrace_HostControl_OnlyRequestedWrites_{label}",
+                recorded.Count > 0 && written == recorded.Count && recorded.All(e => (e.Keyword & keywords) != 0));
+        }
+    }
+}
+
+/// <summary>
+/// A root whose first render is left by an app-requested propagation still counts as
+/// rendered: its next render reports <c>state</c>, not a second <c>mount</c> — with only the
+/// perf provider listening, so the EventSource's bookkeeping can't mask it.
+/// </summary>
+internal class PerfTrace_PropagatedRootAdvancesToUpdate(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var run = await PerfTraceScenario.RunPropagatedRootAsync(H);
+        if (run is null)
+        {
+            H.Skip("PerfTrace_PropagatedRoot_NextRenderIsUpdate", PerfTraceScenario.SkipReason);
+            return;
+        }
+        // Each root must report mount then state. (ReactorHost only: a standalone
+        // ReactorHostControl renders off its Mount call, so a propagation escapes to the
+        // dispatcher; its catch filter is the same line as ReactorHost's.)
+        var perRoot = run.Value.Events
+            .Where(e => e.Name == "ComponentRender" && e.Opcode == 1
+                && e.Fields.TryGetValue("name", out var n) && (string)n == nameof(RenderedNestedPropagatingRoot))
+            .GroupBy(e => e.Fields["componentId"])
+            .Select(g => string.Join(",", g.Select(e => (string)e.Fields["reason"])))
+            .ToList();
+        Console.WriteLine($"# perf propagated root: {string.Join(" | ", perRoot)} eventSourceOn={ComponentRenderTrace.IsEnabled}");
+        H.Check("PerfTrace_PropagatedRoot_NextRenderIsUpdate",
+            !ComponentRenderTrace.IsEnabled && perRoot.Count == 1 && perRoot[0] == "mount,state");
+    }
+}
+
+/// <summary>
+/// A root that mounts a replacement during its own render: the effects the host flushes at the
+/// end of that pass are the live (replacement) root's, so the <c>Effects</c> span must name the
+/// replacement, never the outgoing root.
+/// </summary>
+internal class PerfTrace_ReentrantMountEffectsNameLiveRoot(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        var run = await PerfTraceScenario.RunReentrantMountAsync(H);
+        if (run is null)
+        {
+            H.Skip("PerfTrace_ReentrantMount_EffectsNameLiveRoot", PerfTraceScenario.SkipReason);
+            H.Skip("PerfTrace_ReentrantMount_RetiredRootRequestNamesNobody", PerfTraceScenario.SkipReason);
+            return;
+        }
+        var events = run.Value.Events;
+        var starts = events.Where(e => e.Name == "ComponentRender" && e.Opcode == 1).ToList();
+        var outgoing = starts.Where(e => (string)e.Fields["name"] == "render in PerfTraceScenario.RunReentrantMountAsync").Select(e => e.Fields["componentId"]).Distinct().ToList();
+        var live = starts.Where(e => (string)e.Fields["name"] == nameof(PerfTraceReplacementRoot)).Select(e => e.Fields["componentId"]).Distinct().ToList();
+        var effects = events.Where(e => e.Name == "Effects" && e.Opcode == 1).Select(e => e.Fields["componentId"]).ToList();
+        Console.WriteLine($"# perf reentrant: outgoing={string.Join(",", outgoing)} live={string.Join(",", live)} effects={string.Join(",", effects)}");
+        H.Check("PerfTrace_ReentrantMount_EffectsNameLiveRoot",
+            outgoing.Count == 1 && live.Count == 1 && effects.Count > 0 && effects.All(id => Equals(id, live[0])));
+
+        var passes = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+            .Select(e => ((ulong)e.Fields["requesterId"], (string)e.Fields["requesterName"], (uint)e.Fields["requestCount"])).ToList();
+        Console.WriteLine("# perf reentrant: passes " + string.Join(" ", passes));
+        H.Check("PerfTrace_ReentrantMount_RetiredRootRequestNamesNobody",
+            live.Count == 1 && passes.Count >= 2 && passes.Skip(1).Any(p => p.Item3 >= 1)
+            && passes.All(p => p.Item1 != (ulong)live[0] && p.Item2 != nameof(PerfTraceReplacementRoot)));
+    }
+}
+
+/// <summary>
+/// A root mounted over another, on each host, then asking for a render from its own state:
+/// the pass names the new root — its rerender is bound to its own diagnostics, not to the
+/// retired root's. On the control the first root is a function root that asks once too, so
+/// both of the control's root kinds are covered.
+/// </summary>
+internal class PerfTrace_RemountedRootNamesItself(Harness h) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        var hostRoot = new PerfTraceRemountedRoot();
+        var hostRun = await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                host = H.CreateHost();
+                host.Mount(new PerfTraceReplacementRoot());
+                await Harness.Render();
+                host.Mount(hostRoot);
+                await Harness.Render();
+                hostRoot.Bump!();
+                await Harness.Render();
+            },
+            () => host?.Dispose());
+
+        Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
+        var controlRoot = new PerfTraceRemountedRoot();
+        Action? funcBump = null;
+        var controlRun = hostRun is null ? null : await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                // A function root first: its own request names it, then the class root replaces it.
+                control.Mount(ctx =>
+                {
+                    var (n, setN) = ctx.UseState(0);
+                    funcBump = () => setN(n + 1);
+                    return TextBlock($"perf control function root {n}");
+                });
+                H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                await Harness.WaitFor(() => H.FindText("perf control function root 0") is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                funcBump!();
+                await Harness.WaitFor(() => H.FindText("perf control function root 1") is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                control.Mount(controlRoot);
+                await Harness.WaitFor(() => controlRoot.Bump is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                controlRoot.Bump!();
+                await Harness.WaitFor(() => controlRoot.Renders >= 2, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+            },
+            () => control?.Dispose());
+
+        if (hostRun is null || controlRun is null)
+        {
+            H.Skip("PerfTrace_RemountedRoot_HostNamesNewRoot", PerfTraceScenario.SkipReason);
+            H.Skip("PerfTrace_RemountedRoot_ControlNamesNewRoot", PerfTraceScenario.SkipReason);
+            return;
+        }
+        Check("PerfTrace_RemountedRoot_HostNamesNewRoot", "host", hostRun.Value.Events, functionRootFirst: false);
+        Check("PerfTrace_RemountedRoot_ControlNamesNewRoot", "control", controlRun.Value.Events, functionRootFirst: true);
+    }
+
+    private void Check(string name, string label, List<CapturedEtwEvent> events, bool functionRootFirst)
+    {
+        string Name(CapturedEtwEvent e) => e.Fields.TryGetValue("name", out var n) ? (string)n : "";
+        var starts = events.Where(e => e.Name == "ComponentRender" && e.Opcode == 1).ToList();
+        var root = starts.FirstOrDefault(e => Name(e) == nameof(PerfTraceRemountedRoot));
+        var function = starts.FirstOrDefault(e => Name(e).StartsWith("render in ", StringComparison.Ordinal));
+        var requested = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1 && (ulong)e.Fields["requesterId"] != 0)
+            .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}").ToList();
+        Console.WriteLine($"# perf remounted root {label}: root={root?.Fields["componentId"]} function={function?.Fields["componentId"]} requesters={string.Join(",", requested)}");
+        var expected = new List<string>();
+        if (functionRootFirst && function is not null)
+            expected.Add($"{function.Fields["componentId"]}/{Name(function)}");
+        if (root is not null)
+            expected.Add($"{root.Fields["componentId"]}/{nameof(PerfTraceRemountedRoot)}");
+        H.Check(name, root is not null && (ulong)root.Fields["componentId"] != 0
+            && (!functionRootFirst || (function is not null && (ulong)function.Fields["componentId"] != 0))
+            && requested.SequenceEqual(expected));
+    }
+}
+
+/// <summary>A root mounted over another that asks for one render from its own state.</summary>
+internal sealed class PerfTraceRemountedRoot : Component
+{
+    public Action? Bump;
+    public int Renders;
+
+    public override Element Render()
+    {
+        Renders++;
+        var (n, setN) = UseState(0);
+        Bump = () => setN(n + 1);
+        return TextBlock($"perf remounted root {n}");
+    }
+}
+
+internal sealed class PerfTraceReplacementRoot : Component
+{
+    public override Element Render() => TextBlock("perf replacement root");
+}
+
+/// <summary>
+/// The <c>ComponentRender</c> call-site fields from a real source map: with source mapping on
+/// (the generator is compiled into this Debug host), a root, a class component and a function
+/// component report the file name and line of the C# that created them — never the directory.
+/// </summary>
+internal class PerfTrace_CallSitesFromTheSourceMap(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly string[] Checks = ["PerfTrace_CallSite_FileAndLine", "PerfTrace_CallSite_HostControlRoot", "PerfTrace_CallSite_NoDirectory"];
+
+    public override async Task RunAsync()
+    {
+        var previous = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled;
+        Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = true;
+        try
+        {
+            // Positive control: this build stamps call sites at all (Release builds do not).
+            if (Component<PerfTraceCounter>().CallSite is null)
+            {
+                foreach (var check in Checks) H.Skip(check, "built without source mapping");
+                return;
+            }
+
+            int line = 0, controlLine = 0;
+            Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+            Microsoft.UI.Reactor.Hosting.ReactorHostControl? control = null;
+            var run = await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Component,
+                async () =>
+                {
+                    host = H.CreateHost();
+                    host.Mount(_ => VStack(Component<PerfTraceCounter>(), RenderEachTime(PerfTraceFunctions.Badge))); line = Here();
+                    await Harness.Render();
+
+                    // The other host: its root reports where ReactorHostControl.Mount was called.
+                    control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl();
+                    control.Mount(new PerfTraceReplacementRoot()); controlLine = Here();
+                    H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                    await Harness.WaitFor(() => H.FindText("perf replacement root") is not null, maxPasses: 32, perPassMs: 10);
+                    await control.WaitForIdleAsync();
+                },
+                () =>
+                {
+                    control?.Dispose();
+                    host?.Dispose();
+                });
+            if (run is null)
+            {
+                foreach (var check in Checks) H.Skip(check, PerfTraceScenario.SkipReason);
+                return;
+            }
+
+            var starts = run.Value.Events.Where(e => e.Name == "ComponentRender" && e.Opcode == 1).ToList();
+            CapturedEtwEvent? Named(Func<string, bool> match) => starts.FirstOrDefault(e => match((string)e.Fields["name"]));
+            var sites = new[]
+            {
+                Named(n => n.StartsWith("render in ", StringComparison.Ordinal)),
+                Named(n => n == nameof(PerfTraceCounter)),
+                Named(n => n == "PerfTraceFunctions.Badge"),
+            };
+            Console.WriteLine($"# perf call sites (expected line {line}): " + string.Join("; ", sites.Select(e => e is null ? "missing"
+                : $"{e.Fields["name"]} @ {e.Fields["callSiteFile"]}:{e.Fields["callSiteLine"]}:{e.Fields["callSiteColumn"]}")));
+            H.Check("PerfTrace_CallSite_FileAndLine",
+                sites.All(e => e is not null && (string)e.Fields["callSiteFile"] == "PerfTraceFixtures.cs"
+                    && (uint)e.Fields["callSiteLine"] == (uint)line && (uint)e.Fields["callSiteColumn"] > 0)
+                // Three calls on one line: the columns tell them apart.
+                && sites.Select(e => e!.Fields["callSiteColumn"]).Distinct().Count() == 3);
+            var controlRoot = Named(n => n == nameof(PerfTraceReplacementRoot));
+            Console.WriteLine($"# perf call sites: control root (expected line {controlLine}) "
+                + (controlRoot is null ? "missing" : $"@ {controlRoot.Fields["callSiteFile"]}:{controlRoot.Fields["callSiteLine"]}"));
+            H.Check("PerfTrace_CallSite_HostControlRoot",
+                controlRoot is not null && (string)controlRoot.Fields["callSiteFile"] == "PerfTraceFixtures.cs"
+                && (uint)controlRoot.Fields["callSiteLine"] == (uint)controlLine);
+            H.Check("PerfTrace_CallSite_NoDirectory",
+                starts.Count > 0 && starts.All(e => ((string)e.Fields["callSiteFile"]).IndexOfAny(['/', '\\', ':']) < 0));
+        }
+        finally
+        {
+            Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.Enabled = previous;
+        }
+    }
+
+    private static int Here([global::System.Runtime.CompilerServices.CallerLineNumber] int line = 0) => line;
+}
+
+/// <summary>
+/// The request bookkeeping behind <c>RenderPass</c>'s requester costs nothing untraced and never
+/// reports stale data: with no session a request records nothing; a request a session noted
+/// right before it stopped is dropped by the untraced pass it scheduled, so a later traced pass
+/// that no component asked for names nobody; a pass queued before a session started names
+/// nobody even when a component's request coalesces into it afterwards; and the Reconcile edit
+/// tally is closed between entries (an open one would make every child reconcile pay for it).
+/// </summary>
+internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly string[] Checks =
+        ["PerfTrace_Requests_UntracedRecordNothing", "PerfTrace_Requests_StaleDiscarded", "PerfTrace_TallyClosedAfterEntry", "PerfTrace_Requests_PendingBeforeSessionNamesNobody", "PerfTrace_Requests_ControlPendingBeforeSessionNamesNobody"];
+
+    public override async Task RunAsync()
+    {
+        using var host = H.CreateHost();
+        // 0: untraced requests (must record nothing); 1: traced requests (must record); 2: ignored.
+        int phase = 0;
+        bool pendingUntraced = false, pendingTraced = false;
+        Microsoft.UI.Reactor.Hosting.ReactorHost.RequestRenderAfterRenderingCheckForTest = caller =>
+        {
+            if (!ReferenceEquals(caller, host)) return;
+            if (phase == 0) pendingUntraced |= caller.PerfRequestsForTests.HasPending;
+            else if (phase == 1) pendingTraced |= caller.PerfRequestsForTests.HasPending;
+        };
+        string Etl() => global::System.IO.Path.Join(global::System.IO.Path.GetTempPath(),
+            "reactor-perf-selftest-" + Guid.NewGuid().ToString("N") + ".etl");
+        string first = Etl(), second = Etl(), third = Etl(), fourth = Etl();
+        try
+        {
+            host.Mount(_ => VStack(Component<PerfTraceCounter>()));
+            await Harness.Render();
+            H.ClickButton("perf-inc");
+            await Harness.Render();
+
+            EtwPrivateCapture noted;
+            try
+            {
+                noted = EtwPrivateCapture.Start(first);
+            }
+            catch (global::System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 5)
+            {
+                foreach (var check in Checks) H.Skip(check, PerfTraceScenario.SkipReason);
+                return;
+            }
+            // The session notes the click, then stops before the pass the click scheduled runs.
+            using (noted)
+            {
+                noted.Enable(ReactorPerfTrace.ProviderId, 4, ReactorPerfTrace.Keywords.Pass);
+                phase = 1;
+                H.ClickButton("perf-inc");
+                phase = 2;
+                noted.Stop();
+            }
+            bool notedBeforeStop = host.PerfRequestsForTests.HasPending;
+            await Harness.Render();
+            bool droppedByUntracedPass = !host.PerfRequestsForTests.HasPending;
+
+            // A traced pass the host asked for itself (no component did).
+            List<CapturedEtwEvent> events;
+            using (var later = EtwPrivateCapture.Start(second))
+            {
+                later.Enable(ReactorPerfTrace.ProviderId, 4, ReactorPerfTrace.Keywords.Pass);
+                host.RequestRender();
+                await Harness.Render();
+                later.Stop();
+            }
+            events = EtwPrivateCapture.Read(second, ReactorPerfTrace.ProviderId).Where(e => e.ProcessId == Environment.ProcessId).ToList();
+            var starts = events.Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+                .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}/{e.Fields["requestCount"]}").ToList();
+            Console.WriteLine($"# perf requests: untraced pending={pendingUntraced} traced pending={pendingTraced} noted={notedBeforeStop}"
+                + $" dropped={droppedByUntracedPass} later passes={string.Join(",", starts)}");
+
+            H.Check("PerfTrace_Requests_UntracedRecordNothing", !pendingUntraced && pendingTraced);
+            H.Check("PerfTrace_Requests_StaleDiscarded",
+                notedBeforeStop && droppedByUntracedPass && starts.Count > 0 && starts.All(s => s == "0//1"));
+            H.Check("PerfTrace_TallyClosedAfterEntry",
+                events.Any(e => e.Name == "Reconcile") && !host.Reconciler.PerfTallyOpenForTests);
+
+            // A pass queued before a session starts (here by the host itself), then a component's
+            // request that coalesces into it once the session listens: the pass names nobody.
+            host.RequestRender();
+            using (var pending = EtwPrivateCapture.Start(third))
+            {
+                pending.Enable(ReactorPerfTrace.ProviderId, 4, ReactorPerfTrace.Keywords.Pass);
+                H.ClickButton("perf-inc");
+                await Harness.Render();
+                pending.Stop();
+            }
+            var pendingStarts = EtwPrivateCapture.Read(third, ReactorPerfTrace.ProviderId).Where(e => e.ProcessId == Environment.ProcessId)
+                .Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+                .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}/{e.Fields["requestCount"]}").ToList();
+            Console.WriteLine($"# perf requests: pending before session passes={string.Join(",", pendingStarts)}");
+            H.Check("PerfTrace_Requests_PendingBeforeSessionNamesNobody",
+                pendingStarts.Count > 0 && pendingStarts[0] == "0//1");
+
+            // The same on a ReactorHostControl (its request bookkeeping is a separate call site):
+            // the root's untraced request queues the pass, its traced one coalesces into it.
+            var controlRoot = new PerfTraceControlRoot();
+            List<string> controlStarts;
+            using (var control = new Microsoft.UI.Reactor.Hosting.ReactorHostControl())
+            {
+                control.Mount(controlRoot);
+                H.SetContent(new Microsoft.UI.Xaml.Controls.Border { Child = control });
+                await Harness.WaitFor(() => controlRoot.Bump is not null, maxPasses: 32, perPassMs: 10);
+                await control.WaitForIdleAsync();
+                controlRoot.Bump!();
+                using (var pending = EtwPrivateCapture.Start(fourth))
+                {
+                    pending.Enable(ReactorPerfTrace.ProviderId, 4, ReactorPerfTrace.Keywords.Pass);
+                    controlRoot.WorkerBump!();
+                    await Harness.WaitFor(() => controlRoot.Renders >= 2, maxPasses: 32, perPassMs: 10);
+                    await control.WaitForIdleAsync();
+                    pending.Stop();
+                }
+                controlStarts = EtwPrivateCapture.Read(fourth, ReactorPerfTrace.ProviderId).Where(e => e.ProcessId == Environment.ProcessId)
+                    .Where(e => e.Name == "RenderPass" && e.Opcode == 1)
+                    .Select(e => $"{e.Fields["requesterId"]}/{e.Fields["requesterName"]}/{e.Fields["requestCount"]}").ToList();
+            }
+            Console.WriteLine($"# perf requests: control pending before session passes={string.Join(",", controlStarts)} renders={controlRoot.Renders}");
+            H.Check("PerfTrace_Requests_ControlPendingBeforeSessionNamesNobody",
+                controlRoot.Renders == 2 && controlStarts.Count > 0 && controlStarts[0] == "0//1");
+        }
+        finally
+        {
+            Microsoft.UI.Reactor.Hosting.ReactorHost.RequestRenderAfterRenderingCheckForTest = null;
+            H.SetContent(null);
+            foreach (var etl in new[] { first, second, third, fourth })
+            {
+                try { global::System.IO.File.Delete(etl); }
+                catch (global::System.IO.IOException ex)
+                {
+                    // Best effort: a leftover temp ETL must not fail the test.
+                    Console.WriteLine("# could not delete " + etl + ": " + ex.Message);
+                }
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Schema revision 3 (issue #1538): what a render achieved, recorded under winapp's own session
+/// (<c>Pass|Component</c> at level 4). A memo component reports a <c>ComponentSkip</c> (memo hit)
+/// when its parent re-renders with equal props and a <c>memoMiss</c> render when they changed; a
+/// render whose output reconciled to nothing reports <c>changes</c> 0 (inclusive of nested
+/// components); and the setState calls a component's effects make are its own <c>stateSets</c>
+/// (exclusive), with the root's effects reported on the <c>Effects</c> span.
+/// </summary>
+internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly string[] Checks =
+    [
+        "PerfTrace_Outcome_MemoHit",
+        "PerfTrace_Outcome_MemoMiss",
+        "PerfTrace_Outcome_NoOpRender",
+        "PerfTrace_Outcome_ChangedRender",
+        "PerfTrace_Outcome_StateSets",
+        "PerfTrace_Outcome_RootEffectsStateSets",
+        "PerfTrace_Outcome_TallyClosed",
+        "PerfTrace_Outcome_MovesCounted",
+        "PerfTrace_Outcome_RemovalCounted",
+        "PerfTrace_Outcome_InsertCounted",
+        "PerfTrace_Outcome_RawItemsCounted",
+        "PerfTrace_Outcome_MemoFunctionGate",
+        "PerfTrace_Outcome_ReplaceCounted",
+        "PerfTrace_Outcome_ExitCounted",
+        "PerfTrace_Outcome_TreeNodeCounted",
+        "PerfTrace_Outcome_TreeChildCounted",
+        "PerfTrace_Outcome_MenuItemCounted",
+        "PerfTrace_Outcome_KeyedMemoReplaced",
+        "PerfTrace_Outcome_ItemElementsCounted",
+    ];
+
+    private const string RootName = "render in PerfTrace_RenderOutcomes.RunAsync";
+    private const string MemoName = "Memo in PerfTrace_RenderOutcomes.RunAsync";
+
+    public override async Task RunAsync()
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        var run = await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (tick, setTick) = ctx.UseState(0);
+                    var (label, setLabel) = ctx.UseState("a");
+                    var (mounted, setMounted) = ctx.UseState(false);
+                    var (keys, setKeys) = ctx.UseState(new[] { "a", "b", "c" });
+                    var (combo, setCombo) = ctx.UseState(new[] { "x", "y" });
+                    var (memoDep, setMemoDep) = ctx.UseState(0);
+                    var (replaced, setReplaced) = ctx.UseState(false);
+                    var (exitKeys, setExitKeys) = ctx.UseState(new[] { "e1", "e2" });
+                    var (tree, setTree) = ctx.UseState(new[] { "t1", "t2" });
+                    var (treeChild, setTreeChild) = ctx.UseState(false);
+                    var (menuLabel, setMenuLabel) = ctx.UseState("outcome menu item");
+                    var (memoKey, setMemoKey) = ctx.UseState("outcome-keyed");
+                    var (itemElements, setItemElements) = ctx.UseState<Element[]>([TextBlock("outcome item 1"), TextBlock("outcome item 2")]);
+                    // Two setState calls from the root's effects: one changes, one does not.
+                    ctx.UseEffect(() =>
+                    {
+                        if (mounted) return;
+                        setMounted(true);
+                        setMounted(true);
+                    }, mounted);
+                    // `tick` is never shown: a tick re-renders the root for nothing.
+                    return VStack(
+                        Button("outcome-tick", () => setTick(tick + 1)),
+                        Button("outcome-label", () => setLabel(label + "b")),
+                        // Keyed rows whose content never changes: a pass that only moves, removes
+                        // or inserts one isolates that edit's count.
+                        Button("outcome-move", () => setKeys(["c", "a", "b"])),
+                        Button("outcome-remove", () => setKeys(["c", "a"])),
+                        Button("outcome-insert", () => setKeys(["c", "a", "d"])),
+                        VStack(keys.Select(k => (Element)TextBlock("outcome key " + k).WithKey(k)).ToArray()),
+                        // Raw items: an edit or a new item changes what the host shows without a
+                        // control being mounted; an equal list in a new array changes nothing.
+                        Button("outcome-combo-edit", () => setCombo(["x", "z"])),
+                        Button("outcome-combo-grow", () => setCombo(["x", "z", "w"])),
+                        Button("outcome-combo-same", () => setCombo(["x", "z", "w"])),
+                        ComboBox(combo),
+                        Component<PerfTraceOutcomeMemoChild, string>(label),
+                        RenderEachTime(PerfTraceFunctions.Static),
+                        Component<PerfTraceOutcomeFanOut>(),
+                        // A Memo(...) function component: skipped while its dependency holds.
+                        Button("outcome-memo", () => setMemoDep(memoDep + 1)),
+                        Memo(_ => TextBlock("outcome memo " + memoDep), memoDep),
+                        // Re-created every render, yet nothing they show changes: a keyed Memo
+                        // whose key holds, and a handler closure capturing the current tick.
+                        Memo(memoKey, () => TextBlock("outcome keyed memo " + memoKey)),
+                        TextBlock("outcome tap").OnTapped((_, _) => setTick(tick + 1)),
+                        // An unkeyed slot whose control type changes: replaced in place (the old
+                        // control is unmounted, the new one mounted).
+                        Button("outcome-replace", () => setReplaced(true)),
+                        VStack(replaced
+                            ? Button("outcome swapped")
+                            : TextBlock("outcome swap me")),
+                        // A row removed with an exit animation: its unmount runs after the pass.
+                        Button("outcome-exit", () => setExitKeys(["e1"])),
+                        VStack(exitKeys.Select(k => (Element)TextBlock("outcome exit " + k)
+                            .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade).WithKey(k)).ToArray()),
+                        // A typed TreeView gaining a root node.
+                        Button("outcome-tree", () => setTree(["t1", "t2", "t3"])),
+                        // ... and then a child under a retained root (same root list).
+                        Button("outcome-tree-child", () => setTreeChild(true)),
+                        TreeView(tree, static t => t, t => treeChild && t == "t1" ? ["t1a"] : null,
+                            static t => TextBlock("outcome node " + t)).Height(120),
+                        // A menu item patched natively; its click closure is new every render.
+                        Button("outcome-menu", () => setMenuLabel("outcome menu item renamed")),
+                        MenuFlyout(TextBlock("outcome menu target"), MenuItem(menuLabel, () => setTick(tick + 1))),
+                        // A keyed Memo whose key changes: one control unmounted, one mounted.
+                        Button("outcome-memo-key", () => setMemoKey("outcome-keyed-2")),
+                        // ComboBox item elements: removing two unmounts two controls; an Empty()
+                        // item mounts nothing, so it changes nothing.
+                        Button("outcome-items-remove", () => setItemElements([])),
+                        Button("outcome-items-empty", () => setItemElements([Empty()])),
+                        ComboBox(itemElements, default, null));
+                });
+                await Harness.Render();
+                await Harness.Render();
+                await Harness.Render();
+                H.ClickButton("outcome-tick");
+                await Harness.Render();
+                H.ClickButton("outcome-label");
+                await Harness.Render();
+                foreach (var button in new[] { "outcome-move", "outcome-remove", "outcome-insert",
+                    "outcome-combo-edit", "outcome-combo-grow", "outcome-combo-same",
+                    "outcome-memo", "outcome-replace", "outcome-exit", "outcome-tree", "outcome-tree-child", "outcome-menu",
+                    "outcome-memo-key", "outcome-items-remove", "outcome-items-empty" })
+                {
+                    H.ClickButton(button);
+                    await Harness.Render();
+                }
+            },
+            () => host?.Dispose());
+        if (run is null)
+        {
+            foreach (var check in Checks) H.Skip(check, PerfTraceScenario.SkipReason);
+            return;
+        }
+
+        var events = run.Value.Events;
+        string Name(CapturedEtwEvent e) => e.Fields.TryGetValue("name", out var n) ? (string)n : "";
+        // Pair each ComponentRender Start with its Stop (same thread, properly nested).
+        var renders = new List<(CapturedEtwEvent Start, CapturedEtwEvent Stop)>();
+        var open = new Stack<CapturedEtwEvent>();
+        foreach (var e in events.Where(e => e.Name == "ComponentRender").OrderBy(e => e.Timestamp))
+        {
+            if (e.Opcode == 1) open.Push(e);
+            else if (open.Count > 0) renders.Add((open.Pop(), e));
+        }
+        string Describe((CapturedEtwEvent Start, CapturedEtwEvent Stop) r)
+            => $"{Name(r.Start)}:{r.Start.Fields["reason"]}:miss={r.Start.Fields["memoMiss"]}:changes={r.Stop.Fields["changes"]}:sets={r.Stop.Fields["ownStateSets"]}";
+        Console.WriteLine("# perf outcomes: " + string.Join(" | ", renders.OrderBy(r => r.Start.Timestamp).Select(Describe)));
+        var skips = events.Where(e => e.Name == "ComponentSkip").ToList();
+        Console.WriteLine("# perf outcomes: skips " + string.Join(",", skips.Select(e => $"{e.Fields["componentId"]}:{Name(e)}")));
+
+        List<(CapturedEtwEvent Start, CapturedEtwEvent Stop)> Of(string name)
+            => renders.Where(r => Name(r.Start) == name).OrderBy(r => r.Start.Timestamp).ToList();
+        var child = Of(nameof(PerfTraceOutcomeMemoChild));
+        var root = Of(RootName);
+        var func = Of("PerfTraceFunctions.Static");
+        var fanOut = Of(nameof(PerfTraceOutcomeFanOut));
+
+        // Memo hits: the child skipped (named and with its own id) on the passes its props held.
+        var childId = child.Count > 0 ? child[0].Start.Fields["componentId"] : null;
+        H.Check("PerfTrace_Outcome_MemoHit",
+            childId is not null && skips.Any(e => Name(e) == nameof(PerfTraceOutcomeMemoChild) && Equals(e.Fields["componentId"], childId))
+            && skips.Any(e => Name(e) == nameof(PerfTraceOutcomeFanOut)));
+
+        // Memo misses: the child's props render is one; its mount, the root's state renders and
+        // the gate-less function component's renders are not.
+        H.Check("PerfTrace_Outcome_MemoMiss",
+            child.Count == 2 && (string)child[0].Start.Fields["reason"] == "mount" && !(bool)child[0].Start.Fields["memoMiss"]
+            && (string)child[1].Start.Fields["reason"] == "props" && (bool)child[1].Start.Fields["memoMiss"]
+            && func.Count >= 3 && func.All(r => !(bool)r.Start.Fields["memoMiss"])
+            && root.Count >= 3 && root.All(r => !(bool)r.Start.Fields["memoMiss"]));
+
+        // The tick: the root and its function child rendered and changed nothing (no control was
+        // created, updated, removed or moved). It is the last root render that ended before the
+        // child's props render began.
+        var labelRender = child.Count == 2 ? child[1] : default;
+        var tickRoot = root.LastOrDefault(r => labelRender.Start is not null && r.Stop.Timestamp < labelRender.Start.Timestamp
+            && (string)r.Start.Fields["reason"] == "state");
+        var tickFunc = func.LastOrDefault(r => tickRoot.Start is not null && r.Start.Timestamp > tickRoot.Start.Timestamp
+            && r.Stop.Timestamp < tickRoot.Stop.Timestamp);
+        H.Check("PerfTrace_Outcome_NoOpRender",
+            tickRoot.Start is not null && (uint)tickRoot.Stop.Fields["changes"] == 0
+            && tickFunc.Start is not null && (uint)tickFunc.Stop.Fields["changes"] == 0);
+
+        // The label: the child updated its text, and the root's count includes it.
+        var labelRoot = root.LastOrDefault(r => labelRender.Start is not null && r.Start.Timestamp < labelRender.Start.Timestamp
+            && r.Stop.Timestamp > labelRender.Stop.Timestamp);
+        H.Check("PerfTrace_Outcome_ChangedRender",
+            labelRender.Start is not null && (uint)labelRender.Stop.Fields["changes"] >= 1
+            && labelRoot.Start is not null && (uint)labelRoot.Stop.Fields["changes"] >= (uint)labelRender.Stop.Fields["changes"]);
+
+        // The fan-out child's mount effects made three setState calls; they are its own, not the
+        // enclosing root's (whose own effects run after its span, on the Effects span).
+        H.Check("PerfTrace_Outcome_StateSets",
+            fanOut.Count >= 1 && (string)fanOut[0].Start.Fields["reason"] == "mount" && (uint)fanOut[0].Stop.Fields["ownStateSets"] == 3
+            && fanOut.Skip(1).All(r => (uint)r.Stop.Fields["ownStateSets"] == 0)
+            && root.Count > 0 && (uint)root[0].Stop.Fields["ownStateSets"] == 0);
+
+        var effectsStops = events.Where(e => e.Name == "Effects" && e.Opcode == 2).Select(e => (uint)e.Fields["ownStateSets"]).ToList();
+        Console.WriteLine("# perf outcomes: root effects stateSets " + string.Join(",", effectsStops));
+        H.Check("PerfTrace_Outcome_RootEffectsStateSets",
+            effectsStops.Count >= 2 && effectsStops[0] == 2 && effectsStops.Skip(1).All(s => s == 0));
+
+        H.Check("PerfTrace_Outcome_TallyClosed", ComponentPerfTally.OpenScopesForTests == 0);
+
+        // The last fifteen root renders each made one kind of edit and nothing else, so the root's
+        // (inclusive) count is exactly that edit's: the moves the pass's Reconcile Stop reports,
+        // one unmounted row, one mounted row, then one raw-items edit each for a changed and a
+        // grown ComboBox list and nothing for an equal list in a new array, the Memo's text, a
+        // replaced row (its unmount and the new control's mount), a row starting its exit
+        // animation, a TreeView root node built (its container is realized later, during layout), a child
+        // node built under a retained root, a menu item renamed in place, a keyed Memo's key change
+        // (its control unmounted and its replacement mounted, never counted twice), two ComboBox
+        // item elements removed, and an Empty() item that mounts nothing.
+        var edits = root.TakeLast(15).Select(r =>
+        {
+            var stop = events.FirstOrDefault(e => e.Name == "Reconcile" && e.Opcode == 2
+                && e.Timestamp > r.Start.Timestamp && e.Timestamp < r.Stop.Timestamp);
+            return (Changes: (uint)r.Stop.Fields["changes"],
+                Moved: stop is null ? uint.MaxValue : (uint)stop.Fields["moved"],
+                Removed: stop is null ? uint.MaxValue : (uint)stop.Fields["removed"],
+                Inserted: stop is null ? uint.MaxValue : (uint)stop.Fields["inserted"],
+                Replaced: stop is null ? uint.MaxValue : (uint)stop.Fields["replaced"]);
+        }).ToList();
+        Console.WriteLine("# perf outcomes: single-edit passes " + string.Join(" ", edits));
+        H.Check("PerfTrace_Outcome_MovesCounted",
+            edits.Count == 15 && edits[0].Moved is >= 1 and < uint.MaxValue && edits[0].Changes == edits[0].Moved);
+        H.Check("PerfTrace_Outcome_RemovalCounted",
+            edits.Count == 15 && edits[1].Removed == 1 && edits[1].Changes == 1);
+        H.Check("PerfTrace_Outcome_InsertCounted",
+            edits.Count == 15 && edits[2].Inserted == 1 && edits[2].Changes == 1);
+        H.Check("PerfTrace_Outcome_RawItemsCounted",
+            edits.Count == 15 && edits[3].Changes == 1 && edits[4].Changes == 1 && edits[5].Changes == 0);
+
+        // The Memo(...) gate: it skipped while its dependency held (the tick), then rendered on the
+        // dependency change as a memo miss that updated its text.
+        var memo = Of(MemoName);
+        var memoId = memo.Count > 0 ? memo[0].Start.Fields["componentId"] : null;
+        Console.WriteLine("# perf outcomes: memo renders " + string.Join(" | ", memo.Select(Describe)));
+        H.Check("PerfTrace_Outcome_MemoFunctionGate",
+            memo.Count == 2 && (string)memo[0].Start.Fields["reason"] == "mount" && !(bool)memo[0].Start.Fields["memoMiss"]
+            && (string)memo[1].Start.Fields["reason"] == "props" && (bool)memo[1].Start.Fields["memoMiss"]
+            && (uint)memo[1].Stop.Fields["changes"] == 1
+            && skips.Any(e => Name(e) == MemoName && Equals(e.Fields["componentId"], memoId))
+            && edits.Count == 15 && edits[6].Changes == 1);
+        H.Check("PerfTrace_Outcome_ReplaceCounted",
+            edits.Count == 15 && edits[7].Replaced == 1 && edits[7].Changes == 2);
+        H.Check("PerfTrace_Outcome_ExitCounted",
+            edits.Count == 15 && edits[8].Changes == 1);
+        H.Check("PerfTrace_Outcome_TreeNodeCounted",
+            edits.Count == 15 && edits[9].Changes == 1);
+        H.Check("PerfTrace_Outcome_TreeChildCounted",
+            edits.Count == 15 && edits[10].Changes == 1);
+        H.Check("PerfTrace_Outcome_MenuItemCounted",
+            edits.Count == 15 && edits[11].Changes == 1);
+        H.Check("PerfTrace_Outcome_KeyedMemoReplaced",
+            edits.Count == 15 && edits[12].Changes == 2);
+        H.Check("PerfTrace_Outcome_ItemElementsCounted",
+            edits.Count == 15 && edits[13].Changes == 2 && edits[14].Changes == 0);
+    }
+}
+
+/// <summary>A memoized child: re-renders only when its props change.</summary>
+internal sealed class PerfTraceOutcomeMemoChild : Component<string>
+{
+    public override Element Render() => TextBlock("outcome " + Props);
+}
+
+/// <summary>Sets three pieces of state from its mount effect, i.e. a setState fan-out (spec 023's PERF005).</summary>
+internal sealed class PerfTraceOutcomeFanOut : Component
+{
+    public override Element Render()
+    {
+        var (a, setA) = UseState(0);
+        var (b, setB) = UseState(0);
+        var (c, setC) = UseState(0);
+        UseEffect(() =>
+        {
+            if (a != 0) return;
+            setA(1);
+            setB(1);
+            setC(1);
+        }, a);
+        return TextBlock($"fan-out {a + b + c}");
+    }
+}
+
+internal static class PerfTraceFunctions
+{
+    /// <summary>A function component written as a method group: its perf name is the method's.</summary>
+    public static Element Badge(RenderContext ctx) => TextBlock("perf badge");
+
+    /// <summary>A function component whose output never changes.</summary>
+    public static Element Static(RenderContext ctx) => TextBlock("perf static");
+}
+
+internal sealed class PerfTraceControlRoot : Component
+{
+    public Action? Bump;
+    public Action? WorkerBump;
+    public int Renders;
+
+    public override Element Render()
+    {
+        Renders++;
+        var (n, setN) = UseState(0);
+        var (w, setW) = UseState(0, threadSafe: true);
+        Bump = () => setN(n + 1);
+        // A thread-safe setter requests from its caller's thread: the claim and the note happen there.
+        WorkerBump = () => setW(w + 1);
+        return VStack(TextBlock($"control {n} {w}"), Component<PerfTraceRow, string>("control row"), Component<PerfTraceWorkerChild, PerfTraceWorkerProbe>(Worker));
+    }
+
+    /// <summary>What the scenario reads from, and calls on, the worker child the reconciler creates.</summary>
+    public readonly PerfTraceWorkerProbe Worker = new();
+}
+
+internal sealed class PerfTraceWorkerProbe
+{
+    public Action? WorkerBump;
+    public int Renders;
+}
+
+/// <summary>A child whose thread-safe setter is called off the UI thread (its request is queued to the UI thread).</summary>
+internal sealed class PerfTraceWorkerChild : Component<PerfTraceWorkerProbe>
+{
+    public override Element Render()
+    {
+        Props.Renders++;
+        var (n, setN) = UseState(0, threadSafe: true);
+        Props.WorkerBump = () => setN(n + 1);
+        return TextBlock($"worker child {n}");
+    }
+}
+
+internal sealed class PerfTraceCounter : Component
+{
+    public override Element Render()
+    {
+        var (n, setN) = UseState(0);
+        return VStack(TextBlock($"perf count {n}"), Button("perf-inc", () => setN(n + 1)));
+    }
+}
+
+/// <summary>Sets its own state once from a mount effect, i.e. during a pass.</summary>
+internal sealed class PerfTraceEffectSetter : Component
+{
+    public override Element Render()
+    {
+        var (loaded, setLoaded) = UseState(false);
+        UseEffect(() =>
+        {
+            if (!loaded) setLoaded(true);
+        }, loaded);
+        return TextBlock(loaded ? "perf effect loaded" : "perf effect loading");
+    }
+}
+
+internal sealed class PerfTraceRow : Component<string>
+{
+    public override Element Render() => TextBlock(Props).Height(24);
+}
+
+internal sealed class PerfTracePropsChild : Component<string>
+{
+    public static readonly Context<string> Theme = new("");
+
+    public override Element Render() => TextBlock("props " + Props);
+}
+
+internal sealed class PerfTraceThrower : Component<bool>
+{
+    public override Element Render()
+        => Props ? throw new InvalidOperationException("PerfTrace selftest: deliberate render failure") : TextBlock("perf thrower");
+}

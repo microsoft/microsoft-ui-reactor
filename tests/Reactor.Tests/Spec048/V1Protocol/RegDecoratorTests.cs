@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 using Microsoft.UI.Xaml;
 using Xunit;
 
@@ -25,6 +26,28 @@ namespace Microsoft.UI.Reactor.Tests.Spec048.V1Protocol;
 [Collection(nameof(ControlRegistryTestCollection))]
 public class RegDecoratorTests
 {
+    [Fact]
+    public void Only_BuiltIn_Flyouts_Use_The_Separate_Decorator_Tag()
+    {
+        Assert.True(new V1DecoratorHandlerAdapter<FlyoutElement>(new FlyoutHandler()).PreservesTargetTag);
+        Assert.True(new V1DecoratorHandlerAdapter<MenuFlyoutElement>(new MenuFlyoutHandler()).PreservesTargetTag);
+        Assert.True(new V1DecoratorHandlerAdapter<CommandBarFlyoutElement>(new CommandBarFlyoutHandler()).PreservesTargetTag);
+
+        var custom = new SourceMappedFlyoutHandler();
+        var element = new FlyoutElement(new TextBlockElement("target"), new TextBlockElement("body"));
+        Assert.NotNull(custom.GetSourceTarget(element));
+        Assert.False(new V1DecoratorHandlerAdapter<FlyoutElement>(custom).PreservesTargetTag);
+    }
+
+    private sealed class SourceMappedFlyoutHandler : IDecoratorElementHandler<FlyoutElement>
+    {
+        public UIElement Mount(MountContext ctx, FlyoutElement element) => null!;
+        public UIElement Update(UpdateContext ctx, FlyoutElement oldEl, FlyoutElement newEl, UIElement control) => control;
+        public V1UnmountDisposition Unmount(UnmountContext ctx, FlyoutElement? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+        public Element? GetSourceTarget(FlyoutElement element) => element.Target;
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // §3.4 — first touch registers the decorator handler exactly once
     // for the closed-generic instantiation.

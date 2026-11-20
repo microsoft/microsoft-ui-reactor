@@ -443,7 +443,8 @@ public partial record RatingElement;
 
         // Wired via the public .Controlled entry (echo encapsulated), not OneWay.
         Assert.Contains(".Controlled<double,", src);
-        Assert.Contains(".ValueChanged += (s, e) => h(s, e)", src);
+        Assert.Contains(".ValueChanged += (_, args) =>", src);
+        Assert.Contains("if (owner.Active && owner.Reference.TryGetTarget(out var live)) h(live, args);", src);
         Assert.Contains("callback:    static e => e.OnValueChanged", src);
         Assert.Contains("readBack:    static c => c.Value", src);
         Assert.DoesNotContain("OneWayConditional<double>", src);
@@ -490,7 +491,8 @@ public partial record ToggleElement;
         Assert.Contains("public global::Microsoft.UI.Reactor.Optional<bool> IsOn { get; init; }", src);
         Assert.Contains("public global::System.Action<bool>? OnIsOnChanged { get; init; }", src);
         Assert.Contains(".Controlled<bool,", src);
-        Assert.Contains(".Toggled += (s, e) => h(s, e)", src);
+        Assert.Contains(".Toggled += (_, args) =>", src);
+        Assert.Contains("if (owner.Active && owner.Reference.TryGetTarget(out var live)) h(live, args);", src);
         Assert.Contains("callback:    static e => e.OnIsOnChanged", src);
         Assert.Contains("readBack:    static c => c.IsOn", src);
 
@@ -543,9 +545,10 @@ public partial record ToggleElement;
         Assert.Contains(".Controlled<bool?,", src);
 
         // Both events wired to the shared handler in a multi-line subscribe block.
-        Assert.Contains("subscribe:   static (fe, h) =>", src);
-        Assert.Contains(".Checked += (s, e) => h(s, e);", src);
-        Assert.Contains(".Unchecked += (s, e) => h(s, e);", src);
+        Assert.Contains("subscribe:   static (c, h) =>", src);
+        Assert.Contains(".Checked += (_, args) =>", src);
+        Assert.Contains(".Unchecked += (_, args) =>", src);
+        Assert.Equal(2, src.Split("if (owner.Active && owner.Reference.TryGetTarget(out var live)) h(live, args);").Length - 1);
         Assert.Contains("readBack:    static c => c.IsChecked", src);
 
         // Both events are consumed (no fire-and-forget OnChecked/OnUnchecked).
@@ -936,9 +939,9 @@ public partial record TabsElement;
 
         // Auto whole-args: Action<TabsArgs>, trampoline invokes with the args object.
         Assert.Contains("public global::System.Action<global::App.TabsArgs>? OnTabClosed { get; init; }", src);
-        Assert.Contains("HandCodedEvent<__EventPayload, global::Windows.Foundation.TypedEventHandler<global::App.Tabs, global::App.TabsArgs>>", src);
+        Assert.Contains("HandCodedEvent<__EventPayload, global::System.Action<global::App.Tabs, global::App.TabsArgs>>", src);
         Assert.Contains("live.OnTabClosed?.Invoke(args)", src);
-        Assert.Contains("c.TabClosed += h", src);
+        Assert.Contains(".TabClosed += (_, args) =>", src);
 
         Assert.Empty(result.Diagnostics);
     }
@@ -1617,22 +1620,134 @@ public partial record GadgetElement;
         Assert.Empty(result.Diagnostics);
     }
 
-    [Fact]
-    public void Two_Controlled_Props_On_One_Control_Reports_REACTORGEN012()
+    [Theory]
+    [InlineData("Clicked")]
+    [InlineData("State")]
+    public void Two_Controlled_Props_Share_One_Dispatch_With_Independent_Observations(string changedEvent)
     {
-        // A control has a single per-control controlled-event state slot, so only
-        // one controlled/two-way prop works; a second silently never fires. Two
-        // [WrapControlled] props bound to the same event (RangeSelector pattern)
-        // must surface a REACTORGEN012 warning (source is still emitted).
-        var result = Run(Stubs + @"
+        var result = Run(Stubs.Replace("Clicked", changedEvent) + $@"
 [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.FakeControl))]
-[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", ChangedEvent = ""Clicked"")]
-[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""Clicked"")]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", ChangedEvent = ""{changedEvent}"")]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""{changedEvent}"")]
 public partial record FakeControlElement;
 ");
-        Assert.Contains(result.Diagnostics, d => d.Id == "REACTORGEN012");
-        // Source is still emitted (the warning doesn't block generation).
-        Assert.Contains(result.GeneratedTrees, t => t.FilePath.EndsWith("FakeControlElement.Wrapper.g.cs", StringComparison.Ordinal));
+        Assert.Empty(result.Diagnostics);
+        var src = WrapperFor(result, "FakeControlElement");
+        Assert.DoesNotContain(".Controlled<", src);
+        Assert.Equal(1, src.Split($"c.{changedEvent} += state.{changedEvent}Handler;").Length - 1);
+        Assert.Contains($"if (owner.TryGetTarget(out var live)) __Controlled{changedEvent}Handler(live);", src);
+        Assert.Equal(1, src.Split("ReactorBinding.ShouldSuppressEcho(c)").Length - 1);
+        Assert.Contains("OnCountChanged?.Invoke(__valueCount);", src);
+        Assert.Contains("OnRatioChanged?.Invoke(__valueRatio);", src);
+        Assert.Contains("state.VersionCount == __versionCount", src);
+        Assert.Contains("state.VersionRatio == __versionRatio", src);
+        Assert.Contains("EqualityComparer<int>.Default.Equals(state.LastCount, __valueCount)", src);
+        Assert.Contains("EqualityComparer<double>.Default.Equals(state.LastRatio, __valueRatio)", src);
+        Assert.Contains($"c.{changedEvent} -= state.{changedEvent}Handler;", src);
+    }
+
+    [Fact]
+    public void Ordinary_Event_Alongside_Controlled_Value_Does_Not_Use_Competing_Payloads()
+    {
+        var result = Run(Stubs + @"
+namespace App
+{
+    public class ObservedControl : FakeControl
+    {
+        public event System.EventHandler<System.EventArgs> CountChanged;
+    }
+}
+[Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.ObservedControl))]
+public partial record ObservedElement;
+");
+        var src = WrapperFor(result, "ObservedElement");
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("c.CountChanged += state.CountChangedHandler;", src);
+        Assert.Contains(".HandCodedEvent<__EventPayload,", src);
+        Assert.Contains("live.OnClicked?.Invoke();", src);
+        Assert.DoesNotContain(".Controlled<", src);
+    }
+
+    [Fact]
+    public void Multiple_Deferred_Props_Wire_Each_Distinct_Event_Exactly_Once()
+    {
+        var result = Run(Stubs + @"
+namespace App
+{
+    public class MultiEventControl : FakeControl
+    {
+        public event System.EventHandler<System.EventArgs> Released;
+    }
+}
+[Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.MultiEventControl))]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Count"", Events = new[] { ""Clicked"", ""Released"" }, Deferred = true)]
+[Microsoft.UI.Reactor.Wrappers.WrapControlled(""Ratio"", ChangedEvent = ""Clicked"", Deferred = true)]
+public partial record MultiEventElement;
+");
+        var src = WrapperFor(result, "MultiEventElement");
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(1, src.Split("c.Clicked += state.ClickedHandler;").Length - 1);
+        Assert.Equal(1, src.Split("c.Released += state.ReleasedHandler;").Length - 1);
+        Assert.Contains("global::System.EventHandler<global::System.EventArgs>? ReleasedHandler", src);
+        Assert.DoesNotContain(".HandCodedControlled<", src);
+        Assert.Contains("state.WriteDepth++;", src);
+        Assert.Contains("__CaptureControlled(c, state);", src);
+    }
+
+    [Theory]
+    [InlineData("Single")]
+    [InlineData("Deferred")]
+    [InlineData("Ordinary")]
+    [InlineData("Combined")]
+    public void Forwarded_Typed_Sender_Is_Not_Used_As_The_Subscribed_Owner(string path)
+    {
+        var attributes = path switch
+        {
+            "Single" => "[Microsoft.UI.Reactor.Wrappers.WrapControlled(\"Count\", ChangedEvent = \"Changed\")]",
+            "Deferred" => "[Microsoft.UI.Reactor.Wrappers.WrapControlled(\"Count\", ChangedEvent = \"Changed\", Deferred = true)]",
+            "Combined" => """
+                [Microsoft.UI.Reactor.Wrappers.WrapControlled("Count", ChangedEvent = "Changed")]
+                [Microsoft.UI.Reactor.Wrappers.WrapControlled("Ratio", ChangedEvent = "Changed")]
+                """,
+            _ => "",
+        };
+        var result = Run("""
+            namespace Microsoft.UI.Xaml
+            {
+                public class DependencyObject {}
+                public class UIElement : DependencyObject {}
+                public class FrameworkElement : UIElement {}
+            }
+            namespace Microsoft.UI.Xaml.Controls { public class Control : Microsoft.UI.Xaml.FrameworkElement {} }
+            namespace Windows.Foundation { public delegate void TypedEventHandler<S, A>(S sender, A args); }
+            namespace App
+            {
+                public sealed class Inner : Microsoft.UI.Xaml.Controls.Control {}
+                public sealed class Outer : Microsoft.UI.Xaml.Controls.Control
+                {
+                    public int Count { get; set; }
+                    public double Ratio { get; set; }
+                    public event Windows.Foundation.TypedEventHandler<Inner, System.EventArgs> Changed;
+                }
+            }
+            [Microsoft.UI.Reactor.Wrappers.GenerateReactorWrapper(typeof(App.Outer))]
+            """ + attributes + "\npublic partial record OuterElement;");
+        Assert.Empty(result.Diagnostics);
+        var src = WrapperFor(result, "OuterElement");
+        Assert.Contains("new global::System.WeakReference<global::App.Outer>", src);
+        Assert.DoesNotContain("sender is not", src);
+        Assert.DoesNotContain("GetElementTag((global::Microsoft.UI.Xaml.FrameworkElement)(object)s!)", src);
+        Assert.DoesNotContain("s as global::App.Outer", src);
+        Assert.DoesNotContain("h(s, e)", src);
+        if (path == "Combined")
+        {
+            Assert.Contains("if (owner.TryGetTarget(out var live)) __ControlledChangedHandler(live);", src);
+            Assert.Contains("c.Changed -= state.ChangedHandler;", src);
+        }
+        else
+            Assert.Contains(path == "Deferred"
+                ? "if (owner.Active && owner.Reference.TryGetTarget(out var live)) h(live);"
+                : "if (owner.Active && owner.Reference.TryGetTarget(out var live)) h(live, args);", src);
     }
 
     [Fact]

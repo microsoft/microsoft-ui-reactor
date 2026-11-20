@@ -80,7 +80,7 @@ cd MyApp
 dotnet run
 ```
 
-Scaffolded apps are packaged (single-project MSIX), so `dotnet run` launches them with full package identity — the F5 equivalent. `reactor-mvu`, `reactor-navview`, and `reactor-tabview` start from richer shells (`winapp new --list` prints them all). Requires Developer Mode (Settings → System → For developers).
+Scaffolded apps are packaged (single-project MSIX) by default, so `dotnet run` launches them with full package identity — the F5 equivalent. That requires Developer Mode (Settings → System → For developers); `dotnet new reactor -n MyApp --packaging Unpackaged` scaffolds a plain unpackaged `.exe` instead. `reactor-mvu`, `reactor-navview`, and `reactor-tabview` start from richer shells, and `reactor-singlefile` is a single `.cs` file with no project (`winapp new --list` prints them all).
 
 Prefer plain .NET tooling? `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>` followed by `dotnet new reactor -n MyApp` does the same thing. The pack is prerelease-only today and `dotnet new install` resolves stable versions unless you pin one explicitly, which is the step `winapp new` removes.
 

@@ -40,14 +40,14 @@ public static partial class ElementExtensions
     // ════════════════════════════════════════════════════════════════
 
     public static T Margin<T>(this T el, double uniform) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(uniform) });
+        el.Margin(new Thickness(uniform));
 
     // Two-argument spacing follows the same order everywhere in Reactor:
     // horizontal FIRST, then vertical. This keeps `.Margin(...)`,
     // `.Padding(...)`, and `.FlexPadding(...)` aligned and matches the mental
     // model of Thickness(left/right, top/bottom).
     public static T Margin<T>(this T el, double horizontal, double vertical) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(horizontal, vertical, horizontal, vertical) });
+        el.Margin(new Thickness(horizontal, vertical, horizontal, vertical));
 
     // Default values on the per-side overload let callers name only the sides
     // they want (`.Margin(top: 10)`, `.Margin(left: 8, right: 8)`). Existing
@@ -57,7 +57,7 @@ public static partial class ElementExtensions
     // (fewer parameters → preferred match). Mirrors WPF Thickness defaults:
     // unspecified sides are zero.
     public static T Margin<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(left, top, right, bottom) });
+        el.Margin(new Thickness(left, top, right, bottom));
 
     // The struct overload exists so a `.Set(fe => fe.Margin = someThickness)` — the exact
     // shape REACTOR_POOL_001 flags — is a lift-and-shift rather than a rewrite: the value
@@ -65,72 +65,104 @@ public static partial class ElementExtensions
     // the local holding it. Mirrors the BorderThickness(Thickness) overload below. The
     // double overloads stay the ergonomic default.
     public static T Margin<T>(this T el, Thickness thickness) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Margin = thickness });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { Margin = thickness }
+            : new LayoutModifiers { Margin = thickness });
 
     public static T Padding<T>(this T el, double uniform) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(uniform) });
+        el.Padding(new Thickness(uniform));
 
     // Same ordering as Margin above — horizontal first, then vertical.
     public static T Padding<T>(this T el, double horizontal, double vertical) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(horizontal, vertical, horizontal, vertical) });
+        el.Padding(new Thickness(horizontal, vertical, horizontal, vertical));
 
     // Same defaulting story as Margin above — `.Padding(top: 8)` etc. are
     // valid; existing 1-arg / 2-arg / 4-arg positional call shapes still bind
     // to the more-specific overloads.
     public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(left, top, right, bottom) });
+        el.Padding(new Thickness(left, top, right, bottom));
 
     // Same lift-and-shift story as Margin(Thickness) above.
     public static T Padding<T>(this T el, Thickness thickness) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Padding = thickness });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { Padding = thickness }
+            : new LayoutModifiers { Padding = thickness });
 
     // ── Logical (BiDi-aware) layout modifiers ───────────────────────
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
     // Resolved at mount/update time based on FlowDirection.
 
     public static T MarginInlineStart<T>(this T el, double value) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { MarginInlineStart = value });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { MarginInlineStart = value }
+            : new LayoutModifiers { MarginInlineStart = value });
 
     public static T MarginInlineEnd<T>(this T el, double value) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { MarginInlineEnd = value });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { MarginInlineEnd = value }
+            : new LayoutModifiers { MarginInlineEnd = value });
 
     public static T PaddingInlineStart<T>(this T el, double value) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { PaddingInlineStart = value });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { PaddingInlineStart = value }
+            : new LayoutModifiers { PaddingInlineStart = value });
 
     public static T PaddingInlineEnd<T>(this T el, double value) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { PaddingInlineEnd = value });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { PaddingInlineEnd = value }
+            : new LayoutModifiers { PaddingInlineEnd = value });
 
     public static T BorderInlineStart<T>(this T el, Thickness thickness) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { BorderInlineStart = thickness });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { BorderInlineStart = thickness }
+            : new LayoutModifiers { BorderInlineStart = thickness });
 
     public static T Width<T>(this T el, double width) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Width = width });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { Width = width }
+            : new LayoutModifiers { Width = width });
 
     public static T Height<T>(this T el, double height) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Height = height });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { Height = height }
+            : new LayoutModifiers { Height = height });
 
     public static T Size<T>(this T el, double width, double height) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { Width = width, Height = height });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { Width = width, Height = height }
+            : new LayoutModifiers { Width = width, Height = height });
 
     public static T MinWidth<T>(this T el, double w) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { MinWidth = w });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { MinWidth = w }
+            : new LayoutModifiers { MinWidth = w });
 
     public static T MinHeight<T>(this T el, double h) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { MinHeight = h });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { MinHeight = h }
+            : new LayoutModifiers { MinHeight = h });
 
     public static T MaxWidth<T>(this T el, double w) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { MaxWidth = w });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { MaxWidth = w }
+            : new LayoutModifiers { MaxWidth = w });
 
     public static T MaxHeight<T>(this T el, double h) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { MaxHeight = h });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { MaxHeight = h }
+            : new LayoutModifiers { MaxHeight = h });
 
     // ── Alignment ───────────────────────────────────────────────────
 
     public static T HAlign<T>(this T el, HorizontalAlignment alignment) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { HorizontalAlignment = alignment });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { HorizontalAlignment = alignment }
+            : new LayoutModifiers { HorizontalAlignment = alignment });
 
     public static T VAlign<T>(this T el, VerticalAlignment alignment) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { VerticalAlignment = alignment });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { VerticalAlignment = alignment }
+            : new LayoutModifiers { VerticalAlignment = alignment });
 
     // Long-form aliases matching the WinUI/WPF FrameworkElement property names.
     // The agent's first-instinct write is `.HorizontalAlignment(...)`; making
@@ -138,23 +170,33 @@ public static partial class ElementExtensions
     // Parameter types are fully qualified because the method names shadow the
     // enum names in this scope.
     public static T HorizontalAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { HorizontalAlignment = alignment });
+        el.HAlign(alignment);
 
     public static T VerticalAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { VerticalAlignment = alignment });
+        el.VAlign(alignment);
 
     public static T HorizontalContentAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { HorizontalContentAlignment = alignment });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { HorizontalContentAlignment = alignment }
+            : new LayoutModifiers { HorizontalContentAlignment = alignment });
 
     public static T VerticalContentAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { VerticalContentAlignment = alignment });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { VerticalContentAlignment = alignment }
+            : new LayoutModifiers { VerticalContentAlignment = alignment });
 
     public static T Center<T>(this T el) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers
-        {
-            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
-            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
-        });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with
+            {
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+            }
+            : new LayoutModifiers
+            {
+                HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+            });
 
     // ── Theme override ───────────────────────────────────────────────
 
@@ -169,13 +211,17 @@ public static partial class ElementExtensions
     /// </para>
     /// </summary>
     public static T RequestedTheme<T>(this T el, ElementTheme theme) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { RequestedTheme = theme });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { RequestedTheme = theme }
+            : new LayoutModifiers { RequestedTheme = theme });
 
     // ── Visibility ──────────────────────────────────────────────────
 
     /// <summary>Sets whether the element is visible or collapsed.</summary>
     public static T IsVisible<T>(this T el, bool isVisible) where T : Element =>
-        ModifyLayout(el, new LayoutModifiers { IsVisible = isVisible });
+        WithLayout(el, el.Modifiers?.Layout is { } layout
+            ? layout with { IsVisible = isVisible }
+            : new LayoutModifiers { IsVisible = isVisible });
 
     /// <inheritdoc cref="IsVisible{T}(T, bool)"/>
     [Obsolete("Use IsVisible() — aligns with WinUI boolean modifier naming (see #268).")]
@@ -1756,14 +1802,15 @@ public static partial class ElementExtensions
     public static InfoBarElement Content(this InfoBarElement el, Element content) =>
         el with { Content = content };
 
-    // ── Expander extra sugar (HeaderTemplate, ContentTransitions) ───
+    // ── Expander extra sugar (HeaderContent, ContentTransitions) ───
 
     /// <summary>
     /// Sets an Element header (overrides the string <c>Header</c> from the
-    /// factory). Mirrors WinUI's <c>HeaderTemplate</c> slot.
+    /// factory). The mounted child is assigned to WinUI's <c>Header</c> property,
+    /// not its <c>HeaderTemplate</c> DataTemplate property.
     /// </summary>
-    public static ExpanderElement HeaderTemplate(this ExpanderElement el, Element header) =>
-        el with { HeaderTemplate = header };
+    public static ExpanderElement HeaderContent(this ExpanderElement el, Element header) =>
+        el with { HeaderContent = header };
 
     /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
     public static ExpanderElement ContentTransitions(this ExpanderElement el, Microsoft.UI.Xaml.Media.Animation.TransitionCollection transitions) =>
@@ -2110,6 +2157,10 @@ public static partial class ElementExtensions
     public static TitleBarElement Content(this TitleBarElement el, Element content) =>
         el with { Content = content };
 
+    /// <summary>Sets the leading-edge header slot (typically navigation or contextual controls).</summary>
+    public static TitleBarElement LeftHeader(this TitleBarElement el, Element leftHeader) =>
+        el with { LeftHeader = leftHeader };
+
     /// <summary>Sets the trailing-edge content slot (typically a profile / settings element).</summary>
     public static TitleBarElement RightHeader(this TitleBarElement el, Element rightHeader) =>
         el with { RightHeader = rightHeader };
@@ -2304,8 +2355,12 @@ public static partial class ElementExtensions
         el.IsAddTabButtonVisible(visible);
     // ── Key ─────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Assigns a stable reconciliation key. Reuses the element when it already holds
+    /// the same string reference; otherwise returns an immutable copy.
+    /// </summary>
     public static T WithKey<T>(this T el, string key) where T : Element =>
-        el with { Key = key };
+        ReferenceEquals(el.Key, key) ? el : el with { Key = key };
 
     /// <summary>
     /// Assigns the stable identity from an <see cref="IReactorKeyed"/> data
@@ -2323,7 +2378,7 @@ public static partial class ElementExtensions
         where TKey : IReactorKeyed
     {
         ArgumentNullException.ThrowIfNull(item);
-        return el with { Key = item.Key };
+        return el.WithKey(item.Key);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -3340,24 +3395,20 @@ public static partial class ElementExtensions
     private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
         el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
 
-    // #165/#157 — bucket-level merge entry points for pure-layout / pure-visual
-    // fluent modifiers. Routing through these avoids allocating a throwaway parent
-    // ElementModifiers (and the bucket sub-record its init shim builds) on every
-    // chained call: `.Margin().Width().Foreground()` merges the delta straight into
-    // the Layout / Visual slot instead of constructing a temporary ElementModifiers
-    // per step. Semantics are identical to Modify(el, new ElementModifiers { <field> }):
-    // ElementModifiers.Merge copies every non-bucket field as `other.X ?? X` (i.e.
-    // unchanged) when only a bucket is supplied, and merges the bucket with the same
-    // `other ?? this` precedence used here.
-    private static T ModifyLayout<T>(T el, LayoutModifiers delta) where T : Element
+    // Callers copy only the fields they set, preserving the existing layout without
+    // allocating a temporary delta. The parent and concrete element stay immutable.
+    private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
     {
         var mods = el.Modifiers;
-        if (mods is null)
-            return el with { Modifiers = new ElementModifiers { Layout = delta } };
-        var merged = mods.Layout is not null ? mods.Layout.Merge(delta) : delta;
-        return el with { Modifiers = mods with { Layout = merged } };
+        return el with
+        {
+            Modifiers = mods is not null
+                ? mods with { Layout = layout }
+                : new ElementModifiers { Layout = layout },
+        };
     }
 
+    // Merge visual deltas directly into the bucket, without a temporary parent.
     private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
     {
         var mods = el.Modifiers;

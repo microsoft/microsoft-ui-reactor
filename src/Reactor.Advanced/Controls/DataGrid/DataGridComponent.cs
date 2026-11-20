@@ -261,13 +261,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // The hook owns fetch lifecycle, cache subscriptions, and deps-change restart.
         if (useHookPaging)
         {
-            // DataRequest is rebuilt each render so sort/filter/search changes flow into
-            // the hook's deps and restart pagination cleanly.
-            var rowH = el.RowHeight ?? el.EstimatedRowHeight;
-            var pageSize = Math.Max(50, (int)Math.Ceiling(2160.0 / rowH));
+            // Page size is the same mount-time value the legacy path sizes its cache with
+            // (derived once from RowHeight when the state was created). UseDataSource latches
+            // its first page size for the hook's lifetime anyway, so re-deriving it from a
+            // runtime RowHeight change could never take effect — it would only trip the
+            // UseDataSource.PageSize warning and, via the memo below, restart pagination.
+            var pageSize = state.BlockSize;
 
-            // Memoize the DataRequest on the sort/filter/search/pageSize identity. Rebuilding it
-            // every render allocated two fresh List copies (Sort/Filters) whose references then
+            // Memoize the DataRequest on the sort/filter/search identity. Rebuilding it every
+            // render allocated two fresh List copies (Sort/Filters) whose references then
             // changed UseDataSource's deps every render, restarting pagination. Keyed on the
             // version counters, the request and its list references stay stable until the
             // underlying sort/filter/search actually change.
@@ -277,7 +279,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 Sort = state.Sorts.Count > 0 ? state.Sorts.ToList() : null,
                 Filters = state.Filters.Count > 0 ? state.Filters.ToList() : null,
                 SearchQuery = state.SearchQuery,
-            }, state.SortVersion, state.FilterVersion, state.SearchQuery ?? string.Empty, pageSize);
+            }, state.SortVersion, state.FilterVersion, state.SearchQuery ?? string.Empty);
 
             var resource = UseDataSource(
                 source,
@@ -917,7 +919,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // cost identified by profiling. Construct it directly with the cached, shared
         // GridDefinition (FilterRowChildren mirrors the Grid(...) factory's child handling) so the
         // reconciler reuses the definition reference and skips rebuilding ColumnDefinitions.
-        Element row = new GridElement(gridDef, FilterRowChildren(cells));
+        var needsRowShell = el.RowDetailTemplate is not null
+            || el.Editable
+            || el.OnRowChanged is not null;
+        Element row = new GridElement(gridDef, FilterRowChildren(cells))
+        {
+            Key = needsRowShell ? "row" : null,
+        };
         row = row.Background(rowBg);
 
         // Click handler — always present (maintains element tree structure).
@@ -992,10 +1000,6 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // The decision reads ONLY element-level props — never per-row or placeholder state — so an
         // async-paging placeholder resolving into a loaded row can't flip the root type either.
         // Grids without these features keep the bare Grid root and pay nothing.
-        var needsRowShell = el.RowDetailTemplate is not null
-            || el.Editable
-            || el.OnRowChanged is not null;
-
         if (!needsRowShell)
             return row;
 
@@ -1015,7 +1019,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // discarding any state its component holds mid-edit.
         return VStack(
             spacing: 0,
-            row.WithKey("row"),
+            row,
             validationSummary,
             commitErrorBar,
             detailPane);
@@ -1509,11 +1513,10 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     // same render — no timing risk, no consumer call — and keeps the
                     // grip trimmable when the data grid is unreachable.
                     _ = ResizeGripRegistration.Done;
-                    var grip = new ResizeGripElement()
+                    var grip = new ResizeGripElement { Key = $"grip-{colName}" }
                         .Width(6)
                         .HAlign(HorizontalAlignment.Right)
                         .VAlign(VerticalAlignment.Stretch)
-                        .WithKey($"grip-{colName}")
                         .OnMount(fe => AttachResizeHandlers(fe, state, colName));
                     overlayChildren.Add(grip.Grid(row: 0, column: 0));
                 }

@@ -16,7 +16,7 @@ user-invocable: true
 >
 > Run it from the workspace root. It produces a working `.csproj` and `App.cs` already wired against `Microsoft.UI.Reactor` (the `App.cs` carries its own `using` directives — there is no `GlobalUsings.cs`, and you should not add one). **Edit that. Do not hand-write a `.csproj` and `App.cs` from scratch** — that path consistently leads to invented API names (`UseElementFocus`, `AutomationLandmarkType.Complementary`, etc.), wasted `mur check` round-trips, and longer sessions.
 >
-> Richer starting points: `reactor-mvu` (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell), `reactor-tabview` (`TabView` shell).
+> Richer starting points: `reactor-mvu` (Model-View-Update via `UseReducer`), `reactor-navview` (`NavigationView` shell), `reactor-tabview` (`TabView` shell). Add `--packaging Unpackaged` to `reactor` or any of these when the user wants an unpackaged app. When the user asks for a single-file script, `dotnet new reactor-singlefile -n <AppName>` scaffolds `<AppName>/<AppName>.cs` (no `.csproj`).
 >
 > If the templates aren't installed yet, scaffold with the Windows App SDK CLI
 > instead — it installs the pack on demand, so there is no version to pin:
@@ -25,7 +25,7 @@ user-invocable: true
 > winapp new -t reactor -n <AppName>
 > ```
 >
-> To install the pack without scaffolding, run `winapp new --list`.
+> To install the pack without scaffolding, run `winapp new --list`. If `dotnet new` rejects `--packaging` or can't find `reactor-singlefile`, the installed pack predates them; `winapp new --list --template-version latest` updates it.
 
 You build Reactor apps in this rhythm: scaffold → understand requirements → draft component tree → write files in a batch → `mur check`.
 
@@ -36,11 +36,11 @@ Before continuing
 
 Then for each task:
 
-1. **Scaffold first** (see the callout above). For a new app: `dotnet new reactor -n <AppName>`. Skip this step *only* if the user has told you to write a single-file script, edit an existing project, or otherwise asked for a non-scaffolded shape.
+1. **Scaffold first** (see the callout above). For a new app: `dotnet new reactor -n <AppName>`; for a single-file script: `dotnet new reactor-singlefile -n <AppName>`. Skip this step *only* if the user has told you to edit an existing project or otherwise asked for a non-scaffolded shape.
 2. **Understand the task.** Note what the app needs to do. Don't guess at requirements.
 3. **Draft.** Sketch the component tree, identify state, decide where each piece lives. If you know how you'd build the equivalent in React, you already know the shape — just translate to the C# spelling.
-4. **Write the files in a batch.** Add models and child components in one stretch on top of the scaffolded `App.cs`. Don't stop and rebuild after each file — build once at the end.
-5. **Run `mur check` and read the output.** `mur check <path>` is the build — it runs `dotnet build` under the hood, returns the same exit code, and adds skill pointers for `REACTOR_*` IDs plus `→ try: <name>` did-you-mean suggestions for unknown identifiers. When it exits 0, you are done — **do not re-run `dotnet build` to confirm**; it's the same compilation. Read errors and analyzer warnings; fix them in another batch; re-run `mur check`. Fall back to `dotnet build` / `dotnet run` only if `mur` isn't on PATH.
+4. **Write the files in a batch.** Add models and child components in one stretch on top of the scaffolded `App.cs`. A `reactor-singlefile` scaffold has no `App.cs`: put everything in the generated `<AppName>/<AppName>.cs`, because a file-based app compiles only that one file. Don't stop and rebuild after each file — build once at the end.
+5. **Run `mur check` and read the output.** `mur check <path>` is the build — it runs `dotnet build` under the hood, returns the same exit code, and adds skill pointers for `REACTOR_*` IDs plus `→ try: <name>` did-you-mean suggestions for unknown identifiers. For a single-file app, name the file: `mur check <AppName>.cs` from its folder. A bare `mur check` builds the current directory, which needs a project file. When it exits 0, you are done — **do not re-run `dotnet build` to confirm**; it's the same compilation. Read errors and analyzer warnings; fix them in another batch; re-run `mur check`. Fall back to `dotnet build` / `dotnet run` only if `mur` isn't on PATH.
 
 Beyond those two, load topical skills only when the task hits them — see the table below. The full signatures index lives in `reactor-dsl/references/reactor.api.txt` if you need a less-common control.
 

@@ -122,6 +122,50 @@ class FormsGroup : Component
 WinUI design page: [Buttons](https://learn.microsoft.com/en-us/windows/apps/design/controls/buttons),
 [Text controls](https://learn.microsoft.com/en-us/windows/apps/design/controls/text-controls).
 
+### Composing button content
+
+Button-family controls accept an `Element` instead of a string, so icons,
+labels, and other controls can share the native content slot. The native
+control still owns focus, invocation, and checked-state visuals.
+
+| Controls | Content overload |
+|---|---|
+| `Button`, `RepeatButton`, `HyperlinkButton` | Pass an `Element` as the first argument. |
+| `ToggleButton`, `ThreeStateToggleButton` | Pass an `Element` first, followed by the checked value and callback. |
+| `DropDownButton`, `SplitButton`, `ToggleSplitButton` | Pass primary content first; `flyout:` remains a separate slot. |
+| `RadioButton` | Pass content first; checked state and group name are unchanged. |
+| `CheckBox`, `ThreeStateCheckBox` | Pass content as the third argument, after the checked value and callback. |
+
+```csharp
+class ButtonContentExample : Component
+{
+    public override Element Render()
+    {
+        var (selected, setSelected) = UseState(false);
+        return ToggleButton(
+            HStack(8,
+                Icon(FontIcon("\uE8B9")).AccessibilityHidden(),
+                TextBlock("Images")),
+            selected,
+            setSelected)
+            .AutomationName("Images");
+    }
+}
+```
+
+The text overloads remain available. On a direct element record,
+`ContentElement` takes precedence over its text property; setting it back
+to `null` restores that text. Updating the content preserves compatible
+child controls and their component state. Replacing or removing the subtree
+runs its cleanup.
+
+Content assigned through `.Set(c => c.Content = nativeElement)` remains available
+when no Reactor `ContentElement` is declared, including when switching from an
+Element subtree to native content. For composed content, set an explicit
+`.AutomationName(...)` when it has no directly readable text caption; hidden fallback
+text is not used as the accessible name. An explicit `.AutomationName(...)` is
+preserved when switching content, even if it matches the previous visible caption.
+
 ## Collections
 
 Bound-list rendering and virtualization. Use `ListView` when the data

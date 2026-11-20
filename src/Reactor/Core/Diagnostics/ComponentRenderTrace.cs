@@ -265,12 +265,12 @@ internal static class ComponentRenderControls
     /// <returns>Whether the event is enabled.</returns>
     internal static bool TraceRootRendered(
         ref long rootId, ref bool rootRendered, string componentName,
-        bool hotReloadRender, bool forcePending, double elapsedMilliseconds)
+        bool hotReloadRender, bool forcePending, double elapsedMilliseconds, RenderContext? context = null)
     {
         bool firstRender = !rootRendered;
         rootRendered = true;
         if (!ComponentRenderTrace.IsEnabled) return false;
-        if (rootId == 0) rootId = ComponentRenderTrace.NextId();
+        if (rootId == 0) rootId = context?.EnsureDiagnosticId() ?? ComponentRenderTrace.NextId();
         ReactorEventSource.Log.ComponentRendered(
             componentName,
             rootId,
@@ -296,6 +296,10 @@ internal sealed class RootRenderDiagnostics
 
     internal long IdForTests => _id;
 
+    // The perf name of a render-function root, resolved on its first traced render and kept for
+    // the root's lifetime (a new root gets a new instance, or Reset).
+    private string? _perfFunctionName;
+
     /// <summary>A new (or disposed) root is a new component instance: fresh id, next render is "mount".</summary>
     public void Reset()
     {
@@ -303,6 +307,7 @@ internal sealed class RootRenderDiagnostics
         _id = 0;
         _rendered = false;
         _hotReloadRetry = false;
+        _perfFunctionName = null;
     }
 
     /// <summary>
@@ -318,13 +323,108 @@ internal sealed class RootRenderDiagnostics
     public void MarkHotReloadRetry() => _hotReloadRetry = true;
 
     /// <summary>See <see cref="ComponentRenderControls.TraceRootRendered"/>. Returns whether the event is enabled.</summary>
-    public bool TraceRendered(string componentName, bool hotReloadRender, bool forcePending, double elapsedMilliseconds)
+    public bool TraceRendered(string componentName, bool hotReloadRender, bool forcePending, double elapsedMilliseconds,
+        RenderContext? context = null)
     {
         bool hotReload = hotReloadRender || _hotReloadRetry;
         _hotReloadRetry = false;
         return ComponentRenderControls.TraceRootRendered(
-            ref _id, ref _rendered, componentName, hotReload, forcePending, elapsedMilliseconds);
+            ref _id, ref _rendered, componentName, hotReload, forcePending, elapsedMilliseconds, context);
     }
+
+    /// <summary>
+    /// The root's componentId for the perf spans, assigned on first use. Taken from the root's
+    /// <paramref name="context"/> when it has one, so it matches the id its state changes report.
+    /// </summary>
+    public long EnsureId(RenderContext? context)
+    {
+        if (_id == 0) _id = context?.EnsureDiagnosticId() ?? ComponentRenderTrace.NextId();
+        return _id;
+    }
+
+    /// <summary>
+    /// The reason the next <see cref="TraceRendered"/> will report, without consuming it — for
+    /// the perf span that starts before the root renders.
+    /// </summary>
+    public string PeekReason(bool hotReloadRender, bool forcePending)
+        => ComponentRenderTrace.ClassifyRoot(!_rendered, hotReloadRender || _hotReloadRetry, forcePending);
+
+    /// <summary>
+    /// Starts the root's perf <c>ComponentRender</c> span: its Render(), the reconcile and the
+    /// commit into the host (the root's effects get their own <c>Effects</c> span). The caller
+    /// checks <see cref="ReactorPerfTrace.ComponentEnabled"/>. <paramref name="root"/> is the
+    /// class root, or null for a render-function root (<paramref name="renderFunc"/>) whose hooks
+    /// live in <paramref name="funcContext"/>. <paramref name="mountSite"/> is where app code
+    /// mounted the root, when source mapping recorded it.
+    /// </summary>
+    public ReactorPerfTrace.ComponentSpan BeginPerfSpan(Component? root, RenderContext? funcContext, Delegate? renderFunc,
+        SourceLocation? mountSite, bool hotReloadRender, bool forcePending)
+        => ReactorPerfTrace.ComponentSpan.Begin(
+            (ulong)EnsureId(root?.Context ?? funcContext),
+            PerfName(root, renderFunc),
+            PeekReason(hotReloadRender, forcePending),
+            mountSite);
+
+    /// <summary>
+    /// The root's name on the perf spans: a class root's type name, or the render function's
+    /// display name (<see cref="ComponentNames.ForRenderFunction(Delegate, string)"/>), resolved once per root.
+    /// </summary>
+    public string PerfName(Component? root, Delegate? renderFunc)
+        => root is not null
+            ? ComponentNames.For(root, element: null)
+            : _perfFunctionName ??= ComponentNames.ForRenderFunction(renderFunc, ComponentNames.RootRenderFunctionFallback);
+
+    /// <summary>
+    /// Starts a host pass on the perf provider: while the Pass keyword is on
+    /// (<paramref name="perfPass"/>) writes the <c>RenderPass</c> Start (<see cref="WritePassStart"/>);
+    /// otherwise drops requests a session noted before it stopped
+    /// (<see cref="RenderPassRequests.DiscardStale"/>). Both hosts call it, so they cannot drift.
+    /// </summary>
+    public void BeginPass(bool perfPass, ulong hostId, RenderPassRequests requests,
+        Component? root, RenderContext? funcContext, Delegate? renderFunc)
+    {
+        if (perfPass)
+            WritePassStart(hostId, requests, root, funcContext, renderFunc);
+        else
+            requests.DiscardStale();
+    }
+
+    /// <summary>
+    /// Writes a host's <c>RenderPass</c> Start, naming the component whose request scheduled the
+    /// pass (see <see cref="RenderPassRequests"/>). The caller checks
+    /// <see cref="ReactorPerfTrace.PassEnabled"/>. Called on the host's live root diagnostics:
+    /// the root's own requests claim with this instance (<see cref="RequestFromRoot"/>), so a
+    /// request from a root that has since been replaced names nobody. <paramref name="root"/>,
+    /// <paramref name="funcContext"/> and <paramref name="renderFunc"/> are the live root.
+    /// </summary>
+    public void WritePassStart(ulong hostId, RenderPassRequests requests,
+        Component? root, RenderContext? funcContext, Delegate? renderFunc)
+    {
+        object? requester = requests.Take(out uint count);
+        ulong requesterId = 0;
+        string requesterName = "";
+        if (requester is Reconciler.ComponentNode node)
+        {
+            requesterId = (ulong)node.EnsureDiagnosticId();
+            requesterName = Reconciler.PerfComponentName(node, node.Element);
+        }
+        else if (ReferenceEquals(requester, this) && (root is not null || funcContext is not null))
+        {
+            requesterId = (ulong)EnsureId(root?.Context ?? funcContext);
+            requesterName = PerfName(root, renderFunc);
+        }
+        ReactorPerfTrace.RenderPassStart(hostId, requesterId, requesterName, count);
+    }
+
+    /// <summary>
+    /// Runs a re-render request the root component's own hooks made (<paramref name="request"/>
+    /// goes on to the host), attributed to this root on the next <c>RenderPass</c> Start.
+    /// </summary>
+    public void RequestFromRoot(Action request) => RenderPassRequests.InvokeAs(this, request);
+
+    /// <summary>The root's perf <c>Effects</c> span, or an inactive one while the <c>Pass</c> keyword is off.</summary>
+    public ReactorPerfTrace.EffectsSpan BeginEffectsPerfSpan(RenderContext? context)
+        => ReactorPerfTrace.PassEnabled ? ReactorPerfTrace.EffectsSpan.Begin(EnsureId(context)) : default;
 
     /// <summary>
     /// Keeps the root's id pointing at the control now standing in for its content (the

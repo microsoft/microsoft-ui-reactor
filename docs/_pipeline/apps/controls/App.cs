@@ -46,6 +46,23 @@ class FormsGroup : Component
 }
 // </snippet:forms-group>
 
+// <snippet:button-content>
+class ButtonContentExample : Component
+{
+    public override Element Render()
+    {
+        var (selected, setSelected) = UseState(false);
+        return ToggleButton(
+            HStack(8,
+                Icon(FontIcon("\uE8B9")).AccessibilityHidden(),
+                TextBlock("Images")),
+            selected,
+            setSelected)
+            .AutomationName("Images");
+    }
+}
+// </snippet:button-content>
+
 // <snippet:collections-group>
 class CollectionsGroup : Component
 {

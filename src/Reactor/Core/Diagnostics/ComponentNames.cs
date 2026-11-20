@@ -17,7 +17,9 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// component (<c>Counter</c>), so existing traces and greps are unchanged. A generic
 /// component renders its arity in C# form (<c>Counter&lt;Int32&gt;</c>) instead of the
 /// metadata name (<c>Counter`1</c>). Function and memo components have no type of their
-/// own and keep reporting <c>FuncElement</c> / <c>MemoElement</c>.</para>
+/// own and keep reporting <c>FuncElement</c> / <c>MemoElement</c> here; the
+/// <c>Microsoft-UI-Reactor-Perf</c> spans name them by their render function instead
+/// (<see cref="ForRenderFunction(Element)"/>).</para>
 ///
 /// <para><b>PII.</b> Output is built only from developer-authored type names — never
 /// props, state, keys or paths — so it is safe on the ETW payload
@@ -39,6 +41,39 @@ internal static class ComponentNames
         if (element is ComponentElement componentElement) return For(componentElement.ComponentType);
         return element is null ? "unknown" : For(element.GetType());
     }
+
+    /// <summary>Name prefix of a <see cref="FuncElement"/> lambda (its factory, <c>RenderEachTime</c>).</summary>
+    internal const string FuncFallback = "RenderEachTime";
+
+    /// <summary>Name prefix of a <see cref="MemoElement"/> lambda (its factory, <c>Memo</c>).</summary>
+    internal const string MemoFallback = "Memo";
+
+    /// <summary>Name prefix of a host's render-function root lambda.</summary>
+    internal const string RootRenderFunctionFallback = "render";
+
+    /// <summary>
+    /// The name the <c>Microsoft-UI-Reactor-Perf</c> spans give a function or memo component:
+    /// what its render function runs, as DevTools' component inspector shows it
+    /// (<c>Counter.Row</c> for a method group, <c>RenderEachTime in MainPage.Render</c> or
+    /// <c>Memo in MainPage.Render</c> for a lambda or local function). Any other element gets
+    /// <see cref="For(Component, Element)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Reads <see cref="Delegate.Method"/>, which costs ~150 ns and allocates for a fresh closure,
+    /// so callers resolve it once per component and cache it. Built only from developer-authored
+    /// type and method names (spec 044 §6.2.1). Falls back to the factory name when the method
+    /// is not available (Native AOT without its metadata).
+    /// </remarks>
+    internal static string ForRenderFunction(Element? element) => element switch
+    {
+        FuncElement f => ForRenderFunction(f.RenderFunc, FuncFallback),
+        MemoElement m => ForRenderFunction(m.RenderFunc, MemoFallback),
+        _ => For(instance: null, element),
+    };
+
+    /// <inheritdoc cref="ForRenderFunction(Element)"/>
+    internal static string ForRenderFunction(Delegate? render, string fallback)
+        => DiagnosticText.DelegateName(render, fallback);
 
     /// <summary>Display name of a component type; see the class remarks for the shape.</summary>
     internal static string For(Type type)

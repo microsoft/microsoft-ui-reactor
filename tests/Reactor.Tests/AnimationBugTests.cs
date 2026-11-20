@@ -303,7 +303,7 @@ public class AnimationBugTests
             global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
         var parameters = method!.GetParameters();
-        Assert.Equal(3, parameters.Length);
+        Assert.Equal(3, parameters.Count(p => !p.IsOptional));
         Assert.Equal(typeof(UIElement), parameters[0].ParameterType);
         Assert.Equal(typeof(string), parameters[1].ParameterType);
         Assert.Equal(typeof(Vector3), parameters[2].ParameterType);

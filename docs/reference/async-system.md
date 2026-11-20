@@ -522,11 +522,17 @@ Pages are cached in two places:
    hot-path accessor for `ItemAt`. Subject to LRU eviction when
    `InfiniteResourceOptions.MaxLoadedPages` is set. Each `PageSlot` holds the
    items and that page's `NextCursor`; `null` items means in-flight placeholder.
-2. **`QueryCache` under `{keyPrefix}/page:{n}`** — the warm-path. Survives
+2. **`QueryCache` under `{keyPrefix}/size:{pageSize}/page:{n}`** — the warm-path. Survives
    LRU eviction from `_pages`; survives unmount-and-remount inside `CacheTime`.
    `InfiniteHookState.SubscribeKey` (`UseInfiniteResource.cs:407-411`) ref-counts every page key that
    this hook has ever loaded or started loading, so the cache retains them
    until unmount.
+
+`CacheKeyFor` (`UseInfiniteResource.cs:231`) includes the state's initial
+`_options.PageSize`, which also determines row positions. Hooks with the same
+prefix and equal deps can reuse pages when their initial page sizes match;
+different sizes use separate cache entries. Later PageSize options do not change
+the size segment, including after a query or prefix restart.
 
 On `RequestPage`, the hook checks `QueryCache` first
 (`UseInfiniteResource.cs:242`), validating the entry's dependency snapshot.
@@ -734,11 +740,12 @@ page slots, so a later write can replace an earlier query's pages even within
 
 ### 5.9 `IDataSource<T>` adapter
 
-`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:22-53`)
+`DataSourceResourceExtensions.UseDataSource` (`DataSourceResourceExtensions.cs:28-73`)
 is a thin hook that projects any `IDataSource<T>` into `UseInfiniteResource`:
 
 ```csharp
-int pageSize = Math.Max(1, options?.PageSize ?? request.PageSize);
+var sizeRef = ctx.UseRef<int?>(null);
+int pageSize = sizeRef.Current ??= Math.Max(1, options?.PageSize ?? request.PageSize);
 options ??= InfiniteResourceOptions.Default;
 if (options.PageSize != pageSize)
     options = options with { PageSize = pageSize };
@@ -759,7 +766,18 @@ return ctx.UseInfiniteResource<T, string>(
 On the initial call, `options.PageSize` takes precedence over `request.PageSize`,
 clamped to at least 1. Requests, offset cursors, and resource row positions all
 use this size. The adapter copies options only when their page size differs;
-the caller's options and all other settings are preserved.
+the caller's options and all other settings are preserved. The current
+`CacheKeyPrefix` still participates in query restarts.
+The initial size is retained for the hook's lifetime, including query restarts.
+Later PageSize changes do not change the request size, cursor offsets, or row
+positions. To use a different size, remount the calling component by changing
+its key from the parent, e.g. `.WithKey($"tasks:{pageSize}")`. Alternatively,
+increment a parent-owned reset version used by `.WithKey($"tasks:{resetVersion}")`.
+The diagnostic code is omitted above. When warning diagnostics are enabled,
+an ignored size change emits a `ReactorEventSource.Warning` event under
+`Keywords.Errors`, with operation `UseDataSource.PageSize`, once per hook.
+The event is available in Release builds of Reactor. Debug builds of Reactor
+also mirror the warning to `Debug.WriteLine`.
 
 Deps include the source *identity* plus the request's sort/filter/search —
 any change restarts pagination, which is the correct behavior for an

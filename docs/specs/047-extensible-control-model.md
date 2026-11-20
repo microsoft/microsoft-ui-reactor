@@ -2,6 +2,11 @@
 
 ## Status
 
+**API naming update:** the Element-valued `Expander.HeaderTemplate` discussed below
+is now `Expander.HeaderContent`. It mounts a child into native `Expander.Header`;
+the historical name did not represent a `DataTemplate`. See the
+[migration notes](../guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
 **Phase 0 complete — Phase 1 greenlit.** The seven Phase 0 deliverables in §14 have all shipped (see [`docs/specs/tasks/047-extensible-control-model-implementation.md`](tasks/047-extensible-control-model-implementation.md) for the per-deliverable status). The audits ([`047/audits/`](047/audits/)) reshaped the design space materially: §8 collapsed from a §8 vs §8.1 debate into a small concrete plan, §9 has a clean structural cut, and §13's data-driven open questions have ratified decision criteria in [`047/decision-criteria.md`](047/decision-criteria.md). Baseline numbers are committed under [`047/baseline-results/`](047/baseline-results/); §11.6 and §12 now anchor their targets to measured M1–M13 values from LAPTOP-4MEP83VI (workstation x64 + ARM64-native captures deferred to Phase 1's first promotion PR per [`047/baseline-results/machines.md`](047/baseline-results/machines.md)). The §8.2 setter-suppression carve-out landed ahead of Phase 1 ([`047/factoring-recommendation.md`](047/factoring-recommendation.md)); spec 047 stays unified — no split executed.
 
 This spec documents the design for removing the asymmetry between *built-in Reactor controls* and *externally-authored controls registered via `Reconciler.RegisterType`*. The conversation started concretely (could a Win2D `CanvasControl` wrapper live downstream in the pix project without Reactor changes?), and ended in a broader question: what would it take for every mechanism Reactor uses to implement its own controls to be available to third-party authors — and could that protocol be smaller, more data-driven, and lower-overhead than what we have today?
@@ -639,6 +644,28 @@ single controlled value): `ComboBox`, `FlipView`, `GridView`, `ListBox`,
 `valueDiffEcho: true`), plus `ToggleSwitchHandler` and the live `TextBoxHandler`
 (`ControlledPropEntry` was already value-diff from the PoC).
 
+`RichEditBox.Text` moved over later, although its echo is deferred:
+`Document.SetText` raises `TextChanged` asynchronously. On the counter it lost
+the user's first edit after every state write, because the entry's
+`WriteSuppressed` and the descriptor's own Mount-time `BeginSuppress` both
+reserved a token for the one event, and a skipped empty write reserved one with
+no event at all. The arm stays set until the next `TextChanged`, which drops it
+only when the document text matches, so a missing or merged echo cannot swallow
+a real edit. The descriptor passes `armOnMount: true`, so the entry arms the
+Mount write too, since that write's echo arrives after the trampoline is wired.
+It compares with line breaks normalized because the document reads `\n` back
+as `\r`. Trailing breaks still count: the comparer also decides whether the
+entry writes at all, so the readback drops only the document's implicit final
+paragraph mark (`GetText` returns `"a\n"` as `"a\r\r"`) and keeps `"text\n"`
+distinct from `"text"`.
+
+`AutoSuggestBox.Text` moved over for the same symptom. Its trampoline returned on
+a non-`UserInput` reason before taking the counter token, so the write's own
+`ProgrammaticChange` echo never spent it and the user's next keystroke did. The
+echo is also debounced (about 150 ms, merging several writes), so a count could
+not match it anyway. The trampoline now consumes the arm on every `TextChanged`
+and only then filters on the reason.
+
 **Retained on the counter** (with rationale):
 
 | Site | Why value-diff is unsafe |
@@ -646,7 +673,7 @@ single controlled value): `ComboBox`, `FlipView`, `GridView`, `ListBox`,
 | `Slider.Value`, `NumberBox.Value` | `double` snapping / precision — exact readback comparison leaks echoes |
 | `NumberBox` Min/Max coercion (`CoercingOneWayPropEntry`) | post-write coerced value is not known a-priori at arm time |
 | `CalendarView.SelectedDates` (`CollectionDiffControlledPropEntry`) | collection batch — no single expected value |
-| `AutoSuggestBox.Text`, `PasswordBox`, `RichEditBox` | string + deferred/coercion semantics |
+| `PasswordBox` | string + deferred/coercion semantics |
 | `Expander` (`Expanding`/`Collapsed`) | `IsExpanded` readback timing at event uncertain |
 | `CheckBox` path-B legacy trampoline | retained legacy path |
 | `ApplySetters` scope | engine cannot predict which DPs `.Set(...)` writes — no expected value |

@@ -165,7 +165,7 @@ first; everyone else can follow the order.
 ### 7. Tooling & process
 
 - **[Dev Tooling](dev-tooling.md)** — `mur` CLI, the WinUI DevTools (`winapp run . --devtools`), VS Code panel, dotnet watch
-- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2022 (17.14+) and 2026 (18.x)
+- **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2026 (18.x)
 - **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
 - **[Performance](performance.md)** — ETW, EventDispatch, flame graphs
 - **[Packaging](packaging.md)** — MSIX, single-file, ARM64, AOT considerations
@@ -231,7 +231,7 @@ project and edit the `.csproj`:
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.17" />
+    <PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.18" />
   </ItemGroup>
 </Project>
 ```

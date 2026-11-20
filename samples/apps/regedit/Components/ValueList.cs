@@ -35,13 +35,8 @@ internal sealed class ValueList : Component<ValueListProps>
             TextBlock(Strings.ColumnType).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1),
             TextBlock(Strings.ColumnData).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2)
         ).Padding(8, 0, 8, 0)
-         .Set(g =>
-         {
-             // BorderThickness/BorderBrush remain imperative until their modifier gates
-             // grow concrete Grid support.
-             g.BorderThickness = new Thickness(0, 0, 0, 1);
-             g.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"];
-         });
+         .BorderThickness(0, 0, 0, 1)
+         .BorderBrush(Theme.DividerStroke);
 
         var list = LazyVStack<RegistryValueEntry>(
             values,

@@ -15,12 +15,11 @@ public sealed record Page<TItem, TCursor>(
 
 /// <summary>
 /// The four discrete load states of an <see cref="InfiniteResource{TItem}"/>.
-/// Mirrors Android Paging 3's <c>LoadState</c>.
+/// Mirrors Android Paging 3's <c>LoadState</c>. The hierarchy is <c>closed</c>, so a C# 15+
+/// <c>switch</c> over all four cases is exhaustive without a discard arm.
 /// </summary>
-public abstract record LoadState
+public closed record LoadState
 {
-    private protected LoadState() { }
-
     /// <summary>A page fetch is in flight.</summary>
     public sealed record Loading : LoadState { public static readonly Loading Instance = new(); }
 
@@ -44,7 +43,7 @@ public abstract record LoadState
 /// <param name="CacheTime">Retention after the last subscriber leaves; null uses five minutes.</param>
 /// <param name="CacheKeyPrefix">
 /// Overrides the prefix for page cache keys; null uses a prefix unique to this hook.
-/// Page keys still include the dependency hash and page index. Changing deps
+/// Page keys still include the dependency hash, initial page size, and page index. Changing deps
 /// cancels in-flight page requests, resets the page set, and loads the first page
 /// for the new deps, even if the prefix is unchanged.
 /// </param>

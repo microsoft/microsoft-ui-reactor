@@ -70,7 +70,7 @@ public static partial class ReactorDiagnostics
             // An unmounted (unpooled) control keeps its tag, but its reference state was torn
             // down; only a control still in the live tree has an authored edge to recover.
             && control is FrameworkElement { IsLoaded: true }
-            && Reconciler.GetElementTag(control) is { } tag
+            && Reconciler.GetMountedElement(control) is { } tag
             && Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(tag) is var chain
             && !Microsoft.UI.Reactor.Core.V1Protocol.OverlayLifecycle.IsAttributionOnlyTag(control, chain[^1])
             && ReferenceEdgeMap.EffectiveLabeledById(chain) is { } id)

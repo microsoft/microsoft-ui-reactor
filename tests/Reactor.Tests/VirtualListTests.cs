@@ -10,6 +10,99 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class VirtualListTests
 {
+    private sealed record ProbeElement(string Label) : Element;
+
+    private static LazyVStackElement<int> Render(VirtualListComponent component)
+    {
+        component.Context.BeginRender(static () => { });
+        return Assert.IsType<LazyVStackElement<int>>(component.Render());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    [InlineData(100_000)]
+    public void Indices_AreCheckedAndEnumerateTheCompleteRange(int count)
+    {
+        IReadOnlyList<int> indices = new VirtualListIndices(count);
+        Assert.Equal(Enumerable.Range(0, count), indices);
+        Assert.Equal(Enumerable.Range(0, count),
+            ((global::System.Collections.IEnumerable)indices).Cast<int>());
+        Assert.Throws<ArgumentOutOfRangeException>(() => indices[-1]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => indices[count]);
+        if (count > 0)
+        {
+            Assert.Equal(0, indices[0]);
+            Assert.Equal(count - 1, indices[count - 1]);
+        }
+    }
+
+    [Fact]
+    public void Indices_RejectNegativeCount_AndSupportMaximumCountWithoutMaterializing()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new VirtualListIndices(-1));
+        var indices = new VirtualListIndices(int.MaxValue);
+        Assert.Equal(int.MaxValue, indices.Count);
+        Assert.Equal(int.MaxValue - 1, indices[int.MaxValue - 1]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => indices[int.MaxValue]);
+    }
+
+    [Fact]
+    public void Render_MemoizesOnlyTheIndices_AndRefreshesTheViewBuilder()
+    {
+        var component = new VirtualListComponent
+        {
+            Props = new() { ItemCount = 4, RenderItem = i => new ProbeElement($"old-{i}") },
+        };
+        var before = Render(component);
+        component.Props = component.Props with
+        {
+            RenderItem = i => new ProbeElement($"new-{i}"),
+            ItemHeight = 37,
+            Spacing = 3,
+        };
+        var after = Render(component);
+        Assert.IsType<VirtualListIndices>(after.Items);
+        Assert.Same(before.Items, after.Items);
+        Assert.Equal("old-2", Assert.IsType<ProbeElement>(before.BuildItemView(2)).Label);
+        var row = Assert.IsType<ProbeElement>(after.BuildItemView(2));
+        Assert.Equal("new-2", row.Label);
+        Assert.Equal(37, row.Modifiers?.Layout?.Height);
+        Assert.Equal(3, after.Spacing);
+        Assert.True(VirtualListIndices.IsDefaultKeySource(after));
+
+        component.Props = component.Props with { ItemCount = 5 };
+        var grown = Render(component);
+        Assert.Equal(5, grown.Items.Count);
+        Assert.NotSame(after.Items, grown.Items);
+        Assert.Equal(4, after.Items.Count);
+    }
+
+    [Fact]
+    public void DefaultKeyInvariant_RejectsReplacedItemsOrSelector()
+    {
+        var component = new VirtualListComponent
+        {
+            Props = new() { ItemCount = 3, RenderItem = i => new ProbeElement(i.ToString()) },
+        };
+        var original = Render(component);
+        Assert.True(VirtualListIndices.IsDefaultKeySource(original));
+        Assert.False(VirtualListIndices.IsDefaultKeySource(original with { Items = new[] { 2, 1, 0 } }));
+        Assert.False(VirtualListIndices.IsDefaultKeySource(original with { KeySelector = i => i.ToString() }));
+
+        var keys = new[] { "placeholder", "a", "b" };
+        Func<int, string> selector = i => keys[i];
+        component.Props = component.Props with { GetItemKey = selector };
+        var custom = Render(component);
+        Assert.Same(original.Items, custom.Items);
+        Assert.Same(selector, custom.KeySelector);
+        Assert.False(VirtualListIndices.IsDefaultKeySource(custom));
+        keys[0] = "loaded";
+        Assert.Equal("loaded", custom.GetKeyAt(0));
+        component.Props = component.Props with { GetItemKey = null };
+        Assert.True(VirtualListIndices.IsDefaultKeySource(Render(component)));
+    }
+
     // ── Element construction ────────────────────────────────────────
 
     [Fact]

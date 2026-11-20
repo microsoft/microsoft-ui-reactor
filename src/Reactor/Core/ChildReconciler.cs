@@ -364,12 +364,13 @@ internal static class ChildReconciler
                 // circuits Update, so without this the event trampoline keeps
                 // dispatching through the previous render's closure — stale state
                 // (e.g., Counter's `() => setCount(count + 1)` would keep capturing
-                // the initial count). For callback-free elements we still avoid
+                // the initial count). Callback-free non-flyout elements still avoid
                 // the children.Get COM call.
                 // #721 — the gesture/drag slots are excluded from the skip predicate,
                 // so refresh their cached dispatch closures here too (same stale-closure
                 // hazard as Tag). Fetch the control once for either need.
                 if ((newEl.HasCallbacks
+                        || Reconciler.IsFlyoutDecorator(newEl)
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
                         || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
@@ -566,7 +567,7 @@ internal static class ChildReconciler
                 if (_physical >= count) continue;
                 if (control is FrameworkElement fe)
                 {
-                    var controlKey = Reconciler.GetElementTag(fe)?.Key;
+                    var controlKey = Reconciler.GetMountedElement(fe)?.Key;
                     // An unkeyed Memo must not claim a keyed sibling, but its own
                     // realized output can carry a key that is not a sibling key.
                     if (oldChildren[logical].Key is { } key
@@ -656,6 +657,7 @@ internal static class ChildReconciler
                 // #721 — likewise refresh the cached gesture/drag dispatch closures
                 // (excluded from the skip predicate). Fetch the control once.
                 if ((newEl.HasCallbacks
+                        || Reconciler.IsFlyoutDecorator(newEl)
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
                         || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
@@ -709,6 +711,7 @@ internal static class ChildReconciler
                 reconciler.DebugElementsSkipped++;
                 // #721 — refresh Tag + cached gesture/drag dispatch closures on skip.
                 if ((newEl.HasCallbacks
+                        || Reconciler.IsFlyoutDecorator(newEl)
                         || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
                         || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers)
                         || Reconciler.CallSiteChangedOnSkip(oldEl, newEl))
@@ -823,19 +826,35 @@ internal static class ChildReconciler
             // must default to false for the unmatched-removal pass below.
             global::System.Array.Clear(matched, 0, oldMidLen);
 
-            // Build old key → index map
+            // Unkeyed children match by absolute position; they need no synthetic string
+            // unless an explicit key can collide with the legacy fallback namespace.
+            bool legacyFallback = false;
             for (int i = 0; i < oldMidLen; i++)
             {
-                var key = GetKey(oldChildren[oldStart + i], oldStart + i);
+                var key = oldChildren[oldStart + i].Key;
+                if (key is null) continue;
                 oldKeyMap[key] = i;
+                legacyFallback |= key.StartsWith("__pos_", StringComparison.Ordinal);
+            }
+            if (legacyFallback)
+            {
+                // Preserve last-wins shadowing even though CanUpdate later rejects
+                // keyed/unkeyed and runtime-type mismatches.
+                oldKeyMap.Clear();
+                for (int i = 0; i < oldMidLen; i++)
+                    oldKeyMap[GetKey(oldChildren[oldStart + i], oldStart + i)] = i;
             }
 
             // Map new keys to old indices
             for (int i = 0; i < newMidLen; i++)
             {
-                var key = GetKey(newChildren[newStart + i], newStart + i);
-                if (oldKeyMap.TryGetValue(key, out int oldIdx) &&
-                    reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChildren[newStart + i]))
+                var newChild = newChildren[newStart + i];
+                var key = legacyFallback ? GetKey(newChild, newStart + i) : newChild.Key;
+                int oldIdx = newStart + i - oldStart;
+                bool found = key is not null
+                    ? oldKeyMap.TryGetValue(key, out oldIdx)
+                    : (uint)oldIdx < (uint)oldMidLen;
+                if (found && reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChild))
                 {
                     newToOld[i] = oldIdx;
                     matched[oldIdx] = true;

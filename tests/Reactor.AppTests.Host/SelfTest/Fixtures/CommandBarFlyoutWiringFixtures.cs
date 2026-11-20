@@ -447,14 +447,8 @@ internal static class CommandBarFlyoutWiringFixtures
     //  Wrapping a target in CommandBarFlyout must not cost the target its
     //  own callbacks.
     //
-    //  KNOWN GAP (issue #942): all three target-wrapping decorators —
-    //  Flyout, MenuFlyout and CommandBarFlyout — retag the target control
-    //  with the *decorator's* element (SetElementTag), which is the same
-    //  ReactorState slot the target's own event trampolines resolve
-    //  through, so the target's callbacks are dropped. Pre-existing and
-    //  identical on MenuFlyout, so it is not this change's to fix; the two
-    //  assertions below are SKIPped rather than deleted so the gap stays
-    //  visible in the TAP log and flips to a real assertion when #942 lands.
+    //  Issue #942: the decorator and target share a native control, but
+    //  must keep separate element identities for their own callbacks.
     // ════════════════════════════════════════════════════════════════════
     internal class TargetKeepsItsOwnCallbacks(Harness h) : SelfTestFixtureBase(h)
     {
@@ -482,25 +476,18 @@ internal static class CommandBarFlyoutWiringFixtures
             H.Check("CbfCallbacks_CheckBoxMounted",
                 H.FindControl<CheckBox>(c => c.Content is string s && s == "cbfcb-chk") is not null);
 
-            // Button target: the flyout opens on click (this change), and the target's own
-            // OnClick should fire on the same click (blocked by #942).
+            // The same click opens the flyout and invokes the target's own callback.
             H.ClickButton("cbfcb-btn");
             await Harness.Render();
             var button = H.FindButton("cbfcb-btn");
             H.Check("CbfCallbacks_ButtonClickOpensFlyout", await WaitOpen(button?.Flyout));
-            if (clicks == 1)
-                H.Check("CbfCallbacks_ButtonOnClickFired", true);
-            else
-                H.Skip("CbfCallbacks_ButtonOnClickFired", "issue #942 - decorator retags the target");
+            H.Check("CbfCallbacks_ButtonOnClickFired", clicks == 1);
             await CloseAndSettle(button?.Flyout);
 
-            // Non-button (attached-slot) target: same gap, no flyout involvement at all.
+            // Non-button targets use the attached slot and still dispatch their own events.
             H.ToggleCheckBox("cbfcb-chk");
             await Harness.Render();
-            if (checks == 1)
-                H.Check("CbfCallbacks_CheckBoxOnChangedFired", true);
-            else
-                H.Skip("CbfCallbacks_CheckBoxOnChangedFired", "issue #942 - decorator retags the target");
+            H.Check("CbfCallbacks_CheckBoxOnChangedFired", checks == 1);
         }
     }
 }

@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 //
 // Expander needs callback/template wiring that the generic descriptor path does
 // not cover: the IsExpanded-changed callback added/changed on UPDATE, plus
-// HeaderTemplate (Element header wins over the string slot), ContentTransitions,
+// HeaderContent (Element header wins over the string slot), ContentTransitions,
 // and ExpandDirection. Expander has Header + Content child elements;
 // ContinueDefaultTraversal lets the engine's default unmount recursion run. The
 // unregistered ExpanderDescriptor is retained for isolated selftests.
@@ -24,11 +24,10 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
         };
         if (el.IsExpanded.HasValue)
             expander.IsExpanded = el.IsExpanded.Value;
-        // Element header wins over the string slot (matches the spec
-        // "HeaderTemplate" slot semantics — strings are still supported as
-        // the default header content).
-        expander.Header = el.HeaderTemplate is not null
-            ? ctx.Reconciler.Mount(el.HeaderTemplate, requestRerender)
+        // Element header wins over the string slot. The child is assigned to
+        // native Header, leaving HeaderTemplate available for a DataTemplate.
+        expander.Header = el.HeaderContent is not null
+            ? ctx.Reconciler.Mount(el.HeaderContent, requestRerender)
             : el.Header;
         if (el.ContentTransitions is not null) expander.ContentTransitions = el.ContentTransitions;
         expander.Content = ctx.Reconciler.Mount(el.Content, requestRerender);
@@ -52,10 +51,10 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
         exp.ExpandDirection = newEl.ExpandDirection;
 
         // Element header wins over the string slot. Reconcile via ReconcileChild
-        // when both old and new use HeaderTemplate; otherwise swap modes.
-        if (newEl.HeaderTemplate is not null)
+        // when both old and new use HeaderContent; otherwise swap modes.
+        if (newEl.HeaderContent is not null)
         {
-            reconciler.ReconcileChild(oldEl.HeaderTemplate, newEl.HeaderTemplate,
+            reconciler.ReconcileChild(oldEl.HeaderContent, newEl.HeaderContent,
                 () => exp.Header as UIElement,
                 c => exp.Header = c,
                 () => exp.Header = newEl.Header,
@@ -98,7 +97,7 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
     {
         var expander = (WinUI.Expander)control;
         // The default ContentControl traversal owns Content, but not Header.
-        if (element?.HeaderTemplate is not null)
+        if (element?.HeaderContent is not null)
         {
             if (expander.Header is UIElement header) ctx.Reconciler.UnmountChild(header);
             expander.Header = null;

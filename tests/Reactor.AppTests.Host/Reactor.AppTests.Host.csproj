@@ -37,6 +37,7 @@
 
   <ItemGroup>
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+    <Compile Include="..\_shared\EtwPrivateCapture.cs" Link="EtwPrivateCapture.cs" />
     <!-- PackagedIdentityFixtures lives here and is linked into the packaged host, so the
          derivation has to compile in both. -->
     <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />

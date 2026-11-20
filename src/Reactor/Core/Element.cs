@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -502,6 +503,21 @@ public abstract record Element
     /// Returns true only when the two elements are provably identical for rendering purposes.
     /// Conservative: returns false for unknown element types.
     /// </summary>
+    /// <summary>
+    /// Whether two elements carry equal extras that <see cref="OwnPropsEqual"/> does not read:
+    /// animations, attached layout values (grid row, canvas position, flex), theme bindings and
+    /// resource overrides. Context values are left out: a provider change re-renders its
+    /// consumers, which report their own changes. For the perf provider's <c>changes</c> count.
+    /// </summary>
+    internal static bool ExtrasEqual(Element a, Element b)
+    {
+        if (a.Extensions is null && b.Extensions is null) return true;
+        return (a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)
+            && AttachedEqual(a.Attached, b.Attached)
+            && ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)
+            && ResourceOverridesEqual(a.ResourceOverrides, b.ResourceOverrides);
+    }
+
     internal static bool ShallowEquals(Element a, Element b)
     {
         if (ReferenceEquals(a, b)) return true;
@@ -510,11 +526,12 @@ public abstract record Element
 
         // Spec 047 §4.4 fast-path: when neither element carries an Extras bucket,
         // all 14 bucketed fields (Attached, ThemeBindings, ContextValues, …) are
-        // provably null on both sides, so the three structural compares below are
+        // provably null on both sides, so the structural comparisons below are
         // guaranteed to pass. Skip them (and their null-deref property GETs) for
         // the common no-extras leaf.
         if (!(a.Extensions is null && b.Extensions is null))
         {
+            if (!(a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)) return false;
             if (!AttachedEqual(a.Attached, b.Attached)) return false;
             if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
             // Issue #675 — compare ResourceOverrides for symmetry with ThemeBindings: a
@@ -554,6 +571,7 @@ public abstract record Element
 
             (HyperlinkButtonElement ha, HyperlinkButtonElement hb) =>
                 ha.Content == hb.Content
+                && ha.ContentElement is null && hb.ContentElement is null
                 && ha.NavigateUri == hb.NavigateUri
                 && CommandBindings.CommandsEqual(ha.Command, hb.Command)
                 && SettersEqual(ha.Setters, hb.Setters),
@@ -561,6 +579,7 @@ public abstract record Element
             (RepeatButtonElement ra, RepeatButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.Delay == rb.Delay
+                && ra.ContentElement is null && rb.ContentElement is null
                 && ra.Interval == rb.Interval
                 && CommandBindings.CommandsEqual(ra.Command, rb.Command)
                 && SettersEqual(ra.Setters, rb.Setters),
@@ -568,6 +587,7 @@ public abstract record Element
             (ToggleButtonElement ta, ToggleButtonElement tb) =>
                 ta.Label == tb.Label
                 && ta.IsChecked == tb.IsChecked
+                && ta.ContentElement is null && tb.ContentElement is null
                 && CommandBindings.CommandsEqual(ta.Command, tb.Command)
                 && SettersEqual(ta.Setters, tb.Setters),
 
@@ -577,12 +597,14 @@ public abstract record Element
             // buttons fast-path too.
             (SplitButtonElement sa, SplitButtonElement sb) =>
                 sa.Label == sb.Label
+                && sa.ContentElement is null && sb.ContentElement is null
                 && ReferenceEquals(sa.Flyout, sb.Flyout)
                 && CommandBindings.CommandsEqual(sa.Command, sb.Command)
                 && SettersEqual(sa.Setters, sb.Setters),
 
             (ToggleSplitButtonElement tsa, ToggleSplitButtonElement tsb) =>
                 tsa.Label == tsb.Label
+                && tsa.ContentElement is null && tsb.ContentElement is null
                 && tsa.IsChecked == tsb.IsChecked
                 && ReferenceEquals(tsa.Flyout, tsb.Flyout)
                 && CommandBindings.CommandsEqual(tsa.Command, tsb.Command)
@@ -606,6 +628,7 @@ public abstract record Element
             (CheckBoxElement ca, CheckBoxElement cb) =>
                 ca.IsChecked == cb.IsChecked
                 && ca.Label == cb.Label
+                && ca.ContentElement is null && cb.ContentElement is null
                 && ca.IsThreeState == cb.IsThreeState
                 && ca.CheckedState == cb.CheckedState
                 && SettersEqual(ca.Setters, cb.Setters),
@@ -613,6 +636,7 @@ public abstract record Element
             (RadioButtonElement ra, RadioButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.IsChecked == rb.IsChecked
+                && ra.ContentElement is null && rb.ContentElement is null
                 && ra.GroupName == rb.GroupName
                 && SettersEqual(ra.Setters, rb.Setters),
 
@@ -898,7 +922,10 @@ public abstract record Element
                 && SettersEqual(fa.Setters, fb.Setters),
 
             (CanvasElement ca, CanvasElement cb) =>
-                SettersEqual(ca.Setters, cb.Setters),
+                ca.Width == cb.Width
+                && ca.Height == cb.Height
+                && BrushesEqual(ca.Background, cb.Background)
+                && SettersEqual(ca.Setters, cb.Setters),
 
             (WrapGridElement wa, WrapGridElement wb) =>
                 wa.Orientation == wb.Orientation
@@ -920,7 +947,7 @@ public abstract record Element
                 pa.IsOpen == pb.IsOpen
                 && pa.IsLightDismissEnabled == pb.IsLightDismissEnabled,
 
-            // TitleBar: own-props check (ignore Content/RightHeader slots which
+            // TitleBar: own-props check (ignore LeftHeader/Content/RightHeader slots which
             // recurse as children). Without this, TitleBar flashes yellow on
             // every reconcile even when only descendants changed.
             (TitleBarElement ta, TitleBarElement tb) =>
@@ -969,12 +996,16 @@ public abstract record Element
                 && ca.PlaceholderText == cb.PlaceholderText
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
+                && ca.Description == cb.Description
+                && ca.MaxDropDownHeight.Equals(cb.MaxDropDownHeight)
                 && SettersEqual(ca.Setters, cb.Setters),
 
             (ListViewElement la, ListViewElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
                 && la.SelectionMode == lb.SelectionMode
                 && la.Header == lb.Header
+                && ReferenceEquals(la.ItemContainerStyle, lb.ItemContainerStyle)
+                && la.IncrementalLoadingTrigger == lb.IncrementalLoadingTrigger
                 && SettersEqual(la.Setters, lb.Setters),
 
             (GridViewElement ga, GridViewElement gb) =>
@@ -1234,9 +1265,29 @@ public abstract record Element
     /// the skip.
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
+        => ModifiersEqualCore(a, b, visibleOnly: false);
+
+    /// <summary>
+    /// Like <see cref="ModifiersEqual"/>, but only for what the control shows: callback
+    /// slots (routed handlers, <c>.Ref</c>, <c>.OnUnmount</c>, <c>.OnUpdate</c>) are ignored,
+    /// and a flyout or rich tooltip compares by presence only (its content is reconciled
+    /// when it opens). For the perf provider's <c>changes</c> count (issue #1538), where a
+    /// fresh per-render closure must not make a render look productive.
+    /// </summary>
+    internal static bool ModifiersVisiblyEqual(ElementModifiers? a, ElementModifiers? b)
+        => ModifiersEqualCore(a, b, visibleOnly: true);
+
+    private static bool ModifiersEqualCore(ElementModifiers? a, ElementModifiers? b, bool visibleOnly)
     {
         if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
+        if (a is null || b is null)
+        {
+            if (!visibleOnly) return false;
+            // A side without modifiers shows the defaults, so a callback-only bucket added or
+            // removed is no visible change.
+            a ??= _emptyModifiers;
+            b ??= _emptyModifiers;
+        }
 
         // #159 — hoist the Layout/Visual sub-record reads once instead of
         // dereferencing a.Layout?.X / a.Visual?.X ~20 times through the shim
@@ -1279,11 +1330,15 @@ public abstract record Element
             // were ignored entirely. Gesture / drag-drop slots are deliberately
             // NOT compared here (see ModifierCallbacksEqual) so behavior matches
             // the historical diff exactly.
-            && ModifierCallbacksEqual(a, b)
+            && (visibleOnly || ModifierCallbacksEqual(a, b))
             // Skip RichToolTip, AttachedFlyout, ContextFlyout — rare, conservative false
-            && a.RichToolTip is null && b.RichToolTip is null
-            && a.AttachedFlyout is null && b.AttachedFlyout is null
-            && a.ContextFlyout is null && b.ContextFlyout is null
+            && (visibleOnly
+                ? (a.RichToolTip is null) == (b.RichToolTip is null)
+                    && (a.AttachedFlyout is null) == (b.AttachedFlyout is null)
+                    && (a.ContextFlyout is null) == (b.ContextFlyout is null)
+                : a.RichToolTip is null && b.RichToolTip is null
+                    && a.AttachedFlyout is null && b.AttachedFlyout is null
+                    && a.ContextFlyout is null && b.ContextFlyout is null)
             // Accessibility Tier 1
             && a.HeadingLevel == b.HeadingLevel
             && a.IsDragRegion == b.IsDragRegion
@@ -1298,7 +1353,7 @@ public abstract record Element
             // Imperative ref slot (.Ref). A ref-only change (add/remove/swap)
             // must force Update so ApplyModifiers clears the old cell and sets the
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
-            && ReferenceEquals(a.Ref, b.Ref)
+            && (visibleOnly || ReferenceEquals(a.Ref, b.Ref))
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
             // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
@@ -1310,7 +1365,7 @@ public abstract record Element
             // both null ⇒ equal (no teardown either render ⇒ zero skip-rate cost for
             // plain leaves), a reference-stable teardown still skips, a fresh closure
             // forces Update so the latest teardown is registered.
-            && ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction)
+            && (visibleOnly || ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction))
             // Imperative update slot (.OnUpdateAdd), for the same reason as OnUnmountAction
             // above: it is DEFINED to run on every in-place update, and this skip path is
             // the one thing that can make that false — a skipped element never reaches
@@ -1319,7 +1374,7 @@ public abstract record Element
             // unchanged in the common case, and a reference-stable action (the static
             // method group chart labels use) still skips. Only an added/removed/changed
             // action declines — which is exactly when the caller needs the callback.
-            && ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction)
+            && (visibleOnly || ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction))
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
@@ -1335,6 +1390,7 @@ public abstract record Element
     // against a set one without allocating (and without 20+ null-conditional shims).
     private static readonly LayoutModifiers _emptyLayout = new();
     private static readonly VisualModifiers _emptyVisual = new();
+    private static readonly ElementModifiers _emptyModifiers = new();
 
     /// <summary>
     /// Compare the Visual buckets by value. Brush fields (Background / Foreground /
@@ -1802,6 +1858,24 @@ internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
 }
 
 /// <summary>
+/// Animation declarations compared together when deciding whether an element can skip an update.
+/// Record equality includes every field; arrays and native objects retain their existing equality semantics.
+/// </summary>
+internal readonly record struct AnimationExtras
+{
+    internal ImplicitTransitions? ImplicitTransitions { get; init; }
+    internal ThemeTransitions? ThemeTransitions { get; init; }
+    internal LayoutAnimationConfig? LayoutAnimation { get; init; }
+    internal Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+    internal Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+    internal Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+    internal Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+    internal Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    internal Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+    internal string? ConnectedAnimationKey { get; init; }
+}
+
+/// <summary>
 /// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
 /// Holds the 14 rarely-set fields (attached properties, transitions, theme
 /// bindings, animation configs, resource overrides, context values) that used
@@ -1827,6 +1901,9 @@ internal readonly struct ExtrasSlot : global::System.IEquatable<ExtrasSlot>
 /// <remarks>Spec 047 §4.4.</remarks>
 public record ElementExtras
 {
+    /// <summary>Animation declarations shared by record equality and shallow comparison.</summary>
+    internal AnimationExtras Animations { get; private init; }
+
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
     /// Set via fluent extension methods: TextBlock("hi").Grid(row: 1, column: 2)
@@ -1840,13 +1917,21 @@ public record ElementExtras
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
-    public ImplicitTransitions? ImplicitTransitions { get; init; }
+    public ImplicitTransitions? ImplicitTransitions
+    {
+        get => Animations.ImplicitTransitions;
+        init => Animations = Animations with { ImplicitTransitions = value };
+    }
 
     /// <summary>
     /// Theme transitions (children, item container).
     /// Set via fluent extension methods: VStack(children).WithTransitions(...)
     /// </summary>
-    public ThemeTransitions? ThemeTransitions { get; init; }
+    public ThemeTransitions? ThemeTransitions
+    {
+        get => Animations.ThemeTransitions;
+        init => Animations = Animations with { ThemeTransitions = value };
+    }
 
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
@@ -1861,47 +1946,75 @@ public record ElementExtras
     /// so that layout-driven position (and optionally size) changes animate smoothly.
     /// Set via fluent extension methods: Border(child).LayoutAnimation()
     /// </summary>
-    public LayoutAnimationConfig? LayoutAnimation { get; init; }
+    public LayoutAnimationConfig? LayoutAnimation
+    {
+        get => Animations.LayoutAnimation;
+        init => Animations = Animations with { LayoutAnimation = value };
+    }
 
     /// <summary>
     /// Compositor property animation configuration (.Animate() modifier).
     /// When set, the reconciler creates ImplicitAnimationCollection entries on the
     /// element's Visual for Opacity/Scale/Rotation/Offset/CenterPoint.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig
+    {
+        get => Animations.AnimationConfig;
+        init => Animations = Animations with { AnimationConfig = value };
+    }
 
     /// <summary>
     /// Element enter/exit transition configuration (.Transition() modifier).
     /// When set, the reconciler animates mount (enter) and unmount (exit) with
     /// compositor animations, deferring removal until exit animation completes.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition
+    {
+        get => Animations.ElementTransition;
+        init => Animations = Animations with { ElementTransition = value };
+    }
 
     /// <summary>
     /// Interaction states configuration (.InteractionStates() modifier).
     /// When set, the reconciler registers pointer event handlers that drive
     /// zero-reconcile visual state transitions (hover, pressed, focused).
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates
+    {
+        get => Animations.InteractionStates;
+        init => Animations = Animations with { InteractionStates = value };
+    }
 
     /// <summary>
     /// Stagger configuration for container children (.Stagger() modifier).
     /// When set, child animations (enter, layout, property) have incrementing
     /// DelayTime = childIndex * staggerDelay.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig
+    {
+        get => Animations.StaggerConfig;
+        init => Animations = Animations with { StaggerConfig = value };
+    }
 
     /// <summary>
     /// Keyframe animation definitions (.Keyframes() modifier).
     /// Trigger-based: plays when the trigger value changes between renders.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations
+    {
+        get => Animations.KeyframeAnimations;
+        init => Animations = Animations with { KeyframeAnimations = value };
+    }
 
     /// <summary>
     /// Scroll-linked expression animation configuration (.ScrollLinked() modifier).
     /// Expression animations run on the compositor, driven by ScrollViewer position.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation
+    {
+        get => Animations.ScrollAnimation;
+        init => Animations = Animations with { ScrollAnimation = value };
+    }
 
     /// <summary>
     /// Connected animation key for cross-container transitions.
@@ -1910,7 +2023,11 @@ public record ElementExtras
     /// mount if a prepared animation with the same key exists.
     /// Set via fluent extension method: Border(child).ConnectedAnimation("hero")
     /// </summary>
-    public string? ConnectedAnimationKey { get; init; }
+    public string? ConnectedAnimationKey
+    {
+        get => Animations.ConnectedAnimationKey;
+        init => Animations = Animations with { ConnectedAnimationKey = value };
+    }
 
     /// <summary>
     /// Per-control resource overrides (lightweight styling). When set, the reconciler
@@ -2015,17 +2132,8 @@ public record ElementExtras
     /// </summary>
     internal bool IsBehaviorallyEmpty =>
         Attached is null
-        && ImplicitTransitions is null
-        && ThemeTransitions is null
+        && Animations.Equals(default)
         && ThemeBindings is null
-        && LayoutAnimation is null
-        && AnimationConfig is null
-        && ElementTransition is null
-        && InteractionStates is null
-        && StaggerConfig is null
-        && KeyframeAnimations is null
-        && ScrollAnimation is null
-        && ConnectedAnimationKey is null
         && ResourceOverrides is null
         && ContextValues is null;
 }
@@ -3181,9 +3289,8 @@ public record RichTextInlineUIContainer : RichTextInline
 //  Button elements
 // ════════════════════════════════════════════════════════════════════════
 
-// Spec 058 §15 (P5.22) — fully bespoke (everything in Customize). Polymorphic content: a guarded
-// SingleContent over ContentElement (overwrites the auto unguarded one so a Label string isn't
-// clobbered) + Label OneWayConditional gated on ContentElement is null. IsEnabled gated on
+// Spec 058 §15 (P5.22) — polymorphic content is shared with the button family.
+// ContentElement is reconciled as a child subtree; Label remains the text fallback. IsEnabled gated on
 // !IsDisabledFocusable; IsDisabledFocusable coerces IsEnabled=true + Opacity. Click suppresses when
 // IsDisabledFocusable (Excluded so it isn't auto-surfaced). Replaces ButtonDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Button), Exclude = new[] { "Click" })]
@@ -3251,19 +3358,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ButtonElement, WinUI.Button> d)
     {
-        // Guarded polymorphic content: SetChild only writes a non-null mounted child, so the
-        // string Label written by the gated OneWayConditional below is never clobbered.
-        d.Children = new global::Microsoft.UI.Reactor.Core.V1Protocol.SingleContent<ButtonElement, WinUI.Button>(
-            GetChild: static e => e.ContentElement,
-            SetChild: static (c, ui) => { if (ui is not null) c.Content = ui; })
-        {
-            GetCurrentChild = static c => c.Content as global::Microsoft.UI.Xaml.UIElement,
-        };
-        return d
-            .OneWayConditional(
-                get:         static e => e.Label,
-                set:         static (c, v) => c.Content = v,
-                shouldWrite: static e => e.ContentElement is null)
+        return d.WithContent(static e => e.ContentElement, static e => e.Label)
             .OneWayConditional(
                 get:         static e => e.EffectiveIsEnabled,
                 set:         static (c, v) => c.IsEnabled = v,
@@ -3301,7 +3396,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
 // typed Command property still dispatches: the trampoline invokes OnClick when present, else the
 // command. (Was an auto-surfaced Click→OnClick before #637.)
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.HyperlinkButton), Exclude = new[] { "Click" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Content", "Content")]  // Content as value (not child slot)
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
 public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = null, Action? OnClick = null) : Element
 {
@@ -3309,6 +3404,8 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
     /// <c>new HyperlinkButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch + apply IsEnabled identically. See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.HyperlinkButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
@@ -3323,7 +3420,8 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<HyperlinkButtonElement, WinUI.HyperlinkButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<HyperlinkButtonElement, WinUI.HyperlinkButton> d)
-        => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.HyperlinkButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Content)
+            .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.HyperlinkButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
                 callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
@@ -3334,7 +3432,7 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
 
 // Spec 058 §15 (P5.4). Click Excluded + hand-coded (issue #637) — see HyperlinkButtonElement.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinPrim.RepeatButton), Exclude = new[] { "Click" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
 public partial record RepeatButtonElement(string Label, Action? OnClick = null) : Element
 {
@@ -3344,6 +3442,8 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
     /// <c>new RepeatButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch + apply IsEnabled identically. See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinPrim.RepeatButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
@@ -3358,7 +3458,8 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RepeatButtonElement, WinPrim.RepeatButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RepeatButtonElement, WinPrim.RepeatButton> d)
-        => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.RepeatButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.RepeatButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
                 callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
@@ -3372,7 +3473,7 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
 // IsChecked's source is CheckedState in 3-state mode else IsChecked, and Click reads back the
 // control value firing both callbacks. No event auto-surfaces (no OnClick). Replaces ToggleButtonDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinPrim.ToggleButton))]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsThreeState")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("CheckedState")]
@@ -3395,6 +3496,8 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
     /// issue #637). All paths fire the command on each toggle + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinPrim.ToggleButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnCheckedStateChanged, Command) is not null;
 
@@ -3415,7 +3518,8 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleButtonElement, WinPrim.ToggleButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleButtonElement, WinPrim.ToggleButton> d)
-        => d.OneWay(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .OneWay(
                 get: static e => e.IsThreeState,
                 set: static (c, v) => c.IsThreeState = v)
             .OneWay<bool?>(
@@ -3430,30 +3534,31 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
             .OneWayCommand(static e => e.Command);  // issue #153 — command metadata + IsEnabled applied field-aware
 }
 
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias], which also suppresses the auto content slot
-// so Flyout isn't mis-mapped to Content). Flyout is a [WrapManual] OneWayBridged (CreateFlyoutForDescriptor
-// + reference-identity comparer). Children stay None. Replaces DropDownButtonDescriptor.
+// Text/Element content uses the shared ContentControl strategy. Flyout remains
+// a separate OneWayBridged slot with a reference-identity comparer.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.DropDownButton))]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Flyout")]
 public partial record DropDownButtonElement(string Label, Element? Flyout = null) : Element
 {
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.DropDownButton>[] Setters { get; init; } = [];
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<DropDownButtonElement, WinUI.DropDownButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<DropDownButtonElement, WinUI.DropDownButton> d)
-        => d.OneWayBridged<Element?>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .OneWayBridged<Element?>(
             get:         static e => e.Flyout,
             set:         static (c, v, rec, rr) => c.Flyout = rec.CreateFlyoutForDescriptor(v, rr),
             shouldWrite: static e => e.Flyout is not null,
             comparer:    global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors.ElementReferenceComparer.Instance);
 }
 
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias], suppresses the auto content slot). Click
-// (HandCodedEvent, Excluded so it isn't auto-surfaced) + Flyout (OneWayBridged) in Customize.
-// Children stay None. Replaces SplitButtonDescriptor.
+// Text/Element content uses the shared strategy. Click and Flyout retain their
+// hand-coded event and OneWayBridged paths.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.SplitButton), Exclude = new[] { "Click" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Flyout")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
 public partial record SplitButtonElement(string Label, Action? OnClick = null, Element? Flyout = null) : Element
@@ -3463,6 +3568,8 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
     /// issue #637). All paths dispatch the primary action + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.SplitButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
@@ -3477,7 +3584,8 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SplitButtonElement, WinUI.SplitButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SplitButtonElement, WinUI.SplitButton> d)
-        => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitButtonEventPayload, global::Windows.Foundation.TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs>>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitButtonEventPayload, global::Windows.Foundation.TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs>>(
                 subscribe:        static (c, h) => c.Click += h,
                 callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
@@ -3491,11 +3599,10 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
             .OneWayCommand(static e => e.Command);  // issue #153 — command metadata + IsEnabled applied field-aware
 }
 
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias], suppresses the auto content slot). IsChecked
-// (controlled via IsCheckedChanged — Excluded + handled in Customize) + Flyout (OneWayBridged).
-// Children stay None. Replaces ToggleSplitButtonDescriptor.
+// Text/Element content uses the shared strategy. IsChecked remains controlled
+// via IsCheckedChanged, with Flyout in its separate OneWayBridged slot.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.ToggleSplitButton), Exclude = new[] { "IsCheckedChanged" })]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Flyout")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Command")]
@@ -3506,6 +3613,8 @@ public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsCh
     /// issue #637). All paths fire the command on each toggle + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.ToggleSplitButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(Command) is not null;
 
@@ -3537,7 +3646,8 @@ public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsCh
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> d)
-        => d.HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ToggleSplitButtonEventPayload, bool, global::Windows.Foundation.TypedEventHandler<WinUI.ToggleSplitButton, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs>>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ToggleSplitButtonEventPayload, bool, global::Windows.Foundation.TypedEventHandler<WinUI.ToggleSplitButton, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs>>(
                 get:         static e => e.IsChecked,
                 set:         static (c, v) => c.IsChecked = v,
                 readBack:    static c => c.IsChecked,
@@ -3777,13 +3887,22 @@ public partial record AutoSuggestBoxElement(
     internal Action<WinUI.AutoSuggestBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // A programmatic Text write raises TextChanged with Reason=ProgrammaticChange, about
+    // 150 ms later and debounced (several writes can merge into one event). Every
+    // TextChanged, whatever its reason, consumes the pending arm, so the write's own echo
+    // spends it even though that echo never reaches the callback. No armOnMount: the
+    // Mount write's echo is a ProgrammaticChange too, so the reason filter drops it
+    // without an arm. (On the counter, the reason filter returned before the token
+    // was taken, so it stayed reserved and swallowed the user's next keystroke after
+    // every state write.)
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxTextChangedEventArgs>
         __TextChangedTrampoline = (s, args) =>
         {
-            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             var asb = (WinUI.AutoSuggestBox)s!;
             if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(asb, out var state)) return;
-            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
+            if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, asb.Text)) return;
+            if (args.Reason != WinUI.AutoSuggestionBoxTextChangeReason.UserInput) return;
             (state.Element as AutoSuggestBoxElement)?.OnTextChanged?.Invoke(asb.Text);
         };
 
@@ -3891,7 +4010,8 @@ public partial record AutoSuggestBoxElement(
                 callback:    static e => e.OnTextChanged,
                 trampoline:  __TextChangedTrampoline,
                 slotIsNull:  static p => p.TextChangedTrampoline is null,
-                setSlot:     static (p, h) => p.TextChangedTrampoline = h)
+                setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+                valueDiffEcho: true)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.AutoSuggestBoxEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.AutoSuggestBox, WinUI.AutoSuggestBoxQuerySubmittedEventArgs>>(
                 subscribe:        static (c, h) => c.QuerySubmitted += h,
@@ -3913,12 +4033,12 @@ public partial record AutoSuggestBoxElement(
 }
 
 /// <summary>Check box element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its checked state until explicitly set.</summary>
-// Spec 058 §15 (P5.22) — Label→Content ([WrapAlias]), IsThreeState auto. IsChecked is the
+// Spec 058 §15 (P5.22) — text/Element content is shared; IsThreeState auto. IsChecked is the
 // multi-event controlled value (Checked/Unchecked/Indeterminate) with a dual callback
 // (OnCheckedStateChanged bool? OR OnIsCheckedChanged bool when HasValue); CheckedState folds
 // into that callback. Both bespoke → Customize (RadioButton precedent). Replaces CheckBoxDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.CheckBox))]
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("CheckedState")]
 public partial record CheckBoxElement(
@@ -3930,12 +4050,15 @@ public partial record CheckBoxElement(
     public bool IsThreeState { get; init; }
     public bool? CheckedState { get; init; }
     public Action<bool?>? OnCheckedStateChanged { get; init; }
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.CheckBox>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || OnCheckedStateChanged is not null;
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<CheckBoxElement, WinUI.CheckBox> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<CheckBoxElement, WinUI.CheckBox> d)
-        => d.Controlled<bool?, global::Microsoft.UI.Xaml.RoutedEventArgs>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .Controlled<bool?, global::Microsoft.UI.Xaml.RoutedEventArgs>(
             get:         static e => e.IsChecked,
             set:         static (c, v) => c.IsChecked = v,
             subscribe:   static (fe, h) =>
@@ -3965,7 +4088,7 @@ public partial record CheckBoxElement(
 
 /// <summary>Radio button element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its checked state until explicitly set.</summary>
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.RadioButton))]  // spec 058 §15 (P5.4)
-[global::Microsoft.UI.Reactor.Wrappers.WrapAlias("Label", "Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("Label")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsChecked")]  // record bool vs control bool? — needs readBack ?? false
 public partial record RadioButtonElement(
     string Label,
@@ -3974,13 +4097,16 @@ public partial record RadioButtonElement(
     string? GroupName = null
 ) : Element
 {
+    /// <summary>Declarative content, taking precedence over the text value.</summary>
+    public Element? ContentElement { get; init; }
     internal Action<WinUI.RadioButton>[] Setters { get; init; } = [];
 
     // IsChecked is controlled via Checked + Unchecked; the record models it as a
     // non-nullable bool, the control as bool? — so readBack bridges null → false.
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RadioButtonElement, WinUI.RadioButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RadioButtonElement, WinUI.RadioButton> d)
-        => d.Controlled<bool, global::Microsoft.UI.Xaml.RoutedEventArgs>(
+        => d.WithContent(static e => e.ContentElement, static e => e.Label)
+            .Controlled<bool, global::Microsoft.UI.Xaml.RoutedEventArgs>(
             get:         static e => e.IsChecked,
             set:         static (c, v) => c.IsChecked = v,
             subscribe:   static (fe, h) =>
@@ -4535,18 +4661,26 @@ public partial record RichEditBoxElement(
     internal override bool HasCallbacks => OnTextChanged is not null;
 
     // Text round-trips through the RichEditBox document (not a Text DP): the set
-    // writes Document.SetText (guarded on non-empty, manual BeginSuppress because
-    // SetText fires TextChanged asynchronously), readBack/trampoline read
-    // Document.GetText trimming a trailing \r. Reused verbatim from the hand-written
-    // descriptor so the deferred suppress-counter echo behaviour is identical.
+    // writes Document.SetText (skipped for an empty value), readBack/trampoline read
+    // it back through ReadDocumentText.
+    //
+    // Echo suppression uses the spec 047 §8 value-diff arm, not the suppress counter.
+    // SetText raises TextChanged asynchronously, so the arm is consumed by the next
+    // TextChanged after the write; it only drops that event when its readback equals
+    // the written text, so a write whose echo never comes (or is merged) can't
+    // swallow a real edit. The engine arms before calling set, on Update and, with
+    // armOnMount, on Mount too, since the Mount write echoes after the trampoline
+    // is wired. It clears the arm when set skipped the write. (The counter took
+    // one token from the engine's Update wrapper and a second one from set for a
+    // single TextChanged, so the user's next edit after every state write was
+    // dropped.)
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __TextChangedTrampoline = (s, _) =>
     {
         var r = (WinUI.RichEditBox)s!;
         if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(r, out var state)) return;
-        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(state)) return;
-        r.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-        (state.Element as RichEditBoxElement)
-            ?.OnTextChanged?.Invoke(text?.TrimEnd('\r') ?? "");
+        var text = ReadDocumentText(r);
+        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, text)) return;
+        (state.Element as RichEditBoxElement)?.OnTextChanged?.Invoke(text);
     };
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RichEditBoxElement, WinUI.RichEditBox> Customize(
@@ -4556,21 +4690,47 @@ public partial record RichEditBoxElement(
             set:         static (c, v) =>
             {
                 if (!string.IsNullOrEmpty(v))
-                {
-                    global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.BeginSuppress(c);
                     c.Document.SetText(global::Microsoft.UI.Text.TextSetOptions.None, v);
-                }
             },
-            readBack:    static c =>
-            {
-                c.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var text);
-                return text?.TrimEnd('\r') ?? "";
-            },
+            readBack:    static c => ReadDocumentText(c),
             subscribe:   static (c, h) => c.TextChanged += h,
             callback:    static e => e.OnTextChanged,
             trampoline:  __TextChangedTrampoline,
             slotIsNull:  static p => p.TextChangedTrampoline is null,
-            setSlot:     static (p, h) => p.TextChangedTrampoline = h);
+            setSlot:     static (p, h) => p.TextChangedTrampoline = h,
+            comparer:    DocumentTextComparer.Instance,
+            valueDiffEcho: true,
+            armOnMount:  true);
+
+    // GetText(None) returns every line break as \r and always ends with one more \r,
+    // the document's implicit final paragraph mark: "" reads back as "\r", "a" as
+    // "a\r", "a\n" as "a\r\r". Drop only that mark, so a trailing line break the
+    // text really has (written by state or typed by the user) survives the round
+    // trip, and "text" and "text\n" stay different values.
+    private static string ReadDocumentText(WinUI.RichEditBox box)
+    {
+        box.Document.GetText(global::Microsoft.UI.Text.TextGetOptions.None, out var raw);
+        if (string.IsNullOrEmpty(raw)) return "";
+        return raw[^1] == '\r' ? raw[..^1] : raw;
+    }
+
+    // The document stores every line break as \r, so "a\nb" reads back as "a\rb".
+    // Compare with \r\n and \n normalized to \r, so a multi-line write matches its
+    // own echo and isn't rewritten on every render. Trailing breaks still count.
+    private sealed class DocumentTextComparer : global::System.Collections.Generic.IEqualityComparer<string>
+    {
+        internal static readonly DocumentTextComparer Instance = new();
+
+        public bool Equals(string? x, string? y) =>
+            string.Equals(Normalize(x), Normalize(y), global::System.StringComparison.Ordinal);
+
+        public int GetHashCode(string obj) =>
+            global::System.StringComparer.Ordinal.GetHashCode(Normalize(obj));
+
+        private static string Normalize(string? s) =>
+            (s ?? "").Replace("\r\n", "\r", global::System.StringComparison.Ordinal)
+                .Replace('\n', '\r');
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -4791,15 +4951,15 @@ public partial record BorderElement(Element? Child) : Element
 }
 
 /// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>
-// Spec 058 §15 (P5.23) — ExpandDirection auto. Content + HeaderTemplate are both Element-typed so
+// Spec 058 §15 (P5.23) — ExpandDirection auto. Content + HeaderContent are both Element-typed so
 // auto content-slot detection is ambiguous → overwrite d.Children with SingleContent(Content) in
-// Customize. HeaderTemplate (ImperativeBridged, Element header wins), gated string Header, IsExpanded
+// Customize. HeaderContent (ImperativeBridged, Element header wins), gated string Header, IsExpanded
 // (counter-echo HandCodedControlled over Expanding + Collapsed event) are bespoke. ContentTransitions
 // (TransitionCollection) is Excluded (legacy gap — escape-hatched via setter). Replaces ExpanderDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.Expander), Exclude = new[] { "ContentTransitions" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Header")]
-[global::Microsoft.UI.Reactor.Wrappers.WrapManual("HeaderTemplate")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("HeaderContent")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("IsExpanded")]
 public partial record ExpanderElement(
     string Header,
@@ -4809,8 +4969,9 @@ public partial record ExpanderElement(
 ) : Element
 {
     public ExpandDirection ExpandDirection { get; init; } = ExpandDirection.Down;
-    /// <summary>Custom Element header (overrides the string <see cref="Header"/>).</summary>
-    public Element? HeaderTemplate { get; init; }
+    /// <summary>Custom Element content assigned to the native Expander's Header,
+    /// overriding the string <see cref="Header"/>. This is a mounted child, not a DataTemplate.</summary>
+    public Element? HeaderContent { get; init; }
     /// <summary>Custom <c>TransitionCollection</c> applied to the expanding content area.</summary>
     public Microsoft.UI.Xaml.Media.Animation.TransitionCollection? ContentTransitions { get; init; }
     internal Action<WinUI.Expander>[] Setters { get; init; } = [];
@@ -4845,22 +5006,22 @@ public partial record ExpanderElement(
             .ImperativeBridged(
                 mount: static (ctx, c, e) =>
                 {
-                    if (e.HeaderTemplate is null) return;
-                    var mounted = ctx.MountChild(e.HeaderTemplate);
+                    if (e.HeaderContent is null) return;
+                    var mounted = ctx.MountChild(e.HeaderContent);
                     if (mounted is not null) c.Header = mounted;
                 },
                 update: static (ctx, c, oldEl, newEl) =>
                 {
-                    if (oldEl.HeaderTemplate is null && newEl.HeaderTemplate is null) return;
+                    if (oldEl.HeaderContent is null && newEl.HeaderContent is null) return;
                     var existing = c.Header as global::Microsoft.UI.Xaml.UIElement;
                     var next = ctx.Reconciler.ReconcileV1Child(
-                        oldEl.HeaderTemplate, newEl.HeaderTemplate, existing, ctx.RequestRerender);
+                        oldEl.HeaderContent, newEl.HeaderContent, existing, ctx.RequestRerender);
                     if (!ReferenceEquals(existing, next))
                         c.Header = next;
                 },
                 unmount: static (ctx, c) =>
                 {
-                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderTemplate: not null }) return;
+                    if (Reconciler.GetElementTag(c) is not ExpanderElement { HeaderContent: not null }) return;
                     if (c.Header is global::Microsoft.UI.Xaml.UIElement child)
                         ctx.Reconciler.UnmountChild(child);
                     c.Header = null;
@@ -4868,7 +5029,7 @@ public partial record ExpanderElement(
             .OneWayConditional(
                 get:         static e => e.Header ?? string.Empty,
                 set:         static (c, v) => c.Header = v,
-                shouldWrite: static e => e.HeaderTemplate is null)
+                shouldWrite: static e => e.HeaderContent is null)
             .HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ExpanderEventPayload, bool,
                 global::Windows.Foundation.TypedEventHandler<WinUI.Expander, WinUI.ExpanderExpandingEventArgs>>(
                 get:         static e => e.IsExpanded,
@@ -5203,12 +5364,13 @@ public partial record NavigationViewElement(
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/
-// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. Content+RightHeader (NamedSlots → overwrite d.Children),
+// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. LeftHeader+Content+RightHeader (NamedSlots → overwrite d.Children),
 // Icon (Icon→IconSource via IconResolver transform), the window.SetTitleBar registration
 // (.Imperative) and the BackRequested/PaneToggleRequested events (Excluded) are bespoke.
 // Replaces TitleBarDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.TitleBar), Exclude = new[] { "BackRequested", "PaneToggleRequested" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("LeftHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("RightHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Icon")]
 public partial record TitleBarElement(
@@ -5259,6 +5421,8 @@ public partial record TitleBarElement(
     /// </remarks>
     public WindowTitleBarTheme? PreferredTheme { get; init; }
     public Element? Content { get; init; }
+    /// <summary>Custom content in the title bar's leading header slot.</summary>
+    public Element? LeftHeader { get; init; }
     public Element? RightHeader { get; init; }
     /// <summary>
     /// Icon shown in the title bar's leading slot. Mirrors WinUI 3
@@ -5302,6 +5466,13 @@ public partial record TitleBarElement(
     {
         d.Children = new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlots<TitleBarElement, WinUI.TitleBar>(new[]
         {
+            new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<TitleBarElement, WinUI.TitleBar>(
+                Name: "LeftHeader",
+                GetChild: static e => e.LeftHeader,
+                SetChild: static (c, ui) => c.LeftHeader = ui)
+            {
+                GetCurrentChild = static c => c.LeftHeader as global::Microsoft.UI.Xaml.UIElement,
+            },
             new global::Microsoft.UI.Reactor.Core.V1Protocol.NamedSlot<TitleBarElement, WinUI.TitleBar>(
                 Name: "Content",
                 GetChild: static e => e.Content,

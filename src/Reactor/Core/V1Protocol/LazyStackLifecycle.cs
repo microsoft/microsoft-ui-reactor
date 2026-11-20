@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Reactor.Animation;
+using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -85,6 +86,8 @@ internal static class LazyStackLifecycle
                 // Phase 1 OC<ReactorRow> binding shape.
                 var fresh = BuildListState(reconciler, repeater, n);
                 Reconciler.SetListState(repeater, fresh);
+                // A rebind replaces what the host shows (perf `changes`).
+                Reconciler.CountPerfChanges();
                 repeater.ItemsSource = fresh.Source;
                 var factory = n.CreateFactory(reconciler, requestRerender, reconciler._pool);
                 n.AttachListStateToFactory(factory, fresh);
@@ -103,16 +106,34 @@ internal static class LazyStackLifecycle
 
     private static void ApplyLazyKeyedDiffOrFallback(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase n, IElementFactory factory)
     {
+        bool defaultKeys = VirtualListIndices.IsDefaultKeySource(n);
         var state = Reconciler.GetListState(repeater);
         if (state is null || !ReferenceEquals(repeater.ItemsSource, state.Source))
         {
             var fresh = BuildListState(reconciler, repeater, n);
             Reconciler.SetListState(repeater, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            Reconciler.CountPerfChanges();
             repeater.ItemsSource = fresh.Source;
             n.AttachListStateToFactory(factory, fresh);
             return;
         }
 
+        // A prior duplicate-key bailout collapses ByKey. Reseed before switching
+        // to default positions, preserving the existing collection binding.
+        if (defaultKeys && state.ByKey.Count != state.LastKeys.Count)
+        {
+            SeedListState(reconciler, repeater, n, state);
+            return;
+        }
+
+        if (defaultKeys && state.HasDefaultPositionalKeys && state.LastKeys.Count == n.ItemCount)
+            return;
+
+        // Invalidate before invoking user code: a failed custom projection must not
+        // leave a positional invariant behind. Realized rows are refreshed by Update
+        // even when the unchanged-count default path above needs no structural diff.
+        state.HasDefaultPositionalKeys = false;
         var ambient = AnimationAmbient.Current;
         var attribution = reconciler.KeyedListAttributionFor(n);
         var stats = KeyedListDiff.Apply(
@@ -124,6 +145,7 @@ internal static class LazyStackLifecycle
             ambient,
             controlInstance: repeater,
             attribution: attribution);
+        state.HasDefaultPositionalKeys = defaultKeys;
 
         // ItemsRepeater realizes containers through ElementFactory, so the
         // enter animation runs from there. Moves on already-realized
@@ -154,9 +176,15 @@ internal static class LazyStackLifecycle
     private static ReactorListState BuildListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy)
     {
         var state = new ReactorListState();
+        SeedListState(reconciler, repeater, lazy, state);
+        return state;
+    }
+
+    private static void SeedListState(Reconciler reconciler, WinUI.ItemsRepeater repeater, LazyStackElementBase lazy, ReactorListState state)
+    {
         state.Reset(KeyedListDiff.SeedKeys(
             lazy, lazy.ItemCount, static (l, i) => l.GetKeyAt(i),
             reconciler._logger, repeater.GetType().Name, repeater, reconciler.KeyedListAttributionFor(lazy)));
-        return state;
+        state.HasDefaultPositionalKeys = VirtualListIndices.IsDefaultKeySource(lazy);
     }
 }

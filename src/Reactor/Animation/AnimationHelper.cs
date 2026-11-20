@@ -13,17 +13,124 @@ namespace Microsoft.UI.Reactor.Animation;
 /// </summary>
 internal static class AnimationHelper
 {
+    private static AnimateProperty PropertyFlag(string property) => property switch
+    {
+        "Opacity" => AnimateProperty.Opacity,
+        "Scale" => AnimateProperty.Scale,
+        "Rotation" => AnimateProperty.Rotation,
+        "Translation" => AnimateProperty.Offset,
+        "CenterPoint" => AnimateProperty.CenterPoint,
+        _ => default,
+    };
+
+    // The pool marker follows wrapper identity; property ownership follows native identity.
+    private static bool ShouldWriteToVisual(UIElement element, string property)
+        => ElementPool.IsCompositorTainted(element)
+            || (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
+                && (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
+
+    private static void MarkCompositionWrite(UIElement element, string property)
+    {
+        var state = Reconciler.GetOrCreateReactorState(element);
+        var flag = PropertyFlag(property);
+        state.CompositionModifierProperties |= flag;
+        state.KeyframeChannelOwners?.Remove(flag);
+        state.DeferredModifierResets &= ~flag;
+    }
+
+    private static Visual GetAnimationVisual(UIElement element)
+    {
+        var visual = ElementCompositionPreview.GetElementVisual(element);
+        ElementPool.MarkCompositorTainted(element);
+        return visual;
+    }
+
+    /// <summary>
+    /// Releases a modifier's facade or compositor write.
+    /// Ordinary facade writes must not call GetElementVisual: handing out the visual
+    /// permanently disables XAML implicit transitions and makes the element unpoolable.
+    /// </summary>
+    internal static void ResetCompositionModifier(UIElement element, string property, AnimationController? expectedController = null)
+    {
+        var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+        var flag = PropertyFlag(property);
+        if (state is null || (state.CompositionModifierProperties & flag) == 0)
+        {
+            if (property == "Opacity") return;
+            try
+            {
+                switch (property)
+                {
+                    case "Scale": element.Scale = Vector3.One; break;
+                    case "Rotation": element.Rotation = 0; break;
+                    case "Translation": element.Translation = Vector3.Zero; break;
+                    case "CenterPoint": element.CenterPoint = Vector3.Zero; break;
+                }
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // A different feature handed out the Visual. It already released the
+                // facade and owns its visual value; do not overwrite that value.
+                ElementPool.MarkCompositorTainted(element);
+                return;
+            }
+        }
+        var visual = GetAnimationVisual(element);
+        // A shared target can replace the deferred animation before its decorator plays.
+        if (expectedController is not null && !Equals(expectedController, visual.TryGetAnimationController(CompositorPropertyName(property))))
+        {
+            ClearCompositionOwnership(state, flag);
+            return;
+        }
+        if (state.KeyframeChannelOwners?.TryGetValue(flag, out var owner) == true && owner.Entry.Definition.Loop
+            && visual.TryGetAnimationController(CompositorPropertyName(property)) is { } controller)
+        {
+            state.DeferredModifierResets |= flag;
+            state.KeyframeChannelOwners[flag] = owner with { DeferredController = controller };
+            return;
+        }
+
+        // A direct visual write replaces its running animation as well as its base
+        // value. StopAnimation alone can leave the last animated value behind.
+        // Disable implicit animations so .Animate() cannot animate this reset again.
+        var implicitAnimations = visual.ImplicitAnimations;
+        try
+        {
+            visual.ImplicitAnimations = null;
+            switch (property)
+            {
+                case "Opacity": visual.Opacity = (float)element.Opacity; break;
+                case "Scale": visual.Scale = Vector3.One; break;
+                case "Rotation": visual.RotationAngle = 0; break;
+                case "Translation":
+                    element.Translation = Vector3.Zero;
+                    visual.Properties.InsertVector3("Translation", Vector3.Zero);
+                    break;
+                case "CenterPoint": visual.CenterPoint = Vector3.Zero; break;
+            }
+        }
+        finally { visual.ImplicitAnimations = implicitAnimations; }
+        ClearCompositionOwnership(state, flag);
+    }
+
+    private static void ClearCompositionOwnership(Reconciler.ReactorState state, AnimateProperty flag)
+    {
+        state.CompositionModifierProperties &= ~flag;
+        state.KeyframeChannelOwners?.Remove(flag);
+        state.DeferredModifierResets &= ~flag;
+    }
+
     /// <summary>
     /// Sets a scalar property on a UIElement, animating via the compositor if
     /// <see cref="AnimationScope.Current"/> is non-null.
     /// </summary>
-    internal static void SetOrAnimate(UIElement element, string property, float value)
+    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null,
+        bool respectPropertyFlags = false)
     {
         // Resolve animation curve: prefer ambient WithAnimation scope,
         // fall back to element's .Animate() config curve.
-        var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= (element is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagEl)
-            ? tagEl.AnimationConfig?.Curve : null;
+        var curve = ResolveCurve(element, property, source, respectPropertyFlags);
 
         if (curve is null)
         {
@@ -31,7 +138,7 @@ internal static class AnimationHelper
             return;
         }
 
-        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var visual = GetAnimationVisual(element);
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
 
@@ -67,8 +174,9 @@ internal static class AnimationHelper
             }
             default:
                 SetScalarDirect(element, property, value);
-                break;
+                return;
         }
+        MarkCompositionWrite(element, property);
     }
 
     /// <summary>
@@ -237,11 +345,10 @@ internal static class AnimationHelper
     /// Sets a Vector3 property on a UIElement, animating via the compositor if
     /// <see cref="AnimationScope.Current"/> is non-null.
     /// </summary>
-    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value)
+    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null,
+        bool respectPropertyFlags = false)
     {
-        var curve = AnimationScope.HasScope ? AnimationScope.Current : null;
-        curve ??= (element is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagEl)
-            ? tagEl.AnimationConfig?.Curve : null;
+        var curve = ResolveCurve(element, property, source, respectPropertyFlags);
 
         if (curve is null)
         {
@@ -249,7 +356,12 @@ internal static class AnimationHelper
             return;
         }
 
-        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var visual = GetAnimationVisual(element);
+        if (property == "Translation")
+        {
+            element.Translation = Vector3.Zero;
+            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+        }
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
 
@@ -285,8 +397,24 @@ internal static class AnimationHelper
             }
             default:
                 SetVector3Direct(element, property, value);
-                break;
+                return;
         }
+        MarkCompositionWrite(element, property);
+    }
+
+    private static Curve? ResolveCurve(UIElement element, string property, Element? source, bool respectPropertyFlags)
+    {
+        if (AnimationScope.HasScope && AnimationScope.Current is { } ambient) return ambient;
+        var config = Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig, source);
+        if (config is null)
+            return null;
+
+        // Restoring another decorator's value must not restart a channel that the
+        // current declaration excluded, including a channel just narrowed away.
+        if (respectPropertyFlags && (config.Properties & PropertyFlag(property)) == 0)
+            return null;
+
+        return config.Curve;
     }
 
     private static string CompositorPropertyName(string property) => property switch
@@ -301,31 +429,57 @@ internal static class AnimationHelper
 
     private static void SetScalarDirect(UIElement element, string property, float value)
     {
-        switch (property)
+        if (!ShouldWriteToVisual(element, property))
         {
-            case "Opacity":
-                element.Opacity = value;
-                break;
-            case "Rotation":
-                element.Rotation = value;
-                break;
+            try
+            {
+                switch (property)
+                {
+                    case "Opacity": element.Opacity = value; break;
+                    case "Rotation": element.Rotation = value; break;
+                }
+                return;
+            }
+            catch (UnauthorizedAccessException) { }
         }
+        var visual = GetAnimationVisual(element);
+        if (property == "Rotation") visual.RotationAngleInDegrees = value;
+        else if (property == "Opacity")
+        {
+            element.Opacity = value;
+            visual.Opacity = value;
+        }
+        MarkCompositionWrite(element, property);
     }
 
     private static void SetVector3Direct(UIElement element, string property, Vector3 value)
     {
+        if (!ShouldWriteToVisual(element, property))
+        {
+            try
+            {
+                switch (property)
+                {
+                    case "Scale": element.Scale = value; break;
+                    case "Translation": element.Translation = value; break;
+                    case "CenterPoint": element.CenterPoint = value; break;
+                }
+                return;
+            }
+            catch (UnauthorizedAccessException) { }
+        }
+        var visual = GetAnimationVisual(element);
         switch (property)
         {
-            case "Scale":
-                element.Scale = value;
-                break;
+            case "Scale": visual.Scale = value; break;
             case "Translation":
-                element.Translation = value;
+                element.Translation = Vector3.Zero;
+                ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+                visual.Properties.InsertVector3("Translation", value);
                 break;
-            case "CenterPoint":
-                element.CenterPoint = value;
-                break;
+            case "CenterPoint": visual.CenterPoint = value; break;
         }
+        MarkCompositionWrite(element, property);
     }
 }
 

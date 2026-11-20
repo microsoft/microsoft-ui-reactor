@@ -3,37 +3,35 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Mxc.Sdk.V1;
 
 namespace WidgetCreator.Services;
 
 /// <summary>
 /// Independent, host-side confirmation that a widget really is contained
-/// (threat-model C-2). MXC is the entire runtime security bar, yet the host
-/// otherwise derives "was it sandboxed?" purely by substring-matching
-/// <c>wxc-exec</c> stdout — which is fail-open (a partial setup, an ignored
-/// policy field, or spoofed output all read as "contained"). This verifier adds
-/// two out-of-band signals that do NOT trust the untrusted run's stdout:
+/// (threat-model C-2). MXC is the entire runtime security bar, so the host does
+/// not take "it was sandboxed" on faith from a successful launch. This verifier
+/// adds two out-of-band signals:
 /// <list type="number">
-///   <item><b>Tier probe</b> — a dedicated <c>wxc-exec --probe</c> invocation
-///   (runs no widget code) reports the strongest containment tier available on
-///   this host, so we can optionally <b>fail closed</b> when only a weak tier is
-///   available for untrusted code.</item>
-///   <item><b>Token check</b> — after launch we locate the sandboxed widget
-///   process from the host and inspect its access token directly
-///   (<c>TokenIsAppContainer</c> + integrity level). A process running at the
-///   host's own medium integrity with no AppContainer is a definite fail-open;
-///   we kill it rather than believe stdout that claimed it was sandboxed.</item>
+///   <item><b>Tier probe</b> — <see cref="MxcContainer.Probe"/> (runs no widget
+///   code) reports which Windows ProcessContainer isolation tier would serve the
+///   request on this host, so we can optionally <b>fail closed</b> when only a
+///   weaker tier is available for untrusted code.</item>
+///   <item><b>Token check</b> — after launch we take the contained process id
+///   reported by the SDK (<see cref="MxcProcess.Id"/>) and inspect its access
+///   token directly from the host (<c>TokenIsAppContainer</c> + integrity level).
+///   A process running at the host's own medium integrity with no AppContainer
+///   is a definite fail-open; we kill it rather than trust the launch.</item>
 /// </list>
 /// </summary>
 public static class MxcContainmentVerifier
 {
     /// <summary>Opt-in (truthy env): refuse to run untrusted code unless the
     /// strong BaseContainer tier is confirmed available. Off by default because
-    /// AppContainer+DACL is still a real sandbox and is the only tier on some
-    /// hosts; strict mode is for deployments that require the stronger boundary.</summary>
+    /// AppContainer (BFS or DACL) is still a real sandbox and is the only tier on
+    /// some hosts; strict mode is for deployments that require the stronger
+    /// boundary.</summary>
     public const string RequireBaseContainerVar = "WIDGET_CREATOR_REQUIRE_BASE_CONTAINER";
 
     public static bool StrictBaseContainer =>
@@ -42,83 +40,34 @@ public static class MxcContainmentVerifier
 
     // ── tier probe ──────────────────────────────────────────────────────────
 
-    /// <summary>Result of a dedicated <c>wxc-exec --probe</c> run (no widget code).</summary>
-    public sealed record TierProbe(bool Ran, bool BaseContainerActive, string Raw)
+    /// <summary>Result of <see cref="MxcContainer.Probe"/> for a request (no widget code runs).</summary>
+    public sealed record TierProbe(bool Ran, IsolationTier? Tier, string Raw)
     {
-        /// <summary>True when we have positive evidence the host supports the
-        /// strong BaseContainer tier.</summary>
-        public bool StrongTierConfirmed => Ran && BaseContainerActive;
+        /// <summary>True when we have positive evidence the host serves this
+        /// request with the strong BaseContainer tier.</summary>
+        public bool StrongTierConfirmed => Ran && Tier == IsolationTier.BaseContainer;
     }
 
-    static readonly SemaphoreSlim _probeGate = new(1, 1);
-    static TierProbe? _cachedProbe;
-
-    /// <summary>Probe the effective containment tier once (cached). Best-effort:
-    /// if <c>--probe</c> is unavailable the result is <see cref="TierProbe.Ran"/>
-    /// = false and callers treat the strong tier as unconfirmed.</summary>
-    public static async Task<TierProbe> ProbeTierAsync(string wxcExecPath, CancellationToken ct)
-    {
-        if (_cachedProbe is { } cached) return cached;
-        await _probeGate.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (_cachedProbe is { } c2) return c2;
-            _cachedProbe = await RunProbeAsync(wxcExecPath, ct).ConfigureAwait(false);
-            SessionLog.Write(_cachedProbe.Ran
-                ? $"[Containment] tier probe: baseContainer={_cachedProbe.BaseContainerActive}"
-                : "[Containment] tier probe did not run (wxc-exec --probe unavailable)");
-            return _cachedProbe;
-        }
-        finally
-        {
-            _probeGate.Release();
-        }
-    }
-
-    static async Task<TierProbe> RunProbeAsync(string wxcExecPath, CancellationToken ct)
+    /// <summary>
+    /// Ask MXC which ProcessContainer tier would serve <paramref name="request"/>.
+    /// Best-effort: on failure <see cref="TierProbe.Ran"/> is false and callers
+    /// treat the strong tier as unconfirmed.
+    /// </summary>
+    public static TierProbe ProbeTier(ContainerRequest request)
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = wxcExecPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("--probe");
-
-            using var proc = new Process { StartInfo = psi };
-            proc.Start();
-            var stdout = await proc.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
-            var stderr = await proc.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
-            using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
-            {
-                timeout.CancelAfter(TimeSpan.FromSeconds(15));
-                try { await proc.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                {
-                    try { proc.Kill(entireProcessTree: true); } catch { /* gone */ }
-                }
-            }
-
-            var raw = stdout + "\n" + stderr;
-            // The probe reports the preferred tier; BaseContainer is the strong
-            // tier, "appcontainer"/"dacl" is the weaker fallback. Treat an active
-            // BaseContainer as confirmed only when it is not flagged unavailable.
-            var lower = raw.ToLowerInvariant();
-            var baseActive =
-                (lower.Contains("base-container") || lower.Contains("basecontainer"))
-                && !lower.Contains("not preferred")
-                && !lower.Contains("unavailable")
-                && !lower.Contains("bfscompiledin: false");
-            return new TierProbe(Ran: true, BaseContainerActive: baseActive, Raw: raw.Trim());
+            var probe = MxcContainer.Probe(request);
+            var raw = $"tier={probe.Tier?.ToString() ?? "none"}"
+                + (probe.Error is { Length: > 0 } e ? $" error={e}" : "")
+                + (probe.Warnings.Count > 0 ? $" warnings=[{string.Join("; ", probe.Warnings)}]" : "");
+            SessionLog.Write($"[Containment] tier probe: {raw}");
+            return new TierProbe(Ran: probe.Error is null && probe.Tier is not null, probe.Tier, raw);
         }
         catch (Exception ex)
         {
             SessionLog.Write($"[Containment] tier probe failed: {ex.Message}");
-            return new TierProbe(Ran: false, BaseContainerActive: false, Raw: ex.Message);
+            return new TierProbe(Ran: false, Tier: null, Raw: ex.Message);
         }
     }
 
@@ -139,18 +88,23 @@ public static class MxcContainmentVerifier
     }
 
     /// <summary>
-    /// Poll for the sandboxed widget process (a descendant of <paramref name="rootPid"/>,
-    /// i.e. the <c>wxc-exec</c> we launched) and inspect its token. Returns as soon
-    /// as a matching process is found and checked, the deadline passes, or
+    /// Locate the sandboxed widget process — <paramref name="rootPid"/> itself (the
+    /// contained process the SDK spawned) or, if MXC interposed a launcher, a
+    /// descendant named <paramref name="widgetExeName"/> — and inspect its token.
+    /// Returns as soon as a matching process is checked, the deadline passes, or
     /// cancellation fires. Best-effort by design.
     /// </summary>
     public static TokenContainment VerifyWidgetProcess(
         int rootPid, string widgetExeName, TimeSpan deadline, CancellationToken ct)
     {
+        if (rootPid <= 0)
+            return new TokenContainment(Checked: false, IsAppContainer: false, IntegrityRid: 0,
+                Detail: "MXC reported no process id");
+
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < deadline && !ct.IsCancellationRequested)
         {
-            var pid = FindDescendantByName(rootPid, widgetExeName);
+            var pid = FindWidgetProcess(rootPid, widgetExeName);
             if (pid != 0)
                 return InspectToken(pid);
             Thread.Sleep(150);
@@ -219,9 +173,12 @@ public static class MxcContainmentVerifier
 
     // ── process-tree walk (toolhelp snapshot) ────────────────────────────────
 
-    static int FindDescendantByName(int rootPid, string exeName)
+    static int FindWidgetProcess(int rootPid, string exeName)
     {
         var (children, names) = SnapshotProcessTree();
+        if (names.TryGetValue(rootPid, out var rootName) &&
+            string.Equals(rootName, exeName, StringComparison.OrdinalIgnoreCase))
+            return rootPid;
         if (children.Count == 0) return 0;
 
         var stack = new Stack<int>();

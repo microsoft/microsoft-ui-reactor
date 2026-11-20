@@ -23,7 +23,7 @@ internal static class ItemsHostReviewFixtures
             bool parented = false;
             var element = Expander("fallback", TextBlock("body"), isExpanded: true) with
             {
-                HeaderTemplate = Button("owned header").OnUnmount(c =>
+                HeaderContent = Button("owned header").OnUnmount(c =>
                 {
                     cleanups++;
                     parented = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(c) is not null;

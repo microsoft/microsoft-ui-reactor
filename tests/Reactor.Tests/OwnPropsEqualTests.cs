@@ -432,12 +432,12 @@ public class OwnPropsEqualTests
     [Fact]
     public void TitleBarElement_DescendantChange_DoesNotFlashChrome()
     {
-        // Pinning the comment in the source: Content / RightHeader are
+        // Pinning the comment in the source: Content / LeftHeader / RightHeader are
         // *not* own-props and changing them must leave OwnPropsEqual=true,
         // because they recurse as children. If a future change added Content
         // to the comparison, every descendant edit would flash the chrome.
         var a = new TitleBarElement("App") { Content = new EmptyElement() };
-        var b = new TitleBarElement("App") { Content = new GroupElement(NoChildren), RightHeader = new EmptyElement() };
+        var b = new TitleBarElement("App") { Content = new GroupElement(NoChildren), LeftHeader = new EmptyElement(), RightHeader = new EmptyElement() };
         Assert.True(Element.OwnPropsEqual(a, b));
     }
 

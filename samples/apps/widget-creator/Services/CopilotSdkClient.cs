@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -47,6 +50,17 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         {
             if (_client is not null) return _client;
             var options = new CopilotClientOptions();
+            // The SDK's default stdio transport looks ONLY for a CLI bundled next to
+            // the app (runtimes/<rid>/native/copilot.exe) and does not consult
+            // COPILOT_CLI_PATH. When the app was built without a bundled CLI (e.g.
+            // CopilotSkipCliDownload=true on a restricted network), resolve one at
+            // run time and pass it explicitly so generation still works.
+            var cliPath = ResolveCliPath();
+            if (cliPath is not null)
+            {
+                SessionLog.Write($"[CopilotSdk] no bundled CLI; using resolved CLI at {cliPath}");
+                options.Connection = RuntimeConnection.ForStdio(path: cliPath);
+            }
             var client = new CopilotClient(options);
             SessionLog.Write($"[CopilotSdk] starting CLI server (model={_model})");
             await client.StartAsync().ConfigureAwait(false);
@@ -58,6 +72,48 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         {
             _initLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Resolves a Copilot CLI to spawn when the SDK's bundled binary is absent.
+    /// Returns <c>null</c> when the bundled CLI is present (let the SDK use it) or
+    /// when nothing could be found (let the SDK throw its descriptive error).
+    /// Order: bundled next to the app → <c>COPILOT_CLI_PATH</c> → a locally
+    /// installed Copilot CLI in its well-known install locations. We deliberately
+    /// do NOT probe <c>PATH</c> for <c>copilot.exe</c> — that would let any
+    /// unrelated (or malicious) binary earlier on <c>PATH</c> be launched. To use
+    /// a CLI in a non-standard location, set <c>COPILOT_CLI_PATH</c> explicitly.
+    /// </summary>
+    static string? ResolveCliPath()
+    {
+        var rid = "win-" + (RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64");
+        // Path.Join never discards earlier segments (unlike Path.Combine with a rooted segment).
+        var bundled = Path.Join(AppContext.BaseDirectory, "runtimes", rid, "native", "copilot.exe");
+        if (File.Exists(bundled))
+            return null; // SDK's default resolution works.
+
+        var env = Environment.GetEnvironmentVariable("COPILOT_CLI_PATH");
+        if (!string.IsNullOrWhiteSpace(env) && File.Exists(env))
+            return env;
+
+        return EnumerateInstalledCliPaths().FirstOrDefault(File.Exists);
+    }
+
+    static IEnumerable<string> EnumerateInstalledCliPaths()
+    {
+        // Standalone GitHub Copilot CLI installs in their well-known locations:
+        // the gh-managed copy, then the WinGet `GitHub.Copilot` command links
+        // (user scope, then machine scope). Intentionally fixed paths — never a
+        // PATH scan, so an unrelated copilot.exe on PATH can't be picked up and run.
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrEmpty(localAppData))
+        {
+            yield return Path.Join(localAppData, "GitHub CLI", "copilot", "copilot.exe");
+            yield return Path.Join(localAppData, "Microsoft", "WinGet", "Links", "copilot.exe");
+        }
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrEmpty(programFiles))
+            yield return Path.Join(programFiles, "WinGet", "Links", "copilot.exe");
     }
 
     public async Task<IModelConversation> StartConversationAsync(string systemPrompt, CancellationToken ct)

@@ -228,7 +228,7 @@ internal sealed class InfiniteHookState<TItem, TCursor> : IDisposable
         return r;
     }
 
-    private string CacheKeyFor(int pageIndex) => $"{KeyPrefix}/page:{pageIndex}";
+    private string CacheKeyFor(int pageIndex) => $"{KeyPrefix}/size:{_options.PageSize}/page:{pageIndex}";
 
     private void RequestPage(int pageIndex)
     {

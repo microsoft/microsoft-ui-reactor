@@ -32,7 +32,7 @@ internal readonly record struct ModifierGateArgument(string? Slot, string Identi
 /// <para>
 /// The gate groups are named by concatenating their receiver list, so a gate that is a superset of
 /// another <b>necessarily</b> has a name that is a superset string —
-/// <c>ControlBorder</c> ⊏ <c>ControlBorderGridStack</c> ⊏ <c>ControlBorderGridStackRelative</c> ⊏
+/// <c>ControlBorderGridStack</c> ⊏ <c>ControlBorderGridStackRelative</c> ⊏
 /// <c>…RelativeText</c>. Any check that asserts "modifier X has gate Y" by substring therefore
 /// passes when X carries a different, <em>wider</em> gate: a silent false PASS on precisely the
 /// assertion meant to catch a mis-widened gate. Issue #1062.

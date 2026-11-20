@@ -3,14 +3,14 @@
   <PropertyGroup>
     <!--
       Spec 047 §14 Phase 1 (1.10) — fixture project for the
-      Reactor.Compile.Analyzer Roslyn analyzer. Hosted on net8.0 (not
+      Reactor.Compile.Analyzer Roslyn analyzer. Hosted on net10.0 (not
       net10.0-windows) because the analyzer targets netstandard2.0 and
       its tests don't need WinUI runtime types — every WinUI shape used
       by REACTOR1002 is stubbed in the test source string passed to
       `CSharpAnalyzerTest`, the way other Reactor analyzer tests stub
       their dependencies.
     -->
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AssemblyName>Reactor.Compile.Analyzer.Tests</AssemblyName>
@@ -24,6 +24,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <!-- Lifts the harness's transitive Pkcs to a patched version (see Directory.Packages.props). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>

@@ -121,3 +121,10 @@ public sealed class PersistenceEtwCollection { }
 /// </summary>
 [CollectionDefinition("RenderErrorGlobals", DisableParallelization = true)]
 public sealed class RenderErrorGlobalsCollection { }
+
+/// <summary>
+/// Isolates data-source diagnostics so other tests' EventSource listeners cannot
+/// enable the process-wide warning gate during delayed-subscription checks.
+/// </summary>
+[CollectionDefinition("DataSourceDiagnostics", DisableParallelization = true)]
+public sealed class DataSourceDiagnosticsCollection { }

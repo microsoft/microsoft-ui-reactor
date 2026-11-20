@@ -95,23 +95,17 @@ if ($UnitOnly) {
   if ($LASTEXITCODE -ne 0) { throw "Selftest coverage collect failed" }
 
   Write-Host '==> Merging cobertura reports' -ForegroundColor Cyan
-  dotnet-coverage merge $unitOut $selfOut --output $mergedOut --output-format cobertura
-  if ($LASTEXITCODE -ne 0) { throw "merge failed" }
+  # Not `dotnet-coverage merge`: it drops covered lines from these reports
+  # (tests/coverage/ci/README.md explains why). This is the merge CI's Coverage workflow uses.
+  & "$repoRoot/tests/coverage/ci/Merge-Cobertura.ps1" -OutFile $mergedOut $unitOut $selfOut
 }
 
-# Summary
-[xml]$x = Get-Content $mergedOut
-$line = [math]::Round([double]$x.coverage.'line-rate' * 100, 2)
-$covered = 0; $total = 0
-foreach ($l in $x.SelectNodes('//line[@condition-coverage]')) {
-  if ($l.'condition-coverage' -match '\((\d+)/(\d+)\)') {
-    $covered += [int]$Matches[1]; $total += [int]$Matches[2]
-  }
-}
-$branch = if ($total -gt 0) { [math]::Round(100.0 * $covered / $total, 2) } else { 0 }
+# Summary, scored the way CI's Coverage workflow scores it.
+. "$repoRoot/tests/coverage/ci/CoverageLib.ps1"
+$rates = Get-CoberturaRates -Path $mergedOut
 
 Write-Host ''
 Write-Host "===== Merged coverage =====" -ForegroundColor Green
-Write-Host ("  Line   : {0,6:F2}%" -f $line)
-Write-Host ("  Branch : {0,6:F2}%  ({1}/{2})" -f $branch, $covered, $total)
+Write-Host "  Line   : $(Format-Percent $rates.Line)"
+Write-Host "  Branch : $(Format-BranchCell $rates.Branch $rates.BranchesCovered $rates.BranchesTotal)"
 Write-Host "  Output : $mergedOut"

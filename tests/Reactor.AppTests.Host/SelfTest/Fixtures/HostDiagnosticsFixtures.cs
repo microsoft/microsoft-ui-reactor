@@ -284,11 +284,11 @@ internal static class HostDiagnosticsFixtures
                 var plain = WrapperOf(H, "hostdiag-component");
                 H.Check("HostDiagDecor_WrappersFound", decorated is not null && plain is not null);
                 if (decorated is null || plain is null) return;
-                H.Check("HostDiagDecor_FlyoutTagBeforeEnable", Reconciler.GetElementTag(decorated) is FlyoutElement);
+                H.Check("HostDiagDecor_FlyoutTagBeforeEnable", Reconciler.GetMountedElement(decorated) is FlyoutElement);
 
                 ReactorSourceMap.Enabled = true;
-                H.Check("HostDiagDecor_FlyoutTagKept", Reconciler.GetElementTag(decorated) is FlyoutElement,
-                    $"tag={Reconciler.GetElementTag(decorated)?.GetType().Name ?? "null"}");
+                H.Check("HostDiagDecor_FlyoutTagKept", Reconciler.GetMountedElement(decorated) is FlyoutElement,
+                    $"tag={Reconciler.GetMountedElement(decorated)?.GetType().Name ?? "null"}");
                 H.Check("HostDiagDecor_PlainBoundaryTagged", Reconciler.GetElementTag(plain) is ComponentElement);
 
                 var flyout = Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(decorated);

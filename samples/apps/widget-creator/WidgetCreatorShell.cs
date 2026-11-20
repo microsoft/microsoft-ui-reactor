@@ -246,6 +246,19 @@ public sealed class WidgetCreatorShell : Component
                         await _library.SaveAsync(app).ConfigureAwait(false);
                         RefreshApps(app.Id);
                         setEditingId(app.Id);
+                        if (result.SelfTestLaunchFailed)
+                        {
+                            // The sandbox couldn't run (or contain) the self-test: don't
+                            // launch the same build again — that is a host problem, and if
+                            // containment was the failure, relaunching would re-run
+                            // untrusted code that was just found uncontained.
+                            setStatus($"'{app.Title}' was saved but not launched — sandbox problem.");
+                            setBanner($"'{app.Title}' was saved but NOT launched: the MXC sandbox could not run its "
+                                + "self-test. This is a sandbox/host problem, not an app bug, so it was not sent for "
+                                + "repair. See the log for details; fix the sandbox issue, then run it from the library.");
+                            AppendLog($"# Saved '{app.Title}' — NOT launched (sandbox could not run the self-test):{Environment.NewLine}{result.SelfTestReport}", setLog);
+                            return;
+                        }
                         if (result.SelfTestPassed)
                         {
                             setStatus($"Self-test passed — launching '{app.Title}'...");
@@ -397,7 +410,7 @@ public sealed class WidgetCreatorShell : Component
                         await _library.SavePolicyAsync(app, normalized).ConfigureAwait(false);
 
                     setStatus(isDefault
-                        ? $"Reset '{app.Title}' to the default permissions (UI + internet)."
+                        ? $"Reset '{app.Title}' to the default permissions (window only, no network)."
                         : $"Saved custom permissions for '{app.Title}'. They apply next time it runs.");
                 }
                 catch (Exception ex)
@@ -737,7 +750,7 @@ public sealed class WidgetCreatorShell : Component
         var titleBar = TitleBar("Widget Creator") with
         {
             Subtitle = status,
-            RightHeader = Caption(MxcSandbox.WxcExecPath).Foreground(Theme.TertiaryText),
+            RightHeader = Caption(MxcSandbox.StatusText).Foreground(Theme.TertiaryText),
         };
 
         return Grid(
@@ -805,21 +818,24 @@ public sealed class WidgetCreatorShell : Component
             if (policyAdvanced)
             {
                 var jsonBox = (TextBox(policyJson, setPolicyJson,
-                        placeholderText: "MXC ContainerConfig policy JSON...")
+                        placeholderText: "MXC policy JSON (filesystem / network / ui / processContainer)...")
                     with { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap })
                     .FontFamily("Cascadia Mono")
                     .MinHeight(280)
                     .AutomationName("Policy JSON");
 
                 body = FlexColumn(
-                    Caption("Edit the raw MXC ContainerConfig policy. The process command line, working "
-                        + "directory, and a read grant on the app's own folder are added automatically at launch.")
+                    Caption("Edit the raw policy. Fields follow the MXC 1.0 containment contract: "
+                        + "filesystem.{readonlyPaths, readwritePaths, deniedPaths}, network.egress.{default, allow, deny}, "
+                        + "network.ingress.{default, hostLoopback}, ui.{disable, clipboard, injection}, and "
+                        + "processContainer.capabilities. The command line, working directory, and a read grant on "
+                        + "the app's own folder are added automatically at launch.")
                         .Foreground(Theme.SecondaryText)
                         .TextWrapping(TextWrapping.Wrap),
                     jsonBox,
                     valid
                         ? (Element)Empty()
-                        : Caption($"Invalid JSON: {parseError}").Foreground(Theme.SystemCaution).TextWrapping(TextWrapping.Wrap))
+                        : Caption($"Invalid policy: {parseError}").Foreground(Theme.SystemCaution).TextWrapping(TextWrapping.Wrap))
                     with { RowGap = 8 };
             }
             else
@@ -829,15 +845,17 @@ public sealed class WidgetCreatorShell : Component
                 var clipboard = MxcPolicy.GetClipboard(policy);
                 var network = MxcPolicy.GetNetwork(policy);
                 var allowLocal = MxcPolicy.GetAllowLocalNetwork(policy);
-                var leastPrivilege = MxcPolicy.GetLeastPrivilege(policy);
                 var fileEntries = MxcPolicy.GetFileEntries(policy);
 
-                string[] clipLevels = ["none", "read", "readwrite"];
-                string[] clipLabels = ["No access", "Read only", "Read & write"];
+                string[] clipLevels = MxcPolicy.ClipboardLevels;
+                string[] clipLabels = ["No access", "Read only", "Write only", "Read & write"];
                 var clipIndex = Array.IndexOf(clipLevels, clipboard);
                 Optional<int> clipSelected = clipIndex >= 0 ? clipIndex : default;
 
                 string[] accessLabels = ["Read only", "Read & write", "Denied"];
+                string[] netLabels = network == NetworkAccess.Custom
+                    ? ["No network access", "Internet access", "Custom rules (edit in Advanced)"]
+                    : ["No network access", "Internet access"];
 
                 Element fileList = fileEntries.Length == 0
                     ? Caption("No extra folders yet.").Foreground(Theme.TertiaryText)
@@ -871,22 +889,18 @@ public sealed class WidgetCreatorShell : Component
                                 .Width(180))),
 
                     PermSection("Network",
-                        RadioButtons(["No network access", "Internet access"],
-                            network == NetworkAccess.Internet ? 1 : 0,
-                            i => setPolicyJson(MxcPolicy.WithNetwork(policyJson,
-                                i == 1 ? NetworkAccess.Internet : NetworkAccess.None))),
+                        RadioButtons(netLabels,
+                            network switch { NetworkAccess.Internet => 1, NetworkAccess.Custom => 2, _ => 0 },
+                            i => setPolicyJson(i switch
+                            {
+                                0 => MxcPolicy.WithNetwork(policyJson, NetworkAccess.None),
+                                1 => MxcPolicy.WithNetwork(policyJson, NetworkAccess.Internet),
+                                _ => policyJson,
+                            })),
                         CheckBox(allowLocal,
                             v => setPolicyJson(MxcPolicy.WithAllowLocalNetwork(policyJson, v)),
-                            "Allow local network (localhost / LAN)")),
-
-                    PermSection("Isolation",
-                        CheckBox(leastPrivilege,
-                            v => setPolicyJson(MxcPolicy.WithLeastPrivilege(policyJson, v)),
-                            "Run with least privilege (stricter AppContainer)"),
-                        Caption("Note: least privilege can prevent a widget from opening its window "
-                            + "(WinUI needs access this mode strips). Leave off for UI widgets.")
-                            .Foreground(Theme.SecondaryText)
-                            .TextWrapping(TextWrapping.Wrap)),
+                            "Also allow the local network (LAN, including incoming connections)")
+                            .IsEnabled(network == NetworkAccess.Internet || allowLocal)),
 
                     PermSection("File access",
                         Caption("The app can always read its own folder. Add folders below and choose each "

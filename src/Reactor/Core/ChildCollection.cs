@@ -58,8 +58,26 @@ internal sealed class PanelChildCollection : IChildCollection
     public int Count => _children.Count;
     public UIElement Get(int index) => _children[index];
     public int IndexOf(UIElement element) => _children.IndexOf(element);
-    public void Insert(int index, UIElement element) => _children.Insert(index, element);
-    public void RemoveAt(int index) => _children.RemoveAt(index);
+
+    // Edits made through this wrapper, for the perf ChildReconcile span. Each reconcile of a
+    // container gets a fresh wrapper, so these are that reconcile's own edits. A plain
+    // increment next to a WinUI collection call, so it is kept unconditionally.
+    internal uint InsertCount { get; private set; }
+    internal uint RemoveCount { get; private set; }
+    internal uint MoveCount { get; private set; }
+    internal uint ReplaceCount { get; private set; }
+
+    public void Insert(int index, UIElement element)
+    {
+        _children.Insert(index, element);
+        InsertCount++;
+    }
+
+    public void RemoveAt(int index)
+    {
+        _children.RemoveAt(index);
+        RemoveCount++;
+    }
 
     public void Move(int oldIndex, int newIndex)
     {
@@ -72,6 +90,7 @@ internal sealed class PanelChildCollection : IChildCollection
         // After RemoveAt, inserting at newIndex places the item at that index
         // in the resulting collection.
         _children.Insert(newIndex, item);
+        MoveCount++;
     }
 
     public void Replace(int index, UIElement element)
@@ -82,5 +101,6 @@ internal sealed class PanelChildCollection : IChildCollection
         // element is later reused from the pool.
         _children.RemoveAt(index);
         _children.Insert(index, element);
+        ReplaceCount++;
     }
 }

@@ -53,9 +53,12 @@ internal static class AppliedModifierMap
         : Is<WinUI.RelativePanel>(t) ? "RelativePanel.CornerRadius"
         : null;
 
-    private static Func<Type, string?> ControlOrBorder(string property)
+    private static Func<Type, string?> BorderOwner(string property)
         => t => Is<WinUI.Control>(t) ? "Control." + property
             : Is<WinUI.Border>(t) ? "Border." + property
+            : Is<WinUI.Grid>(t) ? "Grid." + property
+            : Is<WinUI.StackPanel>(t) ? "StackPanel." + property
+            : Is<WinUI.RelativePanel>(t) ? "RelativePanel." + property
             : null;
 
     private static Func<Type, string?> ControlOrTextBlock(string property)
@@ -110,9 +113,9 @@ internal static class AppliedModifierMap
         new("ContextFlyout", m => m.ContextFlyout, Always("UIElement.ContextFlyout")),
         new("IsEnabled", m => m.IsEnabled, ControlOnly("IsEnabled")),
         new("CornerRadius", m => m.CornerRadius, CornerRadiusOwner),
-        new("BorderBrush", m => m.BorderBrush, ControlOrBorder("BorderBrush")),
-        new("BorderThickness", m => m.BorderThickness, ControlOrBorder("BorderThickness")),
-        new("BorderInlineStart", m => m.BorderInlineStart, ControlOrBorder("BorderThickness")),
+        new("BorderBrush", m => m.BorderBrush, BorderOwner("BorderBrush")),
+        new("BorderThickness", m => m.BorderThickness, BorderOwner("BorderThickness")),
+        new("BorderInlineStart", m => m.BorderInlineStart, BorderOwner("BorderThickness")),
         new("Background", m => m.Background, BackgroundOwner),
         new("Foreground", m => m.Foreground, ControlOrTextBlock("Foreground")),
         new("AutomationName", m => m.AutomationName, Always("AutomationProperties.Name")),

@@ -28,15 +28,333 @@ Conventions for contributors:
 
 ### Added
 
+- **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
+  §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
+  `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds
+  a `ComponentSkip` event (id 13) for each memo hit. `changes` is `0` for a render that changed
+  nothing on screen, and `ownStateSets` counts the state writes a component's render and effects
+  made (spec 023's setState fan-out check). Everything is at level 4 under the `Pass` and
+  `Component` keywords that `winapp perf` records, and only appends fields or adds an id, so
+  existing decoders keep working. See `docs/reference/perf-trace-events.md`.
+
+- `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
+  element construction with `Size`. The code fix preserves argument evaluation order
+  and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
+
+### Changed
+
+- Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
+  without allocating fallback key strings. Explicit keys resembling the legacy
+  fallback format retain their existing collision behavior (spec 042 §5).
+
+- Layout fluent modifiers copy the existing layout bucket directly instead of
+  constructing a temporary delta to merge. Chained sizing, spacing, alignment,
+  visibility, and theme updates preserve immutable snapshots and last-write
+  precedence with fewer allocations. D3 rectangle/circle builders and PropertyGrid
+  array-item buttons also combine width/height updates with `Size`, avoiding an
+  intermediate layout, modifier, and element copy per shape/button (spec 034 §A).
+
+- `VirtualList` with default positional keys no longer projects every key on
+  unchanged-count updates; realized content and callbacks still refresh. Its memoized
+  index source is now an immutable range instead of an allocated integer list, reducing
+  mount/count-change storage. Custom key selectors retain keyed reconciliation (spec 042 §4).
+
+- `UseState` setters and both `UseReducer` callbacks defer marshaling closures
+  until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
+  invocations avoid those allocations, including unchanged values; callback identity,
+  equality checks, and cross-thread dispatch behavior are unchanged (issue #659).
+
+- `UsePersisted` setters also defer marshaling closures until an off-thread call
+  needs the UI dispatcher. UI-thread writes avoid these allocations without changing
+  equality checks, callback identity, or save-on-unmount scope behavior (issue #659).
+
+- Avoid redundant element copies when assigning keys in built-in component factories,
+  DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
+  supplied key is already the same string reference. Different key references still
+  produce a copy, and key values and formatting are unchanged (spec 042 §5).
+
+- **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
+  `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
+  unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
+  `PasswordBox` and `AutoSuggestBox`. Both are now checked. A `ToggleSwitch` is also labeled by
+  its on/off content, which WinUI uses as its name. A `ComboBox` placeholder is not, because
+  WinUI only exposes `PlaceholderText` as help text. Projects that build with warnings as errors
+  may see new `REACTOR_A11Y_003` errors on unlabeled combo boxes and switches; add `.Header(...)`
+  or `.AutomationName(...)`. A label on an enclosing container (`Expander(field).Header(...)`)
+  no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
+  (devtools) covers the same two controls.
+
+### Deprecated
+
+### Removed
+
+- **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
+  2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
+  toolchain CI builds it with. `Build-Vsix.ps1` and `Reinstall-Vsix.ps1` only use Visual
+  Studio 2026 instances, and `bootstrap.ps1` skips the extension when the newest instance is
+  Visual Studio 2022. The build's fallback to the `Microsoft.VSSDK.BuildTools`
+  package targets now follows the restored package instead of a hardcoded version.
+
+### Fixed
+
+- `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
+  (or estimate), and spacing after rerenders. Removing and re-adding the callback
+  preserves the native viewer and its single subscription, which is detached when
+  the component unmounts (spec 017, VirtualList).
+
+- Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
+  declaration restores its identity value and releases modifier-owned composition
+  animations. Removing `.Opacity()` also releases its compositor override so styles
+  take effect again; surviving declarations on shared-control wrappers are preserved
+  (issue #1001).
+
+- Shallow comparison now checks all animation and transition declarations together,
+  so configuration-only changes reach direct updates and parent child-skip paths.
+  Value-equivalent plain-data configurations remain eligible for skipping; native
+  objects and arrays retain reference equality. This also restores `.Keyframes()`
+  playback when only the trigger changes (issue #1536; spec 014).
+
+- Generated wrapper callbacks now resolve the subscribed outer control when native events
+  forward an inner control, null, or unrelated sender. Current callbacks, original event
+  arguments, echo suppression, and native-identity subscription gates are preserved
+  (spec 058 §8.3, issue #1573).
+
+- The Toolkit `TabbedCommandBar` sample now composes its document below the native
+  ribbon instead of assigning the inherited `Content` property, which the Toolkit
+  template does not display. Native tabs and commands remain intact, with visible
+  command feedback that stays current across rerenders (issue #1577).
+
+- The Toolkit sample's GridSplitter panes and HeaderedContentControl card use
+  `Theme.CardBackground` instead of a hardcoded pale background, adapting to the app
+  theme and avoiding `REACTOR_THEME_001` errors in package consumers with warnings
+  treated as errors (issue #1578).
+
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
+  rest of the button family remembered which child they owned by the control's managed wrapper.
+  When a collection replaced that wrapper between renders, the next update mounted a second copy
+  of the content instead of updating it, which dropped its state (an `AnimatedIcon`'s visual
+  state, focus, caret) and leaked the old copy without unmounting it. The record now lives on the
+  native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
+  selftest failures.
+
+- **Generated wrappers preserve their control library's XAML metadata under
+  trimming/NativeAOT (issue #1565, spec 058 §9a).** A unique publicly constructible
+  metadata provider is now registered through a static reference when the wrapper
+  is first used, fixing code-only Toolkit SettingsCard/SettingsExpander consumers
+  without rooting whole assemblies. Provider-free controls and explicit registration
+  remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
+
+- The Toolkit RangeSelector sample now controls both endpoints through the shared
+  native event. It demonstrates pointer-driven parent acceptance/rejection, independent callback
+  counts and echo-free parent resets instead of calling one-way values controlled
+  (issue #1566; depends on #1564). The pinned Toolkit's missing keyboard change
+  notifications are documented as an unsupported mapping scenario.
+
+- Generated wrappers now support multiple controlled properties, including range endpoints
+  sharing one native event, without losing callbacks or notifying unchanged endpoints.
+  Controlled bindings also coexist with ordinary events, reassert parent values, and
+  suppress synchronous, deferred, silent-setter and coercion echoes. The obsolete
+  `REACTORGEN012` warning is retired (spec 058 §8.2, issue #1564).
+
+- The Toolkit sample maps Settings headers, descriptions, icons and expander
+  content as reconciled Element slots while preserving accessible string-header
+  names and native-owned headers when the wrapper's header inputs stay unset.
+  Rich-header state and cleanup survive native or lifecycle-driven Header
+  replacement without unmounting or clearing the foreign replacement.
+  Explicit wrapper factory calls keep the sample on actual Toolkit controls
+  rather than similarly named built-ins (issues #1504, #1566).
+
+- The Toolkit ContentSizer sample explicitly targets the advertised sibling
+  instead of resizing its containing stack. The target is connected on mount and
+  cleared on unmount, including when navigating away and back (issue #1567).
+
+- The Toolkit `SwitchPresenter` sample now populates native `SwitchCases` and
+  drives `Value` declaratively, demonstrating matching, default and no-match
+  transitions without replacing Toolkit's selected content with a Reactor
+  switch expression (issue #1568).
+
+- The Toolkit `TokenizingTextBox` sample filters suggestions as advertised, using
+  case-insensitive substring matching while preserving native token creation and
+  removal (issue #1569).
+
+- **The Toolkit `RichSuggestBox` sample now filters and commits suggestions (issue #1570).**
+  Typing a mention filters the sample names case-insensitively; choosing a suggestion
+  inserts the full name instead of the query text. The page shows the last chosen name
+  and selection count while leaving token management to the Toolkit control.
+
+- The Toolkit `CameraPreview` sample now waits for startup before stopping playback
+  and awaiting capture/frame-reader cleanup on unmount, including after native
+  retries from a failed preview. Re-entry, including a replacement mounted before
+  its predecessor unmounts, waits for the preceding cleanup,
+  and lifecycle failures are reported rather than swallowed (issue #1571).
+
+- The analyzers and source generators in the `Microsoft.UI.Reactor` package are
+  now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
+  the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
+  failed with CS8032 on anything older than VS 18.9 / SDK 10.0.400, which also
+  broke generator-dependent code. Visual Studio 2022 remains unsupported (#1558).
+
+- **The `Microsoft.UI.Reactor` and `Microsoft.UI.Reactor.Advanced` packages now include
+  `ThirdPartyNoticeText.txt` (issue #1535).** Both packages contain code ported from other
+  open-source projects (Yoga, md4c, D3, WinUI.Dock), but only shipped Reactor's own license.
+  Each package now carries a notice file at its root that lists only the code it ports (Yoga in
+  `Microsoft.UI.Reactor`, md4c, D3 and WinUI.Dock in `Microsoft.UI.Reactor.Advanced`), and the
+  package workflows fail if it is missing or out of date.
+
+- **`Microsoft.UI.Reactor` now credits WinUIEx in `ThirdPartyNoticeText.txt`.** Window-placement
+  persistence (`WindowPlacementCodec`) and the Win32 message monitor (`WindowMessageMonitor`) are
+  adapted from WinUIEx (MIT) but shipped without its notice. Comments that claimed Reactor reads
+  placements saved by WinUIEx were also corrected. It never did, because Reactor uses its own
+  settings container and keys. Behavior and the stored format are unchanged (spec 036 §5.1 and
+  §8, related issue #184).
+
+- **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
+  accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
+  `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
+  own guidance recommends), a field passed as the `content` of a Community Toolkit
+  `SettingsCard` with a string header, and a field passed to a helper declared in the project that
+  applies `.AutomationName`, `.Header` or `.LabeledBy` to it, such as a
+  `SettingsRow(label, control)` row helper.
+
+- Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
+  restore null normal brushes and the latest normal value, including border modifier
+  changes during an active interaction (issue #1501).
+
+- Shallow comparison now detects changes to an element's `.Animate()` curve or
+  property flags, including parent child-skip checks. Equivalent configurations
+  remain eligible for skipping (spec 014, Feature 3).
+
+- Removing `.Animate()` or narrowing its property flags releases the dropped
+  implicit channels before handlers and modifiers run, preventing setters from
+  retriggering outgoing animations. Retained layout Offset and transitions
+  reapplied during the update are preserved (spec 014, Feature 3).
+
+- Reconcile-highlight overlay lifecycle selftests wait for actual expiry completion
+  and use controlled schedules to verify refresh lifetimes, removing fixed-delay
+  assertion races on contended runners. Coverage includes stale callbacks after
+  refresh and disposal (issue #995; [testing guide](TESTING.md#timer-lifetime-tests)).
+- **Release docs go live without a manual re-run (issue #1268).** On 0.1.0-preview.16,
+  .17 and .18 the release tag's `Publish docs` deployment reported success but was never
+  served, so the new version's docs stayed missing until someone dispatched the workflow on
+  `main`. GitHub Pages accepts a deployment made from a tag ref for a commit it is already
+  serving and keeps serving the previous artifact (also reported upstream in
+  actions/deploy-pages#383); a release tag always points at the merge commit the `main` push
+  has just deployed. A tag run now publishes its version to `gh-pages` and hands the
+  deployment to a `Publish docs` run it dispatches on `main`, whose `verify` job also probes
+  the handed-off release directories.
+- **Inline margin, padding and border edges no longer keep the previous render's value
+  (issue #965).** With no physical value declared, `.MarginInlineStart`/`End`,
+  `.PaddingInlineStart`/`End` and `.BorderInlineStart` took the edges they do not set from
+  the control, which on an update still held the previous render's inline edge. Swapping
+  `.PaddingInlineStart(8)` for `.PaddingInlineEnd(4)` gave `8,0,4,0` instead of `0,0,4,0`,
+  and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
+  instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
+  also skip the write and leave the right-to-left value on the control.
+
+### Security
+
+## [0.1.0-preview.18] — 2026-11-12
+
+### Added
+
+- Element-valued content overloads for `HyperlinkButton`, `RepeatButton`,
+  `ToggleButton` / `ThreeStateToggleButton`, `DropDownButton`, `SplitButton`,
+  `ToggleSplitButton`, `CheckBox` / `ThreeStateCheckBox`, and `RadioButton`
+  (issue #1482).
+- `Imperative<TElement, TControl>.Unmount`, an optional teardown callback the engine
+  runs when a tagged control using that children strategy unmounts, so a handler can
+  unmount the children its `Reconcile` mounted (issue #1482).
+- Reactor's render timing is recordable by a non-elevated **private** ETW session (the kind
+  `winapp perf` attaches with), which never enables the `Microsoft-UI-Reactor` EventSource.
+  A new raw TraceLogging provider, `Microsoft-UI-Reactor-Perf`
+  (`0902a96c-4e92-5b91-4d2b-5a8058055c78`), writes a `RenderPass` span per host render pass,
+  an inclusive `ComponentRender` span per component render (mount, update, the host root, and
+  rows a virtualized list realizes during layout), `Reconcile`, `Effects` and `ChildReconcile`
+  spans (with inserted/removed/moved/replaced counts), `StateChange` naming the component whose
+  setter ran, and `KeyedListDiagnostic`. `RenderPass` Start names the component whose
+  re-render request scheduled the pass (`requesterId`, `requesterName`, `requestCount`), with
+  no need for the verbose `State` keyword. `ComponentRender` Start carries the C# call site that
+  created the component from the source map (`callSiteFile` (the file name only),
+  `callSiteLine`, `callSiteColumn`). `Reconcile` Stop counts the panel child edits made during
+  the entry at the default level (`inserted`, `removed`, `moved`, `replaced`). Function and memo
+  components are named by their render function, as DevTools names them
+  (`RenderEachTime in MainPage.Render`). With no session listening each emit site is one
+  enabled check. The provider ships at schema revision 2; schema:
+  `docs/reference/perf-trace-events.md` (issues #1484, #1489; call-site fields follow the
+  spec 044 §6.2.1 payload PII policy).
+
+- `TitleBarElement.LeftHeader` and `.LeftHeader(Element)` support declarative content
+  before the title bar's title, using the same child lifecycle as `RightHeader`
+  (issue #1478).
+
+- Opt-in message-wide Markdown text selection in Reactor Advanced:
+  `MarkdownOptions.TextSelection`, `MarkdownTextSelection.Scope`, semantic `Surface`
+  and composable `Visibility` gates coordinate separately rendered Markdown leaves,
+  lists, code and tables. Includes grapheme-aware caret movement, modern ScrollView /
+  ItemsView scrolling, UIA TextPattern ranges and feedback-only `OnCopyResult` after
+  Reactor's single clipboard write (openclaw/openclaw-windows-node#1844).
+
 - `PersonPictureElement.ProfilePicture(string? uri)` fluent modifier, matching the existing
   `DisplayName` / `Initials` sugar. ReactorGallery's PersonPicture page uses it to show an
   avatar loaded over HTTPS (issue #1460).
 
+- `ControlDescriptor.HandCodedControlled` takes `armOnMount`. With `valueDiffEcho`, it arms
+  the Mount write's echo as well as Update's, for a control whose change event arrives
+  after the trampoline is wired, as `RichEditBox`'s `Document.SetText` does
+  (spec 047 §8.3).
+
 ### Changed
+
+- **`AsyncValue<T>` and `LoadState` are now C# 15 `closed` records (breaking for
+  subclasses).** They were abstract records whose `private protected` constructor was meant
+  to keep the case set closed, but a subclass in another assembly could still chain to the
+  compiler-generated `protected` copy constructor (`: base(other)`); such subclasses now fail
+  with CS9382. The built-in cases and pattern matching are unchanged. Consumers compiling
+  with C# 15 can `switch` over the cases exhaustively without a `_` arm, and a missing case
+  is warning CS8509. Reactor still targets `net10.0` and stays consumable from the .NET 10
+  SDK; building Reactor from source now requires the .NET 11 SDK (spec 020 §5).
+- Public `SingleContent` strategies leave native setter-supplied content intact
+  when no Element child is declared (on mount or on both sides of an update).
+  Declare `Empty()` to clear the slot explicitly; this also applies to
+  third-party control handlers (issue #1482).
+- `Button` and the button family share content reconciliation that preserves
+  descendant state. For `Button`, replaced declared content is now cleaned up when
+  it gives way to text or native setter-supplied content. A declared `ContentElement`
+  now also supplies `Button`'s caption-derived accessible name instead of `Label`;
+  icon-only content should supply `.AutomationName(...)` (issue #1482).
+- `CheckBox(value, callback, null)` and `ThreeStateCheckBox(value, callback, null)`
+  are now ambiguous between string and Element content overloads. Use `label: null`
+  or cast to `(string?)null` to select the existing text overload (issue #1482).
+- **`ExpanderElement.HeaderTemplate` and `.HeaderTemplate(Element)` are renamed to
+  `HeaderContent` and `.HeaderContent(Element)` (breaking).** This Element-valued
+  child is mounted into WinUI's `Expander.Header`, not its `HeaderTemplate`
+  DataTemplate property. Rename fluent calls, object/`with` initializers, and
+  property reads, then recompile consumers; string-header fallback and child
+  lifecycle behavior are unchanged (issue #1480). See the [migration notes](docs/guide/layout.md#migration-expanderheadertemplate-renamed-to-headercontent).
+
+- `.Set` writes to `BorderThickness` or `BorderBrush` on `Grid` and `StackPanel`
+  now report `REACTOR_POOL_001` (Warning). Builds using `TreatWarningsAsErrors`
+  may need to use the corresponding fluent modifiers instead. The same writes on
+  `RelativePanel` now report `REACTOR_MOD_002` (Info), since it is not pooled
+  (issue #1039).
+
+- The generated API index now includes Reactor Advanced factories, modifiers, hooks,
+  enums and public types alongside the core Reactor surface, keeping `mur --api` and
+  both shipped agent-reference copies complete (PR #1475).
 
 - The internal Yoga layout engine behind `FlexPanel` is synced to upstream
   facebook/yoga@41118bd (pinned in `cgmanifest.json`), with a few documented local
   divergences. `FlexPanel` layouts are unchanged apart from the fixes listed under Fixed.
+- **The guide, README, agent kit and `bootstrap.ps1` now describe Windows App SDK template pack
+  `0.0.8-alpha`** (microsoft/WindowsAppSDK#6845; spec 022). That pack adds `reactor-singlefile`, a
+  one-file app with no `.csproj`, and a `--packaging Packaged|Unpackaged` option on the four project
+  templates, so the unpackaged shape no longer needs a hand edit after scaffolding. Its scaffolds no
+  longer reference the `Microsoft.WindowsAppSDK` metapackage and the `--wasdk-version` option is
+  gone: the Windows App SDK arrives through `Microsoft.UI.Reactor` at the version Reactor depends on.
+  Add the metapackage yourself for a self-contained app or a newer WinUI. An older installed pack
+  rejects `--packaging` and lacks `reactor-singlefile`; update it with
+  `winapp new --list --template-version latest`.
 
 ### Deprecated
 
@@ -99,6 +417,69 @@ Conventions for contributors:
   `Microsoft.UI.Reactor.Advanced`, `Microsoft.Extensions.Logging.Abstractions` or `MessageFormat`.
 
 ### Fixed
+
+- In diagnostics mode (`REACTOR_DIAGNOSTICS=1`), mounting a different root over content
+  that keeps a closed `CommandBarFlyout` no longer leaves that flyout's commands holding
+  a collected `ReactorSource` value. CsWinRT boxes a string written to a
+  DependencyProperty as a managed CCW, and XAML stops keeping it alive on those commands
+  after the swap. The next garbage collection freed the renamed value, and any later read
+  of the property threw `NullReferenceException`, including Reactor's own walk on the next
+  root swap. The renamed values are now held for the process, like the values written
+  when the commands mounted (spec 010).
+
+- Removing a subtree through the pooled teardown path now unregisters the
+  `ErrorBoundary` nodes inside it, as the non-pooled path already did, so a
+  recycled wrapper control no longer keeps a stale boundary record (issue #1482).
+
+- `ContentDialog` resolves the application implicit style, falling back to
+  `DefaultContentDialogStyle`, before its first template realization. This restores
+  the native entrance animation for programmatically created dialogs while
+  preserving app-level implicit styles. Caller `.Set(...)` styles keep priority
+  (issue #1487;
+  [WinUI #8476](https://github.com/microsoft/microsoft-ui-xaml/issues/8476)).
+
+- Flyout, MenuFlyout and CommandBarFlyout targets retain their own event callbacks
+  after mount, update and pool reuse. Decorator identity is stored separately so
+  flyout callbacks and teardown still use the current decorator. Exit transitions
+  and connected-animation keys use the first configured value from the outermost
+  decorator inward. Animated modifiers select the current render's `.Animate()`
+  curve when a flyout target or decorator updates, with ambient curves taking
+  precedence. Unmount also releases refs and animation state on intermediate
+  decorators. Nested decorators attach only
+  the outermost native flyout, including through transparent Memo or RegisterType
+  targets. They clean up displaced content and keep inner updates
+  from changing the outer flyout or duplicating its callbacks. For these
+  decorators, the provisional `Reconciler.GetElementTag` now returns the target's
+  tag instead of the decorator element (spec 047 §14 Phase 1; #942).
+
+- A controlled `RichEditBox` or `AutoSuggestBox` no longer drops the user's first edit after
+  a state write (#1455). Both now suppress their asynchronous echo with the value-diff arm
+  instead of the suppress counter, which kept a token after every write. A `RichEditBox`
+  whose state value contains line breaks no longer calls `SetText` on every render, and
+  `onTextChanged` keeps a trailing break the user types (spec 047 §8.3).
+
+- `BorderBrush`, `BorderThickness`, and `BorderInlineStart` now apply to `Grid`,
+  `StackPanel`, and `RelativePanel`, including themed border brushes. Pooled grids
+  and stack panels release their border values before reuse. The Regedit example
+  uses the supported fluent modifiers (issue #1039).
+
+- Pooled controls release `HorizontalContentAlignment` and `VerticalContentAlignment`
+  on return, preventing content alignment from leaking into the next element that
+  reuses the control ([issue #1013](https://github.com/microsoft/microsoft-ui-reactor/issues/1013)).
+
+- `UseInfiniteResource` and `UseDataSource` hooks that share a `CacheKeyPrefix` isolate
+  cached pages by the hook's initial page size. Hooks with different sizes no longer reuse
+  incompatible pages, while hooks with matching sizes and query dependencies can still
+  share them (spec 020 §14 D6; #1452, case 3).
+- `UseDataSource` retains its initial normalized page size across rerenders and
+  query restarts, keeping requests and cursor offsets aligned with resource row
+  positions. A later render that asks for a different size logs one
+  `UseDataSource.PageSize` diagnostic warning per hook instead. To use a different size,
+  remount the calling component by changing its key from the parent (part of #1452, case 2).
+- `DataGrid` under `ReactorFeatureFlags.UseHookBasedPaging` now keeps its mount-time page
+  size, matching the legacy paging path. Changing `RowHeight` or `EstimatedRowHeight` at
+  runtime no longer restarts pagination or discards loaded rows when a sort or filter is
+  active (part of #1452).
 
 - `PersonPicture`'s `ProfilePicture` no longer throws during reconciliation for empty,
   relative, or malformed URIs; it shows no picture instead. Removing `ProfilePicture` on

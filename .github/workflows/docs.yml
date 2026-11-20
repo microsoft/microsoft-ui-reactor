@@ -29,6 +29,21 @@ on:
           the selected branch as the `main` version.
         required: false
         default: ''
+      handoff_versions:
+        description: >-
+          Set by a release-tag run, which publishes to gh-pages but hands the
+          Pages deployment to main (see the handoff job). Space-separated
+          versions already on gh-pages that this run must deploy and verify,
+          e.g. "0.1.0-preview.18". Can also be set by hand when re-serving a
+          release, so verify probes that version's directory too.
+        required: false
+        default: ''
+      handoff_from:
+        description: >-
+          Set by a release-tag run: the URL of the run that handed its
+          deployment here. Informational only.
+        required: false
+        default: ''
 
 permissions: {}
 
@@ -46,6 +61,11 @@ permissions: {}
 #
 # `cancel-in-progress` is deliberately absent: it defaults to false, and
 # `queue: max` with `cancel-in-progress: true` is a workflow validation error.
+#
+# The run a release tag hands its deployment to (see the handoff job) joins this
+# group too, behind the tag run that dispatched it. That is why the tag run
+# cannot wait for it: the tag run holds the group until its last job finishes,
+# so waiting would deadlock.
 concurrency:
   group: pages
   queue: max
@@ -63,14 +83,21 @@ env:
   # Held as a bare filename because workflow-level env cannot expand
   # $RUNNER_TEMP; every use joins the two.
   PUBLISHED_VERSIONS_FILE: published-versions.txt
+  # The branch every Pages deployment is made from. A release-tag run hands its
+  # deployment to a run dispatched here rather than deploying from the tag (see
+  # the handoff job). It must be a branch: a tag-ref deployment is exactly the
+  # one Pages drops.
+  PAGES_DEPLOY_REF: main
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     outputs:
       # The exact version list the verify job must find on the live site, and
-      # the subset this run actually wrote. See the artifact step for why each
-      # exists.
+      # the subset this run actually wrote (plus any a release-tag run handed
+      # off to it). See the artifact step for why each exists. The handoff job
+      # also passes `published` on, as the versions the run it dispatches must
+      # verify.
       versions: ${{ steps.artifact.outputs.versions }}
       published: ${{ steps.artifact.outputs.published }}
       # The attempt that produced the artifact. `github.run_attempt` read in
@@ -221,6 +248,25 @@ jobs:
             mike set-default --branch "$MIKE_BRANCH" --push "${highest_backfilled#v}"
           fi
 
+      - name: Adopt the versions a release-tag run handed off
+        # A release-tag run writes its version to gh-pages but does not deploy
+        # it (see the handoff job); it dispatches this workflow on
+        # PAGES_DEPLOY_REF and names what it wrote. Recording those versions
+        # here is what makes verify probe their directories on the live site.
+        # Without it this run would only prove `main`, and a broken release
+        # directory could pass on the strength of its versions.json entry. The
+        # artifact step fails the run if any of them is missing from gh-pages.
+        if: inputs.handoff_versions
+        env:
+          HANDOFF_VERSIONS: ${{ inputs.handoff_versions }}
+          HANDOFF_FROM: ${{ inputs.handoff_from }}
+        run: |
+          echo "Deploying versions handed off by ${HANDOFF_FROM:-a manual dispatch}: $HANDOFF_VERSIONS"
+          # `read -a` rather than an unquoted loop: it splits on whitespace
+          # without glob-expanding a stray `*` against the workspace.
+          read -r -a handed_off <<< "$HANDOFF_VERSIONS"
+          printf '%s\n' "${handed_off[@]}" >> "$RUNNER_TEMP/$PUBLISHED_VERSIONS_FILE"
+
       - name: Assemble the Pages artifact from every published version
         id: artifact
         # `git archive` rather than a checkout: it materialises the branch
@@ -276,7 +322,8 @@ jobs:
           # Compact, because a job output is a single line.
           echo "versions=$(jq -c . site/versions.json)" >> "$GITHUB_OUTPUT"
 
-          # The versions this run actually wrote, for the verify job to probe.
+          # The versions this run actually wrote, plus any a release-tag run
+          # handed off to it, for the verify job to probe.
           # Every trigger path publishes at least one (main push, release tag,
           # or backfill), so an empty list means a publishing step stopped
           # recording and the gate would quietly fall back to probing only the
@@ -296,7 +343,7 @@ jobs:
           missing="$(jq -c --argjson published "$published" \
             '(map(.version)) as $known | $published - $known' site/versions.json)"
           if [ "$missing" != "[]" ]; then
-            echo "::error::These versions were recorded as published but are absent from site/versions.json: $missing. The publishing steps and mike disagree, so the verify job cannot be trusted to probe the right directories."
+            echo "::error::These versions were recorded as published (or handed off by a release-tag run) but are absent from site/versions.json: $missing. The recorded list and mike disagree, so the verify job cannot be trusted to probe the right directories."
             exit 1
           fi
 
@@ -315,19 +362,19 @@ jobs:
 
   deploy:
     needs: publish
-    # A release commit produces two runs that hand actions/deploy-pages the
-    # same `pages_build_version` — it is github.sha, with no input to override
-    # it — so both deployments land under one identity and Pages may strand one
-    # of them (issue #1268).
+    # Never from a tag. GitHub Pages accepts a deployment made from a tag ref
+    # for a commit it is already serving, reports it successful (the
+    # Deployments API even marks it active), and keeps serving the previous
+    # artifact (issue #1268, actions/deploy-pages#383). A release tag always
+    # points at the merge commit the `main` push just deployed, so its own
+    # deployment was dropped on every release from 0.1.0-preview.16 to .18.
+    # One came 14 minutes after the `main` run, so it is not a race. A
+    # same-commit deployment from `main` went live within seconds each time.
     #
-    # That duplicate is tolerated rather than avoided. Standing one run down
-    # requires predicting that the other will deploy, and every form of that
-    # prediction fails silently in the direction that matters: a pending tag
-    # run can be evicted, a stale local tag can name a release that no longer
-    # exists, an unreachable `origin` makes the check answer "no tag here", and
-    # the two runs are not guaranteed to enter the concurrency group in event
-    # order. Each of those skips the deployment *and* the verification below,
-    # which is strictly worse than a duplicate that `verify` can catch.
+    # So a tag run publishes to gh-pages and the handoff job below hands the
+    # deployment to `main`. The two conditions are exact complements: every
+    # run either deploys (and is verified) or hands off.
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -360,10 +407,10 @@ jobs:
           node-version: '22.13.0'
 
       # `deploy` reporting success is not evidence that the site serves what
-      # this run built: a deployment can collide with another under the same
-      # pages_build_version and be stranded while every job stays green
-      # (issue #1268). This is the only step in the pipeline that looks at the
-      # live site, so it is the only one that can catch that.
+      # this run built: Pages has accepted and reported deployments it never
+      # served (issue #1268). This is the only step in the pipeline that looks
+      # at the live site, so it is the only one that can catch that, whatever
+      # the cause.
       - name: Assert the live site is serving this run's artifact
         env:
           DOCS_BASE_URL: ${{ needs.deploy.outputs.page_url }}
@@ -374,3 +421,81 @@ jobs:
           DOCS_VERIFY_TIMEOUT_SECONDS: '600'
           DOCS_VERIFY_INTERVAL_SECONDS: '15'
         run: node .github/scripts/verify-docs-deployment.mjs
+
+  handoff:
+    name: Hand the deployment to main
+    needs: publish
+    # The complement of `deploy`'s condition; see there for why a tag run must
+    # not deploy. By the time this runs, `publish` has already written this
+    # tag's version to gh-pages, so the dispatched run (which assembles its
+    # artifact from the whole branch) serves it, and verifies the versions
+    # named below on the live site.
+    #
+    # Nothing here predicts whether some other run will deploy. The handoff is
+    # unconditional, the run it creates queues behind this one in the `pages`
+    # group and so always finds this version on gh-pages, and a refused
+    # dispatch fails this job. `queue: max` still cancels a run that arrives at
+    # a full queue (100 pending), so the step also checks that the dispatched
+    # run was admitted rather than trusting the API's acceptance. This run does
+    # not wait for it to *finish*: see the concurrency block for why it cannot.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # dispatches this workflow on PAGES_DEPLOY_REF
+    steps:
+      - name: Dispatch Publish docs on main to deploy and verify this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: ${{ needs.publish.outputs.published }}
+        run: |
+          # Assigned on its own so `bash -e` sees a jq failure; inside another
+          # command's arguments it would be swallowed.
+          versions="$(jq -er 'if type == "array" and length > 0 and all(type == "string")
+            then join(" ") else error("publish recorded no versions: \(.)") end' <<< "${PUBLISHED:-null}")"
+
+          # The file this run started from, so a rename cannot leave the
+          # dispatch pointing at a workflow that no longer exists. Cut at
+          # `@refs/` rather than the last `@`, which a tag name may contain.
+          workflow="${GITHUB_WORKFLOW_REF%%@refs/*}"
+          workflow="${workflow##*/}"
+          from="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+
+          request="$(jq -n --arg ref "$PAGES_DEPLOY_REF" --arg versions "$versions" --arg from "$from" \
+            '{ref: $ref, inputs: {handoff_versions: $versions, handoff_from: $from}, return_run_details: true}')"
+          echo "Dispatching $workflow on $PAGES_DEPLOY_REF: $request"
+
+          # A refused dispatch (permissions, an input the target ref's workflow
+          # does not declare) exits non-zero and fails this job, so the release
+          # cannot quietly go unserved.
+          response="$(gh api --method POST "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/dispatches" --input - <<< "$request")"
+
+          run_url="$(jq -r '.html_url // empty' <<< "$response")"
+          run_id="$(jq -r '.workflow_run_id // empty' <<< "$response")"
+          if [ -z "$run_url" ] || [ -z "$run_id" ]; then
+            # The dispatch was accepted; only the link and the admission check
+            # below are missing.
+            run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/$workflow?query=event%3Aworkflow_dispatch"
+            echo "::warning::The dispatch was accepted but GitHub returned no run details, so its admission to the pages queue is unchecked. Find the run in $run_url."
+          else
+            # This run holds the `pages` group, so a healthy dispatched run
+            # waits behind it and cannot finish yet. Finishing anyway means it
+            # never got in: cancelled at a full queue, or a startup failure.
+            for _ in $(seq 1 9); do
+              sleep 5
+              state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq '"\(.status) \(.conclusion // "")"')" \
+                || state="unreadable "
+              if [ "${state%% *}" = completed ]; then
+                echo "::error::The dispatched run $run_url ended before it could deploy (${state#* }), so $versions is on $MIKE_BRANCH but not being served. Dispatch Publish docs on $PAGES_DEPLOY_REF with handoff_versions set to '$versions'."
+                exit 1
+              fi
+            done
+            echo "Dispatched run $run_id is waiting its turn ($state)."
+          fi
+
+          echo "::notice title=Deployment handed to $PAGES_DEPLOY_REF::$run_url deploys and verifies $versions. Its verify job, not this run, says whether the release is live."
+          {
+            echo "### Deployment handed to \`$PAGES_DEPLOY_REF\`"
+            echo
+            echo "This tag run published \`$versions\` to \`$MIKE_BRANCH\` but does not deploy from a tag ref (issue #1268)."
+            echo "[The run it dispatched]($run_url) deploys from \`$PAGES_DEPLOY_REF\` and verifies the live site: check its \`verify\` job."
+          } >> "$GITHUB_STEP_SUMMARY"

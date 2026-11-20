@@ -97,7 +97,8 @@ unaffected and the section is simply omitted.
 
 - **Windows** with a real interactive desktop session (the harness opens a real
   WinUI window — see [Troubleshooting](#troubleshooting)).
-- **.NET 10 SDK** (`dotnet --version` ≥ 10).
+- **.NET 11 SDK** (`dotnet --version` ≥ 11, pinned in `global.json`) plus the
+  **.NET 10 runtime** (the harness targets `net10.0`).
 - **PowerShell 7+** (`pwsh`). The scripts use pwsh-7 syntax (`??`, `(if …)`
   sub-expressions) and will not run under Windows PowerShell 5.1.
 - **No Windows App SDK runtime install needed.** The runner builds the harness
