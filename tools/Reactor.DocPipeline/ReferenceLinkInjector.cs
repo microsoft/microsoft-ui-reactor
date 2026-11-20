@@ -1,133 +1,39 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
-/// Spec 041 §10.4.1 — post-processes generated reference pages and
-/// hand-authored templates so the conceptual guide and the auto-generated
-/// reference cross-link in both directions.
-///
-/// Three responsibilities:
+/// Spec 041 §10.4.1 — links the hand-written guide and the generated
+/// reference in both directions.
 ///
 /// <list type="number">
-/// <item>Inject a <b>Learn more</b> callout near the top of each
-///   reference page using the <c>guide-pages</c> mapping from
-///   <c>reference-map.yaml</c>.</item>
-/// <item>Inject a <b>Featured in</b> list at the bottom of each
-///   reference page enumerating any hand-authored guide template that
-///   names the member via an <c>&lt;!-- ref:Member --&gt;</c> marker.</item>
-/// <item>Expand <c>&lt;!-- ref:Member --&gt;</c> markers in template bodies
-///   to relative MD links pointed at the generated reference page.</item>
+/// <item>Expands <c>&lt;!-- ref:Member --&gt;</c> markers in template bodies
+///   into relative links to the reference page and heading anchor that
+///   document the member.</item>
+/// <item>Builds the reverse index (member → templates that mention it). The
+///   generator uses it to add those templates to each reference page's
+///   <b>Learn more</b> line.</item>
 /// </list>
 ///
-/// Lints:
-/// <list type="bullet">
-/// <item><c>REACTOR_DOC_REGISTRY_W001</c> — a registry category /
-///   member resolves to a category with an empty <c>guide-pages</c>
-///   list.</item>
-/// <item><c>REACTOR_DOC_REGISTRY_W002</c> — a guide page (declared by
-///   any registry rule) has no incoming <c>&lt;!-- ref: --&gt;</c>
-///   marker.</item>
-/// </list>
+/// Lint: <c>REACTOR_DOC_REGISTRY_W002</c> — a guide page (declared by any
+/// registry rule) has no incoming <c>&lt;!-- ref: --&gt;</c> marker.
 /// </summary>
 internal static class ReferenceLinkInjector
 {
     /// <summary>
-    /// Apply post-processing to a single generated reference page. The
-    /// caller supplies the in-memory ref-gen result so the injector can
-    /// resolve cross-page links without re-parsing the on-disk MD.
-    /// </summary>
-    public static string Inject(
-        GeneratedPage page,
-        ReferenceGenResult result,
-        IReadOnlyDictionary<string, IReadOnlyList<TemplateReference>> reverseIndex,
-        List<RefGenFinding> findings)
-    {
-        var body = page.Body;
-        var route = page.Route;
-
-        // 1) Learn-more callout. Guide pages live under docs/guide/<page>.md;
-        //    reference pages live under docs/guide/reference/<category>/.
-        //    Each guide-pages entry becomes a relative ../../<page>.md link.
-        if (route.GuidePages.Count == 0)
-        {
-            findings.Add(new RefGenFinding(
-                "REACTOR_DOC_REGISTRY_W001",
-                $"registry category '{route.Category}' has no guide-pages mapping for {page.Member.Cref}",
-                route.RelativePath,
-                TierLintSeverity.Warning));
-        }
-        else
-        {
-            var links = string.Join(", ", route.GuidePages.Select(p => $"[{ToTitle(p)}](../../{p}.md)"));
-            var callout = $"> **Learn more:** {links}\n\n";
-            // Insert immediately after the signature block (the `_cref_: ...`
-            // line). Locate that line and insert after the trailing blank line.
-            body = InsertAfterSignature(body, callout);
-        }
-
-        // 2) Dual-link inline <see cref> targets: if the cref resolved to a
-        //    page with non-empty guide-pages, append ` ([guide](../../<page>.md))`
-        //    next to the existing reference-page link. The existing
-        //    `[Name](Name.md)` rendering came from CrefResolver; here we
-        //    detect those links and add the guide pointer.
-        body = InlineDualLinkPattern.Replace(body, m =>
-        {
-            var name = m.Groups["name"].Value;
-            var relPath = m.Groups["path"].Value;
-            // The path is relative (e.g. "Foo.md" sibling, or "../other/Foo.md").
-            // Find the corresponding GeneratedPage by short name; if it has
-            // guide-pages, append the dual-link suffix.
-            var target = result.Pages.FirstOrDefault(p => p.Route.ShortName == name);
-            if (target is null || target.Route.GuidePages.Count == 0) return m.Value;
-            var guide = target.Route.GuidePages[0];
-            return $"{m.Value} ([guide](../../{guide}.md))";
-        });
-
-        // 3) Featured-in reverse-index injection. A marker may name any of
-        //    the members this page documents (overloads share a page), or
-        //    the page's short name.
-        List<TemplateReference>? matched = null;
-        foreach (var key in page.Members.Select(m => m.Cref).Append(page.Route.ShortName))
-        {
-            if (!reverseIndex.TryGetValue(key, out var found)) continue;
-            matched ??= new List<TemplateReference>();
-            foreach (var r in found)
-                if (!matched.Any(x => x.TemplateId == r.TemplateId))
-                    matched.Add(r);
-        }
-        if (matched is not null)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine("## Featured in");
-            sb.AppendLine();
-            foreach (var r in matched)
-            {
-                sb.AppendLine($"- [{ToTitle(r.TemplateId)}](../../{r.TemplateId}.md)");
-            }
-            sb.AppendLine();
-            body = body.TrimEnd() + "\n\n" + sb;
-        }
-
-        return body;
-    }
-
-    /// <summary>
-    /// Scan a template body for <c>&lt;!-- ref:Member --&gt;</c> markers and
-    /// expand each one to a relative MD link to the routed reference page.
-    /// Returns the rewritten body.
+    /// Expand every <c>&lt;!-- ref:Member --&gt;</c> marker in
+    /// <paramref name="templateBody"/> into a relative link to the reference
+    /// page and anchor that document it. The identifier can be a short name
+    /// (<c>UseState</c>, <c>Button</c>, <c>Margin</c>) or a full cref
+    /// (<c>M:Microsoft.UI.Reactor.Core.RenderContext.UseState``1(``0)</c>).
     ///
     /// An unresolvable marker degrades to inline code — the same treatment
-    /// <see cref="ReferenceGen.CrefResolver.Rewrite"/> gives an unresolvable
-    /// cref — and reports <c>REACTOR_DOC_REFMARKER_001</c>. It must never be
-    /// left in place: the marker is an HTML comment, so passing it through
-    /// deletes the cross-reference from the rendered page and leaves a hole
-    /// mid-sentence with nothing on screen to show something is missing.
-    /// Reference generation is deliberately gated to one category, so a
-    /// marker naming a not-yet-generated type is an expected authoring
-    /// state, not a build break.
+    /// the generator gives an unresolvable cref — and reports
+    /// <c>REACTOR_DOC_REFMARKER_001</c>. It must never be left in place: the
+    /// marker is an HTML comment, so passing it through deletes the
+    /// cross-reference from the rendered page and leaves a hole mid-sentence
+    /// with nothing on screen to show something is missing.
     /// </summary>
     public static string ExpandMarkers(
         string templateBody,
@@ -135,13 +41,14 @@ internal static class ReferenceLinkInjector
         ReferenceGenResult refResult,
         List<RefGenFinding> findings)
     {
+        // The guide page lives at docs/guide/<templateId>.md and links are
+        // relative to docs/guide, so a nested template id climbs one folder
+        // per segment.
+        var prefix = string.Concat(Enumerable.Repeat("../", templateId.Count(c => c == '/')));
         return RefMarkerPattern.Replace(templateBody, m =>
         {
             var ident = m.Groups["ident"].Value.Trim();
-            // Identifier may be a short name (UseState) or a full cref.
-            GeneratedPage? target = ident.Contains(':')
-                ? refResult.Pages.FirstOrDefault(p => p.Members.Any(mem => mem.Cref == ident))
-                : refResult.Pages.FirstOrDefault(p => p.Route.ShortName == ident);
+            var target = ResolveIdent(ident, refResult.LinksByDocId, refResult.LinksByName);
             if (target is null)
             {
                 findings.Add(new RefGenFinding(
@@ -151,19 +58,33 @@ internal static class ReferenceLinkInjector
                     TierLintSeverity.Warning));
                 return $"`{MarkerShortName(ident)}`";
             }
-            // Guide template lives at docs/guide/<topicId>.md; reference page
-            // lives at docs/guide/reference/<cat>/<name>.md. Relative path
-            // from the guide page to the reference page is `reference/<cat>/<name>.md`.
-            var relative = target.Route.RelativePath.Replace('\\', '/');
-            return $"[{target.Route.ShortName}]({relative})";
+            var href = prefix + target.RelativePath + (target.Anchor is null ? string.Empty : "#" + target.Anchor);
+            return $"[{MarkerShortName(ident)}]({href})";
         });
     }
 
     /// <summary>
-    /// Reader-facing name for a marker that didn't resolve: the trailing
-    /// identifier, whether the author wrote a short name or a full cref.
+    /// Finds the reference location for a marker identifier. A full cref
+    /// (it contains <c>:</c>) is looked up by doc id; anything else by short
+    /// name, so <c>T:Foo.Bar</c> and <c>Bar</c> both work.
     /// </summary>
-    private static string MarkerShortName(string ident)
+    internal static RefLocation? ResolveIdent(
+        string ident,
+        IReadOnlyDictionary<string, RefLocation> byDocId,
+        IReadOnlyDictionary<string, RefLocation> byName)
+    {
+        if (ident.Contains(':'))
+            return byDocId.TryGetValue(ident, out var exact) ? exact : null;
+        if (byName.TryGetValue(ident, out var named)) return named;
+        var shortName = MarkerShortName(ident);
+        return byName.TryGetValue(shortName, out var fallback) ? fallback : null;
+    }
+
+    /// <summary>
+    /// Reader-facing name for a marker: the trailing identifier, whether the
+    /// author wrote a short name or a full cref.
+    /// </summary>
+    internal static string MarkerShortName(string ident)
     {
         var stem = ident;
         if (stem.Length >= 2 && stem[1] == ':') stem = stem[2..];
@@ -219,76 +140,31 @@ internal static class ReferenceLinkInjector
             .SelectMany(rs => rs.Select(r => r.TemplateId))
             .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var page in declaredGuidePages.Distinct(StringComparer.Ordinal))
-        {
-            if (!templateSet.Contains(page)) continue; // no template yet — out of scope
-            if (!pagesWithInboundMarkers.Contains(page))
-            {
-                yield return new RefGenFinding(
-                    "REACTOR_DOC_REGISTRY_W002",
-                    $"guide page '{page}' has no <!-- ref:Member --> markers pointing to it",
-                    page + ".md.dt",
-                    TierLintSeverity.Warning);
-            }
-        }
+        // One finding for all of them: the map names many guide pages, and a
+        // warning per page would bury the rest of the phase output.
+        var orphans = declaredGuidePages
+            .Distinct(StringComparer.Ordinal)
+            .Where(p => templateSet.Contains(p) && !pagesWithInboundMarkers.Contains(p))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        if (orphans.Count == 0) yield break;
+        var subject = orphans.Count == 1
+            ? $"guide page '{orphans[0]}' has"
+            : $"{orphans.Count} guide pages have";
+        yield return new RefGenFinding(
+            "REACTOR_DOC_REGISTRY_W002",
+            $"{subject} no <!-- ref:Member --> markers pointing to the reference: {string.Join(", ", orphans)}",
+            orphans.Count == 1 ? orphans[0] + ".md.dt" : "docs/_pipeline/reference-map.yaml",
+            TierLintSeverity.Warning);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Locate the signature block (the `_cref_: ...` line) and return the
-    /// body with <paramref name="content"/> inserted after the next blank
-    /// line. Idempotent — calling twice doesn't double the callout because
-    /// the second insertion lands after the first callout's blank line.
-    /// </summary>
-    private static string InsertAfterSignature(string body, string content)
-    {
-        // Find the first blank line after the `_cref_:` row.
-        var lines = body.Replace("\r\n", "\n").Split('\n');
-        int crefIdx = -1;
-        for (int i = 0; i < lines.Length; i++)
-        {
-            if (lines[i].StartsWith("_cref_:", StringComparison.Ordinal))
-            {
-                crefIdx = i; break;
-            }
-        }
-        if (crefIdx < 0) return body;
-        // Insert after the next blank line.
-        int blankIdx = crefIdx + 1;
-        while (blankIdx < lines.Length && lines[blankIdx].Length > 0) blankIdx++;
-        // Skip the blank to land before the next non-empty line.
-        blankIdx++;
-        var sb = new StringBuilder();
-        for (int i = 0; i < blankIdx; i++) sb.AppendLine(lines[i]);
-        sb.Append(content);
-        for (int i = blankIdx; i < lines.Length; i++) sb.AppendLine(lines[i]);
-        // AppendLine adds \r\n; emit \n to match the reader convention.
-        return sb.ToString().Replace("\r\n", "\n");
-    }
-
-    private static string ToTitle(string slug) =>
+    /// <summary>Turns a guide slug such as <c>data-system</c> into a title (<c>Data system</c>).</summary>
+    internal static string ToTitle(string slug) =>
         string.IsNullOrEmpty(slug) ? slug
         : char.ToUpperInvariant(slug[0]) + slug[1..].Replace('-', ' ');
 
     internal static readonly Regex RefMarkerPattern = new(
         @"<!--\s*ref:\s*(?<ident>[^\s\-][^-]*?)\s*-->",
-        RegexOptions.Compiled);
-
-    /// <summary>
-    /// Detect inline <c>[Name](path.md)</c> links so the dual-link
-    /// post-processor can append a guide pointer.
-    /// <para>
-    /// The fragment is optional and must stay optional: once overloaded members
-    /// got their own anchors, every cref to an overloaded page started emitting
-    /// <c>Foo.md#foobar</c>, and a pattern ending at <c>.md)</c> silently stopped
-    /// matching them — dropping the guide annotation from exactly those pages
-    /// rather than failing. <c>m.Value</c> carries the fragment through, so the
-    /// rewritten link keeps its anchor.
-    /// </para>
-    /// </summary>
-    internal static readonly Regex InlineDualLinkPattern = new(
-        @"\[(?<name>[A-Za-z_][A-Za-z0-9_]*)\]\((?<path>(?:[^()\s]+/)?[A-Za-z_][A-Za-z0-9_]*\.md)(?<frag>#[A-Za-z0-9_.-]*)?\)(?!\s*\(\[guide\])",
         RegexOptions.Compiled);
 }
 

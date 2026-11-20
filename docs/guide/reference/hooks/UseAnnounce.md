@@ -1,41 +1,30 @@
 # UseAnnounce
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.Component)`
+Creates an [`AnnounceHandle`](hook-types.md#announcehandle) for making screen reader announcements. The handle persists across re-renders.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+You must include [`AnnounceHandle.Region`](hook-types.md#region) in your rendered tree:
 
-## Overloads
-
-- [`UseAnnounce(Component)`](#useannouncecomponent)
-- [`UseAnnounce(RenderContext)`](#useannouncerendercontext)
-
-## `UseAnnounce(Component)`
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.Component)`
-
-### Summary
-
-Creates an [AnnounceHandle](AnnounceHandle.md) ([guide](../../hooks.md)) for making screen reader announcements.
-
-## `UseAnnounce(RenderContext)`
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.RenderContext)`
-
-### Summary
-
-Creates an [AnnounceHandle](AnnounceHandle.md) ([guide](../../hooks.md)) for making screen reader announcements.
-The handle persists across re-renders.
-
-You must include [Region](Region.md) ([guide](../../hooks.md)) in your rendered tree:
 ```csharp
 var announce = UseAnnounce();
 return VStack(
-announce.Region,
-Button("Save", () => { Save(); announce.Announce("Document saved"); }),
+    announce.Region,
+    Button("Save", () => { Save(); announce.Announce("Document saved"); }),
 );
 ```
 
+```csharp
+public static AnnounceHandle UseAnnounce(this RenderContext ctx)
+```
 
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseAnnounceExtensions`.
+
+**Learn more:** [Accessibility](../../accessibility.md), [Hooks](../../hooks.md)
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected AnnounceHandle UseAnnounce()
+public static AnnounceHandle UseAnnounce(this Component component)
+```

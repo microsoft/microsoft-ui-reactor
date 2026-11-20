@@ -1,33 +1,209 @@
 # Pending
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.PendingFactory.Pending(Microsoft.UI.Reactor.Core.Element,Microsoft.UI.Reactor.Core.Element)`
+The Pending element that shows a fallback while resources below it load.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+**Learn more:** [Hooks](../../hooks.md)
 
-## Summary
+## `PendingComponent`
 
-Wraps `child` with a fresh [PendingScope](PendingScope.md) ([guide](../../hooks.md)). Renders
-`fallback` instead of `child` while any
-`UseResource`/`UseInfiniteResource` in the subtree is in the
-`Loading` state. `Reloading(previous)` does **not** trigger the
-fallback — spec §10.1.
+Component backing the `Pending` element. Hosts a [`PendingScope`](#pendingscope), subscribes to its [`PendingScope.Changed`](#changed) event, and chooses between [`PendingProps.Fallback`](#fallback) and [`PendingProps.Child`](#child).
 
-## Discussion
+```csharp
+public sealed class PendingComponent
+```
 
-The child subtree is always mounted so its hooks register with the scope. The
-element simply chooses which rendered tree to show — there is no unwinding
-of rendering, and no reconciler involvement.
+Namespace: `Microsoft.UI.Reactor.Hooks`.
 
+### Remarks
 
-Marked `[ReactorSourceTransparent]` (see
-`ReactorSourceTransparentAttribute`, spec 010) because it is a
-pure forwarder: the element is really built by the `Component<,>` call
-on the next line, inside Reactor's own assembly, where no consumer call site
-exists to intercept. Without the annotation a `Pending(...)` element reports
-no location at all. With it, the interceptor in the consumer's compilation stamps
-the line they wrote `Pending(` on, which is the answer they were looking for.
+The child subtree is always rendered. When the scope reports any loading resource, the child's `Visibility` is flipped to `Collapsed` and the fallback is shown instead. Because the subtree stays mounted, its hooks keep running, their fetches complete in the background, and the UI swaps to the real content on the next render frame after the scope reports clean.
 
+### Constructors
 
+#### `PendingComponent`
 
+```csharp
+public PendingComponent()
+```
 
+### Methods
+
+#### `Render`
+
+```csharp
+public override Element Render()
+```
+
+## `PendingFactory`
+
+Entry-point factory for the `Pending` bubble-up element. See `docs/specs/020-async-resources-design.md` §10 for the full mechanism.
+
+```csharp
+public static class PendingFactory
+```
+
+Namespace: `Microsoft.UI.Reactor.Hooks`.
+
+### Methods
+
+#### `Pending`
+
+Wraps `child` with a fresh [`PendingScope`](#pendingscope). Renders `fallback` instead of `child` while any `UseResource`/`UseInfiniteResource` in the subtree is in the `Loading` state. `Reloading(previous)` does **not** trigger the fallback — spec §10.1.
+
+```csharp
+public static Element Pending(Element fallback, Element child)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `fallback` | [`Element`](../elements/Element.md) |  |
+| `child` | [`Element`](../elements/Element.md) |  |
+
+**Remarks**
+
+The child subtree is always mounted so its hooks register with the scope. The element simply chooses which rendered tree to show — there is no unwinding of rendering, and no reconciler involvement.
+
+Marked `[ReactorSourceTransparent]` (see [`ReactorSourceTransparentAttribute`](../diagnostics/ReactorSourceTransparentAttribute.md), spec 010) because it is a pure forwarder: the element is really built by the `Component<,>` call on the next line, inside Reactor's own assembly, where no consumer call site exists to intercept. Without the annotation a `Pending(...)` element reports no location at all. With it, the interceptor in the consumer's compilation stamps the line they wrote `Pending(` on, which is the answer they were looking for.
+
+## `PendingProps`
+
+Props for [`PendingComponent`](#pendingcomponent).
+
+```csharp
+public sealed record PendingProps(Element Fallback, Element Child)
+```
+
+Namespace: `Microsoft.UI.Reactor.Hooks`.
+
+### Constructors
+
+#### `PendingProps`
+
+Props for [`PendingComponent`](#pendingcomponent).
+
+```csharp
+public PendingProps(Element Fallback, Element Child)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `Fallback` | [`Element`](../elements/Element.md) |  |
+| `Child` | [`Element`](../elements/Element.md) |  |
+
+### Properties
+
+#### `Child`
+
+```csharp
+public Element Child  // get, init
+```
+
+#### `Fallback`
+
+```csharp
+public Element Fallback  // get, init
+```
+
+## `PendingScope`
+
+Shared loading-state ref-count consumed by the `Pending` element and populated by `UseResource` / `UseInfiniteResource` hooks inside the scope. When the scope observes **any** registered resource in the `Loading` state (not `Reloading`), the owning `Pending` element renders its fallback instead of the child subtree.
+
+```csharp
+public sealed class PendingScope
+```
+
+Namespace: `Microsoft.UI.Reactor.Hooks`.
+
+### Remarks
+
+**Semantics.** Only `Loading` triggers the fallback — spec §10.1. A `Reloading(previous)` is "we already have something to show" and the subtree continues to render normally.
+
+**Threading.** All members are thread-safe. [`PendingScope.Changed`](#changed) fires on the thread that caused the mutation — consumers (typically `Pending`'s re-render trigger) marshal it to the dispatcher themselves.
+
+**Scope nesting.** Each `Pending` provides a fresh scope to its subtree, so nested `Pending`s are independent. A hook registers only with its nearest ancestor scope.
+
+### Constructors
+
+#### `PendingScope`
+
+```csharp
+public PendingScope()
+```
+
+### Properties
+
+#### `AnyLoading`
+
+True iff any tracked token is currently `Loading`.
+
+```csharp
+public bool AnyLoading  // get
+```
+
+#### `Count`
+
+Snapshot the number of registered tokens (loading or not). Diagnostic only.
+
+```csharp
+public int Count  // get
+```
+
+### Methods
+
+#### `Register`
+
+Start tracking `token` with the given initial `isLoading` state. A hook typically uses its own `this`-equivalent as the token.
+
+```csharp
+public void Register(object token, bool isLoading)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `token` | `object` |  |
+| `isLoading` | `bool` |  |
+
+#### `SetLoading`
+
+Update `token`'s loading state. Silently ignored if the token was never registered (defensive — avoids forcing the caller to track whether they registered).
+
+```csharp
+public void SetLoading(object token, bool isLoading)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `token` | `object` |  |
+| `isLoading` | `bool` |  |
+
+#### `Unregister`
+
+Stop tracking `token`. Idempotent.
+
+```csharp
+public void Unregister(object token)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `token` | `object` |  |
+
+### Events
+
+#### `Changed`
+
+Fires when a resource joins, leaves, or changes its loading state.
+
+```csharp
+public event Action? Changed
+```

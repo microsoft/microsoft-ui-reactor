@@ -1,56 +1,93 @@
 # UseResource
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseResourceExtensions.UseResource``1(Microsoft.UI.Reactor.Core.RenderContext,System.Func{System.Threading.CancellationToken,System.Threading.Tasks.Task{``0}},System.Object[],Microsoft.UI.Reactor.Hooks.ResourceOptions,Microsoft.UI.Reactor.Hooks.IHookDispatcher)`
+Runs an async fetch keyed on `deps`, returning an [`AsyncValue<T>`](../data/async-values.md#asyncvaluet) that tracks the fetch's lifecycle. The hook owns the cancellation token, stores results in `cache`, and re-renders when new results land.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public static AsyncValue<T> UseResource<T>(this RenderContext ctx, Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions? options = null, IHookDispatcher? dispatcher = null)
+public static AsyncValue<T> UseResource<T>(this RenderContext ctx, Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions? options = null, IHookDispatcher? dispatcher = null)
+protected AsyncValue<T> UseResource<T>(Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions? options = null)
+protected AsyncValue<T> UseResource<T>(Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions? options = null)
+```
+
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseResourceExtensions`.
+
+**Learn more:** [Async Resources](../../async-resources.md), [Effects and Lifecycle](../../effects.md), [Hooks](../../hooks.md)
 
 ## Overloads
 
-- [`UseResource<T1>(RenderContext, Func<CancellationToken, Task<T1>>, object[], ResourceOptions, IHookDispatcher)`](#useresourcet1rendercontext-funccancellationtoken-taskt1-object-resourceoptions-ihookdispatcher)
-- [`UseResource<T1>(RenderContext, Func<CancellationToken, Task<T1>>, QueryCache, object[], ResourceOptions, IHookDispatcher)`](#useresourcet1rendercontext-funccancellationtoken-taskt1-querycache-object-resourceoptions-ihookdispatcher)
+| Overload | Description |
+| --- | --- |
+| [`UseResource<T>(RenderContext, Func<CancellationToken, Task<T>>, object[], ResourceOptions?, IHookDispatcher?)`](#useresourcetrendercontext-funccancellationtoken-taskt-object-resourceoptions-ihookdispatcher) | Overload that reads the ambient `QueryCache` from `AppContexts.QueryCache`. |
+| [`UseResource<T>(RenderContext, Func<CancellationToken, Task<T>>, QueryCache, object[], ResourceOptions?, IHookDispatcher?)`](#useresourcetrendercontext-funccancellationtoken-taskt-querycache-object-resourceoptions-ihookdispatcher) | Runs an async fetch keyed on `deps`, returning an `AsyncValue<T>` that tracks the fetch's lifecycle. |
+| [`UseResource<T>(Func<CancellationToken, Task<T>>, object[], ResourceOptions?)`](#useresourcetfunccancellationtoken-taskt-object-resourceoptions) |  |
+| [`UseResource<T>(Func<CancellationToken, Task<T>>, QueryCache, object[], ResourceOptions?)`](#useresourcetfunccancellationtoken-taskt-querycache-object-resourceoptions) |  |
 
-## `UseResource<T1>(RenderContext, Func<CancellationToken, Task<T1>>, object[], ResourceOptions, IHookDispatcher)`
+### `UseResource<T>(RenderContext, Func<CancellationToken, Task<T>>, object[], ResourceOptions?, IHookDispatcher?)`
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseResourceExtensions.UseResource``1(Microsoft.UI.Reactor.Core.RenderContext,System.Func{System.Threading.CancellationToken,System.Threading.Tasks.Task{``0}},System.Object[],Microsoft.UI.Reactor.Hooks.ResourceOptions,Microsoft.UI.Reactor.Hooks.IHookDispatcher)`
+Overload that reads the ambient [`QueryCache`](../data/query-cache.md#querycache) from [`AppContexts.QueryCache`](../components/AppContexts.md#querycache). [`ReactorHost`](../hosting/ReactorHost.md) installs a process-wide default cache at startup; tests or subtrees may override it via `.Provide(AppContexts.QueryCache, customCache)`.
 
-### Summary
+```csharp
+public static AsyncValue<T> UseResource<T>(this RenderContext ctx, Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions? options = null, IHookDispatcher? dispatcher = null)
+```
 
-Overload that reads the ambient `QueryCache` from
-`AppContexts.QueryCache`. `ReactorHost` installs a
-process-wide default cache at startup; tests or subtrees may override it via
-`.Provide(AppContexts.QueryCache, customCache)`.
+**Parameters**
 
-## `UseResource<T1>(RenderContext, Func<CancellationToken, Task<T1>>, QueryCache, object[], ResourceOptions, IHookDispatcher)`
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetcher` | `Func<CancellationToken, Task<T>>` |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`ResourceOptions?`](hook-types.md#resourceoptions) | `null` |  |
+| `dispatcher` | [`IHookDispatcher?`](hook-types.md#ihookdispatcher) | `null` |  |
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseResourceExtensions.UseResource``1(Microsoft.UI.Reactor.Core.RenderContext,System.Func{System.Threading.CancellationToken,System.Threading.Tasks.Task{``0}},Microsoft.UI.Reactor.Core.QueryCache,System.Object[],Microsoft.UI.Reactor.Hooks.ResourceOptions,Microsoft.UI.Reactor.Hooks.IHookDispatcher)`
+### `UseResource<T>(RenderContext, Func<CancellationToken, Task<T>>, QueryCache, object[], ResourceOptions?, IHookDispatcher?)`
 
-### Summary
+Runs an async fetch keyed on `deps`, returning an [`AsyncValue<T>`](../data/async-values.md#asyncvaluet) that tracks the fetch's lifecycle. The hook owns the cancellation token, stores results in `cache`, and re-renders when new results land.
 
-Runs an async fetch keyed on `deps`, returning an
-`AsyncValue` that tracks the fetch's lifecycle. The hook
-owns the cancellation token, stores results in `cache`,
-and re-renders when new results land.
+```csharp
+public static AsyncValue<T> UseResource<T>(this RenderContext ctx, Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions? options = null, IHookDispatcher? dispatcher = null)
+```
 
-### Discussion
+**Parameters**
 
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetcher` | `Func<CancellationToken, Task<T>>` |  |  |
+| `cache` | [`QueryCache`](../data/query-cache.md#querycache) |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`ResourceOptions?`](hook-types.md#resourceoptions) | `null` |  |
+| `dispatcher` | [`IHookDispatcher?`](hook-types.md#ihookdispatcher) | `null` |  |
 
+**Remarks**
 
-**Sync-complete fast path.** If `fetcher` returns an
-already-completed task, this call returns `Data(result)` on the same render,
-with no transient `Loading` flash.
+**Sync-complete fast path.** If `fetcher` returns an already-completed task, this call returns `Data(result)` on the same render, with no transient `Loading` flash.
 
+**Dispatcher.** The hook captures the dispatcher at registration time (`DispatcherQueue.GetForCurrentThread()`). In unit tests without a WinUI dispatcher, continuations run inline on the thread-pool thread that completed the fetch.
 
+### `UseResource<T>(Func<CancellationToken, Task<T>>, object[], ResourceOptions?)`
 
-**Dispatcher.** The hook captures the dispatcher at registration time
-(`DispatcherQueue.GetForCurrentThread()`). In unit tests without a WinUI
-dispatcher, continuations run inline on the thread-pool thread that completed
-the fetch.
+```csharp
+protected AsyncValue<T> UseResource<T>(Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions? options = null)
+```
 
-## Featured in
+**Parameters**
 
-- [Effects](../../effects.md)
-- [Hooks](../../hooks.md)
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetcher` | `Func<CancellationToken, Task<T>>` |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`ResourceOptions?`](hook-types.md#resourceoptions) | `null` |  |
 
+### `UseResource<T>(Func<CancellationToken, Task<T>>, QueryCache, object[], ResourceOptions?)`
+
+```csharp
+protected AsyncValue<T> UseResource<T>(Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions? options = null)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetcher` | `Func<CancellationToken, Task<T>>` |  |  |
+| `cache` | [`QueryCache`](../data/query-cache.md#querycache) |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`ResourceOptions?`](hook-types.md#resourceoptions) | `null` |  |
