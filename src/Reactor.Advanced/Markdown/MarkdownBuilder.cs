@@ -230,18 +230,17 @@ internal sealed class MarkdownBuilder
 
     private int OnEnterBlock(MarkdownBlockType type, object? detail)
     {
+        // Tight items have no paragraph callbacks. Preserve their pending text
+        // before any child block consumes or clears the shared inline buffer.
+        if (_blockStack.TryPeek(out var item) && item.Type == MarkdownBlockType.Li)
+            FlushPendingInlines(item);
+
         switch (type)
         {
-            case MarkdownBlockType.Ul:
-            case MarkdownBlockType.Ol:
-                // Tight items have no paragraph callbacks. Keep their pending text
-                // in the parent item before the nested list consumes new inlines.
-                if (_blockStack.TryPeek(out var item) && item.Type == MarkdownBlockType.Li)
-                    FlushPendingInlines(item);
-                goto case MarkdownBlockType.Doc;
-
             case MarkdownBlockType.Doc:
             case MarkdownBlockType.Quote:
+            case MarkdownBlockType.Ul:
+            case MarkdownBlockType.Ol:
             case MarkdownBlockType.Li:
             case MarkdownBlockType.P:
             case MarkdownBlockType.H:

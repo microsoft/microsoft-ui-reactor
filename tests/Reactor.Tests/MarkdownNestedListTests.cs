@@ -7,6 +7,55 @@ namespace Microsoft.UI.Reactor.Tests;
 public class MarkdownNestedListTests
 {
     [Theory]
+    [InlineData(false, "# child")]
+    [InlineData(true, "# child")]
+    [InlineData(false, "> child")]
+    [InlineData(true, "> child")]
+    [InlineData(false, "```\nchild\n```")]
+    [InlineData(true, "```\nchild\n```")]
+    public void TightItemTextPrecedesOtherChildBlocks(bool structured, string childBlock)
+    {
+        var source = "- intro\n  " + childBlock.Replace("\n", "\n  ");
+        var tree = global::Microsoft.UI.Reactor.Advanced.Factories.Markdown(source,
+            new MarkdownOptions
+            {
+                UnifiedRichText = true,
+                TextSelection = structured ? new() : null,
+                BlockQuote = element => Assert.IsType<BorderElement>(element).Child!,
+                CodeBlock = (code, _) => structured
+                    ? MarkdownTextSelection.Surface(code, new TextBlockElement(code))
+                    : new TextBlockElement(code),
+            });
+        var list = Assert.IsType<StackElement>(structured
+            ? Assert.Single(Assert.IsType<StackElement>(tree).Children)
+            : Assert.IsType<RichTextInlineUIContainer>(Assert.Single(
+                Assert.Single(Assert.IsType<RichTextBlockElement>(tree).Paragraphs!).Inlines)).Child);
+        var row = Assert.IsType<GridElement>(Assert.Single(list.Children));
+        var content = Assert.IsType<StackElement>(row.Children[1]);
+        Assert.Equal(2, content.Children.Length);
+        var intro = Assert.IsType<RichTextBlockElement>(Unwrap(content.Children[0]));
+        Assert.Equal("intro", Assert.IsType<RichTextRun>(
+            Assert.Single(Assert.Single(intro.Paragraphs!).Inlines)).Text);
+        var child = Unwrap(content.Children[1]);
+        if (child is StackElement quote)
+            child = Unwrap(Assert.Single(quote.Children));
+        Assert.Equal("child", child switch
+        {
+            RichTextBlockElement rich => Assert.IsType<RichTextRun>(
+                Assert.Single(Assert.Single(rich.Paragraphs!).Inlines)).Text,
+            TextBlockElement code => code.Content,
+            _ => throw new InvalidOperationException($"Unexpected child: {child.GetType().Name}"),
+        });
+        if (structured)
+        {
+            var document = new MarkdownSelectionDocument();
+            document.Rebuild(MarkdownTextSelectionTests.Surfaces(tree)
+                .Select(s => new SelectionPart(s, s.Text, s.SeparatorAfter)));
+            Assert.Equal("\u2022 intro\nchild", document.Text);
+        }
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -80,9 +129,6 @@ public class MarkdownNestedListTests
             Assert.Equal("7. parent docs\n\u2022 child\n1. leaf\n\u2022 child sibling\n8. parent sibling", document.Text);
         }
 
-        static Element Unwrap(Element element) =>
-            element is MarkdownSelectionElement surface ? surface.Content : element;
-
         static RichTextInline[] ReadInlines(Element element) =>
             Assert.Single(Assert.IsType<RichTextBlockElement>(Unwrap(element)).Paragraphs!).Inlines;
 
@@ -94,4 +140,7 @@ public class MarkdownNestedListTests
                 _ => throw new InvalidOperationException($"Unexpected inline: {i.GetType().Name}"),
             }));
     }
+
+    private static Element Unwrap(Element element) =>
+        element is MarkdownSelectionElement surface ? surface.Content : element;
 }
