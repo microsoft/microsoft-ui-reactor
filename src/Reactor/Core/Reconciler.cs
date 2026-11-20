@@ -6357,10 +6357,13 @@ public sealed partial class Reconciler : IDisposable
         overrideApplied = false;
         if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
             return;
-        // A local brush (or local null) is written back. No local value, or one that cannot be
-        // written back (a binding expression), clears the property to what styles supply.
+        // A local brush (or local null) is written back, and a binding the state wrote over is set
+        // again from its Binding, so it keeps following its source. No local value clears the
+        // property to what styles supply.
         if (normal is null or Brush)
             fe.SetValue(dp, normal);
+        else if (normal is Microsoft.UI.Xaml.Data.BindingExpression { ParentBinding: { } binding })
+            fe.SetBinding(dp, binding);
         else
             fe.ClearValue(dp);
     }

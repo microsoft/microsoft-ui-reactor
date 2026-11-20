@@ -293,6 +293,53 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
+    /// A Background set by a binding comes back as that binding after a hover and a press, not as
+    /// a cleared property, and keeps following its source afterwards.
+    /// </summary>
+    internal sealed class InteractionStatesRestoresBinding(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var hover = new SolidColorBrush(HoverColor);
+            var pressed = new SolidColorBrush(DarkColor);
+            var first = new SolidColorBrush(ExplicitColor);
+            var second = new SolidColorBrush(OtherExplicitColor);
+            var source = new WinUI.Border { Background = first };
+            using var host = H.CreateHost();
+            try
+            {
+                host.Mount(_ => VStack(Border(TextBlock("trs-bound"))
+                    .Set(b => b.SetBinding(WinUI.Border.BackgroundProperty,
+                        new Microsoft.UI.Xaml.Data.Binding { Source = source, Path = new PropertyPath("Background") }))
+                    .InteractionStates(s => s.PointerOver(background: hover).Pressed(background: pressed))));
+                await Harness.Render();
+
+                var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trs-bound" });
+                H.Check("ThemeRefStyle_Bound_Initial", ReferenceEquals(border?.Background, first));
+                if (border is null) return;
+
+                Reconciler.SimulatePointerOverForTests(border, isOver: true);
+                Reconciler.SimulatePressedForTests(border, isPressed: true);
+                H.Check("ThemeRefStyle_Bound_PressedBrush", ReferenceEquals(border.Background, pressed));
+                Reconciler.SimulatePressedForTests(border, isPressed: false);
+                Reconciler.SimulatePointerOverForTests(border, isOver: false);
+                H.Check("ThemeRefStyle_Bound_Restored", ReferenceEquals(border.Background, first),
+                    $"bg={ColorOf(border.Background)}");
+
+                source.Background = second;
+                H.Check("ThemeRefStyle_Bound_FollowsSource",
+                    await Harness.WaitFor(() => ReferenceEquals(border.Background, second)),
+                    $"bg={ColorOf(border.Background)}");
+            }
+            finally
+            {
+                H.SetContent(null);
+                await Harness.Render();
+            }
+        }
+    }
+
+    /// <summary>
     /// A ThemeRef keeps a Style the app set (<c>.Set</c> on every render, <c>.ApplyStyle</c> once at
     /// mount): the themed Style is built BasedOn it, re-renders don't chain another level, and
     /// dropping the ThemeRef hands the control back to the app's Style.
