@@ -124,9 +124,14 @@ the report:
 - If you changed anything, commit (`Address pr-review findings`) and push. If every
   finding was disputed, there's nothing to commit; go straight to the checkpoint.
 
-Record `pr-review: done@<sha>` in the checkpoint. **Don't run `pr-review` again in later
+Record `pr-review: done@<sha>` in the checkpoint. `pr-review` already retries a failed
+dimension once; if its report still shows any dimension `✗ skipped`, record
+`pr-review: partial@<sha> (skipped: <dimensions>)` instead, and name the
+gap in the Phase 3 summary rather than presenting the PR as fully reviewed. A
+cross-family check reported as unavailable is a disclosed limitation, not a skip.
+**Don't run `pr-review` again in later
 rounds.** The Copilot loop reviews every later change. If the skill is invoked again
-on a PR whose checkpoint shows `pr-review` done, resume at Phase 3 (it's safe to repeat
+on a PR whose checkpoint shows `pr-review` done or partial, resume at Phase 3 (it's safe to repeat
 and makes sure the body is current), then continue to Phase 4. If there's no
 checkpoint but the PR already has a lifecycle label, ask the user whether to repeat
 the pass instead of guessing.

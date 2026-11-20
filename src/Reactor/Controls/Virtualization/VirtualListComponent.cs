@@ -16,13 +16,10 @@ public class VirtualListComponent : Component<VirtualListElement>
     {
         var el = Props;
 
-        // Build index list for ItemsRepeater's item source
-        var indices = UseMemo(() =>
-            Enumerable.Range(0, el.ItemCount).ToList() as IReadOnlyList<int>,
-            el.ItemCount);
+        var indices = UseMemo(() => new VirtualListIndices(el.ItemCount), el.ItemCount);
 
         // Key selector: use provided GetItemKey or default to index string
-        var keySelector = el.GetItemKey ?? (i => i.ToString());
+        var keySelector = el.GetItemKey ?? VirtualListIndices.DefaultKeySelector;
 
         // View builder: wrap the RenderItem callback, applying fixed height when set
         var fixedHeight = el.ItemHeight;
@@ -43,21 +40,20 @@ public class VirtualListComponent : Component<VirtualListElement>
 
         // Configure the LazyVStack with appropriate settings
         var estimatedSize = el.ItemHeight ?? el.EstimatedItemHeight;
-        var lazyStack = LazyVStack(indices, i => keySelector(i), viewBuilder) with
+        var lazyStack = LazyVStack(indices, keySelector, viewBuilder) with
         {
             Spacing = el.Spacing,
             EstimatedItemSize = estimatedSize,
         };
 
-        // Wire up Ref and OnVisibleRangeChanged via ScrollViewer setters.
-        // These setters run at mount AND on every update, so we use a flag ref
-        // to ensure event handlers are only attached once.
-        var wiredRef = UseRef(false);
+        // Refresh even when both callbacks are absent and no viewer setter runs.
+        var rangeRef = UseRef<VisibleRangeSubscription?>(null);
+        var range = rangeRef.Current ??= new VisibleRangeSubscription();
+        range.Current = (el.OnVisibleRangeChanged, el.ItemHeight, el.EstimatedItemHeight, el.Spacing);
+        UseEffect(() => range.Dispose, []);
         var elRef = el.Ref;
         var elOnRange = el.OnVisibleRangeChanged;
         var elHeight = el.ItemHeight;
-        var elEstHeight = el.EstimatedItemHeight;
-        var elSpacing = el.Spacing;
 
         if (elRef is not null || elOnRange is not null)
         {
@@ -72,21 +68,44 @@ public class VirtualListComponent : Component<VirtualListElement>
                         elRef(new VirtualListRef(sv, repeater, elHeight));
                     }
 
-                    // Only attach event handler once
-                    if (!wiredRef.Current && elOnRange is not null)
-                    {
-                        wiredRef.Current = true;
-                        sv.ViewChanged += (_, _) =>
-                        {
-                            var (first, last) = GetVisibleRange(sv, elHeight, elEstHeight, elSpacing);
-                            elOnRange(first, last);
-                        };
-                    }
+                    if (elOnRange is not null)
+                        range.Attach(sv);
                 }],
             };
         }
 
         return lazyStack;
+    }
+
+    private sealed class VisibleRangeSubscription : IDisposable
+    {
+        private ScrollViewer? _viewer;
+        public (Action<int, int>? Callback, double? Height, double Estimate, double Spacing) Current;
+
+        public void Attach(ScrollViewer viewer)
+        {
+            if (_viewer is not null) return;
+            _viewer = viewer;
+            viewer.ViewChanged += OnViewChanged;
+        }
+
+        private void OnViewChanged(object? sender, ScrollViewerViewChangedEventArgs args)
+        {
+            var current = Current;
+            if (_viewer is { } viewer && current.Callback is { } callback)
+            {
+                var (first, last) = GetVisibleRange(viewer, current.Height, current.Estimate, current.Spacing);
+                callback(first, last);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_viewer is { } viewer)
+                viewer.ViewChanged -= OnViewChanged;
+            _viewer = null;
+            Current = default;
+        }
     }
 
     /// <summary>

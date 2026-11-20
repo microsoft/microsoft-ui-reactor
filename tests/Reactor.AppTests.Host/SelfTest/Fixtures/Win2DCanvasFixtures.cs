@@ -39,7 +39,9 @@ internal static class Win2DCanvasFixtures
                 await Harness.WaitFor(() => Volatile.Read(ref drawCount) >= 1, maxPasses: 40, perPassMs: 25));
 
             var before = Volatile.Read(ref drawCount);
-            var weak = CaptureControlWeakReference<CanvasControl>(H);
+            var weak = TryCaptureControlWeakReference<CanvasControl>(H, "Win2D_Canvas_ControlFound");
+            if (weak is null)
+                return;
             H.ClickButton("Redraw Win2D");
             await Harness.Render();
 
@@ -324,13 +326,14 @@ internal static class Win2DCanvasFixtures
         public int Ticks;
     }
 
-    private static WeakReference CaptureControlWeakReference<TControl>(Harness h)
+    // Reports the precondition as a check (emitted on every run, so its absence is never
+    // mistaken for success) instead of throwing, which truncated the TAP stream (issue #998).
+    private static WeakReference? TryCaptureControlWeakReference<TControl>(Harness h, string checkName)
         where TControl : Microsoft.UI.Xaml.DependencyObject
     {
         var control = h.FindControl<TControl>(_ => true);
-        if (control is null)
-            throw new InvalidOperationException($"Expected {typeof(TControl).Name} in visual tree.");
-        return new WeakReference(control);
+        h.Check(checkName, control is not null);
+        return control is null ? null : new WeakReference(control);
     }
 
     private static async Task<bool> WaitForCollectedOrDetached(WeakReference weak, Func<bool> isDetached)

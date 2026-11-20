@@ -789,6 +789,7 @@ public sealed class ReactorPerfTraceTests
             update(static v => v + 1);
             dispatch(0);
             setPersisted(3);
+            setPersisted(3);
         }, out long written);
 
         long id = ctx.DiagnosticId;
@@ -796,11 +797,11 @@ public sealed class ReactorPerfTraceTests
         var mine = events.Where(e => e.Id == 11).ToList();
         Assert.All(mine, e => Assert.Equal((ulong)id, e.Fields["componentId"]));
         Assert.Equal(
-            new (string, bool)[] { ("UseState", true), ("UseReducer", false), ("UseReducer", true), ("UseReducer", true), ("UseReducer", false), ("UsePersisted", true) },
+            new (string, bool)[] { ("UseState", true), ("UseReducer", false), ("UseReducer", true), ("UseReducer", true), ("UseReducer", false), ("UsePersisted", true), ("UsePersisted", false) },
             mine.Select(e => ((string)e.Fields["hook"], (bool)e.Fields["changed"])));
         // The thread-safe writes are reported on the worker thread that made them.
         Assert.All(mine.Take(3), e => Assert.NotEqual(mine[3].ThreadId, e.ThreadId));
-        Assert.Equal(6, written);
+        Assert.Equal(7, written);
     }
 
     [Fact]

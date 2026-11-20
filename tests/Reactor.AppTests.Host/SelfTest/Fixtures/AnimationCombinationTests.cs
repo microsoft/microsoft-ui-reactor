@@ -31,6 +31,25 @@ internal static class AnimationCombinationTests
         h.FindControl<StackPanel>(sp =>
             Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(sp) == id);
 
+    /// <summary>
+    /// Waits until XAML has run a full render walk after the caller's writes. A UIElement
+    /// facade write (e.g. <c>UIElement.Opacity</c>) reaches the element's handoff Visual —
+    /// and fires any implicit animation keyed on it — only in that walk, which runs on a
+    /// frame tick that neither UpdateLayout nor a dispatcher yield (so not
+    /// <see cref="Harness.Render"/>) guarantees. The second Rendering event is a later
+    /// tick, so the first tick's walk has completed. Returns the frames observed.
+    /// </summary>
+    static async Task<int> WaitForRenderWalk(int frames = 2, int timeoutMs = 2000)
+    {
+        var seen = 0;
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<object> onRendering = (_, _) => { if (++seen >= frames) done.TrySetResult(); };
+        global::Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += onRendering;
+        try { await Task.WhenAny(done.Task, Task.Delay(timeoutMs)); }
+        finally { global::Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= onRendering; }
+        return seen;
+    }
+
     static bool HasImplicitKey(Microsoft.UI.Composition.ImplicitAnimationCollection? coll, string key)
     {
         if (coll is null) return false;
@@ -685,6 +704,10 @@ internal static class AnimationCombinationTests
                     if (transition is not null) next = next.ScaleTransition(transition);
                     H.Check(name + "_SameButton", reconciler.Update(first, next, button, static () => { }) is null);
                     await Harness.Render();
+                    // The Modifier scenario writes UIElement.Opacity, which reaches the
+                    // Visual (and would fire a retained "Opacity" channel) only in a render
+                    // walk. Without one, both checks below read the pre-update Visual.
+                    var frames = await WaitForRenderWalk();
 
                     H.Check(name + "_No" + channel + "Animation", visual.TryGetAnimationController(channel) is null);
                     if (scenario.Narrow)
@@ -698,7 +721,8 @@ internal static class AnimationCombinationTests
                     else
                     {
                         H.Check(name + "_OpacityIsImmediate", (scenario.Setter || button.Opacity == 0.5)
-                            && Math.Abs(visual.Opacity - 0.5f) < 0.001f);
+                            && Math.Abs(visual.Opacity - 0.5f) < 0.001f,
+                            $"element={button.Opacity} visual={visual.Opacity} frames={frames}");
                         H.Check(name + "_DroppedOpacityChannel", visual.ImplicitAnimations?.ContainsKey("Opacity") != true);
                     }
                     if (scenario.Layout)

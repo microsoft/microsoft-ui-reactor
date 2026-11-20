@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml.Controls.AnimatedVisuals;
 using static Microsoft.UI.Reactor.Factories;
@@ -5,6 +6,7 @@ using static Microsoft.UI.Reactor.Factories;
 // `using static Factories` shadows the WinUI type names with factory methods, so the
 // attached-property helpers and the source interface are reached through aliases.
 using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
+using XamlButton = Microsoft.UI.Xaml.Controls.Button;
 using IAnimatedVisualSource2 = Microsoft.UI.Xaml.Controls.IAnimatedVisualSource2;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -356,6 +358,7 @@ internal static class AnimatedIconStateFixtures
             // that first write -- a hard cut -- and only the second interaction animates.
             // That is precisely the reported symptom: click animates, hover does not.
             var directMountState = directBefore is null ? null : XamlAnimatedIcon.GetState(directBefore);
+            ReportWrapperCollected(H, "Direct", CollectContentButtonWrapper(H));
             H.ClickButton("BumpDirect");
             await Harness.Render();
             var directAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
@@ -381,6 +384,7 @@ internal static class AnimatedIconStateFixtures
             await Harness.Render();
             var nestedBefore = H.FindControl<XamlAnimatedIcon>(_ => true);
             var nestedMountState = nestedBefore is null ? null : XamlAnimatedIcon.GetState(nestedBefore);
+            ReportWrapperCollected(H, "Nested", CollectContentButtonWrapper(H));
             H.ClickButton("BumpNested");
             await Harness.Render();
             var nestedAfter = H.FindControl<XamlAnimatedIcon>(_ => true);
@@ -421,5 +425,61 @@ internal static class AnimatedIconStateFixtures
                 return true;
             });
         }
+    }
+
+    // ── The content Button's managed wrapper, collected between mount and update ──
+    // The button family's owned-child record used to live in a ConditionalWeakTable keyed by
+    // the Button's managed wrapper. Nothing roots that wrapper between renders, so when a GC
+    // landed between the mount and the update, WinRT projected a fresh wrapper over the same
+    // native Button, the lookup missed, and the update mounted a second icon in the right
+    // state — failing only the *ContentUpdatedInPlace checks, and only on runs where a GC
+    // happened to land there. Collecting here makes that the path every run takes.
+
+    static readonly object WrapperMark = new();
+
+    /// <summary>
+    /// Collects the content Button's wrapper. True when the live tree then hands back a
+    /// different one, i.e. the update that follows really runs against a fresh wrapper.
+    /// </summary>
+    // Kept out of the async fixture, whose locals live on the state machine: a wrapper held
+    // there would survive the collection.
+    // The forced GC is the stimulus, not cleanup: without it the fixture only hits the bug on
+    // runs where a collection happens to land between mount and update, which is the flake this
+    // replaces. CodeQL flags it as cs/call-to-gc, an acknowledged trade-off (as in
+    // Phase2WindowingFixtures.CollectWindowResources).
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static bool CollectContentButtonWrapper(Harness h)
+    {
+        var seen = new ConditionalWeakTable<XamlButton, object>();
+        if (!MarkContentButton(h, seen)) return false;
+        GC.Collect(); // CodeQL[cs/call-to-gc]: intentional, see above.
+        GC.WaitForPendingFinalizers();
+        GC.Collect(); // CodeQL[cs/call-to-gc]: intentional, see above.
+        return FindContentButton(h) is { } current && !seen.TryGetValue(current, out _);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static bool MarkContentButton(Harness h, ConditionalWeakTable<XamlButton, object> seen)
+    {
+        if (FindContentButton(h) is not { } button) return false;
+        seen.Add(button, WrapperMark);
+        return true;
+    }
+
+    // The Bump buttons carry string content; the button under test carries UI.
+    static XamlButton? FindContentButton(Harness h) =>
+        h.FindControl<XamlButton>(b => b.Content is not null and not string);
+
+    // The fresh-wrapper path is the point of this regression test, so it is reported, not just
+    // logged: a run where the wrapper survived the collection would pass the in-place checks
+    // even with the old wrapper-keyed table. That shows as a skip rather than an ordinary pass.
+    // Collected in every one of 200 AOT stress observations, so a skip, not a failure.
+    static void ReportWrapperCollected(Harness h, string arm, bool fresh)
+    {
+        var name = $"AnimIconInButton_{arm}WrapperCollected";
+        if (fresh)
+            h.Check(name, true);
+        else
+            h.Skip(name, "the Button's wrapper survived the forced collection, so the update did not run against a fresh wrapper");
     }
 }

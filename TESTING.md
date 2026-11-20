@@ -230,10 +230,29 @@ Some tests here parse repo *sources* with Roslyn rather than exercising Reactor 
 | Test | Fails when |
 |---|---|
 | `GallerySnippetAgreementTests` | A `SampleCard` snippet uses a lowerCamelCase name that does not exist in the live code beside it — the snippet renamed, or the card did and the snippet did not. Direction is snippet → live only: a snippet may omit, it may not invent. |
-| `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. |
+| `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. Also checks [PUA glyph fonts](#pua-glyph-fonts-in-gallery-samples) in live gallery code and displayed snippets. |
 | `SearchIndexGeneratorTests` | `samples/ReactorGallery/reactor-search-index.json` is stale. Regenerate with `dotnet run --project tools/Reactor.SearchIndex`. |
 
 A snippet-agreement failure names the page, line, card title and identifier, and says which of the two sides to move. There is no allowlist: fix the snippet or fix the card.
+
+#### PUA glyph fonts in gallery samples
+
+`PuaStringContent_HasFontFamily` checks string content in `TextBlock`, named
+text styles such as `Body` and `Caption`, and button factories such as
+`Button`, `ToggleButton`, and `HyperlinkButton`. It checks live `ControlPages`
+code and compile-time `SampleCard` snippets for `.FontFamily(...)` on the
+element's own fluent chain. See the [Gallery authoring notes](samples/ReactorGallery/README.md#editing-sample-snippets).
+
+Roslyn resolves compile-time constants in the page's context and skips
+unreachable content in constant conditionals and simple switches. The lint
+checks source, so runtime-generated snippets, runtime font values, and font
+changes through record assignments are outside its scope.
+
+After building the unit-test project, run the PUA checks with:
+
+```powershell
+dotnet test tests/Reactor.Tests --no-build -p:Platform=x64 --filter-class '*GallerySampleLintTests' --filter-method '*Pua*'
+```
 
 ---
 
@@ -325,11 +344,14 @@ configuration and TFM stamped into the test assembly by `Reactor.SelfTests.cspro
 
 ### Fixture registration is two-place — and what that does to name searches
 
-Selftest: add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`; miss the second and
-`--list-fixtures` reports a name the run cannot produce. E2E: add it to `AllFixtures` **and**
-to the `Build` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs` — `--list-fixtures`
-is selftest-only, so nothing warns you about the E2E half.
+For SelfTest, add the fixture to `AllFixtures` **and** to the `Create()` switch in
+`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. For E2E, add it to
+`AllFixtures` **and** to the `Build()` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
+
+`--list-fixtures` lists only SelfTest fixtures for the current host tier.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` compares `AllFixtures` with the factory
+switch for both SelfTest and E2E. It reports each fixture registered on just one side and
+identifies where the registration is missing.
 
 That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
 carries two kinds of name and they live in different files: *fixture* names (registry only, and
@@ -341,7 +363,7 @@ the class they map to is often spelled differently — `CenterOnCurrent_UsesCurs
 |---|---|
 | grep `SelfTest/Fixtures/` only | fixture names whose class name differs |
 | grep `SelfTestFixtureRegistry.cs` only | check-only names — e.g. `WindowLevel_RuntimeFlip_Topmost`, `TabViewFill_Mounted`, `ExitTr_Removed` are all registry=0 |
-| **grep `tests/Reactor.AppTests.Host/` whole** | **literal names: none — use this** |
+| **grep `tests/Reactor.AppTests.Host/` whole** | A substring search can match a longer fixture name. Search for the full quoted fixture name. |
 
 One blind spot survives even the whole-tree grep: check names built by interpolation —
 `H.Check($"A11y_Role_{role}_Mounted", …)` — match no literal anywhere, so grepping the TAP name
@@ -642,6 +664,53 @@ before theorising:**
   This is the only one of the two that still produces a red.
 
 Do not assume "quiet machine ⇒ passes": that holds only in the interactive case.
+
+### Generated-wrapper metadata consumer (issue #1565)
+
+`tests\aot_trim_proof\Reactor.WrapperMetadata` is a separate, code-only app:
+no `App.xaml`, no explicit provider construction, and no shared selftest bootstrap
+that could accidentally root metadata. It realizes SettingsCard/SettingsExpander,
+a second Toolkit library, and a provider-free control, then changes six texts and
+requires the native card header's identity to survive. It exits nonzero on failure
+or a 45-second timeout. It opens a window but does not inject foreground input.
+
+```powershell
+dotnet build tests\aot_trim_proof\Reactor.WrapperMetadata -p:Platform=x64 -p:RuntimeIdentifier=win-x64 -p:SkipSignaturesGen=true -m:1 -nr:false
+& .\tests\aot_trim_proof\Reactor.WrapperMetadata\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.WrapperMetadata.exe
+
+# In a Visual Studio Developer environment:
+dotnet publish tests\aot_trim_proof\Reactor.WrapperMetadata -c Release -p:Platform=x64 -r win-x64 -p:PublishAotInternal=true --self-contained -p:SkipSignaturesGen=true -m:1 -nr:false -o artifacts\wrapper-metadata-aot
+& .\artifacts\wrapper-metadata-aot\Reactor.WrapperMetadata.exe
+```
+
+The JIT run must log `dynamic-code=True`; the native run must log
+`dynamic-code=False`. Both must print `PASS updated six texts` and exit 0.
+The unused RadialGauge wrapper is a trimming sentinel: native output should contain
+the used `CardElement`/SettingsControls provider symbols but not `UnusedGaugeElement`
+or the RadialGauge metadata-provider namespace.
+
+The in-repo proof uses central package versions and Windows App SDK injection.
+For shipping-package coverage, pack `src\Reactor` at a unique local version and copy
+**only** this proof's `.csproj` and `Program.cs` into a fresh directory outside the
+repository and any inherited `Directory.Build.*` / `Directory.Packages.props`.
+Materialize its package versions in that **external copy**, where CPM is off by
+default and the repository's SDK injection is absent:
+
+```powershell
+# $consumer is the full path to the copied Reactor.WrapperMetadata.csproj.
+# Use the current central values from Directory.Build.props / Directory.Packages.props.
+dotnet add $consumer package Microsoft.WindowsAppSDK --version 2.2.0 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.SettingsControls --version 8.3.260402-preview2 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.HeaderedControls --version 8.3.260402-preview2 --no-restore
+dotnet add $consumer package CommunityToolkit.WinUI.Controls.RadialGauge --version 8.3.260402-preview2 --no-restore
+```
+
+Then run the same build/publish commands against the external project with
+`-p:ReactorPackageVersion=<version>` and
+`-p:RestoreAdditionalProjectSources=<local-package-feed>`. That selects a
+`PackageReference` instead of all three Reactor project references, exercising the
+generator and authoring attributes shipped in the nupkg. Use separate output
+directories; never add explicit provider roots to this automatic-registration proof.
 
 ### Running selftests under NativeAOT
 

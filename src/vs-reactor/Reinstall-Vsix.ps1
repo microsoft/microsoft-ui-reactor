@@ -79,13 +79,14 @@ if (-not (Test-Path -LiteralPath $vsix)) {
 # 2. Discover the target VS instance via vswhere.
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 if (-not (Test-Path -LiteralPath $vswhere)) {
-    Write-Error "vswhere.exe not found. Install Visual Studio 2022 or 2026 with the 'Visual Studio extension development' workload."
+    Write-Error "vswhere.exe not found. Install Visual Studio 2026 with the 'Visual Studio extension development' workload."
     exit 1
 }
 
-$instances = & $vswhere -all -prerelease -format json | ConvertFrom-Json
+# The extension supports Visual Studio 2026 (18.x) only; older instances would reject the VSIX.
+$instances = & $vswhere -all -prerelease -version '[18.0,' -format json | ConvertFrom-Json
 if (-not $instances) {
-    Write-Error "No Visual Studio instances found."
+    Write-Error "No Visual Studio 2026 instances found."
     exit 1
 }
 
@@ -96,7 +97,7 @@ if ($VsInstanceId) {
         exit 1
     }
 } else {
-    # Default to the highest version (VS 2026 wins over VS 2022).
+    # Default to the highest version.
     $target = $instances | Sort-Object installationVersion -Descending | Select-Object -First 1
 }
 
