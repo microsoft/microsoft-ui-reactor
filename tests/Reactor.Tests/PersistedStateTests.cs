@@ -121,6 +121,39 @@ public class PersistedStateTests : IDisposable
     }
 
     [Fact]
+    public void Cached_Setter_Uses_Live_Callback_And_Saves_Only_At_Cleanup()
+    {
+        var ctx = new RenderContext();
+        int oldRenders = 0, currentRenders = 0;
+        ctx.BeginRender(() => oldRenders++);
+        var (_, set) = ctx.UsePersisted<string?>("cached-setter", "initial", PersistedScope.Application);
+
+        ctx.BeginRender(() => currentRenders++);
+        Assert.Same(set, ctx.UsePersisted<string?>("cached-setter", "ignored", PersistedScope.Application).Set);
+        set(new string("initial".ToCharArray()));
+        Assert.Equal(0, currentRenders);
+        set(null);
+        set(null);
+        set("saved");
+        Assert.Equal(0, oldRenders);
+        Assert.Equal(2, currentRenders);
+        Assert.False(PersistedStateCache.TryGet<string>("cached-setter", out _));
+
+        ctx.BeginRender(() => currentRenders++);
+        Assert.Equal("saved", ctx.UsePersisted<string?>("cached-setter", null, PersistedScope.Application).Value);
+        ctx.RunCleanups();
+        ctx.DetachFromHost();
+        set("too-late");
+        Assert.Equal(2, currentRenders);
+        Assert.True(PersistedStateCache.TryGet<string>("cached-setter", out var saved));
+        Assert.Equal("saved", saved);
+
+        var remounted = new RenderContext();
+        remounted.BeginRender(static () => { });
+        Assert.Equal("saved", remounted.UsePersisted("cached-setter", "initial", PersistedScope.Application).Value);
+    }
+
+    [Fact]
     public void UsePersisted_Value_Type_Int_No_Boxing_Issue()
     {
         var ctx = new RenderContext();

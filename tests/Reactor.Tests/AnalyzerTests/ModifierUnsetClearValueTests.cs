@@ -104,20 +104,6 @@ public class ModifierUnsetClearValueTests
     private static readonly Dictionary<string, string> MissingUnsetArmExceptions =
         new(StringComparer.Ordinal)
         {
-            // Issue #1001. These four are XAML *facade* properties. With no ambient curve the
-            // set path (AnimationHelper.SetOrAnimate / SetOrAnimateVector3) falls through to
-            // SetVector3Direct and assigns the facade property, which a mechanical ClearValue
-            // arm would release normally. But when a curve *is* ambient the same path calls
-            // visual.StartAnimation instead, and a running composition animation outranks the
-            // DP while leaving no local value for ClearValue to release — so the mechanical
-            // arm every other modifier gets would silently do nothing in exactly the case
-            // that matters. The fix needs a StopAnimation companion plus a
-            // selftest that actually exercises the animated path; deleting these four entries
-            // is the first commit of #1001.
-            ["ApplyModifiers.Scale"] = "Compositor-backed facade property — issue #1001.",
-            ["ApplyModifiers.Rotation"] = "Compositor-backed facade property — issue #1001.",
-            ["ApplyModifiers.Translation"] = "Compositor-backed facade property — issue #1001.",
-            ["ApplyModifiers.CenterPoint"] = "Compositor-backed facade property — issue #1001.",
         };
 
     /// <summary>
@@ -130,6 +116,14 @@ public class ModifierUnsetClearValueTests
             // Reactor's own pool/element-identity slot, not a value any Style supplies.
             // Nulling it is the point; there is no styled value to fall back to.
             ["Tag"] = "framework-internal element-identity slot, never style-provided",
+            // Issue #1614: the facade transforms are plain properties, not DPs, so there is no
+            // ClearValue to call and no Style can supply them. Assigning identity is the reset.
+            ["Rotation"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["Scale"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["Translation"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["CenterPoint"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["RotationAxis"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["TransformMatrix"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
         };
 
     /// <summary>
@@ -175,11 +169,30 @@ public class ModifierUnsetClearValueTests
     [Fact]
     public void Every_Unset_Arm_Actually_Resets_Something()
     {
+        // Transform removal runs before handlers, so their setters are not erased
+        // afterward. The unset arm restores only a surviving decorator declaration.
+        // Native ModifierTransform tests mutation-check the cleanup and its ordering.
+        var facadeResets = ReadIfStatements("ClearRemovedTransformModifiers")
+            .SelectMany(statement => statement.Statement.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>())
+            .Where(call => call.Expression.ToString() == "AnimationHelper.ResetCompositionModifier")
+            .Select(call => call.ArgumentList.Arguments[1].Expression)
+            .OfType<LiteralExpressionSyntax>()
+            .Select(literal => literal.Token.ValueText).ToHashSet(StringComparer.Ordinal);
         var inert = ReadUnsetArms()
             .Where(entry => !entry.Arm.DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
                 .Any(invocation => invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "ClearValue" }))
             .Where(entry => !entry.Arm.DescendantNodes().OfType<AssignmentExpressionSyntax>().Any())
+            // Facades have no public DP identifier. Require both the early reset
+            // and a matching restoration call in the surviving-owner arm.
+            .Where(entry => !(entry.Method == "ApplyModifiers"
+                && entry.Modifier is "Scale" or "Rotation" or "Translation" or "CenterPoint"
+                && facadeResets.Contains(entry.Modifier)
+                && entry.Arm.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call =>
+                    call.Expression.ToString() is "AnimationHelper.SetOrAnimate" or "AnimationHelper.SetOrAnimateVector3"
+                    && call.ArgumentList.Arguments.Count >= 3
+                    && call.ArgumentList.Arguments[1].Expression is LiteralExpressionSyntax literal
+                    && literal.Token.ValueText == entry.Modifier)))
             .Select(entry => entry.Method + "." + entry.Modifier)
             .ToList();
 
