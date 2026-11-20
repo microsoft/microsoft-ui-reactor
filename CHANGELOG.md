@@ -34,6 +34,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Opt-in Markdown text selection supports double-click to select a word and
+  triple-click to select a text surface, including drag extension by either unit.
+  Selection drags from inline links and release-mode custom link buttons do not
+  activate the link; clicking outside a message clears its selection (follow-up
+  to PR #1475).
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write

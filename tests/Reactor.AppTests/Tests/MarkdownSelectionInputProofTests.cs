@@ -112,6 +112,10 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Mouse(2); mouseHeld = true;
                 Mouse(4); mouseHeld = false;
             }
+            void MultiClick(double x, double y, int count)
+            {
+                for (int i = 0; i < count; i++) Click(x, y);
+            }
             static double[] Glyph(TextPatternRange document, int start)
             {
                 var range = document.Clone();
@@ -144,11 +148,40 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 && dragged.CompareEndpoints(TextPatternRangeEndpoint.End, link, TextPatternRangeEndpoint.End) <= 0,
                 "Link drag range must stay inside the pressed hyperlink");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag must not activate link");
+            var customLinkRange = outerText.DocumentRange.FindText("button link", false, false);
+            Assert.IsNotNull(customLinkRange);
+            var customButton = Find("SelectionCustomLink");
+            var customGlyph = Glyph(customLinkRange, 2);
+            double customX = customGlyph[0] + customGlyph[2] / 2;
+            double customY = customGlyph[1] + customGlyph[3] / 2;
+            Click(customX, customY);
+            Wait(() => customButton.Current.HelpText == "Custom clicks 1", "custom link button click");
+            Point(customX, customY);
+            Mouse(2); mouseHeld = true;
+            Point(customX + 15, customY);
+            Mouse(4); mouseHeld = false;
+            Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
+                "custom link button drag selects");
+            var customDragged = outerText.GetSelection().Single();
+            Assert.IsTrue(customDragged.CompareEndpoints(TextPatternRangeEndpoint.Start,
+                    customLinkRange, TextPatternRangeEndpoint.Start) >= 0
+                && customDragged.CompareEndpoints(TextPatternRangeEndpoint.End,
+                    customLinkRange, TextPatternRangeEndpoint.End) <= 0,
+                "Custom link drag range must stay inside the link label");
+            Assert.AreEqual("Custom clicks 1", customButton.Current.HelpText,
+                "custom link drag must not activate its release-mode button");
             var outerSelection = outerText.GetSelection().Single().GetText(-1);
             var outerRangeBeforeInnerInput = outerText.GetSelection().Single().Clone();
             Console.WriteLine($"Link drag selected={outerSelection}");
             var innerGlyph = Glyph(innerText.DocumentRange, 1);
-            Click(innerGlyph[0] + innerGlyph[2] / 2, innerGlyph[1] + innerGlyph[3] / 2);
+            double innerX = innerGlyph[0] + innerGlyph[2] / 2;
+            double innerY = innerGlyph[1] + innerGlyph[3] / 2;
+            MultiClick(innerX, innerY, 2);
+            Assert.AreEqual("inner ", innerText.GetSelection().Single().GetText(-1),
+                "Double-click selects the word with trailing whitespace");
+            Click(innerX, innerY);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text",
+                "triple-click selects the Markdown paragraph");
             Thread.Sleep(SampleIntervalMs);
             uint clipboardSequence = GetClipboardSequenceNumber();
             Key(0x11, false);
@@ -218,6 +251,53 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             }
             Mouse(4); mouseHeld = false;
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link at end");
+            var currentLink = outerText.DocumentRange.FindText("native link", false, false);
+            Assert.IsNotNull(currentLink);
+            var currentLinkGlyph = Glyph(currentLink, 2);
+            Click(currentLinkGlyph[0] + currentLinkGlyph[2] / 2, currentLinkGlyph[1] + currentLinkGlyph[3] / 2);
+            Wait(() => Find("SelectionClicks").Current.Name == "Clicks 2", "link click after selection");
+            var dismissed = longText.GetSelection().Single();
+            Assert.AreEqual("", dismissed.GetText(-1), "Clicking another message collapses the old selection");
+            Assert.AreEqual(0, dismissed.CompareEndpoints(TextPatternRangeEndpoint.Start,
+                dismissed, TextPatternRangeEndpoint.End), "Click-away leaves no selected accessibility range");
+            void SelectInnerText()
+            {
+                var glyph = Glyph(innerText.DocumentRange, 1);
+                Click(glyph[0] + glyph[2] / 2, glyph[1] + glyph[3] / 2);
+                Key(0x11, false);
+                Key(0x41, false); Key(0x41, true);
+                Key(0x11, true);
+                Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text streamed",
+                    "reselect inner message before click-away");
+            }
+            SelectInnerText();
+            var blank = Find("SelectionBlank");
+            var blankBounds = blank.Current.BoundingRectangle;
+            Click(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "" &&
+                blank.Current.HelpText == "Blank clicks 1", "blank chat click dismisses selection and reaches target");
+            var currentInnerGlyph = Glyph(innerText.DocumentRange, 1);
+            double currentInnerX = currentInnerGlyph[0] + currentInnerGlyph[2] / 2;
+            double currentInnerY = currentInnerGlyph[1] + currentInnerGlyph[3] / 2;
+            Click(currentInnerX, currentInnerY);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "",
+                "single click leaves the message collapsed");
+            Click(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
+            Wait(() => blank.Current.HelpText == "Blank clicks 2",
+                "blank chat click resets pending multiclick state");
+            Click(currentInnerX, currentInnerY);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "",
+                "first click after click-away does not become a double-click");
+            Key(0x11, false);
+            Key(0x41, false); Key(0x41, true);
+            Key(0x11, true);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text streamed",
+                "reselect inner message before composer click-away");
+            var composer = Find("SelectionComposer");
+            var composerBounds = composer.Current.BoundingRectangle;
+            Click(composerBounds.Left + composerBounds.Width / 2, composerBounds.Top + composerBounds.Height / 2);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "" && composer.Current.HasKeyboardFocus,
+                "composer click dismisses selection and receives keyboard focus");
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
             Console.WriteLine($"Received TextChanged={string.Join("|", receivedText)}; TextSelectionChanged={string.Join("|", receivedSelection)}");
             Console.WriteLine($"External input checks passed; textEvents={textEvents}, selectionEvents={selectionEvents}, PID={TestSession.HostPid}");

@@ -889,8 +889,11 @@ internal sealed class MarkdownBuilder
                 Label = labelInlines.Length == 0 ? null : MakeLinkLabel(labelInlines),
                 Uri = _linkUri,
             };
-            ReplaceLinkInlines(Selectable(link.Text, buildLink(link)
-                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element."), ""));
+            var content = buildLink(link)
+                ?? throw new InvalidOperationException("MarkdownOptions.LinkBuilder must return a non-null Element.");
+            var selectable = Selectable(link.Text, content, "");
+            ReplaceLinkInlines(selectable is MarkdownSelectionElement { Role: SelectionRole.Surface } surface
+                ? surface with { IsLink = true } : selectable);
             return;
         }
 

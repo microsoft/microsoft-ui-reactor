@@ -10,6 +10,27 @@ namespace Microsoft.UI.Reactor.Tests;
 public class MarkdownTextSelectionTests
 {
     [Theory]
+    [InlineData(-121, -24)]
+    [InlineData(-120, 0)]
+    [InlineData(-12, 0)]
+    [InlineData(0, 0)]
+    [InlineData(60, 0)]
+    [InlineData(120, 0)]
+    [InlineData(121, 24)]
+    public void DragScroll_UsesEnclosingViewportEdges(double y, double expected) =>
+        Assert.Equal(expected, MarkdownSelectionHost.DragScrollDelta(
+            new global::Windows.Foundation.Rect(0, -120, 400, 240),
+            new global::Windows.Foundation.Point(100, y)));
+
+    [Theory]
+    [InlineData(0, 200, -1)]
+    [InlineData(400, 0, 201)]
+    public void DragScroll_EmptyViewportDoesNotScroll(double width, double height, double y) =>
+        Assert.Equal(0, MarkdownSelectionHost.DragScrollDelta(
+            new global::Windows.Foundation.Rect(0, 0, width, height),
+            new global::Windows.Foundation.Point(100, y)));
+
+    [Theory]
     [InlineData(global::Windows.System.VirtualKeyModifiers.None, 7)]
     [InlineData(global::Windows.System.VirtualKeyModifiers.Shift, 2)]
     [InlineData(global::Windows.System.VirtualKeyModifiers.Shift | global::Windows.System.VirtualKeyModifiers.Control, 2)]
@@ -24,6 +45,117 @@ public class MarkdownTextSelectionTests
     public void PointerSelection_LeavesTouchAndPenToNativePanning(
         Microsoft.UI.Input.PointerDeviceType device, bool expected) =>
         Assert.Equal(expected, MarkdownSelectionHost.IsMouseSelection(device));
+
+    [Fact]
+    public void ClickSequence_UsesInclusiveTimeAndRectangle_AndResetsAfterTripleClickOrDrag()
+    {
+        var clicks = new MarkdownClickSequence();
+        var surface = new object();
+        int Press(ulong time, double x = 0, double y = 0) => clicks.Press(surface, time, x, y, 500_000, 2, 3);
+
+        Assert.Equal(1, Press(1_000));
+        Assert.Equal(2, Press(501_000, 2, 3));
+        Assert.Equal(3, Press(1_001_000));
+        Assert.Equal(1, Press(1_002_000));
+        Assert.Equal(1, Press(1_502_001));
+        Assert.Equal(1, Press(1_502_002, 2.01));
+        Assert.Equal(1, Press(1_502_003, 2.01, 3.01));
+        clicks.Reset();
+        Assert.Equal(1, Press(1_502_004, 2.01, 3.01));
+        Assert.Equal(2, Press(1_502_005, 2.01, 3.01));
+        clicks.Reset();
+        Assert.Equal(1, Press(1_502_006, 2.01, 3.01));
+        Assert.Equal(1, clicks.Press(new object(), 1_502_007, 2.01, 3.01, 500_000, 2, 3));
+    }
+
+    [Fact]
+    public void WordSelection_IncludesTrailingSpaces_ButNotSurfaceSeparatorsOrLeadingWhitespace()
+    {
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(new object(), "  café  next", "\t"), new(new object(), "cell", "")]);
+
+        Assert.Equal(new MarkdownSelectionSpan(0, 2), document.UnitAt(MarkdownSelectionUnit.Word, 1));
+        Assert.Equal(new MarkdownSelectionSpan(2, 8), document.UnitAt(MarkdownSelectionUnit.Word, 6));
+        Assert.Equal(new MarkdownSelectionSpan(8, 12), document.UnitAt(MarkdownSelectionUnit.Word, 12, document.Entries[0]));
+        Assert.Equal(new MarkdownSelectionSpan(12, 13), document.UnitAt(MarkdownSelectionUnit.Word, 12));
+        Assert.Equal(new MarkdownSelectionSpan(13, 17), document.UnitAt(MarkdownSelectionUnit.Word, 13));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WordSelection_AcrossAnInlineLink_UsesVisibleTextNotInlineBoundaries(bool customLink)
+    {
+        var markdown = Md("inter[oper](https://example.com)able text", new MarkdownOptions
+        {
+            TextSelection = new(),
+            LinkBuilder = customLink ? link => Button(link.Text) : null,
+        });
+        var surface = Assert.Single(Surfaces(markdown), s => s.Text == "interoperable text");
+        if (customLink)
+        {
+            var rich = Assert.IsType<RichTextBlockElement>(surface.Content);
+            var inline = Assert.Single(rich.Paragraphs!.SelectMany(p => p.Inlines).OfType<RichTextInlineUIContainer>());
+            Assert.True(Assert.IsType<MarkdownSelectionElement>(inline.Child).IsLink);
+        }
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(surface, surface.Text, surface.SeparatorAfter)]);
+        var range = document.UnitAt(MarkdownSelectionUnit.Word, 6, document.Entries[0]);
+        document.Select(range.Start, range.End);
+        Assert.Equal("interoperable ", document.SelectedText);
+    }
+
+    [Theory]
+    [InlineData(false, "first", "second", "third")]
+    [InlineData(true, "first\nline", "second\nline", "third\nline")]
+    public void UnitDrag_ExtendsInEitherDirection_AndRetainsPressedUnit(
+        bool paragraph, string first, string second, string third)
+    {
+        var unit = paragraph ? MarkdownSelectionUnit.Paragraph : MarkdownSelectionUnit.Word;
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(new object(), first, "\t"), new(new object(), second, "\n"), new(new object(), third, "")]);
+        var pressed = document.UnitAt(unit, document.Entries[1].Start);
+        var left = pressed.ExtendTo(document.UnitAt(unit, 1));
+        document.Select(left.Anchor, left.Caret);
+        Assert.Equal($"{first}\t{second}", document.SelectedText);
+        Assert.True(document.Anchor > document.Caret);
+        var right = pressed.ExtendTo(document.UnitAt(unit, document.Text.Length - 1));
+        document.Select(right.Anchor, right.Caret);
+        Assert.Equal($"{second}\n{third}", document.SelectedText);
+        Assert.True(document.Anchor < document.Caret);
+        Assert.Equal((pressed.Start, pressed.End), pressed.ExtendTo(pressed));
+    }
+
+    [Fact]
+    public void ParagraphAndWordHits_KeepSurfaceAffinityAtSharedCaret()
+    {
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(new object(), "alpha", ""), new(new object(), "beta", "")]);
+        foreach (var unit in new[] { MarkdownSelectionUnit.Paragraph, MarkdownSelectionUnit.Word })
+        {
+            Assert.Equal(new MarkdownSelectionSpan(0, 5), document.UnitAt(unit, 5, document.Entries[0]));
+            Assert.Equal(new MarkdownSelectionSpan(5, 9), document.UnitAt(unit, 5, document.Entries[1]));
+        }
+    }
+
+    [Fact]
+    public void WarmWordSelectionBoundaries_AvoidPerMoveAllocationsForLongDocuments()
+    {
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild(Enumerable.Range(0, 400)
+            .Select(i => new SelectionPart(i, $"message {i:D4} contains some longer selectable words", "\n")));
+        var boundaries = document.WordBoundaries;
+        var entries = document.Entries;
+        for (int i = 0; i < 32; i++) _ = document.UnitAt(MarkdownSelectionUnit.Word, i * 7, entries[i % entries.Count]);
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++)
+            _ = document.UnitAt(MarkdownSelectionUnit.Word, i * 13 % document.Text.Length, entries[i % entries.Count]);
+        allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
+
+        Assert.Same(boundaries, document.WordBoundaries);
+        Assert.Equal(0, allocated);
+    }
 
     private static Element Md(string text, MarkdownOptions? options = null) =>
         Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, options ?? new MarkdownOptions());

@@ -16,6 +16,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
     private readonly MarkdownTextSelectionOptions _innerOptions = new();
     private readonly MarkdownTextSelectionOptions _longOptions = new();
     private int _clicks;
+    private int _blankClicks;
+    private int _customClicks;
 
     public override Element Render()
     {
@@ -32,6 +34,15 @@ internal sealed class MarkdownSelectionInputFixture : Component
             paragraph.Inlines.Add(hyperlink);
             control.Blocks.Add(paragraph);
         });
+        var customLink = Microsoft.UI.Reactor.Advanced.Factories.Markdown(
+            "custom start [button link](https://example.com/custom) after",
+            new MarkdownOptions
+            {
+                TextSelection = _outerOptions,
+                LinkBuilder = link => Button(link.Text).AutomationId("SelectionCustomLink")
+                    .OnMountAdd(fe => ((Button)fe).Click += OnCustomLinkClick)
+                    .OnUnmountAdd(fe => ((Button)fe).Click -= OnCustomLinkClick),
+            });
         return VStack(
             TextBlock("Clicks 0").AutomationId("SelectionClicks").Set(text =>
             {
@@ -50,13 +61,30 @@ internal sealed class MarkdownSelectionInputFixture : Component
                 Md("outer text", _outerOptions),
                 MarkdownTextSelection.Scope(_innerOptions, Md(streamed ? "inner text streamed" : "inner text", _innerOptions))
                     .AutomationId("SelectionInner"),
+                customLink,
                 MarkdownTextSelection.Surface("native link", link)).Set(TracePointerRouting))
                 .AutomationId("SelectionOuter"),
             ItemsView(new[] { "message" }, row => row, (_, _) =>
                 ItemContainer(MarkdownTextSelection.Scope(_longOptions,
                     Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
                     .AutomationId("SelectionLong")))
-                .Height(180).AutomationId("SelectionTimeline")).Width(450);
+                    .Height(180).AutomationId("SelectionTimeline"),
+            Border(null).Height(48).Background("#00000000").AutomationId("SelectionBlank")
+                    .OnMountAdd(fe => ((Border)fe).Tapped += OnBlankTapped)
+                    .OnUnmountAdd(fe => ((Border)fe).Tapped -= OnBlankTapped),
+            TextBox().Width(420).AutomationId("SelectionComposer")).Width(450);
+    }
+
+    private void OnBlankTapped(object sender, TappedRoutedEventArgs args)
+    {
+        if (sender is Border border)
+            AutomationProperties.SetHelpText(border, $"Blank clicks {++_blankClicks}");
+    }
+
+    private void OnCustomLinkClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button button)
+            AutomationProperties.SetHelpText(button, $"Custom clicks {++_customClicks}");
     }
 
     private static void TracePointerRouting(StackPanel panel)
