@@ -171,7 +171,6 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Assert.AreEqual("Custom clicks 1", customButton.Current.HelpText,
                 "custom link drag must not activate its release-mode button");
             var outerSelection = outerText.GetSelection().Single().GetText(-1);
-            var outerRangeBeforeInnerInput = outerText.GetSelection().Single().Clone();
             Console.WriteLine($"Link drag selected={outerSelection}");
             var innerGlyph = Glyph(innerText.DocumentRange, 1);
             double innerX = innerGlyph[0] + innerGlyph[2] / 2;
@@ -192,9 +191,12 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text", "inner Ctrl+A");
             Wait(() => receivedSelection.Contains("inner text"), "Ctrl+A exact selection-change event");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link after timer settle");
-            Assert.AreEqual(outerSelection, outerText.GetSelection().Single().GetText(-1), "outer selection unchanged");
-            Assert.IsTrue(outerRangeBeforeInnerInput.Compare(outerText.GetSelection().Single()),
-                "Nested input must not move either endpoint of the saved outer range");
+            var outerRangeAfterClickAway = outerText.GetSelection().Single();
+            Assert.AreEqual("", outerRangeAfterClickAway.GetText(-1),
+                "Clicking another selection scope clears the old selection");
+            Assert.AreEqual(0, outerRangeAfterClickAway.CompareEndpoints(
+                TextPatternRangeEndpoint.Start, outerRangeAfterClickAway, TextPatternRangeEndpoint.End),
+                "Click-away leaves no selected accessibility range");
             Wait(() => GetClipboardSequenceNumber() != clipboardSequence && ReadClipboard() == "inner text",
                 "fresh inner clipboard write");
             var clipboard = ReadClipboard();

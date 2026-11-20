@@ -23,6 +23,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private readonly TextBlock _selectionDefaults = new() { Visibility = Visibility.Collapsed };
     private readonly List<MarkdownSelectionMarker> _surfaces = [];
     private readonly List<MarkdownSelectionMarker> _membership = [];
+    private readonly HashSet<UIElement> _visibilityNodes = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<UIElement, long> _visibilitySubscriptions = new(ReferenceEqualityComparer.Instance);
+    private readonly List<UIElement> _staleVisibilityNodes = [];
     private readonly List<Rect> _selectionRectangles = [];
     private readonly Dictionary<int, Rect> _characterRects = [];
     private readonly Dictionary<(int Offset, int Next), Rect> _glyphRects = [];
@@ -35,6 +38,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private readonly PointerEventHandler _moved;
     private readonly PointerEventHandler _released;
     private readonly KeyEventHandler _keyDown;
+    private readonly DependencyPropertyChangedCallback _visibilityChanged;
     private Pointer? _pointer;
     private Point _dragPoint;
     private Point _rootDragPoint;
@@ -75,6 +79,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         _moved = OnMoved;
         _released = OnReleased;
         _keyDown = OnKeyDown;
+        _visibilityChanged = OnVisibilityChanged;
         AddHandler(PointerPressedEvent, _pressed, true);
         AddHandler(PointerMovedEvent, _moved, true);
         AddHandler(PointerReleasedEvent, _released, true);
@@ -129,6 +134,11 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         UpdateLayoutTracking();
         UpdateClickAwayRegistration();
         _automationPeer?.NotifyChanged(text, selection);
+    }
+
+    private void OnVisibilityChanged(DependencyObject sender, DependencyProperty property)
+    {
+        if (property == UIElement.VisibilityProperty) InvalidateDocument();
     }
 
     private void UpdateClickAwayRegistration()
@@ -255,6 +265,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         _characterRects.Clear();
         _glyphRects.Clear();
         _surfaceBounds.Clear();
+        ClearVisibilitySubscriptions();
         _layoutOwners.Clear();
         _segments.Clear();
         _documentDirty = true;
@@ -285,7 +296,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void CheckMembership()
     {
         _membership.Clear();
-        if (Body is not null) Visit(Body, _membership);
+        _visibilityNodes.Clear();
+        if (Body is not null) Visit(Body, _membership, ancestorsVisible: true);
+        UpdateVisibilitySubscriptions();
         if (!_membership.SequenceEqual(_surfaces, ReferenceEqualityComparer.Instance))
             _documentDirty = true;
     }
@@ -339,23 +352,58 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         finally { _refreshing = false; }
     }
 
-    private void Visit(DependencyObject node, List<MarkdownSelectionMarker> target)
+    private bool Visit(DependencyObject node, List<MarkdownSelectionMarker> target, bool ancestorsVisible)
     {
         // Registration is semantic, not viewport-based. Fully clipped blocks remain
         // part of the document so Down/PageDown and UIA can reach them.
-        if (node is MarkdownSelectionHost) return;
-        if (node is UIElement { Visibility: Visibility.Collapsed }) return;
+        if (node is MarkdownSelectionHost) return false;
         if (node is MarkdownSelectionMarker marker)
         {
-            if (marker.Metadata.Role == SelectionRole.Visibility && !marker.Metadata.IsVisible) return;
+            if (marker.Metadata.Role == SelectionRole.Visibility && !marker.Metadata.IsVisible) return false;
             if (marker.Metadata.Role == SelectionRole.Surface)
             {
-                target.Add(marker);
-                return;
+                bool visible = ancestorsVisible && marker.Visibility != Visibility.Collapsed;
+                if (visible) target.Add(marker);
+                _visibilityNodes.Add(marker);
+                return true;
             }
         }
+
+        bool childAncestorsVisible = ancestorsVisible &&
+            node is not UIElement { Visibility: Visibility.Collapsed };
+        bool containsSurface = false;
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
-            Visit(VisualTreeHelper.GetChild(node, i), target);
+            containsSurface |= Visit(VisualTreeHelper.GetChild(node, i), target, childAncestorsVisible);
+        if (containsSurface && node is UIElement element) _visibilityNodes.Add(element);
+        return containsSurface;
+    }
+
+    private void UpdateVisibilitySubscriptions()
+    {
+        _staleVisibilityNodes.Clear();
+        foreach (var element in _visibilitySubscriptions.Keys)
+        {
+            if (!_visibilityNodes.Contains(element)) _staleVisibilityNodes.Add(element);
+        }
+        foreach (var element in _staleVisibilityNodes)
+        {
+            element.UnregisterPropertyChangedCallback(UIElement.VisibilityProperty, _visibilitySubscriptions[element]);
+            _visibilitySubscriptions.Remove(element);
+        }
+        foreach (var element in _visibilityNodes)
+        {
+            if (_visibilitySubscriptions.ContainsKey(element)) continue;
+            long token = element.RegisterPropertyChangedCallback(UIElement.VisibilityProperty, _visibilityChanged);
+            _visibilitySubscriptions.Add(element, token);
+        }
+    }
+
+    private void ClearVisibilitySubscriptions()
+    {
+        foreach (var (element, token) in _visibilitySubscriptions)
+            element.UnregisterPropertyChangedCallback(UIElement.VisibilityProperty, token);
+        _visibilitySubscriptions.Clear();
+        _visibilityNodes.Clear();
     }
 
     internal static IEnumerable<DependencyObject> Descendants(DependencyObject node)
