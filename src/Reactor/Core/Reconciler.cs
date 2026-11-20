@@ -5932,8 +5932,9 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyScaleTransition(UIElement uie, Visual visual, Compositor compositor, float from, Curve curve, bool isEnter, TimeSpan delay)
     {
-        // Scale relative to the element's own .Scale(), which lives on the visual once it is handed out.
-        var rest = visual.Scale;
+        // Scale relative to the element's own .Scale(). The visual's Scale getter returns the
+        // last assigned value, which after an enter is its start value, so it is not the rest.
+        var rest = DeclaredTransform(uie).Scale;
         var scaled = new Vector3(rest.X * from, rest.Y * from, rest.Z);
         if (isEnter)
         {

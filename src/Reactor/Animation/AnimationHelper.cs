@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
@@ -46,12 +45,6 @@ internal static class AnimationHelper
         return visual;
     }
 
-    // Elements whose handoff visual this helper already returned. Facade writes throw from
-    // then on, so their facade transforms are known to be identity. Like the pool marker this
-    // follows wrapper identity; a fresh wrapper only costs one more read of identity values.
-    private static readonly ConditionalWeakTable<UIElement, object> _visualHandedOut = new();
-    private static readonly object HandedOut = new();
-
     /// <summary>
     /// Returns the element's handoff visual. Every Reactor feature that needs the visual of a
     /// user element must take it here rather than from <see cref="ElementCompositionPreview"/>.
@@ -59,17 +52,16 @@ internal static class AnimationHelper
     /// <remarks>
     /// WinUI refuses <c>GetElementVisual</c> while <see cref="UIElement.Scale"/>,
     /// <see cref="UIElement.Rotation"/> or <see cref="UIElement.CenterPoint"/> holds a non-identity
-    /// value, and refuses facade writes after the handoff (#1613). The first call therefore resets
-    /// those facade values to identity, takes the visual, writes the same values to it, and marks
-    /// them as composition writes so later modifier updates and unsets follow them to the visual.
-    /// <see cref="UIElement.Translation"/> does not block the handoff but moves too, so that the
-    /// visual's Translation is the only one and features that animate it start from the right value.
+    /// value, and refuses facade writes after the handoff (#1613). This therefore resets any such
+    /// facade value to identity, takes the visual, writes the same value to it, and marks it as a
+    /// composition write so later modifier updates and unsets follow it to the visual.
+    /// <see cref="UIElement.Translation"/> does not block the handoff and stays writable after it,
+    /// but it moves too, so that the visual's Translation is the only one and features that
+    /// animate it start from the right value. The facade is read on every call rather than
+    /// cached so that a Translation written to the facade later is moved as well.
     /// </remarks>
     internal static Visual GetElementVisual(UIElement element)
     {
-        if (_visualHandedOut.TryGetValue(element, out _))
-            return ElementCompositionPreview.GetElementVisual(element);
-
         var scale = element.Scale;
         var rotation = element.Rotation;
         var translation = element.Translation;
@@ -77,11 +69,7 @@ internal static class AnimationHelper
         bool moveScale = scale != Vector3.One, moveRotation = rotation != 0;
         bool moveTranslation = translation != Vector3.Zero, moveCenter = center != Vector3.Zero;
         if (!(moveScale || moveRotation || moveTranslation || moveCenter))
-        {
-            var plain = ElementCompositionPreview.GetElementVisual(element);
-            _visualHandedOut.AddOrUpdate(element, HandedOut);
-            return plain;
-        }
+            return ElementCompositionPreview.GetElementVisual(element);
 
         if (moveScale) element.Scale = Vector3.One;
         if (moveRotation) element.Rotation = 0;
@@ -102,7 +90,9 @@ internal static class AnimationHelper
             if (moveCenter) element.CenterPoint = center;
             throw;
         }
-        _visualHandedOut.AddOrUpdate(element, HandedOut);
+        // The visual now carries transforms that pool cleanup does not reset, so the element
+        // must not be pooled even when the caller does not mark it.
+        ElementPool.MarkCompositorTainted(element);
 
         // Facade Rotation is in degrees; RotationAngle is in radians.
         if (moveScale) visual.Scale = scale;

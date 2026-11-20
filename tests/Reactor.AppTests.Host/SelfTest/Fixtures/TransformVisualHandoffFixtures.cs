@@ -151,19 +151,7 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
                     var withExit = WithTransform(Target(), transform)
                         .Transition(Animation.Transition.Scale(0.5f), Curve.Linear(60000));
                     reconciler.Update(Stage(full), Stage(withExit), stage, static () => { });
-                    reconciler.Update(Stage(withExit), Stage(null), stage, static () => { });
-                    var controller = ElementCompositionPreview.GetElementVisual(target).TryGetAnimationController("Scale");
-                    H.Check(name + "_ExitStarted", controller is not null);
-                    if (controller is null) break;
-                    controller.Pause();
-                    controller.Progress = 0;
-                    await CheckPose(name + "_ExitStart", stage, declared);
-                    controller.Progress = 1;
-                    await CheckPose(name + "_ExitEnd", stage, declared.Scaled(0.5f));
-                    // Stopping the animation completes the exit batch, which removes the child.
-                    ElementCompositionPreview.GetElementVisual(target).StopAnimation("Scale");
-                    for (int i = 0; i < 20 && stage.Children.Count > 0; i++) await Settle(50);
-                    H.Check(name + "_ExitRemoved", stage.Children.Count == 0, $"children={stage.Children.Count}");
+                    await CheckExit(name, reconciler, stage, target, withExit, declared);
                     break;
                 }
 
@@ -171,9 +159,8 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
                     await CheckPose(name + "_Played", stage, declared with { Scale = new Vector3(2, 2, 1) });
                     break;
 
-                // Mounting .Rotation() under .Animate() animates RotationAngle in the wrong
-                // unit, which is #1615 and not a handoff problem.
                 case "Animate" when transform == "Rotation" && order == "Mount":
+                    H.Skip(name + "_Rendered", "#1615: .Rotation() mounted under .Animate() animates RotationAngle in degrees");
                     break;
 
                 case "Transition":
@@ -188,6 +175,21 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
                 var visual = ElementCompositionPreview.GetElementVisual(target);
                 H.Check(name + "_VisualCenterPoint", visual.CenterPoint == Center, $"center={visual.CenterPoint}");
             }
+
+            if (feature == "Transition" && order == "Mount")
+            {
+                // The exit must scale from the declared size, not from the enter's start value.
+                await CheckExit(name, reconciler, stage, target, full, declared);
+            }
+            else if (target.Parent is not null)
+            {
+                // Removing the transform must reset the value that moved to the visual.
+                var residual = feature == "Keyframes" && transform == "CenterPoint"
+                    ? Pose.Identity with { Scale = new Vector3(2, 2, 1) }
+                    : Pose.Identity;
+                reconciler.Update(Stage(full), Stage(WithFeature(Target(), transform, longTransition)), stage, static () => { });
+                await CheckPose(name + "_Unset", stage, residual);
+            }
         }
         catch (Exception ex)
         {
@@ -197,6 +199,23 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
         {
             H.SetContent(null);
         }
+    }
+
+    private async Task CheckExit(string name, Reconciler reconciler, StackPanel stage, Border target, Element mounted, Pose declared)
+    {
+        reconciler.Update(Stage(mounted), Stage(null), stage, static () => { });
+        var controller = ElementCompositionPreview.GetElementVisual(target).TryGetAnimationController("Scale");
+        H.Check(name + "_ExitStarted", controller is not null);
+        if (controller is null) return;
+        controller.Pause();
+        controller.Progress = 0;
+        await CheckPose(name + "_ExitStart", stage, declared);
+        controller.Progress = 1;
+        await CheckPose(name + "_ExitEnd", stage, declared.Scaled(0.5f));
+        // Stopping the animation completes the exit batch, which removes the child.
+        ElementCompositionPreview.GetElementVisual(target).StopAnimation("Scale");
+        for (int i = 0; i < 20 && stage.Children.Count > 0; i++) await Settle(50);
+        H.Check(name + "_ExitRemoved", stage.Children.Count == 0, $"children={stage.Children.Count}");
     }
 
     private async Task CheckPose(string name, FrameworkElement stage, Pose pose)
