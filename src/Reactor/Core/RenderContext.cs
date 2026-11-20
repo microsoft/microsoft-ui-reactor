@@ -965,9 +965,12 @@ public sealed class RenderContext
 
     private Action<T> MakePersistedSetter<T>(PersistedHookState<T> h)
     {
+        bool MarshalSetter(T newValue)
+            => MarshalIfOffUIThread("UsePersisted", () => Setter(newValue));
+
         void Setter(T newValue)
         {
-            if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             bool changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (Diagnostics.ReactorPerfTrace.StateEnabled)
                 Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UsePersisted", changed);

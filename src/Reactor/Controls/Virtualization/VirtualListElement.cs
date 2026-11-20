@@ -54,6 +54,8 @@ public record VirtualListElement : Element
     /// <summary>
     /// Callback fired when the visible range changes (viewport tracking).
     /// Receives the first and last visible item indices.
+    /// Native view changes use the current callback, item height (or estimate),
+    /// and spacing. Setting this to null stops notifications without remounting.
     /// </summary>
     public Action<int, int>? OnVisibleRangeChanged { get; init; }
 }

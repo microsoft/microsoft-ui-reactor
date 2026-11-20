@@ -28,12 +28,18 @@ Conventions for contributors:
 
 ### Added
 
+- `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
+  element construction with `Size`. The code fix preserves argument evaluation order
+  and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
+
 ### Changed
 
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write
-  precedence with fewer allocations (spec 034 §A).
+  precedence with fewer allocations. D3 rectangle/circle builders and PropertyGrid
+  array-item buttons also combine width/height updates with `Size`, avoiding an
+  intermediate layout, modifier, and element copy per shape/button (spec 034 §A).
 
 - `VirtualList` with default positional keys no longer projects every key on
   unchanged-count updates; realized content and callbacks still refresh. Its memoized
@@ -44,6 +50,10 @@ Conventions for contributors:
   until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
   invocations avoid those allocations, including unchanged values; callback identity,
   equality checks, and cross-thread dispatch behavior are unchanged (issue #659).
+
+- `UsePersisted` setters also defer marshaling closures until an off-thread call
+  needs the UI dispatcher. UI-thread writes avoid these allocations without changing
+  equality checks, callback identity, or save-on-unmount scope behavior (issue #659).
 
 - Avoid redundant element copies when assigning keys in built-in component factories,
   DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
@@ -78,6 +88,11 @@ Conventions for contributors:
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming
   endpoint remapping. One scope per message remains supported (PR #1475).
+
+- `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
+  (or estimate), and spacing after rerenders. Removing and re-adding the callback
+  preserves the native viewer and its single subscription, which is detached when
+  the component unmounts (spec 017, VirtualList).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
