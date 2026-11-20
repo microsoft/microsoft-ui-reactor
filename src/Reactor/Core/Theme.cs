@@ -206,8 +206,15 @@ public readonly record struct ThemeRef(string ResourceKey)
     private static bool TryResolveFromThemeDictionaries(
         ResourceDictionary resources, string key, string themeName, out Brush? brush)
     {
+        // Never read XamlControlsResources' theme dictionaries from code, whether it is a merged
+        // dictionary or Application.Resources itself (ReactorApplication.xaml): that fixes WinUI's
+        // entries to the app theme's values for every element (#1534). Its keys resolve through
+        // ThemeResourceProbe instead.
+        bool isWinUIResources = resources is Microsoft.UI.Xaml.Controls.XamlControlsResources;
+
         // Check this dictionary's ThemeDictionaries
-        if (resources.ThemeDictionaries.TryGetValue(themeName, out var themeObj)
+        if (!isWinUIResources
+            && resources.ThemeDictionaries.TryGetValue(themeName, out var themeObj)
             && themeObj is ResourceDictionary themeDict
             && themeDict.TryGetValue(key, out var themed)
             && themed is Brush themedBrush)
@@ -216,8 +223,7 @@ public readonly record struct ThemeRef(string ResourceKey)
             return true;
         }
 
-        // Check MergedDictionaries, except XamlControlsResources: reading WinUI's own theme
-        // entries from code fixes them to the app theme's values for every element (#1534).
+        // Check MergedDictionaries: app dictionaries merged into the root are still searched.
         foreach (var merged in resources.MergedDictionaries)
         {
             if (merged is Microsoft.UI.Xaml.Controls.XamlControlsResources)
@@ -229,6 +235,13 @@ public readonly record struct ThemeRef(string ResourceKey)
         brush = null;
         return false;
     }
+
+    /// <summary>
+    /// Test seam: the dictionary-walk fallback alone, against <c>Application.Current.Resources</c>,
+    /// so a fresh-process test can prove it never reads WinUI's own theme entries.
+    /// </summary>
+    internal static Brush? ResolveFromDictionariesForTest(string resourceKey, string themeName)
+        => Application.Current?.Resources is { } resources ? ResolveFromDictionaries(resources, resourceKey, themeName) : null;
 }
 
 /// <summary>
