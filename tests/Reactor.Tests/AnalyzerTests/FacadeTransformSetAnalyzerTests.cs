@@ -63,6 +63,12 @@ namespace Microsoft.UI.Xaml.Controls
     public class ScrollViewer : Microsoft.UI.Xaml.FrameworkElement { }
     // A user control that hides the facade with its own property.
     public class Spinner : Border { public new float Rotation { get; set; } }
+    public class ContentDialog : Microsoft.UI.Xaml.FrameworkElement { }
+}
+
+namespace Microsoft.UI.Xaml.Controls.Primitives
+{
+    public class Popup : Microsoft.UI.Xaml.FrameworkElement { }
 }
 
 namespace Microsoft.UI.Reactor
@@ -71,6 +77,8 @@ namespace Microsoft.UI.Reactor
 
     public abstract class Element { }
     public class BorderElement : Element { public BorderElement Set(Action<Border> configure) => this; }
+    public class PopupElement : Element { public PopupElement Set(Action<Microsoft.UI.Xaml.Controls.Primitives.Popup> configure) => this; }
+    public class ContentDialogElement : Element { public ContentDialogElement Set(Action<ContentDialog> configure) => this; }
     public class PathElement : Element { public PathElement Set(Action<Microsoft.UI.Xaml.Shapes.Path> configure) => this; }
     public class SpinnerElement : Element { public SpinnerElement Set(Action<Spinner> configure) => this; }
 
@@ -404,6 +412,20 @@ class C
     {
         // Translation stays writable after the handoff, so a visual-owning modifier alone is fine.
         await VerifyAsync(@"class C { Element M() => Border().Animate(Curve.Ease).Set(fe => fe.Translation = new Vector3(1, 0, 0)); }");
+    }
+
+    [Fact]
+    public async Task Overlay_Set_Targets_A_Different_Control_Than_The_Modifiers()
+    {
+        // Popup's .Set writes the inner Popup while modifiers take the wrapping panel's visual;
+        // ContentDialog's writes the dialog while modifiers take the placeholder.
+        await VerifyAsync(@"
+class C
+{
+    Element A() => new PopupElement().LayoutAnimation().Set(p => p.Rotation = 45);
+    Element B() => new PopupElement().Translation(0, 0, 4).Set(p => p.Translation = new Vector3(1, 0, 0));
+    Element D() => new ContentDialogElement().Animate(Curve.Ease).Set(d => d.Scale = Vector3.One);
+}");
     }
 
     [Fact]

@@ -50,6 +50,15 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     private const string TranslationName = "Translation";
     private const string StartAnimationName = "StartAnimation";
 
+    /// <summary>
+    /// Elements whose <c>.Set</c> configures a control other than the one they mount
+    /// (<c>OverlayLifecycle.MountPopup</c> wraps the popup in a panel,
+    /// <c>MountContentDialog</c> returns a placeholder). Modifiers on them take the mounted
+    /// control's visual, so a facade write through <c>.Set</c> never meets it.
+    /// </summary>
+    private static readonly ImmutableHashSet<string> SplitSetterTargetElements =
+        ImmutableHashSet.Create(System.StringComparer.Ordinal, "PopupElement", "ContentDialogElement");
+
     internal readonly struct FacadeMember
     {
         public FacadeMember(string? modifier, string advice)
@@ -196,6 +205,11 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             return;
 
         if (!SetLambdaHelpers.IsReactorSetInvocation(invocation, model, ct))
+            return;
+
+        // Overlay elements mount a wrapper (Popup) or a placeholder (ContentDialog) and run their
+        // setters on the inner control, so the visual the modifiers take is not the one written.
+        if (SetLambdaHelpers.IsCuratedReactorElement(model.GetTypeInfo(setAccess.Expression, ct).Type, SplitSetterTargetElements))
             return;
 
         foreach (var (node, member, name, assignment) in candidates)

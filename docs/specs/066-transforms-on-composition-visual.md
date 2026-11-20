@@ -609,7 +609,9 @@ element that uses the composition visual.**
     the modifier would animate in on mount while the `.Set` value was migrated without animating. The
     fix is also declined when the value has side effects (a call, an assignment, `++`/`--`), which would
     move from setter time to tree-building time, and when another `.Set` on the chain could interact with
-    the moved write. Compound writes (`+=`) are reported but never fixed.
+    the moved write. Compound writes (`+=`) are reported but never fixed. `PopupElement` and
+  `ContentDialogElement` are excluded, because their `.Set` writes the inner control while the
+  modifiers take the visual of the wrapper or placeholder they mount.
 - *Accepted false negatives.* The rule misses three shapes, because none of them is visible from the
   `.Set` chain:
   - a visual-owning modifier on a wrapper (keyed `Memo`, a decorator) or in a chain split across variables;
