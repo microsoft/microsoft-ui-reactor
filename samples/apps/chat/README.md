@@ -34,7 +34,7 @@ Run the app:
 dotnet run --project samples\apps\chat\App\ChatSample.csproj
 ```
 
-Run with the WinUI DevTools attached (`winapp run … --devtools on`; Reactor's own `-- --devtools on run` is deprecated):
+Run with the WinUI DevTools attached (`winapp run … --devtools on`):
 
 ```powershell
 winapp run samples\apps\chat\App\ChatSample.csproj --devtools on

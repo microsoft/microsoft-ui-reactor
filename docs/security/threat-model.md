@@ -25,7 +25,7 @@ This document is the high-level threat model for the Microsoft.UI.Reactor framew
 
 Reactor is a managed-only C# framework for building WinUI 3 desktop apps. **It has no production network surface, no privilege boundary, no cross-machine reach, no kernel surface, and no secret handling.** It runs inside the consuming app's process at the consuming app's trust level.
 
-The only socket Reactor's packages ever open is one **opt-in, loopback-only, bearer-token-gated dev-time HTTP server** (`PreviewCaptureServer`, in the deprecated `Microsoft.UI.Reactor.Devtools` package, kept for the VS Code and Visual Studio previews). It is off by default and absent from production builds; a consuming app must reference the package, enable the `Reactor.DevtoolsSupport` switch and be launched with `--preview` / `--devtools run` plus `--vscode` or `--embed` to expose it, it binds to `127.0.0.1` only, and every request is authenticated by a 256-bit per-launch random token. The former in-app MCP server (`DevtoolsMcpServer`, HTTP and stdio) has been removed. The dev CLI (`mur`) is developer-invoked.
+The only socket Reactor's packages ever open is one **opt-in, loopback-only, bearer-token-gated dev-time HTTP server** (`PreviewCaptureServer`, in the deprecated `Microsoft.UI.Reactor.Devtools` package, kept for the VS Code and Visual Studio previews). It is off by default and absent from production builds; a consuming app must reference the package, enable the `Reactor.DevtoolsSupport` switch and be launched with `--preview` / `--devtools run` plus `--vscode` or `--embed` to expose it, it binds to `127.0.0.1` only, and every request is authenticated by a 256-bit per-launch random token. The former in-app MCP server (`DevtoolsMcpServer`, HTTP and stdio) has been removed. The dev CLI (`mur`) is developer-invoked; its only outbound call is `mur figma`'s HTTPS client to the Figma API (§7.6).
 
 There is no auto-updater, no telemetry endpoint, no license check, no crypto stored at rest, no key management, and no PKI implementation. `System.Security.Cryptography.RandomNumberGenerator` is used exclusively to generate the per-launch bearer tokens above.
 
@@ -175,7 +175,7 @@ The in-app MCP server, its stdio variant and its per-project lockfile have been 
 
 ### 7.2 Devtools MCP server (removed)
 
-The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-project lockfile, its call log and the `--mcp-port` / `--mcp-transport` / `--devtools-log*` / `--devtools-project` flags have been removed from `Microsoft.UI.Reactor.Devtools`. The flags are now ignored; `--devtools app|screenshot|tree` print the winapp command to use instead and exit 2. This removes the MCP tools a token holder could use to read and change the dev app's tree, properties and state and to drive its UI; the preview server (§7.1) remains. The `McpCallStart` / `McpCallStop` ETW events remain declared but are no longer emitted.
+The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-project lockfile, its call log and the `--mcp-port` / `--mcp-transport` / `--devtools-log*` / `--devtools-project` flags have been removed from `Microsoft.UI.Reactor.Devtools`. The flags are now ignored with a notice; `--devtools app` is ignored with a notice and the app runs normally, and `--devtools screenshot|tree` print the winapp command to use instead and exit 2. This removes the MCP tools a token holder could use to read and change the dev app's tree, properties and state and to drive its UI; the preview server (§7.1) remains. The `McpCallStart` / `McpCallStop` ETW events remain declared but are no longer emitted.
 
 ### 7.3 Skill-kit installer
 
@@ -231,8 +231,8 @@ The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-p
 
 **Mitigations:**
 
-- All inter-process talk is to the **localhost** preview server using the **per-launch token** the child app emitted on stdout.
-- No network outbound, no auto-update.
+- `mur` no longer connects to any in-app server.
+- The only outbound network call is `mur figma`, which calls `https://api.figma.com/` over HTTPS with the developer's Figma API key (from `FIGMA_API_KEY`, or the Figma entry of an MCP config the developer already has) in the `X-Figma-Token` header. No auto-update.
 - No SUID/elevation; runs as the invoking developer.
 
 **Residual risk:** if `mur` were ever extended to follow URL-style attach targets (e.g., `mur attach https://...`), the threat model expands to cover network identity. **As of the audit date, no such target exists.** Adding one would require revisiting this document.
@@ -274,7 +274,7 @@ The Microsoft-internal security-review intake form gave succinct answers about R
 | "Library code executes in the consuming-domain WinUI/.NET app process, typically unelevated user-mode" | Code review of `ReactorApp.Run` and `ReactorWindow` lifecycle | No `RunAs`, no manifest requesting elevation. Reactor inherits the host process's integrity level. |
 | "CLI/debug tooling runs as developer-invoked user-mode process" | Manifest review of `mur.exe`, install script behavior | No elevation, no scheduled-task install. |
 | "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" (the MCP server has since been removed; the preview server remains) | `PreviewCaptureServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
-| "No outbound network communication beyond the above" | Repo-wide grep | Only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`) and an `HttpClient` in the internal doc pipeline (`tools/Reactor.DocPipeline`, not shipped) that targets `127.0.0.1:<port>` of a preview server it spawned itself. |
+| "No outbound network communication beyond the above" | Repo-wide grep | In the framework packages (`src/Reactor*/`), the only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`). Outside them: `mur figma`'s `HttpClient` to `https://api.figma.com/` (developer-invoked, §7.6), and an `HttpClient` in the internal doc pipeline (`tools/Reactor.DocPipeline`, not shipped) that targets `127.0.0.1:<port>` of a preview server it spawned itself. |
 | "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; four source-ported MIT/ISC OSS components (Yoga, md4c, D3, WinUIEx window hosting); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
 | "No prior threat models / security reviews" | Repo audit | This document is the first formal one. README references a 275-finding internal code review — engineering review, not a threat model. |
 

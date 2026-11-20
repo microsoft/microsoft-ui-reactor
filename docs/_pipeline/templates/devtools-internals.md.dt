@@ -71,8 +71,11 @@ switch or the package, it prints how to enable them and exits `2`.
 
 The verbs that went with the MCP server and the dev menu — `--devtools app`,
 `--devtools screenshot`, `--devtools tree` — are still recognised, so they don't
-fall through to `run` with the verb read as a component name: they print the
-winapp command to use instead and exit `2`.
+fall through to `run` with the verb read as a component name. `app` used to run
+the app with the dev menu, so it is ignored with a notice and the app runs
+normally; `screenshot` and `tree` print the winapp command to use and exit `2`.
+So does winapp's own `--devtools on|off|headless` when it is passed to the app
+instead of to `winapp run`.
 
 ```csharp snippet="source:src/Reactor/Hosting/Devtools/DevtoolsCliParser.cs#removed-subverbs"
 ```
@@ -106,9 +109,10 @@ The bearer token is the only thing between the capture server and any other
 process running as the same user: the port is loopback-only but discoverable.
 Don't log `CAPTURE_TOKEN` anywhere persistent, don't relax the check for
 "read-only" endpoints such as `/frame` (a frame can show anything on screen), and
-keep state-changing endpoints (`/focus`, `/preview`, `/embed/*`) POST-only with a
-non-simple content type, so a browser page can't drive them with a simple
-cross-origin request.
+keep state-changing endpoints (`/focus`, `/preview`, `/embed/*`) POST-only, and
+`/preview` and `/embed/*` on `application/json`, so a browser page can't drive
+them with a simple cross-origin request (the required `Authorization` header
+already forces a preflight).
 <!-- /ai:caveat -->
 
 | Endpoint | Used by | What it does |

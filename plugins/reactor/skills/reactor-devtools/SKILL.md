@@ -40,7 +40,7 @@ and `winapp ui`: `"<Counter>"`, `"<Counter>/Button"`, `key=t1`, `App.cs:67`.
 | `--print-config`, `call <tool>` | not carried over: the matching winapp command with `--json` |
 | `windows.close`, `shutdown`, `call docking.*` | no tool equivalent: app behavior — drive the app's UI with `winapp ui` |
 | `DevtoolsMenu(...)`, `UseDevtools()` (removed APIs) | the DevTools overlay toolbar; for app-specific switches, an ordinary menu inside `#if DEBUG` |
-| `--devtools app`, `--devtools screenshot`, `--devtools tree` (app flags) | `winapp run . --devtools on`, `winapp ui screenshot`, `winapp devtools inspect` (the old flags print this and exit 2) |
+| `--devtools app`, `--devtools screenshot`, `--devtools tree` (app flags) | `winapp run . --devtools on`, `winapp ui screenshot`, `winapp devtools inspect` (the old flags print this; `app` then runs the app normally, `screenshot` and `tree` exit 2) |
 
 `mur devtools --help` prints the same table. The `Microsoft.UI.Reactor.Devtools`
 package (now only the component preview host, its capture server and the `--embed` handshake) still exists but is

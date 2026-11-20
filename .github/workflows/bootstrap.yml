@@ -17,8 +17,7 @@ on:
       # The scaffolded TestApp is built and launched by this job's packaged
       # smoke against the source-built 0.0.0-local packages. Its inputs are
       # wider than they look: the template references Microsoft.UI.Reactor and
-      # Microsoft.UI.Reactor.Devtools, Devtools project-references
-      # Reactor.Advanced, and Reactor.csproj packs six more projects into the
+      # Microsoft.UI.Reactor.Devtools, and Reactor.csproj packs six more projects into the
       # package consumers compile against (Analyzers, Analyzers.Internal, the
       # Localization/Wrappers/SourceMap generators, Wrappers.Abstractions).
       # That is 10 of the 14 projects under src/, and an allowlist of them

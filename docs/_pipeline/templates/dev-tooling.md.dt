@@ -252,8 +252,9 @@ prints its winapp equivalent to stderr and exits `1`; none of them runs anything
 > **Removed.** `mur devtools` no longer launches, supervises or connects to an MCP
 > endpoint, `--print-config` is gone, and the in-app MCP server has been removed
 > from `Microsoft.UI.Reactor.Devtools` (with the `--mcp-port`, `--mcp-transport`,
-> `--devtools-log-level`, `--devtools-logs*` and `--devtools-project` flags and the
-> `--devtools app|screenshot|tree` verbs). Use
+> `--devtools-log-level`, `--devtools-logs*` and `--devtools-project` flags, now ignored with
+> a notice, and the `--devtools app|screenshot|tree` verbs: `app` is ignored with a notice and
+> the app runs normally, `screenshot` and `tree` exit `2`). Use
 > [`winapp run . --devtools on`](#winui-devtools-winapp) and the winapp CLI with
 > `--json`; agents load the `winui-devtools` skill.
 

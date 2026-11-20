@@ -16,6 +16,7 @@
     Suppress with either:
       <NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>
       <ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>
+    Under TreatWarningsAsErrors it is an error unless it is also in WarningsNotAsErrors.
   -->
   <Target Name="_ReactorWarnDevtoolsPackageDeprecated"
           BeforeTargets="CoreCompile"

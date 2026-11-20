@@ -13,7 +13,8 @@
 > winapp has its own previewer. Builds that reference it outside Debug show
 > warning `REACTOR_DEVTOOLS_001`
 > (suppress with `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
-> `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
+> `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`;
+> under `TreatWarningsAsErrors`, also add it to `WarningsNotAsErrors` or the build fails).
 >
 > **Migrate:**
 > 1. If you don't use the VS Code live preview or the Visual Studio embedded preview, remove
@@ -83,9 +84,9 @@ alongside the WinUI DevTools:
 winapp run . --devtools on -- --preview <ComponentName>
 ```
 
-or, without winapp, `dotnet run -- --devtools run <ComponentName>`. `--devtools app`,
-`--devtools screenshot` and `--devtools tree` have been removed; they print the winapp command to
-use instead and exit 2.
+or, without winapp, `dotnet run -- --devtools run <ComponentName>`. `--devtools app` has been
+removed: it is ignored with a notice and the app runs normally. `--devtools screenshot` and
+`--devtools tree` have been removed too; they print the winapp command to use instead and exit 2.
 
 ## Security model
 
@@ -95,7 +96,8 @@ use instead and exit 2.
 2. **Loopback-only binding.** The capture server's `HttpListener` binds to `http://127.0.0.1:{port}/`
    and is never exposed on a non-loopback adapter.
 3. **Per-launch bearer token.** Every request, including `/status`, needs the `CAPTURE_TOKEN` the app
-   prints at startup. State-changing endpoints are POST-only with a JSON content type.
+   prints at startup. State-changing endpoints are POST-only; `/preview` and `/embed/*` also require
+   `application/json`.
 
 ## Best Practices
 

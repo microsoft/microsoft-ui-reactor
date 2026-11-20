@@ -17,45 +17,6 @@ namespace Microsoft.UI.Reactor.Tests;
 public class MoreCoverageTests2
 {
     // ════════════════════════════════════════════════════════════════════
-    //  NodeRegistry — additional paths (GetOrCreateForTests resolves back)
-    // ════════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public void NodeRegistry_Resolve_ReturnsFound_WhenTargetStillStronglyHeld()
-    {
-        var reg = new NodeRegistry();
-        var id = reg.InjectForTests(new NodeDescriptor("main", "C", "btn", null, "Button", 0, null));
-
-        // The sentinel is retained inside the registry, so the weak ref still
-        // resolves — exercises the happy-path branch of `Resolve`.
-        var result = reg.Resolve(id);
-        Assert.Equal(NodeLookupStatus.Found, result.Status);
-    }
-
-    [Fact]
-    public void NodeRegistry_InvalidateWindow_ReinjectingSameDescriptor_StaysTombstoned()
-    {
-        var reg = new NodeRegistry();
-        var id = reg.InjectForTests(new NodeDescriptor("w1", "C", "x", null, "Button", 0, null));
-        reg.InvalidateWindow("w1");
-        // Re-injecting the same descriptor re-creates the id in _byId, but the
-        // tombstone lookup wins — Resolve still returns Gone.
-        reg.InjectForTests(new NodeDescriptor("w1", "C", "x", null, "Button", 0, null));
-        Assert.Equal(NodeLookupStatus.Gone, reg.Resolve(id).Status);
-    }
-
-    [Fact]
-    public void NodeRegistry_InvalidateWindow_MultipleWindows_OnlyTombstonesMatching()
-    {
-        var reg = new NodeRegistry();
-        var a = reg.InjectForTests(new NodeDescriptor("w1", "C", "a", null, "Button", 0, null));
-        var b = reg.InjectForTests(new NodeDescriptor("w2", "C", "b", null, "Button", 0, null));
-        reg.InvalidateWindow("w1");
-        Assert.Equal(NodeLookupStatus.Gone, reg.Resolve(a).Status);
-        Assert.Equal(NodeLookupStatus.Found, reg.Resolve(b).Status);
-    }
-
-    // ════════════════════════════════════════════════════════════════════
     //  Delaunay + Voronoi — additional clipping / geometry branches
     // ════════════════════════════════════════════════════════════════════
 

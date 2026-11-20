@@ -25,7 +25,6 @@ public sealed class DevtoolsPreviewFormTests
         // The list subverb writes its (possibly empty) result to this file, which proves it ran.
         var listOut = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), "reactor-preview-list-" + Guid.NewGuid().ToString("N") + ".txt");
         var options = DevtoolsCliParser.Parse(["app.exe", flag, listOut]);
-        Assert.Equal(flag == "--preview-list", options.UsedDeprecatedPreview); // positive control: the flag the warning keyed on
 
         var originalOut = Console.Out;
         var originalError = Console.Error;

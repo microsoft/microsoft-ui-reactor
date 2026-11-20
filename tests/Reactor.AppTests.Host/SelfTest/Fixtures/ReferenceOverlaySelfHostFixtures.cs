@@ -29,7 +29,7 @@ internal static class ReferenceOverlaySelfHostFixtures
     /// </summary>
     private static (ReferenceGraphResult Graph, TreeWalker Walker) BuildOverlay(Harness h)
     {
-        var walker = new TreeWalker("main", new NodeRegistry());
+        var walker = new TreeWalker("main");
         walker.Walk(h.Window.Content);
         return (ReferenceOverlay.Build(walker, "main"), walker);
     }
@@ -162,7 +162,7 @@ internal static class ReferenceOverlaySelfHostFixtures
             var rendered = await Harness.WaitFor(() =>
                 H.FindControl<WinUI.TextBlock>(t => t.Text == "Ovl_Ids_Email") is not null);
 
-            var walker = new TreeWalker("main", new NodeRegistry());
+            var walker = new TreeWalker("main");
             walker.Walk(H.Window.Content);
             var ids = walker.ElementIds.Values.ToList();
             var textBoxes = walker.ElementIds.Keys.OfType<WinUI.TextBox>().ToList();

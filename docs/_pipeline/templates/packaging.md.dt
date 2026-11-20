@@ -327,7 +327,7 @@ activation needs the devtools assembly loadable in the user's process.
 The default launch profile passes no arguments. A
 `"<AppName> (Unpackaged, Devtools)"` profile, where your template pack has
 one, starts that preview host when it passes a bare `--devtools`; one that
-passes `--devtools app` now prints the winapp command and exits `2`, because
+passes `--devtools app` now starts the app normally with a notice, because
 the in-app dev menu has been removed (see
 [Running with devtools](getting-started.md#running-with-devtools)).
 To inspect or drive a running app, use the WinUI DevTools in the winapp

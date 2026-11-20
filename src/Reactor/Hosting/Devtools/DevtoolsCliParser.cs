@@ -24,7 +24,6 @@ public sealed record DevtoolsCliOptions(
     bool VsCodeMode,
     int Fps,
     string? ListOutputPath,
-    bool UsedDeprecatedPreview,
     bool PreviewAndDevtoolsConflict,
     bool EmbedRequested = false,
     WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child,
@@ -34,13 +33,13 @@ public sealed record DevtoolsCliOptions(
     double? WindowWidth = null,
     double? WindowHeight = null,
     double? WindowX = null,
-    double? WindowY = null,
-    string? RemovedSubverbError = null);
+    double? WindowY = null);
 
 /// <summary>
 /// Pure command-line parser for the devtools entry point. Has no side effects so it is
-/// unit-testable without spinning up a process. <c>--devtools app|screenshot|tree</c> parse to
-/// <see cref="DevtoolsCliOptions.RemovedSubverbError"/>, which the runtime prints before exiting.
+/// unit-testable without spinning up a process. Removed <c>--devtools</c> values parse to a
+/// <c>null</c> subverb; the runtime reports them through <see cref="RemovedSubverbMessage"/> and
+/// <see cref="RemovedAppVerbNotice"/>.
 /// </summary>
 internal static class DevtoolsCliParser
 {
@@ -62,7 +61,6 @@ internal static class DevtoolsCliParser
                 VsCodeMode: false,
                 Fps: 10,
                 ListOutputPath: null,
-                UsedDeprecatedPreview: true,
                 PreviewAndDevtoolsConflict: true,
                 EmbedRequested: false,
                 EmbedStyle: ParseEmbedStyle(args),
@@ -80,7 +78,6 @@ internal static class DevtoolsCliParser
                 VsCodeMode: embedOnlyRequested,
                 Fps: 10,
                 ListOutputPath: null,
-                UsedDeprecatedPreview: false,
                 PreviewAndDevtoolsConflict: false,
                 EmbedRequested: embedOnlyRequested,
                 EmbedStyle: ParseEmbedStyle(args),
@@ -89,7 +86,7 @@ internal static class DevtoolsCliParser
                 EmbedAutoEnabledVsCode: embedOnlyRequested && !args.Contains("--vscode"));
         }
 
-        if (devtoolsIdx >= 0 && RemovedSubverbMessage(args, devtoolsIdx) is { } removed)
+        if (devtoolsIdx >= 0 && (RemovedSubverbMessage(args) is not null || RemovedAppVerbNotice(args) is not null))
         {
             return new DevtoolsCliOptions(
                 Subverb: null,
@@ -97,41 +94,39 @@ internal static class DevtoolsCliParser
                 VsCodeMode: false,
                 Fps: 10,
                 ListOutputPath: null,
-                UsedDeprecatedPreview: false,
-                PreviewAndDevtoolsConflict: false,
-                RemovedSubverbError: removed);
+                PreviewAndDevtoolsConflict: false);
         }
 
         DevtoolsSubverb subverb;
         int anchorIdx;
-        bool deprecated;
+        bool viaPreviewFlag;
         int trailingArgStart;
 
         if (devtoolsListIdx >= 0)
         {
             subverb = DevtoolsSubverb.List;
             anchorIdx = devtoolsListIdx;
-            deprecated = false;
+            viaPreviewFlag = false;
             trailingArgStart = devtoolsListIdx + 1;
         }
         else if (devtoolsIdx >= 0)
         {
             anchorIdx = devtoolsIdx;
-            deprecated = false;
+            viaPreviewFlag = false;
             (subverb, trailingArgStart) = ParseSubverbAfter(args, devtoolsIdx);
         }
         else if (previewListIdx >= 0)
         {
             subverb = DevtoolsSubverb.List;
             anchorIdx = previewListIdx;
-            deprecated = true;
+            viaPreviewFlag = true;
             trailingArgStart = previewListIdx + 1;
         }
         else
         {
             subverb = DevtoolsSubverb.Run;
             anchorIdx = previewIdx;
-            deprecated = true;
+            viaPreviewFlag = true;
             trailingArgStart = previewIdx + 1;
         }
 
@@ -186,7 +181,7 @@ internal static class DevtoolsCliParser
         string? embedValidationError = null;
         if (embedRequested)
         {
-            if (deprecated || subverb != DevtoolsSubverb.Run || !IsExplicitDevtoolsRun(args, devtoolsIdx))
+            if (viaPreviewFlag || subverb != DevtoolsSubverb.Run || !IsExplicitDevtoolsRun(args, devtoolsIdx))
                 embedValidationError = "--embed requires '--devtools run'";
             else if (IndexOf(args, "--embed-host-pid") is var pidIdx && (pidIdx < 0 || pidIdx + 1 >= args.Length))
                 embedValidationError = "--embed requires --embed-host-pid <pid>";
@@ -200,7 +195,6 @@ internal static class DevtoolsCliParser
             VsCodeMode: vscode,
             Fps: fps,
             ListOutputPath: listOut,
-            UsedDeprecatedPreview: deprecated,
             PreviewAndDevtoolsConflict: false,
             EmbedRequested: embedRequested,
             EmbedStyle: embedStyle,
@@ -274,24 +268,37 @@ internal static class DevtoolsCliParser
         };
     }
 
-    /// <summary>
-    /// The message for a <c>--devtools</c> verb that was removed with the MCP server and the
-    /// in-app dev menu, or null. Without this, <c>--devtools app</c> would fall through to
-    /// <c>run</c> with "app" read as a component name.
-    /// </summary>
     // <snippet:removed-subverbs>
-    internal static string? RemovedSubverbMessage(string[] args, int devtoolsIdx)
+    /// <summary>
+    /// The error for a <c>--devtools</c> value the app no longer accepts, or null: the headless
+    /// verbs removed with the MCP server, and winapp's own <c>on</c> / <c>off</c> /
+    /// <c>headless</c>, which belong on <c>winapp run</c>. Without this they would fall through to
+    /// <c>run</c> with the value read as a component name.
+    /// </summary>
+    internal static string? RemovedSubverbMessage(string[] args) => TokenAfterDevtools(args) switch
     {
-        if (devtoolsIdx + 1 >= args.Length) return null;
-        return args[devtoolsIdx + 1].ToLowerInvariant() switch
-        {
-            "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools on",
-            "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
-            "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
-            _ => null,
-        };
-    }
+        "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
+        "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
+        var value when value is "on" or "off" or "headless" =>
+            $"'--devtools {value}' is a winapp option, not an app argument. Use: winapp run . --devtools {value}",
+        _ => null,
+    };
+
+    /// <summary>
+    /// The notice for <c>--devtools app</c>, or null. It used to run the app with the in-app dev
+    /// menu. The menu is gone, so the app now runs normally (a launch profile that passes it keeps
+    /// working) and the notice names the replacement.
+    /// </summary>
+    internal static string? RemovedAppVerbNotice(string[] args) => TokenAfterDevtools(args) == "app"
+        ? "Ignoring '--devtools app': the in-app dev menu was removed, so the app runs normally. Inspect it with the WinUI DevTools: winapp run . --devtools on"
+        : null;
     // </snippet:removed-subverbs>
+
+    private static string? TokenAfterDevtools(string[] args)
+    {
+        int idx = IndexOf(args, "--devtools");
+        return idx >= 0 && idx + 1 < args.Length ? args[idx + 1].ToLowerInvariant() : null;
+    }
 
     /// <summary>The flags that went with the in-app MCP server and its log capture.</summary>
     internal static readonly string[] RemovedFlags =

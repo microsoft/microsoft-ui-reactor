@@ -21,50 +21,6 @@ namespace Microsoft.UI.Reactor.Tests;
 public class MoreCoverageTests
 {
     // ════════════════════════════════════════════════════════════════════
-    //  NodeRegistry — additional bookkeeping paths
-    // ════════════════════════════════════════════════════════════════════
-
-    [Fact]
-    public void NodeRegistry_InvalidateWindow_OnlyAffectsMatchingPrefix()
-    {
-        var reg = new NodeRegistry();
-        var a = reg.InjectForTests(new NodeDescriptor("alpha", "C", "x", null, "Button", 0, null));
-        var b = reg.InjectForTests(new NodeDescriptor("alphabet", "C", "y", null, "Button", 0, null));
-
-        // "alpha" shouldn't accidentally invalidate ids from "alphabet" — the
-        // prefix guard appends a '/' to avoid exactly that kind of collision.
-        reg.InvalidateWindow("alpha");
-
-        Assert.Equal(NodeLookupStatus.Gone, reg.Resolve(a).Status);
-        Assert.NotEqual(NodeLookupStatus.Gone, reg.Resolve(b).Status);
-    }
-
-    [Fact]
-    public void NodeRegistry_Tombstone_IsCounted()
-    {
-        var reg = new NodeRegistry();
-        reg.InjectForTests(new NodeDescriptor("main", "C", "btn", null, "Button", 0, null));
-        Assert.Equal(0, reg.TombstoneCountForTests());
-
-        reg.InvalidateWindow("main");
-
-        Assert.Equal(1, reg.TombstoneCountForTests());
-    }
-
-    [Fact]
-    public void NodeRegistry_InjectedThenInvalidated_ReturnsGone_AndStaysGone()
-    {
-        var reg = new NodeRegistry();
-        var id = reg.InjectForTests(new NodeDescriptor("main", "C", "btn", null, "Button", 0, null));
-
-        reg.InvalidateWindow("main");
-
-        // Resolve a second time — tombstone short-circuit path.
-        Assert.Equal(NodeLookupStatus.Gone, reg.Resolve(id).Status);
-        Assert.Equal(NodeLookupStatus.Gone, reg.Resolve(id).Status);
-    }
-
-    // ════════════════════════════════════════════════════════════════════
     //  DevtoolsCliParser — additional branches
     // ════════════════════════════════════════════════════════════════════
 

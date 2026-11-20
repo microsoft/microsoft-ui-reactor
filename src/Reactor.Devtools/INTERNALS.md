@@ -10,8 +10,8 @@
 This folder implements the `--devtools run` / `--preview` runtime path: `DevtoolsHost` mounts the
 previewed component, and with `--vscode` (implied by `--embed`) `PreviewCaptureServer` serves
 `/frame`, `/status`, `/focus`, `/components`, `/preview`, `/references` and, in embed mode,
-`/hwnd` and `/embed/*`. `TreeWalker`, `NodeRegistry`, `NodeIdBuilder` and `ReferenceOverlay`
-remain only to build the `/references` payload.
+`/hwnd` and `/embed/*`. `TreeWalker`, `NodeIdBuilder` and `ReferenceOverlay` remain only to build
+the `/references` payload.
 
 ## Security model
 

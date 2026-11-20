@@ -31,7 +31,7 @@ public class ReactorFeaturesTests
         => TestSetup.WithDevtoolsSupportSwitch(false, static () => Assert.False(ReactorFeatures.IsDevtoolsSupported));
 
     [Fact]
-    public void DevtoolsCliParser_RecognizesDevtoolsVerbs_WithoutLoadingHandlers()
+    public void DevtoolsCliParser_RecognizesDevtoolsVerbs()
     {
         var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "Counter", "--vscode"]);
 
@@ -39,9 +39,36 @@ public class ReactorFeaturesTests
         Assert.Equal("Counter", options.ComponentName);
         Assert.True(options.VsCodeMode);
         Assert.False(options.PreviewAndDevtoolsConflict);
-        Assert.DoesNotContain(
-            options.GetType().GetProperties().Select(p => p.PropertyType),
-            t => t.Assembly.GetName().Name == "Microsoft.UI.Reactor.Devtools");
+    }
+
+    [Fact]
+    public void ReactorApp_Run_SwitchOnButNoPackage_PointsAtThePackage_NotTheSwitch()
+    {
+        // The switch is on by default in Debug, so there the missing piece is the package.
+        var originalError = Console.Error;
+        using var stderr = new StringWriter();
+        var previousHost = ReactorDevtoolsBootstrap.CurrentForTests;
+        var originalExitCode = Environment.ExitCode;
+
+        AppContext.SetSwitch(SwitchName, true);
+        ReactorDevtoolsBootstrap.RestoreForTests(null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Assert.True(ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", "run"], title: "NoPackage", width: 320, height: 240));
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            ReactorDevtoolsBootstrap.RestoreForTests(previousHost);
+            AppContext.SetSwitch(SwitchName, TestSetup.ConfiguredDevtoolsSupport);
+            Environment.ExitCode = originalExitCode;
+            ReactorApp.ResetDevtoolsEnabledForTests();
+        }
+
+        Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"", stderr.ToString());
+        Assert.DoesNotContain("RuntimeHostConfigurationOption", stderr.ToString());
     }
 
     [Fact]

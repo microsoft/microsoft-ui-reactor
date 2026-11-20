@@ -88,6 +88,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     private bool RunRunSubverb(DevtoolsCliOptions options, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, SourceLocation? rootMountSite = null)
     {
         string? componentName = options.ComponentName;
+        bool componentNamed = componentName != null;
         Type? componentType = null;
         if (componentName != null)
         {
@@ -195,13 +196,13 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             };
 
             ReactorApp.Options = new ReactorAppOptions(
-                RootFactory: hostRootFactory ?? (() => (Component)Activator.CreateInstance(initialComponentType)!),
+                RootFactory: PreviewRootFactory(hostRoot, hostRootFactory, componentNamed, initialComponentType),
                 Configure: combinedConfigure,
                 WindowTitle: $"Preview — {initialComponentName}",
                 WindowWidth: width,
                 WindowHeight: height,
                 FullScreen: fullScreen,
-                RootMountSite: PreviewRootMountSite(rootMountSite, hostRoot, hostRootFactory, initialComponentType),
+                RootMountSite: PreviewsAppRoot(hostRoot, hostRootFactory, componentNamed, initialComponentType) ? rootMountSite : null,
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
                     : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height, fullScreen));
@@ -218,12 +219,24 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
     /// <summary>
-    /// The mount site the preview reports for its first root: the app's <c>Run</c> call when the
-    /// preview mounts that call's own root (its factory, or the same component type), and
-    /// <c>null</c> for any other component, which that call never mounted.
+    /// Whether the preview's first root is the app's own <c>Run</c> root: the component type
+    /// <c>Run</c> was given, or (when no component was named) the root its factory builds. A
+    /// named component that isn't that type is a different root, which the <c>Run</c> call never
+    /// mounted, so it gets neither the factory nor <c>Run</c>'s mount site.
     /// </summary>
-    internal static SourceLocation? PreviewRootMountSite(SourceLocation? runSite, Type? hostRoot, Func<Component>? hostRootFactory, Type previewedType)
-        => hostRootFactory is not null || previewedType == hostRoot ? runSite : null;
+    internal static bool PreviewsAppRoot(Type? hostRoot, Func<Component>? hostRootFactory, bool componentNamed, Type previewedType)
+        => previewedType == hostRoot || (hostRootFactory is not null && !componentNamed);
+
+    /// <summary>
+    /// The root the preview mounts first. <c>Run&lt;T&gt;</c> always passes its own factory, so
+    /// using it unconditionally would mount <c>T</c> for <c>--preview &lt;Name&gt;</c> while the
+    /// window title said <c>&lt;Name&gt;</c>.
+    /// </summary>
+    [RequiresUnreferencedCode("Devtools component discovery uses Activator.CreateInstance.")]
+    internal static Func<Component> PreviewRootFactory(Type? hostRoot, Func<Component>? hostRootFactory, bool componentNamed, Type previewedType)
+        => hostRootFactory is not null && PreviewsAppRoot(hostRoot, hostRootFactory, componentNamed, previewedType)
+            ? hostRootFactory
+            : () => (Component)Activator.CreateInstance(previewedType)!;
 
     /// <summary>
     /// Builds the initial spec for a non-embedded preview window when <c>--x</c>/<c>--y</c>

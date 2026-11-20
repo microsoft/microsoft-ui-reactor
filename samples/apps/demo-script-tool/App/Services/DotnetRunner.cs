@@ -69,19 +69,17 @@ public sealed class DotnetRunner
         try
         {
             string args, workdir;
-            // Forward `--devtools` to the spawned step so a generated app that
-            // references the (deprecated) Devtools package starts under its in-app
-            // preview host. Everything after `--` is passed verbatim to the program,
-            // not consumed by `dotnet run`.
+            // The step runs as a plain app. (It used to get `-- --devtools` for the in-app
+            // dev menu, which has been removed; inspect it with `winapp run . --devtools on`.)
             if (multiFile)
             {
                 workdir = Path.Combine(projectRoot, $"step-{step.Number:D2}");
-                args = "run --no-build -- --devtools";
+                args = "run --no-build";
             }
             else
             {
                 workdir = projectRoot;
-                args = $"run \"{Path.Combine(projectRoot, $"step-{step.Number:D2}.cs")}\" -- --devtools";
+                args = $"run \"{Path.Combine(projectRoot, $"step-{step.Number:D2}.cs")}\"";
             }
 
             var psi = new ProcessStartInfo("dotnet", args)

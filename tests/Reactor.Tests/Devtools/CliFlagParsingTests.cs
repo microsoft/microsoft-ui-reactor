@@ -14,7 +14,6 @@ public class CliFlagParsingTests
     {
         var opts = DevtoolsCliParser.Parse(["app.exe"]);
         Assert.Null(opts.Subverb);
-        Assert.False(opts.UsedDeprecatedPreview);
         Assert.False(opts.PreviewAndDevtoolsConflict);
     }
 
@@ -170,7 +169,6 @@ public class CliFlagParsingTests
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
-        Assert.False(opts.UsedDeprecatedPreview);
     }
 
     [Fact]
@@ -181,19 +179,40 @@ public class CliFlagParsingTests
     }
 
     [Theory]
-    [InlineData("app", "winapp run . --devtools on")]
-    [InlineData("screenshot", "winapp ui screenshot")]
-    [InlineData("tree", "winapp devtools inspect")]
-    [InlineData("TREE", "winapp devtools inspect")]
-    public void RemovedSubverbs_ReportTheWinappCommand_InsteadOfRunningAComponentNamedAfterThem(string verb, string winapp)
+    [InlineData("screenshot", "'--devtools screenshot' was removed", "winapp ui screenshot")]
+    [InlineData("tree", "'--devtools tree' was removed", "winapp devtools inspect")]
+    [InlineData("TREE", "'--devtools tree' was removed", "winapp devtools inspect")]
+    [InlineData("on", "'--devtools on' is a winapp option", "winapp run . --devtools on")]
+    [InlineData("off", "'--devtools off' is a winapp option", "winapp run . --devtools off")]
+    [InlineData("headless", "'--devtools headless' is a winapp option", "winapp run . --devtools headless")]
+    public void RemovedValues_ReportTheWinappCommand_InsteadOfRunningAComponentNamedAfterThem(string verb, string message, string winapp)
     {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", verb, "CounterDemo"]);
+        string[] args = ["app.exe", "--devtools", verb, "CounterDemo"];
+        var opts = DevtoolsCliParser.Parse(args);
 
         Assert.Null(opts.Subverb);
         Assert.Null(opts.ComponentName);
-        Assert.NotNull(opts.RemovedSubverbError);
-        Assert.Contains($"'--devtools {verb.ToLowerInvariant()}' was removed", opts.RemovedSubverbError);
-        Assert.Contains(winapp, opts.RemovedSubverbError);
+        var error = DevtoolsCliParser.RemovedSubverbMessage(args);
+        Assert.NotNull(error);
+        Assert.Contains(message, error);
+        Assert.Contains(winapp, error);
+        Assert.Null(DevtoolsCliParser.RemovedAppVerbNotice(args));
+    }
+
+    [Theory]
+    [InlineData("app")]
+    [InlineData("APP")]
+    public void AppVerb_IsANotice_NotAnError_AndRunsNothing(string verb)
+    {
+        // `--devtools app` used to run the app with the dev menu. It now runs the app normally.
+        string[] args = ["app.exe", "--devtools", verb];
+        var opts = DevtoolsCliParser.Parse(args);
+
+        Assert.Null(opts.Subverb);
+        Assert.Null(DevtoolsCliParser.RemovedSubverbMessage(args));
+        var notice = DevtoolsCliParser.RemovedAppVerbNotice(args);
+        Assert.NotNull(notice);
+        Assert.Contains("winapp run . --devtools on", notice);
     }
 
     [Theory]
@@ -207,7 +226,8 @@ public class CliFlagParsingTests
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", token]);
 
         Assert.NotNull(opts.Subverb);
-        Assert.Null(opts.RemovedSubverbError);
+        Assert.Null(DevtoolsCliParser.RemovedSubverbMessage(["app.exe", "--devtools", token]));
+        Assert.Null(DevtoolsCliParser.RemovedAppVerbNotice(["app.exe", "--devtools", token]));
     }
 
     [Theory]
@@ -224,7 +244,6 @@ public class CliFlagParsingTests
 
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
         Assert.Equal("Counter", opts.ComponentName);
-        Assert.Null(opts.RemovedSubverbError);
         Assert.Null(opts.EmbedValidationError);
     }
 
@@ -262,7 +281,7 @@ public class CliFlagParsingTests
 
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
         Assert.Equal("tree", opts.ComponentName);
-        Assert.Null(opts.RemovedSubverbError);
+        Assert.Null(DevtoolsCliParser.RemovedSubverbMessage(["app.exe", "--devtools", "run", "tree"]));
     }
 
     [Fact]
@@ -289,20 +308,18 @@ public class CliFlagParsingTests
     }
 
     [Fact]
-    public void PreviewAlias_SetsDeprecatedFlag_AndMapsToRun()
+    public void PreviewAlias_MapsToRun()
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--preview", "MyComp"]);
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
-        Assert.True(opts.UsedDeprecatedPreview);
         Assert.Equal("MyComp", opts.ComponentName);
     }
 
     [Fact]
-    public void PreviewListAlias_SetsDeprecatedFlag_AndMapsToList()
+    public void PreviewListAlias_MapsToList()
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--preview-list"]);
         Assert.Equal(DevtoolsSubverb.List, opts.Subverb);
-        Assert.True(opts.UsedDeprecatedPreview);
     }
 
     [Fact]
@@ -311,7 +328,6 @@ public class CliFlagParsingTests
         // --devtools-list is the one-step alias used by tools that pre-date the subverb form.
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools-list"]);
         Assert.Equal(DevtoolsSubverb.List, opts.Subverb);
-        Assert.False(opts.UsedDeprecatedPreview);
     }
 
     [Fact]
@@ -524,10 +540,10 @@ public class DevtoolsHostCliTests
     }
 
     [Theory]
-    [InlineData("app", "winapp run . --devtools on")]
-    [InlineData("screenshot", "winapp ui screenshot")]
-    [InlineData("tree", "winapp devtools inspect")]
-    public void TryRunDevtoolsForTest_RemovedSubverb_PrintsTheWinappCommandAndExits2_BeforeTheSupportGate(string verb, string winapp)
+    [InlineData("screenshot", "'--devtools screenshot' was removed", "winapp ui screenshot")]
+    [InlineData("tree", "'--devtools tree' was removed", "winapp devtools inspect")]
+    [InlineData("on", "'--devtools on' is a winapp option", "winapp run . --devtools on")]
+    public void TryRunDevtoolsForTest_RemovedSubverb_PrintsTheWinappCommandAndExits2_BeforeTheSupportGate(string verb, string message, string winapp)
     {
         const string switchName = "Reactor.DevtoolsSupport";
         using var stderr = new StringWriter();
@@ -555,9 +571,38 @@ public class DevtoolsHostCliTests
 
         var text = stderr.ToString();
         Assert.True(handled);
-        Assert.Contains($"[reactor] '--devtools {verb}' was removed", text);
+        Assert.Contains($"[reactor] {message}", text);
         Assert.Contains(winapp, text);
         Assert.DoesNotContain("RuntimeHostConfigurationOption", text);
+    }
+
+    [Fact]
+    public void TryRunDevtoolsForTest_AppVerb_PrintsANotice_AndLetsTheAppRun()
+    {
+        // A launch profile that still passes `--devtools app` must start the app, not exit.
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+
+        bool handled;
+        try
+        {
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+
+            handled = ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", "app"], title: "App", width: 800, height: 600);
+
+            Assert.Equal(0, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+        }
+
+        Assert.False(handled);
+        Assert.Contains("[reactor] Ignoring '--devtools app'", stderr.ToString());
+        Assert.Contains("winapp run . --devtools on", stderr.ToString());
     }
 
     [Theory]
@@ -652,19 +697,35 @@ public class DevtoolsHostCliTests
         public override Element Render() => Factories.TextBlock("other");
     }
 
-    // The preview reports Run's call site only for the root that call mounts: its factory,
-    // or the same component type. Any other --component was never mounted by that call.
+    // The preview mounts (and reports Run's call site for) the app's own root only when that is
+    // what was asked for: Run's component type, or its factory when no component was named. Any
+    // other --component was never mounted by that call.
     [Fact]
-    public void PreviewRootMountSite_KeepsRunSiteOnlyForTheAppsOwnRoot()
+    public void PreviewsAppRoot_OnlyForRunsOwnRoot()
     {
-        var site = new SourceLocation("App.cs", 12, 0);
         Func<Component> factory = () => new AppRoot();
 
-        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), factory, typeof(AppRoot)));
-        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), hostRootFactory: null, typeof(AppRoot)));
-        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), hostRootFactory: null, typeof(OtherComponent)));
-        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, hostRoot: null, hostRootFactory: null, typeof(OtherComponent)));
-        Assert.Null(DevtoolsHost.PreviewRootMountSite(runSite: null, typeof(AppRoot), factory, typeof(AppRoot)));
+        Assert.True(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), factory, componentNamed: false, typeof(AppRoot)));
+        Assert.True(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), factory, componentNamed: true, typeof(AppRoot)));
+        Assert.True(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), hostRootFactory: null, componentNamed: false, typeof(AppRoot)));
+        Assert.True(DevtoolsHost.PreviewsAppRoot(hostRoot: null, factory, componentNamed: false, typeof(OtherComponent)));
+        Assert.False(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), factory, componentNamed: true, typeof(OtherComponent)));
+        Assert.False(DevtoolsHost.PreviewsAppRoot(typeof(AppRoot), hostRootFactory: null, componentNamed: true, typeof(OtherComponent)));
+        Assert.False(DevtoolsHost.PreviewsAppRoot(hostRoot: null, hostRootFactory: null, componentNamed: false, typeof(OtherComponent)));
+    }
+
+    // Run<T> always passes its own factory. `--preview Other` must mount Other, not T.
+    [Fact]
+    public void PreviewRootFactory_MountsTheNamedComponent_NotRunsRoot()
+    {
+        Func<Component> factory = () => new AppRoot();
+
+#pragma warning disable IL2026
+        Assert.IsType<OtherComponent>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, componentNamed: true, typeof(OtherComponent))());
+        Assert.Same(factory, DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, componentNamed: true, typeof(AppRoot)));
+        Assert.Same(factory, DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, componentNamed: false, typeof(AppRoot)));
+        Assert.IsType<AppRoot>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), hostRootFactory: null, componentNamed: true, typeof(AppRoot))());
+#pragma warning restore IL2026
     }
 
     // --x/--y place the capture window on a monitor whose scale matches the

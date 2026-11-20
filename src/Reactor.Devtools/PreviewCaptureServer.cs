@@ -590,7 +590,7 @@ internal sealed class PreviewCaptureServer : IDisposable
         {
             try
             {
-                var walker = new TreeWalker("main", new NodeRegistry());
+                var walker = new TreeWalker("main");
                 walker.Walk(_window.Content);
                 tcs.TrySetResult(SerializeReferenceGraph(ReferenceOverlay.Build(walker, "main")));
             }

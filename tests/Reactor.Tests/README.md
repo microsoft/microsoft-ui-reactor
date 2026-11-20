@@ -52,10 +52,9 @@ The suppressions fall into a small number of honest categories:
 
 **Class-level vs method-level scope.** A suppression is placed at **class scope** only where
 the majority of the class's test methods exercise the one suppressed surface *and* the class
-is named/scoped for it (e.g. `DevtoolsSerializationTests`, `TreeSchemaTests`,
-`TypeRegistryUnmountTests`). Where the reflecting methods are a minority of the class (e.g.
-`ReferenceOverlayTests`, `DevtoolsFireToolTests`, `McpDispatchTests`, `StdioTransportTests`,
-and the large `MoreCoverageTests` grab-bags), the suppression is placed on the individual
+is named/scoped for it (e.g. `TypeRegistryUnmountTests`). Where the reflecting methods are a
+minority of the class (e.g. `ReferenceOverlayTests`, `DevtoolsServerPortRaceTests`, and the
+large `MoreCoverageTests` grab-bags), the suppression is placed on the individual
 method, helper, or field where the diagnostic fires — so a future *different* unsafe
 reflection added elsewhere in the class is still caught.
 

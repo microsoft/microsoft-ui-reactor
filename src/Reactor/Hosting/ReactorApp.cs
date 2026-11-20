@@ -1311,13 +1311,17 @@ public static partial class ReactorApp
             return true;
         }
 
-        if (!string.IsNullOrEmpty(options.RemovedSubverbError ?? options.EmbedValidationError))
+        var error = DevtoolsCliParser.RemovedSubverbMessage(args) ?? options.EmbedValidationError;
+        if (!string.IsNullOrEmpty(error))
         {
-            Console.Error.WriteLine($"[reactor] {options.RemovedSubverbError ?? options.EmbedValidationError}");
+            Console.Error.WriteLine($"[reactor] {error}");
             Environment.ExitCode = 2;
             if (exitOnUnavailable) Environment.Exit(2);
             return true;
         }
+
+        if (DevtoolsCliParser.RemovedAppVerbNotice(args) is { } appNotice)
+            Console.Error.WriteLine($"[reactor] {appNotice}");
 
         if (options.Subverb is null) return false;
 
@@ -1351,11 +1355,22 @@ public static partial class ReactorApp
 
     private static void EmitDevtoolsNotAvailableMessage()
     {
-        Console.Error.WriteLine(
-            "[reactor] --devtools requested but this binary was built without Reactor.DevtoolsSupport or without the Microsoft.UI.Reactor.Devtools package. " +
-            "Devtools must be enabled at build time. Add the following to your csproj and rebuild:");
-        Console.Error.WriteLine(
-            "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+        if (!ReactorFeatures.IsDevtoolsSupported)
+        {
+            Console.Error.WriteLine(
+                "[reactor] --devtools requested but this binary was built without the Reactor.DevtoolsSupport switch. " +
+                "It is on by default in Debug (through ReactorDiagnostics); for this configuration, add the following to your csproj and rebuild:");
+            Console.Error.WriteLine(
+                "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+        }
+        else
+        {
+            Console.Error.WriteLine(
+                "[reactor] --devtools requested but this app does not reference the Microsoft.UI.Reactor.Devtools package, which hosts the in-app preview. " +
+                "Add it for Debug builds and rebuild:");
+            Console.Error.WriteLine(
+                "  <PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Condition=\"'$(Configuration)' == 'Debug'\" />");
+        }
         Console.Error.WriteLine(
             "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");
     }

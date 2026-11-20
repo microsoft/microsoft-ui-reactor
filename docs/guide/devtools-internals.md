@@ -49,13 +49,17 @@ if (options.PreviewAndDevtoolsConflict)
     return true;
 }
 
-if (!string.IsNullOrEmpty(options.RemovedSubverbError ?? options.EmbedValidationError))
+var error = DevtoolsCliParser.RemovedSubverbMessage(args) ?? options.EmbedValidationError;
+if (!string.IsNullOrEmpty(error))
 {
-    Console.Error.WriteLine($"[reactor] {options.RemovedSubverbError ?? options.EmbedValidationError}");
+    Console.Error.WriteLine($"[reactor] {error}");
     Environment.ExitCode = 2;
     if (exitOnUnavailable) Environment.Exit(2);
     return true;
 }
+
+if (DevtoolsCliParser.RemovedAppVerbNotice(args) is { } appNotice)
+    Console.Error.WriteLine($"[reactor] {appNotice}");
 
 if (options.Subverb is null) return false;
 
@@ -98,21 +102,36 @@ switch or the package, it prints how to enable them and exits `2`.
 
 The verbs that went with the MCP server and the dev menu — `--devtools app`,
 `--devtools screenshot`, `--devtools tree` — are still recognised, so they don't
-fall through to `run` with the verb read as a component name: they print the
-winapp command to use instead and exit `2`.
+fall through to `run` with the verb read as a component name. `app` used to run
+the app with the dev menu, so it is ignored with a notice and the app runs
+normally; `screenshot` and `tree` print the winapp command to use and exit `2`.
+So does winapp's own `--devtools on|off|headless` when it is passed to the app
+instead of to `winapp run`.
 
 ```csharp
-internal static string? RemovedSubverbMessage(string[] args, int devtoolsIdx)
+/// <summary>
+/// The error for a <c>--devtools</c> value the app no longer accepts, or null: the headless
+/// verbs removed with the MCP server, and winapp's own <c>on</c> / <c>off</c> /
+/// <c>headless</c>, which belong on <c>winapp run</c>. Without this they would fall through to
+/// <c>run</c> with the value read as a component name.
+/// </summary>
+internal static string? RemovedSubverbMessage(string[] args) => TokenAfterDevtools(args) switch
 {
-    if (devtoolsIdx + 1 >= args.Length) return null;
-    return args[devtoolsIdx + 1].ToLowerInvariant() switch
-    {
-        "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools on",
-        "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
-        "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
-        _ => null,
-    };
-}
+    "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
+    "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
+    var value when value is "on" or "off" or "headless" =>
+        $"'--devtools {value}' is a winapp option, not an app argument. Use: winapp run . --devtools {value}",
+    _ => null,
+};
+
+/// <summary>
+/// The notice for <c>--devtools app</c>, or null. It used to run the app with the in-app dev
+/// menu. The menu is gone, so the app now runs normally (a launch profile that passes it keeps
+/// working) and the notice names the replacement.
+/// </summary>
+internal static string? RemovedAppVerbNotice(string[] args) => TokenAfterDevtools(args) == "app"
+    ? "Ignoring '--devtools app': the in-app dev menu was removed, so the app runs normally. Inspect it with the WinUI DevTools: winapp run . --devtools on"
+    : null;
 ```
 
 `ReactorApp.DevtoolsEnabled` is true while the preview host runs. Source
@@ -151,9 +170,10 @@ if (!BearerMatches(ctx.Request.Headers["Authorization"]))
 > process running as the same user: the port is loopback-only but discoverable.
 > Don't log `CAPTURE_TOKEN` anywhere persistent, don't relax the check for
 > "read-only" endpoints such as `/frame` (a frame can show anything on screen), and
-> keep state-changing endpoints (`/focus`, `/preview`, `/embed/*`) POST-only with a
-> non-simple content type, so a browser page can't drive them with a simple
-> cross-origin request.
+> keep state-changing endpoints (`/focus`, `/preview`, `/embed/*`) POST-only, and
+> `/preview` and `/embed/*` on `application/json`, so a browser page can't drive
+> them with a simple cross-origin request (the required `Authorization` header
+> already forces a preflight).
 
 | Endpoint | Used by | What it does |
 |---|---|---|

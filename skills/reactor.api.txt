@@ -1965,13 +1965,12 @@ Unmount(UnmountContext ctx, TControl control) → void
 Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl) → void
 
 ### record DevtoolsCliOptions
-new(DevtoolsSubverb? Subverb, string ComponentName, bool VsCodeMode, int Fps, string ListOutputPath, bool UsedDeprecatedPreview, bool PreviewAndDevtoolsConflict, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null, string RemovedSubverbError = null)
+new(DevtoolsSubverb? Subverb, string ComponentName, bool VsCodeMode, int Fps, string ListOutputPath, bool PreviewAndDevtoolsConflict, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
 DevtoolsSubverb? Subverb { get; init; }
 WindowEmbedStyle EmbedStyle { get; init; }
 bool EmbedAutoEnabledVsCode { get; init; }
 bool EmbedRequested { get; init; }
 bool PreviewAndDevtoolsConflict { get; init; }
-bool UsedDeprecatedPreview { get; init; }
 bool VsCodeMode { get; init; }
 double? WindowHeight { get; init; }
 double? WindowWidth { get; init; }
@@ -1982,8 +1981,7 @@ int? EmbedHostPid { get; init; }
 string ComponentName { get; init; }
 string EmbedValidationError { get; init; }
 string ListOutputPath { get; init; }
-string RemovedSubverbError { get; init; }
-Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref bool UsedDeprecatedPreview, ref bool PreviewAndDevtoolsConflict, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode, ref double? WindowWidth, ref double? WindowHeight, ref double? WindowX, ref double? WindowY, ref string RemovedSubverbError) → void
+Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref bool PreviewAndDevtoolsConflict, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode, ref double? WindowWidth, ref double? WindowHeight, ref double? WindowX, ref double? WindowY) → void
 Equals(DevtoolsCliOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int

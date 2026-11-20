@@ -599,9 +599,9 @@ template also sets is on in Debug anyway (through `ReactorDiagnostics`), and the
 WinUI DevTools need it for C# call sites. The default launch profile passes no
 arguments. If your template pack also has an `"<AppName> (Unpackaged, Devtools)"`
 profile, what it does depends on its argument: a bare `--devtools` starts the app
-under that preview host, while `--devtools app` (the in-app dev menu session) now
-prints the winapp command to use and exits `2` — use `winapp run . --devtools on`
-instead. The in-app dev menu (`DevtoolsMenu`, `UseDevtools`) has been removed. The
+under that preview host, while `--devtools app` (the in-app dev menu session) is
+now ignored with a notice and the app starts normally — use
+`winapp run . --devtools on` to inspect it. The in-app dev menu (`DevtoolsMenu`, `UseDevtools`) has been removed. The
 [dev tooling](dev-tooling.md) page covers the full inner loop.
 
 ## Common Mistakes

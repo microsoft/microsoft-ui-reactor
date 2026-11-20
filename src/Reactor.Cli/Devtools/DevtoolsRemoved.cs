@@ -47,7 +47,7 @@ internal static class DevtoolsRemoved
         new("version", "version", "winapp devtools call DevTools.negotiate  (reports the Reactor version; winapp devtools list only lists sessions)", true),
         new("windows", "windows", "winapp ui list-windows -a <app>", true),
         new("windows.list", "windows.list", "winapp ui list-windows -a <app>", true),
-        new("windows.activate", "windows.activate <id>", "winapp ui focus <selector> -w <hwnd>", true),
+        new("windows.activate", "windows.activate <id>", "winapp ui focus -w <hwnd>", true),
         new("windows.close", "windows.close <id>", AppBehavior, false),
         new("shutdown", "shutdown", AppBehavior, false),
         new("docking.list", "call docking.list", AppBehavior, false),
@@ -78,13 +78,6 @@ internal static class DevtoolsRemoved
         new("logs", "logs", "winapp devtools logs [--follow]", true),
     };
 
-    // MCP tools reached through `mur devtools call <tool>` that have a row of their own. Other
-    // tool names differ from the winapp commands, so a generic `call` gets the generic row.
-    private static readonly HashSet<string> s_callTools = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ReferencesKey, "docking.list", "docking.snapshot", "docking.dock",
-    };
-
     private static readonly Dictionary<string, DevtoolsVerbMapping> s_byKey =
         Mappings.ToDictionary(m => m.Key, StringComparer.OrdinalIgnoreCase);
 
@@ -111,8 +104,12 @@ internal static class DevtoolsRemoved
             }
             if (string.Equals(first, "call", StringComparison.OrdinalIgnoreCase))
             {
-                return args.Length > 1 && s_callTools.Contains(args[1])
-                    ? s_byKey[args[1]]
+                // MCP tools with a row of their own are the rows written as `call <tool>`. Other
+                // tool names differ from the winapp commands, so they get the generic row.
+                return args.Length > 1
+                    && s_byKey.TryGetValue(args[1], out var tool)
+                    && tool.MurForm.StartsWith("call ", StringComparison.Ordinal)
+                    ? tool
                     : s_byKey["call"];
             }
             if (!first.StartsWith('-') && s_byKey.TryGetValue(first, out var verb))
