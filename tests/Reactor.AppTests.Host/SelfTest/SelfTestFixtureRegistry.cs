@@ -443,6 +443,7 @@ internal static class SelfTestFixtureRegistry
         "PerfTrace_ReentrantMountEffectsNameLiveRoot",
         "PerfTrace_CallSitesFromTheSourceMap",
         "PerfTrace_RequestsRecordedOnlyWhileTraced",
+        "PerfTrace_RenderOutcomes",
         "PerfTrace_RemountedRootNamesItself",
         // ReactorEventSource.ComponentRendered reasons + componentId resolution
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler",
@@ -2817,6 +2818,7 @@ internal static class SelfTestFixtureRegistry
         "PerfTrace_ReentrantMountEffectsNameLiveRoot" => new PerfTrace_ReentrantMountEffectsNameLiveRoot(harness),
         "PerfTrace_CallSitesFromTheSourceMap" => new PerfTrace_CallSitesFromTheSourceMap(harness),
         "PerfTrace_RequestsRecordedOnlyWhileTraced" => new PerfTrace_RequestsRecordedOnlyWhileTraced(harness),
+        "PerfTrace_RenderOutcomes" => new PerfTrace_RenderOutcomes(harness),
         "PerfTrace_RemountedRootNamesItself" => new PerfTrace_RemountedRootNamesItself(harness),
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler" => new ComponentRendered_ReasonsAndIdsFollowTheReconciler(harness),
         "ComponentRendered_HostControlRootAndThrowingRoot" => new ComponentRendered_HostControlRootAndThrowingRoot(harness),

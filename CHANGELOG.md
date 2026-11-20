@@ -28,6 +28,15 @@ Conventions for contributors:
 
 ### Added
 
+- **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
+  §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
+  `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds
+  a `ComponentSkip` event (id 13) for each memo hit. `changes` is `0` for a render that changed
+  nothing on screen, and `ownStateSets` counts the state writes a component's render and effects
+  made (spec 023's setState fan-out check). Everything is at level 4 under the `Pass` and
+  `Component` keywords that `winapp perf` records, and only appends fields or adds an id, so
+  existing decoders keep working. See `docs/reference/perf-trace-events.md`.
+
 - `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).

@@ -122,6 +122,16 @@ internal static class MenuCommandFactory
         int oldCount = oldSource.Length;
         int newCount = newSource.Length;
         int shared = Math.Min(oldCount, newCount);
+        // Items are patched natively, not through the reconciler, so count their edits here for
+        // the perf provider's `changes`: an item whose shown fields changed, or one replaced,
+        // removed or added (a submenu's own items count in its recursive call).
+        if (global::Microsoft.UI.Reactor.Core.Diagnostics.ReactorPerfTrace.ComponentEnabled)
+        {
+            uint edits = (uint)(Math.Max(oldCount, newCount) - shared);
+            for (int i = 0; i < shared; i++)
+                if (!MenuItemVisiblyEqual(oldSource[i], newSource[i])) edits++;
+            if (edits != 0) Reconciler.CountPerfChanges(edits);
+        }
 
         for (int i = 0; i < shared; i++)
         {
@@ -181,6 +191,22 @@ internal static class MenuCommandFactory
         for (int i = shared; i < newCount; i++)
             target.Add(CreateMenuFlyoutItem(newSource[i], reconciler));
     }
+
+    // The fields UpdateMenuFlyoutItems writes to a patched item; callbacks are dispatched through
+    // the item's Tag, so a new closure is not a change. A different item type is a replacement.
+    private static bool MenuItemVisiblyEqual(MenuFlyoutItemBase oldItem, MenuFlyoutItemBase newItem) => (oldItem, newItem) switch
+    {
+        (MenuFlyoutItemData a, MenuFlyoutItemData b) =>
+            a.Text == b.Text && a.IsEnabled == b.IsEnabled && a.Icon == b.Icon && Equals(a.IconElement, b.IconElement)
+            && a.AccessKey == b.AccessKey && a.Description == b.Description,
+        (ToggleMenuFlyoutItemData a, ToggleMenuFlyoutItemData b) =>
+            a.Text == b.Text && a.IsChecked == b.IsChecked && a.Icon == b.Icon && Equals(a.IconElement, b.IconElement),
+        (RadioMenuFlyoutItemData a, RadioMenuFlyoutItemData b) => a.Text == b.Text && a.IsChecked == b.IsChecked,
+        (MenuFlyoutSeparatorData, MenuFlyoutSeparatorData) => true,
+        (MenuFlyoutSubItemData a, MenuFlyoutSubItemData b) =>
+            a.Text == b.Text && a.Icon == b.Icon && Equals(a.IconElement, b.IconElement),
+        _ => false,
+    };
 
     internal static void UpdateAppBarItems(
         global::System.Collections.Generic.IList<WinUI.ICommandBarElement> target,
