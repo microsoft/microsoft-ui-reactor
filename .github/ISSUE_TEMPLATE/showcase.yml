@@ -1,0 +1,51 @@
+name: Submit your app to the showcase
+description: Built something with Reactor? Suggest it for the showcase on the docs site.
+title: "[Showcase] "
+labels: ["documentation", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for building with Reactor. We add apps to the showcase on the docs site by hand, so not every submission makes it in, but we read all of them.
+
+  - type: input
+    id: name
+    attributes:
+      label: App name
+    validations:
+      required: true
+
+  - type: input
+    id: link
+    attributes:
+      label: Link
+      description: The source repository, or a store or download page.
+      placeholder: https://github.com/you/your-app
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What does it do?
+      description: One or two sentences. Tell us what the app is and which parts of Reactor it uses.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Drag in one screenshot of the app window, at least 1280 pixels wide.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: The app is built with Reactor.
+          required: true
+        - label: You may show the name, screenshot and link on the Reactor docs site.
+          required: true

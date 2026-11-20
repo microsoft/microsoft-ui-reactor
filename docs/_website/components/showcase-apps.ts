@@ -14,9 +14,20 @@ export interface ShowcaseApp {
   bloom: BloomVariant;
   /** Shown large at the top of the showcase. */
   featured?: boolean;
+  /** A screenshot in public/showcase. Cards without one show the icon tile. */
+  screenshot?: { src: string; width: number; height: number };
 }
 
 export const SOURCE_ROOT = "https://github.com/microsoft/microsoft-ui-reactor/tree/main/";
+
+export const SUBMIT_URL =
+  "https://github.com/microsoft/microsoft-ui-reactor/issues/new?template=showcase.yml";
+
+const shot = (id: string, width: number, height: number) => ({
+  src: `/showcase/${id}.webp`,
+  width,
+  height,
+});
 
 export const SHOWCASE_APPS: ShowcaseApp[] = [
   {
@@ -29,6 +40,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     icon: "layout-grid",
     bloom: "blue",
     featured: true,
+    screenshot: shot("gallery", 1280, 802),
   },
   {
     id: "ide",
@@ -40,6 +52,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     icon: "panels-top-left",
     bloom: "violet",
     featured: true,
+    screenshot: shot("ide", 1280, 802),
   },
   {
     id: "regedit",
@@ -49,6 +62,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/regedit",
     icon: "folder-tree",
     bloom: "teal",
+    screenshot: shot("regedit", 800, 501),
   },
   {
     id: "headtrax",
@@ -58,6 +72,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/headtrax",
     icon: "table",
     bloom: "green",
+    screenshot: shot("headtrax", 800, 501),
   },
   {
     id: "charting",
@@ -67,6 +82,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/ReactorCharting.Gallery",
     icon: "chart-column",
     bloom: "amber",
+    screenshot: shot("charting", 800, 501),
   },
   {
     id: "particles",
@@ -76,6 +92,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/particle-storm",
     icon: "sparkles",
     bloom: "rose",
+    screenshot: shot("particles", 800, 501),
   },
   {
     id: "netpulse",
@@ -85,6 +102,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/netpulse",
     icon: "activity",
     bloom: "blue",
+    screenshot: shot("netpulse", 800, 501),
   },
   {
     id: "chat",
@@ -94,6 +112,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/chat",
     icon: "message-square",
     bloom: "violet",
+    screenshot: shot("chat", 800, 501),
   },
   {
     id: "widget-creator",
@@ -103,6 +122,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/widget-creator",
     icon: "wand-sparkles",
     bloom: "teal",
+    screenshot: shot("widget-creator", 800, 501),
   },
   {
     id: "minesweeper",
@@ -112,6 +132,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/minesweeper",
     icon: "bomb",
     bloom: "green",
+    screenshot: shot("minesweeper", 626, 613),
   },
   {
     id: "wordpuzzle",
@@ -121,6 +142,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/wordpuzzle",
     icon: "puzzle",
     bloom: "amber",
+    screenshot: shot("wordpuzzle", 800, 603),
   },
   {
     id: "toolkit",
@@ -130,6 +152,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/wct-controls",
     icon: "blocks",
     bloom: "rose",
+    screenshot: shot("toolkit", 800, 501),
   },
   {
     id: "a11y",
@@ -139,6 +162,7 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/a11y-showcase",
     icon: "accessibility",
     bloom: "blue",
+    screenshot: shot("a11y", 800, 501),
   },
   {
     id: "monaco",
@@ -148,5 +172,6 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     path: "samples/apps/monaco-editor",
     icon: "code",
     bloom: "violet",
+    screenshot: shot("monaco", 800, 501),
   },
 ];

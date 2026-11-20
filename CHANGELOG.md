@@ -211,6 +211,8 @@ Conventions for contributors:
   started also holds the cheat sheet and the rules of Reactor, and Guides is grouped into
   Core concepts, Layout and styling, Building apps, Ship your app, Developer tools, and
   Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
+  Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
+  issue form. The cards use soft color gradients drawn in CSS, so they need no image files.
 
 ### Deprecated
 

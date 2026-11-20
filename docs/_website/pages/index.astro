@@ -140,8 +140,8 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
         href={blogPost.url}
         class="group relative isolate flex min-h-[320px] overflow-hidden rounded-3xl text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:min-h-[360px] lg:col-span-2"
       >
-        <Bloom id="home-blog" variant="blue" x={0.84} y={0.5} turn={-8} class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.03]" />
-        <div class="absolute inset-0 bg-gradient-to-r from-[#06102a] via-[#06102a]/70 to-transparent" aria-hidden="true"></div>
+        <Bloom variant="blue" class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.03]" />
+        <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent sm:bg-[linear-gradient(to_right,rgb(0_0_0/0.5)_0%,rgb(0_0_0/0.22)_45%,transparent_72%)]" aria-hidden="true"></div>
         <div class="relative mt-auto max-w-xl p-7 sm:p-10">
           <p class="font-display text-2xl font-semibold leading-tight text-balance sm:text-[2rem]">
             {blogPost.title}
@@ -161,14 +161,14 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
         href={href("/showcase")}
         class="group relative isolate flex min-h-[320px] overflow-hidden rounded-3xl text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent sm:min-h-[360px]"
       >
-        <Bloom id="home-showcase" variant="violet" x={0.62} y={0.2} turn={160} scale={0.9} class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.03]" />
-        <div class="absolute inset-0 bg-gradient-to-t from-[#0f0a26] via-[#0f0a26]/60 to-transparent" aria-hidden="true"></div>
+        <Bloom variant="violet" class="transition-transform duration-700 ease-out motion-safe:group-hover:scale-[1.03]" />
+        <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" aria-hidden="true"></div>
         <div class="relative mt-auto w-full p-7 sm:p-8">
           <ul class="flex -space-x-2" aria-hidden="true">
             {
               showcaseIcons.map((app) => (
                 <li
-                  class="grid size-11 place-items-center rounded-xl bg-white shadow-[0_8px_20px_-8px_rgb(0_0_0/0.7)] ring-2 ring-[#0f0a26]/60"
+                  class="grid size-11 place-items-center rounded-xl bg-white shadow-[0_8px_20px_-8px_rgb(0_0_0/0.7)] ring-2 ring-black/50"
                   style={`color: ${BLOOMS[app.bloom].ink}`}
                 >
                   <Icon name={app.icon} size={20} />
@@ -218,7 +218,7 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
           <CodeBlock code={counter} lang="csharp" title="Counter.cs" />
         </div>
         <div class="relative isolate grid min-h-[340px] place-items-center p-6 sm:p-10" data-counter>
-          <Bloom id="home-demo" variant="blue" x={0.5} y={0.5} turn={24} scale={1.1} />
+          <Bloom variant="blue" flipX />
           <div class="relative w-full max-w-[340px]">
             <div
               class="winui-window overflow-hidden rounded-lg bg-[#f3f3f3] text-[#1b1b1b] shadow-[0_32px_64px_-12px_rgb(0_0_0/0.55)] ring-1 ring-black/10 dark:bg-[#202020] dark:text-white dark:ring-white/10"
@@ -244,7 +244,7 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
                 <button type="button" class="winui-button" data-step="1">+ 1</button>
               </div>
             </div>
-            <p class="mt-4 text-center font-mono text-xs text-white/85" data-status>Render #1 · mounted 4 controls</p>
+            <p class="mx-auto mt-4 w-fit rounded-full bg-black/60 px-3 py-1 text-center font-mono text-xs text-white" data-status>Render #1 · mounted 4 controls</p>
           </div>
         </div>
       </div>
@@ -271,8 +271,8 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
       </div>
       <div class="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:gap-10">
         <div class="relative isolate overflow-hidden rounded-3xl text-white">
-          <Bloom id="home-quickstart" variant="teal" x={0.9} y={0.1} turn={200} scale={0.85} />
-          <div class="absolute inset-0 bg-gradient-to-b from-[#031619]/40 to-[#031619]/85" aria-hidden="true"></div>
+          <Bloom variant="teal" flipY />
+          <div class="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent" aria-hidden="true"></div>
           <div class="relative p-6 sm:p-8">
             <h3 class="font-display text-xl font-semibold">Quickstart</h3>
             <p class="mt-2 max-w-[52ch] text-white/80">
@@ -343,7 +343,7 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
     <section class="mt-24 grid gap-5 sm:mt-32 lg:grid-cols-3" aria-label="Controls, recipes and API reference">
       <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
         <a href={href("/controls")} class="group relative isolate block h-28 overflow-hidden">
-          <Bloom id="home-controls" variant="amber" x={0.8} y={0.9} turn={-30} scale={0.7} class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
+          <Bloom variant="amber" class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
           <span class="sr-only">Controls</span>
         </a>
         <div class="flex flex-1 flex-col p-6">
@@ -370,7 +370,7 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
 
       <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
         <a href={href("/recipes")} class="group relative isolate block h-28 overflow-hidden">
-          <Bloom id="home-recipes" variant="green" x={0.2} y={0.95} turn={40} scale={0.7} class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
+          <Bloom variant="green" flipX class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
           <span class="sr-only">Recipes</span>
         </a>
         <div class="flex flex-1 flex-col p-6">
@@ -397,7 +397,7 @@ const showcaseIcons = SHOWCASE_APPS.slice(0, 6);
 
       <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
         <a href={href("/reference")} class="group relative isolate block h-28 overflow-hidden">
-          <Bloom id="home-reference" variant="rose" x={0.55} y={1} turn={90} scale={0.7} class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
+          <Bloom variant="rose" flipY class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
           <span class="sr-only">API reference</span>
         </a>
         <div class="flex flex-1 flex-col p-6">
