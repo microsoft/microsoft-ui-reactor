@@ -84,6 +84,12 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
     private FrameworkElement? _themeListenerElement;
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
+    // Reports what WinUI applies to the root element, so a contrast-theme switch is picked
+    // up after WinUI has made it (issue #1506). Follows the root like the listener above.
+    // UI thread only.
+    private ThemeProbe? _themeProbe;
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal ThemeProbe? ThemeProbeForTest => _themeProbe;
     private volatile bool _disposed;
 
     // Set at the start of Dispose(), before component cleanups run.
@@ -368,6 +374,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         _reconciler.RenderErrorHandlerProvider = () => EffectiveRenderErrorHandler;
         _window = window;
         _reconciler.HostWindow = window;
+        // While no theme probe is in the live tree, the system setting stands in: read it again,
+        // in case a contrast theme was switched while none was (#1506).
+        Microsoft.UI.Reactor.Core.HighContrastState.Invalidate();
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _reconciler.OwningDispatcher = _dispatcherQueue;
@@ -1539,6 +1548,21 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         if (_themeListenerElement is not null)
             _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
 
+        // ActualThemeChanged does not fire for a contrast-theme switch: the theme probe
+        // reports those, once WinUI has applied them (issue #1506). The new probe attaches
+        // before the old one goes, so the reported state does not lapse to the system setting.
+        if (control is not FrameworkElement probeOwner || _disposed)
+        {
+            _themeProbe?.Dispose();
+            _themeProbe = null;
+        }
+        else if (!ReferenceEquals(_themeProbe?.Owner, probeOwner))
+        {
+            var previousProbe = _themeProbe;
+            _themeProbe = ThemeProbe.TryAttach(probeOwner, previousProbe);
+            previousProbe?.Dispose();
+        }
+
         if (control is not FrameworkElement fe)
         {
             _themeListenerElement = null;
@@ -1583,7 +1607,9 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             _forcedColorsTheme = _isForcedColors ? s_chartingBridge?.CaptureForcedColorsTheme() : null;
         }
         // Issue #660 (#86): a palette / high-contrast change can alter the brush
-        // a (key,theme) pair resolves to — drop the cache so it re-resolves.
+        // a (key,theme) pair resolves to — drop the cache so it re-resolves. A
+        // contrast-theme switch is refreshed by the theme probe instead, once WinUI
+        // has applied it: Windows raises this event before that (issue #1506).
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
@@ -1652,6 +1678,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
             if (_themeListenerElement is not null)
                 _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
             _themeListenerElement = null;
+            _themeProbe?.Dispose();
+            _themeProbe = null;
         });
 
         // Accessibility listener cleanup
@@ -1820,6 +1848,12 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         {
             AttachThemeListener(errorPanel);
             OwningWindow?.OnHostContentRendered(errorPanel);
+        }
+        else
+        {
+            // The built-in panel took the content's place: the probe on the old root is off the
+            // tree now, so it stops counting (issue #1506).
+            _themeProbe?.RecheckLiveness();
         }
     }
 }

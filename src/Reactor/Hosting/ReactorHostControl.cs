@@ -111,9 +111,14 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     private volatile bool _needsRerender;     // only touched on UI thread
     private bool _themeListenerAttached;   // UISettings subscribed (once per control)
     private FrameworkElement? _themeListenerElement;   // current content root listened to
+    // Reports what WinUI applies to the content root, so a contrast-theme switch is picked up
+    // after WinUI has made it (issue #1506). Follows the root like the listener above.
+    private ThemeProbe? _themeProbe;
 
     // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
     internal FrameworkElement? ThemeListenerElement => _themeListenerElement;
+    // Test-only accessor (InternalsVisibleTo Reactor.AppTests.Host).
+    internal ThemeProbe? ThemeProbeForTest => _themeProbe;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -315,6 +320,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
         Core.Diagnostics.ReactorHostRegistry.Register(this);
         ThemeResourceListeners.Register(this);
+        // While no theme probe is in the live tree, the system setting stands in: read it again,
+        // in case a contrast theme was switched while none was (issue #1506).
+        HighContrastState.Invalidate();
 
         if (component is not null)
             MountRoot(component, mountSite: null);
@@ -675,6 +683,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // The theme probe counts only while the content is in the live tree (issue #1506).
+        _themeProbe?.RecheckLiveness();
+
         // A tree rendered while detached resolved ThemeRef resource overrides without the
         // theme this control inherits from its new ancestors. Re-resolve every one of them.
         if (_currentControl is not null && _reconciler.HostThemeChanged)
@@ -808,6 +819,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
         // the hosting app calls Dispose when it's truly done with the
         // control. Until then we keep _rootComponent / _reconciler /
         // Content alive so the tree survives reparenting.
+        //
+        // The theme probe stops counting while the content is off the live tree, where WinUI
+        // does not update it, and counts again once it is back (issue #1506).
+        _themeProbe?.RecheckLiveness();
     }
 
     /// <summary>
@@ -1403,15 +1418,35 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
     /// </summary>
     private void AttachThemeListener(UIElement? control)
     {
-        if (control is not FrameworkElement fe || ReferenceEquals(fe, _themeListenerElement)) return;
+        if (control is not FrameworkElement fe)
+        {
+            // Empty content: the theme probe goes with the old root (issue #1506). The listener
+            // stays on it, as before.
+            _themeProbe?.Dispose();
+            _themeProbe = null;
+            return;
+        }
 
-        // Follow the current content root (issue #1291): an app-supplied error fallback
-        // replaces the root after a successful render, and a listener left on the
-        // detached old root would never see ActualThemeChanged again.
-        if (_themeListenerElement is not null)
-            _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
-        _themeListenerElement = fe;
-        fe.ActualThemeChanged += OnActualThemeChanged;
+        if (!ReferenceEquals(fe, _themeListenerElement))
+        {
+            // Follow the current content root (issue #1291): an app-supplied error fallback
+            // replaces the root after a successful render, and a listener left on the
+            // detached old root would never see ActualThemeChanged again.
+            if (_themeListenerElement is not null)
+                _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
+            _themeListenerElement = fe;
+            fe.ActualThemeChanged += OnActualThemeChanged;
+        }
+
+        // ActualThemeChanged does not fire for a contrast-theme switch: the theme probe reports
+        // those, once WinUI has applied them (issue #1506). The new probe attaches before the
+        // old one goes, so the reported state does not lapse to the system setting.
+        if (!ReferenceEquals(_themeProbe?.Owner, fe))
+        {
+            var previousProbe = _themeProbe;
+            _themeProbe = _disposed ? null : ThemeProbe.TryAttach(fe, previousProbe);
+            previousProbe?.Dispose();
+        }
 
         if (_themeListenerAttached) return;
         _themeListenerAttached = true;
@@ -1439,6 +1474,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
 
     private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
     {
+        // A contrast-theme switch is refreshed by the theme probe instead, once WinUI has
+        // applied it: Windows raises this event before that (issue #1506).
         Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
@@ -1526,10 +1563,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable, Co
             else
                 DetachThemeListener();
         }
+        else
+        {
+            // The built-in panel took the content's place: the probe on the old root is off the
+            // tree now, so it stops counting (issue #1506).
+            _themeProbe?.RecheckLiveness();
+        }
     }
 
     private void DetachThemeListener()
     {
+        _themeProbe?.Dispose();
+        _themeProbe = null;
         if (_themeListenerElement is null) return;
         _themeListenerElement.ActualThemeChanged -= OnActualThemeChanged;
         _themeListenerElement = null;
