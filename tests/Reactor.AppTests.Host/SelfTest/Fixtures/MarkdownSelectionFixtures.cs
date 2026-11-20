@@ -403,7 +403,12 @@ internal static partial class MarkdownSelectionFixtures
             var document = peer.DocumentRange;
             H.Check("MdSelection_UiaDocumentText",
                 document.GetText(-1) == "first alpha tail\nsecond beta end");
-            var paragraph = peer.Range(0, 0);
+            var paragraphCaret = peer.Range(0, 0);
+            var secondStart = peer.Range("first alpha tail\n".Length, "first alpha tail\n".Length);
+            H.Check("MdSelection_UiaParagraphMovePreservesInsertionPoint",
+                paragraphCaret.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph, 1) == 1
+                && paragraphCaret.GetText(-1) == "" && paragraphCaret.Compare(secondStart));
+            var paragraph = peer.Range(0, "first alpha tail".Length);
             bool movedForward = paragraph.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph, 1) == 1
                 && paragraph.GetText(-1) == "second beta end";
             bool movedBackward = paragraph.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph, -1) == -1

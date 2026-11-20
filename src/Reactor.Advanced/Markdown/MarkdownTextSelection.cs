@@ -464,13 +464,20 @@ internal sealed class MarkdownSelectionDocument
         if (old is null) return Math.Min(offset, length);
         var replacement = next.FirstOrDefault(e => ReferenceEquals(e.Identity, old.Identity));
         if (replacement is null) return Math.Min(offset, length);
-        int local = Math.Clamp(offset - old.Start, 0, old.Text.Length);
-        var (prefix, suffix) = CommonEdges(old.Text, replacement.Text);
-        if (local > prefix)
-            local = local >= old.Text.Length - suffix
-                ? replacement.Text.Length - (old.Text.Length - local)
+        return replacement.Start + RemapLocalOffset(offset - old.Start, old.Text, replacement.Text);
+    }
+
+    internal static int RemapLocalOffset(int local, string oldText, string newText, bool followsInsertion = false)
+    {
+        local = Math.Clamp(local, 0, oldText.Length);
+        if (oldText == newText) return local;
+        var (prefix, suffix) = CommonEdges(oldText, newText);
+        if (local > prefix || (followsInsertion && local == prefix && local < oldText.Length &&
+            prefix + suffix == oldText.Length && newText.Length > oldText.Length))
+            local = local >= oldText.Length - suffix
+                ? newText.Length - (oldText.Length - local)
                 : prefix;
-        return replacement.Start + Math.Clamp(local, 0, replacement.Text.Length);
+        return Math.Clamp(local, 0, newText.Length);
     }
 
     internal void Select(int anchor, int caret)

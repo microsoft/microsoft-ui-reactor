@@ -49,7 +49,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private MarkdownSelectionUnit _dragUnit;
     private MarkdownSelectionSpan _pressSpan;
     private int _pressLocalGlyph;
-    private object? _pressSurfaceIdentity;
+    private MarkdownSelectionDocument.Entry? _pressEntry;
     private bool _dragged;
     private bool _documentDirty = true;
     private int _layoutSignature;
@@ -112,12 +112,15 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void UpdateLayoutTracking()
     {
         bool track = !_detached && _loaded && (_refreshPending || _pointer is not null
-            || _nativePressOwner is not null || Document.Start != Document.End);
+            || _nativePressOwner is not null || Document.Start != Document.End || HasVisibleCaret);
         if (track == _trackingLayout) return;
         _trackingLayout = track;
         if (track) LayoutUpdated += OnLayout;
         else LayoutUpdated -= OnLayout;
     }
+
+    private bool HasVisibleCaret => Document.Start == Document.End && !_suppressCaret &&
+        FocusState != FocusState.Unfocused && Document.Text.Length > 0;
 
     private void OnFocusChanged(object sender, RoutedEventArgs e)
     {
@@ -331,14 +334,22 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                     if (_clicks.Surface is { } clickSurface &&
                         !_surfaces.Any(surface => ReferenceEquals(surface, clickSurface)))
                         ResetClickSequence();
-                    var pressedEntry = _pressSurfaceIdentity is null ? null :
-                        Document.Entries.FirstOrDefault(entry => ReferenceEquals(entry.Identity, _pressSurfaceIdentity));
-                    if (_pointer is not null && _pressSurfaceIdentity is not null && pressedEntry is null)
-                        StopDrag();
-                    else if (pressedEntry is not null)
-                        _pressSpan = _dragUnit == MarkdownSelectionUnit.Character
-                            ? new(Document.Anchor, Document.Anchor)
-                            : Document.UnitAt(_dragUnit, pressedEntry.Start + _pressLocalGlyph, pressedEntry);
+                    if (_pressEntry is { } previous)
+                    {
+                        var pressedEntry = Document.Entries.FirstOrDefault(entry =>
+                            ReferenceEquals(entry.Identity, previous.Identity));
+                        if (pressedEntry is null) StopDrag();
+                        else
+                        {
+                            if (_dragUnit == MarkdownSelectionUnit.Word)
+                                _pressLocalGlyph = MarkdownSelectionDocument.RemapLocalOffset(
+                                    _pressLocalGlyph, previous.Text, pressedEntry.Text, followsInsertion: true);
+                            _pressEntry = pressedEntry;
+                            _pressSpan = _dragUnit == MarkdownSelectionUnit.Character
+                                ? new(Document.Anchor, Document.Anchor)
+                                : Document.UnitAt(_dragUnit, pressedEntry.Start + _pressLocalGlyph, pressedEntry);
+                        }
+                    }
                 }
             }
             else if (!membershipChecked) nativeTextChanged = InvalidateNativeSegments();
@@ -563,7 +574,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         _pressSpan = _dragUnit == MarkdownSelectionUnit.Character ? new(anchor, anchor) :
             Document.UnitAt(_dragUnit, glyphOffset, entry);
         _pressLocalGlyph = glyphOffset - entry.Start;
-        _pressSurfaceIdentity = entry.Identity;
+        _pressEntry = entry;
         Document.Select(_pressSpan.Start, _dragUnit == MarkdownSelectionUnit.Character ? offset : _pressSpan.End);
 
         var link = LinkSegmentAtPoint(_dragPoint, glyphOffset, entry, e.OriginalSource as Hyperlink);
@@ -669,7 +680,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         _dragTimer.Stop();
         _nativePressOwner = null;
         _dragged = false;
-        _pressSurfaceIdentity = null;
+        _pressEntry = null;
         var pointer = _pointer;
         _pointer = null;
         UpdateLayoutTracking();
@@ -749,6 +760,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         StopDrag();
         _suppressCaret = true;
         Document.Select(Document.Caret, Document.Caret);
+        UpdateLayoutTracking();
         DrawSelection();
     }
 
@@ -786,6 +798,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             default: return false;
         }
         _suppressCaret = false;
+        UpdateLayoutTracking();
         DrawSelection();
         BringCaretIntoView();
         return true;
@@ -1185,8 +1198,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         // in document registration. Only selected, viewport-intersecting cells are drawn.
         _selectionRectangles.Clear();
         var viewport = Viewport();
-        if (Document.Start == Document.End && !_suppressCaret &&
-            FocusState != FocusState.Unfocused && Document.Text.Length > 0)
+        if (HasVisibleCaret)
         {
             var caret = Intersect(CharacterBounds(Document.Caret), viewport);
             if (caret.Width > 0 && caret.Height > 0) _selectionRectangles.Add(caret);

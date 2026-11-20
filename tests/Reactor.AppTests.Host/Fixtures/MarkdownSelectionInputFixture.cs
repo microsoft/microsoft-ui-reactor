@@ -60,7 +60,7 @@ internal sealed class MarkdownSelectionInputFixture : Component
             MarkdownTextSelection.Scope(_outerOptions, VStack(
                 Md("outer text", _outerOptions),
                 MarkdownTextSelection.Scope(_innerOptions,
-                    VStack(Md(streamed ? "inner text streamed" : "inner text", _innerOptions)).Set(TracePointerRouting))
+                    VStack(Md(streamed ? "new inner text" : "inner text", _innerOptions)).Set(TracePointerRouting))
                     .AutomationId("SelectionInner"),
                 customLink,
                 MarkdownTextSelection.Surface("native link", link)).Set(TracePointerRouting))

@@ -126,6 +126,20 @@ public class MarkdownTextSelectionTests
         Assert.Equal((pressed.Start, pressed.End), pressed.ExtendTo(pressed));
     }
 
+    [Theory]
+    [InlineData("alpha beta", 7, "new alpha beta", 11)]
+    [InlineData("beta", 0, "new beta", 4)]
+    [InlineData("alpha beta", 6, "alpha new beta", 10)]
+    public void WordDrag_FollowsThePressedGlyphAfterInsertion(string before, int glyph, string after, int expected)
+    {
+        int remapped = MarkdownSelectionDocument.RemapLocalOffset(glyph, before, after, followsInsertion: true);
+        Assert.Equal(expected, remapped);
+        var document = new MarkdownSelectionDocument();
+        document.Rebuild([new(new object(), after, "")]);
+        var word = document.UnitAt(MarkdownSelectionUnit.Word, remapped);
+        Assert.Equal("beta", after[word.Start..word.End]);
+    }
+
     [Fact]
     public void ParagraphAndWordHits_KeepSurfaceAffinityAtSharedCaret()
     {

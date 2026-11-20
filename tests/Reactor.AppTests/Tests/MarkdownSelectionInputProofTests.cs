@@ -168,7 +168,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal) &&
                 outerText.GetSelection().Single().GetText(-1) == "",
                 "custom button press was routed without selecting a word");
-            Point(customX + 15, customY);
+            var customDragGlyph = Glyph(customLinkRange, 9);
+            Point(customDragGlyph[0] + customDragGlyph[2] / 2, customDragGlyph[1] + customDragGlyph[3] / 2);
             Console.WriteLine($"Custom button drag before release: routing={outer.Current.HelpText}");
             Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
                 "custom link button drag selects before release");
@@ -195,7 +196,10 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Click(innerX, innerY);
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text",
                 "triple-click selects the Markdown paragraph");
-            Thread.Sleep(SampleIntervalMs);
+            Key(0x27, false); Key(0x27, true);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "" &&
+                receivedSelection.Contains(""), "collapse before testing Ctrl+A");
+            receivedSelection.Clear();
             uint clipboardSequence = GetClipboardSequenceNumber();
             Key(0x11, false);
             Key(0x41, false); Key(0x41, true);
@@ -234,11 +238,14 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "text",
                 "second press anchors the final word before streaming");
             ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
-            Wait(() => innerText.DocumentRange.GetText(-1) == "inner text streamed" &&
-                receivedText.Contains("inner text streamed"), "streaming exact text-change event");
+            Wait(() => innerText.DocumentRange.GetText(-1) == "new inner text" &&
+                receivedText.Contains("new inner text"), "streaming exact text-change event");
+            innerGlyph = Glyph(innerText.DocumentRange, 5);
+            innerX = innerGlyph[0] + innerGlyph[2] / 2;
+            innerY = innerGlyph[1] + innerGlyph[3] / 2;
             Point(innerX, innerY);
-            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text ",
-                "reverse word drag uses the rebuilt anchor, including its new trailing space");
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text",
+                "reverse word drag retains its anchor after a streaming prefix edit");
             Mouse(4); mouseHeld = false;
             Console.WriteLine($"Streaming text={innerText.DocumentRange.GetText(-1)} selected={innerText.GetSelection().Single().GetText(-1)}; textEvents={textEvents}");
 
@@ -290,7 +297,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             void SelectInnerText()
             {
                 innerText.DocumentRange.Select();
-                Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text streamed",
+                Wait(() => innerText.GetSelection().Single().GetText(-1) == "new inner text",
                     "reselect inner message before click-away");
             }
             SelectInnerText();
