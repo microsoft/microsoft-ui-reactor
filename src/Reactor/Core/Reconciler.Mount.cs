@@ -148,6 +148,17 @@ public sealed partial class Reconciler
         if (control is not null)
         {
             DebugUIElementsCreated++;
+            // Count only a control created for this element: a transparent keyed Memo, a
+            // flyout decorator wrapping its target, or a RegisterType callback forwarding a
+            // child hands back a control its inner Mount already counted. Forwarding is only
+            // detectable while source publishing is on; guarded inline (as below) so ILC folds
+            // the publisher out of a build without Reactor.DevtoolsSupport.
+            if (Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (ownsControl || registeredType
+                    && !(global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                        && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && ForwardsAnotherElement(control, element))))
+                Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep
@@ -827,7 +838,7 @@ public sealed partial class Reconciler
 
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+            var visual = AnimationHelper.GetElementVisual(container);
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the

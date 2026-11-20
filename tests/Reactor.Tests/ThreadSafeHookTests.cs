@@ -421,6 +421,36 @@ public class ThreadSafeHookTests
     //  AppTests host fixtures, which actually capture a UI dispatcher.
     // ════════════════════════════════════════════════════════════════
 
+    [Theory]
+    [InlineData(10)]
+    [InlineData(42)]
+    public void UsePersisted_OffThread_NoDispatcher_Throws_Without_Updating(int value)
+    {
+        var ctx = new RenderContext();
+        int notifications = 0;
+        ctx.BeginRender(() => notifications++);
+        var (_, set) = ctx.UsePersisted("no-dispatcher-persisted", 10, PersistedScope.Application);
+        int uiThread = Environment.CurrentManagedThreadId, workerThread = 0;
+        Exception? failure = null;
+        var worker = new Thread(() =>
+        {
+            workerThread = Environment.CurrentManagedThreadId;
+            failure = Record.Exception(() => set(value));
+        });
+        worker.Start();
+        worker.Join();
+
+        var ex = Assert.IsType<InvalidOperationException>(failure);
+        Assert.Equal(
+            $"UsePersisted setter was called from thread {workerThread}, " +
+            $"but the captured UI thread is {uiThread}, and no UI dispatcher is " +
+            "available to marshal the call. Run the setter on the UI thread, " +
+            "or pass threadSafe: true to the hook.", ex.Message);
+        Assert.Equal(0, notifications);
+        ctx.BeginRender(static () => { });
+        Assert.Equal(10, ctx.UsePersisted("no-dispatcher-persisted", 10, PersistedScope.Application).Value);
+    }
+
     [Fact]
     public void UseState_NonThreadSafe_OffThread_NoDispatcher_Throws()
     {

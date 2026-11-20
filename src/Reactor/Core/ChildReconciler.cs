@@ -826,19 +826,35 @@ internal static class ChildReconciler
             // must default to false for the unmatched-removal pass below.
             global::System.Array.Clear(matched, 0, oldMidLen);
 
-            // Build old key → index map
+            // Unkeyed children match by absolute position; they need no synthetic string
+            // unless an explicit key can collide with the legacy fallback namespace.
+            bool legacyFallback = false;
             for (int i = 0; i < oldMidLen; i++)
             {
-                var key = GetKey(oldChildren[oldStart + i], oldStart + i);
+                var key = oldChildren[oldStart + i].Key;
+                if (key is null) continue;
                 oldKeyMap[key] = i;
+                legacyFallback |= key.StartsWith("__pos_", StringComparison.Ordinal);
+            }
+            if (legacyFallback)
+            {
+                // Preserve last-wins shadowing even though CanUpdate later rejects
+                // keyed/unkeyed and runtime-type mismatches.
+                oldKeyMap.Clear();
+                for (int i = 0; i < oldMidLen; i++)
+                    oldKeyMap[GetKey(oldChildren[oldStart + i], oldStart + i)] = i;
             }
 
             // Map new keys to old indices
             for (int i = 0; i < newMidLen; i++)
             {
-                var key = GetKey(newChildren[newStart + i], newStart + i);
-                if (oldKeyMap.TryGetValue(key, out int oldIdx) &&
-                    reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChildren[newStart + i]))
+                var newChild = newChildren[newStart + i];
+                var key = legacyFallback ? GetKey(newChild, newStart + i) : newChild.Key;
+                int oldIdx = newStart + i - oldStart;
+                bool found = key is not null
+                    ? oldKeyMap.TryGetValue(key, out oldIdx)
+                    : (uint)oldIdx < (uint)oldMidLen;
+                if (found && reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChild))
                 {
                     newToOld[i] = oldIdx;
                     matched[oldIdx] = true;
@@ -1351,7 +1367,7 @@ internal static class ChildReconciler
         if (curve is null) return;
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(ctrl);
+            var visual = Animation.AnimationHelper.GetElementVisual(ctrl);
             var compositor = visual.Compositor;
             var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
             var coll = compositor.CreateImplicitAnimationCollection();

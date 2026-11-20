@@ -1264,7 +1264,7 @@ internal static class CoreCoverageFixtures
                             .Duration(300)
                             .At(0f, opacity: 0.5f, scale: new global::System.Numerics.Vector3(0.8f, 0.8f, 1f))
                             .At(0.5f, opacity: 1f, scale: global::System.Numerics.Vector3.One,
-                                translation: new global::System.Numerics.Vector3(10, 0, 0), rotation: 0.1f)
+                                translation: new global::System.Numerics.Vector3(10, 0, 0), rotation: 6f)
                             .At(1f, opacity: 1f, scale: global::System.Numerics.Vector3.One,
                                 translation: global::System.Numerics.Vector3.Zero, rotation: 0f)
                         )

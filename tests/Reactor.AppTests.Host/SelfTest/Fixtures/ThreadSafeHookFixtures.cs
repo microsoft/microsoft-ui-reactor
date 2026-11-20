@@ -409,6 +409,7 @@ internal static class ThreadSafeHookFixtures
         {
             H.CreateHost();
             var ctx = new RenderContext();
+            var persistedKey = "queued-persisted-" + Guid.NewGuid().ToString("N");
             int uiThread = Environment.CurrentManagedThreadId;
             int oldNotifications = 0, notifications = 0, oldReducerCalls = 0;
             bool callbacksOnUi = true;
@@ -420,6 +421,7 @@ internal static class ThreadSafeHookFixtures
                 oldReducerCalls++;
                 return s + a;
             }, 30);
+            var (_, setPersisted) = ctx.UsePersisted(persistedKey, 40, PersistedScope.Application);
 
             // Hold the UI thread until all writes are queued: no callback can drain yet.
             Task.Run(() =>
@@ -434,6 +436,8 @@ internal static class ThreadSafeHookFixtures
                 update(v => v * 3);
                 dispatch(4);
                 dispatch(5);
+                setPersisted(41);
+                setPersisted(42);
             }).GetAwaiter().GetResult();
 
             ctx.BeginRender(() =>
@@ -450,10 +454,14 @@ internal static class ThreadSafeHookFixtures
             }, 30);
             H.Check("Queued_DispatchNotRunInline", initial == 30 && oldReducerCalls == 0);
             H.Check("Queued_DispatchStable", ReferenceEquals(dispatch, currentDispatch));
+            var (persisted, currentPersistedSetter) = ctx.UsePersisted(persistedKey, 40, PersistedScope.Application);
+            H.Check("Queued_PersistedNotWrittenInline", persisted == 40);
+            H.Check("Queued_PersistedSetterStable", ReferenceEquals(setPersisted, currentPersistedSetter));
             set(100);
             update(v => v + 5);
             dispatch(10);
-            H.Check("Queued_InlineNotifications", notifications == 3 && oldNotifications == 0);
+            setPersisted(400);
+            H.Check("Queued_InlineNotifications", notifications == 4 && oldNotifications == 0);
             await Harness.Render();
 
             ctx.BeginRender(() => notifications++);
@@ -461,7 +469,9 @@ internal static class ThreadSafeHookFixtures
             H.Check("Queued_UpdaterUsesLiveValue", ctx.UseReducer(20).Value == 81);
             H.Check("Queued_DispatchUsesLiveReducer",
                 ctx.UseReducer<int, int>(static (s, a) => s - a, 30).Value == 11);
-            H.Check("Queued_UsesLiveNotification", notifications == 9 && oldNotifications == 0);
+            H.Check("Queued_PersistedArgumentsPreserved",
+                ctx.UsePersisted(persistedKey, 40, PersistedScope.Application).Value == 42);
+            H.Check("Queued_UsesLiveNotification", notifications == 12 && oldNotifications == 0);
             H.Check("Queued_CallbacksRunOnUi", callbacksOnUi && oldReducerCalls == 0);
 
             Task.Run(() =>
@@ -469,19 +479,25 @@ internal static class ThreadSafeHookFixtures
                 set(12);
                 update(v => v);
                 dispatch(0);
+                setPersisted(42);
             }).GetAwaiter().GetResult();
             await Harness.Render();
-            H.Check("Queued_UnchangedDoesNotNotify", notifications == 9);
+            H.Check("Queued_UnchangedDoesNotNotify", notifications == 12);
 
             Task.Run(() =>
             {
                 set(99);
                 update(v => v + 1);
                 dispatch(1);
+                setPersisted(99);
             }).GetAwaiter().GetResult();
+            ctx.RunCleanups();
             ctx.DetachFromHost();
             await Harness.Render();
-            H.Check("Queued_DetachedDoesNotNotify", notifications == 9 && oldNotifications == 0);
+            H.Check("Queued_DetachedDoesNotNotify", notifications == 12 && oldNotifications == 0);
+            H.Check("Queued_PersistedSavedBeforeDetach",
+                ApplicationPersistedScope.Default.TryGet<int>(persistedKey, out var saved) && saved == 42);
+            ApplicationPersistedScope.Default.Remove(persistedKey);
         }
     }
 
@@ -503,11 +519,15 @@ internal static class ThreadSafeHookFixtures
                 reducerCalls++;
                 return s + a;
             }, 30);
+            var persistedKey = "shutdown-persisted-" + Guid.NewGuid().ToString("N");
+            var (_, setPersisted) = ctx.UsePersisted(persistedKey, 40, PersistedScope.Application);
             Action[] calls =
             [
                 () => set(11),
                 () => update(v => { reducerCalls++; return v + 1; }),
-                () => dispatch(1)
+                () => dispatch(1),
+                () => setPersisted(41),
+                () => setPersisted(40)
             ];
             try
             {
@@ -526,7 +546,7 @@ internal static class ThreadSafeHookFixtures
                 }).ToArray());
                 for (int i = 0; i < failures.Length; i++)
                 {
-                    var hook = i == 0 ? "UseState" : "UseReducer";
+                    var hook = i switch { 0 => "UseState", >= 3 => "UsePersisted", _ => "UseReducer" };
                     H.Check($"Shutdown_Callback{i}_Diagnostic", failures[i].Message ==
                         $"{hook} setter was called from thread {failures[i].Thread}, " +
                         "but the UI dispatcher refused the marshaled call (TryEnqueue returned " +
@@ -539,6 +559,8 @@ internal static class ThreadSafeHookFixtures
                 H.Check("Shutdown_UpdaterUnchanged", ctx.UseReducer(20).Value == 20);
                 H.Check("Shutdown_DispatchUnchanged",
                     ctx.UseReducer<int, int>(static (s, a) => s + a, 30).Value == 30);
+                H.Check("Shutdown_PersistedUnchanged",
+                    ctx.UsePersisted(persistedKey, 40, PersistedScope.Application).Value == 40);
                 H.Check("Shutdown_NoCallbacks", notifications == 0 && reducerCalls == 0);
             }
             finally

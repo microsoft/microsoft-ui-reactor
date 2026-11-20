@@ -344,11 +344,14 @@ configuration and TFM stamped into the test assembly by `Reactor.SelfTests.cspro
 
 ### Fixture registration is two-place — and what that does to name searches
 
-Selftest: add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`; miss the second and
-`--list-fixtures` reports a name the run cannot produce. E2E: add it to `AllFixtures` **and**
-to the `Build` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs` — `--list-fixtures`
-is selftest-only, so nothing warns you about the E2E half.
+For SelfTest, add the fixture to `AllFixtures` **and** to the `Create()` switch in
+`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. For E2E, add it to
+`AllFixtures` **and** to the `Build()` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
+
+`--list-fixtures` lists only SelfTest fixtures for the current host tier.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` compares `AllFixtures` with the factory
+switch for both SelfTest and E2E. It reports each fixture registered on just one side and
+identifies where the registration is missing.
 
 That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
 carries two kinds of name and they live in different files: *fixture* names (registry only, and
@@ -360,7 +363,7 @@ the class they map to is often spelled differently — `CenterOnCurrent_UsesCurs
 |---|---|
 | grep `SelfTest/Fixtures/` only | fixture names whose class name differs |
 | grep `SelfTestFixtureRegistry.cs` only | check-only names — e.g. `WindowLevel_RuntimeFlip_Topmost`, `TabViewFill_Mounted`, `ExitTr_Removed` are all registry=0 |
-| **grep `tests/Reactor.AppTests.Host/` whole** | **literal names: none — use this** |
+| **grep `tests/Reactor.AppTests.Host/` whole** | A substring search can match a longer fixture name. Search for the full quoted fixture name. |
 
 One blind spot survives even the whole-tree grep: check names built by interpolation —
 `H.Check($"A11y_Role_{role}_Mounted", …)` — match no literal anywhere, so grepping the TAP name
