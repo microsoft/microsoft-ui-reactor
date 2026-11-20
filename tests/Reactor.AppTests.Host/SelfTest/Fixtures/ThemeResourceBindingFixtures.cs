@@ -129,9 +129,9 @@ internal static class ThemeResourceBindingFixtures
                 var (replaced, setter) = ctx.UseState(false);
                 setReplaced = setter;
                 var grid = Grid([GridSize.Star()], [GridSize.Star()], TextBlock("trb-replace")).BorderBrush(key);
-                return replaced
+                return VStack(replaced
                     ? grid.Background(new SolidColorBrush(ExplicitColor))
-                    : grid.Background(key);
+                    : grid.Background(key)).RequestedTheme(ElementTheme.Light);
             });
             await Harness.Render();
 
@@ -185,7 +185,7 @@ internal static class ThemeResourceBindingFixtures
                 var (themed, setter) = ctx.UseState(true);
                 setThemed = setter;
                 var tb = TextBlock("trb-style").Set(t => t.Style = style);
-                return VStack(themed ? tb.Foreground(new ThemeRef("TrbStyleBrush")) : tb);
+                return VStack(themed ? tb.Foreground(new ThemeRef("TrbStyleBrush")) : tb).RequestedTheme(ElementTheme.Light);
             });
             await Harness.Render();
 
@@ -312,9 +312,9 @@ internal static class ThemeResourceBindingFixtures
                 setPhase = setter;
                 return phase switch
                 {
-                    0 => VStack(TextBlock("trb-pool-themed").Foreground(new ThemeRef("TrbPoolBrush"))),
-                    1 => VStack(),
-                    _ => VStack(TextBlock("trb-pool-plain")),
+                    0 => VStack(TextBlock("trb-pool-themed").Foreground(new ThemeRef("TrbPoolBrush"))).RequestedTheme(ElementTheme.Light),
+                    1 => VStack().RequestedTheme(ElementTheme.Light),
+                    _ => VStack(TextBlock("trb-pool-plain")).RequestedTheme(ElementTheme.Light),
                 };
             });
             await Harness.Render();
@@ -882,6 +882,137 @@ internal static class ThemeResourceBindingFixtures
             await Harness.Render();
             H.Check("ThemeResourceBinding_Retry_BoundOnRetry", ColorOf(border.Background) == OtherLightColor,
                 $"bg={ColorOf(border.Background)}");
+        });
+    }
+
+    /// <summary>
+    /// An explicit brush modifier that replaces a Background or Foreground ThemeRef while a hover
+    /// holds the property is what the property shows once the hover ends.
+    /// </summary>
+    internal sealed class ExplicitBrushReplacingThemeRefDuringHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrbDuringHoverBrush", async host =>
+        {
+            var hover = new SolidColorBrush(HoverColor);
+            var explicitBrush = new SolidColorBrush(ExplicitColor);
+            var key = new ThemeRef("TrbDuringHoverBrush");
+            Action<bool>? setExplicit = null;
+            host.Mount(ctx =>
+            {
+                var (useExplicit, setter) = ctx.UseState(false);
+                setExplicit = setter;
+                var border = Border(TextBlock("trb-during-hover-bg")).InteractionStates(s => s.PointerOver(background: hover));
+                var text = TextBlock("trb-during-hover-fg").InteractionStates(s => s.PointerOver(foreground: hover));
+                return VStack(
+                    useExplicit ? border.Background(explicitBrush) : border.Background(key),
+                    useExplicit ? text.Foreground(explicitBrush) : text.Foreground(key)).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+            var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-during-hover-bg" });
+            var text = H.FindText("trb-during-hover-fg");
+            H.Check("ThemeResourceBinding_DuringHover_Bound",
+                ColorOf(border?.Background) == LightColor && ColorOf(text?.Foreground) == LightColor);
+            if (border is null || text is null) return;
+
+            Reconciler.SimulatePointerOverForTests(border, isOver: true);
+            Reconciler.SimulatePointerOverForTests(text, isOver: true);
+            setExplicit!(true);
+            await Harness.Render();
+            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            Reconciler.SimulatePointerOverForTests(text, isOver: false);
+            H.Check("ThemeResourceBinding_DuringHover_BackgroundExplicit", ReferenceEquals(border.Background, explicitBrush),
+                $"bg={ColorOf(border.Background)}");
+            H.Check("ThemeResourceBinding_DuringHover_ForegroundExplicit", ReferenceEquals(text.Foreground, explicitBrush),
+                $"fg={ColorOf(text.Foreground)}");
+        });
+    }
+
+    /// <summary>
+    /// A ThemeRef declared while a hover holds the property (re-added after a removal in the same
+    /// hover, or added for the first time) is installed when the hover ends.
+    /// </summary>
+    internal sealed class ThemeRefDeclaredDuringHoverIsInstalledOnExit(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrbDeclaredDuringHover", async host =>
+        {
+            var hover = new SolidColorBrush(HoverColor);
+            var key = new ThemeRef("TrbDeclaredDuringHover");
+            Action<int>? setPhase = null;
+            host.Mount(ctx =>
+            {
+                var (phase, setter) = ctx.UseState(0);
+                setPhase = setter;
+                var readded = Border(TextBlock("trb-readded")).InteractionStates(s => s.PointerOver(background: hover));
+                var added = Border(TextBlock("trb-added-late")).InteractionStates(s => s.PointerOver(background: hover));
+                return VStack(
+                    phase == 1 ? readded : readded.Background(key),
+                    phase == 2 ? added.Background(key) : added).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+            var readded = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-readded" });
+            var added = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-added-late" });
+            H.Check("ThemeResourceBinding_Declared_Initial",
+                ColorOf(readded?.Background) == LightColor && added is not null && !HasLocal(added, WinUI.Border.BackgroundProperty));
+            if (readded is null || added is null) return;
+
+            Reconciler.SimulatePointerOverForTests(readded, isOver: true);
+            Reconciler.SimulatePointerOverForTests(added, isOver: true);
+            setPhase!(1);
+            await Harness.Render();
+            setPhase!(2);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_Declared_HoverKept",
+                ReferenceEquals(readded.Background, hover) && ReferenceEquals(added.Background, hover));
+            Reconciler.SimulatePointerOverForTests(readded, isOver: false);
+            Reconciler.SimulatePointerOverForTests(added, isOver: false);
+            H.Check("ThemeResourceBinding_Declared_ReaddedInstalled", ColorOf(readded.Background) == LightColor,
+                $"bg={ColorOf(readded.Background)}");
+            H.Check("ThemeResourceBinding_Declared_AddedInstalled", ColorOf(added.Background) == LightColor,
+                $"bg={ColorOf(added.Background)}");
+        });
+    }
+
+    /// <summary>
+    /// A flyout whose target toggles its own RequestedTheme keeps owning the ThemeRef it binds on
+    /// the shared control: the target's theme change re-resolves the binding natively, which is
+    /// no takeover, so a later key change and removal still apply.
+    /// </summary>
+    internal sealed class FlyoutTargetThemeToggleKeepsOuterBinding(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKeys(H, ["TrbFlyoutA"], "TrbFlyoutB", async (host, _) =>
+        {
+            Action<int>? setPhase = null;
+            host.Mount(ctx =>
+            {
+                var (phase, setter) = ctx.UseState(0);
+                setPhase = setter;
+                var target = TextBlock("trb-flyout-target").RequestedTheme(phase == 0 ? ElementTheme.Light : ElementTheme.Dark);
+                var flyout = Flyout(target, TextBlock("trb-flyout-tip"));
+                return VStack(phase switch
+                {
+                    0 or 1 => flyout.Foreground(new ThemeRef("TrbFlyoutA")),
+                    2 => flyout.Foreground(new ThemeRef("TrbFlyoutB")),
+                    _ => flyout,
+                }).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+            var tb = H.FindText("trb-flyout-target");
+            H.Check("ThemeResourceBinding_Flyout_Bound", ColorOf(tb?.Foreground) == LightColor, $"fg={ColorOf(tb?.Foreground)}");
+
+            setPhase!(1);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_Flyout_TargetThemeFollowed", ColorOf(tb?.Foreground) == DarkColor,
+                $"fg={ColorOf(tb?.Foreground)}");
+
+            setPhase!(2);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_Flyout_KeyChangeApplied", ColorOf(tb?.Foreground) == OtherDarkColor,
+                $"fg={ColorOf(tb?.Foreground)}");
+
+            setPhase!(3);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_Flyout_RemovalClears",
+                tb is not null && !HasLocal(tb, WinUI.TextBlock.ForegroundProperty), $"fg={ColorOf(tb?.Foreground)}");
         });
     }
 }
