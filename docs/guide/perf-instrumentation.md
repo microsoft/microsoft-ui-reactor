@@ -165,7 +165,8 @@ created, UI elements modified) are the per-pass cost summary. A
 them off the payload, and so does an in-process
 `ReactorTrace.Subscribe` callback. The same reconciler counters also
 surface without a trace as `LastDiffed`, `LastSkipped`, `LastCreated`
-and `LastModified` on `ReactorHost.Stats` (`RenderStats`). The raw
+and `LastModified` on `ReactorHost.Stats` and `ReactorHostControl.Stats`
+(`RenderStats`), sampled about once a second from the latest pass. The raw
 `Microsoft-UI-Reactor-Perf` provider that `winapp perf` records does
 not carry them; its reconcile span counts child edits instead (see
 [Recording without elevation](#recording-without-elevation)).
