@@ -234,10 +234,4 @@ public class MoreCoverageTests
         Assert.NotEqual(withA1, withB);
         Assert.NotEqual(withA1, withNone);
     }
-
-    // PathDataParser tests were intentionally skipped — every overload of
-    // PathDataParser.Parse constructs a `new PathGeometry()` even for null or
-    // whitespace inputs, which requires WinUI XAML Application activation that
-    // isn't available to this unit-test host. The parser is exercised by
-    // higher-level charting tests that run in the self-host harness.
 }
