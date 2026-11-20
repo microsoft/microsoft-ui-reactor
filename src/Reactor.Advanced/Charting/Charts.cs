@@ -404,28 +404,37 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         };
     }
 
+    // Points that map to a non-finite coordinate (NaN data, a log scale given 0) become gaps,
+    // as with D3's line.defined. Otherwise the path markup is rejected and nothing is drawn.
+    private Func<T, int, bool> FiniteDefined(LinearScale xScale, LinearScale yScale) =>
+        (d, _) => double.IsFinite(xScale.Map(XAccessor(d))) && double.IsFinite(yScale.Map(YAccessor(d)));
+
     private Element[] RenderLine(IReadOnlyList<T> data, LinearScale xScale, LinearScale yScale)
     {
         return [D3LinePath(data,
             d => xScale.Map(XAccessor(d)),
             d => yScale.Map(YAccessor(d)),
-            stroke: Brush(_stroke), strokeWidth: _strokeWidth)];
+            stroke: Brush(_stroke), strokeWidth: _strokeWidth,
+            defined: FiniteDefined(xScale, yScale))];
     }
 
     private Element[] RenderArea(IReadOnlyList<T> data, LinearScale xScale, LinearScale yScale,
         double plotTop, double plotHeight)
     {
         double baseline = plotTop + plotHeight;
-        return [
-            D3AreaPath(data,
-                d => xScale.Map(XAccessor(d)),
+        var defined = FiniteDefined(xScale, yScale);
+        var area = AreaGenerator.Create(
+                (T d) => xScale.Map(XAccessor(d)),
                 _ => baseline,
-                d => yScale.Map(YAccessor(d)),
-                fill: Brush(_fill, _fillOpacity)),
+                d => yScale.Map(YAccessor(d)))
+            .SetDefined(defined);
+        return [
+            D3Path(area.Generate(data), fill: Brush(_fill, _fillOpacity)),
             D3LinePath(data,
                 d => xScale.Map(XAccessor(d)),
                 d => yScale.Map(YAccessor(d)),
-                stroke: Brush(_stroke), strokeWidth: _strokeWidth),
+                stroke: Brush(_stroke), strokeWidth: _strokeWidth,
+                defined: defined),
         ];
     }
 
@@ -444,7 +453,6 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     }
 
     internal static SolidColorBrush ColorToBrush(string color) { var c = D3Color.Parse(color); return new SolidColorBrush(global::Windows.UI.Color.FromArgb((byte)(c.Opacity * 255), c.R, c.G, c.B)); }
-    internal static Geometry ParsePathData(string pathData) => PathDataParser.Parse(pathData);
 
     // ── IChartAccessibilityData ──────────────────────────────────────
 

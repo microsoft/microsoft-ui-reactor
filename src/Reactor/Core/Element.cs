@@ -692,7 +692,7 @@ public abstract record Element
             // re-allocations cause every WinUI Path/Line property to be reassigned.
             (PathElement pa, PathElement pb) =>
                 string.Equals(pa.PathDataString, pb.PathDataString, StringComparison.Ordinal)
-                && (pa.PathDataString is not null || ReferenceEquals(pa.Data, pb.Data))
+                && ReferenceEquals(pa.Data, pb.Data)
                 && BrushesEqual(pa.Fill, pb.Fill)
                 && BrushesEqual(pa.Stroke, pb.Stroke)
                 && pa.StrokeThickness == pb.StrokeThickness
@@ -7088,8 +7088,8 @@ public partial record LineElement() : Element
 public partial record LineElement;
 
 // Spec 058 §15 (P5.23) — Shape leaf. Fill/Stroke/StrokeThickness/RenderTransform/line caps/join/
-// miter/offset auto-map. Bespoke in Customize: Data (3-strategy .Imperative: XamlReader → pre-built
-// Geometry → PathDataParser; PathDataString + Data), FillRule (propagated onto the inner
+// miter/offset auto-map. Bespoke in Customize: Data (.Imperative: native path-markup converter →
+// pre-built Geometry; PathDataString + Data), FillRule (propagated onto the inner
 // PathGeometry), StrokeDashArray (DoubleCollection — unsupported value type). Replaces PathDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinShapes.Path))]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Data")]
@@ -7104,9 +7104,10 @@ public partial record PathElement() : Element
     /// </summary>
     public Geometry? Data { get; init; }
     /// <summary>
-    /// The original SVG path data string. When set, geometry is parsed lazily by the reconciler —
-    /// only when mounting or when the string changes between renders. This avoids expensive
-    /// PathDataParser.Parse + COM Geometry creation on every tree build.
+    /// The path markup string (SVG / XAML path syntax). When set, geometry is converted lazily by the
+    /// reconciler with WinUI's native path-markup converter — only when mounting or when the string
+    /// changes between renders — so no COM Geometry is created on every tree build. Markup the platform
+    /// rejects (for example a NaN coordinate) falls back to <see cref="Data"/>, or draws nothing.
     /// </summary>
     public string? PathDataString { get; init; }
     public Brush? Fill { get; init; }
@@ -7130,7 +7131,7 @@ public partial record PathElement() : Element
     public FillRule FillRule { get; init; } = FillRule.EvenOdd;
     internal Action<WinShapes.Path>[] Setters { get; init; } = [];
 
-    // Data has two source surfaces (pre-built Geometry vs SVG string) + 3-way branching that the
+    // Data has two source surfaces (pre-built Geometry vs SVG string) + a fallback between them that the
     // value-comparer fast path can't express; FillRule writes onto the inner PathGeometry (gated on
     // the LIVE control's Data); StrokeDashArray is a DoubleCollection. Verbatim from the descriptor.
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<PathElement, WinShapes.Path> Customize(
@@ -7139,9 +7140,11 @@ public partial record PathElement() : Element
                 mount: static (c, e) => WriteData(c, e),
                 update: static (c, oldEl, newEl) =>
                 {
-                    bool pathChanged = newEl.PathDataString is null
-                        ? newEl.Data is not null
-                        : !string.Equals(newEl.PathDataString, oldEl.PathDataString, global::System.StringComparison.Ordinal);
+                    // D3Path no longer pre-builds Data, so a Data reference change is a real
+                    // caller change (including a fallback swap under unchanged markup).
+                    bool pathChanged =
+                        !string.Equals(newEl.PathDataString, oldEl.PathDataString, global::System.StringComparison.Ordinal)
+                        || !ReferenceEquals(newEl.Data, oldEl.Data);
                     if (!pathChanged) return;
                     WriteData(c, newEl);
                 })
@@ -7156,65 +7159,22 @@ public partial record PathElement() : Element
                 set:         static (c, v) => c.StrokeDashArray = v,
                 shouldWrite: static e => e.StrokeDashArray is not null);
 
+    // PathDataString goes through the native path-markup converter. If the platform rejects it,
+    // a caller-supplied Data is used instead; with neither, the path is cleared so it draws nothing
+    // (PathMarkup.TryConvert has already logged why). The element's FillRule is re-applied to every
+    // new geometry: the FillRule entry below only writes when FillRule itself changes.
     private static void WriteData(WinShapes.Path c, PathElement e)
     {
-        global::System.Exception? xamlReaderError = null;
-        string? attemptedXaml = null;
-
-        if (e.PathDataString is { Length: > 0 } pds)
+        var geometry = PathMarkup.TryConvert(e.PathDataString) ?? e.Data;
+        try { c.Data = geometry; }
+        catch (global::System.Exception ex)
         {
-            try
-            {
-                var safe = global::System.Net.WebUtility.HtmlEncode(pds);
-                attemptedXaml =
-                    "<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\""
-                    + safe + "\" />";
-                if (global::Microsoft.UI.Xaml.Markup.XamlReader.Load(attemptedXaml) is WinShapes.Path loaded
-                    && loaded.Data is not null)
-                {
-                    c.Data = loaded.Data;
-                    return;
-                }
-            }
-            catch (global::System.Exception ex)
-            {
-                xamlReaderError = ex;
-            }
+            throw new global::System.ArgumentException(
+                $"Path.Data rejected by WinUI. PathDataString={e.PathDataString ?? "(null)"}; "
+                + $"DataType={geometry?.GetType().Name}; inner={ex.Message}.", ex);
         }
-
-        if (e.Data is not null)
-        {
-            try { c.Data = e.Data; }
-            catch (global::System.Exception ex)
-            {
-                var xamlNote = xamlReaderError is not null
-                    ? $" XamlReader.Load also failed: {xamlReaderError.GetType().Name}: {xamlReaderError.Message}. Attempted XAML: {attemptedXaml}"
-                    : " (XamlReader.Load returned non-Path or wasn't attempted)";
-                throw new global::System.ArgumentException(
-                    $"Path.Data rejected by WinUI. PathDataString={e.PathDataString ?? "(null)"}; "
-                    + $"DataType={e.Data.GetType().Name}; inner={ex.Message}.{xamlNote}", ex);
-            }
-            return;
-        }
-
-        if (e.PathDataString is { Length: > 0 } pdsFallback)
-        {
-            global::System.Exception? parserError = null;
-            try { c.Data = PathDataParser.Parse(pdsFallback); }
-            catch (global::System.Exception ex) { parserError = ex; }
-
-            if (parserError is not null)
-            {
-                var xamlNote = xamlReaderError is not null
-                    ? $"XamlReader.Load failed: {xamlReaderError.GetType().Name}: {xamlReaderError.Message}. Attempted XAML: {attemptedXaml}. "
-                    : "XamlReader.Load returned non-Path. ";
-                throw new global::System.ArgumentException(
-                    $"Could not mount PathElement from PathDataString='{pdsFallback}'. "
-                    + xamlNote
-                    + $"PathDataParser.Parse also failed: {parserError.GetType().Name}: {parserError.Message}.",
-                    parserError);
-            }
-        }
+        if (geometry is global::Microsoft.UI.Xaml.Media.PathGeometry pg && pg.FillRule != e.FillRule)
+            pg.FillRule = e.FillRule;
     }
 }
 
