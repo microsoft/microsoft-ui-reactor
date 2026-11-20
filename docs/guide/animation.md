@@ -598,8 +598,15 @@ class InteractionStatesDemo : Component
 
 The builder supports `.PointerOver(...)`, `.Pressed(...)`, and
 `.Focused(...)`. Each accepts optional `opacity`, `scale`, `translation`,
-`rotation`, `background`, `foreground`, and `borderBrush` parameters. Pass
+`rotation` (degrees, clockwise, like `.Rotation()`), `background`, `foreground`, `borderBrush` parameters. Pass
 a `curve:` parameter for spring or ease transitions between states.
+
+States combine with `.Scale()`, `.Rotation()`, `.Translation()`, and
+`.CenterPoint()` on the same element. A state's `scale`, `translation`, and
+`rotation` are the values the element animates to, not offsets from its own
+transform, and leaving the state returns to the element's own values. Use
+`.CenterPoint()` to make a hover scale grow from somewhere other than the
+top-left corner.
 
 ## Enter/Exit Transitions
 
@@ -637,7 +644,7 @@ Built-in transitions:
 |-----------|--------|
 | `Transition.Fade` | Fade in/out |
 | `Transition.Slide(edge)` | Slide from an edge (Left, Top, Right, Bottom) |
-| `Transition.Scale(from)` | Scale from a starting factor |
+| `Transition.Scale(from)` | Scale from `from` times the element's own `.Scale()` to its full size |
 | `a + b` | Run both in parallel |
 | `enter \| exit` | Different transitions for enter and exit |
 
@@ -714,7 +721,7 @@ class KeyframeDemo : Component
 
 The builder supports `.Duration(ms)`, `.Loop()` for infinite repeat, and
 `.At(progress, opacity?, scale?, translation?, rotation?, easing?)` for
-each keyframe. Keyframes run on the compositor — no managed-code
+each keyframe, with `rotation` in degrees like `.Rotation()`. Keyframes run on the compositor — no managed-code
 involvement during playback.
 
 ## Choreography

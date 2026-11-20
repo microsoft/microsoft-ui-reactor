@@ -1182,7 +1182,7 @@
       "files": [
         "src/Reactor.Advanced/Charting/Charts.cs",
         "src/Reactor.Advanced/Charting/D3Charts.cs",
-        "src/Reactor/Core/PathDataParser.cs",
+        "src/Reactor/Core/PathMarkup.cs",
         "src/Reactor.Advanced/Charting/Charts.Tree.cs",
         "src/Reactor.Advanced/Charting/D3/Chord/Chord.cs",
         "src/Reactor.Advanced/Charting/D3/Color/D3Color.cs",

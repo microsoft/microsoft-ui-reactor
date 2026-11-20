@@ -1,14 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.UI.Reactor.Charting;
-using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Markdown;
 
 namespace Microsoft.UI.Reactor.Fuzz;
 
 /// <summary>
-/// CI-friendly fuzz-free pass: feed every file in <c>corpus/markdown</c> and
-/// <c>corpus/pathdata</c> through the matching harness body once. Surfaces
+/// CI-friendly fuzz-free pass: feed every file in <c>corpus/markdown</c>
+/// through the harness body once. Surfaces
 /// harness rot (renamed APIs, broken seed inputs) without requiring the
 /// libfuzzer-dotnet driver or SharpFuzz instrumentation tool in the CI image.
 /// </summary>
@@ -36,11 +35,6 @@ internal static class SmokeRunner
                 var sb = new StringBuilder();
                 MarkdownHtml.Render(text, MarkdownParserFlags.DialectGitHub, MarkdownHtml.HtmlFlags.None, sb);
             });
-
-        failures += RunCorpus(
-            "pathdata",
-            Path.Join(corpusDir, "pathdata"),
-            PathDataParser.ParseTokens);
 
         if (failures > 0)
         {

@@ -116,6 +116,14 @@ public class ModifierUnsetClearValueTests
             // Reactor's own pool/element-identity slot, not a value any Style supplies.
             // Nulling it is the point; there is no styled value to fall back to.
             ["Tag"] = "framework-internal element-identity slot, never style-provided",
+            // Issue #1614: the facade transforms are plain properties, not DPs, so there is no
+            // ClearValue to call and no Style can supply them. Assigning identity is the reset.
+            ["Rotation"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["Scale"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["Translation"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["CenterPoint"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["RotationAxis"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["TransformMatrix"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
         };
 
     /// <summary>

@@ -24,8 +24,8 @@ internal static class TransitionEngine
         NavigationTransition transition, NavigationMode mode,
         Action onComplete)
     {
-        var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
-        var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
+        var outVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(outgoing);
+        var inVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(incoming);
 
         // GetElementVisual permanently costs an element the XAML implicit-transition APIs
         // (OpacityTransition, ScaleTransition, …), so ElementPool refuses to pool anything it
