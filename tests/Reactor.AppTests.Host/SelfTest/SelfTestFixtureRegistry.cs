@@ -283,6 +283,7 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity",
+        "MixedKeyFallback_Identity",
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert",
         // Keyed wrapper children (Component, RenderEachTime, Memo, ErrorBoundary,
         // Memo(key, …)) must stay findable in the keyed-middle pass when a Grid of
@@ -443,6 +444,7 @@ internal static class SelfTestFixtureRegistry
         "PerfTrace_ReentrantMountEffectsNameLiveRoot",
         "PerfTrace_CallSitesFromTheSourceMap",
         "PerfTrace_RequestsRecordedOnlyWhileTraced",
+        "PerfTrace_RenderOutcomes",
         "PerfTrace_RemountedRootNamesItself",
         // ReactorEventSource.ComponentRendered reasons + componentId resolution
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler",
@@ -2688,6 +2690,7 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_RemoveMiddle_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity(harness),
+        "MixedKeyFallback_Identity" => new MixedKeyFallbackFixtures.Identity(harness),
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert" => new KeyedListReconciliationFixtures.FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert(harness),
         // Keyed wrapper children through the keyed-middle pass.
         "KeyedWrapper_Component_GrowAndReverse" => new KeyedWrapperChildrenFixtures.ComponentChildren(harness),
@@ -2821,6 +2824,7 @@ internal static class SelfTestFixtureRegistry
         "PerfTrace_ReentrantMountEffectsNameLiveRoot" => new PerfTrace_ReentrantMountEffectsNameLiveRoot(harness),
         "PerfTrace_CallSitesFromTheSourceMap" => new PerfTrace_CallSitesFromTheSourceMap(harness),
         "PerfTrace_RequestsRecordedOnlyWhileTraced" => new PerfTrace_RequestsRecordedOnlyWhileTraced(harness),
+        "PerfTrace_RenderOutcomes" => new PerfTrace_RenderOutcomes(harness),
         "PerfTrace_RemountedRootNamesItself" => new PerfTrace_RemountedRootNamesItself(harness),
         "ComponentRendered_ReasonsAndIdsFollowTheReconciler" => new ComponentRendered_ReasonsAndIdsFollowTheReconciler(harness),
         "ComponentRendered_HostControlRootAndThrowingRoot" => new ComponentRendered_HostControlRootAndThrowingRoot(harness),

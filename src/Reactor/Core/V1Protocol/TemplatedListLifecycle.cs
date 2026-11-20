@@ -308,6 +308,8 @@ internal static class TemplatedListLifecycle
             // prior render). Rebuild and rebind in one step.
             var fresh = BuildListState(reconciler, lvb, n);
             Reconciler.SetListState(lvb, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            Reconciler.CountPerfChanges();
             lvb.ItemsSource = fresh.Source;
             return;
         }
