@@ -114,10 +114,20 @@ public sealed class ToolkitInputTests : AppTestBase
     {
         NavigateToFixtureFresh("ToolkitInput_ContentSizer");
         WaitForObservation("140|140|360");
-        DragBy("ContentSizer.Sizer", dx: 0, dy: 60);
-        WaitForContentSizerSizes([200, 200, 360]);
-        DragBy("ContentSizer.Sizer", dx: 0, dy: -40);
-        WaitForContentSizerSizes([160, 160, 360]);
+        int gesture = 0;
+        foreach (double dy in new[] { 60.0, -40.0 })
+        {
+            var before = Numbers(ReadObservation().Value);
+            var drag = DragBy("ContentSizer.Sizer", dx: 0, dy);
+            var trace = WaitForContentSizerTrace(++gesture);
+            TestContext?.WriteLine($"native-manipulation-trace={trace}");
+            double expected = ContentSizerOracle.ExpectedHeight(trace, gesture, Math.Sign(dy),
+                (before[0], before[1], before[2]), drag, HostHwnd, Bounds("ContentSizer.Sizer"));
+            TestContext?.WriteLine(FormattableString.Invariant($"native-contract-expected-height={expected:R}"));
+            WaitForObservation(value => Numbers(value) is [var height, var actual, var width] &&
+                height == expected && double.IsFinite(actual) && Math.Abs(actual - expected) <= 2 &&
+                width == before[2], $"advertised Height={expected:R}, settled layout within 2 DIPs and unchanged width");
+        }
     }
 
     [TestMethod]
@@ -176,7 +186,7 @@ public sealed class ToolkitInputTests : AppTestBase
         TestContext?.WriteLine($"drag-result-json={result}");
     }
 
-    private void DragBy(string id, double dx, double dy)
+    private DragEvidence DragBy(string id, double dx, double dy)
     {
         var bounds = Bounds(id);
         double dpi = double.Parse(App.GetValue("ToolkitInput.Dpi")!, CultureInfo.InvariantCulture);
@@ -187,6 +197,7 @@ public sealed class ToolkitInputTests : AppTestBase
             $"drag-request source={id}; source-bounds={bounds}; dpi={dpi:R}; delta-dip={dx:R},{dy:R}; destination={x},{y}"));
         var result = App.Drag(id, $"{x},{y}");
         TestContext?.WriteLine($"drag-result-json={result}");
+        return new DragEvidence(bounds, dpi, x, y, result);
     }
 
     private UiRect Bounds(string id)
@@ -228,24 +239,19 @@ public sealed class ToolkitInputTests : AppTestBase
     private static double[] Numbers(string value) =>
         value.Split('|').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
 
-    private void WaitForContentSizerSizes(double[] expected)
+    private string WaitForContentSizerTrace(int gesture)
     {
-        try
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        string? trace;
+        do
         {
-            WaitForSizes(expected);
-        }
-        finally
-        {
-            try
-            {
-                var trace = App.GetProperty("ContentSizer.Sizer", "HelpText");
-                TestContext?.WriteLine($"native-manipulation-trace={trace ?? "<unavailable>"}");
-            }
-            catch (WinAppException error)
-            {
-                TestContext?.WriteLine($"Native manipulation trace read failed: {error.Message}");
-            }
-        }
+            trace = App.GetProperty("ContentSizer.Sizer", "HelpText");
+            if (trace is not null && trace.StartsWith($"gesture={gesture};", StringComparison.Ordinal) &&
+                trace.Contains("phase=completed;", StringComparison.Ordinal))
+                return trace;
+            Thread.Sleep(100);
+        } while (DateTime.UtcNow < deadline);
+        throw new AssertFailedException($"No fresh completed native gesture {gesture}. Last trace: {trace ?? "<unavailable>"}");
     }
 
     private void WaitForSizes(double[] expected) => WaitForObservation(value =>

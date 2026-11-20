@@ -117,6 +117,7 @@ internal static class ToolkitInputFixtures
                 inverted={_sizer.IsDragInverted}; flow={_sizer.FlowDirection}; target-is-advertised={ReferenceEquals(target, _advertisedTarget)}
                 initial-target-height={target?.Height:R}; initial-target-actual-height={target?.ActualHeight:R}
                 initial-advertised-height={_advertisedTarget.Height:R}; initial-advertised-actual-height={_advertisedTarget.ActualHeight:R}; mode={args.Mode}
+                minimum-height={target?.MinHeight:R}; maximum-height={target?.MaxHeight:R}; sibling-height={_sizer.ActualHeight:R}; sibling-width={_sizer.ActualWidth:R}
                 """));
             Record("starting");
         }
@@ -142,6 +143,7 @@ internal static class ToolkitInputFixtures
             _events.Add(FormattableString.Invariant($"""
                 phase={phase}; delta={Point(delta)}; cumulative={Point(cumulative)}
                 target-height={target?.Height:R}; target-actual-height={target?.ActualHeight:R}; advertised-height={_advertisedTarget.Height:R}; advertised-actual-height={_advertisedTarget.ActualHeight:R}
+                sibling-height={_sizer.ActualHeight:R}; sibling-width={_sizer.ActualWidth:R}
                 """));
         }
 
@@ -189,8 +191,7 @@ internal static class ToolkitInputFixtures
             }
             case "csz":
             {
-                var sizer = elements.OfType<Wct.ContentSizer>().Single();
-                if (sizer.TargetControl is not FrameworkElement target) return "Waiting";
+                var target = elements.Single(e => AutomationProperties.GetAutomationId(e) == "ContentSizer.Target");
                 return FormattableString.Invariant($"{target.Height:R}|{target.ActualHeight:R}|{target.ActualWidth:R}");
             }
             case "psz":

@@ -1042,9 +1042,16 @@ with its resolved endpoints. These are input geometry, not native manipulation
 deltas; do not infer the latter from pointer displacement alone.
 ContentSizer additionally buffers native manipulation starting/started/delta/completed
 events, initial target size and drag settings, then publishes them as HelpText only
-after completion. The test records that trace after its unchanged size assertion,
-including on assertion failure. The observers do not mark events handled, change
-manipulation settings or request renders during input.
+after completion. Its oracle derives the exact declared height from the native
+cumulative deltas and captured initial ActualHeight using Toolkit's truncation and
+bounds contract, not raw pointer distance. It requires a fresh completed gesture,
+nonzero movement in the intended direction, matching CLI coordinates/window,
+independent advertised-target identity and measurements, and an unchanged sizer
+sibling. Forward and reverse gestures each use their own start size. Only settled
+layout retains the existing two-DIP rounding tolerance; declared height must match
+exactly. The observers do not mark events handled, change manipulation settings or
+request renders during input. `ContentSizerOracleTests` exercises this validation
+headlessly without starting the host.
 RangeSelector keyboard **value** changes remain unsupported by the sample's
 controlled mapping because this Toolkit version does not raise `ValueChanged`
 for them. Tab traversal does not claim to cover that limitation.
@@ -1054,7 +1061,7 @@ Headless preparation (no host launch or package registration):
 ```powershell
 dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
 dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
-dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
 ```
 
 Compilation and headless helper tests are **not runtime input passes**. To execute
