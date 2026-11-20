@@ -28,11 +28,24 @@ Conventions for contributors:
 
 ### Added
 
+- **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
+  §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
+  `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds
+  a `ComponentSkip` event (id 13) for each memo hit. `changes` is `0` for a render that changed
+  nothing on screen, and `ownStateSets` counts the state writes a component's render and effects
+  made (spec 023's setState fan-out check). Everything is at level 4 under the `Pass` and
+  `Component` keywords that `winapp perf` records, and only appends fields or adds an id, so
+  existing decoders keep working. See `docs/reference/perf-trace-events.md`.
+
 - `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
 ### Changed
+
+- Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
+  without allocating fallback key strings. Explicit keys resembling the legacy
+  fallback format retain their existing collision behavior (spec 042 §5).
 
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
@@ -71,9 +84,35 @@ Conventions for contributors:
   no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
   (devtools) covers the same two controls.
 
+- **Path markup no longer goes through `XamlReader` or a Reactor parser.** `PathIcon(...)`
+  data and `PathElement.PathDataString` (and so `D3Path`/`D3PathTranslated`) are converted
+  by WinUI's native path-markup converter via `XamlBindingHelper.ConvertValue`, the same
+  converter a XAML `Data="..."` attribute uses. This works under NativeAOT. `D3Path` no
+  longer parses its path eagerly on every render. In a local Release benchmark, mounting a
+  200-point D3 line dropped from about 39 ms to 0.24 ms (2,000 points: about 600 ms to
+  1.8 ms), and path icons converted at least as fast as before. `PathElement`'s `XamlReader`
+  strategy always failed (the loaded geometry can't be re-parented), so paths rendered from
+  a partial managed parser; relative commands and `S`/`T` now render as XAML does.
+  `PathElement` applies its `FillRule` to every new geometry, so it is no longer lost when
+  the path changes, and clearing `PathDataString` (to `null` or `""`) now clears the drawn
+  path. Data-driven markup the platform rejects, in practice a `NaN` or `Infinity`
+  coordinate from corrupt chart data, is not drawn and emits a warning on the
+  `Microsoft-UI-Reactor` ETW event source; it used to draw the bad point at (0,0). The
+  `Chart()` builder's line and area charts skip non-finite points, leaving a gap.
+  Malformed `PathIcon(...)` markup still throws, as before (PR #1622).
+
 ### Deprecated
 
 ### Removed
+
+- **`PathDataParser` is removed.** It only handled the absolute `M L A Q C Z` and relative
+  `h v` commands that D3's `PathBuilder` emits, and silently skipped anything else. For that
+  subset, WinUI's native converter produces the same geometry. To build a `Geometry` from
+  markup, set `PathElement.PathDataString`, or call
+  `XamlBindingHelper.ConvertValue(typeof(Geometry), data)`. Unlike `Parse`, it throws on
+  markup the platform rejects (including `NaN` coordinates), and its result is a
+  `PathGeometry` whose figures can't be read back from code. Its SharpFuzz target is removed
+  with it (PR #1622).
 
 - **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
   2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
@@ -91,6 +130,16 @@ Conventions for contributors:
   reused, and no longer pools a control that carries `.ScaleTransition()`,
   `.RotationTransition()` or `.TranslationTransition()`, since WinUI keeps its
   `RenderTransform` locked (issue #1614).
+
+- `.CenterPoint()`, `.Rotation()`, `.Scale()` and `.Translation()` no longer throw when
+  combined with `.InteractionStates()`, `.Transition()`, `.Keyframes()`, `.Animate()`,
+  `.LayoutAnimation()`, `.ScrollLinked()` or an animated child insert or move. Previously
+  a non-default `CenterPoint`, `Rotation` or `Scale` made those features throw
+  `UnauthorizedAccessException`, either at mount or from the pointer handler on hover.
+  The transform values now move to the element's composition visual when a feature first
+  needs it. Leaving an interaction state also returns to the element's own transform
+  values instead of identity (state values are still absolute targets), and
+  `Transition.Scale` scales relative to the element's `.Scale()` (issue #1613).
 
 - `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
   (or estimate), and spacing after rerenders. Removing and re-adding the callback
@@ -248,6 +297,11 @@ Conventions for contributors:
   also skip the write and leave the right-to-left value on the control.
 
 ### Security
+
+- **`PathIcon(...)` data is no longer interpolated into XAML.** It used to be spliced
+  unescaped into a `<Geometry>` document passed to `XamlReader.Load`, so icon data could
+  inject markup. It is now passed as a single value to WinUI's path-markup converter (see
+  [threat model §7.5](docs/security/threat-model.md#75-path-markup), PR #1622).
 
 ## [0.1.0-preview.18] — 2026-11-12
 
