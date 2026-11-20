@@ -1614,7 +1614,7 @@ internal static class ReconcilerBigCoverageFixtures
                             .At(0f, opacity: 0f,
                                 scale: new SysVec.Vector3(0.5f),
                                 translation: new SysVec.Vector3(20, 20, 0),
-                                rotation: 0.2f)
+                                rotation: 12f)
                             .At(1f, opacity: 1f,
                                 scale: SysVec.Vector3.One,
                                 translation: SysVec.Vector3.Zero,
@@ -1673,7 +1673,7 @@ internal static class ReconcilerBigCoverageFixtures
                             .Keyframes("anim", trigger, kf => kf
                                 .Duration(50)
                                 .At(0f, opacity: 0.4f, scale: new SysVec.Vector3(0.9f),
-                                    translation: new SysVec.Vector3(5, 0, 0), rotation: 0.05f)
+                                    translation: new SysVec.Vector3(5, 0, 0), rotation: 3f)
                                 .At(1f, opacity: 1f, scale: SysVec.Vector3.One,
                                     translation: SysVec.Vector3.Zero, rotation: 0f))
                         : (Element)TextBlock("kf-unmount-gone")
@@ -2289,7 +2289,7 @@ internal static class ReconcilerBigCoverageFixtures
             host.Mount(ctx => VStack(
                 TextBlock("is-target")
                     .InteractionStates(states => states
-                        .PointerOver(opacity: 0.7f, scale: 1.05f, rotation: 0.05f)
+                        .PointerOver(opacity: 0.7f, scale: 1.05f, rotation: 3f)
                         .Pressed(opacity: 0.5f) // inherits scale + rotation from PointerOver
                     )
             ));

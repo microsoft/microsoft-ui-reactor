@@ -22,7 +22,8 @@ fixed-size stack (cap 32) inside `ElementPool`; the
 and `Return(element)` on unmount. This page documents the rental
 contract, the cleanup pass that resets a returned element, and the
 exclusions that keep pooling safe — composition-tainted visuals,
-non-poolable types, and parent-state corner cases.
+transform-transition locks, non-poolable types, and parent-state
+corner cases.
 
 ## Renting on mount
 
@@ -71,13 +72,15 @@ trampoline state that drives Reactor's event dispatch:
 ```csharp snippet="source:src/Reactor/Core/ElementPool.cs#pool-return"
 ```
 
-The path runs in five steps after the type check: composition-taint
+The path runs in six steps after the type check: composition-taint
 check (a visual that has had `GetElementVisual()` called permanently
 loses access to XAML implicit transitions like `OpacityTransition`,
-so it must not be pooled), per-type stack lookup, per-type cap check
-(stop accepting at 32 instances), then — past the snippet boundary —
-the detach-from-parent dance and `CleanElement(...)` reset before the
-control finally pushes onto the stack. The scratch-panel round-trip
+so it must not be pooled), transform-transition check (see the tips
+below), per-type stack lookup, per-type cap check (stop accepting at
+32 instances), then — past the snippet boundary — the
+detach-from-parent dance and `CleanElement(...)` reset before the
+control finally pushes onto the stack. If WinUI refuses a transform
+reset during `CleanElement`, the control is dropped instead. The scratch-panel round-trip
 in `ForceDetach` is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws `COMException` when the
 control is later re-parented, and `_scratchPanel.Children.Add` +
@@ -135,6 +138,13 @@ permanently un-poolable. `ElementPool.MarkCompositorTainted` records
 this; the next `Return` for that instance silently drops it. Reach for
 `.OpacityTransition()` and friends before `.Animate()` when both
 work.
+
+**Transform transitions are one-way too.** Attaching `.ScaleTransition()`,
+`.RotationTransition()` or `.TranslationTransition()` locks the control's
+`RenderTransform` for good, even if the transition is later removed, so
+`Return` drops the control. The facade transforms themselves
+(`.Rotation()`, `.Scale()`, `.Translation()`, `.CenterPoint()`) are reset
+to identity on return and don't affect pooling.
 
 **The cap is 32 per type.** A burst of 100 list items mounts 32 from
 the pool and 68 fresh; the next render returns 32 to the pool and

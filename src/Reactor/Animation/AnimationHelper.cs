@@ -229,6 +229,8 @@ internal static class AnimationHelper
         var visual = GetAnimationVisual(element);
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
+        // Rotation is degrees, but its compositor channel is RotationAngle (radians).
+        var compositorValue = property == "Rotation" ? float.DegreesToRadians(value) : value;
 
         switch (curve)
         {
@@ -237,7 +239,7 @@ internal static class AnimationHelper
                 var anim = compositor.CreateSpringScalarAnimation();
                 anim.DampingRatio = spring.DampingRatio;
                 anim.Period = TimeSpan.FromSeconds(spring.Period);
-                anim.FinalValue = value;
+                anim.FinalValue = compositorValue;
                 visual.StartAnimation(target, anim);
                 break;
             }
@@ -247,7 +249,7 @@ internal static class AnimationHelper
                 var easing = compositor.CreateCubicBezierEasingFunction(
                     new Vector2(ease.Easing.X1, ease.Easing.Y1),
                     new Vector2(ease.Easing.X2, ease.Easing.Y2));
-                anim.InsertKeyFrame(1.0f, value, easing);
+                anim.InsertKeyFrame(1.0f, compositorValue, easing);
                 anim.Duration = ease.Duration;
                 visual.StartAnimation(target, anim);
                 break;
@@ -255,7 +257,7 @@ internal static class AnimationHelper
             case LinearCurve linear:
             {
                 var anim = compositor.CreateScalarKeyFrameAnimation();
-                anim.InsertKeyFrame(1.0f, value);
+                anim.InsertKeyFrame(1.0f, compositorValue);
                 anim.Duration = linear.Duration;
                 visual.StartAnimation(target, anim);
                 break;
@@ -509,6 +511,7 @@ internal static class AnimationHelper
     {
         "Opacity" => "Opacity",
         "Scale" => "Scale",
+        // Radians. Callers convert the degree value with float.DegreesToRadians.
         "Rotation" => "RotationAngle",
         "Translation" => "Translation",
         "CenterPoint" => "CenterPoint",
@@ -531,7 +534,10 @@ internal static class AnimationHelper
             catch (UnauthorizedAccessException) { }
         }
         var visual = GetAnimationVisual(element);
-        if (property == "Rotation") visual.RotationAngleInDegrees = value;
+        // Write the RotationAngle channel, not RotationAngleInDegrees: implicit animations
+        // (.Animate(), the RotationTransition fallback) are keyed on "RotationAngle" and only
+        // trigger on a write to that exact property.
+        if (property == "Rotation") visual.RotationAngle = float.DegreesToRadians(value);
         else if (property == "Opacity")
         {
             element.Opacity = value;

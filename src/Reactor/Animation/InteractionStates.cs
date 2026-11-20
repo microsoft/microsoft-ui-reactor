@@ -7,6 +7,7 @@ namespace Microsoft.UI.Reactor.Animation;
 /// Values for a single interaction state (PointerOver, Pressed, Focused).
 /// Only visual/brush properties — no layout properties (Width, Margin, etc.).
 /// The record IS the boundary: adding a field is a deliberate API decision.
+/// <c>Rotation</c> is in degrees, clockwise, like <c>.Rotation()</c>.
 /// </summary>
 public record InteractionStateValues(
     // Compositor-accelerated (zero cost during interaction)
@@ -40,6 +41,7 @@ public class InteractionStatesBuilder
     private InteractionStateValues? _pressed;
     private InteractionStateValues? _focused;
 
+    /// <summary>Values while the pointer is over the element. <c>rotation</c> is in degrees.</summary>
     public InteractionStatesBuilder PointerOver(
         float? opacity = null, float? scale = null, Vector3? scaleV = null,
         Vector3? translation = null, float? rotation = null,
@@ -49,6 +51,7 @@ public class InteractionStatesBuilder
         return this;
     }
 
+    /// <summary>Values while the element is pressed; unset values inherit from <see cref="PointerOver"/>. <c>rotation</c> is in degrees.</summary>
     public InteractionStatesBuilder Pressed(
         float? opacity = null, float? scale = null, Vector3? scaleV = null,
         Vector3? translation = null, float? rotation = null,
@@ -58,6 +61,7 @@ public class InteractionStatesBuilder
         return this;
     }
 
+    /// <summary>Values while the element has focus. <c>rotation</c> is in degrees.</summary>
     public InteractionStatesBuilder Focused(
         float? opacity = null, float? scale = null, Vector3? scaleV = null,
         Vector3? translation = null, float? rotation = null,

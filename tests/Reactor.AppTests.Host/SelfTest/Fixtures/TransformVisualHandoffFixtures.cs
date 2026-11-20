@@ -160,10 +160,6 @@ internal sealed class TransformVisualHandoffFixture(Harness h, string feature) :
                     await CheckPose(name + "_Played", stage, declared with { Scale = new Vector3(2, 2, 1) });
                     break;
 
-                case "Animate" when transform == "Rotation" && order == "Mount":
-                    H.Skip(name + "_Rendered", "#1615: .Rotation() mounted under .Animate() animates RotationAngle in degrees");
-                    break;
-
                 case "Transition":
                 case "Keyframes":
                 case "Animate":

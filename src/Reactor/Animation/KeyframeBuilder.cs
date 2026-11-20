@@ -20,6 +20,7 @@ public record KeyframeDef(float Progress)
     public float? Opacity { get; init; }
     public Vector3? Scale { get; init; }
     public Vector3? Translation { get; init; }
+    /// <summary>Rotation in degrees, clockwise, like <c>.Rotation()</c>.</summary>
     public float? Rotation { get; init; }
     public Easing? Easing { get; init; }
 }
@@ -45,6 +46,10 @@ public class KeyframeBuilder
         return this;
     }
 
+    /// <summary>
+    /// Adds a keyframe at <paramref name="progress"/> (0 to 1). <c>rotation</c> is in degrees,
+    /// clockwise, like <c>.Rotation()</c>.
+    /// </summary>
     // <snippet:keyframe-anim>
     public KeyframeBuilder At(float progress,
         float? opacity = null, Vector3? scale = null,
