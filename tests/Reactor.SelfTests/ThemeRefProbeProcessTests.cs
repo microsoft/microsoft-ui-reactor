@@ -27,8 +27,10 @@ public class ThemeRefProbeProcessTests
     private const string ProbeFlag = "--themeref-probe";
     private const int PassExitCode = 40;
     private const int FailExitCode = 41;
+    private const int SkipExitCode = 42;
     private const string PassMarker = "THEMEREF-PASS";
     private const string FailMarker = "THEMEREF-FAIL";
+    private const string SkipMarker = "THEMEREF-SKIP";
     private const string KeyMarker = "THEMEREF-KEY";
     private const int ExpectedKeys = 3;
     private const int ProbeTimeoutMs = 60_000;
@@ -41,7 +43,9 @@ public class ThemeRefProbeProcessTests
         var detail = $"Host: {exe} {args}\nexit={exitCode}\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}";
 
         Assert.IsFalse(timedOut, $"Probe did not exit within {ProbeTimeoutMs}ms.\n{detail}");
-        StringAssert.Contains(stdout, $"SCENARIO {scenario} ", $"The probe did not run the scenario.\n{detail}");
+        StringAssert.Contains(stdout, $"SCENARIO {scenario}", $"The probe did not run the scenario.\n{detail}");
+        if (exitCode == SkipExitCode && stdout.Contains(SkipMarker, StringComparison.Ordinal))
+            Assert.Inconclusive($"Not measured: a Windows contrast theme is on, so Light and Dark share brushes.\n{detail}");
 
         // Every key must have been measured: a missing border reads null and fails below, but a
         // probe that reported no keys at all would otherwise pass on the marker alone.

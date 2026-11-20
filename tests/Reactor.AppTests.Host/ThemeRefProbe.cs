@@ -74,10 +74,12 @@ internal static class ThemeRefProbe
 
     internal const int PassExitCode = 40;
     internal const int FailExitCode = 41;
+    internal const int SkipExitCode = 42;
     internal const int UsageExitCode = 64;
 
     internal const string PassMarker = "THEMEREF-PASS";
     internal const string FailMarker = "THEMEREF-FAIL";
+    internal const string SkipMarker = "THEMEREF-SKIP";
     internal const string KeyMarker = "THEMEREF-KEY";
 
     private const string OverrideTarget = "ReactorThemeRefProbeTarget";
@@ -94,6 +96,17 @@ internal static class ThemeRefProbe
             return UsageExitCode;
         }
         var scenario = args[index + 1];
+
+        // In a Windows contrast theme Light and Dark share the system brushes, so the two
+        // borders can't tell the themes apart and nothing here would be a measurement. Checked
+        // before WinUI starts, so no theme entry has been read yet either way.
+        if (new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+        {
+            Console.WriteLine($"SCENARIO {scenario}");
+            Console.WriteLine($"{SkipMarker} a Windows contrast theme is on");
+            Console.Out.Flush();
+            return SkipExitCode;
+        }
 
         ReactorApp.Run(_ =>
         {

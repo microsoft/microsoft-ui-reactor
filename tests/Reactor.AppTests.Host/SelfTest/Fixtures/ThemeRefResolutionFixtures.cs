@@ -92,9 +92,13 @@ internal static class ThemeRefResolutionFixtures
 
                 // Every key differs between the themes, so the checks above can tell a brush for
                 // the wrong theme from the right one. If an earlier read had fixed WinUI's entries
-                // for one theme, the tree would show the same color for both.
-                H.Check("ThemeRefResolve_TreeThemesDistinct", distinct == Keys.Length,
-                    $"{distinct} of {Keys.Length} keys differ between Light and Dark");
+                // for one theme, the tree would show the same color for both. In a Windows
+                // contrast theme Light and Dark share the system brushes, so this can't hold.
+                if (new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+                    H.Skip("ThemeRefResolve_TreeThemesDistinct", "a Windows contrast theme is on, so Light and Dark share brushes");
+                else
+                    H.Check("ThemeRefResolve_TreeThemesDistinct", distinct == Keys.Length,
+                        $"{distinct} of {Keys.Length} keys differ between Light and Dark");
             }
             finally
             {
@@ -198,17 +202,14 @@ internal static class ThemeRefResolutionFixtures
 
                 // A key only the app theme defines: resolving it for the app theme caches the
                 // probe's style, and applying that cached style for the other theme, where the
-                // key is missing, must not throw. It then falls back to the walk, whose last step
-                // is the plain lookup that finds the app theme's entry, as before the probe.
+                // key is missing, must not throw (an exception fails the fixture). It then falls
+                // back to the walk, whose last step is the plain lookup that finds the app
+                // theme's entry, as before the probe.
                 H.Check("ThemeRefFallback_AppOnlyKey_AppTheme",
                     ReferenceEquals(ThemeRef.Resolve(AppOnlyKey, isDark: appIsDark), appBrush));
-                Brush? other = null;
-                Exception? thrown = null;
-                try { other = ThemeRef.Resolve(AppOnlyKey, isDark: !appIsDark); }
-                catch (Exception ex) { thrown = ex; }
+                var other = ThemeRef.Resolve(AppOnlyKey, isDark: !appIsDark);
                 H.Check("ThemeRefFallback_AppOnlyKey_OtherThemeGetsAppBrush",
-                    thrown is null && ReferenceEquals(other, appBrush),
-                    $"thrown={thrown?.GetType().Name} other={other}");
+                    ReferenceEquals(other, appBrush), $"other={other}");
             }
             finally
             {
