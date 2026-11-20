@@ -2372,14 +2372,10 @@ internal static class ReconcilerBigCoverageFixtures
             // paths) returns null so the path is not drawn.
             Exception? convertError = null;
             try { PathMarkup.Convert("M0,0 LNaN,5 L10,10"); }
-            catch (Exception ex) { convertError = ex; }
+            catch (ArgumentException ex) { convertError = ex; }
             H.Check("PrivMount_PathMarkupConvertRejectedThrows", convertError is not null);
-            Microsoft.UI.Xaml.Media.Geometry? rejected = null;
-            Exception? rejectedError = null;
-            try { rejected = PathMarkup.TryConvert("M0,0 LNaN,5 L10,10"); }
-            catch (Exception ex) { rejectedError = ex; }
-            H.Check("PrivMount_PathMarkupTryConvertRejectedIsNull", rejected is null && rejectedError is null,
-                $"result={rejected?.Bounds} error={rejectedError?.GetType().Name}");
+            var rejected = PathMarkup.TryConvert("M0,0 LNaN,5 L10,10");
+            H.Check("PrivMount_PathMarkupTryConvertRejectedIsNull", rejected is null, $"result={rejected?.Bounds}");
 
             var iconSourceData = (IconResolver.ResolveIconSource(new PathIconData(pathIconData)) as WinXC.PathIconSource)?.Data;
             H.Check("PrivMount_PathIconSourceGeometry", iconSourceData?.Bounds == expectedBounds, $"bounds={iconSourceData?.Bounds}");
@@ -2477,10 +2473,11 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("PrivMount_PathIconPatchBlankClears", liveIcon is not null && liveIcon.Data is null, $"bounds={liveIcon?.Data?.Bounds}");
 
             // The Chart() builder turns non-finite points into gaps instead of emitting NaN markup
-            // that the platform rejects (which would leave the line and area undrawn).
+            // that the platform rejects (which would leave the line and area undrawn), and keeps
+            // ±Infinity out of the scale domains so one bad sample can't collapse the whole chart.
             var chartHost = H.CreateHost();
             global::Microsoft.UI.Reactor.Hosting.XamlInterop.Register(chartHost.Reconciler);
-            double[] ys = [10, 40, double.NaN, 30, 50];
+            double[] ys = [10, 40, double.NaN, 30, double.PositiveInfinity, 50, double.NegativeInfinity, 20];
             chartHost.Mount(_ => VStack(
                 Microsoft.UI.Reactor.Charting.Charts.AreaChart(Enumerable.Range(0, ys.Length).ToArray(), i => i, i => ys[i])
                     .Width(400).Height(300).ToElement()));

@@ -325,6 +325,22 @@ public class ChartsBuilderTests
     }
 
     [Fact]
+    public void LineChart_AccessibilityAxes_IgnoreNonFiniteSamples()
+    {
+        // One infinite sample used to stretch the axis extent (and the rendered scale built from
+        // the same extent) to ±Infinity, collapsing every point. Non-finite samples are excluded.
+        var data = new[]
+        {
+            new DataPoint(1, 10), new DataPoint(2, double.PositiveInfinity), new DataPoint(3, double.NaN),
+            new DataPoint(4, 30), new DataPoint(double.NegativeInfinity, 20),
+        };
+        var axes = ((IChartAccessibilityData)Charts.LineChart(data, d => d.X, d => d.Y)).Axes;
+
+        Assert.Equal((1d, 4d), (axes[0].Min, axes[0].Max));
+        Assert.Equal((10d, 30d), (axes[1].Min, axes[1].Max));
+    }
+
+    [Fact]
     public void PieChart_LabelView_NameProjection_FeedsSliceDescriptor_WhenNoLabelAccessor()
     {
         // Issue #162 #3: a LabelView without a string label/DataLabel previously fell

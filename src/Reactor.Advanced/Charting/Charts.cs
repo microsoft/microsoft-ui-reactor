@@ -339,8 +339,8 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         double plotWidth = _width - _marginLeft - _marginRight;
         double plotHeight = _height - _marginTop - _marginBottom;
 
-        var (xMin, xMax) = D3Extent.Extent(data, XAccessor);
-        var (yMin, yMax) = D3Extent.Extent(data, YAccessor);
+        var (xMin, xMax) = FiniteExtent(data, XAccessor);
+        var (yMin, yMax) = FiniteExtent(data, YAccessor);
         var xScale = new LinearScale([xMin, xMax], [plotLeft, plotLeft + plotWidth]).Nice();
         var yScale = new LinearScale([yMin, yMax], [plotTop + plotHeight, plotTop]).Nice();
 
@@ -403,6 +403,12 @@ public sealed class ChartElement<T> : IChartAccessibilityData
             _ => [],
         };
     }
+
+    // D3Extent skips NaN but keeps ±Infinity (as d3.extent does), and one infinite sample would
+    // stretch the domain so far that every point maps to a non-finite coordinate. Domains come
+    // from finite samples only; the invalid rows stay in the data and FiniteDefined gaps them.
+    private static (double min, double max) FiniteExtent(IEnumerable<T> data, Func<T, double> accessor) =>
+        D3Extent.Extent(data, d => accessor(d) is var v && double.IsFinite(v) ? v : double.NaN);
 
     // Points that map to a non-finite coordinate (NaN data, a log scale given 0) become gaps,
     // as with D3's line.defined. Otherwise the path markup is rejected and nothing is drawn.
@@ -487,8 +493,8 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         {
             if (Data.Count == 0) return [];
 
-            var (xMin, xMax) = D3Extent.Extent(Data, XAccessor);
-            var (yMin, yMax) = D3Extent.Extent(Data, YAccessor);
+            var (xMin, xMax) = FiniteExtent(Data, XAccessor);
+            var (yMin, yMax) = FiniteExtent(Data, YAccessor);
 
             return [
                 new ChartAxisDescriptor(ChartAxisType.X, _xAxisLabel, xMin, xMax, _xUnits),

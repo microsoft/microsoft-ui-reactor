@@ -34,7 +34,8 @@ internal static class PathMarkup
         {
             return Convert(data);
         }
-        catch (global::System.Exception ex)
+        catch (global::System.Exception ex) when (ex is global::System.ArgumentException
+            or global::System.FormatException or global::System.Runtime.InteropServices.COMException)
         {
             if (DiagnosticLog.IsWarningEnabled)
             {
