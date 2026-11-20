@@ -6048,6 +6048,11 @@ public sealed partial class Reconciler : IDisposable
         public Brush? NormalForeground;
         public bool BackgroundOverrideApplied;
         public bool ForegroundOverrideApplied;
+        // The brush the state last wrote. If the property holds something else by the time the
+        // state ends, another writer replaced it and its value stands.
+        public Brush? ActiveBackground;
+        public Brush? ActiveForeground;
+        public Brush? ActiveBorderBrush;
         public Brush? NormalBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
         public bool NormalBorderBrushThemeBound;
@@ -6204,9 +6209,9 @@ public sealed partial class Reconciler : IDisposable
         if (uie is FrameworkElement fe)
         {
             ApplyInteractionBrush(fe, "Background", values?.Background,
-                ref tracker.NormalBackground, ref tracker.BackgroundOverrideApplied);
+                ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
             ApplyInteractionBrush(fe, "Foreground", values?.Foreground,
-                ref tracker.NormalForeground, ref tracker.ForegroundOverrideApplied);
+                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
             if (GetThemeBindingProperty(fe, "BorderBrush") is { } borderProperty)
             {
@@ -6221,10 +6226,15 @@ public sealed partial class Reconciler : IDisposable
                         tracker.BorderBrushOverrideApplied = true;
                     }
                     fe.SetValue(borderProperty, borderBrush);
+                    tracker.ActiveBorderBrush = borderBrush;
                 }
                 else if (tracker.BorderBrushOverrideApplied)
                 {
-                    if (!TryRestoreThemeBinding(fe, "BorderBrush"))
+                    // Restore only while the property still holds the state's brush: a value
+                    // another writer put there in the meantime stands.
+                    bool held = ReferenceEquals(fe.ReadLocalValue(borderProperty), tracker.ActiveBorderBrush);
+                    tracker.ActiveBorderBrush = null;
+                    if (held && !TryRestoreThemeBinding(fe, "BorderBrush"))
                     {
                         if (tracker.NormalBorderBrushHasLocalValue && !tracker.NormalBorderBrushThemeBound)
                             fe.SetValue(borderProperty, tracker.NormalBorderBrush);
@@ -6253,12 +6263,12 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="property"/>,
     /// or, once no state sets it, puts back what the property held when the state took it over.
-    /// A property no state touched is left alone, so a pointer transition never overwrites
-    /// another writer.
+    /// A property no state touched, or one another writer replaced the state's brush on, is left
+    /// alone, so a pointer transition never overwrites another writer.
     /// </summary>
     private static void ApplyInteractionBrush(
         FrameworkElement fe, string property, Brush? stateBrush,
-        ref Brush? normalBrush, ref bool overrideApplied)
+        ref Brush? normalBrush, ref Brush? activeBrush, ref bool overrideApplied)
     {
         if (GetThemeBindingProperty(fe, property) is not { } dp)
             return;
@@ -6274,6 +6284,7 @@ public sealed partial class Reconciler : IDisposable
                 overrideApplied = true;
             }
             fe.SetValue(dp, stateBrush);
+            activeBrush = stateBrush;
             return;
         }
 
@@ -6282,6 +6293,10 @@ public sealed partial class Reconciler : IDisposable
         overrideApplied = false;
         var normal = normalBrush;
         normalBrush = null;
+        var active = activeBrush;
+        activeBrush = null;
+        if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
+            return;
         if (IsThemeBound(fe, property))
         {
             // A failed restore (the key is gone) releases the state's brush, so a later render
@@ -8442,7 +8457,15 @@ public sealed partial class Reconciler : IDisposable
             }
             else if (hasLocal)
             {
-                // A value Reactor did not bind beats the ThemeRef, as it beat the old Style.
+                // A value Reactor did not bind beats the ThemeRef, as it beat the old Style. The
+                // exception is an InteractionStates brush over a property with no explicit normal
+                // value: record the ThemeRef, and the state's restore installs it.
+                if (InteractionHoldsUnclaimed(fe, name))
+                {
+                    state ??= GetOrCreateReactorState(fe);
+                    bound = state.ThemeResourceBindings ??= new Dictionary<string, ThemeBindingRecord>(StringComparer.Ordinal);
+                    bound[name] = new ThemeBindingRecord { Key = themeRef.ResourceKey };
+                }
                 continue;
             }
 
@@ -8488,8 +8511,13 @@ public sealed partial class Reconciler : IDisposable
     internal readonly struct ThemeBindingSnapshot
     {
         internal readonly (string Name, object? Local)[]? Values;
+        internal readonly ElementTheme Theme;
 
-        internal ThemeBindingSnapshot((string Name, object? Local)[] values) => Values = values;
+        internal ThemeBindingSnapshot((string Name, object? Local)[] values, ElementTheme theme)
+        {
+            Values = values;
+            Theme = theme;
+        }
 
         internal bool HasValues => Values is not null;
     }
@@ -8503,7 +8531,7 @@ public sealed partial class Reconciler : IDisposable
         int i = 0;
         foreach (var name in bound.Keys)
             values[i++] = (name, GetThemeBindingProperty(fe, name) is { } dp ? fe.ReadLocalValue(dp) : null);
-        return new ThemeBindingSnapshot(values);
+        return new ThemeBindingSnapshot(values, fe.ActualTheme);
     }
 
     /// <summary>
@@ -8512,15 +8540,18 @@ public sealed partial class Reconciler : IDisposable
     /// during this render. It wins, as a local value beat the old Style, and Reactor stops owning
     /// the property, so a later key change, refresh or ThemeRef removal leaves it alone. A binding
     /// a nested layer sharing the control installed in that window is Reactor's own and stays.
-    /// Update calls this after the handler and before ApplyModifiers. Nothing in that window
-    /// changes the control's effective theme (its own <c>RequestedTheme</c> modifier comes later,
-    /// and an ancestor's after its children update), so the value can't have been re-resolved.
+    /// Update calls this after the handler and before ApplyModifiers, so the control's own
+    /// <c>RequestedTheme</c> modifier, and an ancestor's (applied after its children update),
+    /// haven't run yet. A nested layer sharing the control (a flyout target) can still change
+    /// its theme in that window, which re-resolves the binding natively; nothing is handed over
+    /// then, since a changed value no longer proves a takeover.
     /// </summary>
     internal static void ReleaseReplacedThemeBindings(FrameworkElement fe, ThemeBindingSnapshot snapshot)
     {
         if (snapshot.Values is not { } values
             || !TryGetReactorState(fe, out var state)
-            || state.ThemeResourceBindings is not { } bound)
+            || state.ThemeResourceBindings is not { } bound
+            || fe.ActualTheme != snapshot.Theme)
             return;
         foreach (var (name, before) in values)
         {
@@ -8637,6 +8668,28 @@ public sealed partial class Reconciler : IDisposable
             && state.ThemeResourceBindings is { } bound
             && bound.TryGetValue(property, out var record))
             record.Suppressed = false;
+    }
+
+    /// <summary>
+    /// Whether an InteractionStates state holds <paramref name="property"/> with its own brush,
+    /// over a normal value that is no explicit brush (nothing, or a theme binding since dropped).
+    /// </summary>
+    private static bool InteractionHoldsUnclaimed(FrameworkElement fe, string property)
+    {
+        if (!_interactionTrackers.TryGetValue(fe, out var tracker)
+            || GetThemeBindingProperty(fe, property) is not { } dp)
+            return false;
+        var (active, unclaimed) = property switch
+        {
+            "Background" => (tracker.BackgroundOverrideApplied ? tracker.ActiveBackground : null,
+                tracker.NormalBackground is null),
+            "Foreground" => (tracker.ForegroundOverrideApplied ? tracker.ActiveForeground : null,
+                tracker.NormalForeground is null),
+            "BorderBrush" => (tracker.BorderBrushOverrideApplied ? tracker.ActiveBorderBrush : null,
+                !tracker.NormalBorderBrushHasLocalValue || tracker.NormalBorderBrushThemeBound),
+            _ => (null, false),
+        };
+        return active is not null && unclaimed && ReferenceEquals(fe.ReadLocalValue(dp), active);
     }
 
     private static bool IsInteractionOverrideActive(FrameworkElement fe, string property) =>

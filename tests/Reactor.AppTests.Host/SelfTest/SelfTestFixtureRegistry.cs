@@ -368,6 +368,9 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_WrapperThemeRefBeatsInnerThemeRef",
         "ThemeResourceBinding_ExplicitBackgroundReplacingThemeRefBeforeHover",
         "ThemeResourceBinding_FailedHoverRestoreIsRetried",
+        "ThemeResourceBinding_ExplicitBrushReplacingThemeRefDuringHover",
+        "ThemeResourceBinding_ThemeRefDeclaredDuringHoverIsInstalledOnExit",
+        "ThemeResourceBinding_FlyoutTargetThemeToggleKeepsOuterBinding",
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         "NamedStyle_TypeRampStylesResolve",
@@ -2796,6 +2799,9 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_WrapperThemeRefBeatsInnerThemeRef" => new ThemeResourceBindingFixtures.WrapperThemeRefBeatsInnerThemeRef(harness),
         "ThemeResourceBinding_ExplicitBackgroundReplacingThemeRefBeforeHover" => new ThemeResourceBindingFixtures.ExplicitBackgroundReplacingThemeRefBeforeHover(harness),
         "ThemeResourceBinding_FailedHoverRestoreIsRetried" => new ThemeResourceBindingFixtures.FailedHoverRestoreIsRetried(harness),
+        "ThemeResourceBinding_ExplicitBrushReplacingThemeRefDuringHover" => new ThemeResourceBindingFixtures.ExplicitBrushReplacingThemeRefDuringHover(harness),
+        "ThemeResourceBinding_ThemeRefDeclaredDuringHoverIsInstalledOnExit" => new ThemeResourceBindingFixtures.ThemeRefDeclaredDuringHoverIsInstalledOnExit(harness),
+        "ThemeResourceBinding_FlyoutTargetThemeToggleKeepsOuterBinding" => new ThemeResourceBindingFixtures.FlyoutTargetThemeToggleKeepsOuterBinding(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),
