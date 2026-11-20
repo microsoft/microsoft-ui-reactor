@@ -61,6 +61,17 @@ Conventions for contributors:
   no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
   (devtools) covers the same two controls.
 
+- **`ThemeRef` bindings (`.Background(ThemeRef)`, `.Foreground(ThemeRef)`, `.BorderBrush(ThemeRef)`,
+  `.WithBorder(ThemeRef)`) no longer replace the control's `Style`.** Reactor used to build a
+  `{ThemeResource}` Style from a XAML string and assign it, which overwrote any Style the app set.
+  It now binds each property with `FrameworkElement.SetThemeResourceBinding`, the code
+  equivalent of `{ThemeResource}`, so an app Style keeps applying its other setters. The binding
+  still follows Light/Dark, high contrast and an ancestor `RequestedTheme`, and an explicit brush
+  (`.Background(brush)`, a `.Set` setter, an element property) still wins over the ThemeRef. The
+  bound value is now a local value, so `ReadLocalValue` reports the resolved brush where it used
+  to report unset. Requires the experimental Windows App SDK channel, like #1125
+  (winui3-integration proposal #22, issue #522).
+
 ### Deprecated
 
 ### Removed
@@ -86,6 +97,22 @@ Conventions for contributors:
   only reads the dictionaries itself when WinUI cannot find the key for that theme. Because the
   lookup is WinUI's `{ThemeResource}` resolution, a Windows contrast theme applies to
   `ThemeRef.Resolve` the way it applies to `{ThemeResource}`.
+
+- `SplitView(...).PaneBackground(ThemeRef)` now sets the pane background. The old Style-based
+  ThemeRef path had no mapping for `PaneBackground` and silently did nothing. A ThemeRef that
+  replaces an explicit `.PaneBackground(brush)` now takes effect too (winui3-integration proposal #22).
+
+- A ThemeRef background or foreground on an element with `.InteractionStates(...)` keeps
+  following the theme after the pointer leaves. Returning to the normal state used to write
+  back the brush captured when the states were set up, which froze the color at that theme.
+  A state's background or foreground on an element with no normal brush is now cleared when the
+  state ends, instead of staying (winui3-integration proposal #22).
+
+- Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
+  declaration restores its identity value and releases modifier-owned composition
+  animations. Removing `.Opacity()` also releases its compositor override so styles
+  take effect again; surviving declarations on shared-control wrappers are preserved
+  (issue #1001).
 
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.

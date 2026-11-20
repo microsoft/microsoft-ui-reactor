@@ -31,6 +31,9 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
+        var modifierTarget = newEl;
+        var mountedModifierTarget = modifierParent is null ? null : RecordModifierTarget(control, modifierParent, modifierTarget);
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
         // Inner modifiers override outer ones (via Merge: other wins where non-null).
         ElementModifiers? oldModifiers = oldEl.Modifiers;
@@ -60,6 +63,7 @@ public sealed partial class Reconciler
             oldModifiers = oldModifiers is not null ? oldModifiers.Merge(oldEl.Modifiers) : oldEl.Modifiers;
         if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
+        bool sharesModifierTarget = RefreshModifierTarget(control, mountedModifierTarget ?? oldEl, newEl);
 
         // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
         // resolution (mount-theme bug): the element's own RequestedTheme wins, else the
@@ -79,10 +83,10 @@ public sealed partial class Reconciler
         // re-applies a ThemeRef-backed ResourceOverride — its CONCRETE brush depends on
         // the effective theme, which can change independently of the element tree (e.g.
         // a parent RequestedTheme toggle), so it must be re-resolved. ThemeBindings are
-        // ALSO re-applied here but no longer strictly need to be: their {ThemeResource}
-        // setters self-heal natively (which is why the CHILD-level CanSkipUpdate /
-        // container-skip gates no longer decline for them) — the re-apply is a cheap
-        // cached-Style no-op retained for the element-level path.
+        // ALSO re-applied here but no longer strictly need to be: their live theme-resource
+        // bindings self-heal natively (which is why the CHILD-level CanSkipUpdate /
+        // container-skip gates no longer decline for them) — the re-apply is a no-op while
+        // the binding is still in place, retained for the element-level path.
         // ReferenceEquals would fail constantly because fluent chains like
         // .Width(200).Margin(10) produce a fresh ElementModifiers each render —
         // identical values, new instance. Use structural equality so we skip
@@ -118,7 +122,7 @@ public sealed partial class Reconciler
                 && CallSiteChangedOnSkip(oldEl, newEl))
                 PublishSourceOnSkip(control, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
-                ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
+                ApplyThemeBindings(thFeSE, newEl.ThemeBindings, modifiers, _resourceRefreshActive);
             // Re-resolve ThemeRef-based resource overrides on theme change, against the
             // ancestor-aware effective theme (lag-free vs. fe's own ActualTheme view).
             if (newEl.ResourceOverrides is { ThemeRefs.Count: > 0 } && control is FrameworkElement resFeSE)
@@ -144,22 +148,27 @@ public sealed partial class Reconciler
             return null; // null = keep existing control as-is
         }
 
-        // Issue #522 — when the element transitions away from ThemeBindings,
-        // drop the synthesized themed Style we wrote on the previous render.
+        // Issue #522 — when the element drops some or all of its ThemeBindings,
+        // clear the theme bindings we installed for them on the previous render.
         // Without this, e.g. the red Foreground from .Foreground(ThemeRef(
         // "SystemFillColorCriticalBrush")) on an AsyncValue Error arm bleeds
-        // into the next Loading / Data arm on the recycled control.
+        // into the next Loading / Data arm on the recycled control. This runs
+        // before the handler, so a setter or element property that writes a
+        // brush in place of the dropped ThemeRef keeps it.
         //
-        // Ownership is tracked via an attached DP storing the Style instance
-        // we wrote (see ReactorAppliedThemeStyleProperty); we deliberately
-        // avoid ConditionalWeakTable per-FrameworkElement tracking (fragile
-        // under RCW churn) and we avoid forcing a fresh Mount (would
-        // needlessly lose subtree state for container elements like
-        // .Background(ThemeRef(...)) on a VStack).
-        if (oldEl.ThemeBindings is not null && newEl.ThemeBindings is null
-            && control is FrameworkElement clearThFe)
+        // Ownership is tracked on the control's ReactorState (the properties
+        // and keys we bound); we deliberately avoid ConditionalWeakTable
+        // per-FrameworkElement tracking (fragile under RCW churn) and we avoid
+        // forcing a fresh Mount (would needlessly lose subtree state for
+        // container elements like .Background(ThemeRef(...)) on a VStack).
+        ThemeBindingSnapshot themeSnapshot = default;
+        if (oldEl.ThemeBindings is not null && control is FrameworkElement clearThFe)
         {
-            ClearThemeBindings(clearThFe);
+            ClearDroppedThemeBindings(clearThFe, oldEl.ThemeBindings, newEl.ThemeBindings);
+            // What the surviving bindings hold before this render's setters and element
+            // properties run, so a binding one of them replaces can be handed over.
+            if (newEl.ThemeBindings is not null)
+                themeSnapshot = SnapshotThemeBindings(clearThFe);
         }
         DebugUIElementsModified++;
 
@@ -195,6 +204,9 @@ public sealed partial class Reconciler
 
         var prevReconcilingElement = _reconcilingElement;
         _reconcilingElement = newEl;
+        var previousModifierUpdate = ModifierUpdate;
+        if (!ReferenceEquals(ModifierUpdate.Control, control))
+            ModifierUpdate = (control, newEl, modifiers);
 
         UIElement? result;
         bool registeredType = false;
@@ -220,6 +232,19 @@ public sealed partial class Reconciler
             if (properties != default)
                 ClearPropertyAnimation(control, properties);
         }
+
+        var keyframes = newEl.KeyframeAnimations;
+        bool targetCanAdvanceTrigger = keyframes is not null
+            && (sharesModifierTarget || (IsFlyoutDecorator(newEl)
+                && _v1Handlers.TryGet(newEl.GetType(), out var keyframeHandler) && keyframeHandler.PreservesTargetTag));
+        // Release removed declarations before setters. A shared target can change a
+        // retained name's trigger before the decorator reaches its own playback.
+        if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
+            ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
+                ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
+
+        if (control is FrameworkElement departingModifiers)
+            ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -297,6 +322,11 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // A nested update can replace the control or introduce its first
+        // restorable inner declaration. Publish the edge before outer restoration.
+        if (modifierParent is not null && (result is not null || mountedModifierTarget is null))
+            RecordModifierTarget(target, modifierParent, modifierTarget);
+        if (result is not null) ModifierUpdate.Control = target;
         // Re-publish only when the value can change: a replaced control (its mount already
         // published, but a handler may have swapped it without Mount) or a new call site /
         // key / kind. An in-place update of an unchanged element keeps its published value.
@@ -323,6 +353,12 @@ public sealed partial class Reconciler
             global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarIconDefault
                 .ObserveAfterSetters(preModCtl);
         }
+
+        // Hand over the theme bindings this render's setters or element properties wrote over.
+        // Checked before ApplyModifiers, which can change this control's RequestedTheme and so
+        // re-resolve a binding without anyone having taken it over.
+        if (themeSnapshot.HasValues && ReferenceEquals(target, control) && target is FrameworkElement handOverFe)
+            ReleaseReplacedThemeBindings(handOverFe, themeSnapshot);
 
         // Set by BorderElement's built-in descriptor when it already released or replaced a removed
         // Background modifier before native setters ran; clearing here would discard both.
@@ -369,9 +405,10 @@ public sealed partial class Reconciler
                 ResolveCaptionForElement(oldEl),
                 ResolveCaptionForElement(newEl));
 
-        // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
+        // Apply theme-resource bindings (ThemeRef → live {ThemeResource}-equivalent binding).
+        // After modifiers and setters, which it must not override (see ApplyThemeBindings).
         if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, newEl.ThemeBindings);
+            ApplyThemeBindings(thFe, newEl.ThemeBindings, modifiers, _resourceRefreshActive);
 
         // Apply per-control resource overrides (lightweight styling)
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
@@ -398,8 +435,12 @@ public sealed partial class Reconciler
             ClearInteractionStates(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
-        if (newEl.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(target, newEl.KeyframeAnimations);
+        if (keyframes is not null)
+        {
+            if (targetCanAdvanceTrigger && result is null)
+                ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
+            ApplyKeyframeAnimations(target, keyframes);
+        }
         else if (oldEl.KeyframeAnimations is not null)
             ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
 
@@ -416,6 +457,7 @@ public sealed partial class Reconciler
         }
         finally
         {
+            ModifierUpdate = previousModifierUpdate;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();

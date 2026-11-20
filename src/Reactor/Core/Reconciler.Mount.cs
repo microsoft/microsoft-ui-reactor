@@ -33,6 +33,7 @@ public sealed partial class Reconciler
     // <snippet:mount-phase>
     public UIElement? Mount(Element element, Action requestRerender)
     {
+        var modifierTarget = element;
         // Unwrap legacy ModifiedElement (backward compat)
         ElementModifiers? modifiers = element.Modifiers;
         if (element is ModifiedElement mod)
@@ -131,7 +132,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
+            KeyedMemoElement km => MountKeyedMemo(km, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -211,9 +212,10 @@ public sealed partial class Reconciler
         if (control is FrameworkElement captionFe)
             ApplyDefaultAutomationName(captionFe, ResolveCaptionForElement(element));
 
-        // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
+        // Apply theme-resource bindings (ThemeRef → live {ThemeResource}-equivalent binding).
+        // After modifiers and setters, which it must not override (see ApplyThemeBindings).
         if (element.ThemeBindings is not null && control is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, element.ThemeBindings);
+            ApplyThemeBindings(thFe, element.ThemeBindings, modifiers);
 
         // Apply per-control resource overrides (lightweight styling)
         if (element.ResourceOverrides is not null && control is FrameworkElement resFe)
@@ -270,6 +272,17 @@ public sealed partial class Reconciler
         }
 
         NoteMountCompleted(boundaryRootsStart, control);
+        if (control is not null && _modifierMountParent is not null
+            && ReferenceEquals(prevReconcilingElement, _modifierMountParent))
+            (_modifierMounts ??= []).Add((control, modifierTarget));
+        return control;
+    }
+
+    private UIElement? MountKeyedMemo(KeyedMemoElement memo, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        var control = Mount(inner, requestRerender);
+        if (control is not null) RecordModifierTarget(control, memo, inner);
         return control;
     }
 

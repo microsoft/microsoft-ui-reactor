@@ -546,52 +546,6 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>Hard depth cap — see <see cref="t_rerenderDepth"/>.</summary>
     private const int MaxRerenderReentrancy = 50;
 
-    // ── Style cache: avoids redundant XamlReader.Load() for identical theme binding sets ──
-    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _styleCache = new();
-
-    // Issue #522 — per-control marker holding the themed Style instance
-    // Reactor most recently applied via ApplyThemeBindings. Used by
-    // ClearThemeBindings to decide whether the control's current Style is
-    // still ours (vs. replaced by an author Setter) without depending on
-    // _styleCache contents — the cache can be cleared at any time and would
-    // otherwise create a window where the in-place clear silently fails.
-    // Attached DPs are RCW-safe (the value is stored in the underlying
-    // DependencyObject's effective value table, accessed via COM SetValue/
-    // GetValue) — unlike ConditionalWeakTable, which keys on managed
-    // instance identity and desyncs when WinUI hands out duplicate RCWs.
-    private static readonly DependencyProperty ReactorAppliedThemeStyleProperty =
-        DependencyProperty.RegisterAttached(
-            "ReactorAppliedThemeStyle",
-            typeof(Style),
-            typeof(Reconciler),
-            new PropertyMetadata(null));
-
-    /// <summary>
-    /// Builds a deterministic cache key for a style based on its target type and
-    /// the set of ThemeRef bindings. Keys are sorted by property name so that
-    /// dictionaries with the same entries in different enumeration order produce
-    /// the same key.
-    /// </summary>
-    internal static string BuildCacheKey(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
-    {
-        // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal
-        var sortedKeys = bindings.Keys.ToArray();
-        Array.Sort(sortedKeys, StringComparer.Ordinal);
-        var sb = new global::System.Text.StringBuilder(targetType);
-        foreach (var key in sortedKeys)
-        {
-            sb.Append('|').Append(key).Append('=').Append(bindings[key].ResourceKey);
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Clears the compiled style cache. Called on theme change as conservative
-    /// memory cleanup — not a correctness requirement since {ThemeResource}
-    /// setters are live-resolved by WinUI.
-    /// </summary>
-    internal static void ClearStyleCache() => _styleCache.Clear();
-
 
     /// <summary>
     /// Thread-static stagger context for enter transitions. When a parent with StaggerConfig
@@ -1535,27 +1489,53 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     /// <summary>
     /// A shared DataTemplate containing a ContentControl shell.
-    /// Parsed once via XamlReader.Load, reused across all items controls (ListView, GridView, FlipView).
+    /// Built once from code via <c>new DataTemplate(factory)</c> and reused across
+    /// all items controls (ListView, GridView, FlipView). The factory overload
+    /// replaces a <c>XamlReader.Load</c> of an equivalent markup string — see the
+    /// PR description for why parsing markup at runtime was a problem here.
     /// </summary>
     internal static readonly Lazy<DataTemplate> SharedContentControlTemplate = new(() =>
-        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
-            "<ContentControl HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/>" +
-            "</DataTemplate>"));
+        new DataTemplate(() => new Microsoft.UI.Xaml.Controls.ContentControl
+        {
+            HorizontalContentAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch,
+            VerticalContentAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch,
+        }));
 
     /// <summary>
     /// Spec 047 §14 Phase 3 finish — text-bound TreeView item template
     /// shared between the legacy <c>MountTreeView</c> arm and the
     /// <see cref="V1Protocol.TreeChildren{TElement,TControl}"/> strategy.
-    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so
-    /// <c>{Binding Content.Content}</c> resolves <c>TreeViewNode.Content</c>
-    /// (a <c>TreeViewNodeData</c>) → its <c>Content</c> (the display string).
+    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so the
+    /// handler reads <c>TreeViewNode.Content</c> (a <c>TreeViewNodeData</c>) →
+    /// its <c>Content</c> (the display string).
     /// </summary>
     internal static readonly Lazy<DataTemplate> TreeViewTextItemTemplate = new(() =>
-        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
-            "<TextBlock Text='{Binding Content.Content}'/>" +
-            "</DataTemplate>"));
+        new DataTemplate(() =>
+        {
+            var tb = new Microsoft.UI.Xaml.Controls.TextBlock();
+
+            // Strongly-typed replacement for {Binding Content.Content}. A classic
+            // Binding resolves that path by string through CsWinRT's
+            // ICustomPropertyProvider, i.e. by reflection — which NativeAOT trims
+            // unless the source type is annotated, and which costs a reflective
+            // lookup per realized row even when it works. Reading the same chain in
+            // a DataContextChanged handler is reflection-free, so it needs no
+            // annotation and does no lookup. The event re-fires when a virtualized
+            // row is recycled onto new data, so reused rows retext correctly.
+            tb.DataContextChanged += static (sender, args) =>
+            {
+                if (sender is not Microsoft.UI.Xaml.Controls.TextBlock text) return;
+                text.Text = args.NewValue switch
+                {
+                    Microsoft.UI.Xaml.Controls.TreeViewNode { Content: TreeViewNodeData d } => d.Content,
+                    Microsoft.UI.Xaml.Controls.TreeViewNode { Content: string s } => s,
+                    TreeViewNodeData d => d.Content,
+                    _ => string.Empty,
+                };
+            };
+
+            return tb;
+        }));
 
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
@@ -1588,8 +1568,17 @@ public sealed partial class Reconciler : IDisposable
         // Target controls keep their own element for event dispatch. Flyout decorators
         // share that control, but need a separate identity for callbacks and teardown.
         internal Element? DecoratorElement;
+        // Shared-control child roots with transform or opacity declarations to restore.
+        internal List<(Element Parent, Element Target)>? ModifierTargets;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
+        // Properties written on the handed-out Visual by a modifier. Kept on native
+        // attached state so a replacement WinRT wrapper cannot lose cleanup ownership.
+        internal AnimateProperty CompositionModifierProperties;
+        // Track the entry that took over each modifier's Visual channel so
+        // removing one named animation can release its deferred reset.
+        internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
+        internal AnimateProperty DeferredModifierResets;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -1715,6 +1704,18 @@ public sealed partial class Reconciler : IDisposable
         /// pool, so no renter inherits them.
         /// </summary>
         public HashSet<string>? ManagedResourceKeys;
+
+        /// <summary>
+        /// The <see cref="ThemeRef"/> bindings this control currently carries, as property
+        /// name (<c>"Background"</c>, <c>"Foreground"</c>, …) to its <see cref="ThemeBindingRecord"/>. Written by
+        /// <c>ApplyThemeBindings</c> each time it installs a
+        /// <see cref="FrameworkElement.SetThemeResourceBinding"/>, so a later render leaves a
+        /// live binding alone and a dropped binding clears only the properties Reactor bound
+        /// (issue #522). Keyed by name rather than by <see cref="DependencyProperty"/> because a
+        /// static DP getter is not guaranteed to hand back the same managed wrapper twice.
+        /// Kept here for the same duplicate-RCW reason as <see cref="ManagedResourceKeys"/>.
+        /// </summary>
+        public Dictionary<string, ThemeBindingRecord>? ThemeResourceBindings;
 
         /// <summary>
         /// For a templated <c>FlipView</c>: per logical item, the element it mounted or was last
@@ -1852,6 +1853,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(control);
                 state.DecoratorElement = null;
+                state.ModifierTargets = null;
             }
             return;
         }
@@ -2217,6 +2219,7 @@ public sealed partial class Reconciler : IDisposable
             if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
             state.Element = null;
             state.DecoratorElement = null;
+            state.ModifierTargets = null;
         }
         ClearPublishedSource(fe);
     }
@@ -2302,6 +2305,7 @@ public sealed partial class Reconciler : IDisposable
             Diagnostics.ComponentRenderControls.Registry.Forget(state.ComponentDiagnosticId, fe);
         state.Element = null;
         state.DecoratorElement = null;
+        state.ModifierTargets = null;
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
         state.Modifiers?.ClearCurrentHandlers();
@@ -2699,6 +2703,7 @@ public sealed partial class Reconciler : IDisposable
                 ClearRefreshSnapshots(rs);
                 rs.Element = null;
                 rs.DecoratorElement = null;
+                rs.ModifierTargets = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
@@ -3054,6 +3059,12 @@ public sealed partial class Reconciler : IDisposable
     // (Flyout, MenuFlyout, …) or a transparent wrapper shares the host's control but
     // sits at a shallower depth, so only the owner's own Update/skip may re-snapshot.
     private Element? _reconcilingElement;
+    // The outermost current layer updating this same native control. Custom
+    // decorators share modifier priority just like the built-in flyout decorators.
+    internal (UIElement? Control, Element? Root, ElementModifiers? Modifiers) ModifierUpdate;
+    private bool _hasModifierTargets;
+    private Element? _modifierMountParent;
+    private List<(UIElement Control, Element Target)>? _modifierMounts;
     // Until the target update returns, its mounted decorator still describes the previous render.
     internal (FrameworkElement? Target, Element? Decorator) UpdatingFlyout;
 
@@ -5952,10 +5963,22 @@ public sealed partial class Reconciler : IDisposable
     {
         public InteractionState CurrentState;
         public InteractionStatesConfig Config = null!;
+        // The local value a state restores when it ends, captured when the state takes the
+        // property over. Null when there was none, or the property was a Reactor theme binding
+        // (the binding is restored instead, and if it is gone by then the property is cleared
+        // rather than given a brush the binding once resolved to).
         public Brush? NormalBackground;
         public Brush? NormalForeground;
+        public bool BackgroundOverrideApplied;
+        public bool ForegroundOverrideApplied;
+        // The brush the state last wrote. If the property holds something else by the time the
+        // state ends, another writer replaced it and its value stands.
+        public Brush? ActiveBackground;
+        public Brush? ActiveForeground;
+        public Brush? ActiveBorderBrush;
         public Brush? NormalBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
+        public bool NormalBorderBrushThemeBound;
         public bool BorderBrushOverrideApplied;
     }
 
@@ -5973,23 +5996,6 @@ public sealed partial class Reconciler : IDisposable
             tracker = new InteractionStateTracker();
             _interactionTrackers[uie] = tracker;
 
-            // Capture normal brush values
-            if (uie is FrameworkElement fe)
-            {
-                tracker.NormalBackground = fe switch
-                {
-                    WinUI.Panel p => p.Background,
-                    WinUI.Control c => c.Background,
-                    WinUI.Border b => b.Background,
-                    _ => null,
-                };
-                tracker.NormalForeground = fe switch
-                {
-                    WinUI.Control c => c.Foreground,
-                    TextBlock tb => tb.Foreground,
-                    _ => null,
-                };
-            }
 
             // Register handlers
             uie.PointerEntered += OnInteractionPointerEntered;
@@ -6115,34 +6121,17 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
 
-        // Brush properties — direct set
+        // Brush properties — direct set. A state's brush is written over the normal value; when
+        // the state ends, a property Reactor theme-binds gets its binding back rather than the
+        // brush captured at setup, which would freeze it at the theme it had then.
         if (uie is FrameworkElement fe)
         {
-            var bg = values?.Background ?? tracker.NormalBackground;
-            if (bg is not null)
-            {
-                if (fe is WinUI.Panel p) p.Background = bg;
-                else if (fe is WinUI.Control c) c.Background = bg;
-                else if (fe is WinUI.Border b) b.Background = bg;
-            }
+            ApplyInteractionBrush(fe, "Background", values?.Background,
+                ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
+            ApplyInteractionBrush(fe, "Foreground", values?.Foreground,
+                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
-            var fg = values?.Foreground ?? tracker.NormalForeground;
-            if (fg is not null)
-            {
-                if (fe is WinUI.Control c) c.Foreground = fg;
-                else if (fe is TextBlock tb) tb.Foreground = fg;
-            }
-
-            var borderProperty = fe switch
-            {
-                WinUI.Control => WinUI.Control.BorderBrushProperty,
-                WinUI.Border => WinUI.Border.BorderBrushProperty,
-                WinUI.Grid => WinUI.Grid.BorderBrushProperty,
-                WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
-                WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
-                _ => null,
-            };
-            if (borderProperty is not null)
+            if (GetThemeBindingProperty(fe, "BorderBrush") is { } borderProperty)
             {
                 if (values?.BorderBrush is { } borderBrush)
                 {
@@ -6151,19 +6140,82 @@ public sealed partial class Reconciler : IDisposable
                         // Capture the latest normal value before applying an override.
                         tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
                         tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
+                        tracker.NormalBorderBrushThemeBound = IsThemeBound(fe, "BorderBrush");
                         tracker.BorderBrushOverrideApplied = true;
                     }
                     fe.SetValue(borderProperty, borderBrush);
+                    tracker.ActiveBorderBrush = borderBrush;
                 }
                 else if (tracker.BorderBrushOverrideApplied)
                 {
-                    if (tracker.NormalBorderBrushHasLocalValue)
-                        fe.SetValue(borderProperty, tracker.NormalBorderBrush);
-                    else
-                        fe.ClearValue(borderProperty);
+                    // Restore only while the property still holds the state's brush: a value
+                    // another writer put there in the meantime stands.
+                    bool held = ReferenceEquals(fe.ReadLocalValue(borderProperty), tracker.ActiveBorderBrush);
+                    tracker.ActiveBorderBrush = null;
+                    if (held && !TryRestoreThemeBinding(fe, "BorderBrush"))
+                    {
+                        if (tracker.NormalBorderBrushHasLocalValue && !tracker.NormalBorderBrushThemeBound)
+                            fe.SetValue(borderProperty, tracker.NormalBorderBrush);
+                        else
+                            fe.ClearValue(borderProperty);
+                    }
                     tracker.BorderBrushOverrideApplied = false;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="property"/>,
+    /// or, once no state sets it, puts back what the property held when the state took it over.
+    /// A property no state touched, or one another writer replaced the state's brush on, is left
+    /// alone, so a pointer transition never overwrites another writer.
+    /// </summary>
+    private static void ApplyInteractionBrush(
+        FrameworkElement fe, string property, Brush? stateBrush,
+        ref Brush? normalBrush, ref Brush? activeBrush, ref bool overrideApplied)
+    {
+        if (GetThemeBindingProperty(fe, property) is not { } dp)
+            return;
+        if (stateBrush is not null)
+        {
+            if (!overrideApplied)
+            {
+                // Capture the current normal value. A theme-bound property has no fixed brush to
+                // come back to: its binding is restored instead.
+                var local = fe.ReadLocalValue(dp);
+                normalBrush = IsThemeBound(fe, property) || ReferenceEquals(local, DependencyProperty.UnsetValue)
+                    ? null : local as Brush;
+                overrideApplied = true;
+            }
+            fe.SetValue(dp, stateBrush);
+            activeBrush = stateBrush;
+            return;
+        }
+
+        if (!overrideApplied)
+            return;
+        overrideApplied = false;
+        var normal = normalBrush;
+        normalBrush = null;
+        var active = activeBrush;
+        activeBrush = null;
+        if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
+            return;
+        if (IsThemeBound(fe, property))
+        {
+            // A failed restore (the key is gone) releases the state's brush, so a later render
+            // finds the property unset and retries the binding.
+            if (!TryRestoreThemeBinding(fe, property))
+                fe.ClearValue(dp);
+        }
+        else if (normal is not null)
+        {
+            fe.SetValue(dp, normal);
+        }
+        else
+        {
+            fe.ClearValue(dp);
         }
     }
 
@@ -6226,6 +6278,27 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private static readonly Dictionary<(UIElement, string), object?> _keyframeTriggerValues = new();
 
+    internal readonly record struct KeyframeChannelOwner(
+        KeyframeEntry[] Scope, KeyframeEntry Entry, AnimationController? DeferredController = null);
+
+    private enum KeyframeReleaseStage { BeforeHandler, BeforeSharedTarget, BeforePlayback }
+
+    private static bool KeyframeTriggerChanged(bool hasPrevious, object? previous, object? trigger)
+        => !hasPrevious || !Equals(previous, trigger);
+
+    private static AnimateProperty GetKeyframeProperties(KeyframeAnimationDef definition)
+    {
+        var properties = default(AnimateProperty);
+        foreach (var frame in definition.Keyframes)
+        {
+            if (frame.Opacity.HasValue) properties |= AnimateProperty.Opacity;
+            if (frame.Scale.HasValue) properties |= AnimateProperty.Scale;
+            if (frame.Translation.HasValue) properties |= AnimateProperty.Offset;
+            if (frame.Rotation.HasValue) properties |= AnimateProperty.Rotation;
+        }
+        return properties;
+    }
+
     /// <summary>
     /// Checks trigger values and starts keyframe animations when they change.
     /// </summary>
@@ -6238,31 +6311,16 @@ public sealed partial class Reconciler : IDisposable
         foreach (var entry in entries)
         {
             var key = (uie, entry.Name);
-            var changed = false;
-
-            if (_keyframeTriggerValues.TryGetValue(key, out var prevTrigger))
-                changed = !Equals(prevTrigger, entry.Trigger);
-            else
-                changed = true; // First mount
-
+            bool hasPrevious = _keyframeTriggerValues.TryGetValue(key, out var previous);
+            bool changed = KeyframeTriggerChanged(hasPrevious, previous, entry.Trigger);
             _keyframeTriggerValues[key] = entry.Trigger;
-
             if (!changed) continue;
 
             var def = entry.Definition;
             var group = compositor.CreateAnimationGroup();
+            var properties = GetKeyframeProperties(def);
 
-            // Create per-property keyframe animations
-            bool hasOpacity = false, hasScale = false, hasTranslation = false, hasRotation = false;
-            foreach (var kf in def.Keyframes)
-            {
-                if (kf.Opacity.HasValue) hasOpacity = true;
-                if (kf.Scale.HasValue) hasScale = true;
-                if (kf.Translation.HasValue) hasTranslation = true;
-                if (kf.Rotation.HasValue) hasRotation = true;
-            }
-
-            if (hasOpacity)
+            if ((properties & AnimateProperty.Opacity) != 0)
             {
                 var anim = compositor.CreateScalarKeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6283,7 +6341,7 @@ public sealed partial class Reconciler : IDisposable
                 group.Add(anim);
             }
 
-            if (hasScale)
+            if ((properties & AnimateProperty.Scale) != 0)
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6304,7 +6362,7 @@ public sealed partial class Reconciler : IDisposable
                 group.Add(anim);
             }
 
-            if (hasTranslation)
+            if ((properties & AnimateProperty.Offset) != 0)
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6327,7 +6385,7 @@ public sealed partial class Reconciler : IDisposable
                 group.Add(anim);
             }
 
-            if (hasRotation)
+            if ((properties & AnimateProperty.Rotation) != 0)
             {
                 var anim = compositor.CreateScalarKeyFrameAnimation();
                 anim.Duration = def.Duration;
@@ -6351,6 +6409,82 @@ public sealed partial class Reconciler : IDisposable
             // Start the animation group via Visual
             foreach (CompositionAnimation anim in group)
                 visual.StartAnimation(anim.Target, anim);
+
+            if (properties != default && uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+                TrackKeyframeChannelOwners(state, properties & state.CompositionModifierProperties,
+                    new KeyframeChannelOwner(entries, entry));
+        }
+    }
+
+    private static void TrackKeyframeChannelOwners(ReactorState state, AnimateProperty channels, KeyframeChannelOwner owner)
+    {
+        if (channels == default) return;
+        var tracked = owner.Entry.Definition.Loop ? channels : channels & state.DeferredModifierResets;
+        if (tracked == default && state.KeyframeChannelOwners is null) return;
+        var owners = state.KeyframeChannelOwners ??= new(4);
+        Track(AnimateProperty.Opacity);
+        Track(AnimateProperty.Scale);
+        Track(AnimateProperty.Rotation);
+        Track(AnimateProperty.Offset);
+
+        void Track(AnimateProperty property)
+        {
+            if ((channels & property) == 0) return;
+            if ((tracked & property) != 0) owners[property] = owner;
+            else owners.Remove(property);
+        }
+    }
+
+    private static void ReleaseRemovedKeyframeChannels(UIElement uie, KeyframeEntry[] previous, KeyframeEntry[]? current,
+        KeyframeReleaseStage stage)
+    {
+        if (uie.GetValue(ReactorAttached.StateProperty) is not ReactorState { KeyframeChannelOwners: { Count: > 0 } owners } state)
+            return;
+
+        Release(AnimateProperty.Opacity, "Opacity");
+        Release(AnimateProperty.Scale, "Scale");
+        Release(AnimateProperty.Rotation, "Rotation");
+        Release(AnimateProperty.Offset, "Translation");
+
+        void Release(AnimateProperty property, string name)
+        {
+            if (!owners.TryGetValue(property, out var owner) || !ReferenceEquals(owner.Scope, previous)) return;
+            if (current is not null)
+            {
+                var nameKey = owner.Entry.Name;
+                var key = (uie, nameKey);
+                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var trigger);
+                bool retained = false;
+                bool replayed = false;
+                // Playback reads and advances the trigger for every matching entry in order.
+                // Predict those replays without changing what playback will see.
+                foreach (var entry in current)
+                {
+                    if (entry.Name != nameKey) continue;
+                    retained = true;
+                    if (stage == KeyframeReleaseStage.BeforeSharedTarget) break;
+                    bool changed = KeyframeTriggerChanged(hasTrigger, trigger, entry.Trigger);
+                    hasTrigger = true;
+                    trigger = entry.Trigger;
+                    if (!changed) continue;
+                    replayed = true;
+                    if ((GetKeyframeProperties(entry.Definition) & property) != 0)
+                    {
+                        owners[property] = owner with { Scope = current };
+                        return;
+                    }
+                }
+                if (!retained) _keyframeTriggerValues.Remove(key);
+                else if (!replayed)
+                {
+                    owners[property] = owner with { Scope = current };
+                    return;
+                }
+            }
+            owners.Remove(property);
+            if ((state.DeferredModifierResets & property) != 0)
+                AnimationHelper.ResetCompositionModifier(uie, name,
+                    stage == KeyframeReleaseStage.BeforePlayback ? owner.DeferredController : null);
         }
     }
 
@@ -6586,6 +6720,158 @@ public sealed partial class Reconciler : IDisposable
         return _reconcilingElement is { } element && IsFlyoutDecorator(element) ? element : null;
     }
 
+    internal ModifierMountScope CaptureModifierMounts(Element parent) => new(this, parent);
+
+    // A V1 decorator can mount several children but only the control it returns
+    // can share its modifiers. Keep candidates on the reconciler until that return.
+    internal readonly ref struct ModifierMountScope
+    {
+        private readonly Reconciler _owner;
+        private readonly Element? _previousParent;
+        private readonly int _start;
+
+        internal ModifierMountScope(Reconciler owner, Element parent)
+        {
+            _owner = owner;
+            _previousParent = owner._modifierMountParent;
+            _start = owner._modifierMounts?.Count ?? 0;
+            owner._modifierMountParent = parent;
+        }
+
+        internal void RecordReturnedChild(UIElement control)
+        {
+            if (_owner._modifierMounts is not { } mounts) return;
+            for (int i = mounts.Count - 1; i >= _start; i--)
+            {
+                if (!ReferenceEquals(mounts[i].Control, control)) continue;
+                _owner.RecordModifierTarget(control, _owner._modifierMountParent!, mounts[i].Target);
+                break;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_owner._modifierMounts is { } mounts && mounts.Count > _start)
+                mounts.RemoveRange(_start, mounts.Count - _start);
+            _owner._modifierMountParent = _previousParent;
+        }
+    }
+
+    private Element? RecordModifierTarget(UIElement control, Element parent, Element target)
+    {
+        var state = _hasModifierTargets ? control.GetValue(ReactorAttached.StateProperty) as ReactorState : null;
+        var targets = state?.ModifierTargets;
+        if (targets is not null)
+        {
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (!ReferenceEquals(targets[i].Parent, parent)) continue;
+                var previous = targets[i].Target;
+                targets[i] = (parent, target);
+                return previous;
+            }
+        }
+        // Keep the shared edge if a modifier on the parent can be handed to keyframes.
+        // Its otherwise plain target may introduce a keyframe trigger on a later update.
+        if (!HasRestorableModifier(target, targets)
+            && (parent.KeyframeAnimations is null || !HasRestorableModifier(parent, null))) return null;
+        targets ??= (state ?? GetOrCreateReactorState(control)).ModifierTargets ??= [];
+        targets.Add((parent, target));
+        _hasModifierTargets = true;
+        return null;
+    }
+
+    private static bool HasRestorableModifier(Element target, List<(Element Parent, Element Target)>? targets)
+    {
+        static bool Declares(ElementModifiers? modifiers) => modifiers?.Visual is { } v
+            && (v.Opacity.HasValue || v.Scale.HasValue || v.Rotation.HasValue
+                || v.Translation.HasValue || v.CenterPoint.HasValue);
+
+        while (target is ModifiedElement wrapped)
+        {
+            if (Declares(wrapped.Modifiers) || Declares(wrapped.WrappedModifiers)) return true;
+            target = wrapped.Inner;
+        }
+        if (Declares(target.Modifiers)) return true;
+        if (targets is not null)
+            foreach (var entry in targets)
+                if (ReferenceEquals(entry.Parent, target)) return true;
+        return false;
+    }
+
+    private bool RefreshModifierTarget(UIElement control, Element oldElement, Element newElement)
+    {
+        if (!_hasModifierTargets || !(newElement is KeyedMemoElement
+            || (_v1Handlers.TryGet(newElement.GetType(), out var entry) && entry is IV1SourceTargetResolver))) return false;
+        if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState { ModifierTargets: { } targets }) return false;
+        // A Memo resource refresh passes a fresh element as both old and new.
+        // Rebind using the previously recorded target, including through legacy wrappers.
+        while (oldElement is ModifiedElement wrapped) oldElement = wrapped.Inner;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            if (!ReferenceEquals(targets[i].Parent, oldElement)) continue;
+            targets[i] = (newElement, targets[i].Target);
+            return true;
+        }
+        return false;
+    }
+
+    internal (Element Source, ElementModifiers Modifiers)? FindRemainingModifierOwner(Func<ElementModifiers, bool> declares)
+    {
+        // During target recursion the mounted decorator still describes the old tree.
+        // Resolve one property: outer decorators win; inner legacy declarations override outer ones.
+        var root = ModifierUpdate.Root;
+        for (var depth = 0; root is not null && depth <= ReactorSourceMap.MaxDecoratorDepth; depth++)
+        {
+            var modifiers = ReferenceEquals(root, ModifierUpdate.Root) ? ModifierUpdate.Modifiers : null;
+            if (root is ModifiedElement && modifiers is null) modifiers = root.Modifiers;
+            while (root is ModifiedElement wrapped && depth++ <= ReactorSourceMap.MaxDecoratorDepth)
+            {
+                if (declares(wrapped.WrappedModifiers)) modifiers = wrapped.WrappedModifiers;
+                root = wrapped.Inner;
+            }
+            if (root.Modifiers is { } inner && declares(inner)) return (root, inner);
+            if (modifiers is not null && declares(modifiers)) return (root, modifiers);
+            // Match Mount and Update dispatch: a per-host handler can shadow a global decorator.
+            var type = root.GetType();
+            Element? next = null;
+            if (_v1Handlers.TryGet(type, out var handler))
+                next = (handler as IV1SourceTargetResolver)?.GetSourceTarget(root);
+            else if (!_typeRegistry.ContainsKey(type))
+                next = ReactorSourceMap.DecoratorTarget(root);
+            if (next is null && ModifierUpdate.Control?.GetValue(ReactorAttached.StateProperty)
+                is ReactorState { ModifierTargets: { } targets })
+                foreach (var target in targets)
+                    if (ReferenceEquals(target.Parent, root)) { next = target.Target; break; }
+            root = next;
+        }
+        return null;
+    }
+
+    private Element? GetRetainedModifierAnimationSource(FrameworkElement control, Element owner)
+    {
+        if (FindMountedElementValue(control, static e => e.AnimationConfig, owner) is not null) return owner;
+        return GetModifierAnimationSource(control) ?? ModifierUpdate.Root;
+    }
+
+    private void ClearRemovedTransformModifiers(FrameworkElement control, ElementModifiers? old, ElementModifiers? current)
+    {
+        // Release departing facade values before setters or nested targets can
+        // start another animation. Remaining declarations keep their own values.
+        if (old?.Scale.HasValue == true && current?.Scale.HasValue != true
+            && FindRemainingModifierOwner(static m => m.Scale.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "Scale");
+        if (old?.Rotation.HasValue == true && current?.Rotation.HasValue != true
+            && FindRemainingModifierOwner(static m => m.Rotation.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "Rotation");
+        if (old?.Translation.HasValue == true && current?.Translation.HasValue != true
+            && FindRemainingModifierOwner(static m => m.Translation.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "Translation");
+        if (old?.CenterPoint.HasValue == true && current?.CenterPoint.HasValue != true
+            && FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is null)
+            AnimationHelper.ResetCompositionModifier(control, "CenterPoint");
+    }
+
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
     // flyout decorator or keyed memo layered over another element's control. Only the owner's
     // inline overlays are recorded (issue #965).
@@ -6595,6 +6881,11 @@ public sealed partial class Reconciler : IDisposable
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
         // unnecessary sets is critical for large element counts.
+
+        // An explicit brush modifier owns its property, even over a ThemeRef that an inner
+        // layer sharing this control (a Memo, a flyout target) bound earlier in the pass.
+        if (m.Background is not null || m.Foreground is not null || m.BorderBrush is not null)
+            SuppressModifierOwnedThemeBindings(fe, m);
 
         // RequestedTheme must be set BEFORE ApplyThemeBindings so that ThemeRef
         // bindings resolve against the correct theme variant.
@@ -6735,26 +7026,46 @@ public sealed partial class Reconciler : IDisposable
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
             AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe));
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
-            // Note: if the set arm started a compositor animation on Visual.Opacity,
-            // clearing the XAML DP does not cancel it — neither did the previous
-            // `fe.Opacity = 1.0`, so this is not a regression.
-            fe.ClearValue(UIElement.OpacityProperty);
-        // Transform family — Scale / Rotation / Translation / CenterPoint deliberately have
-        // NO unset arm yet (issue #1001). These are XAML facade properties whose live value
-        // lives on the element's composition visual: when a curve is ambient the set path
-        // above calls visual.StartAnimation, which outranks the DP and leaves no local value
-        // for ClearValue to release. Undoing that needs a StopAnimation companion and a
-        // selftest that exercises the animated path, so it is tracked separately rather than
-        // given the mechanical arm the plain-DP modifiers below get.
-        // ModifierUnsetClearValueTests.MissingUnsetArmExceptions records the same four names.
+        {
+            if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+            else
+            {
+                fe.ClearValue(UIElement.OpacityProperty);
+                AnimationHelper.ResetCompositionModifier(fe, "Opacity");
+            }
+        }
+        // These facade properties have no public dependency-property identifiers.
+        // Update already released final removals before handlers ran. Here only
+        // restore surviving declarations; a second reset would overwrite new setters.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
             AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe));
+        else if (!m.Scale.HasValue && oldM?.Scale.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.Scale.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
             AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe));
+        else if (!m.Rotation.HasValue && oldM?.Rotation.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.Rotation.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
             AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe));
+        else if (!m.Translation.HasValue && oldM?.Translation.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
             AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe));
+        else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+        }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
         else if (!m.IsVisible.HasValue && oldM?.IsVisible.HasValue == true)
@@ -6831,6 +7142,10 @@ public sealed partial class Reconciler : IDisposable
             // Keep the active interaction brush while updating what hover-out restores.
             borderTracker.NormalBorderBrush = m.BorderBrush;
             borderTracker.NormalBorderBrushHasLocalValue = m.BorderBrush is not null;
+            borderTracker.NormalBorderBrushThemeBound = false;
+            // A removed modifier hands a theme binding it suppressed back to hover-out's restore.
+            if (m.BorderBrush is null)
+                UnsuppressThemeBinding(fe, "BorderBrush");
         }
         else if (m.BorderBrush is not null && !ReferenceEquals(m.BorderBrush, oldM?.BorderBrush))
         {
@@ -6847,6 +7162,7 @@ public sealed partial class Reconciler : IDisposable
             else if (fe is WinUI.Grid bbGrid) bbGrid.ClearValue(WinUI.Grid.BorderBrushProperty);
             else if (fe is WinUI.StackPanel bbStack) bbStack.ClearValue(WinUI.StackPanel.BorderBrushProperty);
             else if (fe is WinUI.RelativePanel bbRelative) bbRelative.ClearValue(WinUI.RelativePanel.BorderBrushProperty);
+            RestoreSuppressedThemeBinding(fe, "BorderBrush");
         }
         // Apply physical border thickness, then overlay logical (BiDi-aware) inline border
         var resolvedBorder = m.BorderThickness;
@@ -6909,6 +7225,7 @@ public sealed partial class Reconciler : IDisposable
             if (fe is WinUI.Panel panel) panel.ClearValue(WinUI.Panel.BackgroundProperty);
             else if (fe is WinUI.Control ctrl2) ctrl2.ClearValue(WinUI.Control.BackgroundProperty);
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
+            RestoreSuppressedThemeBinding(fe, "Background");
         }
 
         // Foreground (Control or TextBlock)
@@ -6921,6 +7238,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (fe is WinUI.Control fgCtrl) fgCtrl.ClearValue(WinUI.Control.ForegroundProperty);
             else if (fe is TextBlock fgTb) fgTb.ClearValue(TextBlock.ForegroundProperty);
+            RestoreSuppressedThemeBinding(fe, "Foreground");
         }
 
         // AutomationProperties.Name
@@ -7901,146 +8219,444 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Applies ThemeRef bindings by setting properties through WinUI's {ThemeResource}
-    /// mechanism. Builds a local Style with ThemeResource setters and applies it to the
-    /// element. WinUI then handles theme-reactive resolution natively — the live
-    /// {ThemeResource} Style setter re-resolves on the control's effective-theme change,
-    /// which tracks the per-element/inherited <c>ActualTheme</c> (an ancestor
-    /// <c>RequestedTheme</c> override included), not just the app-level theme. This native
-    /// self-heal is why a ThemeBindings-only element is safe to structurally skip
-    /// (#758; empirically verified in <c>ThemeBindingsSkipSelfHealFixtures</c> across
-    /// immediate and inherited ancestor <c>RequestedTheme</c> toggles). Contrast a
-    /// <c>ResourceOverrides.ThemeRef</c>, which resolves to a CONCRETE brush at reconcile
-    /// and does NOT self-heal (so it stays theme-sensitive for the skip gate).
+    /// Applies <see cref="ThemeRef"/> bindings with
+    /// <see cref="FrameworkElement.SetThemeResourceBinding"/>, which installs the same live
+    /// binding as a <c>{ThemeResource key}</c> markup extension. WinUI re-resolves it when the
+    /// control's effective theme changes (the per-element/inherited <c>ActualTheme</c>, an
+    /// ancestor <c>RequestedTheme</c> override included), on a high-contrast change, and when
+    /// the control is parented, so a binding installed at mount on a control that is not in
+    /// the tree yet picks up its ancestors' theme once it joins. That native self-heal is why
+    /// a ThemeBindings-only element is safe to structurally skip (#758; verified in
+    /// <c>ThemeBindingsSkipSelfHealFixtures</c> across immediate and inherited ancestor
+    /// <c>RequestedTheme</c> toggles). Contrast a <c>ResourceOverrides.ThemeRef</c>, which
+    /// resolves to a CONCRETE brush at reconcile and does NOT self-heal (so it stays
+    /// theme-sensitive for the skip gate).
     /// </summary>
-    /// <summary>
-    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
-    /// existing-api-surface.md). Applies <see cref="ThemeRef"/> bindings as
-    /// a synthesized <c>{ThemeResource}</c>-driven Style. Provisional API;
-    /// see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
+    /// <remarks>
+    /// <para>Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
+    /// existing-api-surface.md). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.</para>
+    /// <para>The binding sits at local-value precedence, where earlier releases used a
+    /// synthesized Style. To keep the old winner, a property that already holds a value Reactor
+    /// did not bind (a <c>.Set</c> setter, an element property, app code) is left alone, and
+    /// <c>fe.Style</c> is never touched.</para>
+    /// <para>Only the properties Reactor maps are bound: <c>Background</c>,
+    /// <c>Foreground</c>, <c>BorderBrush</c> (on the control types that declare them) and
+    /// <c>SplitView.PaneBackground</c>. A key that cannot be resolved from the control at call
+    /// time is logged and skipped.</para>
+    /// </remarks>
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
+        => ApplyThemeBindings(fe, bindings, modifiers: null, refresh: false, clearStale: true);
+
+    /// <summary>
+    /// What Reactor knows about one theme-bound property of a control (see
+    /// <see cref="ReactorState.ThemeResourceBindings"/>).
+    /// </summary>
+    internal sealed class ThemeBindingRecord
     {
-        var targetType = GetStyleTargetType(fe);
-        if (targetType is null) return;
+        /// <summary>The resource key the property is bound (or, while suppressed, declared) to.</summary>
+        public string Key = "";
 
-        var cacheKey = BuildCacheKey(targetType, bindings);
+        /// <summary>
+        /// The local value right after Reactor last installed the binding. A value read later
+        /// that is still this object is Reactor's own, not a takeover by another writer.
+        /// </summary>
+        public object? Installed;
 
-        // Cache hit: reuse the previously compiled Style
-        if (_styleCache.TryGetValue(cacheKey, out var cachedStyle))
+        /// <summary>
+        /// An explicit brush modifier holds the property, possibly on a layer that shares the
+        /// control (a keyed Memo, a flyout target). The key is kept so the binding can come back
+        /// when that modifier goes away.
+        /// </summary>
+        public bool Suppressed;
+    }
+
+    /// <summary>
+    /// Reconciler form of <see cref="ApplyThemeBindings(FrameworkElement, IReadOnlyDictionary{string, ThemeRef})"/>.
+    /// <paramref name="modifiers"/> are the element's effective modifiers: an explicit brush
+    /// modifier for the same property (<c>.Background(brush)</c> next to
+    /// <c>.Background(ThemeRef)</c>) wins whatever the call order, as it did against the old
+    /// Style. <paramref name="refresh"/> is set on a resource-refresh pass
+    /// (<c>Theme.NotifyResourcesChanged</c>): a binding resolves its key when installed and only
+    /// re-resolves on a theme change or reparent, so an edited dictionary entry is picked up by
+    /// installing it again. A binding that this render's setters or element properties wrote
+    /// over was already handed over (see <see cref="ReleaseReplacedThemeBindings"/>).
+    /// <paramref name="clearStale"/> drops bound properties missing from
+    /// <paramref name="bindings"/>, for direct callers. The reconciler passes false: it clears
+    /// what an element dropped before the element's setters run
+    /// (<see cref="ClearDroppedThemeBindings"/>), and another layer sharing the control may
+    /// still declare the rest.
+    /// </summary>
+    internal static void ApplyThemeBindings(
+        FrameworkElement fe,
+        IReadOnlyDictionary<string, ThemeRef> bindings,
+        ElementModifiers? modifiers,
+        bool refresh = false,
+        bool clearStale = false)
+    {
+        var state = TryGetReactorState(fe, out var existingState) ? existingState : null;
+        var bound = state?.ThemeResourceBindings;
+
+        if (clearStale && bound is { Count: > 0 })
         {
-            ApplyStyleToElement(fe, cachedStyle);
-            return;
+            List<string>? stale = null;
+            foreach (var name in bound.Keys)
+            {
+                if (!bindings.ContainsKey(name))
+                    (stale ??= new List<string>()).Add(name);
+            }
+            if (stale is not null)
+            {
+                foreach (var name in stale)
+                {
+                    var staleRecord = bound[name];
+                    bound.Remove(name);
+                    if (!staleRecord.Suppressed && !HasExplicitBrushModifier(name, modifiers)
+                        && GetThemeBindingProperty(fe, name) is { } staleDp)
+                        fe.ClearValue(staleDp);
+                }
+            }
         }
 
-        // Cache miss: build XAML, parse, and cache
-        var setters = new global::System.Text.StringBuilder();
-        foreach (var (property, themeRef) in bindings)
+        foreach (var (name, themeRef) in bindings)
         {
-            var dp = GetDependencyPropertyName(fe, property);
+            var dp = GetThemeBindingProperty(fe, name);
             if (dp is null) continue;
-            var escapedResourceKey = global::System.Security.SecurityElement.Escape(themeRef.ResourceKey);
-            setters.Append($"<Setter Property='{dp}' Value='{{ThemeResource {escapedResourceKey}}}'/>");
+
+            ThemeBindingRecord? record = null;
+            bound?.TryGetValue(name, out record);
+
+            if (HasExplicitBrushModifier(name, modifiers))
+            {
+                // ApplyModifiers wrote the explicit brush over any binding we had.
+                if (record is not null)
+                {
+                    record.Key = themeRef.ResourceKey;
+                    record.Suppressed = true;
+                }
+                continue;
+            }
+
+            bool hasLocal = !ReferenceEquals(fe.ReadLocalValue(dp), DependencyProperty.UnsetValue);
+            if (record is { Suppressed: true })
+            {
+                // A brush modifier on a layer sharing the control still holds the property.
+                record.Key = themeRef.ResourceKey;
+                if (hasLocal)
+                    continue;
+            }
+            else if (record is not null)
+            {
+                // The binding is live. Installing it again would only replace a value written
+                // over it outside a render (an InteractionStates brush), so re-bind only when
+                // the key changed, the value was cleared, or a refresh asks for re-resolution.
+                if (hasLocal && !refresh && string.Equals(record.Key, themeRef.ResourceKey, StringComparison.Ordinal))
+                    continue;
+                if (hasLocal && IsInteractionOverrideActive(fe, name))
+                {
+                    // An InteractionStates brush holds the property. Keep it, and let the state's
+                    // restore install the binding for the current key.
+                    record.Key = themeRef.ResourceKey;
+                    continue;
+                }
+            }
+            else if (hasLocal)
+            {
+                // A value Reactor did not bind beats the ThemeRef, as it beat the old Style. The
+                // exception is an InteractionStates brush over a property with no explicit normal
+                // value: record the ThemeRef, and the state's restore installs it.
+                if (InteractionHoldsUnclaimed(fe, name))
+                {
+                    state ??= GetOrCreateReactorState(fe);
+                    bound = state.ThemeResourceBindings ??= new Dictionary<string, ThemeBindingRecord>(StringComparer.Ordinal);
+                    bound[name] = new ThemeBindingRecord { Key = themeRef.ResourceKey };
+                }
+                continue;
+            }
+
+            state ??= GetOrCreateReactorState(fe);
+            TryInstallThemeBinding(fe, state, name, dp, themeRef.ResourceKey, "ApplyThemeBindings");
+            bound = state.ThemeResourceBindings;
         }
+    }
 
-        if (setters.Length == 0) return;
-
+    /// <summary>
+    /// Installs the binding and records it on <paramref name="state"/>. An unknown key
+    /// (<c>COMException</c>) or a value the property can't hold (<c>ArgumentException</c>) is
+    /// logged, the record is left as it was so a later render retries, and the render goes on.
+    /// </summary>
+    private static bool TryInstallThemeBinding(
+        FrameworkElement fe, ReactorState state, string name, DependencyProperty dp, string key, string operation)
+    {
         try
         {
-            var xaml =
-                $"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='{targetType}'>" +
-                setters.ToString() +
-                "</Style>";
-            var style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
-            _styleCache.TryAdd(cacheKey, style);
-            ApplyStyleToElement(fe, style);
+            fe.SetThemeResourceBinding(dp, key);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or global::System.Runtime.InteropServices.COMException)
         {
             Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
-                "ApplyThemeBindings",
+                operation,
                 ex);
+            return false;
         }
+        var bound = state.ThemeResourceBindings ??= new Dictionary<string, ThemeBindingRecord>(StringComparer.Ordinal);
+        if (!bound.TryGetValue(name, out var record))
+            bound[name] = record = new ThemeBindingRecord();
+        record.Key = key;
+        record.Installed = fe.ReadLocalValue(dp);
+        record.Suppressed = false;
+        return true;
     }
 
     /// <summary>
-    /// Issue #522 — counterpart to <see cref="ApplyThemeBindings"/>. When an
-    /// element on a recycled control transitions from having
-    /// <see cref="Element.ThemeBindings"/> to none, drop the previously
-    /// applied themed Style so e.g. the red Foreground from an Error arm
-    /// does not bleed into a subsequent Loading / Data render.
+    /// The local values of a control's theme-bound properties, read by Update before the
+    /// element's setters and element properties run (see <see cref="SnapshotThemeBindings"/>).
+    /// </summary>
+    internal readonly struct ThemeBindingSnapshot
+    {
+        internal readonly (string Name, object? Local)[]? Values;
+        internal readonly ElementTheme Theme;
+
+        internal ThemeBindingSnapshot((string Name, object? Local)[] values, ElementTheme theme)
+        {
+            Values = values;
+            Theme = theme;
+        }
+
+        internal bool HasValues => Values is not null;
+    }
+
+    /// <summary>Reads <see cref="ThemeBindingSnapshot"/> for <paramref name="fe"/>; empty when nothing is bound.</summary>
+    internal static ThemeBindingSnapshot SnapshotThemeBindings(FrameworkElement fe)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { Count: > 0 } bound)
+            return default;
+        var values = new (string Name, object? Local)[bound.Count];
+        int i = 0;
+        foreach (var name in bound.Keys)
+            values[i++] = (name, GetThemeBindingProperty(fe, name) is { } dp ? fe.ReadLocalValue(dp) : null);
+        return new ThemeBindingSnapshot(values, fe.ActualTheme);
+    }
+
+    /// <summary>
+    /// Hands over every theme binding whose local value changed since <paramref name="snapshot"/>
+    /// was read to something Reactor didn't install: a setter or element property wrote over it
+    /// during this render. It wins, as a local value beat the old Style, and Reactor stops owning
+    /// the property, so a later key change, refresh or ThemeRef removal leaves it alone. A binding
+    /// a nested layer sharing the control installed in that window is Reactor's own and stays.
+    /// Update calls this after the handler and before ApplyModifiers, so the control's own
+    /// <c>RequestedTheme</c> modifier, and an ancestor's (applied after its children update),
+    /// haven't run yet. A nested layer sharing the control (a flyout target) can still change
+    /// its theme in that window, which re-resolves the binding natively; nothing is handed over
+    /// then, since a changed value no longer proves a takeover.
+    /// </summary>
+    internal static void ReleaseReplacedThemeBindings(FrameworkElement fe, ThemeBindingSnapshot snapshot)
+    {
+        if (snapshot.Values is not { } values
+            || !TryGetReactorState(fe, out var state)
+            || state.ThemeResourceBindings is not { } bound
+            || fe.ActualTheme != snapshot.Theme)
+            return;
+        foreach (var (name, before) in values)
+        {
+            if (!bound.TryGetValue(name, out var record) || record.Suppressed
+                || GetThemeBindingProperty(fe, name) is not { } dp)
+                continue;
+            var local = fe.ReadLocalValue(dp);
+            if (!ReferenceEquals(local, before) && !ReferenceEquals(local, record.Installed))
+                bound.Remove(name);
+        }
+        if (bound.Count == 0)
+            state.ThemeResourceBindings = null;
+    }
+
+    /// <summary>
+    /// Issue #522 — clears the theme bindings an Update's element stopped declaring
+    /// (in <paramref name="oldBindings"/> but not <paramref name="newBindings"/>), so e.g. the red
+    /// Foreground from an Error arm does not bleed into a subsequent Loading / Data render on the
+    /// recycled control. Runs before the element's setters and element properties, so a brush one
+    /// of them writes in place of a dropped ThemeRef survives. Only bound properties are cleared:
+    /// an author <c>Style</c>, properties Reactor never bound, and properties another layer
+    /// sharing the control declares are left alone. A property an InteractionStates state or a
+    /// brush modifier currently holds keeps that brush.
+    /// </summary>
+    internal static void ClearDroppedThemeBindings(
+        FrameworkElement fe,
+        IReadOnlyDictionary<string, ThemeRef> oldBindings,
+        IReadOnlyDictionary<string, ThemeRef>? newBindings)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { } bound)
+            return;
+        foreach (var name in oldBindings.Keys)
+        {
+            if (newBindings is not null && newBindings.ContainsKey(name))
+                continue;
+            if (!bound.TryGetValue(name, out var record))
+                continue;
+            bound.Remove(name);
+            if (!record.Suppressed && !IsInteractionOverrideActive(fe, name)
+                && GetThemeBindingProperty(fe, name) is { } dp)
+                fe.ClearValue(dp);
+        }
+        if (bound.Count == 0)
+            state.ThemeResourceBindings = null;
+    }
+
+    /// <summary>
+    /// Clears every property Reactor theme-bound on <paramref name="fe"/>, for a control returning
+    /// to the pool (issue #522): a renter must not inherit the previous element's brushes.
     ///
-    /// <para>Ownership is tracked via the
-    /// <c>ReactorAppliedThemeStyleProperty</c> attached DP, which stores the
-    /// Style instance we wrote on the most recent <see cref="ApplyThemeBindings"/>
-    /// call. <see cref="DependencyObject.ClearValue(DependencyProperty)"/>
-    /// on <see cref="FrameworkElement.StyleProperty"/> fires only when
-    /// <c>fe.Style</c> still references the same instance — preserving an
-    /// author Setter (e.g. <c>.Set(c =&gt; c.Style = mine)</c>) that may have
-    /// replaced our Style in between.</para>
-    ///
-    /// <para>This avoids per-FrameworkElement tracking via
-    /// <c>ConditionalWeakTable</c> (fragile under RCW churn) and is robust to
-    /// the global <c>_styleCache</c> being cleared between apply and clear —
-    /// the marker holds the actual Style reference, not a cache lookup key.</para>
+    /// <para>Ownership lives in <see cref="ReactorState.ThemeResourceBindings"/> on the native
+    /// control, so it survives a collected managed wrapper, unlike a
+    /// <c>ConditionalWeakTable</c> keyed on the wrapper.</para>
     /// </summary>
     internal static void ClearThemeBindings(FrameworkElement fe)
     {
-        if (fe.GetValue(ReactorAppliedThemeStyleProperty) is not Style ownedStyle)
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { } bound)
             return;
-        if (ReferenceEquals(fe.Style, ownedStyle))
-            fe.ClearValue(FrameworkElement.StyleProperty);
-        fe.ClearValue(ReactorAppliedThemeStyleProperty);
+        state.ThemeResourceBindings = null;
+        foreach (var name in bound.Keys)
+        {
+            if (GetThemeBindingProperty(fe, name) is { } dp)
+                fe.ClearValue(dp);
+        }
+    }
+
+    /// <summary>Whether Reactor's theme binding currently owns <paramref name="property"/>.</summary>
+    private static bool IsThemeBound(FrameworkElement fe, string property) =>
+        TryGetReactorState(fe, out var state)
+        && state.ThemeResourceBindings is { } bound
+        && bound.TryGetValue(property, out var record)
+        && !record.Suppressed;
+
+    /// <summary>
+    /// Marks the theme bindings for the properties <paramref name="m"/> sets an explicit brush
+    /// for as suppressed. A refresh or key change then leaves the modifier's brush alone, as the
+    /// modifier's local value beat the old Style, and the binding comes back when the modifier
+    /// goes away (<see cref="RestoreSuppressedThemeBinding"/>).
+    /// </summary>
+    private static void SuppressModifierOwnedThemeBindings(FrameworkElement fe, ElementModifiers m)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { Count: > 0 } bound)
+            return;
+        if (m.Background is not null && bound.TryGetValue("Background", out var bg)) bg.Suppressed = true;
+        if (m.Foreground is not null && bound.TryGetValue("Foreground", out var fg)) fg.Suppressed = true;
+        if (m.BorderBrush is not null && bound.TryGetValue("BorderBrush", out var bb)) bb.Suppressed = true;
     }
 
     /// <summary>
-    /// Applies a cached style to an element. Clears any existing style first to
-    /// force WinUI to re-evaluate <c>{ThemeResource}</c> setters against the
-    /// element's current effective theme (which may have changed due to a parent's
-    /// <see cref="FrameworkElement.RequestedTheme"/> override).
+    /// After a brush modifier is removed and its property cleared: re-installs a theme binding the
+    /// modifier was suppressing, for a ThemeRef declared on a layer sharing the control that won't
+    /// necessarily update in this pass (a keyed Memo with an unchanged key).
     /// </summary>
-    private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle)
+    private static void RestoreSuppressedThemeBinding(FrameworkElement fe, string property)
     {
-        // Clearing first forces WinUI to process the subsequent set as a
-        // genuine change, re-resolving {ThemeResource} values. Without this,
-        // re-applying the same cached Style reference is a no-op.
-        if (fe.Style is not null)
-            fe.Style = null;
-        fe.Style = cachedStyle;
-
-        // Track ownership for the symmetric ClearThemeBindings path (issue
-        // #522). Always overwrite so an A → B ThemeBindings transition
-        // updates the marker to the new Style.
-        fe.SetValue(ReactorAppliedThemeStyleProperty, cachedStyle);
+        if (!TryGetReactorState(fe, out var state)
+            || state.ThemeResourceBindings is not { } bound
+            || !bound.TryGetValue(property, out var record)
+            || !record.Suppressed)
+            return;
+        // Not suppressed from here on, even if the install fails: the next render retries.
+        record.Suppressed = false;
+        if (GetThemeBindingProperty(fe, property) is { } dp)
+            TryInstallThemeBinding(fe, state, property, dp, record.Key, "RestoreSuppressedThemeBinding");
     }
 
-    private static string? GetStyleTargetType(FrameworkElement fe) => fe switch
+    /// <summary>
+    /// For an InteractionStates state that held a property while its brush modifier was removed:
+    /// hands a suppressed theme binding back so the state's restore installs it.
+    /// </summary>
+    private static void UnsuppressThemeBinding(FrameworkElement fe, string property)
     {
-        WinUI.Border => "Border",
-        WinUI.StackPanel => "StackPanel",
-        WinUI.Grid => "Grid",
-        WinUI.RelativePanel => "RelativePanel",
-        WinUI.Button => "Button",
-        WinUI.TextBox => "TextBox",
-        TextBlock => "TextBlock",
-        WinUI.ContentControl => "ContentControl",
-        WinUI.Panel => "Panel",
-        WinUI.Control => "Control",
-        _ => fe.GetType().Name,
+        if (TryGetReactorState(fe, out var state)
+            && state.ThemeResourceBindings is { } bound
+            && bound.TryGetValue(property, out var record))
+            record.Suppressed = false;
+    }
+
+    /// <summary>
+    /// Whether an InteractionStates state holds <paramref name="property"/> with its own brush,
+    /// over a normal value that is no explicit brush (nothing, or a theme binding since dropped).
+    /// </summary>
+    private static bool InteractionHoldsUnclaimed(FrameworkElement fe, string property)
+    {
+        if (!_interactionTrackers.TryGetValue(fe, out var tracker)
+            || GetThemeBindingProperty(fe, property) is not { } dp)
+            return false;
+        var (active, unclaimed) = property switch
+        {
+            "Background" => (tracker.BackgroundOverrideApplied ? tracker.ActiveBackground : null,
+                tracker.NormalBackground is null),
+            "Foreground" => (tracker.ForegroundOverrideApplied ? tracker.ActiveForeground : null,
+                tracker.NormalForeground is null),
+            "BorderBrush" => (tracker.BorderBrushOverrideApplied ? tracker.ActiveBorderBrush : null,
+                !tracker.NormalBorderBrushHasLocalValue || tracker.NormalBorderBrushThemeBound),
+            _ => (null, false),
+        };
+        return active is not null && unclaimed && ReferenceEquals(fe.ReadLocalValue(dp), active);
+    }
+
+    private static bool IsInteractionOverrideActive(FrameworkElement fe, string property) =>
+        _interactionTrackers.TryGetValue(fe, out var tracker) && property switch
+        {
+            "Background" => tracker.BackgroundOverrideApplied,
+            "Foreground" => tracker.ForegroundOverrideApplied,
+            "BorderBrush" => tracker.BorderBrushOverrideApplied,
+            _ => false,
+        };
+
+    /// <summary>
+    /// Re-installs the theme binding on <paramref name="property"/> when Reactor owns it, for
+    /// code that wrote a temporary value over it (InteractionStates returning to Normal).
+    /// Returns false when the property is not theme-bound or the install failed, so the caller
+    /// restores its own way.
+    /// </summary>
+    private static bool TryRestoreThemeBinding(FrameworkElement fe, string property)
+    {
+        if (!TryGetReactorState(fe, out var state)
+            || state.ThemeResourceBindings is not { } bound
+            || !bound.TryGetValue(property, out var record)
+            || record.Suppressed
+            || GetThemeBindingProperty(fe, property) is not { } dp)
+            return false;
+        return TryInstallThemeBinding(fe, state, property, dp, record.Key, "RestoreThemeBinding");
+    }
+
+    private static bool HasExplicitBrushModifier(string property, ElementModifiers? m) => m is not null && property switch
+    {
+        "Background" => m.Background is not null,
+        "Foreground" => m.Foreground is not null,
+        "BorderBrush" => m.BorderBrush is not null,
+        _ => false,
     };
 
-    private static string? GetDependencyPropertyName(FrameworkElement fe, string property)
+    private static DependencyProperty? GetThemeBindingProperty(FrameworkElement fe, string property) => property switch
     {
-        if (property == "Background" && (fe is WinUI.Panel || fe is WinUI.Control || fe is WinUI.Border))
-            return "Background";
-        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock))
-            return "Foreground";
-        if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
-            || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
-            return "BorderBrush";
-        return null;
-    }
+        "Background" => fe switch
+        {
+            WinUI.Panel => WinUI.Panel.BackgroundProperty,
+            WinUI.Control => WinUI.Control.BackgroundProperty,
+            WinUI.Border => WinUI.Border.BackgroundProperty,
+            _ => null,
+        },
+        "Foreground" => fe switch
+        {
+            WinUI.Control => WinUI.Control.ForegroundProperty,
+            TextBlock => TextBlock.ForegroundProperty,
+            _ => null,
+        },
+        "BorderBrush" => fe switch
+        {
+            WinUI.Control => WinUI.Control.BorderBrushProperty,
+            WinUI.Border => WinUI.Border.BorderBrushProperty,
+            WinUI.Grid => WinUI.Grid.BorderBrushProperty,
+            WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
+            WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
+            _ => null,
+        },
+        "PaneBackground" => fe is WinUI.SplitView ? WinUI.SplitView.PaneBackgroundProperty : null,
+        _ => null,
+    };
 
     // ── Lightweight Styling: per-control resource overrides ────────────────
 

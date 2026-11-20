@@ -184,6 +184,7 @@ reads these.
 ```csharp
 public UIElement? Mount(Element element, Action requestRerender)
 {
+    var modifierTarget = element;
     // Unwrap legacy ModifiedElement (backward compat)
     ElementModifiers? modifiers = element.Modifiers;
     if (element is ModifiedElement mod)

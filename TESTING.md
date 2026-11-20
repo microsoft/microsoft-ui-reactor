@@ -696,7 +696,7 @@ default and the repository's SDK injection is absent:
 ```powershell
 # $consumer is the full path to the copied Reactor.WrapperMetadata.csproj.
 # Use the current central values from Directory.Build.props / Directory.Packages.props.
-dotnet add $consumer package Microsoft.WindowsAppSDK --version 2.2.0 --no-restore
+dotnet add $consumer package Microsoft.WindowsAppSDK --version 2.6.6-experimental --no-restore
 dotnet add $consumer package CommunityToolkit.WinUI.Controls.SettingsControls --version 8.3.260402-preview2 --no-restore
 dotnet add $consumer package CommunityToolkit.WinUI.Controls.HeaderedControls --version 8.3.260402-preview2 --no-restore
 dotnet add $consumer package CommunityToolkit.WinUI.Controls.RadialGauge --version 8.3.260402-preview2 --no-restore

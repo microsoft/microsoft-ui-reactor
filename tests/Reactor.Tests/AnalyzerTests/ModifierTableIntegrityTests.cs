@@ -717,31 +717,34 @@ public class ModifierTableIntegrityTests
 
     /// <summary>
     /// <c>Reconciler</c> carries a <b>second</b> copy of the same allow-list:
-    /// <c>GetDependencyPropertyName</c> decides which properties a <c>ThemeRef</c> binding may emit
-    /// a <c>&lt;Setter&gt;</c> for. Nothing pins it to <c>ApplyModifiers</c>, so
-    /// <c>.Background(Theme.X)</c> and <c>.Background("#fff")</c> can silently disagree about which
-    /// controls they reach — and both analyzers would be right about only one of them.
+    /// <c>GetThemeBindingProperty</c> decides which properties a <c>ThemeRef</c> binding may bind.
+    /// Nothing pins it to <c>ApplyModifiers</c>, so <c>.Background(Theme.X)</c> and
+    /// <c>.Background("#fff")</c> can silently disagree about which controls they reach — and
+    /// both analyzers would be right about only one of them.
     /// </summary>
     [Fact]
-    public void GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table()
+    public void ThemeBindingProperty_Agrees_With_ApplyModifiers_And_The_Table()
     {
         var applyGates = ReadApplyModifierControlGates();
-        var themeGates = ReadGetDependencyPropertyNameGates();
+        var themeGates = ReadThemeBindingPropertyGates();
 
         // Self-validation: Background, Foreground, BorderBrush.
         Assert.True(
             themeGates.Count >= 3,
-            $"Only {themeGates.Count} gates were read out of GetDependencyPropertyName; expected at least 3. " +
+            $"Only {themeGates.Count} gates were read out of GetThemeBindingProperty; expected at least 3. " +
             "The reader has probably stopped matching.");
 
         var problems = new List<string>();
 
         foreach (var (prop, themeGate) in themeGates.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
+            if (ElementSpecificThemeProperties.Contains(prop))
+                continue;
+
             if (!applyGates.TryGetValue(prop, out var applyGate))
             {
                 problems.Add(
-                    $"{prop}: GetDependencyPropertyName gates the ThemeRef path on " +
+                    $"{prop}: GetThemeBindingProperty gates the ThemeRef path on " +
                     $"[{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}] but ApplyModifiers " +
                     "has no control gate for it at all.");
                 continue;
@@ -766,18 +769,28 @@ public class ModifierTableIntegrityTests
             }
         }
 
+        foreach (var prop in ElementSpecificThemeProperties.Where(prop => !themeGates.ContainsKey(prop)))
+            problems.Add($"{prop}: listed as element-specific but GetThemeBindingProperty no longer maps it. Remove the row.");
+
         Assert.True(
             problems.Count == 0,
             "Reconciler's two applicability copies have drifted:\n  " + string.Join("\n  ", problems));
     }
 
     /// <summary>
-    /// Property name → the WinUI type names <c>Reconciler.GetDependencyPropertyName</c> will emit a
-    /// <c>{ThemeResource}</c> setter for, read out of <c>Reconciler.cs</c>. The method's body is a
-    /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
-    /// branch's string comparison names the property and the type tests are the gate.
+    /// ThemeRef properties that come from one element's own extension rather than a common
+    /// modifier, so <c>ApplyModifiers</c> has no brush counterpart to agree with.
+    /// <c>PaneBackground</c> is <c>SplitViewElement.PaneBackground(ThemeRef)</c>.
     /// </summary>
-    private static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
+    private static readonly HashSet<string> ElementSpecificThemeProperties = new(StringComparer.Ordinal) { "PaneBackground" };
+
+    /// <summary>
+    /// Property name → the WinUI type names <c>Reconciler.GetThemeBindingProperty</c> will bind a
+    /// <c>ThemeRef</c> on, read out of <c>Reconciler.cs</c>. The method is a switch expression on
+    /// the property name; each arm's string constant names the property, and the type patterns
+    /// (or <c>fe is T</c> tests) inside the arm are the gate.
+    /// </summary>
+    private static Dictionary<string, HashSet<string>> ReadThemeBindingPropertyGates()
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
@@ -788,33 +801,42 @@ public class ModifierTableIntegrityTests
         var method = tree.GetRoot()
             .DescendantNodes()
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
-            .FirstOrDefault(m => m.Identifier.Text == "GetDependencyPropertyName");
+            .FirstOrDefault(m => m.Identifier.Text == "GetThemeBindingProperty");
 
         Assert.NotNull(method);
+        var outer = method!.ExpressionBody?.Expression as Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionSyntax;
+        Assert.NotNull(outer);
 
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
-        foreach (var ifStatement in method!.DescendantNodes()
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.IfStatementSyntax>())
+        foreach (var arm in outer!.Arms)
         {
-            var property = ifStatement.Condition
-                .DescendantNodesAndSelf()
-                .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax>()
-                .Select(literal => literal.Token.ValueText)
-                .FirstOrDefault();
-
-            if (property is null)
+            if (arm.Pattern is not Microsoft.CodeAnalysis.CSharp.Syntax.ConstantPatternSyntax
+                {
+                    Expression: Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax literal,
+                })
                 continue;
+            var property = literal.Token.ValueText;
 
-            var typeNames = ifStatement.Condition
+            // `fe switch { WinUI.Panel => …, TextBlock => …, _ => null }` arms parse as type or
+            // constant patterns; `fe is WinUI.SplitView ? … : null` is an is-expression.
+            var fromPatterns = arm.Expression
+                .DescendantNodesAndSelf()
+                .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax>()
+                .Select(inner => inner.Pattern switch
+                {
+                    Microsoft.CodeAnalysis.CSharp.Syntax.TypePatternSyntax typePattern => SimpleTypeName(typePattern.Type),
+                    Microsoft.CodeAnalysis.CSharp.Syntax.ConstantPatternSyntax constant => SimpleTypeName(constant.Expression),
+                    _ => null,
+                });
+            var fromIsTests = arm.Expression
                 .DescendantNodesAndSelf()
                 .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.BinaryExpressionSyntax>()
                 .Where(b => b.RawKind == (int)Microsoft.CodeAnalysis.CSharp.SyntaxKind.IsExpression
                             && b.Left is Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax { Identifier.Text: "fe" })
-                .Select(b => SimpleTypeName(b.Right))
-                .Where(typeName => typeName is not null);
+                .Select(b => SimpleTypeName(b.Right));
 
-            foreach (var typeName in typeNames)
+            foreach (var typeName in fromPatterns.Concat(fromIsTests).Where(typeName => typeName is not null))
             {
                 if (!gates.TryGetValue(property, out var set))
                     gates[property] = set = new HashSet<string>(StringComparer.Ordinal);
@@ -834,6 +856,8 @@ public class ModifierTableIntegrityTests
     {
         Microsoft.CodeAnalysis.CSharp.Syntax.QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
         Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax simple => simple.Identifier.Text,
+        // A switch arm's `WinUI.Panel =>` can parse as a constant pattern over a member access.
+        Microsoft.CodeAnalysis.CSharp.Syntax.MemberAccessExpressionSyntax member => member.Name.Identifier.Text,
         _ => null,
     };
 

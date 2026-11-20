@@ -125,7 +125,7 @@ public class ChildDiffHintsTests
     {
         // Narrowed per #758: ThemeBindings are NO LONGER theme-sensitive for the
         // structural-skip gate. A .Foreground(Theme.X) binding compiles to a
-        // {ThemeResource} Style setter that WinUI re-resolves NATIVELY on the control's
+        // live theme-resource binding (SetThemeResourceBinding) that WinUI re-resolves NATIVELY on the control's
         // effective-theme change (proven live in ThemeBindingsSkipSelfHealFixtures for
         // both an immediate and an inherited ancestor RequestedTheme toggle), so a
         // ThemeBindings-only cell is safe to structurally skip.
