@@ -210,7 +210,7 @@ handoff is never blocked, which fixes **#1623**.
 | | XAML transition (measured) | Fallback today | Proposed |
 |---|---|---|---|
 | Default duration | 300 ms (`ScalarTransition`, `Vector3Transition`) | the transition's `Duration` | the transition's `Duration` |
-| Easing | cubic-bezier **(0.8, 0, 0.2, 1)**. `Q2a`, `Q2b` and `F4a` match `Q2e` sample for sample | none, so the compositor default (an ease-out, Q2c). It is *not* linear as #1630 assumed | `CubicBezierEasingFunction((0.8,0),(0.2,1))`, created once per compositor and cached |
+| Easing | cubic-bezier **(0.8, 0, 0.2, 1)**. `Q2a`, `Q2b` and `F4a` match `Q2e` sample for sample | none, so the compositor default (an ease-out, Q2c). It is *not* linear as #1630 assumed. Layer E (#1640) makes it linear | `CubicBezierEasingFunction((0.8,0),(0.2,1))`, created once per compositor and cached |
 | Start value | current presented value | `this.StartingValue` (implicit) | same |
 | Fires for a write made before the element entered the tree | yes (F3) | yes (Q6f) | yes, parity |
 | Fires when attached and written in the same tick | yes (F3b) | yes (F3c) | yes, parity |
@@ -536,7 +536,7 @@ pulse, pinch/rotate) that currently pivot on the top-left corner, and the shippe
 | 3 | `fe.Translation` from user code is ignored once `.Translation()` (or a Translation channel) enabled translation on that element and it has rendered (F1a). It still works on elements that don't use those modifiers, which covers the existing drag samples (`InputGesturesDemo`, `PointerInputPage`) | Apps mixing both, and agents following the shipped input skills, which show the `.Translation(…)` pan pattern next to a 60 Hz `el.Translation = …` ref pattern | Documented as "don't mix" in `animation.md.dt` and next to that pattern in both input skills (layer 4). Reactor stops zeroing the facade (§4.3), and `REACTOR_ANIM_004` flags the `.Set` form (#1642) |
 | 4 | A user `.Set(fe => fe.OpacityTransition = …)`/`ScaleTransition`/… blocks the handoff (#1623's mechanism). On mount the setter runs first, so any Reactor transition, transform or compositor feature on the same element then throws at the handoff, even on a fresh control. After the handoff, the setter itself throws | Rare | Use the modifiers. `REACTOR_ANIM_004` (§9.1) catches it at build time. Same runtime diagnostic as row 1, which lands in layer 2, the first layer that makes this reachable without a compositor feature |
 | 5 | The `TranslationTransition` fallback animated layout moves (`Offset`). Now `TranslationTransition` animates `.Translation()` on every path, as XAML does | Apps relying on the fallback quirk | `Fixed`. `.LayoutAnimation()` is the API for layout moves |
-| 6 | The transition fallback curve goes from the compositor default (ease-out) to the XAML curve | Visual only | `Fixed` (parity) |
+| 6 | The transition fallback curve goes from linear (the compositor default ease-out before layer E, #1640) to the XAML curve | Visual only | `Fixed` (parity) |
 | 7 | Transforms no longer exclude a control from the pool. Visual-lane controls are reused | none visible (P1 pixel-identical) | — |
 | 8 | Rendering, RTL, hit-testing, `TransformToVisual` and UIA bounds | none: identical (Q9, Q10, Q18) | — |
 | 9 | Reduced motion keeps disabling `.XxxTransition()` | none | §5.5 |

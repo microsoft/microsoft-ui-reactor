@@ -37,6 +37,8 @@ dotnet test tests/Reactor.Tests -p:Platform=x64 && dotnet test tests/Reactor.Sel
 
 `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries. `Reactor.PackagedTests` does the same for `Reactor.PackagedTests.Host`.
 
+For `Reactor.DocPipeline.Tests`, see [Running the doc pipeline tests](docs/contributing/doc-pipeline.md#running-the-doc-pipeline-tests).
+
 ## Flag translation
 
 The suites moved to Microsoft.Testing.Platform when xunit.v3 v4 removed VSTest
@@ -232,6 +234,7 @@ Some tests here parse repo *sources* with Roslyn rather than exercising Reactor 
 | `GallerySnippetAgreementTests` | A `SampleCard` snippet uses a lowerCamelCase name that does not exist in the live code beside it — the snippet renamed, or the card did and the snippet did not. Direction is snippet → live only: a snippet may omit, it may not invent. |
 | `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. Also checks [PUA glyph fonts](#pua-glyph-fonts-in-gallery-samples) in live gallery code and displayed snippets. |
 | `SearchIndexGeneratorTests` | `samples/ReactorGallery/reactor-search-index.json` is stale. Regenerate with `dotnet run --project tools/Reactor.SearchIndex`. |
+| `SearchIndexCoverageTests` | A routed Gallery card is missing or out of order in the index, or a [manifest entry](tests/Reactor.Tests/Tooling/SearchIndexCoverageTests.cs) no longer names a source card. This check still catches omissions after index regeneration. |
 
 A snippet-agreement failure names the page, line, card title and identifier, and says which of the two sides to move. There is no allowlist: fix the snippet or fix the card.
 
