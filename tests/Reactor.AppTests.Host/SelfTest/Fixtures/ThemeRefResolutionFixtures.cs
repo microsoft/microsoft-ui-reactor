@@ -206,10 +206,9 @@ internal static class ThemeRefResolutionFixtures
                 Exception? thrown = null;
                 try { other = ThemeRef.Resolve(AppOnlyKey, isDark: !appIsDark); }
                 catch (Exception ex) { thrown = ex; }
-                var walkResult = Application.Current.Resources.TryGetValue(AppOnlyKey, out var found) ? found as Brush : null;
-                H.Check("ThemeRefFallback_AppOnlyKey_OtherThemeMatchesWalk",
-                    thrown is null && ReferenceEquals(other, walkResult),
-                    $"thrown={thrown?.GetType().Name} other={other} walk={walkResult}");
+                H.Check("ThemeRefFallback_AppOnlyKey_OtherThemeGetsAppBrush",
+                    thrown is null && ReferenceEquals(other, appBrush),
+                    $"thrown={thrown?.GetType().Name} other={other}");
             }
             finally
             {

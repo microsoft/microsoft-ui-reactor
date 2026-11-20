@@ -20,8 +20,8 @@ namespace Microsoft.UI.Reactor.Core;
 /// creates the entry correctly, so this applies a cached <see cref="Style"/> whose setter
 /// assigns <c>{ThemeResource key}</c> to <see cref="FrameworkElement.Tag"/> on a new, unparented
 /// <see cref="Border"/> with the requested <see cref="FrameworkElement.RequestedTheme"/>, and
-/// reads the value back. The lookup follows WinUI's own rules, including the fallback to the
-/// <c>Default</c> dictionary and the Windows contrast themes.</para>
+/// reads the value back. WinUI does the lookup, so its rules apply, including the fallback to
+/// the <c>Default</c> dictionary.</para>
 /// <para>UI thread only. The styles are cached per thread because XAML objects belong to the
 /// thread that created them.</para>
 /// <para>The XamlReader-parsed style is there because stable WinUI has no code API for a
@@ -77,16 +77,7 @@ internal static class ThemeResourceProbe
     /// </summary>
     internal static string? BuildStyleXaml(string resourceKey)
     {
-        if (string.IsNullOrEmpty(resourceKey)) return null;
-        if (resourceKey.AsSpan().IndexOfAny('\t', '\r', '\n') >= 0) return null;
-        try
-        {
-            global::System.Xml.XmlConvert.VerifyXmlChars(resourceKey);
-        }
-        catch (global::System.Xml.XmlException)
-        {
-            return null;
-        }
+        if (string.IsNullOrEmpty(resourceKey) || !IsWritableAsAttribute(resourceKey)) return null;
 
         // Quoted, so keys with spaces, commas, braces or '=' survive markup-extension parsing.
         // Inside the quotes a backslash escapes the next character, so double it. A backslash
@@ -100,5 +91,23 @@ internal static class ThemeResourceProbe
         return $"<Style xmlns='{XamlNamespace}' TargetType='Border'>"
             + $"<Setter Property='Tag' Value=\"{value}\"/>"
             + "</Style>";
+    }
+
+    // XML 1.0 Char, minus tab, CR and LF (an attribute value turns them into spaces). Checked by
+    // hand rather than with XmlConvert, which would pull System.Xml into every trimmed app.
+    private static bool IsWritableAsAttribute(string key)
+    {
+        for (int i = 0; i < key.Length; i++)
+        {
+            char c = key[i];
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 >= key.Length || !char.IsLowSurrogate(key[i + 1])) return false;
+                i++;
+                continue;
+            }
+            if (c < 0x20 || char.IsLowSurrogate(c) || c is '\uFFFE' or '\uFFFF') return false;
+        }
+        return true;
     }
 }

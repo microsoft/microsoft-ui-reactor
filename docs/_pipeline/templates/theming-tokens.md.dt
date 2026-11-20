@@ -64,11 +64,12 @@ literal at build time so the regression never reaches review.
 resource key. A modifier like `.Background(token)` sets the property
 through a `{ThemeResource}` reference, so WinUI picks the brush for the
 element's effective theme, including an ancestor's `RequestedTheme`.
-`.Resources(...)` overrides and `ThemeRef.Resolve` find the theme the
-same way (the nearest `RequestedTheme` up the tree, then `ActualTheme`,
-then `Application.RequestedTheme`) and ask WinUI to resolve the key for
-it, as a `{ThemeResource}` reference on an element in that theme would.
-Reactor reads the theme dictionaries itself only when WinUI can't find
+`.Resources(...)` overrides find the theme the same way (the nearest
+`RequestedTheme` up the tree, then `ActualTheme`, then
+`Application.RequestedTheme`), and `ThemeRef.Resolve(key, isDark)` uses
+the theme you pass. Both ask WinUI to resolve the key for that theme, as a
+`{ThemeResource}` reference on an element in that theme would. Reactor
+reads an app's own theme dictionaries itself only when WinUI can't find
 the key for that theme.
 
 ```csharp snippet="theming-tokens/good-theme-ref"

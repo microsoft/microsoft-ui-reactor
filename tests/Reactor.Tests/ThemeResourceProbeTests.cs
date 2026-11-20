@@ -17,13 +17,26 @@ public class ThemeResourceProbeTests
     [InlineData("Tab\tKey")]
     [InlineData("Line\nKey")]
     [InlineData("Control\u0001Key")]
+    [InlineData("NonChar\uFFFEKey")]
     public void Keys_That_Cannot_Be_Written_As_A_Reference_Are_Not_Probed(string key)
         => Assert.Null(ThemeResourceProbe.BuildStyleXaml(key));
 
-    // Not an InlineData case: test-case serialization replaces a lone surrogate before it runs.
+    // Not InlineData cases: test-case serialization can rewrite surrogates before they run.
     [Fact]
     public void Key_With_A_Lone_Surrogate_Is_Not_Probed()
-        => Assert.Null(ThemeResourceProbe.BuildStyleXaml("Lone" + '\uD800' + "Surrogate"));
+    {
+        Assert.Null(ThemeResourceProbe.BuildStyleXaml("Lone" + '\uD800' + "High"));
+        Assert.Null(ThemeResourceProbe.BuildStyleXaml("Lone" + '\uDC00' + "Low"));
+        Assert.Null(ThemeResourceProbe.BuildStyleXaml("Trailing" + '\uD800'));
+    }
+
+    [Fact]
+    public void Key_With_A_Surrogate_Pair_Is_Probed()
+    {
+        var key = "Emoji" + char.ConvertFromUtf32(0x1F600) + "Brush";
+        var setter = XDocument.Parse(ThemeResourceProbe.BuildStyleXaml(key)!).Root!.Elements().Single();
+        Assert.Equal("{ThemeResource '" + key + "'}", setter.Attribute("Value")!.Value);
+    }
 
     [Theory]
     [InlineData("ControlFillColorSecondaryBrush", "{ThemeResource 'ControlFillColorSecondaryBrush'}")]

@@ -83,9 +83,8 @@ Conventions for contributors:
   backed `.Resources(...)` overrides with theme tokens under an element with the other
   `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
   the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
-  only reads the dictionaries itself when WinUI cannot find the key for that theme. Because the
-  lookup is WinUI's `{ThemeResource}` resolution, a Windows contrast theme applies to
-  `ThemeRef.Resolve` the way it applies to `{ThemeResource}`.
+  only reads the dictionaries itself when WinUI cannot find the key for that theme, never
+  reading WinUI's own `XamlControlsResources` that way.
 
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.
