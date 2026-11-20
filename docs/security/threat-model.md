@@ -29,7 +29,7 @@ The only sockets the framework ever opens are two **opt-in, loopback-only, beare
 
 There is no auto-updater, no telemetry endpoint, no license check, no crypto stored at rest, no key management, and no PKI implementation. `System.Security.Cryptography.RandomNumberGenerator` is used exclusively to generate the per-launch bearer tokens above.
 
-The most attacker-influenced text Reactor parses in-process is CommonMark markdown (`Md4cParser`) and SVG path-data strings (`PathDataParser`). Both run inside the host app's trust level — *not* a formal trust boundary, but practical hardening (memory safety from managed code, in-tree SharpFuzz coverage) is documented in [§7](#7-attack-surfaces).
+The most attacker-influenced text Reactor parses in-process is CommonMark markdown (`Md4cParser`). It runs inside the host app's trust level — *not* a formal trust boundary, but practical hardening (memory safety from managed code, in-tree SharpFuzz coverage) is documented in [§7](#7-attack-surfaces). Path markup strings (`PathIcon`, `PathElement.PathDataString`) are handed to WinUI's own native converter rather than parsed by Reactor ([§7.5](#75-path-markup)).
 
 ## 3. What Reactor is, in one paragraph
 
@@ -228,14 +228,14 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 - A logic defect in `Md4cParser` could cause infinite loop / OOM on adversarial input. Mitigation today: ~2,200 xUnit tests including 543 Yoga-style fixture cases and the upstream md4c spec tests. Mitigation in flight: a SharpFuzz harness (`tests/Reactor.Fuzz/`) covers `MarkdownHtml.Render` on every PR via the `fuzz-smoke` CI job and is being onboarded for continuous fuzzing.
 - Markdown is rendered into the consuming-app's tree; the consuming app decides whether to display attacker-influenced markdown at all. **The threat is the consuming app's choice to render untrusted markdown, not the framework's. Reactor's job is to make the default rendering safe.**
 
-### 7.5 SVG path data parser
+### 7.5 Path markup
 
-**File:** `src/Reactor/Core/PathDataParser.cs`.
-**Activation:** chart authors pass SVG-mini-language path strings.
+**File:** `src/Reactor/Core/PathMarkup.cs`.
+**Activation:** app or chart code passes SVG/XAML path markup (`PathIcon(...)`, `PathElement.PathDataString`, `D3Path(...)`).
 
-**Mitigations:** pure managed code; bounds-checked indexing via `Span<char>`; no unsafe memory access. Same SharpFuzz follow-up applies.
+**Mitigations:** Reactor does not parse path markup. The string goes to WinUI's native path-markup converter through `XamlBindingHelper.ConvertValue(typeof(Geometry), ...)`, the same converter a XAML `Data="..."` attribute uses. It is never spliced into a XAML document, so it cannot inject markup (earlier `XamlReader.Load` call sites interpolated path icon data into XAML unescaped). Data-driven markup the converter rejects (`PathElement.PathDataString`, D3 paths) is not drawn and logs a `DiagnosticLog` warning; author-written `PathIcon` markup throws, as XAML would.
 
-**Residual risk:** same as §7.4 — malformed input could provoke an infinite loop or pathological allocation. Not a trust boundary; runs at host trust level.
+**Residual risk:** defects in the platform converter belong to WinUI. Not a trust boundary; runs at host trust level.
 
 ### 7.6 `mur` CLI
 
@@ -319,7 +319,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 
 1. **Authenticode codesigning** of the NuGet package and `mur.exe` is not yet wired into `release.yml`. Recommendation needed on the signing posture for an experimental public NuGet (Microsoft Trusted Signing? per-release manual signing? defer until first stable?).
 2. **`copilot.exe` BinSkim findings** (BA2008, no CFG) are upstream from `GitHub.Copilot.SDK`. Now scoped out of the BinSkim scan via the `runtimes/<rid>/native/` exclude in `release.yml`. Open question: should we also escalate upstream to the Copilot SDK team for a hardened build?
-3. **Continuous fuzzing.** A SharpFuzz harness for `MarkdownHtml.Render` / `Md4cParser` and `PathDataParser` is in-tree (`tests/Reactor.Fuzz/`) with a smoke-test CI gate. Onboarding to a continuous-fuzzing service is the planned next step; open question is whether onboarding is required for the *experimental* release or can be deferred to first GA.
+3. **Continuous fuzzing.** A SharpFuzz harness for `MarkdownHtml.Render` / `Md4cParser` is in-tree (`tests/Reactor.Fuzz/`) with a smoke-test CI gate. Onboarding to a continuous-fuzzing service is the planned next step; open question is whether onboarding is required for the *experimental* release or can be deferred to first GA.
 4. **Devtools MCP authorization model.** Today: bearer token, full-tool access. Open question is whether the same-user-same-machine threat model below it (single-developer-machine, AI agent driving their own running app) needs anything beyond bearer auth (e.g., per-tool capability tokens) before broader adoption.
 5. **Scope-down sign-off.** Confirm that Reactor's runtime profile — no production network surface, no privilege transition — places it outside the in-depth-review trigger criteria and that any future surface change requires this document to be re-reviewed.
 
@@ -335,7 +335,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 - [`tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs`](../../tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs) — test-only CommonMark/spec HTML renderer + URL sanitizer
 - [`tools/install-skill-kit.ps1`](../../tools/install-skill-kit.ps1) — installer with guard-rails
 - [`tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs`](../../tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs) — URL-sanitizer regression tests
-- [`tests/Reactor.Fuzz/`](../../tests/Reactor.Fuzz/) — SharpFuzz harnesses for `MarkdownHtml.Render` and `PathDataParser.ParseTokens`
+- [`tests/Reactor.Fuzz/`](../../tests/Reactor.Fuzz/) — SharpFuzz harness for `MarkdownHtml.Render`
 
 ## 13. Change log
 
@@ -343,3 +343,4 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 |---|---|---|
 | 2026-05-21 | Chris Anderson | Initial draft for internal security-review intake. Captures runtime baseline at commit `2335e75f`. |
 | 2026-10-02 | Copilot (for the WinUI DevTools effort) | §7.7: inspector diagnostics published on controls (`ReactorSource`); XAML source-info parity (gating, relative paths). |
+| 2026-11-19 | Copilot | §2, §7.5, §11, §12: `PathDataParser` removed; path markup goes to WinUI's native converter instead of `XamlReader`/Reactor parsing; its fuzz target is gone. |

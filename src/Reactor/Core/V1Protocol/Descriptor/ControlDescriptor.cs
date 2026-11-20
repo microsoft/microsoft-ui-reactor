@@ -421,7 +421,7 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// per-value get/set lambdas of <see cref="OneWayConditional{TValue}"/>
     /// can't: comparing one element field while writing a derived value
     /// elsewhere, or multi-source error context like
-    /// <c>Path.PathDataString</c>'s XamlReader/PathDataParser branches.
+    /// <c>Path.PathDataString</c>'s path-markup converter/pre-built Geometry branches.
     ///
     /// <para><b>When to reach for it:</b> only when the standard entries
     /// can't express the diff or the write. Imperative entries skip the
