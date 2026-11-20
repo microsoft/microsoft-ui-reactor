@@ -204,7 +204,8 @@ Conventions for contributors:
 
 - **The docs site has a new home page, a Showcase page and a clearer structure.** The home
   page links to the latest Reactor post on the Windows developer blog and to the new
-  Showcase page, explains what Reactor is next to a live counter example, and leads into
+  Showcase page, explains that Reactor builds native WinUI 3 apps in C# next to a live counter
+  example, and leads into
   Get started, Guides, Controls, Recipes, API reference and How it works. Showcase lists the
   sample apps in the repo, each with a link to its source. The site tabs are now Get started,
   Guides, Controls, Recipes, API reference and How it works ("Internals" is renamed). Get
