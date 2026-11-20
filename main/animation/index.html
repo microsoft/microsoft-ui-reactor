@@ -4499,6 +4499,12 @@ the GPU — Reactor's render loop is never involved:</p>
 <code>.Focused(...)</code>. Each accepts optional <code>opacity</code>, <code>scale</code>, <code>translation</code>,
 <code>rotation</code>, <code>background</code>, <code>foreground</code>, and <code>borderBrush</code> parameters. Pass
 a <code>curve:</code> parameter for spring or ease transitions between states.</p>
+<p>States combine with <code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code>, and
+<code>.CenterPoint()</code> on the same element. A state's <code>scale</code>, <code>translation</code>, and
+<code>rotation</code> are the values the element animates to, not offsets from its own
+transform, and leaving the state returns to the element's own values. Use
+<code>.CenterPoint()</code> to make a hover scale grow from somewhere other than the
+top-left corner.</p>
 <h2 id="enterexit-transitions">Enter/Exit Transitions<a class="headerlink" href="#enterexit-transitions" title="Permanent link">&para;</a></h2>
 <p><code>.Transition()</code> animates an element when it enters or leaves the tree.
 Combine transitions with <code>+</code> (parallel) and <code>|</code> (asymmetric enter/exit):</p>
@@ -4543,7 +4549,7 @@ Combine transitions with <code>+</code> (parallel) and <code>|</code> (asymmetri
 </tr>
 <tr>
 <td><code>Transition.Scale(from)</code></td>
-<td>Scale from a starting factor</td>
+<td>Scale from <code>from</code> times the element's own <code>.Scale()</code> to its full size</td>
 </tr>
 <tr>
 <td><code>a + b</code></td>
