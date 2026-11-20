@@ -4146,7 +4146,9 @@ The common cases never need a <code>.Resources(...)</code> block:</p>
 <p>The button fluents also overload <code>DropDownButton</code>, <code>SplitButton</code>, and
 <code>ToggleSplitButton</code>. Reach for these before <code>.Resources(...)</code> — they
 avoid the six-key hover/pressed/disabled dance and stay in sync with
-system theme updates. See
+system theme updates. A <code>ThemeRef</code> modifier such as
+<code>.Foreground(Theme.PrimaryText)</code> layers on top of a named style (or any
+Style you set that targets a WinUI control type) rather than replacing it. See
 <a href="https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/039-property-and-event-scrub.md">spec 039</a> §2.1, §2.2, and
 §2.4 for the inventory.</p>
 <h2 id="lightweight-styling">Lightweight styling<a class="headerlink" href="#lightweight-styling" title="Permanent link">&para;</a></h2>
