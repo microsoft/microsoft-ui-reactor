@@ -1,14 +1,19 @@
 # UseIsActive
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseIsActive`
+Subscribes to the host window's activation events and re-renders on change. Returns `true` outside a window (the surface is "active" while shown). (spec 036 §7)
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public bool UseIsActive()
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to the host window's activation events and re-renders on
-change. Returns `true` outside a window (the surface is "active"
-while shown). (spec 036 §7)
+**Learn more:** [Windows](../../windows.md), [Hooks](../../hooks.md)
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected bool UseIsActive()
+```

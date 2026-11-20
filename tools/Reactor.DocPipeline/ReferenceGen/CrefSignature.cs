@@ -95,7 +95,7 @@ internal static class CrefSignature
     /// <summary>
     /// The <c>T:</c> cref of the type that declares <paramref name="cref"/>,
     /// or <c>null</c> when the cref is itself a type (or has no declaring
-    /// portion). Used by <see cref="CrefResolver"/> so a reference to a
+    /// portion). Used by <see cref="ReferenceRenderer"/> so a reference to a
     /// member that has no page of its own — notably a positional record's
     /// compiler-generated properties, which never appear in the XML doc file
     /// — still lands on the declaring type's page.

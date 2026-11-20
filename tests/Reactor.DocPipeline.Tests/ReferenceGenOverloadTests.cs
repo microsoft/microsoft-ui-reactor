@@ -6,19 +6,10 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Spec 041 §7.1.2 — a reference page is keyed by short name, so every
-/// overload of a method lands on the same page. These tests pin the two
-/// behaviours that used to be broken:
-///
-/// <list type="bullet">
-/// <item>Overloads beyond the first were dropped from the docset entirely
-///   (<c>REACTOR_DOC_REFGEN_002</c>) — the page must now carry all of
-///   them.</item>
-/// <item>A cref to a member with no XML-doc entry of its own — a positional
-///   record's compiler-generated properties, most visibly — degraded to
-///   inline code even when its declaring type had a page
-///   (<c>REACTOR_DOC_REFGEN_001</c>).</item>
-/// </list>
+/// Spec 041 §10.4 — the reference generator run on XML doc comments alone (no
+/// assembly), with the real shapes that used to break it: eight
+/// <c>UseEffect</c> overloads, a positional record whose properties have no
+/// <c>&lt;member&gt;</c> entry, and the same member name on two unrelated types.
 /// </summary>
 public class ReferenceGenOverloadTests
 {
@@ -37,19 +28,17 @@ defaults:
     private static string FixturePath =>
         Path.Combine(AppContext.BaseDirectory, "Fixtures", "refgen", "overloads.xml");
 
-    private static ReferenceGenResult Generate(string xmlPath) =>
-        new ReferenceGenerator().Generate(
-            xmlPath, HooksMap(), referenceRoot: "/tmp/docs/guide",
-            categoryAllowList: new HashSet<string>() { "hooks" });
+    private static ReferenceGenResult Generate(IReadOnlyList<MemberDoc> docs) =>
+        new ReferenceGenerator().Generate(docs, HooksMap());
 
-    private static ReferenceGenResult GenerateFixture() => Generate(FixturePath);
+    private static ReferenceGenResult GenerateFixture() => Generate(XmlDocReader.Read(FixturePath));
 
-    private static GeneratedPage Page(ReferenceGenResult r, string shortName) =>
-        r.Pages.Single(p => p.Route.ShortName == shortName);
+    private static ReferencePage Page(ReferenceGenResult r, string relativePath) =>
+        r.Pages.Single(p => p.RelativePath == relativePath);
 
-    /// <summary>
-    /// The eight <c>UseEffect</c> overloads the framework declares.
-    /// </summary>
+    private const string UseEffectPage = "reference/hooks/UseEffect.md";
+
+    /// <summary>The eight <c>UseEffect</c> overloads the framework declares.</summary>
     private static readonly string[] UseEffectCrefs =
     {
         "M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect(System.Action,System.Object[])",
@@ -62,243 +51,194 @@ defaults:
         "M:Microsoft.UI.Reactor.Core.RenderContext.UseEffect``3(System.Func{System.Action},``0,``1,``2)",
     };
 
-    // ── Bug 1: overloads must not be silently discarded ───────────────────
-
-    /// <summary>
-    /// The regression oracle. Routing by short name used to let the first
-    /// overload win the page and drop the other seven — including the
-    /// <c>Func&lt;Action&gt;</c> cleanup form, which is the only way to
-    /// register an effect that tears itself down. Every overload's cref and
-    /// its own summary prose must appear on the page.
-    /// </summary>
-    [Fact]
-    public void EveryOverload_IsRenderedOnTheSharedPage()
+    /// <summary>The heading lines of a page outside code fences, in document order.</summary>
+    internal static List<string> Headings(string body)
     {
-        var page = Page(GenerateFixture(), "UseEffect");
-
-        foreach (var cref in UseEffectCrefs)
-            Assert.Contains(cref, page.Body, StringComparison.Ordinal);
-
-        // Prose unique to a non-first overload — a cref alone could in
-        // principle be emitted by an index without the body being there.
-        Assert.Contains("Like UseEffect but the effect returns a cleanup function.", page.Body, StringComparison.Ordinal);
-        Assert.Contains("Three-dependency cleanup-flavor overload.", page.Body, StringComparison.Ordinal);
-
-        Assert.Equal(UseEffectCrefs.Length, page.Members.Count);
-    }
-
-    /// <summary>
-    /// Each overload gets its own <c>##</c> section carrying a readable
-    /// signature, and the page opens with an index linking to each anchor.
-    /// </summary>
-    [Fact]
-    public void EachOverload_GetsItsOwnSectionAndAnchor()
-    {
-        var page = Page(GenerateFixture(), "UseEffect");
-
-        Assert.Contains("## Overloads", page.Body, StringComparison.Ordinal);
-        // Non-generic params flavour, and a typed-dependency flavour whose
-        // documented <typeparam> name is used in preference to a placeholder.
-        Assert.Contains("## `UseEffect(Action, object[])`", page.Body, StringComparison.Ordinal);
-        Assert.Contains("## `UseEffect<TDep>(Action, TDep)`", page.Body, StringComparison.Ordinal);
-        Assert.Contains("## `UseEffect<T1, T2, T3>(Func<Action>, T1, T2, T3)`", page.Body, StringComparison.Ordinal);
-
-        // Every index entry points at a heading that exists on the page.
-        var anchors = System.Text.RegularExpressions.Regex
-            .Matches(page.Body, @"^- \[`(?<sig>[^`]+)`\]\(#(?<anchor>[a-z0-9\-_]+)\)\r?$",
-                System.Text.RegularExpressions.RegexOptions.Multiline);
-        Assert.Equal(UseEffectCrefs.Length, anchors.Count);
-        foreach (System.Text.RegularExpressions.Match m in anchors)
+        var result = new List<string>();
+        var inFence = false;
+        foreach (var line in body.Replace("\r\n", "\n").Split('\n'))
         {
-            var heading = $"## `{m.Groups["sig"].Value}`";
-            Assert.Contains(heading, page.Body, StringComparison.Ordinal);
-            Assert.Equal(m.Groups["anchor"].Value, CrefSignature.Anchor(m.Groups["sig"].Value));
+            if (line.StartsWith("```", StringComparison.Ordinal)) { inFence = !inFence; continue; }
+            if (!inFence && line.StartsWith('#')) result.Add(line);
         }
+        return result;
+    }
+
+    /// <summary>The ids the site gives each heading on the page, replayed in order.</summary>
+    internal static HashSet<string> HeadingIds(string body)
+    {
+        var slugs = new SlugTracker();
+        return Headings(body).Select(h => slugs.Add(h.TrimStart('#').Trim())).ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
-    /// Per-overload docs (parameters, returns) survive the merge instead of
-    /// being flattened onto the first member.
+    /// Every overload, including the <c>Func&lt;Action&gt;</c> cleanup form, lands
+    /// on the one hook page with its own summary.
     /// </summary>
+    [Fact]
+    public void EveryOverload_IsRenderedOnTheHookPage()
+    {
+        var result = GenerateFixture();
+        var page = Page(result, UseEffectPage);
+        Assert.Equal(PageKind.Hook, page.Kind);
+
+        foreach (var summary in new[]
+        {
+            "Runs a side effect after render.",
+            "Like UseEffect but the effect returns a cleanup function.",
+            "Single-dependency overload.",
+            "Single-dependency cleanup-flavor overload.",
+            "Two-dependency overload.",
+            "Two-dependency cleanup-flavor overload.",
+            "Three-dependency overload.",
+            "Three-dependency cleanup-flavor overload.",
+        })
+        {
+            Assert.Contains(summary, page.Body, StringComparison.Ordinal);
+        }
+
+        // No page per overload.
+        Assert.Single(result.Pages, p => p.RelativePath.Contains("UseEffect", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The overload table links each row to a section heading, and each link's
+    /// anchor is the id the site will give that heading.
+    /// </summary>
+    [Fact]
+    public void OverloadTable_LinksEachRowToItsSectionAnchor()
+    {
+        var page = Page(GenerateFixture(), UseEffectPage);
+        var ids = HeadingIds(page.Body);
+
+        var rows = page.Body.Replace("\r\n", "\n").Split('\n')
+            .Where(l => l.StartsWith("| [`UseEffect", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(8, rows.Count);
+
+        var anchors = rows.Select(r =>
+        {
+            var start = r.IndexOf("](#", StringComparison.Ordinal) + 3;
+            return r[start..r.IndexOf(')', start)];
+        }).ToList();
+        Assert.Equal(8, anchors.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(anchors, a => Assert.Contains(a, ids));
+    }
+
     [Fact]
     public void OverloadSections_KeepTheirOwnParametersAndReturns()
     {
-        var page = Page(GenerateFixture(), "UseEffect");
+        var body = Page(GenerateFixture(), UseEffectPage).Body.Replace("\r\n", "\n");
+        var section = body[body.IndexOf("### `UseEffect(Func<Action>, object[])`", StringComparison.Ordinal)..];
+        section = section[..section.IndexOf("\n### ", 1, StringComparison.Ordinal)];
 
-        // Only the Func<Action> params overload documents parameters.
-        Assert.Contains("- **effect** — Factory returning the cleanup action.", page.Body, StringComparison.Ordinal);
-        Assert.Contains("### Returns", page.Body, StringComparison.Ordinal);
-        // Sub-sections nest under the overload heading, not at page level.
-        Assert.DoesNotContain("\n## Returns", page.Body, StringComparison.Ordinal);
+        Assert.Contains("| `effect` | `Func<Action>` | Factory returning the cleanup action. |", section, StringComparison.Ordinal);
+        Assert.Contains("| `deps` | `object[]` | Dependency list. |", section, StringComparison.Ordinal);
+        Assert.Contains("**Returns:** Nothing.", section, StringComparison.Ordinal);
+
+        // The return text belongs to that overload, not to the page as a whole.
+        Assert.DoesNotContain("\n## Returns", body, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Overloads of one method are the normal case, not a collision.
-    /// </summary>
     [Fact]
     public void Overloads_DoNotEmit_REFGEN_002()
     {
-        var findings = GenerateFixture().Findings
-            .Where(f => f.Code == "REACTOR_DOC_REFGEN_002")
-            .ToList();
-
-        Assert.DoesNotContain(findings, f => f.Message.Contains("UseEffect", StringComparison.Ordinal));
-    }
-
-    /// <summary>
-    /// A short name claimed by two unrelated declaring types is still
-    /// ambiguous and still reported — but both members are rendered, because
-    /// dropping one is the content loss this work removed.
-    /// </summary>
-    [Fact]
-    public void UnrelatedDeclaringTypes_StillWarn_ButBothAreRendered()
-    {
         var result = GenerateFixture();
-        var page = Page(result, "Register");
-
-        Assert.Contains(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_002"
-            && f.Message.Contains("Register", StringComparison.Ordinal));
-        Assert.Contains("Registers a pending token.", page.Body, StringComparison.Ordinal);
-        Assert.Contains("Registers a focusable field.", page.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_002");
     }
 
-    /// <summary>
-    /// A cref naming any overload — not just the one that used to win the
-    /// page — is routed, and links to it carry that overload's anchor.
-    /// </summary>
     [Fact]
     public void CrefToAnyOverload_ResolvesToItsAnchor()
     {
         var result = GenerateFixture();
-        var routed = result.Pages
-            .SelectMany(p => p.Members.Select(m => m.Cref))
-            .ToHashSet(StringComparer.Ordinal);
+        var ids = HeadingIds(Page(result, UseEffectPage).Body);
+        var anchors = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var cref in UseEffectCrefs)
-            Assert.Contains(cref, routed);
-
-        // Anchors are distinct per overload, so a link can address the
-        // cleanup flavour specifically rather than the page as a whole.
-        var page = Page(result, "UseEffect");
-        Assert.Contains("#useeffectfuncaction-object", page.Body, StringComparison.Ordinal);
-        Assert.Contains("#useeffectaction-object", page.Body, StringComparison.Ordinal);
-
-        var slugs = System.Text.RegularExpressions.Regex
-            .Matches(page.Body, @"\(#(?<anchor>[a-z0-9\-_]+)\)")
-            .Select(m => m.Groups["anchor"].Value)
-            .ToList();
-        Assert.Equal(slugs.Count, slugs.Distinct(StringComparer.Ordinal).Count());
+        {
+            Assert.True(result.LinksByDocId.TryGetValue(cref, out var loc), cref);
+            Assert.Equal(UseEffectPage, loc!.RelativePath);
+            Assert.False(string.IsNullOrEmpty(loc.Anchor), cref);
+            Assert.Contains(loc.Anchor!, ids);
+            anchors.Add(loc.Anchor!);
+        }
+        Assert.Equal(UseEffectCrefs.Length, anchors.Count);
     }
 
-    // ── Determinism ───────────────────────────────────────────────────────
-
     /// <summary>
-    /// Render order is derived from the cref, never from the order members
-    /// happen to appear in the XML doc file — otherwise a source-file
-    /// reshuffle would churn the whole reference tree.
+    /// The fixture declares the overloads in a shuffled order. Reversing the file
+    /// must not change a single byte of any page.
     /// </summary>
     [Fact]
-    public void OverloadOrder_IsIndependentOfXmlDeclarationOrder()
+    public void Output_IsIndependentOfXmlDeclarationOrder()
     {
-        var original = GenerateFixture();
-
         var doc = XDocument.Load(FixturePath);
-        var membersEl = doc.Root!.Element("members")!;
-        var reversed = membersEl.Elements("member").Reverse().ToList();
-        membersEl.RemoveNodes();
-        foreach (var m in reversed) membersEl.Add(m);
+        var members = doc.Root!.Element("members")!;
+        var reversed = members.Elements("member").Reverse().ToList();
+        members.RemoveNodes();
+        members.Add(reversed);
 
-        var tmp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xml");
-        doc.Save(tmp);
-        try
-        {
-            var shuffled = Generate(tmp);
-            Assert.Equal(original.Pages.Count, shuffled.Pages.Count);
-            foreach (var page in original.Pages)
-            {
-                var other = Page(shuffled, page.Route.ShortName);
-                Assert.Equal(page.Body, other.Body);
-            }
-        }
-        finally { File.Delete(tmp); }
+        var a = GenerateFixture();
+        var b = Generate(XmlDocReader.ReadString(doc.ToString()));
+
+        Assert.Equal(a.Pages.Select(p => p.RelativePath), b.Pages.Select(p => p.RelativePath));
+        foreach (var page in a.Pages)
+            Assert.Equal(page.Body, Page(b, page.RelativePath).Body);
+        Assert.Equal(a.NavFragment, b.NavFragment);
     }
 
-    // ── Bug 2: member crefs resolve through their declaring type ──────────
-
     /// <summary>
-    /// <c>MutationOptions&lt;TInput,TResult&gt;</c> is a positional record:
-    /// its <c>OnSuccess</c> / <c>InvalidateKeys</c> properties are
-    /// compiler-generated and never appear as <c>&lt;member&gt;</c> entries.
-    /// A cref to one must land on the declaring type's page rather than
-    /// degrade to inline code.
+    /// Roslyn emits no <c>&lt;member&gt;</c> for a positional record's properties,
+    /// so a cref to one resolves to its declaring type's page.
     /// </summary>
     [Fact]
     public void PositionalRecordProperty_ResolvesToDeclaringTypePage()
     {
         var result = GenerateFixture();
-        var page = Page(result, "UseMutation");
+        var body = Page(result, "reference/hooks/UseMutation.md").Body;
 
-        Assert.Contains("[OnSuccess](MutationOptions.md)", page.Body, StringComparison.Ordinal);
-        Assert.Contains("[InvalidateKeys](MutationOptions.md)", page.Body, StringComparison.Ordinal);
-        // and no longer degraded to inline code
-        Assert.DoesNotContain("`OnSuccess`", page.Body, StringComparison.Ordinal);
-
+        Assert.Contains("[`MutationOptions.OnSuccess`](MutationOptions.md)", body, StringComparison.Ordinal);
+        Assert.Contains("[`MutationOptions.InvalidateKeys`](MutationOptions.md)", body, StringComparison.Ordinal);
         Assert.DoesNotContain(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_001"
             && f.Message.Contains("MutationOptions", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// Negative control, shape-matched to the subject: the declaring-type
-    /// fallback must not become a blanket "resolve anything".
-    ///
-    /// The control has to be a <em>member</em> cref whose declaring type has
-    /// no page — a type cref would never reach the member-fallback branch,
-    /// so it could not vouch for the branch staying narrow.
-    /// <c>Microsoft.UI.Reactor.Input.FocusManager</c> is outside the gated
-    /// hooks category, and it deliberately shares a short name with
-    /// <c>Microsoft.UI.Reactor.Hooks.FocusManager</c>, which does have a
-    /// page: resolving by short name instead of by full declaring-type cref
-    /// would send the reader to a same-named type in another namespace.
+    /// A cref to a Reactor type with no page becomes plain code and a warning,
+    /// never a broken link. A .NET type links to Microsoft Learn instead.
     /// </summary>
     [Fact]
-    public void MemberOfUnroutedType_StillDegradesAndWarns()
+    public void UnknownReactorCref_IsCodeText_AndDotNetCref_LinksToLearn()
     {
         var result = GenerateFixture();
-        var page = Page(result, "UseMutation");
+        var body = Page(result, "reference/hooks/UseMutation.md").Body;
 
-        // A member of an unrouted type. The fallback keeps the declaring type
-        // so the sentence still says *which* Focus — an unqualified `Focus`
-        // produced sentences like "the ambient QueryCache from QueryCache".
-        Assert.Contains("`FocusManager.Focus`", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("[Focus](", page.Body, StringComparison.Ordinal);
+        Assert.Contains("restored via `FocusManager.Focus`.", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("[`FocusManager.Focus`]", body, StringComparison.Ordinal);
         Assert.Contains(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_001"
-            && f.Message.Contains("M:Microsoft.UI.Reactor.Input.FocusManager.Focus", StringComparison.Ordinal));
+            && f.Message.Contains("M:Microsoft.UI.Reactor.Input.FocusManager.Focus(", StringComparison.Ordinal)
+            && f.Message.Contains("does not resolve", StringComparison.Ordinal));
 
-        // And a plain type cref outside the category — types stay unqualified,
-        // since the namespace adds noise without disambiguating.
-        Assert.Contains("`OperationCanceledException`", page.Body, StringComparison.Ordinal);
-        Assert.Contains(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_001"
-            && f.Message.Contains("T:System.OperationCanceledException", StringComparison.Ordinal));
+        Assert.Contains(
+            "[`OperationCanceledException`](https://learn.microsoft.com/dotnet/api/system.operationcanceledexception)",
+            body, StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Findings, f => f.Message.Contains("OperationCanceledException", StringComparison.Ordinal));
     }
 
     /// <summary>
-    /// The fallback keys off the full declaring-type cref, so a member of
-    /// <c>Input.FocusManager</c> must not be captured by the page generated
-    /// for the unrelated <c>Hooks.FocusManager</c>.
+    /// <c>Input.FocusManager</c> (unknown) and <c>Hooks.FocusManager</c> share a
+    /// simple name. The unknown one must not be captured by the other's page.
     /// </summary>
     [Fact]
     public void DeclaringTypeFallback_DoesNotMatchASameNamedTypeInAnotherNamespace()
     {
         var result = GenerateFixture();
-        // Hooks.FocusManager.Register is routed, so the short name has a page.
-        Assert.Contains(result.Pages, p => p.Route.ShortName == "Register");
+        Assert.Contains(result.Pages, p => p.RelativePath == "reference/hooks/FocusManager.md");
+        Assert.Contains(result.Pages, p => p.RelativePath == "reference/hooks/PendingScope.md");
+        Assert.DoesNotContain("FocusManager.md#", Page(result, "reference/hooks/UseMutation.md").Body, StringComparison.Ordinal);
 
         Assert.Equal(
             "T:Microsoft.UI.Reactor.Input.FocusManager",
-            CrefSignature.DeclaringTypeCref(
-                "M:Microsoft.UI.Reactor.Input.FocusManager.Focus(Microsoft.UI.Reactor.Input.ElementRef,Microsoft.UI.Xaml.FocusState)"));
-        Assert.NotEqual(
-            "T:Microsoft.UI.Reactor.Hooks.FocusManager",
             CrefSignature.DeclaringTypeCref(
                 "M:Microsoft.UI.Reactor.Input.FocusManager.Focus(Microsoft.UI.Reactor.Input.ElementRef,Microsoft.UI.Xaml.FocusState)"));
     }
@@ -306,8 +246,6 @@ defaults:
     [Fact]
     public void DeclaringTypeFallback_IsNotAppliedToTypeCrefs()
     {
-        // A T: cref has no declaring *type*; resolving `T:Ns.Missing` must
-        // not accidentally match a page for the namespace.
         Assert.Null(CrefSignature.DeclaringTypeCref("T:Microsoft.UI.Reactor.Hooks.MutationOptions`2"));
         Assert.Equal(
             "T:Microsoft.UI.Reactor.Hooks.MutationOptions`2",
@@ -318,76 +256,82 @@ defaults:
     }
 
     /// <summary>
-    /// XML-doc markup must not reach the page. Roslyn entity-escapes doc text,
-    /// and a Markdown code span is literal, so wrapping the serialized text
-    /// without decoding published <c>UseElementRef&amp;lt;Button&amp;gt;()</c>.
-    /// The overload and link assertions elsewhere stay green through that
-    /// defect, so it needs its own gate.
+    /// XML-doc markup must not reach the page. Roslyn entity-escapes doc text, and a
+    /// Markdown code span is literal, so text wrapped without decoding would publish
+    /// <c>UseElementRef&amp;lt;Button&amp;gt;()</c>.
     /// </summary>
     [Fact]
     public void XmlDocFormatting_IsRewrittenToMarkdown()
     {
-        var page = Page(GenerateFixture(), "Probe");
+        var body = Page(GenerateFixture(), "reference/hooks/FormattingProbe.md").Body;
 
-        // Inline <c> and <paramref> become code spans, with entities decoded.
-        Assert.Contains("`UseNavigation<TRoute>()`", page.Body, StringComparison.Ordinal);
-        Assert.Contains("`() => items.ToArray()`", page.Body, StringComparison.Ordinal);
-        Assert.Contains("`factory`", page.Body, StringComparison.Ordinal);
-        Assert.Contains("**bold**", page.Body, StringComparison.Ordinal);
+        Assert.Contains("`UseNavigation<TRoute>()`", body, StringComparison.Ordinal);
+        Assert.Contains("`() => items.ToArray()`", body, StringComparison.Ordinal);
+        Assert.Contains("`factory`", body, StringComparison.Ordinal);
+        Assert.Contains("**bold**", body, StringComparison.Ordinal);
 
-        // Block <code> becomes a fenced block, also decoded.
-        Assert.Contains("```csharp", page.Body, StringComparison.Ordinal);
-        Assert.Contains("ctx.UseElementRef<Button>()", page.Body, StringComparison.Ordinal);
-        Assert.Contains("Array.Empty<object>()", page.Body, StringComparison.Ordinal);
+        Assert.Contains("```csharp", body, StringComparison.Ordinal);
+        Assert.Contains("ctx.UseElementRef<Button>()", body, StringComparison.Ordinal);
+        Assert.Contains("Array.Empty<object>()", body, StringComparison.Ordinal);
 
-        // <para>/<list> become real Markdown. Left as raw HTML blocks,
-        // CommonMark would stop parsing and emit the inline rewrites literally.
-        Assert.Contains("A wrapped paragraph with a `code span` and **bold**.", page.Body, StringComparison.Ordinal);
-        Assert.Contains("- First item with `inline code`.", page.Body, StringComparison.Ordinal);
-        Assert.Contains("- Second item.", page.Body, StringComparison.Ordinal);
+        Assert.Contains("A wrapped paragraph with a `code span` and **bold**.", body, StringComparison.Ordinal);
+        Assert.Contains("1. First item with `inline code`.", body, StringComparison.Ordinal);
+        Assert.Contains("2. Second item.", body, StringComparison.Ordinal);
 
-        // No raw markup or entities survive anywhere on the page.
-        Assert.DoesNotContain("<c>", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<code>", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<b>", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<paramref", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<para>", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<list", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("<item>", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("&lt;", page.Body, StringComparison.Ordinal);
-        Assert.DoesNotContain("&gt;", page.Body, StringComparison.Ordinal);
+        foreach (var raw in new[] { "<c>", "<code>", "<b>", "<paramref", "<para>", "<list", "<item>", "&lt;", "&gt;" })
+            Assert.DoesNotContain(raw, body, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// An &lt;example&gt; without a &lt;code&gt; wrapper would otherwise be
-    /// emitted as bare lines and collapsed into one prose paragraph, leaving the
-    /// sample unreadable and uncopyable.
+    /// An &lt;example&gt; without a &lt;code&gt; wrapper would otherwise collapse
+    /// into one prose paragraph.
     /// </summary>
     [Fact]
     public void UnwrappedExample_IsStillFenced()
     {
-        var page = Page(GenerateFixture(), "Probe");
-        var examples = page.Body[page.Body.IndexOf("Examples", StringComparison.Ordinal)..];
+        var body = Page(GenerateFixture(), "reference/hooks/FormattingProbe.md").Body;
+        var example = body[body.IndexOf("**Example**", StringComparison.Ordinal)..];
 
-        Assert.Contains("```csharp", examples, StringComparison.Ordinal);
-        Assert.Contains("var (value, setValue) = ctx.UseState(0);", examples, StringComparison.Ordinal);
+        Assert.Contains("```csharp\nvar (value, setValue) = ctx.UseState(0);", example.Replace("\r\n", "\n"), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Plain-text docs often mark a new paragraph with a blank line instead of
+    /// <c>&lt;para&gt;</c>. The page keeps the break; a table cell stays on one line.
+    /// </summary>
+    [Fact]
+    public void BlankLineInPlainText_StartsANewParagraph()
+    {
+        const string xml = """
+<doc><assembly><name>P</name></assembly><members>
+<member name="M:Microsoft.UI.Reactor.Hooks.ParagraphProbe.UseProbe(System.Int32)">
+  <summary>
+  First paragraph, wrapped
+  over two lines.
+
+  Second paragraph with <c>code</c>.
+  </summary>
+  <param name="count">One line.
+
+  Still the same cell.</param>
+</member>
+</members></doc>
+""";
+        var pages = Generate(XmlDocReader.ReadString(xml)).Pages;
+        var page = pages.FirstOrDefault(p => p.Body.Contains("ParagraphProbe", StringComparison.Ordinal) && p.Kind != PageKind.CategoryIndex && p.Kind != PageKind.RootIndex);
+        Assert.True(page is not null, string.Join(", ", pages.Select(p => p.RelativePath)));
+        var body = page!.Body.Replace("\r\n", "\n");
+
+        Assert.Contains("First paragraph, wrapped over two lines.\n\nSecond paragraph with `code`.", body, StringComparison.Ordinal);
+        Assert.Contains("| One line. Still the same cell. |", body, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// A generic type documented with its <c>typeparam</c> tags in reverse order
-    /// must render identically to the in-order one.
-    ///
-    /// <para>XML preserves authoring order and nothing in a cref carries
-    /// declaration ordinals, so any difference between these two means
-    /// authoring order is leaking into member signatures — and from there into
-    /// anchors, silently renaming real parameters into each other's slots.</para>
-    ///
-    /// <para>The overloads are load-bearing, not decoration: a page with a
-    /// single member renders only <c>#&#32;Swap</c>, so the per-member signature
-    /// heading — the only place declaring type parameters appear — is never
-    /// emitted and the assertion would hold no matter what the generator did.
-    /// The first version of this test was vacuous for exactly that reason and
-    /// survived a mutation that reverted the fix.</para>
+    /// must give the same headings. XML keeps authoring order and a cref carries
+    /// no ordinals, so any difference means authoring order leaks into member
+    /// signatures and anchors. The two overloads matter: without member sections
+    /// there are no signature headings to compare.
     /// </summary>
     [Fact]
     public void TypeParamTagOrder_DoesNotChangeMemberSignatures()
@@ -412,28 +356,14 @@ defaults:
         var reversed = HeadingsFor(head +
             "  <typeparam name=\"TValue\">v</typeparam>\n  <typeparam name=\"TKey\">k</typeparam>\n</member>\n" + body);
 
-        // Non-vacuity floor: the signature headings must actually be present,
-        // otherwise the comparison below is between two empty sets.
-        Assert.Contains(inOrder, h => h.Contains("Swap(", StringComparison.Ordinal));
-
+        Assert.Contains(inOrder, h => h.StartsWith("#### `Swap(", StringComparison.Ordinal));
         Assert.Equal(inOrder, reversed);
-
-        // And an order that cannot be proven is not asserted as fact.
         Assert.DoesNotContain(inOrder, h => h.Contains("TKey", StringComparison.Ordinal));
     }
 
-    private static List<string> HeadingsFor(string xml)
-    {
-        var path = Path.Combine(Path.GetTempPath(), "refgen-" + Guid.NewGuid().ToString("N") + ".xml");
-        File.WriteAllText(path, xml);
-        try
-        {
-            return Generate(path).Pages
-                .SelectMany(p => p.Body.Replace("\r\n", "\n").Split('\n'))
-                .Where(l => l.StartsWith("#", StringComparison.Ordinal))
-                .OrderBy(h => h, StringComparer.Ordinal)
-                .ToList();
-        }
-        finally { File.Delete(path); }
-    }
+    private static List<string> HeadingsFor(string xml) =>
+        Generate(XmlDocReader.ReadString(xml)).Pages
+            .SelectMany(p => Headings(p.Body))
+            .OrderBy(h => h, StringComparer.Ordinal)
+            .ToList();
 }

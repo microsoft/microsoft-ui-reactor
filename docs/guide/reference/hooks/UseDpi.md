@@ -1,14 +1,19 @@
 # UseDpi
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseDpi`
+Returns the current per-window DPI ([`ReactorWindow.Dpi`](../hosting/ReactorWindow.md#dpi)) and re-renders on DPI change. Returns the system primary-monitor DPI when called outside a window. (spec 036 §5.2)
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public uint UseDpi()
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Returns the current per-window DPI (`ReactorWindow.Dpi`)
-and re-renders on DPI change. Returns the system primary-monitor DPI when
-called outside a window. (spec 036 §5.2)
+**Learn more:** [Advanced Windowing](../../windowing-advanced.md), [Hooks](../../hooks.md)
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected uint UseDpi()
+```

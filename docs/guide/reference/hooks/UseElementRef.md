@@ -1,37 +1,25 @@
 # UseElementRef
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.Component)`
+Returns a stable [`ElementRef<T>`](../input/element-refs.md#elementreft) for the current component scope.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public static ElementRef<T> UseElementRef<T>(this RenderContext ctx) where T : FrameworkElement
+```
 
-## Overloads
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseElementRefExtensions`.
 
-- [`UseElementRef<T>(Component)`](#useelementreftcomponent)
-- [`UseElementRef<T>(RenderContext)`](#useelementreftrendercontext)
+**Learn more:** [Input and gestures](../../input-and-gestures.md), [Hooks](../../hooks.md)
 
-## `UseElementRef<T>(Component)`
+## Type parameters
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.Component)`
+| Name | Description |
+| --- | --- |
+| `T` | The concrete control type the ref will attach to. |
 
-### Summary
+## Use from a class component
 
-Component-extension overload of [UseElementRef](UseElementRef.md#useelementreftrendercontext) ([guide](../../hooks.md)).
-Equivalent to calling the `RenderContext`-extension form against
-`component.Context`.
+Class components can call the same hook directly. These overloads forward to the ones above:
 
-### Parameters
-
-- **component** — The component whose render context owns the hook slot.
-
-## `UseElementRef<T>(RenderContext)`
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.RenderContext)`
-
-### Summary
-
-Returns a stable `ElementRef` for the current component scope.
-
-
+```csharp
+public static ElementRef<T> UseElementRef<T>(this Component component) where T : FrameworkElement
+```
