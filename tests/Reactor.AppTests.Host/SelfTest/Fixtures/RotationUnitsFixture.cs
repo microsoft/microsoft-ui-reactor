@@ -109,7 +109,16 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
                 H.Check(name + "_TargetIsNinetyDegrees", Math.Abs(angle - MathF.PI / 2) < 1e-3, $"RotationAngle={angle}");
             }
         }
-        finally { H.SetContent(null); }
+        finally
+        {
+            // Unmounting drops the static keyframe-trigger and interaction-tracker registrations.
+            int trackers = Reconciler.InteractionTrackerCountForTests;
+            reconciler.UnmountChild(target);
+            if (mode == "InteractionStates")
+                H.Check(name + "_TrackerReleased", Reconciler.InteractionTrackerCountForTests == trackers - 1,
+                    $"trackers {trackers} -> {Reconciler.InteractionTrackerCountForTests}");
+            H.SetContent(null);
+        }
     }
 
     private static bool Near(double actual, double expected) => Math.Abs(actual - expected) <= 3;
