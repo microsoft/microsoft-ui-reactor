@@ -180,7 +180,7 @@ public class NonCsharpSnippetFenceTests
         // Corpus-level fail-closed check. `snippet=` is a pipeline directive: if
         // one survives into docs/guide it was never substituted, and the page is
         // showing the reader an empty or stale block.
-        var guideDir = Path.Join(FindRepoRoot(), "docs", "guide");
+        var guideDir = Path.Join(TestRepo.Root, "docs", "guide");
         var pages = Directory.GetFiles(guideDir, "*.md", SearchOption.AllDirectories);
 
         // Positive control #1 — prove we are actually reading a corpus. A broken
@@ -214,7 +214,7 @@ public class NonCsharpSnippetFenceTests
         // author has actually written next to a `snippet=`, so adding a new one
         // (```json, ```yaml) fails here rather than silently producing an empty
         // block three pipeline stages later.
-        var templateDir = Path.Join(FindRepoRoot(), "docs", "_pipeline", "templates");
+        var templateDir = Path.Join(TestRepo.Root, "docs", "_pipeline", "templates");
         var fence = new Regex(@"```(?<lang>[^\s`]+)\s+snippet=""");
 
         var languages = Directory.GetFiles(templateDir, "*.md.dt", SearchOption.AllDirectories)
@@ -237,17 +237,5 @@ public class NonCsharpSnippetFenceTests
                 $"DocAssembler does not substitute ```{language} fences, so every "
                 + $"`{language}` snippet in the templates renders as an empty code block.");
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("Reactor repo root not found from test cwd.");
     }
 }

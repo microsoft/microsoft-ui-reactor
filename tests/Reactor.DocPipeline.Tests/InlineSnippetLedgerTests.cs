@@ -666,7 +666,7 @@ public class InlineSnippetLedgerTests
 
     private static IEnumerable<(string Topic, string Path)> Templates()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var dir = Path.Join(repoRoot, TemplatesRelative.Replace('/', Path.DirectorySeparatorChar));
 
         foreach (var file in Directory.EnumerateFiles(dir, "*.md.dt", SearchOption.AllDirectories))
@@ -678,17 +678,5 @@ public class InlineSnippetLedgerTests
             var relative = Path.GetRelativePath(dir, file).Replace(Path.DirectorySeparatorChar, '/');
             yield return (relative[..^".md.dt".Length], file);
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("Reactor repo root not found from test cwd.");
     }
 }

@@ -37,6 +37,8 @@ dotnet test tests/Reactor.Tests -p:Platform=x64 && dotnet test tests/Reactor.Sel
 
 `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries. `Reactor.PackagedTests` does the same for `Reactor.PackagedTests.Host`.
 
+For `Reactor.DocPipeline.Tests`, see [Running the doc pipeline tests](docs/contributing/doc-pipeline.md#running-the-doc-pipeline-tests).
+
 ## Flag translation
 
 The suites moved to Microsoft.Testing.Platform when xunit.v3 v4 removed VSTest
