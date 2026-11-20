@@ -319,12 +319,14 @@ Conventions for contributors:
   also skip the write and leave the right-to-left value on the control.
 - **`Curve.Linear` animates at constant speed (spec 066 §16, issue #1640).** Its compositor
   keyframes had no easing function, so the compositor's default ease-out applied and a
-  linear animation reached about 70% of its travel at 30% of its duration. Every linear
+  linear animation was already about two-thirds of the way at 30% of its duration. Every linear
   path now passes a linear easing function: `.Animate(Curve.Linear(...))`,
   `AnimationScope.WithAnimation(Curve.Linear(...))`, `.InteractionStates(..., Curve.Linear(...))`,
   `.Transition(..., Curve.Linear(...))` enter and exit animations, and the compositor fallback
   for `.OpacityTransition()`, `.RotationTransition()`, `.ScaleTransition()` and
-  `.TranslationTransition()` on an element whose visual was already handed out.
+  `.TranslationTransition()` on an element whose visual was already handed out. That fallback
+  is built on the linear curve, so it is now linear too. Spec 066 later moves it to the XAML
+  transition curve.
 
 ### Security
 

@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
@@ -14,7 +15,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// from it (#1640, spec 066 §16). Each animation is paused through its controller at fixed time
 /// fractions and the rendered value is read back, so the oracle doesn't depend on wall-clock timing.
 /// Without an explicit easing function the compositor applies its default ease-out, which is at
-/// about 0.65 at a time fraction of 0.3. <c>EaseControl</c> is the positive control: a decelerating
+/// about 0.7 at a time fraction of 0.3. <c>EaseControl</c> is the positive control: a decelerating
 /// curve must read well ahead of the time fraction, proving the oracle can tell the two apart.
 /// </summary>
 internal sealed class CurveLinearProgressFixture(Harness h, string mode) : SelfTestFixtureBase(h)
@@ -32,12 +33,9 @@ internal sealed class CurveLinearProgressFixture(Harness h, string mode) : SelfT
         Element plain = Border(null).Width(100).Height(40).Background("#FFFF0000");
         var curve = mode == "EaseControl" ? Curve.Ease(DurationMs, Easing.Decelerate) : Curve.Linear(DurationMs);
         bool opacity = mode.EndsWith("Opacity", StringComparison.Ordinal);
-        bool compositorTransition = mode.StartsWith("CompositorTransition", StringComparison.Ordinal);
+        bool implicitWrite = mode.StartsWith("AnimateImplicit", StringComparison.Ordinal);
         string property = opacity ? "Opacity" : "Scale";
         Element Value(Element el, bool end) => opacity ? el.Opacity(end ? 0 : 1) : el.Scale(end ? 2f : 1f);
-        var duration = TimeSpan.FromMilliseconds(DurationMs);
-        Element Armed(Element el) => (opacity ? el.OpacityTransition(duration) : el.ScaleTransition(new Vector3Transition { Duration = duration }))
-            .Transition(Transition.Fade);
 
         Element initial, final;
         switch (mode)
@@ -48,11 +46,10 @@ internal sealed class CurveLinearProgressFixture(Harness h, string mode) : SelfT
             case "InteractionStatesOpacity":
                 initial = final = plain.InteractionStates(s => s.PointerOver(opacity: 0f), curve);
                 break;
-            case "CompositorTransitionScale" or "CompositorTransitionOpacity":
-                // The enter transition hands out the visual, so WinUI refuses the XAML transition
-                // added later and Reactor falls back to a compositor implicit animation.
-                initial = Value(plain, false).Transition(Transition.Fade);
-                final = Armed(Value(plain, true));
+            case "AnimateImplicitScale" or "AnimateImplicitOpacity":
+                // .Animate() also installs implicit animations on the visual. A write that bypasses
+                // Reactor's modifiers triggers them instead of the write-time animation.
+                initial = final = plain.Animate(curve);
                 break;
             case "AmbientScale" or "AmbientOpacity":
                 initial = Value(plain, false);
@@ -80,28 +77,20 @@ internal sealed class CurveLinearProgressFixture(Harness h, string mode) : SelfT
         string name = "CurveLinear_" + mode;
         try
         {
-            if (compositorTransition)
-            {
-                // Let the enter fade finish, then arm the transition before the value changes
-                // so the implicit animation starts from the initial value.
-                await Task.Delay(1000);
-                var armed = Armed(Value(plain, false));
-                reconciler.Update(initial, armed, target, () => { });
-                await Harness.Render();
-                initial = armed;
-            }
-
+            var visual = ElementCompositionPreview.GetElementVisual(target);
             void Apply() => reconciler.Update(initial, final, target, () => { });
-            if (mode.StartsWith("Ambient", StringComparison.Ordinal)) AnimationScope.WithAnimation(curve, Apply);
+            if (implicitWrite)
+            {
+                H.Check(name + "_ImplicitInstalled", visual.ImplicitAnimations?.ContainsKey(property) == true);
+                if (opacity) visual.Opacity = 0;
+                else visual.Scale = new Vector3(2, 2, 1);
+            }
+            else if (mode.StartsWith("Ambient", StringComparison.Ordinal)) AnimationScope.WithAnimation(curve, Apply);
             else if (mode.StartsWith("InteractionStates", StringComparison.Ordinal)) Reconciler.SimulatePointerOverForTests(target, isOver: true);
             else Apply();
             await Harness.Render();
 
-            if (compositorTransition)
-                H.Check(name + "_CompositorFallback",
-                    ElementCompositionPreview.GetElementVisual(target).ImplicitAnimations?.ContainsKey(property) == true);
-
-            var controller = ElementCompositionPreview.GetElementVisual(target).TryGetAnimationController(property);
+            var controller = visual.TryGetAnimationController(property);
             H.Check(name + "_Animating", controller is not null, $"no animation running on {property}");
             if (controller is null) return;
             controller.Pause();
