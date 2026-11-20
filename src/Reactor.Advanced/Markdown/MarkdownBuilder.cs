@@ -183,9 +183,6 @@ internal sealed class MarkdownBuilder
     private int _tableRowIndex;
     private int _tableCellIndex;
 
-    // List item numbering.
-    private int _listItemIndex;
-
     // Result.
     private Element? _result;
 
@@ -235,10 +232,16 @@ internal sealed class MarkdownBuilder
     {
         switch (type)
         {
-            case MarkdownBlockType.Doc:
-            case MarkdownBlockType.Quote:
             case MarkdownBlockType.Ul:
             case MarkdownBlockType.Ol:
+                // Tight items have no paragraph callbacks. Keep their pending text
+                // in the parent item before the nested list consumes new inlines.
+                if (_blockStack.TryPeek(out var item) && item.Type == MarkdownBlockType.Li)
+                    FlushPendingInlines(item);
+                goto case MarkdownBlockType.Doc;
+
+            case MarkdownBlockType.Doc:
+            case MarkdownBlockType.Quote:
             case MarkdownBlockType.Li:
             case MarkdownBlockType.P:
             case MarkdownBlockType.H:
@@ -283,10 +286,6 @@ internal sealed class MarkdownBuilder
                 // Hr has no children — produce it immediately.
                 break;
         }
-
-        // Reset list item index on entering a list.
-        if (type == MarkdownBlockType.Ul || type == MarkdownBlockType.Ol)
-            _listItemIndex = 0;
 
         // Prepare inlines for text-bearing blocks.
         if (type == MarkdownBlockType.P || type == MarkdownBlockType.H)
@@ -523,7 +522,6 @@ internal sealed class MarkdownBuilder
     private void LeaveListItem(object? detail)
     {
         var frame = _blockStack.Pop();
-        _listItemIndex++;
 
         // Tight lists: md4c suppresses P blocks, so text arrives directly in Li.
         // Flush any pending inlines as a paragraph.
@@ -537,19 +535,14 @@ internal sealed class MarkdownBuilder
             marker = (liDetail.Value.TaskMark == 'x' || liDetail.Value.TaskMark == 'X')
                 ? "\u2611 " : "\u2610 "; // checked / unchecked checkbox
         }
+        else if (_blockStack.TryPeek(out var list) && list.Type == MarkdownBlockType.Ol)
+        {
+            int start = list.Detail is MarkdownBlockOlDetail olDet ? olDet.Start : 1;
+            marker = $"{start + list.Children.Count}. ";
+        }
         else
         {
-            // Check if parent is Ol or Ul.
-            bool isOrdered = _blockStack.Count > 0 && _blockStack.Peek().Type == MarkdownBlockType.Ol;
-            if (isOrdered)
-            {
-                int start = _blockStack.Peek().Detail is MarkdownBlockOlDetail olDet ? olDet.Start : 1;
-                marker = $"{start + _listItemIndex - 1}. ";
-            }
-            else
-            {
-                marker = "\u2022 "; // bullet
-            }
+            marker = "\u2022 "; // bullet
         }
 
         Element content;

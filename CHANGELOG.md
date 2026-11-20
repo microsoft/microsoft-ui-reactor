@@ -89,6 +89,10 @@ Conventions for contributors:
   preserves the native viewer and its single subscription, which is detached when
   the component unmounts (spec 017, VirtualList).
 
+- Tight nested Markdown lists keep each item's text above its child list and
+  preserve ordered numbering across nesting levels, including in cross-block
+  text selection.
+
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
   animations. Removing `.Opacity()` also releases its compositor override so styles
