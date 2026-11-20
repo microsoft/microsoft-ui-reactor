@@ -347,6 +347,23 @@ internal static class SelfTestFixtureRegistry
         ("Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval", static harness => new Issue522TextBlockStyleResetFixture.SharedStyleAcrossMultipleElements_IsolatedRemoval(harness)),
         ("Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks", static harness => new Issue522TextBlockStyleResetFixture.ThemeBindingsRemoval_AfterCacheClear_StillWorks(harness)),
         ("Issue522_ThemeRef_CycleAcrossDifferentKeys", static harness => new Issue522TextBlockStyleResetFixture.ThemeRef_CycleAcrossDifferentKeys(harness)),
+        // ThemeRef through the synthesized {ThemeResource} Style: SplitView pane background,
+        // InteractionStates restore, an app's own Style kept as BasedOn, quoted keys.
+        ("ThemeRefStyle_SplitViewPaneBackground", static harness => new ThemeRefStyleFixtures.SplitViewPaneBackground(harness)),
+        ("ThemeRefStyle_InteractionStatesRestoreKeepsThemeLive", static harness => new ThemeRefStyleFixtures.InteractionStatesRestoreKeepsThemeLive(harness)),
+        ("ThemeRefStyle_InteractionStatesOpacityOnlyDoesNotPin", static harness => new ThemeRefStyleFixtures.InteractionStatesOpacityOnlyDoesNotPin(harness)),
+        ("ThemeRefStyle_InteractionStatesRestoresCurrentExplicitBrush", static harness => new ThemeRefStyleFixtures.InteractionStatesRestoresCurrentExplicitBrush(harness)),
+        ("ThemeRefStyle_InteractionStatesRestoresBinding", static harness => new ThemeRefStyleFixtures.InteractionStatesRestoresBinding(harness)),
+        ("ThemeRefStyle_AuthorStyleKept", static harness => new ThemeRefStyleFixtures.AuthorStyleKept(harness)),
+        ("ThemeRefStyle_NamedStyleKeptWithThemeRef", static harness => new ThemeRefStyleFixtures.NamedStyleKeptWithThemeRef(harness)),
+        ("ThemeRefStyle_AuthorStyleDerivedTargetType", static harness => new ThemeRefStyleFixtures.AuthorStyleDerivedTargetType(harness)),
+        ("ThemeRefStyle_AuthorTemplateNotRebuilt", static harness => new ThemeRefStyleFixtures.AuthorTemplateNotRebuilt(harness)),
+        ("ThemeRefStyle_KeyNeedsQuoting", static harness => new ThemeRefStyleFixtures.ThemeRefKeyNeedsQuoting(harness)),
+        ("ThemeRefStyle_UnrepresentableKeySkipsOnlyItsProperty", static harness => new ThemeRefStyleFixtures.UnrepresentableKeySkipsOnlyItsProperty(harness)),
+        ("ThemeRefStyle_MissingKeyKeepsAuthorBase", static harness => new ThemeRefStyleFixtures.MissingKeyKeepsAuthorBase(harness)),
+        ("ThemeRefStyle_PoolReturnDropsThemedStyle", static harness => new ThemeRefStyleFixtures.PoolReturnDropsThemedStyle(harness)),
+        ("ThemeRefStyle_CacheKeyDoesNotCollide", static harness => new ThemeRefStyleFixtures.CacheKeyDoesNotCollide(harness)),
+        ("ThemeRefStyle_ThirdPartyStyleFallsBack", static harness => new ThemeRefStyleFixtures.ThirdPartyStyleFallsBack(harness)),
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         ("NamedStyle_TypeRampStylesResolve", static harness => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness)),

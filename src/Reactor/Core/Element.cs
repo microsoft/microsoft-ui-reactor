@@ -5112,11 +5112,13 @@ public partial record SplitViewElement(
             },
         });
         return d
-            .OneWayConditional(
-                get:         static e => e.PaneBackground,
-                set:         static (c, v) => c.PaneBackground = v!,
-                shouldWrite: static e => e.PaneBackground is not null,
-                comparer:    SplitViewBrushReferenceComparer.Instance)
+            // Clearing a removed brush (rather than leaving it, as OneWayConditional does) lets a
+            // `.PaneBackground(ThemeRef)` that replaces it show through the themed Style.
+            .OneWay(
+                get:      static e => e.PaneBackground is { } b ? Optional<Brush?>.Of(b) : Optional<Brush?>.Unset,
+                set:      static (c, v) => c.PaneBackground = v!,
+                dp:       WinUI.SplitView.PaneBackgroundProperty,
+                comparer: SplitViewBrushReferenceComparer.Instance)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitViewEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.SplitView, object>>(
                 subscribe:        static (c, h) => c.PaneOpening += h,
