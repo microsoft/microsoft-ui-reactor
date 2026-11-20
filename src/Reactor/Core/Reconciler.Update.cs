@@ -164,7 +164,7 @@ public sealed partial class Reconciler
         ThemeBindingSnapshot themeSnapshot = default;
         if (oldEl.ThemeBindings is not null && control is FrameworkElement clearThFe)
         {
-            ClearDroppedThemeBindings(clearThFe, newEl.ThemeBindings);
+            ClearDroppedThemeBindings(clearThFe, oldEl.ThemeBindings, newEl.ThemeBindings);
             // What the surviving bindings hold before this render's setters and element
             // properties run, so a binding one of them replaces can be handed over.
             if (newEl.ThemeBindings is not null)
