@@ -226,6 +226,7 @@ internal struct MarkdownClickSequence
     private int _count;
 
     internal bool IsPending => _count != 0;
+    internal object? Surface => _surface;
 
     internal int Press(object surface, ulong timestamp, double x, double y,
         ulong maxInterval, double halfWidth, double halfHeight)
@@ -322,10 +323,15 @@ internal sealed class MarkdownSelectionDocument
     private int[] _graphemes = [];
     private int[]? _wordBoundaries;
     private int[]? _paragraphBoundaries;
+    private int[]? _paragraphEndBoundaries;
     internal Action<bool, bool>? Changed { get; set; }
 
     internal int[] ParagraphBoundaries => _paragraphBoundaries ??=
         Entries.Where(entry => entry.Text.Length > 0).Select(entry => entry.Start)
+            .Append(Text.Length).Prepend(0).Distinct().ToArray();
+
+    internal int[] ParagraphEndBoundaries => _paragraphEndBoundaries ??=
+        Entries.Where(entry => entry.Text.Length > 0).Select(entry => entry.End)
             .Append(Text.Length).Prepend(0).Distinct().ToArray();
 
     internal int[] WordBoundaries => _wordBoundaries ??= BuildWordBoundaries();
@@ -411,7 +417,7 @@ internal sealed class MarkdownSelectionDocument
         Entries = next;
         Text = value;
         _graphemes = StringInfo.ParseCombiningCharacters(value);
-        _wordBoundaries = _paragraphBoundaries = null;
+        _wordBoundaries = _paragraphBoundaries = _paragraphEndBoundaries = null;
         Anchor = Math.Clamp(anchor, 0, Text.Length);
         Caret = Math.Clamp(caret, 0, Text.Length);
         Changed?.Invoke(textChanged, selectionChanged);

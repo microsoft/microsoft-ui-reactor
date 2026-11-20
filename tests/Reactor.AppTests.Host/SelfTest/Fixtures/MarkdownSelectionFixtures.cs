@@ -394,7 +394,7 @@ internal static partial class MarkdownSelectionFixtures
             var host = H.CreateHost();
             host.Mount(_ => MarkdownTextSelection.Scope(options, VStack(
                 Md("first [alpha](https://example.com/a) tail\n\nsecond [beta](https://example.com/b) end",
-                    new MarkdownOptions { TextSelection = options, LinkBuilder = link => Button(link.Text) }),
+                    new MarkdownOptions { TextSelection = options, LinkBuilder = link => Button($"Open {link.Text}") }),
                 Button("toolbar"))));
             await Harness.Render();
             await WaitForLoadedScopes(H);
@@ -410,6 +410,12 @@ internal static partial class MarkdownSelectionFixtures
                 && paragraph.GetText(-1) == "first alpha tail";
             H.Check("MdSelection_UiaParagraphMoveForwardAcrossSurfaces", movedForward);
             H.Check("MdSelection_UiaParagraphMoveBackwardAcrossSurfaces", movedBackward);
+            var paragraphEndpoint = peer.Range(0, 0);
+            H.Check("MdSelection_UiaParagraphEndExcludesSeparator",
+                paragraphEndpoint.MoveEndpointByUnit(
+                    Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.End,
+                    Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph, 1) == 1
+                && paragraphEndpoint.GetText(-1) == "first alpha tail");
             var alpha = document.FindText("alpha", false, false);
             var beta = document.FindText("beta", false, false);
             H.Check("MdSelection_AlphaHasOneChild", alpha.GetChildren().Length == 1);
@@ -500,6 +506,9 @@ internal static partial class MarkdownSelectionFixtures
             var word = peer.Range(1, 1);
             word.ExpandToEnclosingUnit(Microsoft.UI.Xaml.Automation.Text.TextUnit.Word);
             H.Check("MdSelection_UiaWordBoundary", word.GetText(-1) == "one ");
+            H.Check("MdSelection_UiaWordMove",
+                word.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Word, 1) == 1
+                && word.GetText(-1) == "two ");
             word.ExpandToEnclosingUnit(Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph);
             H.Check("MdSelection_UiaParagraphBoundary", word.GetText(-1) == selection.Document.Text);
             word.Select();

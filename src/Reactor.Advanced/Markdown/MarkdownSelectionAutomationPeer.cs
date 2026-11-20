@@ -190,7 +190,9 @@ internal sealed partial class MarkdownSelectionRange(
     public int MoveEndpointByUnit(TextPatternRangeEndpoint endpoint, TextUnit unit, int count)
     {
         Normalize();
-        var boundaries = Boundaries(unit);
+        // The end of a Markdown paragraph precedes its inter-surface separator.
+        var boundaries = unit == TextUnit.Paragraph && endpoint == TextPatternRangeEndpoint.End
+            ? host.Document.ParagraphEndBoundaries : Boundaries(unit);
         var result = MarkdownSelectionRangeMovement.MoveEndpoint(Endpoint(endpoint), boundaries, count);
         SetEndpoint(endpoint, result.Offset);
         return result.Moved;

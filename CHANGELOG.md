@@ -46,12 +46,12 @@ Conventions for contributors:
 - Opt-in Markdown text selection supports double-click to select a word and
   triple-click to select a text surface, including drag extension by either unit.
   Selection drags from inline links and release-mode custom link buttons do not
-  activate the link; clicking outside a message clears its selection (follow-up
-  to PR #1475).
+  activate the link; clicking outside a message's text clears its selection (#1617).
 
 - Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
   without allocating fallback key strings. Explicit keys resembling the legacy
   fallback format retain their existing collision behavior (spec 042 §5).
+
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write

@@ -79,7 +79,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             textRegistered = true;
             Automation.AddAutomationEventHandler(TextPattern.TextSelectionChangedEvent, inner, TreeScope.Element, selectionHandler);
             selectionRegistered = true;
-            void Point(double x, double y)
+            Input MoveInput(double x, double y)
             {
                 GuardForeground();
                 int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
@@ -87,7 +87,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
                 Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
                     "Pointer target is inside the virtual desktop");
-                Send(new Input
+                return new Input
                 {
                     Union = new InputUnion
                     {
@@ -98,7 +98,11 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                             Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
                         }
                     }
-                });
+                };
+            }
+            void Point(double x, double y)
+            {
+                Send(MoveInput(x, y));
                 Thread.Sleep(PointerSettleMs);
             }
             void Mouse(uint flags)
@@ -156,8 +160,14 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             double customY = customGlyph[1] + customGlyph[3] / 2;
             Click(customX, customY);
             Wait(() => customButton.Current.HelpText == "Custom clicks 1", "custom link button click");
+            Thread.Sleep((int)GetDoubleClickTime() + 1);
             Point(customX, customY);
+            string routingBeforeCustomPress = outer.Current.HelpText;
             Mouse(2); mouseHeld = true;
+            Wait(() => outer.Current.HelpText != routingBeforeCustomPress &&
+                outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal) &&
+                outerText.GetSelection().Single().GetText(-1) == "",
+                "custom button press was routed without selecting a word");
             Point(customX + 15, customY);
             Mouse(4); mouseHeld = false;
             Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
@@ -177,8 +187,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             double innerY = innerGlyph[1] + innerGlyph[3] / 2;
             MultiClick(innerX, innerY, 2);
             Console.WriteLine($"Inner double-click selection={innerText.GetSelection().Single().GetText(-1)}; routing={inner.Current.HelpText}");
-            Assert.AreEqual("inner ", innerText.GetSelection().Single().GetText(-1),
-                "Double-click selects the word with trailing whitespace");
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner ",
+                "double-click selects the word with trailing whitespace");
             Click(innerX, innerY);
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text",
                 "triple-click selects the Markdown paragraph");
@@ -213,9 +223,20 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Assert.AreEqual(0, innerText.GetSelection().Single().CompareEndpoints(
                 TextPatternRangeEndpoint.Start, shiftAnchor, TextPatternRangeEndpoint.Start), "Shift+click keeps anchor");
             Console.WriteLine($"Shift+click selected={innerText.GetSelection().Single().GetText(-1)}");
+            var lastWord = Glyph(innerText.DocumentRange, 7);
+            double lastX = lastWord[0] + lastWord[2] / 2;
+            double lastY = lastWord[1] + lastWord[3] / 2;
+            Click(lastX, lastY);
+            Mouse(2); mouseHeld = true;
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "text",
+                "second press anchors the final word before streaming");
             ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
             Wait(() => innerText.DocumentRange.GetText(-1) == "inner text streamed" &&
                 receivedText.Contains("inner text streamed"), "streaming exact text-change event");
+            Point(innerX, innerY);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text ",
+                "reverse word drag uses the rebuilt anchor, including its new trailing space");
+            Mouse(4); mouseHeld = false;
             Console.WriteLine($"Streaming text={innerText.DocumentRange.GetText(-1)} selected={innerText.GetSelection().Single().GetText(-1)}; textEvents={textEvents}");
 
             var longElement = Find("SelectionLong");
@@ -265,11 +286,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 dismissed, TextPatternRangeEndpoint.End), "Click-away leaves no selected accessibility range");
             void SelectInnerText()
             {
-                var glyph = Glyph(innerText.DocumentRange, 1);
-                Click(glyph[0] + glyph[2] / 2, glyph[1] + glyph[3] / 2);
-                Key(0x11, false);
-                Key(0x41, false); Key(0x41, true);
-                Key(0x11, true);
+                innerText.DocumentRange.Select();
                 Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text streamed",
                     "reselect inner message before click-away");
             }
@@ -282,20 +299,32 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             var currentInnerGlyph = Glyph(innerText.DocumentRange, 1);
             double currentInnerX = currentInnerGlyph[0] + currentInnerGlyph[2] / 2;
             double currentInnerY = currentInnerGlyph[1] + currentInnerGlyph[3] / 2;
-            Click(currentInnerX, currentInnerY);
-            Wait(() => innerText.GetSelection().Single().GetText(-1) == "",
-                "single click leaves the message collapsed");
-            Click(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
+            var innerMove = MoveInput(currentInnerX, currentInnerY);
+            var blankMove = MoveInput(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
+            var down = new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 2 } } };
+            var up = new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 4 } } };
+            static int PressCount(string routing)
+            {
+                string press = routing.Split(" | ").Last(entry => entry.StartsWith("press pressCount=", StringComparison.Ordinal));
+                int start = "press pressCount=".Length;
+                return int.Parse(press.AsSpan(start, press.IndexOf(' ', start) - start),
+                    global::System.Globalization.CultureInfo.InvariantCulture);
+            }
+            int finalPress = PressCount(inner.Current.HelpText) + 3;
+            // One batch keeps all four clicks in the same double-click interval.
+            Input[] clickAwaySequence = [innerMove, down, up, blankMove, down, up, innerMove, down, up, down, up];
+            mouseHeld = true;
+            Assert.AreEqual((uint)clickAwaySequence.Length,
+                SendInput((uint)clickAwaySequence.Length, clickAwaySequence, Marshal.SizeOf<Input>()));
+            mouseHeld = false;
             Wait(() => blank.Current.HelpText == "Blank clicks 2",
                 "blank chat click resets pending multiclick state");
-            Click(currentInnerX, currentInnerY);
-            Wait(() => innerText.GetSelection().Single().GetText(-1) == "",
-                "first click after click-away does not become a double-click");
-            Key(0x11, false);
-            Key(0x41, false); Key(0x41, true);
-            Key(0x11, true);
-            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text streamed",
-                "reselect inner message before composer click-away");
+            Wait(() => inner.Current.HelpText.Split(" | ")[^1].StartsWith(
+                    $"release pressCount={finalPress} ", StringComparison.Ordinal),
+                "all three inner clicks finished");
+            Assert.AreEqual("inner ", innerText.GetSelection().Single().GetText(-1),
+                "two presses after click-away select a word rather than a paragraph");
+            SelectInnerText();
             var composer = Find("SelectionComposer");
             var composerBounds = composer.Current.BoundingRectangle;
             Click(composerBounds.Left + composerBounds.Width / 2, composerBounds.Top + composerBounds.Height / 2);
@@ -482,4 +511,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private static partial bool GetCursorPos(out ScreenPoint point);
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial uint SendInput(uint count, [In] Input[] inputs, int size);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDoubleClickTime();
 }

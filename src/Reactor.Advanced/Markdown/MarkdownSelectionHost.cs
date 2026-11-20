@@ -27,6 +27,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private readonly Dictionary<UIElement, long> _visibilitySubscriptions = new(ReferenceEqualityComparer.Instance);
     private readonly List<UIElement> _staleVisibilityNodes = [];
     private readonly List<Rect> _selectionRectangles = [];
+    private readonly List<(double Score, int Index)> _hitCandidates = [];
     private readonly Dictionary<int, Rect> _characterRects = [];
     private readonly Dictionary<(int Offset, int Next), Rect> _glyphRects = [];
     private readonly Dictionary<MarkdownSelectionMarker, Rect> _surfaceBounds = [];
@@ -47,7 +48,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private MarkdownClickSequence _clicks;
     private MarkdownSelectionUnit _dragUnit;
     private MarkdownSelectionSpan _pressSpan;
-    private MarkdownSelectionSpan _pressLocalSpan;
+    private int _pressLocalGlyph;
     private object? _pressSurfaceIdentity;
     private bool _dragged;
     private bool _documentDirty = true;
@@ -165,7 +166,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void ResetClickSequence()
     {
         _clickTimer.Stop();
-        _clicks.Reset();
+        if (_clicks.Surface is { } clickSurface &&
+            !Document.Entries.Any(entry => ReferenceEquals(entry.Identity, clickSurface)))
+            ResetClickSequence();
         UpdateClickAwayRegistration();
     }
 
@@ -332,10 +335,10 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                         Document.Entries.FirstOrDefault(entry => ReferenceEquals(entry.Identity, _pressSurfaceIdentity));
                     if (_pointer is not null && _pressSurfaceIdentity is not null && pressedEntry is null)
                         StopDrag();
-                    else if (documentChanged && pressedEntry is not null)
-                        _pressSpan = new(
-                            pressedEntry.Start + Math.Clamp(_pressLocalSpan.Start, 0, pressedEntry.Text.Length),
-                            pressedEntry.Start + Math.Clamp(_pressLocalSpan.End, 0, pressedEntry.Text.Length));
+                    else if (pressedEntry is not null)
+                        _pressSpan = _dragUnit == MarkdownSelectionUnit.Character
+                            ? new(Document.Anchor, Document.Anchor)
+                            : Document.UnitAt(_dragUnit, pressedEntry.Start + _pressLocalGlyph, pressedEntry);
                 }
             }
             else if (!membershipChecked) nativeTextChanged = InvalidateNativeSegments();
@@ -465,7 +468,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         for (var node = source as DependencyObject; node is not null && !ReferenceEquals(node, this);
             node = VisualTreeHelper.GetParent(node))
         {
-            if (node is TextBox or PasswordBox or Selector) return true;
+            if (node is TextBox or PasswordBox or Selector or ScrollBar) return true;
             if (node is ButtonBase candidate) button ??= candidate;
             if (button is not null && node is MarkdownSelectionMarker { Metadata.IsLink: true } &&
                 button.ClickMode == ClickMode.Release)
@@ -559,7 +562,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         int anchor = PointerAnchor(Document.Anchor, offset, e.KeyModifiers);
         _pressSpan = _dragUnit == MarkdownSelectionUnit.Character ? new(anchor, anchor) :
             Document.UnitAt(_dragUnit, glyphOffset, entry);
-        _pressLocalSpan = new(_pressSpan.Start - entry.Start, _pressSpan.End - entry.Start);
+        _pressLocalGlyph = glyphOffset - entry.Start;
         _pressSurfaceIdentity = entry.Identity;
         Document.Select(_pressSpan.Start, _dragUnit == MarkdownSelectionUnit.Character ? offset : _pressSpan.End);
 
@@ -782,6 +785,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 break;
             default: return false;
         }
+        _suppressCaret = false;
         DrawSelection();
         BringCaretIntoView();
         return true;
@@ -828,6 +832,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         hitEntry = null;
         double score = double.MaxValue;
         var entries = Document.Entries;
+        _hitCandidates.Clear();
         for (int entryIndex = 0; entryIndex < entries.Count; entryIndex++)
         {
             var entry = entries[entryIndex];
@@ -836,8 +841,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 point.Y > bounds.Bottom ? point.Y - bounds.Bottom : 0;
             double dx = point.X < bounds.Left ? bounds.Left - point.X :
                 point.X > bounds.Right ? point.X - bounds.Right : 0;
-            double minimumScore = dy * dy * 10000 + dx * dx;
-            if (minimumScore > score || requireInsideSurface && !Contains(bounds, point)) continue;
+            if (requireInsideSurface && !Contains(bounds, point)) continue;
+            _hitCandidates.Add((dy * dy * 10000 + dx * dx, entryIndex));
+        }
+        _hitCandidates.Sort();
+        foreach (var candidate in _hitCandidates)
+        {
+            if (candidate.Score > score) break;
+            var entry = entries[candidate.Index];
             // No intersection with Viewport here: navigation traverses the entire message.
             for (int local = 0; local <= entry.Text.Length;)
             {
@@ -1353,6 +1364,7 @@ internal static class MarkdownSelectionClickAway
             for (var node = e.OriginalSource as DependencyObject; node is not null;
                 node = VisualTreeHelper.GetParent(node))
             {
+                if (node is ScrollBar) return;
                 if (node is MarkdownSelectionHost host) { target = host; break; }
             }
             bool targetOwnsSurface = target?.HasSurfaceAncestor(e.OriginalSource) == true;

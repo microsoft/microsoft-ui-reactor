@@ -351,7 +351,7 @@ Triple-click excludes the separator between surfaces; dragging can extend
 selection by whole words or surfaces and includes any separators crossed.
 An ordinary click activates a link. Dragging from a link selects text instead,
 including on custom `LinkBuilder` buttons that use the default release click
-mode. A primary click outside the selection clears its highlight and collapsed
+mode. A primary click outside the message's text clears its highlight and collapses the
 text range without consuming the new click. Keyboard link activation stays native.
 
 Surface wrappers own outer margins, sizing, alignment and Grid/Canvas/Flex
