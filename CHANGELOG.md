@@ -84,6 +84,17 @@ Conventions for contributors:
   no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
   (devtools) covers the same two controls.
 
+- **`ThemeRef` bindings (`.Background(ThemeRef)`, `.Foreground(ThemeRef)`, `.BorderBrush(ThemeRef)`,
+  `.WithBorder(ThemeRef)`) no longer replace the control's `Style`.** Reactor used to build a
+  `{ThemeResource}` Style from a XAML string and assign it, which overwrote any Style the app set.
+  It now binds each property with `FrameworkElement.SetThemeResourceBinding`, the code
+  equivalent of `{ThemeResource}`, so an app Style keeps applying its other setters. The binding
+  still follows Light/Dark, high contrast and an ancestor `RequestedTheme`, and an explicit brush
+  (`.Background(brush)`, a `.Set` setter, an element property) still wins over the ThemeRef. The
+  bound value is now a local value, so `ReadLocalValue` reports the resolved brush where it used
+  to report unset. Requires the experimental Windows App SDK channel, like #1125
+  (winui3-integration proposal #22, issue #522).
+
 - **The `rotation:` parameter of `.InteractionStates(...)` and `.Keyframes(...)` is now in
   degrees, like `.Rotation()` (issue #1615).** It used to be passed to the compositor as
   radians, which was never documented. An existing value written in radians now turns
@@ -140,6 +151,30 @@ Conventions for contributors:
   package targets now follows the restored package instead of a hardcoded version.
 
 ### Fixed
+
+- **Resolving a theme resource for the theme the app is not using returns that theme's
+  brush and no longer changes the brush for the whole app (issue #1534).** WinUI creates a
+  theme dictionary entry the first time it is read, using the app's theme. Reactor read the
+  entries from code, so in a Light app `ThemeRef.Resolve("ControlFillColorSecondaryBrush",
+  isDark: true)` returned the Light color, and every Dark element using that key showed the
+  Light color from then on. Most theme keys were affected in both directions. The same lookup
+  backed `.Resources(...)` overrides with theme tokens under an element with the other
+  `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
+  the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
+  only reads the dictionaries itself when WinUI cannot find the key for that theme, never
+  reading WinUI's own `XamlControlsResources` that way. The lookup uses
+  `FrameworkElement.SetThemeResourceBinding`, so keys with characters that markup cannot hold
+  resolve through WinUI too (issue #1634).
+
+- `SplitView(...).PaneBackground(ThemeRef)` now sets the pane background. The old Style-based
+  ThemeRef path had no mapping for `PaneBackground` and silently did nothing. A ThemeRef that
+  replaces an explicit `.PaneBackground(brush)` now takes effect too (winui3-integration proposal #22).
+
+- A ThemeRef background or foreground on an element with `.InteractionStates(...)` keeps
+  following the theme after the pointer leaves. Returning to the normal state used to write
+  back the brush captured when the states were set up, which froze the color at that theme.
+  A state's background or foreground on an element with no normal brush is now cleared when the
+  state ends, instead of staying (winui3-integration proposal #22).
 
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no

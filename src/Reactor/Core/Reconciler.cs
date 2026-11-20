@@ -6247,6 +6247,60 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="property"/>,
+    /// or, once no state sets it, puts back what the property held when the state took it over.
+    /// A property no state touched, or one another writer replaced the state's brush on, is left
+    /// alone, so a pointer transition never overwrites another writer.
+    /// </summary>
+    private static void ApplyInteractionBrush(
+        FrameworkElement fe, string property, Brush? stateBrush,
+        ref Brush? normalBrush, ref Brush? activeBrush, ref bool overrideApplied)
+    {
+        if (GetThemeBindingProperty(fe, property) is not { } dp)
+            return;
+        if (stateBrush is not null)
+        {
+            if (!overrideApplied)
+            {
+                // Capture the current normal value. A theme-bound property has no fixed brush to
+                // come back to: its binding is restored instead.
+                var local = fe.ReadLocalValue(dp);
+                normalBrush = IsThemeBound(fe, property) || ReferenceEquals(local, DependencyProperty.UnsetValue)
+                    ? null : local as Brush;
+                overrideApplied = true;
+            }
+            fe.SetValue(dp, stateBrush);
+            activeBrush = stateBrush;
+            return;
+        }
+
+        if (!overrideApplied)
+            return;
+        overrideApplied = false;
+        var normal = normalBrush;
+        normalBrush = null;
+        var active = activeBrush;
+        activeBrush = null;
+        if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
+            return;
+        if (IsThemeBound(fe, property))
+        {
+            // A failed restore (the key is gone) releases the state's brush, so a later render
+            // finds the property unset and retries the binding.
+            if (!TryRestoreThemeBinding(fe, property))
+                fe.ClearValue(dp);
+        }
+        else if (normal is not null)
+        {
+            fe.SetValue(dp, normal);
+        }
+        else
+        {
+            fe.ClearValue(dp);
+        }
+    }
+
     /// <summary>The transform modifier values last written to an element's handed-out Visual.</summary>
     internal sealed class TransformRest
     {
