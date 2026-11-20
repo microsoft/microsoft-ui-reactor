@@ -312,13 +312,19 @@ internal static class ImplicitAnimationSlots
 }
 ```
 
-The claims are kept in `ReactorState`, keyed by `(key, feature, declaration)`. The *feature*
-(Transition < Animate < Layout) sets priority between features. The *declaration* is the element that
-declared it. On one native control, that can be the target or a transparent decorator or keyed `Memo`
-layered over it. Within one feature, the effective declaration is resolved across the shared-target
-chain the same way `FindRemainingModifierOwner` resolves modifiers, with the outermost winning, and
-removing it restores the inner one. The live collection is always derived from the claims. It's
-created on first claim, mutated in place, and set to `null` when the last claim goes away.
+The claims are kept in `ReactorState`, keyed by `(key, feature, declaration slot)`. The *feature*
+(Transition < Animate < Layout) sets priority between features. The *declaration slot* is the position
+in the shared-target chain that declared the feature, not the `Element` record. On one native control,
+that can be the target itself or a transparent decorator or keyed `Memo` at some depth over it. Element
+records are immutable and are replaced on every reconcile, so keying by record would leave the old
+record's claim behind after a value-only update. Removing the feature later would then restore an
+obsolete animation, and the claim would keep the old element graph alive. Every update therefore
+re-claims each retained feature under the same slot, which replaces the previous claim's animation in
+place, and releases the slots whose feature is gone. Within one feature, the effective declaration is
+resolved across the chain the same way `FindRemainingModifierOwner` resolves modifiers, with the
+outermost winning, and removing it restores the inner one. The live collection is always derived from
+the claims. It's created on first claim, mutated in place, and set to `null` when the last claim goes
+away.
 
 The precedence keeps today's ordering. `LayoutAnimation` wins `Offset` and `Size` over `.Animate(Offset)`,
 as `ApplyPropertyAnimation` does now. `.Animate()` wins `Opacity`, `Scale` and `RotationAngle` over a
@@ -384,7 +390,12 @@ throw, while a fresh control wouldn't. So the pool keeps two lanes per type.
 target plus any transparent decorators or keyed `Memo` resolved over it, and `RentControl` gets that
 context as a new argument. The **visual lane** is eligible only when both of these hold.
 
-- *Demand.* The element declares a non-identity transform, a transition or a compositor feature.
+- *Demand.* The element declares a feature that takes the visual **in the layers landed so far**, that
+  is, one listed in `VisualOwningModifiers` (§9.1, the same table the analyzer uses). Background-only
+  and theme-only transitions never count. Because layer 3 lands before layers 2 and 4, a
+  `TranslationTransition`-only or `.Scale()`-only element doesn't count as demand until the layer that
+  moves it to the visual has landed. Before that, it would get a visual-taken control while fresh
+  controls still take the XAML path, and it would pick up the readback and setter restrictions early.
 - *Compatibility.* No declaration in the chain carries setters (`.Set`, `.OnMount`-style callbacks) and
   the control isn't a custom or third-party handler. A setter could write a facade that throws on a
   rented visual-taken control but works on a fresh one. Example: `.Set(b => b.Rotation = 10).Scale(2)`
@@ -416,13 +427,18 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
 2. `ImplicitAnimationSlots.ReleaseAll` (`ImplicitAnimations = null`).
 3. Identity writes. `Opacity = 1`, `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
    `CenterPoint = Zero`, `AnchorPoint = Zero`, `Orientation = Identity`, `TransformMatrix = Identity`,
-   `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`.
+   `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
+   and then `UIElement.Translation = Zero` when it isn't already. That facade stays writable after the
+   handoff (Q8a, P1g). §4.3 leaves it to user code when no Reactor Translation channel is declared, so
+   a control mounted with `.Set(b => b.Translation = …).Scale(2)` would otherwise carry its offset to
+   the next renter.
    `Offset` and `Size` are left to layout (P2).
 4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
    origin property set (§8), and the keyframe trigger table entries for the control.
-5. The plain-lane steps stay as they are (#1620 facade resets, `RenderTransform`, `FlowDirection`, …). The facade
-   writes are skipped for `VisualTaken` controls, because they would throw (Q8a).
+5. The plain-lane steps stay as they are (#1620 facade resets, `RenderTransform`, `FlowDirection`, …). The
+   `Rotation`, `Scale`, `CenterPoint`, `RotationAxis` and `TransformMatrix` facade writes are skipped
+   for `VisualTaken` controls, because they would throw (Q8a). `Translation` is reset in step 3.
 
 The reset doesn't cover these, so such controls still aren't pooled. A control whose exit `.Transition()` is
 still running is already handled, because removal waits for the batch. Controls whose reset throws
@@ -505,8 +521,8 @@ pulse, pinch/rotate) that currently pivot on the top-left corner, and the shippe
 
 | # | Change | Who notices | Mitigation |
 |---|---|---|---|
-| 1 | A user `.Set(fe => fe.Rotation / Scale / CenterPoint / RotationAxis / TransformMatrix = …)` on an element that **also** uses a Reactor transform modifier, a transition or a compositor feature. **Mount:** setters run before modifiers, and `GetElementVisual` migrates `Scale`, `Rotation`, `Translation` and `CenterPoint` (#1627), so those still work. It does **not** migrate `RotationAxis` or `TransformMatrix`, so a non-identity value there makes the handoff throw, even on a fresh control. **Update:** a setter that writes any of these facades after the handoff throws (Q8a). Today all of this works as long as no compositor feature is present | Apps mixing `.Set` facade writes with modifiers | Breaking. CHANGELOG `Changed`. Supported: the four migrated facades on mount. Rejected with a diagnostic: everything else. A `DiagnosticLog.Warning` names the modifier to use when the reconcile catches `UnauthorizedAccessException` from a setter **or from the handoff** on a Reactor-owned element. `REACTOR_ANIM_004` catches it at build time and suggests the modifier (§9.1) |
-| 2 | Reading `fe.Scale`/`fe.Rotation`/`fe.CenterPoint` returns identity for values set by modifiers (Q8b) | Code reading facades back | Breaking (minor). Documented. Read `ElementCompositionPreview.GetElementVisual(fe).Scale` instead |
+| 1 | A user `.Set(fe => fe.Rotation / Scale / CenterPoint / RotationAxis / TransformMatrix = …)` on an element that **also** uses a Reactor transform modifier, a transition or a compositor feature. Reachable from layer 2 for elements with a transition (for example `.Set(b => b.Scale = new(2)).ScaleTransition()`), and from layer 4 for transform-only elements. **Mount:** setters run before modifiers, and `GetElementVisual` migrates `Scale`, `Rotation`, `Translation` and `CenterPoint` (#1627), so those still work. It does **not** migrate `RotationAxis` or `TransformMatrix`, so a non-identity value there makes the handoff throw, even on a fresh control. **Update:** a setter that writes any of these facades after the handoff throws (Q8a). Today all of this works as long as no compositor feature is present | Apps mixing `.Set` facade writes with modifiers | Breaking. CHANGELOG `Changed`. Supported: the four migrated facades on mount. Rejected with a diagnostic: everything else. A `DiagnosticLog.Warning` names the modifier to use when the reconcile catches `UnauthorizedAccessException` from a setter **or from the handoff** on a Reactor-owned element. `REACTOR_ANIM_004` catches it at build time and suggests the modifier (§9.1) |
+| 2 | Reading `fe.Scale`/`fe.Rotation`/`fe.CenterPoint` returns identity for values set by modifiers (Q8b). From layer 2 on elements with an implicit transition (it takes the visual), from layer 4 on every transformed element | Code reading facades back | Breaking (minor). Documented. Read `ElementCompositionPreview.GetElementVisual(fe).Scale` instead |
 | 3 | `fe.Translation` from user code is ignored once `.Translation()` (or a Translation channel) enabled translation on that element and it has rendered (F1a). It still works on elements that don't use those modifiers, which covers the existing drag samples (`InputGesturesDemo`, `PointerInputPage`) | Apps mixing both, and agents following the shipped input skills, which show the `.Translation(…)` pan pattern next to a 60 Hz `el.Translation = …` ref pattern | Documented as "don't mix" in `animation.md.dt` and next to that pattern in both input skills (layer 4). Reactor stops zeroing the facade (§4.3), and `REACTOR_ANIM_004` flags the `.Set` form (#1642) |
 | 4 | A user `.Set(fe => fe.OpacityTransition = …)`/`ScaleTransition`/… blocks the handoff (#1623's mechanism). On mount the setter runs first, so any Reactor transition, transform or compositor feature on the same element then throws at the handoff, even on a fresh control. After the handoff, the setter itself throws | Rare | Use the modifiers. `REACTOR_ANIM_004` (§9.1) catches it at build time. Same runtime diagnostic as row 1, which lands in layer 2, the first layer that makes this reachable without a compositor feature |
 | 5 | The `TranslationTransition` fallback animated layout moves (`Offset`). Now `TranslationTransition` animates `.Translation()` on every path, as XAML does | Apps relying on the fallback quirk | `Fixed`. `.LayoutAnimation()` is the API for layout moves |
@@ -538,7 +554,9 @@ element that uses the composition visual.**
 - *And.* The same fluent chain declares a modifier that takes the visual. The analyzer walks the chain
   with `DuplicateAtomicModifierAnalyzer.GetReceiverInvocation` in both directions from the `.Set`. The
   trigger set is a `VisualOwningModifiers` table in `ModifierTable`, and it grows with the rollout:
-  - **today:** `.Animate`, `.InteractionStates`, `.Transition`, `.Keyframes`, `.LayoutAnimation`;
+  - **today:** `.Animate`, `.InteractionStates`, `.Transition`, `.Keyframes`, `.LayoutAnimation`,
+    `.ScrollLinked` (`ApplyScrollAnimation` takes the visual through `AnimationHelper.GetElementVisual`,
+    `Reconciler.cs` ~6580);
   - **layer 2:** the four `.XxxTransition()`;
   - **layer 4:** `.Scale`, `.Rotation`, `.Translation`, `.CenterPoint`;
   - **layer 5:** `.TransformOrigin`.
@@ -800,9 +818,9 @@ pre-existing difference with an issue link. The model isn't bent to fit it.
    purpose.
 4. Expected changes per layer:
    - **L1:** the #1625 and #1626 cases go from not animating, or still animating after removal, to correct.
-   - **L2:** the #1623 cases go from `threw` to passing, the fallback curve changes, and Translation-transition semantics change.
+   - **L2:** the #1623 cases go from `threw` to passing, the fallback curve changes, and Translation-transition semantics change. On elements with a transition, `channel` flips, facade readback becomes identity, and the §9 row 1 setter cases start to throw (rows 1–2, with the diagnostic from this layer).
    - **L3:** `pool.recycled` flips for compositor-feature cases.
-   - **L4:** `channel` flips for every transform case, and the §9 row 1 setter cases start to throw.
+   - **L4:** `channel` flips for the remaining transform-only cases, and their §9 row 1 setter cases start to throw.
    - **L5:** only additions.
 5. **Noise.** Poses compare within ±2 px and motion compares by verdict, not raw progress. A
    mismatch reruns three times before it fails. Quarantining a case needs an explicit ledger entry.
@@ -884,7 +902,8 @@ one), and its positive control must reproduce Q1f's `NOT-APPLIED`.
 - #1626: dropping each transition stops the animation. For Background, assert `panel.BackgroundTransition == null` after the update. That's a deterministic property read. A motion check would be vacuous, because RTB can't see XAML transitions in flight and CI may run with animations off. Dropping or adding a transition
   and changing the value in the **same** reconcile honours the new policy (§6.3).
 - Claim identity: a transition declared on both a keyed `Memo` and its target. Removing the outer one
-  restores the inner one (§6.1).
+  restores the inner one (§6.1). Repeated value-only updates followed by removal of the feature leave
+  no claim and no animation behind, and no reference to an old element record.
 - Theme-only `.WithTransitions()` updates still apply (§6.3 gate).
 - `TranslationTransition` with `Components = X` animates X and jumps Y end to end, and `WithAnimation`
   still takes precedence over it (§5.3).
@@ -893,7 +912,10 @@ one), and its positive control must reproduce Q1f's `NOT-APPLIED`.
   removal of `.CenterPoint`, and a navigation transition (§8.2).
 - Identity precedence: `.Set(b => b.Scale = new(2)).Scale(1)` renders at scale 1 (§4).
 - Pool lanes: a transformed control returns, a transformed renter gets the same instance, and the
-  result is pixel-identical to fresh with writes that don't animate. A plain renter never gets it, and
+  result is pixel-identical to fresh with writes that don't animate. A control mounted with
+  `.Set(b => b.Translation = …).Scale(2)` comes back with a zero facade `Translation` (§7.3 step 3). A
+  `TranslationTransition`-only renter doesn't take from the visual lane before layer 2 lands (§7.2
+  demand). A plain renter never gets it, and
   its `.Set(b => b.Rotation = 10)` doesn't throw. A transformed renter **with** a setter never gets it
   either (§7.2 compatibility). #1624: `BackgroundTransition` and
   `ChildrenTransitions` are cleared. Reuse `PooledFacadeTransformFixtures` for the plain lane.
@@ -922,7 +944,7 @@ this spec and the issue). Sizes are product lines excluding tests and docs.
 | 0 | `REACTOR_ANIM_004` with today's trigger set and its code fix (§9.1). Independent, valid on `main` now. Its `Translation` arm covers #1642 at build time | #1613/#1623-shaped user code, #1642 (build-time half) | S (~250 incl. fix) | — | `AnalyzerReleases.Unshipped.md`, `analyzer-architecture.md.dt`, the `reactor-build-and-check` skill cheat table |
 | 1 | `ImplicitAnimationSlots`. Route LayoutAnimation, Animate and the transition fallback through it, and widen the Update gate for removals | #1625, #1626 (the fallback and XAML removal arms) | S (~200) | V | `animation-pipeline.md.dt` (shared implicit keys) |
 | 3 | Pool lanes, the native `VisualTaken` marker and the visual reset list. Clears `ChildrenTransitions`/`ChildTransitions`/`ContentTransitions` in both lanes | #1624 (rest), #1639, #1643; restores pooling for compositor-feature elements | M (~250) | 1 | `element-pool.md.dt` (remove "permanently un-poolable", the "prefer `.OpacityTransition()` over `.Animate()`" tip and the one-way transform-transition note) |
-| 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, the §9 handoff diagnostic, and `.XxxTransition()` added to `VisualOwningModifiers` | #1623, #1624 (Opacity, Background), #1626 (Background arm) | M (~350) | 3 (so `.OpacityTransition()` elements, which take the visual from here on, never lose pooling) | `animation.md.dt` (`TranslationTransition` semantics, the XAML curve, reduced motion) |
+| 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, the §9 handoff diagnostic, and `.XxxTransition()` added to `VisualOwningModifiers` | #1623, #1624 (Opacity, Background), #1626 (Background arm) | M (~350) | 3 (so `.OpacityTransition()` elements, which take the visual from here on, never lose pooling) | `animation.md.dt` (`TranslationTransition` semantics, the XAML curve, reduced motion, and the §9 rows 1–2 readback and setter notes for elements with transitions) |
 | 4 | Transforms always on the visual. Remove the facade branches, lazy handoff with the effective-identity rule, stop zeroing `UIElement.Translation`, enable translation only for declared Translation channels (§4.3), extend the diagnostic to setter facade writes, and transform modifiers added to `VisualOwningModifiers`. Subject to the decision gate in §15 Q8 | #1630, #1642 (runtime half, §4.3) | M (~200 net, mostly deletions) | 2 | `modifier-system.md.dt` caveat; §9 rows 2–3 warnings in `animation.md.dt`; "don't mix `fe.Translation` with `.Translation()`" next to the 60 Hz pan pattern in `plugins/reactor/skills/reactor-input/SKILL.md` and `skills/input.md` |
 | 5 | `.TransformOrigin(x, y)`, the origin property set and `CenterPoint` ownership, navigation reuses it, api.txt ×2, docs templates, gallery samples | #773 | M (~300) | 4 | §8.3 list, plus `skills/dsl-reference.md` and the pinch/rotate snippets in `skills/input.md` and `reactor-input/SKILL.md`; the `reactor-design` and `reactor-dsl` skills that teach `.CenterPoint()` pivots |
 
@@ -988,7 +1010,9 @@ declare its own ledger entries.
    Layer 4 is still planned, but it goes ahead only after layer 3 has landed and the §12.1 matrix has
    been re-run. Two questions decide it. Do any ledger cases still fail, or keep two-channel complexity,
    that only layer 4 removes? And is the measured cost (§11.3) acceptable in the gallery and `/perf`?
-   If not, the facade-until-handoff routing stays, and §9 rows 1–3 don't happen.
+   If not, the facade-until-handoff routing stays. Then §9 rows 1–3 don't happen for **transform-only**
+   elements. Elements with an implicit transition get rows 1–2 from layer 2 either way, because layer 2
+   makes every `.XxxTransition()` take the visual (§9 rows 1–2).
 
 ## §16 Other defects found by the spike
 
