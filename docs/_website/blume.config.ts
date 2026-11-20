@@ -63,6 +63,9 @@ const redirects = readJson<{ from: string; to: string }[]>(
 export default defineConfig({
   title: "Reactor",
   description: "Declarative UI framework for native Windows desktop apps in pure C#.",
+  // The WinUI logo, from the Windows brand assets. Inlined next to the title,
+  // and used as the brand mark on the generated social cards.
+  logo: "/brand/winui.svg",
   github: { owner: "microsoft", repo: "microsoft-ui-reactor", branch: "main" },
   deployment: base ? { site, base } : { site },
   theme: {

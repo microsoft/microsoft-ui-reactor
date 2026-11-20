@@ -11,10 +11,9 @@ import PageLayout from "blume/components/layout/PageLayout.astro";
 import Bloom from "../components/Bloom.astro";
 import { BLOOMS } from "../components/bloom-palettes";
 import { SHOWCASE_APPS } from "../components/showcase-apps";
-import appsIcon from "../components/fluent/apps_24_color.svg?raw";
-import codeIcon from "../components/fluent/code_24_color.svg?raw";
-import contentViewIcon from "../components/fluent/content_view_24_color.svg?raw";
-import syncIcon from "../components/fluent/arrow_sync_24_color.svg?raw";
+import codeIcon from "../components/fluent/code_24_regular.svg?raw";
+import contentViewIcon from "../components/fluent/content_view_24_regular.svg?raw";
+import syncIcon from "../components/fluent/arrow_sync_24_regular.svg?raw";
 
 const { config, navigation, fontCssVars } = data;
 
@@ -68,11 +67,11 @@ const hooks = featuredHooks
 const firstInternal = internals[0]?.pages[0];
 
 const blogPost = {
-  title: "WinUI Reactor: A New Approach to User Interfaces",
-  summary:
-    "Meet Reactor, a C#-first way to build WinUI apps: no XAML, no code-behind, no view models, and real WinUI controls.",
-  source: "#ifdef Windows",
-  date: "October 21, 2026",
+  title: "Microsoft.UI.Reactor: a C#-first way to build WinUI apps",
+  summary: "No XAML, no code-behind, no view models. Just C#.",
+  date: "Oct 21, 2026",
+  dateTime: "2026-10-21",
+  image: "/blog/reactor-part-1.webp",
   url: "https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/",
 };
 
@@ -95,11 +94,11 @@ const counter = `class Counter : Component
     }
 }`;
 
-const facts = [
+const facts: { title: string; text: string; icon?: string; image?: string }[] = [
   {
     title: "Native WinUI 3",
     text: "Every element is a real WinUI\u00a03 control, with Fluent styling and accessibility built in. No web view, no Electron.",
-    icon: appsIcon,
+    image: "/brand/winui.svg",
   },
   { title: "Pure C#", text: "No XAML, no data binding, no view models. Your UI is code you can step through.", icon: codeIcon },
   { title: "Declarative", text: "Describe the UI for the current state. Reactor works out what changed.", icon: contentViewIcon },
@@ -149,21 +148,33 @@ const [frontShot, backShot] = showcaseShots;
       <div class="max-w-3xl">
         <a
           href={blogPost.url}
-          class="group inline-flex max-w-full items-center gap-3 rounded-full border border-border bg-background py-1.5 pl-1.5 pr-4 text-sm text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.05)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          class="group flex max-w-2xl items-center gap-3 rounded-2xl border border-border bg-background p-2 pr-4 text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.05)] transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:gap-4 sm:pr-5"
         >
-          <span
-            class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold text-white"
-            style={`background: linear-gradient(110deg, ${BLOOMS.blue.ink}, ${BLOOMS.violet.ink})`}
-          >
-            Blog
+          <img
+            src={href(blogPost.image)}
+            width="768"
+            height="403"
+            alt=""
+            decoding="async"
+            class="h-16 w-[122px] shrink-0 rounded-xl bg-muted object-cover sm:h-[84px] sm:w-40"
+          />
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2 text-xs text-muted-foreground">
+              <span
+                class="shrink-0 rounded-full px-2 py-0.5 font-semibold text-white"
+                style={`background: linear-gradient(110deg, ${BLOOMS.blue.ink}, ${BLOOMS.violet.ink})`}
+              >
+                Blog
+              </span>
+              <span class="truncate">Latest post · <time datetime={blogPost.dateTime}>{blogPost.date}</time></span>
+            </span>
+            <span class="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug sm:line-clamp-1 sm:text-base">{blogPost.title}</span>
+            <span class="mt-0.5 hidden truncate text-sm text-muted-foreground sm:block">{blogPost.summary}</span>
           </span>
-          <span class="min-w-0 truncate">
-            <span class="font-medium">Check out the latest blog post</span><span class="hidden text-muted-foreground md:inline">{` · ${blogPost.title}`}</span>
-          </span>
-          <Icon name="arrow-up-right" size={14} class="shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-safe:group-hover:-translate-y-px motion-safe:group-hover:translate-x-px" />
+          <Icon name="arrow-up-right" size={16} class="hidden shrink-0 text-muted-foreground transition-transform group-hover:text-foreground motion-safe:group-hover:-translate-y-px motion-safe:group-hover:translate-x-px sm:block" />
         </a>
         <h1 id="intro-title" class="mt-8 font-display text-4xl font-semibold tracking-tight text-balance text-foreground sm:text-5xl lg:text-6xl">
-          Native Windows apps, in pure C#.
+          <span class="sm:whitespace-nowrap">Native Windows apps,</span> in pure C#.
         </h1>
         <p class="mt-5 max-w-[62ch] text-lg leading-relaxed text-muted-foreground">
           Reactor is a declarative UI framework for building native Windows apps with WinUI&nbsp;3. Write your UI in C#,
@@ -233,10 +244,11 @@ const [frontShot, backShot] = showcaseShots;
           facts.map((fact) => (
             <li class="border-t border-border pt-5">
               <span
-                class="grid size-10 place-items-center rounded-xl bg-muted ring-1 ring-inset ring-border [&_svg]:size-6"
+                class="grid size-10 place-items-center rounded-xl bg-muted text-foreground ring-1 ring-inset ring-border [&_svg]:size-6 [&_svg]:fill-current"
                 aria-hidden="true"
-                set:html={fact.icon}
-              />
+              >
+                {fact.image ? <img src={href(fact.image)} width="24" height="24" alt="" class="size-6" /> : <Fragment set:html={fact.icon} />}
+              </span>
               <h2 class="mt-4 text-sm font-semibold text-foreground">{fact.title}</h2>
               <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">{fact.text}</p>
             </li>
