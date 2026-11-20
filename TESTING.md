@@ -1040,6 +1040,11 @@ Drag diagnostics are captured in MSTest output/TRX: the pre-drag source bounds,
 DPI and requested destination, followed by the unmodified successful CLI JSON
 with its resolved endpoints. These are input geometry, not native manipulation
 deltas; do not infer the latter from pointer displacement alone.
+ContentSizer additionally buffers native manipulation starting/started/delta/completed
+events, initial target size and drag settings, then publishes them as HelpText only
+after completion. The test records that trace after its unchanged size assertion,
+including on assertion failure. The observers do not mark events handled, change
+manipulation settings or request renders during input.
 RangeSelector keyboard **value** changes remain unsupported by the sample's
 controlled mapping because this Toolkit version does not raise `ValueChanged`
 for them. Tab traversal does not claim to cover that limitation.

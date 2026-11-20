@@ -115,9 +115,9 @@ public sealed class ToolkitInputTests : AppTestBase
         NavigateToFixtureFresh("ToolkitInput_ContentSizer");
         WaitForObservation("140|140|360");
         DragBy("ContentSizer.Sizer", dx: 0, dy: 60);
-        WaitForSizes([200, 200, 360]);
+        WaitForContentSizerSizes([200, 200, 360]);
         DragBy("ContentSizer.Sizer", dx: 0, dy: -40);
-        WaitForSizes([160, 160, 360]);
+        WaitForContentSizerSizes([160, 160, 360]);
     }
 
     [TestMethod]
@@ -227,6 +227,26 @@ public sealed class ToolkitInputTests : AppTestBase
 
     private static double[] Numbers(string value) =>
         value.Split('|').Select(s => double.Parse(s, CultureInfo.InvariantCulture)).ToArray();
+
+    private void WaitForContentSizerSizes(double[] expected)
+    {
+        try
+        {
+            WaitForSizes(expected);
+        }
+        finally
+        {
+            try
+            {
+                var trace = App.GetProperty("ContentSizer.Sizer", "HelpText");
+                TestContext?.WriteLine($"native-manipulation-trace={trace ?? "<unavailable>"}");
+            }
+            catch (WinAppException error)
+            {
+                TestContext?.WriteLine($"Native manipulation trace read failed: {error.Message}");
+            }
+        }
+    }
 
     private void WaitForSizes(double[] expected) => WaitForObservation(value =>
     {

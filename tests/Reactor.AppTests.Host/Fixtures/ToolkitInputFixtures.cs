@@ -21,6 +21,7 @@ internal static class ToolkitInputFixtures
     {
         private FrameworkElement? _root;
         private DispatcherTimer? _timer;
+        private ContentSizerTrace? _contentSizerTrace;
         private long _sequence;
 
         public override Element Render() =>
@@ -45,6 +46,8 @@ internal static class ToolkitInputFixtures
 
         private void Detach(FrameworkElement root)
         {
+            _contentSizerTrace?.Dispose();
+            _contentSizerTrace = null;
             root.Loaded -= Start;
             root.Unloaded -= Stop;
             if (_timer is { } timer)
@@ -63,6 +66,10 @@ internal static class ToolkitInputFixtures
         {
             if (_root is not { IsLoaded: true } root) return;
             var elements = Descendants(root).OfType<FrameworkElement>().ToArray();
+            if (Props == "csz" && _contentSizerTrace is null)
+                _contentSizerTrace = new ContentSizerTrace(
+                    elements.OfType<Wct.ContentSizer>().Single(),
+                    elements.Single(e => AutomationProperties.GetAutomationId(e) == "ContentSizer.Target"));
             var observation = Read(Props, elements);
             // A fresh sequence lets tests reject a pre-input snapshot, especially when
             // the controlled parent rejects an edit and the expected value is unchanged.
@@ -73,6 +80,73 @@ internal static class ToolkitInputFixtures
             Write(elements, "ToolkitInput.Dpi",
                 root.XamlRoot.RasterizationScale.ToString("R", CultureInfo.InvariantCulture));
         }
+    }
+
+    private sealed class ContentSizerTrace : IDisposable
+    {
+        private readonly Wct.ContentSizer _sizer;
+        private readonly FrameworkElement _advertisedTarget;
+        private readonly List<string> _events = [];
+        private int _gesture;
+
+        public ContentSizerTrace(Wct.ContentSizer sizer, FrameworkElement advertisedTarget)
+        {
+            _sizer = sizer;
+            _advertisedTarget = advertisedTarget;
+            sizer.ManipulationStarting += Starting;
+            sizer.ManipulationStarted += Started;
+            sizer.ManipulationDelta += Delta;
+            sizer.ManipulationCompleted += Completed;
+            AutomationProperties.SetHelpText(sizer, "No completed native manipulation.");
+        }
+
+        public void Dispose()
+        {
+            _sizer.ManipulationStarting -= Starting;
+            _sizer.ManipulationStarted -= Started;
+            _sizer.ManipulationDelta -= Delta;
+            _sizer.ManipulationCompleted -= Completed;
+        }
+
+        private void Starting(object sender, ManipulationStartingRoutedEventArgs args)
+        {
+            _events.Clear();
+            var target = _sizer.TargetControl as FrameworkElement;
+            _events.Add(FormattableString.Invariant($"""
+                gesture={++_gesture}; orientation={_sizer.Orientation}; drag-increment={_sizer.DragIncrement:R}
+                inverted={_sizer.IsDragInverted}; flow={_sizer.FlowDirection}; target-is-advertised={ReferenceEquals(target, _advertisedTarget)}
+                initial-target-height={target?.Height:R}; initial-target-actual-height={target?.ActualHeight:R}
+                initial-advertised-height={_advertisedTarget.Height:R}; initial-advertised-actual-height={_advertisedTarget.ActualHeight:R}; mode={args.Mode}
+                """));
+            Record("starting");
+        }
+
+        private void Started(object sender, ManipulationStartedRoutedEventArgs args) =>
+            Record("started", cumulative: args.Cumulative.Translation);
+
+        private void Delta(object sender, ManipulationDeltaRoutedEventArgs args) =>
+            Record("delta", args.Delta.Translation, args.Cumulative.Translation);
+
+        private void Completed(object sender, ManipulationCompletedRoutedEventArgs args)
+        {
+            Record("completed", cumulative: args.Cumulative.Translation);
+            // Buffer only during input; publish non-layout metadata after completion, with
+            // no UseState, RequestRender, control-value write or timer-cadence change.
+            AutomationProperties.SetHelpText(_sizer, string.Join("\n", _events));
+        }
+
+        private void Record(string phase, global::Windows.Foundation.Point? delta = null,
+            global::Windows.Foundation.Point? cumulative = null)
+        {
+            var target = _sizer.TargetControl as FrameworkElement;
+            _events.Add(FormattableString.Invariant($"""
+                phase={phase}; delta={Point(delta)}; cumulative={Point(cumulative)}
+                target-height={target?.Height:R}; target-actual-height={target?.ActualHeight:R}; advertised-height={_advertisedTarget.Height:R}; advertised-actual-height={_advertisedTarget.ActualHeight:R}
+                """));
+        }
+
+        private static string Point(global::Windows.Foundation.Point? point) =>
+            point is { } value ? FormattableString.Invariant($"{value.X:R},{value.Y:R}") : "<not supplied>";
     }
 
     // Only instrumentation is written here: IDs on native template parts and observation
