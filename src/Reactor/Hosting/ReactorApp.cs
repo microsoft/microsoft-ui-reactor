@@ -1371,7 +1371,7 @@ public static partial class ReactorApp
                 "Run a Debug build instead, for example `winapp run . --devtools on -- --preview <Name>` (Debug is winapp's default). It also needs the Microsoft.UI.Reactor.Devtools package, referenced for Debug:");
             Console.Error.WriteLine(packageReference);
             Console.Error.WriteLine(
-                "[reactor] To use it in this configuration anyway, build once with -p:ReactorDiagnostics=true and reference the package for that build too (outside Debug the reference warns REACTOR_DEVTOOLS_001). Don't ship a build made that way.");
+                "[reactor] To use it in this configuration anyway, build once with -p:ReactorDiagnostics=true and change the reference's Condition to \"'$(Configuration)' == 'Debug' or '$(ReactorDiagnostics)' == 'true'\" (outside Debug the reference warns REACTOR_DEVTOOLS_001). Don't ship a build made that way.");
         }
         else
         {
@@ -1380,7 +1380,7 @@ public static partial class ReactorApp
                 "Add it at the same version as Microsoft.UI.Reactor, and rebuild:");
             Console.Error.WriteLine(packageReference);
             Console.Error.WriteLine(
-                "[reactor] (The Condition keeps it out of Release. If you build with -p:ReactorDiagnostics=true outside Debug, reference it for that build too.)");
+                "[reactor] (The Condition keeps it out of Release. If you build with -p:ReactorDiagnostics=true outside Debug, use Condition=\"'$(Configuration)' == 'Debug' or '$(ReactorDiagnostics)' == 'true'\" instead.)");
         }
         Console.Error.WriteLine(
             "[reactor] The in-app preview host is deprecated and kept for component previews (--preview <Name>) and the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");

@@ -783,12 +783,11 @@ public class DevtoolsHostCliTests
     // A host from an assembly named like the package but built at another version: the gate must
     // stop before TryHandleCommandLine (which throws here, as a stale package would fail to JIT).
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Emits a stand-in Devtools assembly for a stale-package test; Reactor.Tests runs on the JIT only.")]
     public void TryRunDevtools_StaleDevtoolsPackage_ReportsBothVersions_Exits2_WithoutCallingTheHost()
     {
         const string switchName = "Reactor.DevtoolsSupport";
-#pragma warning disable IL3050 // the unit tests run on the JIT
         var host = EmitPackageNamedHost("0.0.1+stale");
-#pragma warning restore IL3050
         Assert.Contains("0.0.1+stale", ReactorApp.DevtoolsPackageMismatchMessage(host.GetType().Assembly) ?? "");
 
         var previous = ReactorDevtoolsBootstrap.CurrentForTests;

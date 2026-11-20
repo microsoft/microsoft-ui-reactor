@@ -53,7 +53,7 @@
 > Reactor apps work with `winapp devtools` selectors such as `"<Counter>/Button"`, `key=t1`
 > and `App.cs:67`. `mur devtools --help` prints the full mapping.
 
-**Deprecated in-app preview host for [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — kept for the VS Code live preview and the Visual Studio embedded preview.**
+**Deprecated in-app preview host for [`Microsoft.UI.Reactor`](https://www.nuget.org/packages/Microsoft.UI.Reactor) — kept for component previews (`--preview <Name>`), the VS Code live preview and the Visual Studio embedded preview.**
 
 ## About
 

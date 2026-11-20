@@ -73,7 +73,7 @@ and retained header identity across two Toolkit libraries and a provider-free co
 
 ## Devtools support switch
 
-The in-app preview host in the deprecated `Microsoft.UI.Reactor.Devtools` package (kept for the VS Code and Visual Studio previews) is a two-layer opt-in so release and NativeAOT binaries stay trimmed by default. Inspecting a running app needs no package and no launch flag: use the WinUI DevTools (`winapp run . --devtools on`). They read C# call sites through the same `Reactor.DevtoolsSupport` switch, which is on by default in Debug.
+The in-app preview host in the deprecated `Microsoft.UI.Reactor.Devtools` package (kept for component previews and the VS Code and Visual Studio previews) is a two-layer opt-in so release and NativeAOT binaries stay trimmed by default. Inspecting a running app needs no package and no launch flag: use the WinUI DevTools (`winapp run . --devtools on`). They read C# call sites through the same `Reactor.DevtoolsSupport` switch, which is on by default in Debug.
 
 1. **Build-time capability** — the `Reactor.DevtoolsSupport` feature switch. You don't declare it: `src/Reactor/build/Reactor.targets` sets it to `true` in Debug (through `ReactorDiagnostics`) and `false` otherwise, so Release/AOT publishes leave it off unless you opt in (`-p:ReactorDiagnostics=true`). Reference the package Debug-only to match:
 
