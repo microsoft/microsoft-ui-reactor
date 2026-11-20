@@ -251,11 +251,9 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         Wait(() => Find("FixtureStatus").Current.Name == "Loaded: " + fixture, "edge fixture navigation");
         var message = Find("SelectionEdgeMessage");
         var text = (TextPattern)message.GetCurrentPattern(TextPattern.Pattern);
-        var viewportElement = Find("SelectionEdgeViewport");
-        var scrollElement = viewportElement.TryGetCurrentPattern(ScrollPattern.Pattern, out _)
-            ? viewportElement
-            : viewportElement.FindFirst(TreeScope.Descendants,
-                new PropertyCondition(AutomationElement.IsScrollPatternAvailableProperty, true));
+        AutomationElement? scrollElement = TreeWalker.ControlViewWalker.GetParent(message);
+        while (scrollElement is not null && !scrollElement.TryGetCurrentPattern(ScrollPattern.Pattern, out _))
+            scrollElement = TreeWalker.ControlViewWalker.GetParent(scrollElement);
         Assert.IsNotNull(scrollElement);
         var scroll = (ScrollPattern)scrollElement.GetCurrentPattern(ScrollPattern.Pattern);
         Assert.IsTrue(scroll.Current.VerticallyScrollable, "A nonzero scrolling extent is required");
@@ -328,14 +326,17 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Point(x, viewport.Top - 12);
             Wait(() => scroll.Current.VerticalScrollPercent < before - .1, "edge scroll active before capture loss");
             GuardForeground();
+            Assert.AreEqual("Capture not released", Find("SelectionCaptureStatus").Current.Name,
+                "Capture-loss positive control has not already run");
             ((InvokePattern)Find("SelectionReleaseCapture").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
             Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
                 is var latest && latest.Contains("capture-lost", StringComparison.Ordinal)
-                && latest.Contains("captures=0", StringComparison.Ordinal),
+                && latest.Contains("left=True", StringComparison.Ordinal)
+                && Find("SelectionCaptureStatus").Current.Name == "Released captures=0",
                 "native capture-lost event delivered while button remains held");
             Thread.Sleep(SampleIntervalMs);
             Stable(scroll.Current.VerticalScrollPercent, "capture loss stops edge scrolling");
-            End();
+            Mouse(4); mouseHeld = false;
         }
         finally
         {

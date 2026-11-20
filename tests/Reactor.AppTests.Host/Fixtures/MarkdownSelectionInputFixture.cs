@@ -107,6 +107,7 @@ internal sealed class MarkdownSelectionEdgesFixture : Component<bool>
 {
     private readonly MarkdownTextSelectionOptions _options = new();
     private MarkdownSelectionHost? _scope;
+    private TextBlock? _captureStatus;
 
     public override Element Render()
     {
@@ -132,8 +133,16 @@ internal sealed class MarkdownSelectionEdgesFixture : Component<bool>
         Element scroller = Props ? ScrollView(content) : ScrollViewer(content);
         return VStack(
             Button("Release selection capture", () =>
-                (_scope ?? throw new InvalidOperationException("Selection scope is not loaded.")).ReleasePointerCaptures())
+            {
+                var scope = _scope ?? throw new InvalidOperationException("Selection scope is not loaded.");
+                scope.ReleasePointerCaptures();
+                var status = _captureStatus ?? throw new InvalidOperationException("Capture status is not loaded.");
+                string text = $"Released captures={scope.PointerCaptures?.Count ?? 0}";
+                Reconciler.UpdateDefaultAutomationName(status, status.Text, text);
+                status.Text = text;
+            })
                 .AutomationId("SelectionReleaseCapture"),
+            TextBlock("Capture not released").AutomationId("SelectionCaptureStatus").Set(text => _captureStatus = text),
             scroller.Height(240).Width(400).AutomationId("SelectionEdgeViewport")).Width(450);
     }
 }
