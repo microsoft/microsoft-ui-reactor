@@ -435,7 +435,7 @@ to silence a flake, fix the flake instead — a skip makes the flake invisible r
 A skip is a per-run observation; tier applicability is a fixed property of the fixture, so a skip
 would restate the same permanent fact on every run and accumulate in the amber inventory — which is
 what [#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154) was. Declare the tier in
-`SelfTestFixtureRegistry.TierRequirements` instead and the fixture is simply not selected; see §3.
+its `SelfTestFixtureRegistry.Registrations` entry instead and the fixture is simply not selected; see §3.
 
 For raw-TAP consumers (the AOT job pipes `--self-test` straight to a `.tap` artifact and greps
 `^not ok `), the Host emits a `# Total skipped fixtures: N` trailer — placed *after*
@@ -909,10 +909,10 @@ packaged tier in two steps. **Gate** the fixture body.
 if (!PackagedIdentityFixtures.RequirePackagedTier(H, this)) return;
 ```
 
-**Declare** the same name as packaged in `SelfTestFixtureRegistry.TierRequirements`.
+**Declare** the tier as the third element of the fixture's `Registrations` entry.
 
 ```csharp
-["Packaged_MyNewThing"] = SelfTestTier.Packaged,
+("Packaged_MyNewThing", static harness => new MyNewThingFixture(harness), SelfTestTier.Packaged),
 ```
 
 Register it with the **`Packaged_`** prefix — that is what the shim's

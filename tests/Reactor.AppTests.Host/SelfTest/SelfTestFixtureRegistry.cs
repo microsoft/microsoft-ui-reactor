@@ -7,11 +7,13 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 /// </summary>
 internal static class SelfTestFixtureRegistry
 {
-    // Keep registration order for SelfTest execution and shard assignment.
-    private static readonly (string Name, Func<Harness, SelfTestFixtureBase?> Factory)[] Registrations =
+    // Keep registration order for SelfTest execution and shard assignment. An entry is
+    // (name, factory) for a fixture that runs in every tier, or (name, factory, tier) for one
+    // that needs a specific host.
+    private static readonly FixtureRegistration[] Registrations =
     [
         ("JumpList_NativeInterop", static harness => new JumpListNativeInteropFixture(harness)),
-        ("Packaged_JumpList", static harness => new PackagedJumpListFixture(harness)),
+        ("Packaged_JumpList", static harness => new PackagedJumpListFixture(harness), SelfTestTier.Packaged),
         ("SourceMapReadPath_Enabled", static harness => new SourceMapReadPathTests.LeafIsReadableWhenEnabled(harness)),
         ("HostDiag_WindowHostIsListedAndBoundariesAreTagged", static harness => new HostDiagnosticsFixtures.WindowHostIsListedAndBoundariesAreTagged(harness)),
         ("HostDiag_FlagOffLeavesBoundariesUntagged", static harness => new HostDiagnosticsFixtures.FlagOffLeavesBoundariesUntagged(harness)),
@@ -1669,12 +1671,12 @@ internal static class SelfTestFixtureRegistry
         // Spec 036 — Window model live-shell coverage
         ("WindowModel_LifecycleEvents", static harness => new WindowModelFixtures.WindowLifecycleEvents(harness)),
         ("WindowModel_WindowIconApplied", static harness => new WindowModelFixtures.WindowIconApplied(harness)),
-        // Packaged (MSIX) tier. Declared SelfTestTier.Packaged in TierRequirements below, so the
-        // unpackaged host does not run them at all — see issue #1154.
-        ("Packaged_IdentityGuard", static harness => new PackagedIdentityFixtures.IdentityGuard(harness)),
-        ("Packaged_ResourceResolution", static harness => new PackagedIdentityFixtures.ResourceResolution(harness)),
-        ("Packaged_SettingsStoreRoundTrip", static harness => new PackagedIdentityFixtures.SettingsStoreRoundTrip(harness)),
-        ("Packaged_WindowIconFromResource", static harness => new WindowModelFixtures.PackagedWindowIconFromResource(harness)),
+        // Packaged (MSIX) tier. Declared SelfTestTier.Packaged, so the unpackaged host does not
+        // run them at all — see issue #1154.
+        ("Packaged_IdentityGuard", static harness => new PackagedIdentityFixtures.IdentityGuard(harness), SelfTestTier.Packaged),
+        ("Packaged_ResourceResolution", static harness => new PackagedIdentityFixtures.ResourceResolution(harness), SelfTestTier.Packaged),
+        ("Packaged_SettingsStoreRoundTrip", static harness => new PackagedIdentityFixtures.SettingsStoreRoundTrip(harness), SelfTestTier.Packaged),
+        ("Packaged_WindowIconFromResource", static harness => new WindowModelFixtures.PackagedWindowIconFromResource(harness), SelfTestTier.Packaged),
         ("WindowModel_ClosingEventCancels", static harness => new WindowModelFixtures.WindowClosingEventCancels(harness)),
         ("WindowModel_TaskbarProgressLiveCom", static harness => new WindowModelFixtures.TaskbarProgressLiveCom(harness)),
         ("WindowModel_ThumbnailToolbarLiveCom", static harness => new WindowModelFixtures.ThumbnailToolbarLiveCom(harness)),
@@ -2318,15 +2320,28 @@ internal static class SelfTestFixtureRegistry
         // Positive control for the three-state verdict (issue #1061). Asserts nothing on purpose;
         // its SKIPPED result is what SelfTestBatch.SkippedFixtures_AreReported checks for.
         (SkipVerdictPositiveControl.FixtureName, static harness => new SkipVerdictPositiveControl(harness)),
-
-        // Guards TierRequirements below against outliving its fixtures (issue #1154).
-        (TierDeclarationConsistencyFixture.FixtureName, static harness => new TierDeclarationConsistencyFixture(harness)),
     ];
 
     public static readonly string[] AllFixtures = Registrations.Select(static entry => entry.Name).ToArray();
 
     private static readonly Dictionary<string, Func<Harness, SelfTestFixtureBase?>> FactoriesByName =
         Registrations.ToDictionary(static entry => entry.Name, static entry => entry.Factory, StringComparer.Ordinal);
+
+    /// <summary>
+    /// One <see cref="Registrations"/> entry. The implicit conversions let an entry be written as
+    /// a plain <c>(name, factory)</c> or <c>(name, factory, tier)</c> tuple.
+    /// </summary>
+    private readonly record struct FixtureRegistration(
+        string Name, Func<Harness, SelfTestFixtureBase?> Factory, SelfTestTier Tier = SelfTestTier.Any)
+    {
+        public static implicit operator FixtureRegistration(
+            (string Name, Func<Harness, SelfTestFixtureBase?> Factory) entry) =>
+            new(entry.Name, entry.Factory);
+
+        public static implicit operator FixtureRegistration(
+            (string Name, Func<Harness, SelfTestFixtureBase?> Factory, SelfTestTier Tier) entry) =>
+            new(entry.Name, entry.Factory, entry.Tier);
+    }
 
     // ════════════════════════════════════════════════════════════════════
     //  Tier applicability
@@ -2360,8 +2375,8 @@ internal static class SelfTestFixtureRegistry
     }
 
     /// <summary>
-    /// Fixtures that only apply to one tier. Everything absent from this map is
-    /// <see cref="SelfTestTier.Any"/>.
+    /// Fixtures that only apply to one tier, built from the tier on each <see cref="Registrations"/>
+    /// entry. Everything absent from this map is <see cref="SelfTestTier.Any"/>.
     ///
     /// <para><b>This is the declaration that removes a fixture from the other tier's corpus
     /// entirely</b> — it is not run there, emits no TAP, and gets no test case. Before issue #1154
@@ -2371,29 +2386,23 @@ internal static class SelfTestFixtureRegistry
     /// incidental. Declaring the requirement says the same thing once, as data.</para>
     ///
     /// <para><b>Keep the runtime gate too, but not because it re-checks identity.</b> A fixture
-    /// declared here must still call <c>PackagedIdentityFixtures.RequirePackagedTier</c> — yet
+    /// declared packaged must still call <c>PackagedIdentityFixtures.RequirePackagedTier</c> — yet
     /// that gate reads the <i>same</i> <c>IsPackagedTier</c> entry-assembly predicate
     /// <see cref="AppliesToCurrentTier"/> does, so once selection admits a fixture the gate
     /// necessarily returns true. It is not an independent identity check, and a mis-launched
     /// packaged host is caught by <c>Packaged_IdentityGuard</c> failing its
     /// <c>PackageRuntime.IsPackaged</c> / <c>Package.Current</c> assertions instead. The gate
-    /// earns its place as the safety net for a <i>missing</i> declaration: delete an entry from
-    /// this map and the fixture degrades to a clean skip with a stated reason rather than an
+    /// earns its place as the safety net for a <i>missing</i> declaration: drop the tier from an
+    /// entry and the fixture degrades to a clean skip with a stated reason rather than an
     /// opaque <c>COMException</c>.</para>
     ///
-    /// <para>Every key must also name a live entry in <see cref="AllFixtures"/> — see
-    /// <see cref="StaleTierDeclarations"/> for why a stale one is invisible to every other guard
-    /// here.</para>
+    /// <para>Because the tier lives on the registration itself, a declaration cannot outlive or
+    /// misspell its fixture.</para>
     /// </summary>
     private static readonly Dictionary<string, SelfTestTier> TierRequirements =
-        new(StringComparer.Ordinal)
-        {
-            ["Packaged_IdentityGuard"] = SelfTestTier.Packaged,
-            ["Packaged_JumpList"] = SelfTestTier.Packaged,
-            ["Packaged_ResourceResolution"] = SelfTestTier.Packaged,
-            ["Packaged_SettingsStoreRoundTrip"] = SelfTestTier.Packaged,
-            ["Packaged_WindowIconFromResource"] = SelfTestTier.Packaged,
-        };
+        Registrations
+            .Where(static entry => entry.Tier != SelfTestTier.Any)
+            .ToDictionary(static entry => entry.Name, static entry => entry.Tier, StringComparer.Ordinal);
 
     /// <summary>
     /// The tier <paramref name="fixture"/> requires; <see cref="SelfTestTier.Any"/> when undeclared.
@@ -2418,34 +2427,6 @@ internal static class SelfTestFixtureRegistry
         };
 
     /// <summary>
-    /// Names in <see cref="TierRequirements"/> that are not in <see cref="AllFixtures"/>, i.e.
-    /// declarations for fixtures that no longer exist. Empty is the healthy answer.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Why a stale key is worse than dead weight.</b> Both filtered corpora scan
-    /// <see cref="AllFixtures"/>, so a key naming a deleted fixture is <i>invisible</i> to every
-    /// other guard in this mechanism: the unpackaged trailer just drops from 3 to 2 — still
-    /// satisfying <c>NotApplicableFixtures_AreExcludedFromThisTier</c>'s <c>&gt; 0</c> — and the
-    /// packaged trailer stays 0, so both new assertions pass while a fixture has silently
-    /// vanished from the corpus. That is precisely the partial-deletion case this whole
-    /// mechanism exists to make visible, and it would have walked straight through it.</para>
-    /// <para>Asserted by the <c>SelfTestRegistry_TierDeclarationsMatchCorpus</c> fixture, which
-    /// runs in both tiers.</para>
-    /// </remarks>
-    internal static string[] StaleTierDeclarations() =>
-        TierRequirements.Keys
-            .Where(name => Array.IndexOf(AllFixtures, name) < 0)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
-
-    /// <summary>
-    /// How many fixtures carry a tier declaration. Exposed so
-    /// <c>SelfTestRegistry_TierDeclarationsMatchCorpus</c> can assert the map is non-empty —
-    /// without that, its "no stale keys" check would pass vacuously against an emptied map.
-    /// </summary>
-    internal static int DeclaredTierFixtureCount => TierRequirements.Count;
-
-    /// <summary>
     /// The corpus this host actually runs. Both <c>--self-test</c> and <c>--list-fixtures</c> use
     /// it, so discovery and execution cannot disagree about the set.
     /// </summary>
@@ -2454,7 +2435,7 @@ internal static class SelfTestFixtureRegistry
     /// would silently depend on being declared textually after <see cref="AllFixtures"/> and
     /// <see cref="TierRequirements"/>, and moving either — an ordinary-looking edit in a 3000-line
     /// registry — would evaluate it against a null array or an empty map and quietly return the
-    /// wrong corpus. Recomputing costs one scan of ~1500 strings, on the two or three calls a
+    /// wrong corpus. Recomputing costs one scan of ~2000 strings, on the two or three calls a
     /// process makes, against a suite measured in minutes.
     /// </remarks>
     public static string[] FixturesForCurrentTier => Array.FindAll(AllFixtures, AppliesToCurrentTier);
