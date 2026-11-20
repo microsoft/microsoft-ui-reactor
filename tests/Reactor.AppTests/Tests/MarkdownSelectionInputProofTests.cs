@@ -169,6 +169,9 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 outerText.GetSelection().Single().GetText(-1) == "",
                 "custom button press was routed without selecting a word");
             Point(customX + 15, customY);
+            Console.WriteLine($"Custom button drag before release: routing={outer.Current.HelpText}");
+            Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
+                "custom link button drag selects before release");
             Mouse(4); mouseHeld = false;
             Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
                 "custom link button drag selects");

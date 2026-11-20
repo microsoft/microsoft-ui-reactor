@@ -166,9 +166,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void ResetClickSequence()
     {
         _clickTimer.Stop();
-        if (_clicks.Surface is { } clickSurface &&
-            !Document.Entries.Any(entry => ReferenceEquals(entry.Identity, clickSurface)))
-            ResetClickSequence();
+        _clicks.Reset();
         UpdateClickAwayRegistration();
     }
 
@@ -330,7 +328,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                     new SelectionPart(s, s.Metadata.Text, s.Metadata.SeparatorAfter)));
                 if (documentChanged)
                 {
-                    _clicks.Reset();
+                    if (_clicks.Surface is { } clickSurface &&
+                        !_surfaces.Any(surface => ReferenceEquals(surface, clickSurface)))
+                        ResetClickSequence();
                     var pressedEntry = _pressSurfaceIdentity is null ? null :
                         Document.Entries.FirstOrDefault(entry => ReferenceEquals(entry.Identity, _pressSurfaceIdentity));
                     if (_pointer is not null && _pressSurfaceIdentity is not null && pressedEntry is null)
@@ -1139,7 +1139,8 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         if (!marker.Metadata.IsLink) return TextSegments(marker);
         var native = TextSegments(marker).ToArray();
         return string.Concat(native.Select(s => s.Text)) != marker.Metadata.Text
-            ? [new TextSegment(marker, marker.Metadata.Text, null, marker)] : native;
+            ? [new TextSegment(marker.Child as FrameworkElement ?? marker, marker.Metadata.Text, null, marker)]
+            : native;
     }
 
     private static IEnumerable<TextSegment> TextSegments(DependencyObject root)
