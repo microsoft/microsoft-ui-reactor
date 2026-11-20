@@ -113,9 +113,9 @@ internal sealed class MarkdownSelectionEdgesFixture : Component<bool>
         Element content = VStack(0,
             TextBlock("earlier messages").Height(300),
             MarkdownTextSelection.Scope(_options,
-                Microsoft.UI.Reactor.Advanced.Factories.Markdown("edge anchor alpha\n\nedge anchor bravo",
+                VStack(Microsoft.UI.Reactor.Advanced.Factories.Markdown("edge anchor alpha\n\nedge anchor bravo",
                     new MarkdownOptions { TextSelection = _options }))
-                .Height(70).AutomationId("SelectionEdgeMessage").Set((StackPanel panel) =>
+                .Set((StackPanel panel) =>
                 {
                     MarkdownSelectionInputFixture.TracePointerRouting(panel);
                     panel.Loaded += (_, _) =>
@@ -127,7 +127,7 @@ internal sealed class MarkdownSelectionEdgesFixture : Component<bool>
                             throw new InvalidOperationException("The edge proof needs its enclosing selection scope.");
                     };
                     panel.Unloaded += (_, _) => _scope = null;
-                }),
+                })).Height(70).AutomationId("SelectionEdgeMessage"),
             TextBlock("later messages").Height(300));
         Element scroller = Props ? ScrollView(content) : ScrollViewer(content);
         return VStack(
