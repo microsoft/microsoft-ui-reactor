@@ -84,6 +84,13 @@ Conventions for contributors:
   no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
   (devtools) covers the same two controls.
 
+- **The `rotation:` parameter of `.InteractionStates(...)` and `.Keyframes(...)` is now in
+  degrees, like `.Rotation()` (issue #1615).** It used to be passed to the compositor as
+  radians, which was never documented. An existing value written in radians now turns
+  about 57 times less (π, a half turn, becomes about 3°), so multiply it by 180/π (for
+  example `rotation: 0.1f` becomes about `rotation: 6f`). `InteractionStateValues.Rotation`
+  and `KeyframeDef.Rotation` follow the same unit.
+
 - **Path markup no longer goes through `XamlReader` or a Reactor parser.** `PathIcon(...)`
   data and `PathElement.PathDataString` (and so `D3Path`/`D3PathTranslated`) are converted
   by WinUI's native path-markup converter via `XamlBindingHelper.ConvertValue`, the same
@@ -151,6 +158,12 @@ Conventions for contributors:
   animations. Removing `.Opacity()` also releases its compositor override so styles
   take effect again; surviving declarations on shared-control wrappers are preserved
   (issue #1001).
+
+- `.Rotation()` is now degrees when it animates, as it already was for static
+  writes. With `.Animate()` or `AnimationScope.WithAnimation(...)` the value was sent to the
+  compositor's radian channel, so `.Rotation(90)` settled at about 116.6°. A `.Rotation()`
+  change on an element whose visual was already handed out now also plays the
+  `.RotationTransition()` compositor fallback instead of jumping (issue #1615).
 
 - Shallow comparison now checks all animation and transition declarations together,
   so configuration-only changes reach direct updates and parent child-skip paths.

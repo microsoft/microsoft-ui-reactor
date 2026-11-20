@@ -598,7 +598,7 @@ class InteractionStatesDemo : Component
 
 The builder supports `.PointerOver(...)`, `.Pressed(...)`, and
 `.Focused(...)`. Each accepts optional `opacity`, `scale`, `translation`,
-`rotation`, `background`, `foreground`, and `borderBrush` parameters. Pass
+`rotation` (degrees, clockwise, like `.Rotation()`), `background`, `foreground`, `borderBrush` parameters. Pass
 a `curve:` parameter for spring or ease transitions between states.
 
 States combine with `.Scale()`, `.Rotation()`, `.Translation()`, and
@@ -721,7 +721,7 @@ class KeyframeDemo : Component
 
 The builder supports `.Duration(ms)`, `.Loop()` for infinite repeat, and
 `.At(progress, opacity?, scale?, translation?, rotation?, easing?)` for
-each keyframe. Keyframes run on the compositor — no managed-code
+each keyframe, with `rotation` in degrees like `.Rotation()`. Keyframes run on the compositor — no managed-code
 involvement during playback.
 
 ## Choreography
