@@ -28,6 +28,15 @@ Conventions for contributors:
 
 ### Added
 
+- **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
+  §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
+  `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds
+  a `ComponentSkip` event (id 13) for each memo hit. `changes` is `0` for a render that changed
+  nothing on screen, and `ownStateSets` counts the state writes a component's render and effects
+  made (spec 023's setState fan-out check). Everything is at level 4 under the `Pass` and
+  `Component` keywords that `winapp perf` records, and only appends fields or adds an id, so
+  existing decoders keep working. See `docs/reference/perf-trace-events.md`.
+
 - `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
@@ -39,6 +48,10 @@ Conventions for contributors:
   Selection drags from inline links and release-mode custom link buttons do not
   activate the link; clicking outside a message clears its selection (follow-up
   to PR #1475).
+
+- Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
+  without allocating fallback key strings. Explicit keys resembling the legacy
+  fallback format retain their existing collision behavior (spec 042 §5).
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write
@@ -88,6 +101,11 @@ Conventions for contributors:
   package targets now follows the restored package instead of a hardcoded version.
 
 ### Fixed
+
+- `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
+  (or estimate), and spacing after rerenders. Removing and re-adding the callback
+  preserves the native viewer and its single subscription, which is detached when
+  the component unmounts (spec 017, VirtualList).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition

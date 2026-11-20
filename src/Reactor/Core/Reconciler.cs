@@ -492,6 +492,48 @@ public sealed partial class Reconciler : IDisposable
     // Test-only: the tally must be closed between entries, or every child reconcile pays for it.
     internal bool PerfTallyOpenForTests => _perfTally;
 
+    /// <summary>
+    /// Counts controls this reconciler created, updated, removed or moved toward the open perf
+    /// <c>ComponentRender</c> spans' <c>changes</c> (<see cref="Diagnostics.ComponentPerfTally"/>).
+    /// One static gate read when nobody listens.
+    /// </summary>
+    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    internal static void CountPerfChanges(uint count = 1)
+    {
+        if (Diagnostics.ReactorPerfTrace.ComponentEnabled)
+            Diagnostics.ComponentPerfTally.AddChanges(count);
+    }
+
+    /// <summary>
+    /// Whether an in-place update changed what the control shows, for the perf <c>changes</c>
+    /// count. <paramref name="shallowEqual"/> is <see cref="Element.ShallowEquals"/> of the two
+    /// elements, which <see cref="Update"/> already computed. Counts a change when the effective
+    /// modifiers differ in anything but callback identity
+    /// (<see cref="Element.ModifiersVisiblyEqual"/>), or the element's own properties differ.
+    /// Own properties ignore a container's or items host's children and items, which report
+    /// their own edits: <see cref="Element.OwnPropsEqual"/> (the reconcile-highlight overlay's
+    /// rule) plus the attached layout, theme bindings, resource overrides and animations it does
+    /// not read (<see cref="Element.ExtrasEqual"/>). A type neither comparison knows counts as
+    /// changed. A keyed <c>Memo</c> whose key held keeps its control (its inner update, if any,
+    /// counts itself).
+    /// </summary>
+    internal static bool PerfUpdateChanged(Element oldEl, Element newEl,
+        ElementModifiers? oldModifiers, ElementModifiers? modifiers, bool shallowEqual)
+    {
+        if (!Element.ModifiersVisiblyEqual(oldModifiers, modifiers)) return true;
+        if (shallowEqual) return false;
+        // Only a keyed Memo's factory output is stable under its key; the wrapper's own extras
+        // (theme bindings, overrides, attached values) are applied on every update.
+        if (oldEl is KeyedMemoElement && newEl is KeyedMemoElement) return !Element.ExtrasEqual(oldEl, newEl);
+        if (Element.OwnPropsEqual(oldEl, newEl) && Element.ExtrasEqual(oldEl, newEl)) return false;
+        // ShallowEquals also compares the element's own modifiers, callbacks included. The
+        // effective modifiers are visibly equal (checked above), so when they differ in identity
+        // only, compare the rest of the element without them.
+        return ReferenceEquals(oldEl.Modifiers, newEl.Modifiers)
+            || Element.ModifiersEqual(oldEl.Modifiers, newEl.Modifiers)
+            || !Element.ShallowEquals(oldEl, newEl with { Modifiers = oldEl.Modifiers });
+    }
+
     private struct PerfEdits
     {
         public uint Inserted, Removed, Moved, Replaced;
@@ -3593,11 +3635,11 @@ public sealed partial class Reconciler : IDisposable
     /// component's inclusive cost, including the WinUI controls its subtree creates.
     /// </summary>
     private static Diagnostics.ReactorPerfTrace.ComponentSpan BeginPerfComponentSpan(
-        ComponentNode node, Element element, string reason)
+        ComponentNode node, Element element, string reason, bool memoMiss = false)
     {
         if (!Diagnostics.ReactorPerfTrace.ComponentEnabled) return default;
         return Diagnostics.ReactorPerfTrace.ComponentSpan.Begin(
-            (ulong)node.EnsureDiagnosticId(), PerfComponentName(node, element), reason, element.CallSite);
+            (ulong)node.EnsureDiagnosticId(), PerfComponentName(node, element), reason, element.CallSite, memoMiss);
     }
 
     /// <summary>
@@ -3843,6 +3885,9 @@ public sealed partial class Reconciler : IDisposable
         // Set when the reason classification below already read the event's gate, so
         // the render path reuses it instead of checking a second time.
         bool? traceEnabled = null;
+        // A memo gate (class props / ShouldUpdate, Memo dependencies) was evaluated: a render that
+        // follows is a memo miss on the perf provider, a skip a memo hit.
+        bool memoGated = false;
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -3874,6 +3919,7 @@ public sealed partial class Reconciler : IDisposable
 
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !propsChanged && !contextChanged;
+                memoGated = true;
                 // Props components: a props change wins, else it was the context.
                 // Propless components (ShouldUpdate() true or a context change): the
                 // context wins, else nothing could skip it.
@@ -3895,6 +3941,7 @@ public sealed partial class Reconciler : IDisposable
                     : oldDeps is null || newDeps is null || !RenderContext.DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
+                memoGated = true;
                 memoReason = depsChanged
                     ? Diagnostics.ComponentRenderTrace.Reasons.Props
                     : Diagnostics.ComponentRenderTrace.Reasons.Context;
@@ -3911,6 +3958,10 @@ public sealed partial class Reconciler : IDisposable
 
             if (skipRender)
             {
+                // A memo hit on the perf provider (the render it saved is not a span).
+                if (Diagnostics.ReactorPerfTrace.ComponentEnabled)
+                    Diagnostics.ReactorPerfTrace.ComponentSkip((ulong)node.EnsureDiagnosticId(), PerfComponentName(node, newEl));
+
                 // Still update the element reference (modifiers may have changed on the ComponentElement itself)
                 node.Element = newEl;
 
@@ -3938,7 +3989,8 @@ public sealed partial class Reconciler : IDisposable
         // Perf span: Render(), effects and the subtree reconcile below (closes on every exit).
         using var perfSpan = Diagnostics.ReactorPerfTrace.ComponentEnabled
             ? BeginPerfComponentSpan(node, newEl, Diagnostics.ComponentRenderTrace.ClassifyUpdate(
-                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason))
+                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason),
+                memoMiss: memoGated)
             : default;
 
         // Pass the component's own wrapped rerender to children so that child state
@@ -4282,11 +4334,13 @@ public sealed partial class Reconciler : IDisposable
             if (!_perfTally)
             {
                 ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
+                CountPerfMoves(childCollection);
                 return;
             }
             // Only the enclosing Reconcile span's edit tally wants this container's counts.
             try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
             finally { _perfEdits.Add(childCollection); }
+            CountPerfMoves(childCollection);
             return;
         }
         if (traceSource)
@@ -4307,6 +4361,15 @@ public sealed partial class Reconciler : IDisposable
             if (_perfTally)
                 _perfEdits.Add(childCollection);
         }
+        CountPerfMoves(childCollection);
+    }
+
+    // A repositioned child is a change the mount and unmount counts do not see (inserts,
+    // removals and replacements mount or unmount a control, which counts it).
+    private static void CountPerfMoves(PanelChildCollection childCollection)
+    {
+        if (childCollection.MoveCount != 0)
+            CountPerfChanges(childCollection.MoveCount);
     }
 
     /// <summary>
@@ -4398,6 +4461,7 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         if (SkipOrTrackIsolatedTeardown(control)) return;
+        CountPerfChanges();
         NoteUnmountDuringSlotUpdate(control);
         EndExit(control);
         CancelPostLayoutSweep(control);
@@ -4846,7 +4910,12 @@ public sealed partial class Reconciler : IDisposable
         return false;
     }
 
-    private void BeginExit(UIElement control) => (_exitingControls ??= new()).Add(control);
+    // An exit animation starts now; the removal (and its unmount count) comes after it, outside the pass.
+    private void BeginExit(UIElement control)
+    {
+        CountPerfChanges();
+        (_exitingControls ??= new()).Add(control);
+    }
 
     private void EndExit(UIElement control)
     {
@@ -5021,6 +5090,7 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         if (SkipOrTrackIsolatedTeardown(control)) return;
+        CountPerfChanges();
         NoteUnmountDuringSlotUpdate(control);
         // A control torn down with an ancestor while still fading out is no longer exiting.
         EndExit(control);
