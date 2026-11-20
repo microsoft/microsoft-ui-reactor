@@ -4,11 +4,16 @@
 > Plans fixes for [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
 > [#1624](https://github.com/microsoft/microsoft-ui-reactor/issues/1624),
 > [#1625](https://github.com/microsoft/microsoft-ui-reactor/issues/1625),
-> [#1626](https://github.com/microsoft/microsoft-ui-reactor/issues/1626) and
-> [#773](https://github.com/microsoft/microsoft-ui-reactor/issues/773).
+> [#1626](https://github.com/microsoft/microsoft-ui-reactor/issues/1626),
+> [#1639](https://github.com/microsoft/microsoft-ui-reactor/issues/1639),
+> [#1640](https://github.com/microsoft/microsoft-ui-reactor/issues/1640),
+> [#1641](https://github.com/microsoft/microsoft-ui-reactor/issues/1641),
+> [#1642](https://github.com/microsoft/microsoft-ui-reactor/issues/1642),
+> [#1643](https://github.com/microsoft/microsoft-ui-reactor/issues/1643) and
+> [#773](https://github.com/microsoft/microsoft-ui-reactor/issues/773). §13 maps each issue to its layer.
 > Builds on #1553, #1620, #1621 and #1627 (all on `main` @ `0c5edca6b`).
 > Every runtime claim below was measured by a scratch selftest spike against that commit. The spike
-> was not committed, and §11 lists its results.
+> was not committed. §11 summarises its results, and Appendix A defines every measurement label.
 
 ## Table of contents
 
@@ -28,6 +33,7 @@
 - [§14 Rejected alternatives](#14-rejected-alternatives)
 - [§15 Open questions](#15-open-questions)
 - [§16 Other defects found by the spike](#16-other-defects-found-by-the-spike)
+- [Appendix A Measurement labels](#appendix-a-measurement-labels)
 
 ---
 
@@ -56,7 +62,7 @@ Four open bugs still come from that split.
 - **#1626.** Removing `.OpacityTransition()`, `.ScaleTransition()` or `.RotationTransition()` never removes the transition.
 
 #773 asks for a size-relative transform origin. That origin is an expression on `Visual.Size`, and the
-facade channel can't run one (the #773 report, E5).
+facade channel can't run one (the earlier #773 investigation, E5 in Appendix A).
 
 ## §2 Goals and non-goals
 
@@ -119,9 +125,13 @@ Invariants:
    for example `.Set(b => b.Scale = new(2)).Scale(1)`, the identity write still takes the visual (the
    handoff migrates the setter's value) and then overwrites it, so the modifier keeps winning as it
    does today.
-3. `AnimationHelper.GetElementVisual` stays the single place that takes the visual. Its facade
-   migration (#1627) stays as well, but its job becomes moving a value that *user code* wrote through
-   `.Set(...)` before the handoff. Reactor no longer writes those facades itself.
+3. `AnimationHelper.GetElementVisual` stays the single place that takes the visual. Every successful
+   handoff through it marks the control (a permanent `ReactorState` flag on the native control, §7.2,
+   #1643). `CompositorProvider.EnsureCompositor` and `ApplyStaggerDelays` go through it as well, so no
+   handoff goes unmarked. Its facade migration (#1627) stays, but its job becomes moving a
+   `Scale`/`Rotation`/`CenterPoint` value that *user code* wrote through `.Set(...)` before the
+   handoff. Reactor no longer writes those facades itself. `Translation` is migrated only when a Reactor
+   Translation channel is declared (§4.3).
 4. `UIElement.Opacity` stays the opacity channel. The two opacities don't multiply (Q4d). XAML pushes
    `UIElement.Opacity` into the handoff visual's `Opacity` when it commits a change, which overwrites an
    earlier direct visual write (Q4d: UIElement 0.5 then visual 1 settles at 0.5). Writing it fires the
@@ -141,7 +151,7 @@ All four transform modifiers share one write path in `AnimationHelper`. `SetScal
 | `.Rotation(deg)` | `Visual.RotationAngle = rad(deg)` | same | `RotationAngle = 0` | explicit animation on `RotationAngle`, radians (#1621, unchanged) |
 | `.Translation(x,y,z)` | `SetIsTranslationEnabled(true)` once, then `Properties["Translation"] = v` | same | `Properties["Translation"] = Zero` | explicit animation on `Translation` (unchanged) |
 | `.CenterPoint(v)` | static `Visual.CenterPoint = v`, or the origin expression's offset when `.TransformOrigin` is set (§8) | same | `Zero`, or offset `Zero` | explicit animation on `CenterPoint`, or on the `ReactorOriginOffset` property when an origin is set, so the expression survives (§8.2) |
-| `.Opacity(o)` | `UIElement.Opacity = o` (no handoff) | same | `ClearValue(Opacity)` | explicit animation on `Opacity` (unchanged) |
+| `.Opacity(o)` | `UIElement.Opacity = o` (no handoff). If Reactor has animated or written the visual's `Opacity` on this control (recorded in `CompositionModifierProperties`), also `StopAnimation("Opacity")` and write `Visual.Opacity = o`. A `UIElement.Opacity` write that doesn't change the value commits nothing, so without this the visual would stay at the animated value | same | `ClearValue(Opacity)`, plus the same visual stop-and-write when recorded | explicit animation on `Opacity` (unchanged) |
 
 Details:
 
@@ -177,11 +187,16 @@ working after the handoff (F1b).
 Rules:
 
 1. Reactor calls `SetIsTranslationEnabled(true)` only when `.Translation()` or a Translation channel
-   (`Keyframes` `translation:`, `TranslationTransition`) is declared.
+   (`Keyframes` `translation:`, `TranslationTransition`) is declared. That includes the handoff's
+   facade migration. `GetElementVisual` stops migrating `UIElement.Translation` unless one of those is
+   declared. Translation doesn't block the handoff and stays writable after it (Q8a). Otherwise a drag
+   card that writes `fe.Translation` from a handler would lose those writes as soon as it gained a
+   `.Scale(pressed ? 0.97f : 1)` (#1642).
 2. Reactor stops zeroing `UIElement.Translation` when it writes the visual
-   (`AnimationHelper.SetVector3Direct`/`SetOrAnimateVector3`). A user facade value written before
-   the handoff still gets migrated by `GetElementVisual`.
-3. Docs warn that `fe.Translation` from user code doesn't combine with `.Translation()` (§9.3).
+   (`AnimationHelper.SetVector3Direct`/`SetOrAnimateVector3`). When a Translation channel *is* declared,
+   a user facade value written before the handoff still gets migrated by `GetElementVisual`.
+3. Docs warn that `fe.Translation` from user code doesn't combine with `.Translation()` (§9 row 3), and
+   `REACTOR_ANIM_004` flags the `.Set` form (§9.1).
 
 ## §5 Implicit transitions, compositor only
 
@@ -205,8 +220,10 @@ handoff is never blocked, which fixes **#1623**.
 `Vector3Transition.Components` is honoured by XAML. With `Components = X`, X animates and Y jumps
 (Q2f, Q2g). The fallback ignores it today. The proposal is a two-keyframe implicit animation. Keyframe
 0 is `Vector3(c.X ? this.StartingValue.X : this.FinalValue.X, …)` and keyframe 1 is
-`this.FinalValue` with the easing. Measured: X animates and Y jumps (F4b, F4c). When `Components` is
-`X|Y|Z`, Reactor uses the single-keyframe form.
+`this.FinalValue` with the easing. Y jumped (F4c: `JUMPED`). X reached its final value but was only at
+0.01 progress 0.25 s in (F4b). That reads `UNCLEAR` under §11's early-sample verdict, which is what the
+eased start predicts, but it isn't proof of motion on its own. Layer V re-measures it with the
+mid-duration verdict from §12.1 A. When `Components` is `X|Y|Z`, Reactor uses the single-keyframe form.
 
 ### §5.3 TranslationTransition
 
@@ -220,11 +237,17 @@ F1e). So `TranslationTransition` becomes a **write-time animation**. `AnimationH
 becomes `ResolvePolicy`, which returns a curve and a component mask. The source order is unchanged
 (ambient `WithAnimation` scope, then `.Animate()`), with a declared `TranslationTransition` added last.
 It yields `EaseCurve(Duration, 0.8,0,0.2,1)` with the transition's `Components`, so an explicit
-`WithAnimation` or `.Animate()` still wins, as today. `SetOrAnimateVector3("Translation", …)` then
+`WithAnimation` or `.Animate()` still wins, as today. `ResolvePolicy` honours the `.Animate()`
+property flags for the channel being written, which the current `ResolveCurve` does only when
+`respectPropertyFlags` is set (AnimationHelper.cs ~495-507). So `.Animate(AnimateProperty.Opacity, c)`
+no longer overrides a declared Scale or Translation transition. That's the same per-key precedence §6.1
+uses for implicit keys. `SetOrAnimateVector3("Translation", …)` then
 starts an explicit animation, as `.Animate()` already does. When the mask isn't `X|Y|Z`, the
 animation gets a keyframe 0 of `Vector3(mask.X ? this.StartingValue.X : final.X, …)`, with `final`
 passed as a parameter, so masked axes jump, as in §5.2. F4b/F4c validated the masked form only for an
-implicit Scale key, so §12 adds an end-to-end Translation mask test. Retargeting mid-flight starts from
+implicit Scale key, so §12 adds an end-to-end Translation mask test. The explicit animation itself
+reached its target (F1f), but its early sample reads `UNCLEAR` for the same eased-start reason as F4b,
+so layer V re-measures it. Retargeting mid-flight starts from
 the presented value (F1g: 151 → 152 px), which matches XAML.
 
 One difference remains. XAML animates *any* write to `UIElement.Translation`, including a write
@@ -327,8 +350,11 @@ and releasing the key afterwards can't undo an animation that already started. S
 transition policy runs **before** setters and modifier writes, both releases and new claims, the way
 `ClearRemovedTransformModifiers` already releases departing transforms early. The same applies to the
 reduced-motion gate. That also gives XAML parity for attach-and-write in one reconcile (F3b, F3c). On
-mount the order stays as it is (modifiers, then transitions), so initial values don't animate in. §12
-tests removal and addition together with a value change in the same reconcile.
+mount the order stays as it is (modifiers, then transitions), so a declared initial value should not
+animate in. That's unmeasured, though. Every spike probe attached the transition before writing, and
+Reactor's mount writes first. Layer V adds a write-then-attach probe (in the same tick, before entering
+the tree) for both XAML on `main` and the compositor path. If they differ, it gets a §9 row before
+layer 2 lands. §12 tests removal and addition together with a value change in the same reconcile.
 
 ## §7 Pooling elements whose visual was taken
 
@@ -369,9 +395,18 @@ element, and any element whose context isn't known, **only** takes from the plai
 never meets a control it couldn't have met fresh, and most transformed elements become poolable again.
 They aren't pooled today, because `_compositorTainted` excludes them. Each lane keeps its own cap of 32.
 
+**The lane marker lives on the native control (#1643).** `Return` decides the lane from a permanent
+`VisualTaken` flag in the native control's attached `ReactorState`. Every successful
+`AnimationHelper.GetElementVisual` sets it (§3 invariant 3), and pool cleanup never clears it. Today's
+`_compositorTainted` can't do this job, for two reasons. It's a `ConditionalWeakTable` keyed by the
+managed wrapper, which another RCW for the same control doesn't see (the duplicate-RCW problem
+`ReactorAttached.StateProperty` exists for, `Reconciler.cs` ~1606-1615). And some handoffs never set it
+(`ApplyStaggerDelays`, `CompositorProvider.EnsureCompositor`). The forced-visual perf run saw only
+83–356 of 1000 children marked (`rperf.txt`). Layer 3 replaces the table with the flag.
+
 ### §7.3 Reset list (visual lane)
 
-Applied in `CleanElement` when the control is tainted. Measured cost is in §11.
+Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured cost is in §11.
 
 1. `StopAnimation` for `Opacity`, `Scale`, `RotationAngle`, `RotationAngleInDegrees`, `CenterPoint`,
    `Offset`, `Size`, `Orientation`, `AnchorPoint` and `TransformMatrix`. Stop `Translation` **only if the
@@ -387,7 +422,7 @@ Applied in `CleanElement` when the control is tainted. Measured cost is in §11.
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
    origin property set (§8), and the keyframe trigger table entries for the control.
 5. The plain-lane steps stay as they are (#1620 facade resets, `RenderTransform`, `FlowDirection`, …). The facade
-   writes are skipped for tainted controls, because they would throw (Q8a).
+   writes are skipped for `VisualTaken` controls, because they would throw (Q8a).
 
 The reset doesn't cover these, so such controls still aren't pooled. A control whose exit `.Transition()` is
 still running is already handled, because removal waits for the batch. Controls whose reset throws
@@ -441,7 +476,7 @@ nothing else may start an animation on that property or write it.
   `EnsureOrigin(visual)`, which restarts the expression when the element still declares an origin
   (`ReactorState` records that).
 
-Measured (the #773 report and this spike):
+Measured (the earlier #773 investigation and this spike, see Appendix A):
 
 - It works when started before first layout, it tracks resizes (#773 E7a/E7c), and it centres scale and
   3D rotation (V2, V4).
@@ -461,8 +496,10 @@ value or Zero.
 
 `VisualModifiers`/`ElementModifiers` field (`TransformOrigin: Vector2?`), equality, `Merge`, skip,
 `ApplyModifiers`, unset arm, `AppliedModifierMap`, `ModifierTable` (analyzers), both `reactor.api.txt`
-copies (`mur --regen-api`), `animation.md.dt` and `modifier-system.md.dt`, and the gallery samples
-(hover, pulse, pinch/rotate) that currently pivot on the top-left corner.
+copies (`mur --regen-api`), `animation.md.dt` and `modifier-system.md.dt`, the gallery samples (hover,
+pulse, pinch/rotate) that currently pivot on the top-left corner, and the shipped agent kit:
+`skills/dsl-reference.md`, which is a hand-written modifier list, and the pinch/rotate snippets in
+`skills/input.md` and `plugins/reactor/skills/reactor-input/SKILL.md`.
 
 ## §9 Compatibility and breaking changes
 
@@ -470,7 +507,7 @@ copies (`mur --regen-api`), `animation.md.dt` and `modifier-system.md.dt`, and t
 |---|---|---|---|
 | 1 | A user `.Set(fe => fe.Rotation / Scale / CenterPoint / RotationAxis / TransformMatrix = …)` on an element that **also** uses a Reactor transform modifier, a transition or a compositor feature. **Mount:** setters run before modifiers, and `GetElementVisual` migrates `Scale`, `Rotation`, `Translation` and `CenterPoint` (#1627), so those still work. It does **not** migrate `RotationAxis` or `TransformMatrix`, so a non-identity value there makes the handoff throw, even on a fresh control. **Update:** a setter that writes any of these facades after the handoff throws (Q8a). Today all of this works as long as no compositor feature is present | Apps mixing `.Set` facade writes with modifiers | Breaking. CHANGELOG `Changed`. Supported: the four migrated facades on mount. Rejected with a diagnostic: everything else. A `DiagnosticLog.Warning` names the modifier to use when the reconcile catches `UnauthorizedAccessException` from a setter **or from the handoff** on a Reactor-owned element. `REACTOR_ANIM_004` catches it at build time and suggests the modifier (§9.1) |
 | 2 | Reading `fe.Scale`/`fe.Rotation`/`fe.CenterPoint` returns identity for values set by modifiers (Q8b) | Code reading facades back | Breaking (minor). Documented. Read `ElementCompositionPreview.GetElementVisual(fe).Scale` instead |
-| 3 | `fe.Translation` from user code is ignored once `.Translation()` (or a Translation channel) enabled translation on that element and it has rendered (F1a). It still works on elements that don't use those modifiers, which covers the existing drag samples (`InputGesturesDemo`, `PointerInputPage`) | Apps mixing both | Documented as "don't mix". Reactor stops zeroing the facade (§4.3) |
+| 3 | `fe.Translation` from user code is ignored once `.Translation()` (or a Translation channel) enabled translation on that element and it has rendered (F1a). It still works on elements that don't use those modifiers, which covers the existing drag samples (`InputGesturesDemo`, `PointerInputPage`) | Apps mixing both, and agents following the shipped input skills, which show the `.Translation(…)` pan pattern next to a 60 Hz `el.Translation = …` ref pattern | Documented as "don't mix" in `animation.md.dt` and next to that pattern in both input skills (layer 4). Reactor stops zeroing the facade (§4.3), and `REACTOR_ANIM_004` flags the `.Set` form (#1642) |
 | 4 | A user `.Set(fe => fe.OpacityTransition = …)`/`ScaleTransition`/… blocks the handoff (#1623's mechanism). On mount the setter runs first, so any Reactor transition, transform or compositor feature on the same element then throws at the handoff, even on a fresh control. After the handoff, the setter itself throws | Rare | Use the modifiers. `REACTOR_ANIM_004` (§9.1) catches it at build time. Same runtime diagnostic as row 1, which lands in layer 2, the first layer that makes this reachable without a compositor feature |
 | 5 | The `TranslationTransition` fallback animated layout moves (`Offset`). Now `TranslationTransition` animates `.Translation()` on every path, as XAML does | Apps relying on the fallback quirk | `Fixed`. `.LayoutAnimation()` is the API for layout moves |
 | 6 | The transition fallback curve goes from the compositor default (ease-out) to the XAML curve | Visual only | `Fixed` (parity) |
@@ -482,8 +519,8 @@ copies (`mur --regen-api`), `animation.md.dt` and `modifier-system.md.dt`, and t
 
 ### §9.1 Analyzers
 
-The runtime diagnostic in row 1 only fires once the code runs. Two build-time diagnostics catch the
-same mistakes at compile time and point to the modifier that works with the composition visual.
+The runtime diagnostic in row 1 only fires once the code runs. A build-time diagnostic catches the
+same mistakes at compile time and points to the modifier that works with the composition visual.
 
 **`REACTOR_ANIM_004` (Warning, `Reactor.Animation`). A facade transform is written through `.Set` on an
 element that uses the composition visual.**
@@ -510,38 +547,40 @@ element that uses the composition visual.**
   transitions block the handoff at mount (#1623, §9 rows 1 and 4). So the rule can ship ahead of the
   stack (layer 0 in §13).
 - *Message.* It names the modifier when one exists: `Rotation` → `.Rotation(…)`, `Scale` → `.Scale(…)`,
-  `CenterPoint` → `.CenterPoint(…)`, `Translation` → `.Translation(x, y, z)`, `OpacityTransition` →
+  `CenterPoint` → `.CenterPoint(…)`, `OpacityTransition` →
   `.OpacityTransition(duration)`, `ScaleTransition` and `TranslationTransition` → the same-named modifier,
   and `RotationTransition` → `.RotationTransition(duration)`. `RotationAxis`, `TransformMatrix` and
   `StartAnimation` have no modifier. Their message points to `.Keyframes`/`.Animate`, or to taking the
-  visual with `ElementCompositionPreview.GetElementVisual` in `.OnMount`.
+  visual with `ElementCompositionPreview.GetElementVisual` in `.OnMount`. The `Translation` arm only
+  fires when the chain already declares `.Translation()`, so it gets its own message instead of a
+  suggestion: "this write is ignored because `.Translation(…)` owns translation on this element; remove
+  it or merge the value into the existing `.Translation(…)`" (#1642).
 - *Code fix.* Mechanical rewrites only, under the same constraints as `PoolResetSetCodeFix`. The
   assignment must be the lambda's only statement, and the right-hand side must map to the modifier's
   parameters without evaluating anything twice:
   - `fe.Rotation = e` → `.Rotation(e)`, and the same for `Scale` and `CenterPoint`;
-  - `fe.Translation = new Vector3(a, b, c)` → `.Translation(a, b, c)`;
   - `fe.OpacityTransition = new ScalarTransition { Duration = d }` → `.OpacityTransition(d)`, and the same for `RotationTransition`;
   - `fe.ScaleTransition = t` → `.ScaleTransition(t)`, and the same for `TranslationTransition`.
 
-  Any other shape gets the diagnostic without a fix.
+  The `Translation` arm has no rewrite. Adding `.Translation(…)` would duplicate the existing call,
+  and `ModifyVisual` merges last-wins, so the added call would be dead code. Any other shape also gets
+  the diagnostic without a fix.
 - *Accepted false negatives.* The rule misses three shapes, because none of them is visible from the
   `.Set` chain:
   - a visual-owning modifier on a wrapper (keyed `Memo`, a decorator) or in a chain split across variables;
   - facade writes through `ElementRef.Current` or in event handlers (the drag samples);
   - `.OnMount` callbacks. These could be added later if the matching proves as clean.
 
-**`REACTOR_MOD_002` widening (Info, layer 4).** After layer 4, `.Scale/.Rotation/.CenterPoint` are
-ungated writes to every element, which is the "application path verified" condition `ModifierTable`
-waits for. Their rows move from `DeliberatelyExcluded` to `Properties` (non-pool-reset). Any
-`.Set(fe => fe.Rotation = …)`, even on an element without compositor features, then suggests the
-modifier, because only the modifier composes with transitions, animations and `.TransformOrigin`.
-`Translation` stays excluded because of the signature mismatch, and `ANIM_004` covers its harmful case.
-The four `*Transition` rows stay excluded too. The `.Set` write and the modifier are no longer
-"different operations" after layer 2. But a plain element with only a `.Set` transition still works on
-the XAML path, so `ANIM_004` (when combined with visual-owning modifiers) is the right severity, not a
-blanket suggestion.
+**No `REACTOR_MOD_002` widening.** `Scale`, `Rotation` and `CenterPoint` stay in `ModifierTable.DeliberatelyExcluded`,
+with the reason updated to: "the modifier takes the composition visual, which locks the facades for the
+control's lifetime; `REACTOR_ANIM_004` covers the harmful combination". A blanket suggestion would
+rewrite working code on a plain element into code that takes the visual, costs about 100 µs per
+element (§11.3), and makes any later facade write from an event handler or `ElementRef.Current` throw.
+The analyzer can't see those writes. Keeping the rows excluded also means one `.Set` write never gets
+both an `ANIM_004` and a `MOD_002` diagnostic. The four `*Transition` and the `Translation` rows stay
+excluded for their existing reasons.
 
-Both rules belong in `src/Reactor.Analyzers`. Neither has a `mur check` mirror, the same as the rest of
+`ANIM_004` belongs in `src/Reactor.Analyzers`. It has no `mur check` mirror, the same as the rest of
 the `.Set` family (`POOL_001`, `MOD_002`). Before implementation, the `analyzer-dym` workflow runs an FP
 spike. Positives are the shapes above, and the deliberate fixture writes in
 `PooledFacadeTransformFixtures`, `TransformModifierFixtures` and `ItemsViewParkingFixtures` get
@@ -570,8 +609,16 @@ transitions in flight. `PrintWindow(PW_RENDERFULLCONTENT)` sees both once animat
 animation verdict samples about 0.25 s into a 1.5 s animation and again after it must have ended.
 `JUMPED` means early progress ≥ 0.95, `ANIMATING` means early progress between 0.03 and 0.95 with the
 final at 1, and `UNCLEAR` means early progress < 0.03 with the final at 1 (the slow start of the XAML ease
-at 0.25 s). The positive controls are PC0 (no transition, `JUMPED`) and PC1/F0b (XAML transition, which
-animates only when system animations are on).
+at 0.25 s). The (0.8,0,0.2,1) curve is at 0.018 at that point, so this verdict can't return `ANIMATING`
+for it. Every eased case reads `UNCLEAR`, the positive controls PC1/F0b included. The eased results
+cited as motion below therefore rest on the curve traces (Q2a, Q2b, F4a), not on the verdict, and
+§12.1 A replaces the early sample with a mid-duration one. The positive controls are PC0 (no
+transition, `JUMPED`) and PC1/F0b (XAML transition, which animates only when system animations are on).
+
+The two oracles also **disagree at rest** in one case. A facade `Translation` written after
+`SetIsTranslationEnabled` + render ends at 1.00 under RTB but at 0.00 on screen (Q1f, animations off
+in both runs). The screen is what users see. RTB results for facade `Translation` are therefore not
+trusted, and §4.3 / §9 row 3 rest on the PrintWindow runs (F1a–F1c).
 
 The machine had "Animation effects" off (an RDP session). The XAML rows therefore ran twice, once as
 found (everything jumped) and once with `SPI_SETCLIENTAREAANIMATION` turned on for that session only
@@ -688,8 +735,8 @@ stack.
 |---|---|
 | `threw` | Exception type and lifecycle step, or none |
 | `pose` | RTB bounding box of the red target at rest, ±2 px, compared with the model in B |
-| `motion` | Per animated channel: `JUMPED` / `ANIMATING` / `NOT-APPLIED`, plus progress at 0/50/100%. Deterministic where possible. The harness pauses the channel's `AnimationController` (`Visual.TryGetAnimationController`) and sets `Progress`, as `TransformVisualHandoffFixture` already does. Layer V checks whether implicit animations expose a controller. If not, it uses wall-clock sampling with ≥ 1.5 s durations and §11's three-way verdict |
-| `curve` | For transition cases: progress at 25/50/75% within ±0.05 of (0.8,0,0.2,1) |
+| `motion` | Per animated channel: `JUMPED` / `ANIMATING` / `NOT-APPLIED`, plus progress at 0/50/100%. The controller-driven path is the default: the harness pauses the channel's `AnimationController` (`Visual.TryGetAnimationController`) and sets `Progress`, as `TransformVisualHandoffFixture` already does. Layer V first checks whether implicit animations expose a controller. The wall-clock fallback samples at **mid-duration**: `ANIMATING` means progress between 0.2 and 0.8 there and 1 at the end, and anything inconclusive (§11's `UNCLEAR`) is a failure, not a pass. Facade `Translation` cases use PrintWindow (§12.2) |
+| `curve` | For transition cases: requires the controller-driven path. Wall-clock samples are compared in the time domain instead: invert the curve, then allow one frame (±17 ms) of the measured time. A ±0.05 progress band at 50% is under one frame, because the curve's slope there is about 5 |
 | `hit`, `uia`, `ttv` | Hit-test at three probe points, the UIA bounding rectangle, and `TransformToVisual` of one corner |
 | `channel` | Which channel holds each value (facade getters vs visual properties). Layer 4 flips this on purpose |
 | `pool` | Recycled or not, which lane, pixel diff of the rented control against a fresh one, and residual implicit keys or running animations (`TryGetAnimationController` for every channel) |
@@ -699,7 +746,7 @@ stack.
 
 | Dimension | Values |
 |---|---|
-| Transforms | none, `Scale`, `Rotation`, `Translation`, `CenterPoint`, `Scale+Rotation+CenterPoint`, and `TransformOrigin` from layer 5 |
+| Transforms | none, identity (`.Rotation(0)`, `.Scale(1)`, which must not take the visual, §3 invariant 2), `Scale`, `Rotation`, `Translation`, `CenterPoint`, `Scale+Rotation+CenterPoint`, and `TransformOrigin` from layer 5 |
 | Implicit transition | none, Opacity, Scale, Rotation, Translation (also `Components = X`), Background |
 | Compositor feature | none, `.Animate(curve)`, `WithAnimation`, `InteractionStates` hover, `.Transition` enter and exit, `.Keyframes` (scale, opacity, translation, rotation; one-shot and looping), `.LayoutAnimation` (offset + size), `.Stagger` parent |
 | Wrapper | direct, keyed `Memo`, `ModifiedElement` decorator |
@@ -710,10 +757,14 @@ Each case runs one scripted lifecycle. Mount, change the declared values, add a 
 feature, remove a modifier, then unmount, rent from the pool as a plain element and as a transformed
 one. One case covers every step. The full product is far too large, so the generator combines two
 sets. One is **all triples of Transforms × Transition × Feature**, the axis behind every bug so far
-(#1613, #1623, #1625): 7 × 6 × 9 = 378 cases (Keyframes counts once, with one-shot and looping as sub-variants). The other is **pairwise coverage** of the remaining dimensions on top. The
-generator is seeded and case ids are stable, so ledger diffs stay readable. Budget: about 20 minutes. It
-runs in full on every layer PR (label-triggered job) and nightly. Every PR's normal CI runs a fixed
-10% seeded sample plus the §12.2 fixtures.
+(#1613, #1623, #1625): 8 × 6 × 9 = 432 cases (Keyframes counts once, with one-shot and looping as sub-variants). The other is **pairwise coverage** of the remaining dimensions on top. The
+generator is seeded and case ids are stable, so ledger diffs stay readable. **Budget.** Controller-driven
+cases settle in a few frames per step. Wall-clock cases cost about 2.5 s per motion verdict, so a
+lifecycle with five motion steps is over 10 s. Layer V measures the real per-case time and sets the
+budget from that, not from this estimate. The matrix runs in its own CI job, never inside the sharded
+selftest corpus (900 s cap per shard, TESTING.md). It runs in full on every layer PR (label-triggered
+job) and nightly. Every PR's normal CI runs a fixed seeded sample sized to fit a single shard, plus the
+§12.2 fixtures.
 
 The model writes down what "compounds properly" means, so the oracle has something to check
 against:
@@ -744,7 +795,9 @@ pre-existing difference with an issue link. The model isn't bent to fit it.
    difference fails. So does an expectation that matches nothing, because it's stale. The PR then
    regenerates the ledger, and the ledger's own diff shows reviewers exactly which behaviours changed.
 3. **Control group.** Cases with no transform, transition or compositor feature must stay
-   byte-identical across every layer.
+   byte-identical across every layer. That covers every step except the "rent as a transformed
+   element" step, whose fields are excluded from the control group because layer 4 changes them on
+   purpose.
 4. Expected changes per layer:
    - **L1:** the #1625 and #1626 cases go from not animating, or still animating after removal, to correct.
    - **L2:** the #1623 cases go from `threw` to passing, the fallback curve changes, and Translation-transition semantics change.
@@ -765,7 +818,8 @@ pre-existing difference with an issue link. The model isn't bent to fit it.
   §5.1 parity claims that layer 2 relies on.
 - **Mutation checks.** Each layer breaks its key lines, reruns the matrix, and records in the PR which
   cases turned red. Examples: skip a `Claim`, drop the easing, skip one reset step, write the facade
-  instead of the visual. A mutation that no case catches gets a new case before the layer merges.
+  instead of the visual, skip the identity check, set `VisualTaken` on only one handoff path. A mutation
+  that no case catches gets a new case before the layer merges.
 
 #### E. Beyond the matrix
 
@@ -791,27 +845,43 @@ group is unchanged. Mutation results are recorded. The soak is clean (layers 3�
   writes go behind an interface so the logic can be tested without WinUI. Cases: lower owner hidden
   then restored; release of a non-owner is a no-op; last release yields an empty set.
 - `TransformOrigin` modifier equality, `Merge`, skip and unset (pure records).
-- The `ResolveCurve` source order with `TranslationTransition` (pure).
+- The `ResolvePolicy` source order with `TranslationTransition`, including that `.Animate()` only
+  beats a transition on channels its `AnimateProperty` flags include (pure).
 - `ModifierTable`/analyzer parity for the new modifier.
 - `REACTOR_ANIM_004` analyzer and code-fix tests (`tests/Reactor.Tests/AnalyzerTests/`): each §9.1
   positive and negative, the code fix for every mechanical shape, no fix for multi-statement lambdas
-  or non-`new Vector3(...)` right-hand sides, and a parity test that `VisualOwningModifiers` names
-  exactly the modifiers whose Reactor implementation calls `AnimationHelper.GetElementVisual`. That
-  test reddens if a layer moves a modifier to the visual without updating the table.
-- `REACTOR_MOD_002` (layer 4): `ModifierTableIntegrityTests` passes with `Scale/Rotation/CenterPoint`
-  moved out of `DeliberatelyExcluded`.
+  or for the `Translation` arm, and the `Translation` arm's own message.
+- `ModifierTableIntegrityTests` still passes with `Scale/Rotation/CenterPoint` in
+  `DeliberatelyExcluded` under the updated reason (§9.1). One `.Set` write never gets both `ANIM_004`
+  and `MOD_002`.
 
-**Selftests (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`).** The RTB oracle is enough because every
-animation is now compositor-side.
+**Selftests (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`).** RTB is enough for compositor-side
+motion, but **not** for facade `Translation` after `SetIsTranslationEnabled`. Q1f ends at 1.00 under
+RTB and at 0.00 on screen, with animations off in both runs. Cases that write facade `Translation`
+(§4.3, §9 row 3, #1642) therefore use PrintWindow with an interactive-desktop guard (`H.Skip` without
+one), and its positive control must reproduce Q1f's `NOT-APPLIED`.
+- `VisualOwningModifiers` parity: for each modifier in `ModifierTable`, mount a fresh `Border` with a
+  non-identity value and read the `VisualTaken` flag. The observed set must equal the table. The
+  mutation check removes one table entry and expects red. This is a selftest, because the call is
+  runtime behaviour that headless tests can't observe.
+- Opacity lifecycle (H1 of the PR review): `.Opacity(1)`, then a `WithAnimation` fade to 0, then a static
+  `.Opacity(1)`. The control must render fully opaque. Run it once more with the static write as an
+  unset.
+- Lazy handoff: mount and update `.Rotation(0)`, `.Scale(1)`, `.Translation(0,0,0)` and `.CenterPoint(0)` on
+  a fresh `Border`. `VisualTaken` must stay false (after layer 3, the control returns to the plain lane),
+  and a following `.Set(b => b.Rotation = 10)` must succeed. Pixel oracles can't see this (Q18).
+- Handoff marker (#1643): a staggered child with no animations of its own returns to the visual lane,
+  never the plain one. A control whose handoff happened through one RCW is still classified correctly
+  when the pool reaches it through another (release the wrapper, force GC, reacquire through the parent).
 - Extend `TransformVisualHandoffFixture` with a channel assertion (the facade getters stay identity, and
   the visual holds the value) plus #1623's matrix: each `.XxxTransition()` × LayoutAnimation, Animate,
   Transition, InteractionStates and Keyframes, in Mount, Update and FeatureFirst orders.
-- Transition parity: curve samples at 25/50/75% within ±0.05 of (0.8,0,0.2,1), `Components = X`,
+- Transition parity: controller-driven curve samples at 25/50/75% match (0.8,0,0.2,1) within one frame of time (§12.1 A), `Components = X`,
   `TranslationTransition` animates `.Translation()` and not a layout move, and the reduced-motion
   gate via `TransitionEngine.OverrideAnimationsEnabled(false)` gives `JUMPED`.
 - #1625: `.OpacityTransition().LayoutAnimation()` animates opacity, and dropping `.LayoutAnimation()`
   keeps it animating.
-- #1626: dropping each transition stops the animation, for Background too. Dropping or adding a transition
+- #1626: dropping each transition stops the animation. For Background, assert `panel.BackgroundTransition == null` after the update. That's a deterministic property read. A motion check would be vacuous, because RTB can't see XAML transitions in flight and CI may run with animations off. Dropping or adding a transition
   and changing the value in the **same** reconcile honours the new policy (§6.3).
 - Claim identity: a transition declared on both a keyed `Memo` and its target. Removing the outer one
   restores the inner one (§6.1).
@@ -845,29 +915,52 @@ path only. The §11.3 microbenchmark covers the transformed path and should be r
 Stacked PRs. Each one passes CI alone and carries its own CHANGELOG lines (`Fixed` or `Changed`, citing
 this spec and the issue). Sizes are product lines excluding tests and docs.
 
-| # | Layer | Fixes | Size | Depends on |
-|---|---|---|---|---|
-| V | Validation harness (§12.1): matrix generator, observation recorder, composition model, positive controls, pool soak, and the ledger captured on `main`. Test-only, no product change | — | M (~900, tests only) | — |
-| 0 | `REACTOR_ANIM_004` with today's trigger set and its code fix (§9.1). Independent, valid on `main` now | #1613/#1623-shaped user code | S (~250 incl. fix) | — |
-| 1 | `ImplicitAnimationSlots`. Route LayoutAnimation, Animate and the transition fallback through it, and widen the Update gate for removals | #1625, #1626 (the fallback and XAML removal arms) | S (~200) | — |
-| 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, the §9 handoff diagnostic, and `.XxxTransition()` added to `VisualOwningModifiers` | #1623, #1624 (Opacity, Background) | M (~350) | 1 |
-| 3 | Pool lanes and the visual reset list | #1624 (rest), restores pooling for compositor-feature elements | M (~250) | 2 |
-| 4 | Transforms always on the visual. Remove the facade branches, lazy handoff with the effective-identity rule, stop zeroing `UIElement.Translation`, extend the diagnostic to setter facade writes, transform modifiers added to `VisualOwningModifiers`, and the `REACTOR_MOD_002` widening | #1630 | M (~200 net, mostly deletions) | 3 (so transformed elements never lose pooling) |
-| 5 | `.TransformOrigin(x, y)`, the origin property set and `CenterPoint` ownership, navigation reuses it, api.txt ×2, docs templates, gallery samples | #773 | M (~300) | 4 |
+| # | Layer | Fixes | Size | Depends on | Docs and agent kit |
+|---|---|---|---|---|---|
+| E | Early standalone fixes, one small PR each, both before layer V so the ledger records fixed behaviour. **#1640:** pass `CreateLinearEasingFunction()` on every `LinearCurve` arm (`CreateScalar/Vector3ImplicitAnimation`, `CreateScalar/Vector3TargetAnimation`, `SetOrAnimate`/`SetOrAnimateVector3`). **#1641:** make each `StopAnimation` in the keyframe cleanup (`Reconciler.cs` ~6564-6568) independent, and skip `Translation` when the property doesn't exist (§7.3 step 1 rule) | #1640, #1641 | S (~40 each) | — | CHANGELOG only |
+| V | Validation harness (§12.1): matrix generator, observation recorder, composition model, positive controls, pool soak, and the ledger captured on `main`. Test-only, no product change | — | M (~900, tests only) | E | `TESTING.md` section on the matrix job and ledger |
+| 0 | `REACTOR_ANIM_004` with today's trigger set and its code fix (§9.1). Independent, valid on `main` now. Its `Translation` arm covers #1642 at build time | #1613/#1623-shaped user code, #1642 (build-time half) | S (~250 incl. fix) | — | `AnalyzerReleases.Unshipped.md`, `analyzer-architecture.md.dt`, the `reactor-build-and-check` skill cheat table |
+| 1 | `ImplicitAnimationSlots`. Route LayoutAnimation, Animate and the transition fallback through it, and widen the Update gate for removals | #1625, #1626 (the fallback and XAML removal arms) | S (~200) | V | `animation-pipeline.md.dt` (shared implicit keys) |
+| 3 | Pool lanes, the native `VisualTaken` marker and the visual reset list. Clears `ChildrenTransitions`/`ChildTransitions`/`ContentTransitions` in both lanes | #1624 (rest), #1639, #1643; restores pooling for compositor-feature elements | M (~250) | 1 | `element-pool.md.dt` (remove "permanently un-poolable", the "prefer `.OpacityTransition()` over `.Animate()`" tip and the one-way transform-transition note) |
+| 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, the §9 handoff diagnostic, and `.XxxTransition()` added to `VisualOwningModifiers` | #1623, #1624 (Opacity, Background), #1626 (Background arm) | M (~350) | 3 (so `.OpacityTransition()` elements, which take the visual from here on, never lose pooling) | `animation.md.dt` (`TranslationTransition` semantics, the XAML curve, reduced motion) |
+| 4 | Transforms always on the visual. Remove the facade branches, lazy handoff with the effective-identity rule, stop zeroing `UIElement.Translation`, enable translation only for declared Translation channels (§4.3), extend the diagnostic to setter facade writes, and transform modifiers added to `VisualOwningModifiers`. Subject to the decision gate in §15 Q8 | #1630, #1642 (runtime half, §4.3) | M (~200 net, mostly deletions) | 2 | `modifier-system.md.dt` caveat; §9 rows 2–3 warnings in `animation.md.dt`; "don't mix `fe.Translation` with `.Translation()`" next to the 60 Hz pan pattern in `plugins/reactor/skills/reactor-input/SKILL.md` and `skills/input.md` |
+| 5 | `.TransformOrigin(x, y)`, the origin property set and `CenterPoint` ownership, navigation reuses it, api.txt ×2, docs templates, gallery samples | #773 | M (~300) | 4 | §8.3 list, plus `skills/dsl-reference.md` and the pinch/rotate snippets in `skills/input.md` and `reactor-input/SKILL.md`; the `reactor-design` and `reactor-dsl` skills that teach `.CenterPoint()` pivots |
 
-The `Curve.Linear` fix (§16) doesn't depend on any layer (but see the ledger note below). Neither does layer 0, whose
-`VisualOwningModifiers` table then grows in layers 2, 4 and 5. Layers 1–5 all depend on layer V. Its
-ledger must be captured on `main` before the first behaviour change, otherwise the "only on purpose"
-check has no baseline. The `Curve.Linear` fix changes curves that the ledger records, so it must land
-either before layer V or with its own declared ledger entries.
+**Landing order: E, V, 0, 1, 3, 2, 4, 5.** Layer numbers name the change. The table lists them in the
+order they land. Layer 3 goes before layer 2, because layer 2 makes `.OpacityTransition()` take the
+visual, and without the lanes those controls would leave the pool, which `main` pools today. Layer 3
+only needs layer 1's `ReleaseAll`, and a reset visual-lane control is valid before layer 2, because it
+never carries XAML transform transitions.
+
+Layer E (#1640, #1641) lands first, so the ledger records the fixed curves and cleanup. Layer 0 doesn't
+depend on any layer, and its `VisualOwningModifiers` table grows in layers 2, 4 and 5. Layers 1–5 all
+depend on layer V. Its ledger must be captured on `main` before the first behaviour change, otherwise
+the "only on purpose" check has no baseline. An early fix that misses the window before layer V has to
+declare its own ledger entries.
+
+**Issue map.**
+
+| Issue | Layer |
+|---|---|
+| #1640 `Curve.Linear` isn't linear | E |
+| #1641 `StopAnimation("Translation")` throws and skips the `RotationAngle` stop | E |
+| #1642 `UIElement.Translation` ignored after `SetIsTranslationEnabled` | 0 (build time), 4 (runtime, §4.3) |
+| #1625 `ApplyLayoutAnimation` drops transition keys | 1 |
+| #1626 removed transitions never clear | 1 (fallback and XAML arms), 2 (Background) |
+| #1623 XAML transitions block every compositor modifier | 2 |
+| #1624 pool leaks `OpacityTransition`/`BackgroundTransition` | 2 (Opacity, Background), 3 (the rest) |
+| #1639 pool leaks theme transitions | 3 |
+| #1643 pool handoff marker misses handoffs | 3 |
+| #1630 transforms on the visual | 4 |
+| #773 `.TransformOrigin` | 5 |
 
 ## §14 Rejected alternatives
 
 | Alternative | Why not |
 |---|---|
-| Keep facades for static transforms and migrate at each handoff (#1627, the status quo) | Two channels. Every new compositor feature needs the helper, and it doesn't help #1623 or #773 |
+| Keep facades for static transforms and migrate at each handoff (#1627, the status quo) | Not rejected outright. It's the fallback if layer 4 fails its decision gate (§15 Q8). Once layers 1, 2, 3 and 5 land, #1623, #1625, #1626 and #773 are fixed without layer 4. And the handoff migration plus `ShouldWriteToVisual` already route every later write to the visual once anything takes it, so adding a feature on update works. What layer 4 adds is one channel. That means no migration on the Reactor side, no facade unset arms, the same pose and pooling behaviour whether or not a compositor feature is present, and `.Set` facade conflicts that surface at mount instead of when a feature is added later. It costs about 100–130 µs and 3 KB per transformed element (§11.3) and the §9 rows 1–3 breaks |
 | Move to `RenderTransform`/`CompositeTransform` (the Toolkit's XAML layer) | It also blocks the facades, has no size-relative centre for compositor animations, and Storyboards run outside Reactor's compositor animations |
-| Choose the channel per element (facade until a compositor feature appears) | That's today's model. It breaks whenever a feature is added on update, and the XAML transitions still block the handoff |
+| Choose the channel per element (facade until a compositor feature appears) | Same as the first row. It's the layer-4 fallback, not a rejected design. The XAML-transition blocker it used to have goes away with layer 2 |
 | Hybrid transitions (XAML when possible) | Same failure. A later compositor feature throws (#1623) |
 | Implicit `"Translation"` key for `TranslationTransition` | Never fires for `InsertVector3` writes (Q1c, F1d, F1e) |
 | Facade `CenterPoint` expression on `ActualSize` for #773 | Evaluated once, stale after resize, hit-testing stale (#773 E5) |
@@ -891,21 +984,107 @@ either before layer V or with its own declared ledger entries.
 6. **Analyzer scope.** §9.1 limits `REACTOR_ANIM_004` to `.Set` lambdas. Should it also cover `.OnMount`
    callbacks and `ElementRef.Current` writes, which are harder to tie to a chain?
 7. **Pool lane caps.** Same 32 per lane, or a shared 32 per type?
+8. **Layer 4 decision gate.** Layers 1, 2, 3 and 5 fix every listed bug without layer 4 (§14 first row).
+   Layer 4 is still planned, but it goes ahead only after layer 3 has landed and the §12.1 matrix has
+   been re-run. Two questions decide it. Do any ledger cases still fail, or keep two-channel complexity,
+   that only layer 4 removes? And is the measured cost (§11.3) acceptable in the gallery and `/perf`?
+   If not, the facade-until-handoff routing stays, and §9 rows 1–3 don't happen.
 
 ## §16 Other defects found by the spike
 
-These aren't fixed by this spec. They're recorded so they can be filed.
+Each of these is filed and assigned to a layer in §13.
 
-1. **`Curve.Linear` is not linear.** `AnimationHelper.CreateScalarImplicitAnimation`,
+1. **#1640 `Curve.Linear` is not linear (layer E).** `AnimationHelper.CreateScalarImplicitAnimation`,
    `CreateVector3ImplicitAnimation`, `CreateScalar/Vector3TargetAnimation` and the `LinearCurve` arms
    of `SetOrAnimate`/`SetOrAnimateVector3` insert their keyframes without an easing function, so the
    compositor default ease-out applies. With `Curve.Linear(3000)`, the scale reached 65% of its travel
    at 29% of the duration (Q2h, Q2i). With an explicit `LinearEasingFunction` it reached 27% (Q2d).
    The fix is to pass `compositor.CreateLinearEasingFunction()`.
-2. **`CleanElement` never resets `ChildrenTransitions`/`ChildTransitions`/`ContentTransitions`**
-   (by inspection of `ElementPool.cs`). A pooled panel keeps the previous renter's theme transitions.
-   That's the #1624 family, and layer 3 handles it.
-3. **`ApplyStaggerDelays` takes the handoff visual of every child** of the staggered panel, even children
-   with no implicit animations (`Reconciler.cs` ~6316). Today that taints them and drops them out of the
-   pool. After layer 3 it only moves them to the visual lane. The cheaper fix is to check the
-   children's slot claims before taking the visual.
+2. **#1639 `CleanElement` never resets `ChildrenTransitions`/`ChildTransitions`/`ContentTransitions`
+   (layer 3).** Found by inspection of `ElementPool.cs`. A pooled panel keeps the previous renter's theme
+   transitions.
+3. **#1641 `StopAnimation("Translation")` throws when the property doesn't exist (layer E).** It throws
+   `ArgumentException`, which the perf run hit in the spike's reset list. The keyframe cleanup
+   (`Reconciler.cs` ~6564-6568) runs four stops inside one `try`, so a throwing `Translation` stop skips
+   the `RotationAngle` stop after it. The fix makes each stop independent and skips `Translation`
+   unless the property exists, the same rule as §7.3 step 1.
+4. **#1642 `UIElement.Translation` writes are silently ignored after `SetIsTranslationEnabled` (layers 0
+   and 4).** This is F1a/F1c (§4.3). Layer 0's `REACTOR_ANIM_004` catches the `.Set` form at build time.
+   Layer 4 enables translation only for declared Translation channels and stops migrating or zeroing
+   the facade otherwise (§4.3).
+5. **#1643 the pool's handoff marker misses handoffs (layer 3).** `AnimationHelper.GetElementVisual`
+   taints only on its facade-migration path, so `ApplyStaggerDelays` (`Reconciler.cs` ~6316) and
+   `CompositorProvider.EnsureCompositor` take a visual without tainting. Those controls are pooled today
+   with their visual taken. The marker is also a `ConditionalWeakTable` keyed by the managed wrapper,
+   which a different RCW for the same control doesn't see. Layer 3 replaces it with a permanent flag on
+   the native control's `ReactorState`, set on every handoff (§7.2).
+
+
+## Appendix A Measurement labels
+
+Every label the spec cites, with its scenario and the observed result. The target is a 100×40 red
+`Border` at (150,150) in a 400×400 white canvas. "PW" is PrintWindow and "RTB" is RenderTargetBitmap
+(§11). "Anim on" means the run with system animations enabled. The raw logs and the spike source were
+kept outside the repository, because the spike was a throwaway, so this table is the record.
+
+| Label | Scenario | Result |
+|---|---|---|
+| PC0 | No transition, facade `Scale` 2 | `JUMPED` (both oracles) |
+| PC1, F0b | XAML `ScaleTransition` 1.5 s, facade `Scale` 2 | Animations off: `JUMPED`. Anim on (PW): reaches the final value with an eased start (0.01 at 0.25 s, `UNCLEAR`) |
+| Q1a | XAML `TranslationTransition`, facade `Translation` x+100 | Anim on (PW): reaches the final value with an eased start (`UNCLEAR`) |
+| Q1b | XAML `TranslationTransition`, layout move (`Canvas.Left` +100) | `JUMPED`: layout moves don't animate |
+| Q1c | Visual implicit key `"Translation"`, `InsertVector3("Translation")` | `JUMPED`: the key never fires |
+| Q1d | Implicit key `"Offset"` (today's fallback), visual `Translation` write | `JUMPED` |
+| Q1e | Implicit key `"Offset"`, layout move | `ANIMATING` (0.20–0.25 at 0.25 s) |
+| Q1f | Key `"Translation"` + translation enabled + rendered, then facade `Translation` x+100 | RTB: final 1.00. PW: `NOT-APPLIED`, final 0.00. The oracles disagree at rest |
+| Q1g | Today's fallback: `.TranslationTransition()` + `.Translation(100)` on a tainted element | `JUMPED` |
+| Q2a, Q2b | XAML `ScaleTransition` / `OpacityTransition` curve, 3 s (anim on, PW) | Same as Q2e sample for sample (0.51→0.44, 0.58→0.74, 0.73→0.93) |
+| Q2c | Visual implicit `Scale`, keyframe without easing | Ease-out: 0.30→0.68, 0.51→0.90 |
+| Q2d | Same with `LinearEasingFunction` | Linear: 0.29→0.27, 0.51→0.49 |
+| Q2e | Same with cubic-bezier (0.8,0,0.2,1) | 0.51→0.44, 0.58→0.74, 0.73→0.93 |
+| Q2f, Q2g | XAML `ScaleTransition` with `Components = X` (anim on) | X reaches its final value with an eased start. Y `JUMPED`. The final Y extent is applied |
+| Q2h, Q2i | Reactor `LinearCurve` implicit / `WithAnimation(Curve.Linear(3000))` | Ease-out, 0.29→0.65 (#1640) |
+| Q3a | XAML `RotationTransition`, facade `Rotation` 90 | Anim on: reaches the final value with an eased start |
+| Q3b / Q3c | Key `"RotationAngle"`, write `RotationAngle` / `RotationAngleInDegrees` | `ANIMATING` / `JUMPED` |
+| Q3d / Q3e | Key `"RotationAngleInDegrees"`, write `RotationAngleInDegrees` / `RotationAngle` | `ANIMATING` / `JUMPED` |
+| Q4a | XAML `OpacityTransition` | Anim on: reaches the final value with an eased start |
+| Q4b / Q4c | Key `"Opacity"`, write `Visual.Opacity` / `UIElement.Opacity` | `ANIMATING` / `ANIMATING` |
+| Q4d | `UIElement.Opacity` then `Visual.Opacity`: (1,1), (0.5,1), (1,0.5), (0.5,0.5) | Effective 1, 0.5, 0.5, 0.5. The visual getter reads the effective value. No multiplication |
+| Q4e | Reactor `.Opacity(0.5).LayoutAnimation()`, then `.Opacity(0.6)` | 0.50, then 0.60. No double application |
+| Q5a, Q5c, Q5d | `Grid.BackgroundTransition` and the handoff, in both orders, and after a visual `Scale` | No throw |
+| F2 | `BackgroundTransition` after the handoff, red→white (anim on, PW) | `ANIMATING` |
+| Q6a | `Visual.ImplicitAnimations` getter | Returns the assigned instance |
+| Q6b / Q6c | Remove / add a key on the assigned collection, without reassigning | Takes effect: `JUMPED` / `ANIMATING` |
+| Q6d | One collection assigned to two visuals | No throw |
+| Q6e | `CompositionAnimationGroup` as a key's value | `ANIMATING` |
+| Q6f | Compositor key present, write before the element enters the tree | Animates on entry (0.24 at about 0.3 s) |
+| Q6g, F3 | XAML `ScaleTransition`, write before the element enters the tree | Animations off: jumps. Anim on: animates on entry (eased, 0.01 at 0.3 s) |
+| F3b / F3c | Attach and write in the same tick: XAML / compositor | Both animate |
+| Q8a | Facade writes after the handoff | `Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix` (even identity) throw 0x80070005. `Translation`, `Opacity` and `RenderTransform` don't |
+| Q8b | Facade getters after visual writes | Identity |
+| Q8c, Q8d | Facade and visual `Translation`, both written before the first render | They add up |
+| F1a | Handoff, translation enabled, rendered, then facade `Translation` x+100 (PW) | `NOT-APPLIED` |
+| F1b | Handoff without enabling translation, facade `Translation` x+100 | Applied (`JUMPED`) |
+| F1c | Handoff, translation enabled, key `"Translation"`, facade write (PW) | `NOT-APPLIED` |
+| F1d, F1e | Key `"Translation"`, second write / fresh collection | `JUMPED` |
+| F1f | Explicit `StartAnimation("Translation")` with the (0.8,0,0.2,1) ease | Reaches the final value with an eased start (`UNCLEAR` early) |
+| F1g | Explicit `Translation` animation retargeted mid-flight | 151 px before, 152 px right after: continuous |
+| F4a | XAML `RotationTransition` curve (anim on, PW) | Matches (0.8,0,0.2,1) |
+| F4b / F4c | Compositor `Components = X` emulation, X / Y | X reaches its final value with an eased start (`UNCLEAR` early). Y `JUMPED` |
+| Q9 | Facade vs visual: rotation 30 about (50,20), translation (30,10), scale 1.5, in LTR and RTL | Identical in 6 of 6 |
+| Q10 | UIA bounds, hit-test, `TransformToVisual`: none / facade / visual / visual + centre expression | Facade and visual identical. The centre expression is honoured by all three |
+| Q11 | Visual `Scale` and `Translation` written before the element enters the tree | Honoured |
+| Q12a–c | Centre expression + 90° rotation + implicit `Size` animation 100→300 | Exact at rest. Mid-animation the pivot follows the animated size (240) while the content renders at 300 |
+| Q16a–d | Entrance/Reposition theme transitions with a visual-scaled child | No throw, correct poses |
+| Q18 | Text + rounded border, with and without the handoff, and with identity writes | Pixel diff 0. Positive control (one character changed): 453 |
+| P0, P1 | Dirty visual (scale, rotation, translation, centre expression, looping opacity, clip, implicit keys), with and without the §7.3 reset, then rented | Diff 0 with the reset, 11,724 px without |
+| P1b, P1c | Writes after the reset | `JUMPED` (no implicit keys left) |
+| P1d–P1i | APIs after the reset | Facade `Rotation` and `ScaleTransition` throw. `RenderTransform`, facade `Translation` and `SetIsTranslationEnabled(false)` work. Diff 0 afterwards |
+| P2a, P2b | Direct `Visual.Offset` write after layout | Layout re-applies its offset |
+| P3 | Handoff visual after detach and after reparenting to another tree | Same instance |
+| P4 | `StopAnimation` mid-flight | Leaves the last value (0.90 progress) |
+| `perf4.txt`, `rperf.txt` | Raw WinUI and Reactor microbenchmarks | §11.3 |
+| E5 (earlier #773 investigation, `main` @ `7e3d0254b`) | Facade `CenterPoint` expression on `ActualSize` | Evaluated once: 0 before layout, stale after a resize, stale hit-testing |
+| E7a, E7c | Handoff-visual expression on `Size` | Tracks a resize and works when started before layout |
+| E10a, V1 | The same in RTL | The transform space is flow-relative |
+| V2, V4, H1 | The expression with a visual `Scale` animation, a Y-axis rotation, and hit-testing | Centred, and hit-testing honours it |
