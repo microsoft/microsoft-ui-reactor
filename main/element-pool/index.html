@@ -3351,7 +3351,8 @@ fixed-size stack (cap 32) inside <code>ElementPool</code>; the
 and <code>Return(element)</code> on unmount. This page documents the rental
 contract, the cleanup pass that resets a returned element, and the
 exclusions that keep pooling safe — composition-tainted visuals,
-non-poolable types, and parent-state corner cases.</p>
+transform-transition locks, non-poolable types, and parent-state
+corner cases.</p>
 <h2 id="renting-on-mount">Renting on mount<a class="headerlink" href="#renting-on-mount" title="Permanent link">&para;</a></h2>
 <p>The standard descriptor-backed control mount path follows the same
 shape: try the pool first, allocate fresh on miss. Composition-primitive
@@ -3437,21 +3438,31 @@ trampoline state that drives Reactor's event dispatch:</p>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="c1">// lose XAML implicit transition API access (OpacityTransition, etc.).</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">IsCompositorTainted</span><span class="p">(</span><span class="n">element</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">_pools</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">))</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">        </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Stack</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">        </span><span class="n">_pools</span><span class="p">[</span><span class="n">type</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">;</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MaxPerType</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="c1">// Issue #1614: attaching an implicit transform transition permanently locks</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="c1">// RenderTransform (nulling the transition does not release it), so such a control is</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="c1">// no longer interchangeable with a fresh one. Same reasoning as the taint check above.</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="c1">// This is the fast path; the catch around CleanElement below is the backstop for a</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="c1">// control whose transition was attached and later removed.</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">element</span><span class="p">.</span><span class="n">ScaleTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">RotationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">        </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">TranslationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">_pools</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">))</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">        </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Stack</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">        </span><span class="n">_pools</span><span class="p">[</span><span class="n">type</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">;</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MaxPerType</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
 </code></pre></div>
-<p>The path runs in five steps after the type check: composition-taint
+<p>The path runs in six steps after the type check: composition-taint
 check (a visual that has had <code>GetElementVisual()</code> called permanently
 loses access to XAML implicit transitions like <code>OpacityTransition</code>,
-so it must not be pooled), per-type stack lookup, per-type cap check
-(stop accepting at 32 instances), then — past the snippet boundary —
-the detach-from-parent dance and <code>CleanElement(...)</code> reset before the
-control finally pushes onto the stack. The scratch-panel round-trip
+so it must not be pooled), transform-transition check (see the tips
+below), per-type stack lookup, per-type cap check (stop accepting at
+32 instances), then — past the snippet boundary — the
+detach-from-parent dance and <code>CleanElement(...)</code> reset before the
+control finally pushes onto the stack. If WinUI refuses a transform
+reset during <code>CleanElement</code>, the control is dropped instead. The scratch-panel round-trip
 in <code>ForceDetach</code> is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws <code>COMException</code> when the
 control is later re-parented, and <code>_scratchPanel.Children.Add</code> +
@@ -3520,6 +3531,12 @@ permanently un-poolable. <code>ElementPool.MarkCompositorTainted</code> records
 this; the next <code>Return</code> for that instance silently drops it. Reach for
 <code>.OpacityTransition()</code> and friends before <code>.Animate()</code> when both
 work.</p>
+<p><strong>Transform transitions are one-way too.</strong> Attaching <code>.ScaleTransition()</code>,
+<code>.RotationTransition()</code> or <code>.TranslationTransition()</code> locks the control's
+<code>RenderTransform</code> for good, even if the transition is later removed, so
+<code>Return</code> drops the control. The facade transforms themselves
+(<code>.Rotation()</code>, <code>.Scale()</code>, <code>.Translation()</code>, <code>.CenterPoint()</code>) are reset
+to identity on return and don't affect pooling.</p>
 <p><strong>The cap is 32 per type.</strong> A burst of 100 list items mounts 32 from
 the pool and 68 fresh; the next render returns 32 to the pool and
 drops 36. That's fine for steady-state scrolling — the working set
