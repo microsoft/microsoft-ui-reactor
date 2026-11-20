@@ -169,29 +169,20 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         // writes ('fe.Rotation += 5') are reported too, since they write the facade just the same;
         // IsFixable only rewrites a simple '='.
         var candidates = new List<(SyntaxNode Node, ExpressionSyntax Member, string Name, AssignmentExpressionSyntax? Assignment)>();
-        foreach (var assignment in SetLambdaHelpers.GetLambdaAssignments(lambda))
-        {
-            var left = SetLambdaHelpers.GetAssignedMemberAccess(assignment, paramName);
-            if (left is null)
-                continue;
-            var name = left.Name.Identifier.Text;
-            if (name == StartAnimationName || (name != TranslationName && !FacadeMembers.ContainsKey(name)))
-                continue;
-            candidates.Add((assignment, left, name, assignment));
-        }
+        var writes = SetLambdaHelpers.GetLambdaAssignments(lambda)
+            .Select(assignment => (Assignment: assignment, Left: SetLambdaHelpers.GetAssignedMemberAccess(assignment, paramName)))
+            .Where(write => write.Left is { } left && IsAssignedMember(left.Name.Identifier.Text));
+        foreach (var (assignment, left) in writes)
+            candidates.Add((assignment, left!, left!.Name.Identifier.Text, assignment));
 
-        foreach (var call in SetLambdaHelpers.GetLambdaInvocations(lambda))
-        {
-            if (call.Expression is MemberAccessExpressionSyntax
-                {
-                    Expression: IdentifierNameSyntax target,
-                    Name.Identifier.Text: StartAnimationName,
-                } access
-                && target.Identifier.Text == paramName)
+        var startAnimationCalls = SetLambdaHelpers.GetLambdaInvocations(lambda)
+            .Where(call => call.Expression is MemberAccessExpressionSyntax
             {
-                candidates.Add((call, access, StartAnimationName, null));
-            }
-        }
+                Expression: IdentifierNameSyntax target,
+                Name.Identifier.Text: StartAnimationName,
+            } && target.Identifier.Text == paramName);
+        foreach (var call in startAnimationCalls)
+            candidates.Add((call, call.Expression, StartAnimationName, null));
 
         if (candidates.Count == 0)
             return;
@@ -288,6 +279,10 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         return ns is not null
             && (ns == "Microsoft.UI.Reactor" || ns.StartsWith("Microsoft.UI.Reactor.", System.StringComparison.Ordinal));
     }
+
+    /// <summary>A member name the rule matches as an assignment target.</summary>
+    private static bool IsAssignedMember(string name) =>
+        name != StartAnimationName && (name == TranslationName || FacadeMembers.ContainsKey(name));
 
     /// <summary>
     /// True when the member is declared on <c>Microsoft.UI.Xaml.UIElement</c>, so a user type
