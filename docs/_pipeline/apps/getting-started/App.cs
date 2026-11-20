@@ -118,3 +118,47 @@ class MultipleStateExample : Component
     }
 }
 // </snippet:multiple-state>
+
+// <snippet:keyed-list>
+// Launch with:
+//   ReactorApp.Run<KeyedListExample>("Keyed List");
+
+record Fruit(string Id, string Name);
+
+class KeyedListExample : Component
+{
+    static readonly string[] Names = ["Apple", "Banana", "Cherry", "Mango", "Pear"];
+
+    static readonly IReadOnlyList<Fruit> StartFruits =
+        [new("fruit-1", "Apple"), new("fruit-2", "Banana")];
+
+    public override Element Render()
+    {
+        var (fruits, setFruits) = UseState(StartFruits);
+        var (nextId, setNextId) = UseState(3);
+
+        void AddFruit()
+        {
+            var name = Names[(nextId - 1) % Names.Length];
+            setFruits([.. fruits, new Fruit($"fruit-{nextId}", name)]);
+            setNextId(nextId + 1);
+        }
+
+        void RemoveFruit(string id) =>
+            setFruits([.. fruits.Where(f => f.Id != id)]);
+
+        return VStack(12,
+            Button("Add fruit", AddFruit),
+            VStack(4,
+                ForEach(fruits, fruit =>
+                    HStack(8,
+                        TextBlock(fruit.Name).Width(120),
+                        Button("Remove", () => RemoveFruit(fruit.Id))
+                            .AutomationName($"Remove {fruit.Name}")
+                    ).WithKey(fruit.Id)
+                )
+            )
+        ).Padding(24);
+    }
+}
+// </snippet:keyed-list>

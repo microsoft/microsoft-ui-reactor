@@ -782,9 +782,8 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 |-------|------|------|-------------|
 | 0 | readme | comprehensive | Landing page: what Reactor is, the 10-section index, decision tree |
 | 1 | getting-started | comprehensive | Project setup, hello world, state, layout, todo + calculator |
-| 1.5 | thinking-in-reactor | NEW stub | Mental-model essay — function of state, no XAML, declarative shell |
-| 24 | xaml-developers | comprehensive | Migration cookbook: XAML/binding/MVVM/navigation → Reactor |
-| 1.7 | reactor-vs-xaml | NEW stub | Architectural essay (also indexed in §9): DependencyProperty → modifier, Binding → closure, DataTemplate → function component |
+| 1.5 | thinking-in-reactor | comprehensive | Mental model: UI as a function of state, render → diff → patch, data flow, keys, and a worked filterable-list example |
+| 2 | xaml-developers | comprehensive | "Coming from XAML": XAML/MVVM concept map, side-by-side examples, bindings → state, gradual adoption and interop |
 
 ### 2. Learn the framework
 
@@ -871,7 +870,6 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 |-------|------|------|-------------|
 | 30 | architecture-overview | NEW stub → comprehensive | Diagram-led: shell → element records → reconciler → WinUI tree |
 | 31 | reactivity-model | NEW stub → comprehensive | setState → re-render mental model; why hooks not INPC |
-| 1.7 | reactor-vs-xaml | NEW stub → comprehensive | (also indexed in §1) DependencyProperty/Binding/DataTemplate mapping |
 | 32 | hooks-internals | NEW stub → comprehensive | Hook slot table, dispatcher, closure capture, stale state |
 | 33 | reconciliation | NEW stub → comprehensive | Element-record diff, identity, `WithKey`, three phases — promotes `docs/reference/reconciliation.md` |
 | 34 | element-pool | NEW stub → solid | Pooling for GC pressure under scroll-heavy lists (spec 034) |

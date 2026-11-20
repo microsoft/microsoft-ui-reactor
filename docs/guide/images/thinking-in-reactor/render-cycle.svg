@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .group { fill: none; stroke: #afb8c1; stroke-width: 1.25; stroke-dasharray: 5 4; }
+    .group-label { font-size: 12px; font-weight: 600; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .group { stroke: #6e7681; }
+      .group-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- Groups -->
+  <rect class="group" x="255" y="30" width="470" height="150" rx="8"/>
+  <text class="group-label" x="273" y="52">Your code: element trees (cheap C# records)</text>
+
+  <rect class="group" x="745" y="30" width="235" height="150" rx="8"/>
+  <text class="group-label" x="763" y="52">On screen: real WinUI controls</text>
+
+  <!-- 1. State changes -->
+  <rect class="box-accent" x="30" y="74" width="190" height="84" rx="6"/>
+  <text class="label" x="125" y="100" text-anchor="middle">1. State changes</text>
+  <text class="sub" x="125" y="120" text-anchor="middle">a component calls a setter</text>
+  <text class="sub" x="125" y="136" text-anchor="middle">setFilterText("pen")</text>
+
+  <!-- 2. Render -->
+  <rect class="box" x="275" y="74" width="190" height="84" rx="6"/>
+  <text class="label" x="370" y="100" text-anchor="middle">2. Render</text>
+  <text class="sub" x="370" y="120" text-anchor="middle">Render() runs again and</text>
+  <text class="sub" x="370" y="136" text-anchor="middle">returns a new element tree</text>
+
+  <!-- 3. Diff -->
+  <rect class="box" x="515" y="74" width="190" height="84" rx="6"/>
+  <text class="label" x="610" y="100" text-anchor="middle">3. Diff</text>
+  <text class="sub" x="610" y="120" text-anchor="middle">the reconciler compares the</text>
+  <text class="sub" x="610" y="136" text-anchor="middle">new tree with the old tree</text>
+
+  <!-- 4. Patch -->
+  <rect class="box-out" x="765" y="74" width="195" height="84" rx="6"/>
+  <text class="label" x="862" y="100" text-anchor="middle">4. Patch</text>
+  <text class="sub" x="862" y="120" text-anchor="middle">sets only the properties</text>
+  <text class="sub" x="862" y="136" text-anchor="middle">that changed; keeps the rest</text>
+
+  <!-- Forward edges -->
+  <path class="edge" d="M220 116 L273 116" marker-end="url(#arr)"/>
+  <path class="edge" d="M465 116 L513 116" marker-end="url(#arr)"/>
+  <path class="edge" d="M705 116 L763 116" marker-end="url(#arr)"/>
+
+  <!-- Loop back: user input -->
+  <path class="edge-dashed" d="M862 158 L862 236 L125 236 L125 160" marker-end="url(#arr)"/>
+  <text class="edge-label" x="493" y="258" text-anchor="middle">5. The user types or clicks. The control raises an event, and your callback calls a setter.</text>
+  <text class="edge-label" x="493" y="276" text-anchor="middle">If the new value equals the old value, nothing re-renders.</text>
+</svg>

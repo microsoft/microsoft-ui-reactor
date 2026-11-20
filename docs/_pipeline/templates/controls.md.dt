@@ -54,7 +54,7 @@ pick off a shelf. `CommandHost` and `NavigationHost` are wiring emitted by
 `ValidationRule`, and `ValidationVisualizer` are the
 [forms](forms.md) validation decorators; `Semantic` is the
 [accessibility](accessibility.md) annotation wrapper; `XamlHost` and
-`XamlPage` are the [XAML interop](xaml-developers.md) hosts; and
+`XamlPage` are the [XAML interop](xaml-developers.md#host-xaml-inside-reactor) hosts; and
 `AnnounceRegion` is internal — it exists only to back the
 [`UseAnnounce`](accessibility.md) hook and has no public factory. A unit
 test (`ControlCatalogCompletenessTests`) fails the build when a newly

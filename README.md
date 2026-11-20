@@ -120,7 +120,7 @@ On networks where the public NuGet registry is unreachable, bootstrap detects a 
 
 `src/Reactor.Cli` and two samples reference `GitHub.Copilot.SDK`, whose build targets download a native `copilot` CLI from the [github/copilot-cli releases](https://github.com/github/copilot-cli/releases) during a plain `dotnet build` / `dotnet run` / `dotnet test` (checksum-verified against the release's `SHA256SUMS.txt`). If that download is blocked on your network, point it at a mirror of those release assets with `CopilotCliReleaseBaseUrl` (or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment variable), or supply a pre-downloaded binary with `CopilotCliBinaryPath`. `CopilotSkipCliDownload=true` also gets a blocked build moving, but only for compiling: it omits the native binary that `mur loc translate` and the two Copilot SDK samples start at run time. CI sets it because CI never runs those paths.
 
-Prefer to wire it up by hand? **[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
+Prefer to wire it up by hand? **[Manual setup](CONTRIBUTING.md#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes. To learn the framework, start with **[Your first app](https://microsoft.github.io/microsoft-ui-reactor/get-started/first-app/)**.
 
 Release owners: see the [release runbook](docs/contributing/release-runbook.md) before minting a new version tag.
 
@@ -290,9 +290,9 @@ samples/
 
 ## Sample apps
 
-### WordPuzzle — word search game
+### WordPuzzle — sliding tile puzzle
 
-A word search game demonstrating grid layout, timers, and interactive state.
+A sliding tile puzzle demonstrating grid layout, timers, and interactive state.
 
 ```bash
 dotnet run --project samples/apps/wordpuzzle -p:Platform=x64

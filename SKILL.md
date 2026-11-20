@@ -565,7 +565,7 @@ ReactorApp.Run("Hello", ctx =>
 ```
 
 Run with `dotnet run MyApp.cs` — no architecture flag. This is the header the
-[Getting Started guide](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project)
+[Installation guide](https://microsoft.github.io/microsoft-ui-reactor/get-started/install/#one-file-no-project)
 documents: `Microsoft.Windows.SDK.BuildTools.WinApp` makes `dotnet run` launch
 the app packaged, with package identity, which needs Developer Mode. If
 Developer Mode is off, or you don't need identity, add

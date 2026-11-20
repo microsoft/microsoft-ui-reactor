@@ -51,6 +51,165 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ---
 
+## Setting up a source checkout
+
+Clone the repository and run the bootstrap script once. The last line starts the script in the PowerShell you are using now and bypasses the execution policy for this one run:
+
+```powershell
+git clone https://github.com/microsoft/microsoft-ui-reactor.git
+cd microsoft-ui-reactor
+& (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
+```
+
+You can run the script again at any time. It keeps the tools and the template pack you already have, and repacks `mur` and the framework.
+
+`bootstrap.ps1` does these steps, in order:
+
+1. Checks for the .NET 11 SDK and the .NET 10 Desktop runtime, and installs them with winget if they are missing. It also checks the Windows App Runtime and the `winapp` CLI that the E2E tests use.
+2. Packs the `mur` CLI (`src/Reactor.Cli`) and installs it as a `dotnet tool` global tool, so `mur` is on PATH in every shell.
+3. Runs `mur pack-local`, which packs the framework from your working tree into `local-nupkgs/`.
+4. Installs the Windows App SDK template pack (`Microsoft.WindowsAppSDK.WinUI.CSharp.Templates`), which provides `dotnet new reactor`.
+5. Installs the Reactor agent plugin under `~/.claude/plugins/reactor` (a symlink when allowed, a copy otherwise). Skip it with `-SkipPlugin`.
+6. Builds and installs the Reactor Visual Studio preview extension, if Visual Studio has the *Visual Studio extension development* workload. Skip it with `-SkipVsExtension`.
+
+Run `Get-Help ./bootstrap.ps1 -Detailed` for the other switches.
+
+Apps created with `dotnet new reactor` reference the public `Microsoft.UI.Reactor` package from NuGet.org. To make a scaffolded app use the package you built from source, pass `--reactor-version 0.0.0-local`. Only need the framework package? Reference `Microsoft.UI.Reactor` from NuGet.org and skip the bootstrap.
+
+### After `git pull`
+
+A pull changes your source, but not the packages in `local-nupkgs/` or the installed `mur` tool. A copied plugin does not change either (a symlinked one does). Rebuild them with one of these:
+
+```powershell
+mur upgrade           # repacks the framework and refreshes the plugin and VS extension
+./bootstrap.ps1       # the same, plus a new `mur` global tool
+```
+
+`mur upgrade` is the faster option. Re-run `bootstrap.ps1` when `src/Reactor.Cli` changed, because a running `mur` process cannot replace its own binary.
+
+Neither command repacks the `dotnet new reactor` templates. They ship in the Windows App SDK template pack, so a `git pull` never makes them stale. To update the pack, run `winapp new --list --template-version latest`.
+
+### Verify the install
+
+```powershell
+mur doctor
+```
+
+`mur doctor` checks the .NET SDK, the `mur` install, the packages in `local-nupkgs/`, the template pack and the optional plugin. It prints PASS, WARN or FAIL for each check, with a fix for each failure.
+
+### Manual setup
+
+If you prefer not to run `bootstrap.ps1`, these are the same steps by hand. Steps 1 to 4 use only `dotnet` and `git`. Step 5 uses the `mur` you install in step 4. After step 2, run every step from the repository root.
+
+| # | Step | What it produces |
+|---|------|------------------|
+| 1 | `dotnet --list-sdks` and `dotnet --list-runtimes` | Confirms the .NET 11 SDK and the .NET 10 runtime |
+| 2 | `git clone` and `cd` | A local source checkout |
+| 3 | `dotnet pack src/Reactor.Cli` | `Microsoft.UI.Reactor.Cli.<version>.nupkg` in `local-nupkgs/` |
+| 4 | `dotnet tool install -g` | `mur` on PATH from `~/.dotnet/tools` |
+| 5 | `mur pack-local` | Source-built framework packages in `local-nupkgs/` |
+| 6 | `dotnet new install` | The `dotnet new reactor` templates |
+| 7 | Symlink or copy `plugins/reactor` | The Reactor agent plugin under `~/.claude/plugins/reactor` (optional) |
+| 8 | `mur doctor` | A check that steps 1 to 7 worked |
+
+**1. Check the prerequisites.** See [Prerequisites](#prerequisites).
+
+```powershell
+dotnet --list-sdks       # expect an entry that starts with "11.0."
+dotnet --list-runtimes   # expect Microsoft.NETCore.App 10.0.x and Microsoft.WindowsDesktop.App 10.0.x
+```
+
+**2. Clone the repository.**
+
+```powershell
+git clone https://github.com/microsoft/microsoft-ui-reactor.git
+cd microsoft-ui-reactor
+```
+
+**3. Pack `mur` as a global-tool package.** `Reactor.Cli.csproj` sets `PackAsTool=true`. Pass the host architecture as the platform: the build runs the SignaturesGen apphost, which must match the machine.
+
+```powershell
+$hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+dotnet pack src/Reactor.Cli/Reactor.Cli.csproj `
+    -c Release `
+    "-p:Platform=$hostArch" `
+    -o local-nupkgs `
+    --nologo
+```
+
+**4. Install `mur` as a global tool.** If `mur` is already installed, use `update` instead of `install`.
+
+```powershell
+dotnet tool install -g `
+    --add-source ./local-nupkgs `
+    Microsoft.UI.Reactor.Cli `
+    --no-cache --ignore-failed-sources
+
+# If mur is already installed:
+# dotnet tool update -g --add-source ./local-nupkgs Microsoft.UI.Reactor.Cli --no-cache --ignore-failed-sources
+```
+
+`dotnet tool install -g` adds `~/.dotnet/tools` to the user PATH, but the current shell does not see that change. For this shell only, add it yourself so the next step finds `mur`. New shells pick it up on their own.
+
+```powershell
+$env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+```
+
+**5. Pack the framework from source.** This creates the `0.0.0-local` packages, so recipes, samples and smoke tests in this clone use your working tree instead of the published package.
+
+```powershell
+mur pack-local
+# Produces:
+#   local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg
+#   local-nupkgs/Microsoft.UI.Reactor.Advanced.0.0.0-local.nupkg
+#   local-nupkgs/Microsoft.UI.Reactor.Devtools.0.0.0-local.nupkg
+```
+
+To run it without the installed `mur`, call the source project:
+
+```powershell
+dotnet run --project src/Reactor.Cli/Reactor.Cli.csproj `
+    -c Release "-p:Platform=$hostArch" -- pack-local
+```
+
+**6. Install the `dotnet new reactor` templates.** They come from the Windows App SDK template pack on NuGet.org, not from this repository. The pack is prerelease only, so pin a version: a plain `dotnet new install` finds stable versions only.
+
+```powershell
+dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
+```
+
+`winapp new --list` installs the newest pack for you, which is what `bootstrap.ps1` does.
+
+**7. (Optional) Install the Reactor agent plugin.** If you use Claude Code, put the plugin folder from this repository in its plugin path. A symlink is best, because changes in your checkout show up at once. A copy works when you cannot create symlinks (Developer Mode off and a non-admin shell).
+
+```powershell
+$pluginSrc = (Resolve-Path "plugins/reactor").Path
+$pluginDst = "$env:USERPROFILE\.claude\plugins\reactor"
+New-Item -ItemType Directory -Path (Split-Path $pluginDst) -Force | Out-Null
+if (Test-Path $pluginDst) { Remove-Item $pluginDst -Recurse -Force }
+try {
+    New-Item -ItemType SymbolicLink -Path $pluginDst -Target $pluginSrc -ErrorAction Stop | Out-Null
+} catch {
+    Copy-Item $pluginSrc $pluginDst -Recurse -Force
+}
+```
+
+For Copilot CLI or another agent, follow that tool's plugin install steps and point it at `<repo>/plugins/reactor`.
+
+**8. Verify.**
+
+```powershell
+mur doctor
+```
+
+#### Refreshing after `git pull`
+
+Without the bootstrap script, repeat **step 5** after every pull. Repeat **steps 3 and 4** only when `src/Reactor.Cli/` changed, and run them from a shell that is not running `mur`. You do not need to repeat step 6 (see [After `git pull`](#after-git-pull)).
+
+> **Why a global tool?** You can also run `mur` from `bin/<arch>/`, because the CLI project copies `mur.exe` there after every build. The global tool is the simpler default: `mur` works from any shell and any folder without PATH changes, and `dotnet tool update -g` updates it.
+
+---
+
 ## Building
 
 ### From the command line

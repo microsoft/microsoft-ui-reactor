@@ -82,7 +82,7 @@ public sealed class VersionSingleSourceTests
         // is actually in place (not that the literals were merely deleted).
         var repoRoot = FindRepoRoot();
         var templatesDir = Path.Join(repoRoot, "docs", "_pipeline", "templates");
-        foreach (var rel in new[] { "getting-started.md.dt", "packaging.md.dt" })
+        foreach (var rel in new[] { "install.md.dt", "packaging.md.dt" })
         {
             var path = Path.Join(templatesDir, rel);
             var text = File.ReadAllText(path);
@@ -112,7 +112,7 @@ public sealed class VersionSingleSourceTests
     // recompiles ~190 generated files under docs/guide and then judged two of
     // them. Version freshness is now a *subset* of what the gate covers — a
     // ReactorPublicVersion bump that skipped a recompile shows up as drift in
-    // getting-started.md / packaging.md like any other staleness — so this test
+    // install.md / packaging.md like any other staleness — so this test
     // pins the general gate rather than the version-specific one it replaced.
 
     [Fact]
