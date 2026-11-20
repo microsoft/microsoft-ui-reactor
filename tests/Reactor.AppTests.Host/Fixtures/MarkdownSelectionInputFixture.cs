@@ -59,7 +59,7 @@ internal sealed class MarkdownSelectionInputFixture : Component
                 .Height(180).AutomationId("SelectionTimeline")).Width(450);
     }
 
-    private static void TracePointerRouting(StackPanel panel)
+    internal static void TracePointerRouting(StackPanel panel)
     {
         MarkdownSelectionHost? scope = null;
         var history = new Queue<string>();
@@ -100,5 +100,40 @@ internal sealed class MarkdownSelectionInputFixture : Component
             scope.RemoveHandler(UIElement.PointerCaptureLostEvent, lost);
             scope = null;
         };
+    }
+}
+
+internal sealed class MarkdownSelectionEdgesFixture : Component<bool>
+{
+    private readonly MarkdownTextSelectionOptions _options = new();
+    private MarkdownSelectionHost? _scope;
+
+    public override Element Render()
+    {
+        Element content = VStack(0,
+            TextBlock("earlier messages").Height(300),
+            MarkdownTextSelection.Scope(_options,
+                Microsoft.UI.Reactor.Advanced.Factories.Markdown("edge anchor alpha\n\nedge anchor bravo",
+                    new MarkdownOptions { TextSelection = _options }))
+                .Height(70).AutomationId("SelectionEdgeMessage").Set((StackPanel panel) =>
+                {
+                    MarkdownSelectionInputFixture.TracePointerRouting(panel);
+                    panel.Loaded += (_, _) =>
+                    {
+                        for (DependencyObject? parent = panel; parent is not null;
+                            parent = VisualTreeHelper.GetParent(parent))
+                            if (parent is MarkdownSelectionHost scope) { _scope = scope; break; }
+                        if (_scope is null)
+                            throw new InvalidOperationException("The edge proof needs its enclosing selection scope.");
+                    };
+                    panel.Unloaded += (_, _) => _scope = null;
+                }),
+            TextBlock("later messages").Height(300));
+        Element scroller = Props ? ScrollView(content) : ScrollViewer(content);
+        return VStack(
+            Button("Release selection capture", () =>
+                (_scope ?? throw new InvalidOperationException("Selection scope is not loaded.")).ReleasePointerCaptures())
+                .AutomationId("SelectionReleaseCapture"),
+            scroller.Height(240).Width(400).AutomationId("SelectionEdgeViewport")).Width(450);
     }
 }
