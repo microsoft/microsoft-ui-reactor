@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using NativeGrid = Microsoft.UI.Xaml.Controls.Grid;
 using Wct = CommunityToolkit.WinUI.Controls;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -229,7 +230,7 @@ internal static class ToolkitInputFixtures
             {
                 FormattableString.Invariant($"""
                     parent-is-advertised={ReferenceEquals(_splitter.Parent, _grid)}; panes-associated={ReferenceEquals(_left.Parent, _grid) && ReferenceEquals(_right.Parent, _grid)}; definitions-unchanged={definitionsUnchanged}
-                    splitter-column={Grid.GetColumn(_splitter)}; splitter-row={Grid.GetRow(_splitter)}; left-column={Grid.GetColumn(_left)}; left-row={Grid.GetRow(_left)}; right-column={Grid.GetColumn(_right)}; right-row={Grid.GetRow(_right)}
+                    splitter-column={NativeGrid.GetColumn(_splitter)}; splitter-row={NativeGrid.GetRow(_splitter)}; left-column={NativeGrid.GetColumn(_left)}; left-row={NativeGrid.GetRow(_left)}; right-column={NativeGrid.GetColumn(_right)}; right-row={NativeGrid.GetRow(_right)}
                     grid-width={_grid.ActualWidth:R}; grid-height={_grid.ActualHeight:R}; left-pane-width={_left.ActualWidth:R}; right-pane-width={_right.ActualWidth:R}
                     row-unit={_row.Height.GridUnitType}; row-value={_row.Height.Value:R}; row-actual={_row.ActualHeight:R}
                     """)
