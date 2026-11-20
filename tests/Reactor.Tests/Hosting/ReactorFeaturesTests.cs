@@ -96,9 +96,9 @@ public class ReactorFeaturesTests
             Assert.True(consumed);
             // Outside Debug, lead with the build that works, and name both requirements at once.
             var text = stderr.ToString();
-            Assert.Contains("dotnet run -c Debug", text);
+            Assert.Contains("winapp run . --devtools on -- --preview <Name>", text);
             Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"", text);
-            Assert.Contains("<ReactorDiagnostics>true</ReactorDiagnostics>", text);
+            Assert.Contains("-p:ReactorDiagnostics=true", text);
             Assert.False(ReactorApp.DevtoolsEnabled);
         }
         finally

@@ -285,8 +285,7 @@ a side panel that:
 
 - Lists the running app's component tree.
 - Highlights the source line for any element you click in the tree.
-- Renders the latest screenshot capture next to your editor (the same
-  PNGs the doc pipeline produces).
+- Renders the preview window's latest captured frame next to your editor.
 - Toggles a **References** overlay that draws the app's reactive
   reference graph — `descriptor.Reference`/`.ReferenceList`, the
   `binding.Reference` bridge, and modifier edges such as `.LabeledBy`

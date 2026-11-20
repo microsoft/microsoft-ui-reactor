@@ -19,17 +19,17 @@ The preview host is **developer-loop only**. It is not a production endpoint and
 hard gates:
 
 1. **Opt in at build time and launch time.**
-   `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />`
-   is the build-time capability gate; `--devtools run` (or `--preview <Name>`) is the launch-time
-   gate, and the capture server starts only with `--vscode` or `--embed`. Samples keep the switch
-   Debug-conditional so Release/AOT builds have no devtools surface at all.
+   The `Reactor.DevtoolsSupport` feature switch is the build-time capability gate; `ReactorDiagnostics`
+   turns it on in Debug only, so Release/AOT builds have no devtools surface at all. `--devtools run`
+   (or `--preview <Name>`) is the launch-time gate, and the capture server starts only with
+   `--vscode` or `--embed`.
 2. **Loopback-only binding.** The capture server's `HttpListener` binds to
    `http://127.0.0.1:{port}/` and is never exposed on a non-loopback adapter.
 3. **Per-launch bearer token.** Every request, including `/status`, must carry
    `Authorization: Bearer <CAPTURE_TOKEN>`; the token is printed on stdout at startup for the
-   launching editor. State-changing endpoints (`/focus`, `/preview`, `/embed/*`) are POST-only and
-   `/preview` requires `application/json`, so a browser page can't drive them with a simple
-   cross-origin request.
+   launching editor. State-changing endpoints (`/focus`, `/preview`, `/embed/*`) are POST-only;
+   `/preview` and `/embed/*` also require `application/json`, and `/focus` relies on the required
+   `Authorization` header, so a browser page can't drive them with a simple cross-origin request.
 ## Wire protocol versioning
 
 Embedded-preview HTTP endpoints advertise their protocol in `/status` as

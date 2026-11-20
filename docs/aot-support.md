@@ -89,7 +89,7 @@ The in-app preview host in the deprecated `Microsoft.UI.Reactor.Devtools` packag
    dotnet run -- --devtools run
    ```
 
-   `ReactorApp.Run` and `Run<TRoot>` no longer take `devtools:` or `preview:` parameters. If a switch-off binary receives `--devtools run`, it writes an actionable stderr message with the `RuntimeHostConfigurationOption` snippet above instead of silently opening a normal window.
+   `ReactorApp.Run` and `Run<TRoot>` no longer take `devtools:` or `preview:` parameters. If a switch-off binary receives `--devtools run`, it writes an actionable stderr message instead of silently opening a normal window: run a Debug build, reference the package Debug-only, or opt in for one build with `-p:ReactorDiagnostics=true`.
 
 ## Conventions
 

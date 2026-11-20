@@ -780,6 +780,72 @@ public class DevtoolsHostCliTests
         Assert.NotNull(ReactorApp.DevtoolsPackageMismatchMessage("0.2.0", "0.2.0-local"));
     }
 
+    // A host from an assembly named like the package but built at another version: the gate must
+    // stop before TryHandleCommandLine (which throws here, as a stale package would fail to JIT).
+    [Fact]
+    public void TryRunDevtools_StaleDevtoolsPackage_ReportsBothVersions_Exits2_WithoutCallingTheHost()
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+#pragma warning disable IL3050 // the unit tests run on the JIT
+        var host = EmitPackageNamedHost("0.0.1+stale");
+#pragma warning restore IL3050
+        Assert.Contains("0.0.1+stale", ReactorApp.DevtoolsPackageMismatchMessage(host.GetType().Assembly) ?? "");
+
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
+        var originalExitCode = Environment.ExitCode;
+        var originalError = Console.Error;
+        using var stderr = new StringWriter();
+        ReactorDevtoolsBootstrap.Register(host);
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+            Console.SetError(stderr);
+
+            Assert.True(ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", "run"], title: "Preview", width: 800, height: 600));
+            Assert.Equal(2, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
+        }
+
+        Assert.Contains("Microsoft.UI.Reactor.Devtools: 0.0.1+stale", stderr.ToString());
+    }
+
+    [global::System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Emits a stand-in for a stale package; JIT-only test.")]
+    private static IReactorDevtoolsHost EmitPackageNamedHost(string informationalVersion)
+    {
+        var versionAttribute = new global::System.Reflection.Emit.CustomAttributeBuilder(
+            typeof(global::System.Reflection.AssemblyInformationalVersionAttribute).GetConstructor([typeof(string)])!,
+            [informationalVersion]);
+        var assembly = global::System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
+            new global::System.Reflection.AssemblyName("Microsoft.UI.Reactor.Devtools"),
+            global::System.Reflection.Emit.AssemblyBuilderAccess.Run,
+            [versionAttribute]);
+        var type = assembly.DefineDynamicModule("StaleDevtools").DefineType(
+            "StaleDevtoolsHost",
+            global::System.Reflection.TypeAttributes.Public | global::System.Reflection.TypeAttributes.Sealed,
+            typeof(object),
+            [typeof(IReactorDevtoolsHost)]);
+        var contract = typeof(IReactorDevtoolsHost).GetMethod(nameof(IReactorDevtoolsHost.TryHandleCommandLine))!;
+        var method = type.DefineMethod(
+            contract.Name,
+            global::System.Reflection.MethodAttributes.Public | global::System.Reflection.MethodAttributes.Virtual
+                | global::System.Reflection.MethodAttributes.Final | global::System.Reflection.MethodAttributes.HideBySig
+                | global::System.Reflection.MethodAttributes.NewSlot,
+            typeof(bool),
+            [typeof(ReactorDevtoolsBootRequest)]);
+        var il = method.GetILGenerator();
+        il.Emit(global::System.Reflection.Emit.OpCodes.Ldstr, "the stale host must not be called");
+        il.Emit(global::System.Reflection.Emit.OpCodes.Newobj, typeof(InvalidOperationException).GetConstructor([typeof(string)])!);
+        il.Emit(global::System.Reflection.Emit.OpCodes.Throw);
+        type.DefineMethodOverride(method, contract);
+        return (IReactorDevtoolsHost)Activator.CreateInstance(type.CreateType())!;
+    }
+
     // --x/--y place the capture window on a monitor whose scale matches the
     // repo's capture convention when that is not the primary display. Capture is
     // PrintWindow over the live HWND in physical pixels, so the monitor's DPI is

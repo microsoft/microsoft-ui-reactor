@@ -1367,11 +1367,11 @@ public static partial class ReactorApp
             // The switch is on by default in Debug, so this branch is a non-Debug build (or an
             // explicit opt-out): lead with the build that works, not with a snippet for this one.
             Console.Error.WriteLine(
-                "[reactor] The in-app preview host (--devtools run / --preview) is off in this build: it needs the Reactor.DevtoolsSupport switch, which is on only in Debug. " +
-                "Run a Debug build instead, for example `dotnet run -c Debug -- --preview <Name>`. It also needs the Microsoft.UI.Reactor.Devtools package, referenced for Debug:");
+                "[reactor] The in-app preview host (--devtools run / --preview) is off in this build: it needs the Reactor.DevtoolsSupport switch, which is on in Debug unless ReactorDiagnostics or Reactor.DevtoolsSupport is set to false. " +
+                "Run a Debug build instead, for example `winapp run . --devtools on -- --preview <Name>` (Debug is winapp's default). It also needs the Microsoft.UI.Reactor.Devtools package, referenced for Debug:");
             Console.Error.WriteLine(packageReference);
             Console.Error.WriteLine(
-                "[reactor] To use it in this configuration anyway, add <ReactorDiagnostics>true</ReactorDiagnostics> to the csproj and drop the Condition from the reference. Don't ship a build made that way.");
+                "[reactor] To use it in this configuration anyway, build once with -p:ReactorDiagnostics=true and reference the package for that build too (outside Debug the reference warns REACTOR_DEVTOOLS_001). Don't ship a build made that way.");
         }
         else
         {
@@ -1380,7 +1380,7 @@ public static partial class ReactorApp
                 "Add it at the same version as Microsoft.UI.Reactor, and rebuild:");
             Console.Error.WriteLine(packageReference);
             Console.Error.WriteLine(
-                "[reactor] (The Condition keeps it out of Release. If you turned ReactorDiagnostics on outside Debug, drop the Condition for that build.)");
+                "[reactor] (The Condition keeps it out of Release. If you build with -p:ReactorDiagnostics=true outside Debug, reference it for that build too.)");
         }
         Console.Error.WriteLine(
             "[reactor] The in-app preview host is deprecated and kept for component previews (--preview <Name>) and the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");
@@ -1405,7 +1405,7 @@ public static partial class ReactorApp
             "[reactor] Microsoft.UI.Reactor and Microsoft.UI.Reactor.Devtools are from different builds, so the preview host can't start." + Environment.NewLine +
             $"[reactor]   Microsoft.UI.Reactor:          {coreVersion}" + Environment.NewLine +
             $"[reactor]   Microsoft.UI.Reactor.Devtools: {devtoolsVersion}" + Environment.NewLine +
-            $"[reactor] Reference Microsoft.UI.Reactor.Devtools at Version=\"{coreVersion.Split('+')[0]}\". " +
+            $"[reactor] Reference Microsoft.UI.Reactor.Devtools at Version=\"{WithoutCommit(coreVersion)}\". " +
             "With 0.0.0-local packages, run `mur pack-local`, delete bin/obj for this app, then restore and build again.";
     }
 
@@ -1415,13 +1415,10 @@ public static partial class ReactorApp
         ?? assembly.GetName().Version?.ToString()
         ?? "<unknown>";
 
+    private static string WithoutCommit(string informationalVersion) => informationalVersion.Split('+')[0];
+
     /// <summary>The package version of Microsoft.UI.Reactor (informational version without the commit suffix).</summary>
-    private static string ReactorPackageVersion()
-    {
-        var version = global::System.Reflection.CustomAttributeExtensions
-            .GetCustomAttribute<global::System.Reflection.AssemblyInformationalVersionAttribute>(typeof(ReactorApp).Assembly)?.InformationalVersion;
-        return string.IsNullOrEmpty(version) ? "<Microsoft.UI.Reactor version>" : version.Split('+')[0];
-    }
+    private static string ReactorPackageVersion() => WithoutCommit(InformationalVersion(typeof(ReactorApp).Assembly));
 
     internal static void ResetDevtoolsEnabledForTests()
     {
