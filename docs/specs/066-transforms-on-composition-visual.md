@@ -606,7 +606,10 @@ element that uses the composition visual.**
   The fix is also declined in three cases. One is when the right-hand side reads the lambda parameter,
   because the lambda is deleted and the name would fail to bind or rebind to an outer symbol. Another
   is when the lambda holds a comment or a directive. The last is when `.Animate` is on the chain, where
-  the modifier would animate in on mount while the `.Set` value was migrated without animating.
+    the modifier would animate in on mount while the `.Set` value was migrated without animating. The
+    fix is also declined when the value has side effects (a call, an assignment, `++`/`--`), which would
+    move from setter time to tree-building time, and when another `.Set` on the chain could interact with
+    the moved write. Compound writes (`+=`) are reported but never fixed.
 - *Accepted false negatives.* The rule misses three shapes, because none of them is visible from the
   `.Set` chain:
   - a visual-owning modifier on a wrapper (keyed `Memo`, a decorator) or in a chain split across variables;

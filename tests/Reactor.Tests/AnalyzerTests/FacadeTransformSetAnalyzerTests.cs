@@ -308,6 +308,45 @@ class C
     }
 
     [Fact]
+    public async Task Another_Set_On_The_Chain_Blocks_The_Fix()
+    {
+        // Setters run before modifiers, so today 90 wins. Fixing only the first .Set would move 45
+        // after it and mount at 45.
+        var source = @"class C { Element M() => Border().Set(b => {|REACTOR_ANIM_004:b.Rotation = 45|}).Set(b => {|REACTOR_ANIM_004:b.Rotation = 90|}).LayoutAnimation(); }";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
+    public async Task Compound_Writes_Report_Without_A_Fix()
+    {
+        var source = @"
+class C
+{
+    Element A() => Border().LayoutAnimation().Set(b => {|REACTOR_ANIM_004:b.Rotation += 5|});
+    Element B() => Border().LayoutAnimation().Set(b => {|REACTOR_ANIM_004:b.Scale *= 2|});
+    Element C2() => Border().Translation(0, 0, 4).Set(b => {|REACTOR_ANIM_004:b.Translation += new Vector3(1, 0, 0)|});
+}";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
+    public async Task Right_Hand_Side_With_Side_Effects_Does_Not_Fix()
+    {
+        // A setter evaluates its value while the element is applied; a modifier argument while
+        // the tree is built. Moving a call or an increment changes when its side effects happen.
+        var source = @"
+class C
+{
+    int angle;
+    float NextAngle() => angle += 15;
+
+    Element A() => Border().LayoutAnimation().Set(b => {|REACTOR_ANIM_004:b.Rotation = NextAngle()|});
+    Element B() => Border().LayoutAnimation().Set(b => {|REACTOR_ANIM_004:b.Rotation = angle++|});
+}";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
     public async Task Ambiguous_Target_Typed_Scale_Does_Not_Fix()
     {
         // .Scale has float and Vector3 overloads, so '.Scale(new(2, 2, 1))' would not bind.

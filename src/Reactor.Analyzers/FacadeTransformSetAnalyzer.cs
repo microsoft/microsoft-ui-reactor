@@ -165,12 +165,12 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             return;
         var paramName = parameter.Identifier.Text;
 
-        // Syntactic candidates first: writes whose target is the lambda's own parameter.
+        // Syntactic candidates first: writes whose target is the lambda's own parameter. Compound
+        // writes ('fe.Rotation += 5') are reported too, since they write the facade just the same;
+        // IsFixable only rewrites a simple '='.
         var candidates = new List<(SyntaxNode Node, ExpressionSyntax Member, string Name, AssignmentExpressionSyntax? Assignment)>();
         foreach (var assignment in SetLambdaHelpers.GetLambdaAssignments(lambda))
         {
-            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression))
-                continue;
             var left = SetLambdaHelpers.GetAssignedMemberAccess(assignment, paramName);
             if (left is null)
                 continue;
@@ -243,13 +243,15 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     }
     /// <summary>
     /// The first modifier on the <c>.Set</c>'s fluent chain, in either direction, whose name
-    /// passes <paramref name="isMatch"/> and which binds to a Reactor extension method.
+    /// passes <paramref name="isMatch"/> and, unless <paramref name="requireReactorExtension"/> is false,
+    /// binds to a Reactor extension method.
     /// </summary>
     private static string? FindChainModifier(
         InvocationExpressionSyntax setInvocation,
         SemanticModel model,
         CancellationToken ct,
-        System.Func<string, bool> isMatch)
+        System.Func<string, bool> isMatch,
+        bool requireReactorExtension = true)
     {
         for (var node = DuplicateAtomicModifierAnalyzer.GetReceiverInvocation(setInvocation);
              node is not null;
@@ -275,7 +277,7 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         bool Matches(InvocationExpressionSyntax link) =>
             DuplicateAtomicModifierAnalyzer.GetFluentMethodName(link) is { } name
             && isMatch(name)
-            && IsReactorExtension(model.GetSymbolInfo(link, ct).Symbol);
+            && (!requireReactorExtension || IsReactorExtension(model.GetSymbolInfo(link, ct).Symbol));
     }
 
     private static bool IsReactorExtension(ISymbol? symbol)
@@ -313,9 +315,24 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         SemanticModel model,
         CancellationToken ct)
     {
-        // The assignment must be the lambda's only statement, or the rewrite drops the rest.
-        if (SetLambdaHelpers.TryGetLambdaAssignment(lambda) != assignment)
+        // The assignment must be a plain '=' and the lambda's only statement, or the rewrite
+        // drops the rest (or turns 'fe.Rotation += 5' into '.Rotation(5)').
+        if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+            || SetLambdaHelpers.TryGetLambdaAssignment(lambda) != assignment)
+        {
             return false;
+        }
+
+        // A setter runs while the reconciler applies the element; a modifier argument is evaluated
+        // while the tree is built. Moving a call, an increment or a nested assignment changes when
+        // (and how often) its side effects happen, so only side-effect-free values move.
+        if (assignment.Right.DescendantNodesAndSelf().Any(static node =>
+                node is InvocationExpressionSyntax or AssignmentExpressionSyntax or AwaitExpressionSyntax
+                || node.IsKind(SyntaxKind.PreIncrementExpression) || node.IsKind(SyntaxKind.PreDecrementExpression)
+                || node.IsKind(SyntaxKind.PostIncrementExpression) || node.IsKind(SyntaxKind.PostDecrementExpression)))
+        {
+            return false;
+        }
 
         // The lambda is deleted, so a right-hand side that reads its parameter
         // ('fe.CenterPoint = new((float)fe.ActualWidth / 2, ...)') would not compile, or would
@@ -340,6 +357,12 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         {
             return false;
         }
+
+        // Another .Set on the chain runs in the same setter phase. Moving this write to the
+        // modifier phase would let it override (or be read by) the other setter differently, so
+        // stay conservative and leave chains with more than one .Set alone.
+        if (FindChainModifier(setInvocation, model, ct, static n => n == "Set", requireReactorExtension: false) is not null)
+            return false;
 
         // Bind the rewrite where the .Set stands. This rejects overload ambiguity (target-typed
         // 'new(...)' against .Scale's float and Vector3 overloads), type mismatches, and a
