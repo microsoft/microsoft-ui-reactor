@@ -342,22 +342,20 @@ locating and running the Host so every mode agrees on where the binary lives; it
 configuration and TFM stamped into the test assembly by `Reactor.SelfTests.csproj`, so
 `dotnet test -c Release` finds the Release Host rather than a stale Debug one.
 
-### Fixture registration is two-place — and what that does to name searches
+### Fixture registration and TAP names
 
-For SelfTest, add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. For E2E, add it to
-`AllFixtures` **and** to the `Build()` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
+Register each fixture with one name and factory in the ordered `Registrations` table. SelfTest
+uses `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E uses
+`tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Keep the relative order of existing entries
+because it determines SelfTest execution order and shard assignment, and E2E navigation order.
 
 `--list-fixtures` lists only SelfTest fixtures for the current host tier.
-`FixtureRegistryConsistencyTests` in `Reactor.Tests` compares `AllFixtures` with the factory
-switch for both SelfTest and E2E. It reports each fixture registered on just one side and
-identifies where the registration is missing.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names.
 
-That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
-carries two kinds of name and they live in different files: *fixture* names (registry only, and
-the class they map to is often spelled differently — `CenterOnCurrent_UsesCursorMonitor` →
-`CenterOnCurrentUsesCursorMonitor`) and *check* names (string literals in `H.Check(...)` inside
-`Fixtures/`). Neither location is a superset:
+Search the whole host tree for names from TAP output. *Fixture* names are registered in the table,
+and the class they map to is often spelled differently (`CenterOnCurrent_UsesCursorMonitor`
+maps to `CenterOnCurrentUsesCursorMonitor`). *Check* names come from `H.Check(...)` in the
+fixture implementations.
 
 | probe | blind spot |
 |---|---|
@@ -577,7 +575,7 @@ This shape cost six separate investigations before it was diagnosed (issue #988)
 | `Run aborted by dispatcher-starvation hang on fixture 'X' (FailFast did not land; the wrapper's budget killed the process)` | Same signal, but the process would not die even under `FailFast`. **Still causal**, and the extra clause is the diagnosis: it points below the CLR — a native lock or a wedged UI thread. | Debug `X` as above, but expect a native cause. A dump is worth more than a managed stack here. |
 | `Run aborted: suite exceeded its <N>s budget with fixture 'X' in flight (POSITIONAL attribution…)` | The suite ran out of its shared budget with no hang signal. `X` was merely in flight. | Look at the reported elapsed-vs-budget, **not** at `X`. `--filter X` removes the other ~1400 fixtures that shared the budget — it removes the cause, so it passes whether or not `X` is healthy, in *either* direction. |
 | `Run aborted after fixture 'X'` / `Run aborted before fixture 'X'` — with ` (Host died mid-run with no '# Total failures:' trailer — NOT a budget kill; issue #978)` | The Host process stopped mid-fixture on its own (usually a native crash). **This is not #988**, and raising the budget does nothing for it. | Read the exit-code classification in the message first. Check the tail output and stderr for the native fault. |
-| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Look at teardown, not at `X`. Issue #680 (0xC0000005 at final process exit) is one known cause; the other is two-place fixture registration — a name `--list-fixtures` reports that the run's `Create()` switch does not produce. |
+| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Start with teardown and the TAP output. Issue #680 (0xC0000005 at final process exit) is a known teardown cause. Compare missing fixture names with `--list-fixtures` for the same Host binary, tier, and shard. |
 
 > **Do not let the two "arbitrary victim" failures collapse into one.** A budget kill (#988) and a silent mid-run death (#978) look nearly identical from outside: one fixture blamed, everything after it missing, and the victim moving between runs. The discriminator is the **`# Total failures:` trailer** — a budget kill interrupts a Host that *would* have printed it, whereas a Host that dies mid-fixture never reaches it. Prefer the trailer over elapsed time: timing corroborates but cannot decide, because a slow machine and a fast crash produce overlapping durations. The abort reasons above state which one fired, so this is readable off any skipped fixture without a re-run.
 
@@ -900,15 +898,15 @@ git branch -D coexist-probe
 
 ### Writing a packaged fixture
 
-Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,
-and both are load-bearing. **Gate** the fixture body:
+Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Add the
+fixture's name and factory to `SelfTestFixtureRegistry.Registrations`. Then configure the
+packaged tier in two steps. **Gate** the fixture body.
 
 ```csharp
 if (!PackagedIdentityFixtures.RequirePackagedTier(H, this)) return;
 ```
 
-and **declare** its tier in `SelfTestFixtureRegistry.TierRequirements`, beside its entry in
-`AllFixtures`:
+**Declare** the same name as packaged in `SelfTestFixtureRegistry.TierRequirements`.
 
 ```csharp
 ["Packaged_MyNewThing"] = SelfTestTier.Packaged,

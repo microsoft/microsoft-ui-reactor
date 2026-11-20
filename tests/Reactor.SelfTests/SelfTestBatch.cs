@@ -997,11 +997,11 @@ public class SelfTestBatch
                "never scheduled at all.",
 
                "reported Skipped (Assert.Inconclusive). The Host ran to completion without ever " +
-               "naming them, so the likely cause is two-place fixture registration: a name that " +
-               "`--list-fixtures` reports but the run's `Create()` switch does not produce.",
+               "naming them. Compare `--list-fixtures` for the same Host binary, tier, and shard " +
+               "with the fixture markers in its TAP output.",
 
-               $"Start at teardown and at the fixture registry, not at '{fixture}' — it is named " +
-               "here only because it started last.")
+               $"Start with teardown and the TAP output. '{fixture}' is named here because it " +
+               "started last.")
 
             : ("SELFTEST HOST STOPPED MID-RUN — this is NOT a suite-budget kill.",
 
