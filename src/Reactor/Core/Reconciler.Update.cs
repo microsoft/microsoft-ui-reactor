@@ -241,7 +241,7 @@ public sealed partial class Reconciler
         // Stop removed keyframes before the handler and modifiers run, so the cleanup cannot
         // cancel an animation a shared target or a changed modifier starts in this update (#1641).
         if (keyframes is null && oldEl.KeyframeAnimations is not null)
-            ClearKeyframeAnimations(control, oldEl.KeyframeAnimations, declaredOnly: true);
+            ClearKeyframeAnimations(control, oldEl.KeyframeAnimations, ownedOnly: true);
 
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);

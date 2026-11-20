@@ -793,6 +793,49 @@ internal static class AnimationCombinationTests
             await RunRetainedRotationCase("KFRemoveKeepsRunningRotation");
             await RunFlyoutTargetCase("KFRemoveKeepsTargetKeyframes");
             await RunSkippedPlaybackCase("KFRemoveStopsStartedChannel");
+            await RunReplacedChannelCase("KFRemoveKeepsReplacedChannel");
+        }
+
+        // Rotation keyframes switch to opacity under an unchanged trigger, so their rotation loop
+        // keeps running until an animated .Rotation(90) replaces it. Removing the keyframes must
+        // not stop the modifier's rotation, which the unchanged modifier would never restart.
+        async Task RunReplacedChannelCase(string name)
+        {
+            var plain = Border(TextBlock(name));
+            var rotationLoop = plain.Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, rotation: 0f).At(1f, rotation: 360f));
+            static Element Fade(Element element) => element.Keyframes("kf", 1, kf => kf
+                .Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            var opacityLoop = Fade(plain);
+            var rotated = Border(TextBlock(name)).Rotation(90);
+            var rotatedLoop = Fade(rotated);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(rotationLoop, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                var keyframeRotation = visual.TryGetAnimationController("RotationAngle");
+                reconciler.Update(rotationLoop, opacityLoop, target, () => { });
+                AnimationScope.WithAnimation(Curve.Linear(60000), () =>
+                    reconciler.Update(opacityLoop, rotatedLoop, target, () => { }));
+                var modifierRotation = visual.TryGetAnimationController("RotationAngle");
+                H.Check(name + "_ModifierReplacedRotation", keyframeRotation is not null && modifierRotation is not null
+                    && !Equals(keyframeRotation, modifierRotation));
+
+                H.Check(name + "_SameControl", reconciler.Update(rotatedLoop, rotated, target, () => { }) is null);
+
+                H.Check(name + "_ModifierRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         // An unchanged trigger skips playback, so switching a looping entry from scale to

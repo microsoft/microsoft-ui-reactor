@@ -140,10 +140,11 @@ Conventions for contributors:
   channel inside one `try`, and stopping `Translation` throws when translation was never
   enabled, so the rotation stop was skipped and the animation kept running on the control.
   Each stop is now independent, and `Translation` is stopped only when the property exists.
-  When an update removes keyframes from a control that stays mounted, only the channels those
-  keyframes declare or have started are stopped, and they are stopped before the control's handler and
-  modifiers run. Animations on other channels, a Flyout target's own keyframes, and a modifier
-  animation started in the same update keep running (spec 066 §7.3, issue #1641).
+  When an update removes keyframes from a control that stays mounted, it stops a channel only
+  while the animation running there is still one those keyframes started, and it does so
+  before the control's handler and modifiers run. Animations that other features started,
+  including a Flyout target's own keyframes and modifier animations, keep running (spec 066
+  §7.3, issue #1641).
 
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no

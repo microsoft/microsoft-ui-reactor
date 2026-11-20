@@ -6337,10 +6337,11 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name),
-    /// and the channels each entry has started. An unchanged trigger skips playback, so the
-    /// started channels can differ from the entry's latest definition.
+    /// and the controller of each channel the entry started, by compositor property. An
+    /// unchanged trigger skips playback, so the started channels can differ from the entry's
+    /// latest definition.
     /// </summary>
-    private static readonly Dictionary<(UIElement, string), (object? Trigger, AnimateProperty Started)> _keyframeTriggerValues = new();
+    private static readonly Dictionary<(UIElement, string), (object? Trigger, Dictionary<string, AnimationController>? Started)> _keyframeTriggerValues = new();
 
     internal readonly record struct KeyframeChannelOwner(
         KeyframeEntry[] Scope, KeyframeEntry Entry, AnimationController? DeferredController = null);
@@ -6383,7 +6384,6 @@ public sealed partial class Reconciler : IDisposable
             var def = entry.Definition;
             var group = compositor.CreateAnimationGroup();
             var properties = GetKeyframeProperties(def);
-            _keyframeTriggerValues[key] = (entry.Trigger, previous.Started | properties);
 
             if ((properties & AnimateProperty.Opacity) != 0)
             {
@@ -6473,8 +6473,14 @@ public sealed partial class Reconciler : IDisposable
             }
 
             // Start the animation group via Visual
+            var started = previous.Started ?? new Dictionary<string, AnimationController>(4);
             foreach (CompositionAnimation anim in group)
+            {
                 visual.StartAnimation(anim.Target, anim);
+                if (visual.TryGetAnimationController(anim.Target) is { } controller)
+                    started[anim.Target] = controller;
+            }
+            _keyframeTriggerValues[key] = (entry.Trigger, started);
 
             if (properties != default && uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
                 TrackKeyframeChannelOwners(state, properties & state.CompositionModifierProperties,
@@ -6555,19 +6561,25 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    // declaredOnly stops only the channels the entries declare or have started. A retained
-    // control passes true so removing keyframes doesn't stop an unrelated animation on another
-    // channel. Unmount passes false and stops every channel a keyframe can animate.
-    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool declaredOnly = false)
+    // ownedOnly stops only the channels whose running animation is still the one these entries
+    // started. A retained control passes true, so removing keyframes doesn't stop an animation
+    // another feature started on that channel. Unmount passes false and stops every channel a
+    // keyframe can animate.
+    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool ownedOnly = false)
     {
-        var channels = declaredOnly ? default
-            : AnimateProperty.Opacity | AnimateProperty.Scale | AnimateProperty.Offset | AnimateProperty.Rotation;
+        Visual? owner = null;
+        bool noCompositor = false;
         foreach (var entry in entries)
         {
-            _keyframeTriggerValues.Remove((uie, entry.Name), out var triggerState);
-            if (declaredOnly) channels |= GetKeyframeProperties(entry.Definition) | triggerState.Started;
+            if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)
+                || !ownedOnly || noCompositor || state.Started is not { } started)
+                continue;
+            try { owner ??= AnimationHelper.GetElementVisual(uie); }
+            catch { noCompositor = true; continue; }
+            foreach (var (property, controller) in started)
+                StopKeyframeTarget(owner, property, controller);
         }
-        if (channels == default) return;
+        if (ownedOnly) return;
 
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
         // StopAnimation is a no-op on an existing property with no running animation.
@@ -6576,19 +6588,22 @@ public sealed partial class Reconciler : IDisposable
         catch { return; /* No compositor (e.g. unit tests) */ }
 
         // Each stop is independent, so one failure can't leave a later channel running (#1641).
-        if ((channels & AnimateProperty.Opacity) != 0) StopKeyframeTarget(visual, "Opacity");
-        if ((channels & AnimateProperty.Scale) != 0) StopKeyframeTarget(visual, "Scale");
+        StopKeyframeTarget(visual, "Opacity");
+        StopKeyframeTarget(visual, "Scale");
         // Translation is a property-set entry that exists only once translation was enabled.
         // StopAnimation on a missing entry throws ArgumentException (spec 066 §7.3 step 1).
-        if ((channels & AnimateProperty.Offset) != 0
-            && visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
+        if (visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
             StopKeyframeTarget(visual, "Translation");
-        if ((channels & AnimateProperty.Rotation) != 0) StopKeyframeTarget(visual, "RotationAngle");
+        StopKeyframeTarget(visual, "RotationAngle");
     }
 
-    private static void StopKeyframeTarget(Visual visual, string property)
+    private static void StopKeyframeTarget(Visual visual, string property, AnimationController? owned = null)
     {
-        try { visual.StopAnimation(property); }
+        try
+        {
+            if (owned is null || Equals(visual.TryGetAnimationController(property), owned))
+                visual.StopAnimation(property);
+        }
         catch { /* One failed stop must not skip the others. */ }
     }
 
