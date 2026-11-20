@@ -123,6 +123,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- `.CenterPoint()`, `.Rotation()`, `.Scale()` and `.Translation()` no longer throw when
+  combined with `.InteractionStates()`, `.Transition()`, `.Keyframes()`, `.Animate()`,
+  `.LayoutAnimation()`, `.ScrollLinked()` or an animated child insert or move. Previously
+  a non-default `CenterPoint`, `Rotation` or `Scale` made those features throw
+  `UnauthorizedAccessException`, either at mount or from the pointer handler on hover.
+  The transform values now move to the element's composition visual when a feature first
+  needs it. Leaving an interaction state also returns to the element's own transform
+  values instead of identity (state values are still absolute targets), and
+  `Transition.Scale` scales relative to the element's `.Scale()` (issue #1613).
+
 - `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
   (or estimate), and spacing after rerenders. Removing and re-adding the callback
   preserves the native viewer and its single subscription, which is detached when
