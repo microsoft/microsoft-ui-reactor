@@ -25,7 +25,7 @@ This document is the high-level threat model for the Microsoft.UI.Reactor framew
 
 Reactor is a managed-only C# framework for building WinUI 3 desktop apps. **It has no production network surface, no privilege boundary, no cross-machine reach, no kernel surface, and no secret handling.** It runs inside the consuming app's process at the consuming app's trust level.
 
-The only sockets the framework ever opens are two **opt-in, loopback-only, bearer-token-gated dev-time HTTP servers** (`PreviewCaptureServer`, `DevtoolsMcpServer`) plus a stdio MCP variant. These are off by default in production builds; a consuming app must explicitly pass `--preview` or `--devtools` to expose them, they bind to `127.0.0.1` only, and every request is authenticated by a 256-bit per-launch random token. The dev CLI (`mur`) is developer-invoked.
+The only socket Reactor's packages ever open is one **opt-in, loopback-only, bearer-token-gated dev-time HTTP server** (`PreviewCaptureServer`, in the deprecated `Microsoft.UI.Reactor.Devtools` package, kept for the VS Code and Visual Studio previews). It is off by default and absent from production builds; a consuming app must reference the package, enable the `Reactor.DevtoolsSupport` switch and be launched with `--preview` / `--devtools run` plus `--vscode` or `--embed` to expose it, it binds to `127.0.0.1` only, and every request is authenticated by a 256-bit per-launch random token. The former in-app MCP server (`DevtoolsMcpServer`, HTTP and stdio) has been removed. The dev CLI (`mur`) is developer-invoked; its outbound calls are `mur figma` (the Figma API) and `mur loc translate` (GitHub Copilot, through the Copilot SDK) (§7.6).
 
 There is no auto-updater, no telemetry endpoint, no license check, no crypto stored at rest, no key management, and no PKI implementation. `System.Security.Cryptography.RandomNumberGenerator` is used exclusively to generate the per-launch bearer tokens above.
 
@@ -52,21 +52,21 @@ Developer machine
 |  |  |   .Generator    |   | - accessibility / TextBox     | |  |
 |  |  +-----------------+   | - font/glyph rendering        | |  |
 |  |          |             +-------------------------------+ |  |
-|  |          |  (--preview / --devtools, opt-in)             |  |
+|  |          |  (--preview / --devtools run + --vscode or   |  |
+|  |          |   --embed, opt-in; Devtools package only)     |  |
 |  |          v                                                |  |
 |  |  +----------------------------------------------------+  |  |
-|  |  | PreviewCaptureServer  |  DevtoolsMcpServer         |  |  |
-|  |  | http://127.0.0.1:N    |  http://127.0.0.1:M  or    |  |  |
-|  |  | bearer token          |  stdio  (bearer token)     |  |  |
+|  |  | PreviewCaptureServer                               |  |  |
+|  |  | http://127.0.0.1:N, bearer token                   |  |  |
 |  |  +----------------------------------------------------+  |  |
 |  |                ^                          ^               |  |
 |  +----------------|--------------------------|---------------+  |
-|                   | localhost only           | localhost/stdio  |
+|                   | localhost only           | localhost only   |
 |                   |                          |                  |
 |       +-----------+-------------+   +--------+---------+        |
-|       | VS Code "Reactor        |   | mur CLI          |        |
-|       | Preview" extension      |   | (dev tool)       |        |
-|       | (vscode-webview origin) |   |                  |        |
+|       | VS Code "Reactor        |   | Visual Studio    |        |
+|       | Preview" extension      |   | embedded preview |        |
+|       | (vscode-webview origin) |   | / doc pipeline   |        |
 |       +-------------------------+   +------------------+        |
 +----------------------------------------------------------------+
 ```
@@ -74,7 +74,7 @@ Developer machine
 Three things to notice:
 
 1. **Reactor.dll runs inside the consuming app's process.** It has no separate process, no service, no daemon.
-2. The dev-time HTTP servers and the `mur` CLI are *not* shipped to end users. They are developer-loop tooling; in a production app build the developer simply doesn't pass `--preview` / `--devtools` and the servers never instantiate.
+2. The dev-time preview capture server and the `mur` CLI are *not* shipped to end users. They are developer-loop tooling; in a production app build the developer simply doesn't pass `--preview` / `--devtools` and the server never instantiates.
 3. There is no arrow leaving the box. **There is no Reactor process that talks to the network or to another machine.**
 
 ### 4.1 Artifacts produced
@@ -91,7 +91,7 @@ No MSI, no MSIX, no Appx, no Authenticode-signed bundle. **Codesigning of NuGet 
 
 These are facts about the shipped framework. Each was verified during the 2026-05-21 compliance audit.
 
-- **No outbound HTTP / HTTPS / sockets.** Repo-wide grep for `HttpClient`, `WebClient`, `Socket`, `TcpClient`, `UdpClient` in `src/Reactor/` returns only the two loopback `HttpListener` servers in [§7.1](#71-preview-capture-server) and [§7.2](#72-devtools-mcp-server) plus their unit tests.
+- **No outbound HTTP / HTTPS / sockets.** Repo-wide grep for `HttpClient`, `WebClient`, `Socket`, `TcpClient`, `UdpClient` in `src/Reactor/` returns nothing; the only loopback `HttpListener` server is the preview capture server in [§7.1](#71-preview-capture-server) (in `src/Reactor.Devtools/`) plus its unit tests. The former devtools MCP server ([§7.2](#72-devtools-mcp-server-removed)) has been removed.
 - **No telemetry endpoint, no update server, no license check, no call-home.** There is no analytics or crash-reporting transmission. (Diagnostics traces use `EventSource` / `TraceEvent`; they emit to ETW locally.)
 - **No data-at-rest encryption.** The framework holds no secrets, persists no credentials, manages no keys.
 - **No authentication library.** No DRM, no IPsec, no VPN, no TLS termination, no certificate validation logic.
@@ -104,15 +104,15 @@ These are facts about the shipped framework. Each was verified during the 2026-0
 | Asset | Where it lives | Who can reach it | Threat if compromised |
 |---|---|---|---|
 | Consuming-app process integrity | Host EXE memory | Same process, same user | Same as any in-process library defect — code execution at host's trust level |
-| Dev-time loopback ports (preview / devtools) | Localhost, kernel-owned port table | Same-user processes that can read the lockfile or stdout banner | Read of preview frames; remote-control of the developer's running app window (focus steal, component switch, MCP tool invocation) |
-| Per-launch bearer tokens | Process memory + per-user tempdir lockfile + dev stdout | Same-user, same-machine | Same as above — token *is* the dev surface's auth |
+| Dev-time loopback port (preview capture server) | Localhost, kernel-owned port table | Same-user processes that can read the stdout banner | Read of preview frames; remote-control of the developer's running app window (focus steal, component switch) |
+| Per-launch bearer tokens | Process memory + dev stdout | Same-user, same-machine | Same as above — token *is* the dev surface's auth |
 | Source-ported OSS (Yoga, md4c, D3) | Repo source, compiled into Reactor.dll | Anyone who can submit a PR | Smuggled defect in a parser — runs at consuming-app trust level |
 
 **There are no cross-user assets, no remote credentials, no Azure resources, and no end-user PII handled by the framework.**
 
 ## 6. Trust boundaries
 
-A "trust boundary" here is a place where data or control crosses from one identity / privilege level / process / machine to another. Reactor has exactly **two** trust boundaries in the production runtime, and both are off-by-default.
+A "trust boundary" here is a place where data or control crosses from one identity / privilege level / process / machine to another. Reactor has exactly **one** trust boundary in the production runtime, and it is off by default.
 
 ### 6.1 Boundary A: VS Code extension ↔ PreviewCaptureServer (loopback)
 
@@ -125,26 +125,21 @@ Crossing requires:
 
 - A connection to `127.0.0.1:<random port>` (Host header must match `127.0.0.1` or `localhost` — DNS rebinding rejected with 421).
 - A valid `Authorization: Bearer <token>` header (constant-time comparison against per-launch 256-bit random).
-- For state mutations: `POST` only + `Content-Type: application/json` (blocks `<form>`-shaped CSRF).
+- For state mutations: `POST` only; `/preview` and `/embed/*` also require `Content-Type: application/json` (blocks `<form>`-shaped CSRF). `/focus` relies on `POST` plus the required `Authorization` header, which already makes any cross-origin request non-simple.
 - Origin (if present) must parse via `Uri` and be one of: `http://127.0.0.1`, `http://localhost`, `https://localhost`, or `vscode-webview://*`.
 
-### 6.2 Boundary B: External MCP client ↔ DevtoolsMcpServer (loopback HTTP or stdio)
+### 6.2 Boundary B (removed): External MCP client ↔ DevtoolsMcpServer
 
-| Side | Identity / privilege |
-|---|---|
-| Client | An AI agent harness (Claude Code, Copilot CLI, etc.) running same-user |
-| Server | Same user, in-process inside developer's app |
+The in-app MCP server, its stdio variant and its per-project lockfile have been removed from `Microsoft.UI.Reactor.Devtools`, together with the `mur devtools` client. Agents inspect and drive a running app with the winapp CLI (`winapp run . --devtools on`), which is a separate product with its own threat model.
 
-Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) with per-launch 256-bit bearer token, 1 MiB body cap, 16-way dispatch gate, 10 s I/O timeouts. The stdio variant inherits its trust from the parent-process pipe (the parent that spawned `mur` is by definition same-user same-machine and already trusted with the child's stdin/stdout).
-
-**There is no third trust boundary.** No remote endpoint, no privilege transition, no AppContainer crossing, no user-mode ↔ kernel-mode transition. The framework runs entirely at the host app's trust level.
+**There is no second trust boundary.** No remote endpoint, no privilege transition, no AppContainer crossing, no user-mode ↔ kernel-mode transition. The framework runs entirely at the host app's trust level.
 
 ## 7. Attack surfaces
 
 ### 7.1 Preview capture server
 
-**File:** `src/Reactor/Hosting/PreviewCaptureServer.cs`
-**Activation:** opt-in via `--preview` flag on the consuming app or via `mur preview`.
+**File:** `src/Reactor.Devtools/PreviewCaptureServer.cs` (the deprecated `Microsoft.UI.Reactor.Devtools` package)
+**Activation:** opt-in: the app references the package, has the `Reactor.DevtoolsSupport` switch on, and is launched with `--devtools run` / `--preview` plus `--vscode` or `--embed` (the VS Code live preview and the Visual Studio embedded preview do this).
 **Surface:** loopback HTTP listener at `http://127.0.0.1:<random port>`.
 
 **Endpoints:**
@@ -152,44 +147,35 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 - `GET /frame` — returns the latest JPEG-encoded screenshot of the WinUI window (captured via `PrintWindow`).
 - `GET /status` — fps/port introspection.
 - `GET /components` — list of registered preview components.
+- `GET /references` — the reference-graph overlay of the live tree (node ids, edges, diagnostics).
 - `POST /focus` — brings the developer's app window to foreground.
-- `POST /preview` — switches the previewed component by name.
+- `POST /preview` — switches the previewed component by name (allow-listed against the discovered components).
+- Only with `--embed` (`EmbedMode`; otherwise 404): `/hwnd` (the window handle), `/embed/ack` (reparents the window under the Visual Studio placeholder HWND the caller names), `/embed/resize`, `/embed/move`, and `/embed/release` (detaches the window and exits the process).
 
 **Mitigations implemented:**
 
 | Threat | Mitigation | Source |
 |---|---|---|
-| Remote attacker reaches the port | Listener binds to `127.0.0.1` only; loopback is not reachable off-box on default Windows network configurations | `PreviewCaptureServer.cs:75` |
-| Same-machine other-user attack | Loopback is per-machine; segregation between user accounts on Windows means another local user could reach it but lacks the bearer token (token never written outside the process owner's stdout/lockfile) | `PreviewCaptureServer.cs:64`, `GenerateToken` |
-| Token brute-force | 256-bit random from `RandomNumberGenerator.Fill`; constant-time compare; per-launch (no replay across runs) | `PreviewCaptureServer.cs:82`, `BearerMatches` lines 303–314 |
-| DNS rebinding (web-page tricks browser into requesting a `127.0.0.1` URL with attacker-controlled Host) | Host header allow-list enforced before auth: rejects with 421 anything other than `127.0.0.1:<port>` / `localhost:<port>` | `IsAllowedHost` line 316 |
-| Cross-origin browser CSRF | (a) Origin allow-list parsed via `Uri` (not `StartsWith`); (b) state-mutating endpoints require POST + `Content-Type: application/json` (not a CORS "simple request") | `IsAllowedOrigin` line 324, `HandleSwitchComponent` line 432 |
-| Reflected XSS via `<img src=…/focus>` | `/focus` is POST-only (returns 405 for GET) | `HandleFocus` line 392 |
-| Slow-loris / connection exhaustion | `HeaderWait`, `EntityBody`, `IdleConnection`, `RequestQueue` all bounded at 10–15 s | `Start` lines 95–103 |
-| Threadpool exhaustion | 16-way dispatch gate; over-quota requests get HTTP 503 with `Retry-After: 1` | `_dispatchGate` line 34, `ListenAsync` lines 203–215 |
-| Body-bomb | 4 MiB hard cap; over-cap requests get HTTP 413 before the body is read fully | `MaxBodyBytes` line 38, `HandleSwitchComponent` lines 451–456 |
+| Remote attacker reaches the port | Listener binds to `127.0.0.1` only; loopback is not reachable off-box on default Windows network configurations | `LoopbackHttpListener.Prefix` |
+| Same-machine other-user attack | Loopback is per-machine; segregation between user accounts on Windows means another local user could reach it but lacks the bearer token (token never written outside the process owner's stdout) | `GenerateToken` |
+| Token brute-force | 256-bit random from `RandomNumberGenerator.Fill`; constant-time compare; per-launch (no replay across runs) | `GenerateToken`, `BearerMatches` |
+| DNS rebinding (web-page tricks browser into requesting a `127.0.0.1` URL with attacker-controlled Host) | Host header allow-list enforced before auth: rejects with 421 anything other than `127.0.0.1:<port>` / `localhost:<port>` | `IsAllowedHost` |
+| Cross-origin browser CSRF | (a) Origin allow-list parsed via `Uri` (not `StartsWith`); (b) state-mutating endpoints are POST-only; `/preview` and `/embed/*` also require `Content-Type: application/json` (not a CORS "simple request"), and `/focus` relies on the required `Authorization` header, which is not CORS-safelisted either | `IsAllowedOrigin`, `HandleSwitchComponent`, `TryReadEmbedJson`, `HandleFocus` |
+| Reflected XSS via `<img src=…/focus>` | `/focus` is POST-only (returns 405 for GET) | `HandleFocus` |
+| Slow-loris / connection exhaustion | `HeaderWait`, `EntityBody`, `IdleConnection`, `RequestQueue` all bounded at 10–15 s | `Start` |
+| Threadpool exhaustion | 16-way dispatch gate; over-quota requests get HTTP 503 with `Retry-After: 1` | `_dispatchGate`, `ListenAsync` |
+| Body-bomb | 4 MiB hard cap; over-cap requests get HTTP 413 before the body is read fully | `MaxBodyBytes`, `HandleSwitchComponent` |
 | Port TOCTOU steal between probing a free port and `HttpListener.Start` | Bind-and-retry: a placeholder socket can't be held across the bind (HTTP.sys refuses a port any other socket owns), so if another process takes the probed port first, `Start` probes a new one and binds again (bounded). `CAPTURE_PORT` is announced only after the bind succeeds | `LoopbackHttpListener.Start`, `PreviewCaptureServer.Start` |
 
 **Residual risk:**
 
-- **Same-user same-machine compromise.** If another process is already running as the developer's user, it can read the lockfile or stdout and obtain the bearer token. This is consistent with the Windows trust model — that attacker already has read access to the developer's process memory, browser cookies, SSH keys, etc., so this surface adds no meaningful privilege. The dev server is not a security boundary against a co-resident-same-user attacker.
+- **Same-user same-machine compromise.** If another process is already running as the developer's user, it can read stdout and obtain the bearer token. This is consistent with the Windows trust model — that attacker already has read access to the developer's process memory, browser cookies, SSH keys, etc., so this surface adds no meaningful privilege. The dev server is not a security boundary against a co-resident-same-user attacker.
 - **Frame capture as side channel.** The capture is a screenshot of the developer's preview window; any other process running as the developer can already screenshot the same window via the same Win32 APIs. No new disclosure.
+- **Embed mode.** With `--embed`, a token holder can reparent, resize or move the app window (`/embed/ack`, `/embed/resize`, `/embed/move`) and end the process (`/embed/release`). That is the same same-user attacker as above, who could already do all of it through Win32; the endpoints are 404 without `--embed`.
 
-### 7.2 Devtools MCP server
+### 7.2 Devtools MCP server (removed)
 
-**File:** `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`
-**Activation:** opt-in via `--devtools` on the consuming app or via `mur devtools`. Off in production.
-**Surface:** loopback HTTP at `http://127.0.0.1:<port>/mcp` OR stdio.
-
-**Endpoints:** JSON-RPC 2.0 `tools/list` and `tools/call` over `/mcp`. Tools are AI-agent affordances: inspect the running element tree, dispatch synthetic input, request screenshots, etc. (See `src/Reactor/Hosting/Devtools/Tools/` for the inventory.)
-
-**Mitigations:** identical shape to [§7.1](#71-preview-capture-server) — per-launch bearer (line 80), 1 MiB body cap (`MaxRequestBodyBytes` line 55), 16-way dispatch gate (line 43), 10 s I/O timeouts (lines 115–122), loopback bind (line 84). Plus:
-
-- **Single-instance lockfile** per project (`LockfileRegistry.PathFor(projectIdentifier)` — per-user tempdir) prevents two dev sessions racing on the same MCP endpoint and provides the channel by which the bearer token reaches the client (`IsAnotherSessionActive` lines 94–106).
-- **Port TOCTOU** handled as in §7.1: an unpinned port is bound with bind-and-retry, and the endpoint (banner, `devtools-ready` line, lockfile) is announced only after the bind. A port pinned with `--mcp-port` is never moved; if another process holds it, `Start` throws `LoopbackPortUnavailableException` and the app exits with code 43.
-- **Stdio transport** uses raw `Console.OpenStandardInput / Output` so the JSON-RPC framing isn't corrupted by app log writes (lines 145–146). Trust derives from the parent process owning the pipe.
-
-**Residual risk:** same as [§7.1](#71-preview-capture-server) — bearer token is a same-user-same-machine secret. The MCP tools can drive the running app: inspect state, synthesize input, switch components. **An attacker who has the token has full control of the dev app's UI thread.** This is by design — that's what devtools are for — and is no worse than the same attacker already having `OpenProcess(PROCESS_VM_READ)` rights on the dev process they share a user with.
+The in-app MCP server (`DevtoolsMcpServer`, HTTP at `/mcp` and stdio), its per-project lockfile, its call log and the `--mcp-port` / `--mcp-transport` / `--devtools-log*` / `--devtools-project` flags have been removed from `Microsoft.UI.Reactor.Devtools`. The flags are now ignored with a notice; `--devtools app` is ignored with a notice and the app runs normally, and `--devtools screenshot|tree` print the winapp command to use instead and exit 2. This removes the MCP tools a token holder could use to read and change the dev app's tree, properties and state and to drive its UI; the preview server (§7.1) remains. The `McpCallStart` / `McpCallStop` ETW events remain declared but are no longer emitted.
 
 ### 7.3 Skill-kit installer
 
@@ -241,12 +227,15 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 
 **File:** `src/Reactor.Cli/`.
 **Activation:** developer command line.
-**Behavior:** spawns the consuming app under `dotnet run` or attaches to a running session via the MCP/Preview endpoints above.
+**Behavior:** `mur devtools` has been removed; it only prints the winapp equivalent of each command. (The doc pipeline, which spawns doc apps under `dotnet run` and switches components through the preview endpoint above, now lives in the internal `tools/Reactor.DocPipeline` project, not in `mur`.)
 
 **Mitigations:**
 
-- All inter-process talk is to the **localhost** Preview / MCP servers using the **per-launch token** the child app emitted on stdout.
-- No network outbound, no auto-update.
+- `mur` no longer connects to any in-app server.
+- Two commands make outbound calls, both developer-invoked:
+  - `mur figma` calls `https://api.figma.com/` over HTTPS with the developer's Figma API key (from `FIGMA_API_KEY`, or the Figma entry of an MCP config the developer already has) in the `X-Figma-Token` header.
+  - `mur loc translate` sends the `.resw` source strings it translates to GitHub Copilot through the Copilot SDK and its bundled `copilot.exe` runtime (§11), signed in as the developer.
+- No auto-update.
 - No SUID/elevation; runs as the invoking developer.
 
 **Residual risk:** if `mur` were ever extended to follow URL-style attach targets (e.g., `mur attach https://...`), the threat model expands to cover network identity. **As of the audit date, no such target exists.** Adding one would require revisiting this document.
@@ -287,8 +276,8 @@ The Microsoft-internal security-review intake form gave succinct answers about R
 |---|---|---|
 | "Library code executes in the consuming-domain WinUI/.NET app process, typically unelevated user-mode" | Code review of `ReactorApp.Run` and `ReactorWindow` lifecycle | No `RunAs`, no manifest requesting elevation. Reactor inherits the host process's integrity level. |
 | "CLI/debug tooling runs as developer-invoked user-mode process" | Manifest review of `mur.exe`, install script behavior | No elevation, no scheduled-task install. |
-| "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" | `PreviewCaptureServer.cs`, `DevtoolsMcpServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
-| "No outbound network communication beyond the above" | Repo-wide grep | Only `System.Net.*` usage in `src/Reactor/` is the two `HttpListener` servers above and an `HttpClient` *in CLI Docs subsystem* that targets `127.0.0.1:<port>` of a preview server `mur` itself spawned. |
+| "CLI can talk to app as a debugging tool using MCP protocol over HTTP, domain-validated for localhost, with token auth" (the MCP server has since been removed; the preview server remains) | `PreviewCaptureServer.cs` | Listener prefix bound to `http://127.0.0.1:<port>/`; Host header allow-list at `IsAllowedHost`; bearer constant-time compare at `BearerMatches`. |
+| "No outbound network communication beyond the above" | Repo-wide grep, plus the Copilot SDK call sites (SDK-mediated calls don't show up in a `System.Net.*` grep) | In the framework packages (`Microsoft.UI.Reactor`, `.Advanced`, `.Devtools`), the only `System.Net.*` usage is the preview `HttpListener` server above (in `src/Reactor.Devtools/`). The `mur` CLI makes two developer-invoked outbound calls (§7.6): `mur figma`'s `HttpClient` to `https://api.figma.com/`, and `mur loc translate` through the Copilot SDK to GitHub Copilot. The internal doc pipeline (`tools/Reactor.DocPipeline`, not shipped) has an `HttpClient` that targets `127.0.0.1:<port>` of a preview server it spawned itself. |
 | "No unsupported or third-party components" | `ThirdPartyNoticeText.txt`, `Directory.Build.props`, `nuget.config` | Six Microsoft.* / MIT NuGet deps; four source-ported MIT/ISC OSS components (Yoga, md4c, D3, WinUIEx window hosting); no checked-in `.nupkg` binaries; `nuget.config` clears inherited feeds. |
 | "No prior threat models / security reviews" | Repo audit | This document is the first formal one. README references a 275-finding internal code review — engineering review, not a threat model. |
 
@@ -320,7 +309,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 1. **Authenticode codesigning** of the NuGet package and `mur.exe` is not yet wired into `release.yml`. Recommendation needed on the signing posture for an experimental public NuGet (Microsoft Trusted Signing? per-release manual signing? defer until first stable?).
 2. **`copilot.exe` BinSkim findings** (BA2008, no CFG) are upstream from `GitHub.Copilot.SDK`. Now scoped out of the BinSkim scan via the `runtimes/<rid>/native/` exclude in `release.yml`. Open question: should we also escalate upstream to the Copilot SDK team for a hardened build?
 3. **Continuous fuzzing.** A SharpFuzz harness for `MarkdownHtml.Render` / `Md4cParser` is in-tree (`tests/Reactor.Fuzz/`) with a smoke-test CI gate. Onboarding to a continuous-fuzzing service is the planned next step; open question is whether onboarding is required for the *experimental* release or can be deferred to first GA.
-4. **Devtools MCP authorization model.** Today: bearer token, full-tool access. Open question is whether the same-user-same-machine threat model below it (single-developer-machine, AI agent driving their own running app) needs anything beyond bearer auth (e.g., per-tool capability tokens) before broader adoption.
+4. **Devtools MCP authorization model.** Closed: the in-app MCP server has been removed; agents use the winapp CLI instead.
 5. **Scope-down sign-off.** Confirm that Reactor's runtime profile — no production network surface, no privilege transition — places it outside the in-depth-review trigger criteria and that any future surface change requires this document to be re-reviewed.
 
 ## 12. References
@@ -329,8 +318,7 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 - [`AGENTS.md`](../../AGENTS.md) — repo conventions, test tiers, AOT posture
 - [`SECURITY.md`](../../SECURITY.md) — Microsoft vulnerability reporting policy
 - [`ThirdPartyNoticeText.txt`](../../ThirdPartyNoticeText.txt) — OSS attributions for Yoga / md4c / D3 / WinUIEx and NuGet deps
-- [`src/Reactor/Hosting/PreviewCaptureServer.cs`](../../src/Reactor/Hosting/PreviewCaptureServer.cs) — dev preview server
-- [`src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`](../../src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs) — devtools MCP server
+- [`src/Reactor.Devtools/PreviewCaptureServer.cs`](../../src/Reactor.Devtools/PreviewCaptureServer.cs) — dev preview server
 - [`src/Reactor.Advanced/Markdown/MarkdownBuilder.cs`](../../src/Reactor.Advanced/Markdown/MarkdownBuilder.cs) — native `Markdown()` renderer + URL allow-list (`IsSafeUri`)
 - [`tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs`](../../tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs) — test-only CommonMark/spec HTML renderer + URL sanitizer
 - [`tools/install-skill-kit.ps1`](../../tools/install-skill-kit.ps1) — installer with guard-rails

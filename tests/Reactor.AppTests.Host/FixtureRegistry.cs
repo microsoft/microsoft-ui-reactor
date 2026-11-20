@@ -175,7 +175,6 @@ internal static class FixtureRegistry
         "DragDrop_TextFormat",
 
         // Devtools UX (spec 028 — E2E validation)
-        "DevtoolsUx_MenuAndToggle",
 
         // Docking input (spec 045 — E2E validation of keyboard focus
         // across docking layout mutations)
@@ -335,7 +334,6 @@ internal static class FixtureRegistry
         "DataGrid_RowEditGrid" => DataGridFixtures.RowEditGrid(ctx),
 
         // Devtools UX (spec 028 — E2E validation)
-        "DevtoolsUx_MenuAndToggle" => DevtoolsUxFixtures.DevtoolsUxTest(ctx),
 
         // Input & Gestures (spec 027 — E2E validation)
         "Gesture_Pan" => GestureE2EFixtures.PanTest(ctx),

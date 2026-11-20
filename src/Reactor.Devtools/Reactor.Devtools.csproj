@@ -20,8 +20,8 @@
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
-    <Description>Optional devtools host for Microsoft.UI.Reactor.</Description>
-    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;MCP</PackageTags>
+    <Description>DEPRECATED: use the WinUI DevTools in the winapp CLI instead (`winapp run . --devtools on`; agents: the winui-devtools skill). Still needed for component previews (--preview &lt;Name&gt;), the VS Code live preview and the Visual Studio embedded preview until winapp has its own previewer.</Description>
+    <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;deprecated</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -43,23 +43,21 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="MessageFormat" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Reactor\Reactor.csproj" />
-    <!-- Spec 062 §7 Track B (B1): docking moved core → Reactor.Advanced. The
-         docking.* MCP tools (DevtoolsDockingTools) resolve docking types incl.
-         the internal DockHostModelBridge from Advanced. -->
-    <ProjectReference Include="..\Reactor.Advanced\Reactor.Advanced.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
     <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
+    <!-- Deprecation warning REACTOR_DEVTOOLS_001 for projects that reference the
+         package directly outside Debug. build\ only: transitive consumers are not warned. -->
+    <None Remove="build\Microsoft.UI.Reactor.Devtools.targets" />
+    <None Include="build\Microsoft.UI.Reactor.Devtools.targets" Pack="true" PackagePath="build\" />
   </ItemGroup>
 
 </Project>

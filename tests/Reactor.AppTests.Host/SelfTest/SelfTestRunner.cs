@@ -169,23 +169,20 @@ internal static class SelfTestRunner
     // Host. Since the WindowsAppSDK#6394 fix (the project .pri reaches the AOT
     // publish output, via the build tools Reactor depends on), all NATIVE_CRASH
     // skips are gone. What is
-    // left is the buckets below: the UseObservableTree property walk, the
-    // Devtools fixtures that reflect over members the trimmer removes,
+    // left is the buckets below: the UseObservableTree property walk,
     // PropertyGrid auto-discovery, the Issue142 XAML-metadata-provider edge
     // cases, and hot-reload state migration.
     //
     // Reflection on its own does NOT make a fixture AOT-hostile, so don't use it
-    // as the sorting rule. The Devtools fixtures that run here mostly depend on
-    // *type-name* reflection (GetType().Name in TreeWalker / SelectorResolver),
-    // which trimming always preserves. What breaks is *member-level* reflection
-    // whose target the trimmer drops — the Devtools entries below.
+    // as the sorting rule. *Type-name* reflection (GetType().Name) survives
+    // trimming; what breaks is *member-level* reflection whose target the
+    // trimmer drops.
     //
     // Each name was verified to fail in isolation; wildcards from earlier
     // skip-list iterations have been replaced with explicit names so that
     // newly-passing siblings re-enter the run automatically. Prefer splitting a
     // fixture over skipping it whole: an entry mutes every check in the fixture,
-    // including the ones that do pass under AOT (see the #1109 entry below, which
-    // exists precisely so the AOT-safe property-tool checks stay live).
+    // including the ones that do pass under AOT.
     //
     // Keep this list honest: a stale entry is AOT coverage that is silently
     // switched off. Re-run the probe after framework changes and delete whatever
@@ -212,44 +209,6 @@ internal static class SelfTestRunner
         // finds no nested INPC source and the deep-mutation assertion fails
         // (no native crash; the assertion fails inside the fixture). --
         "CoreCov2_UseObservableTreeHook",
-
-        // -- Devtools / MCP server. The other Devtools fixtures run under AOT;
-        // these are the ones that reflect over members the trimmer removes.
-        // `fire` resolves a named handler with GetMethods(DeclaredOnly) over the
-        // *user* component, and under AOT that set comes back empty — the tool
-        // answers unknown-event with reachableMethods: []. `state` reads hook
-        // bookkeeping through Component's non-public Context property.
-        // Devtools_FireRejectsLifecycleMethods deliberately still runs: `fire`
-        // refuses forbidden names against a static HashSet *before* it reflects
-        // (DevtoolsFireTool.FindHandler), so that path is trim-safe and is worth
-        // keeping as live AOT coverage. DependencyProperty discovery for
-        // `properties` / `setProperty` is the third Devtools entry, below. --
-        "Devtools_FireInvokesNamedHandler",
-        "Devtools_StateReadsHooks",
-
-        // DependencyProperty discovery for the `properties` / `setProperty` tools
-        // (issue #1109). The lookups need reflection metadata for the DP statics, and
-        // the trimmer keeps none unless something roots them, so under AOT they find
-        // nothing. Not a CsWinRT quirk: a C#-authored DP *field* on a purpose-built
-        // control is equally undiscoverable.
-        //
-        // This is a deliberate product decision, not an unsolved problem. Rooting the
-        // DP static getters via an ILLink descriptor does make it work, and was
-        // measured on samples/apps/hello-world-aot-devtools-on: +1.5 MB (13.196 vs
-        // 11.655 MB) for all 1851 DPs across 311 WinUI types, gated on the
-        // Reactor.DevtoolsSupport switch so devtools-off apps stay byte-identical.
-        // It was not taken because devtools against an AOT-published app is not a
-        // scenario worth a generated 2500-line descriptor pinned to a Windows App SDK
-        // version: the devtools inner loop is Debug/JIT, where this works. The tool
-        // now reports the situation instead of looking broken — an empty listing on an
-        // AOT build carries a `notice`, and a failed by-name lookup says the same. Full
-        // numbers in docs/aot-support.md, should anyone want to revisit it.
-        //
-        // NOTE for whoever does revisit: un-skipping this fixture is what caught
-        // NativeAOT throwing TypeInitializationException bare where JIT wraps it in
-        // TargetInvocationException. ReadStatic still has the arm for it, but with
-        // this fixture skipped no running test covers that arm. --
-        "Devtools_PropertyToolsDpDiscovery",
 
         // -- PropertyGrid auto-discovery walks user types via reflection and is
         // not AOT-safe by design. Documented in docs/aot-support.md. --

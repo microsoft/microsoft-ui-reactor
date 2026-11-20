@@ -51,8 +51,8 @@ public sealed class DockHostRecord
 
 /// <summary>
 /// Process-wide registry of mounted <see cref="DockManager"/> elements.
-/// Used by the §2.26 MCP tools and the corresponding devtools surface
-/// to enumerate hosts without holding strong refs.
+/// Lets tools and tests enumerate live hosts without holding strong refs
+/// (spec 045 §2.26; the MCP tools that first used it have been removed).
 /// </summary>
 public static class DockHostRegistry
 {

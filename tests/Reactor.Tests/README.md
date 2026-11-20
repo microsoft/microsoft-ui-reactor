@@ -43,7 +43,7 @@ The suppressions fall into a small number of honest categories:
 
 | Category | IL code(s) | Why it is intentional (JIT-only; not claimed trim-safe) |
 |---|---|---|
-| **Devtools/MCP reflection-based JSON** (`JsonSerializer.Serialize`/`Deserialize` with `DevtoolsMcpServer.JsonOpts`, no source-gen context) | IL2026 + IL3050 | Intentionally exercises the devtools JSON surface that issue #70 documents as RUC/RDC-by-design and not-yet-AOT-clean. Run on JIT. |
+| **Devtools preview host** (`PreviewCaptureServer.CreateForTests`, marked `[RequiresUnreferencedCode]` like the rest of the Devtools subsystem, which is gated by `Reactor.DevtoolsSupport`) | IL2026 | Intentionally exercises the deprecated preview host that issue #70 documents as RUC-by-design. Run on JIT. (The MCP server whose reflection-based JSON this row used to cover has been removed.) |
 | **Generic reflection-based JSON** (tuning report, search-index round-trip into concrete records, anonymous-type serialize) | IL2026 + IL3050 | Reflection-based `System.Text.Json` without a source-gen context; JIT only. |
 | **Assembly-wide contract/architecture scans** (`Assembly.GetTypes()` + member reflection: `CoreControlFamilyBoundaryTests`, `PublicApiSurfaceGuardTests`, `DescriptorSilentDropGuardTests`, `RuleRegistryCompletenessTests`, `AnalyzerPackagingTests`, the RegisterAllBuiltIns guard) | IL2026, IL2070, IL2067 | Enumerating the full type surface *is the point of the test* — exactly what trimming would prune. JIT only. |
 | **Member access on concrete runtime objects** (`obj.GetType().GetProperty/GetField/GetMethod`) | IL2075 | Reflects a known member on a concrete object the test constructs. Intentional and JIT-only — **not** claimed trim-safe; behaviour-neutral (neither preserves nor prunes members). |
@@ -52,10 +52,9 @@ The suppressions fall into a small number of honest categories:
 
 **Class-level vs method-level scope.** A suppression is placed at **class scope** only where
 the majority of the class's test methods exercise the one suppressed surface *and* the class
-is named/scoped for it (e.g. `DevtoolsSerializationTests`, `TreeSchemaTests`,
-`TypeRegistryUnmountTests`). Where the reflecting methods are a minority of the class (e.g.
-`ReferenceOverlayTests`, `DevtoolsFireToolTests`, `McpDispatchTests`, `StdioTransportTests`,
-and the large `MoreCoverageTests` grab-bags), the suppression is placed on the individual
+is named/scoped for it (e.g. `TypeRegistryUnmountTests`). Where the reflecting methods are a
+minority of the class (e.g. `ReferenceOverlayTests`, `DevtoolsServerPortRaceTests`, and the
+large `MoreCoverageTests` grab-bags), the suppression is placed on the individual
 method, helper, or field where the diagnostic fires — so a future *different* unsafe
 reflection added elsewhere in the class is still caught.
 

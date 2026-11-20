@@ -29,8 +29,8 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 6. Agent applies `design.md` best practices (typography, layout, accessibility)
 7. Agent generates Component `.cs` files
 8. Agent scaffolds project if needed (`mur --create`)
-9. Agent launches app via `dotnet run -- --devtools run`
-10. Agent verifies via `mur devtools tree` and `mur devtools screenshot`
+9. Agent launches app via `winapp run MyApp --devtools on --detach` (relaunches after each edit, or uses `--watch` without `--detach` for hot reload)
+10. Agent verifies via `winapp devtools inspect` and `winapp ui screenshot` (WinUI DevTools in the winapp CLI; see the `winui-devtools` skill)
 11. Agent iterates until structure matches
 
 ### Watch-Based Sync (continuous)
@@ -433,21 +433,23 @@ public class <ComponentName> : Component
 ### For AI agents (recommended)
 
 ```bash
-# 1. Build and launch with devtools
-dotnet run --project MyApp/MyApp.csproj -- --devtools run
+# 1. Build and launch with the WinUI DevTools (winapp CLI; `mur devtools` has been removed)
+winapp run MyApp --devtools on --detach
 
-# 2. Verify structure
-mur devtools tree --pretty
+# 2. Verify structure (components, element kinds, C# call sites)
+winapp devtools inspect
 
 # 3. Capture screenshot
-mur devtools screenshot --out preview.png
+winapp ui screenshot -a MyApp --output preview.png
 
-# 4. After editing code, reload without restarting
-mur devtools reload
+# 4. After editing code, close the app and repeat step 1: a --detach launch has no hot reload.
+#    For hot reload, launch with `winapp run MyApp --devtools on --watch` instead (it can't be
+#    combined with --detach, so run it as a background process); it rebuilds on rude edits and
+#    re-attaches DevTools automatically
 
 # 5. Re-verify
-mur devtools tree --pretty
-mur devtools screenshot --out preview-v2.png
+winapp devtools inspect
+winapp ui screenshot -a MyApp --output preview-v2.png
 ```
 
 ### For developers (hot-reload)
@@ -456,7 +458,7 @@ mur devtools screenshot --out preview-v2.png
 dotnet watch run --project MyApp/MyApp.csproj
 ```
 
-Note: `dotnet watch` does not maintain MCP/devtools sessions across rebuilds. Use it for manual iteration only.
+Note: `dotnet watch` does not keep a DevTools session attached across rebuilds. Use it for manual iteration only.
 
 ## Rules
 

@@ -320,7 +320,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             if (_isCurrentProcessElevated())
             {
                 await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
-                _vm.ShowError("Visual Studio is elevated", "Embedded preview will silently drop input due to UIPI. Restart VS non-elevated to use embedded preview, or use the standalone preview (mur devtools).");
+                _vm.ShowError("Visual Studio is elevated", "Embedded preview will silently drop input due to UIPI. Restart VS non-elevated to use embedded preview, or use the standalone preview (winapp run . --devtools on -- --preview <Name>).");
                 _vm.TransitionTo(ViewStatus.BuildFailed);
                 return;
             }

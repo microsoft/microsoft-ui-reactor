@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 13px; font-weight: 600; }
+    .sub { font-size: 11px; fill: #57606a; }
+    .edge-label { font-size: 11px; fill: #1f2328; }
+    .box { fill: #f6f8fa; stroke: #57606a; stroke-width: 1.5; }
+    .app { fill: #ffffff; stroke: #0969da; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .host { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .gone { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.25; }
+    .msg { stroke: #57606a; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <!-- Clients -->
+  <rect class="box" x="20" y="40" width="230" height="62" rx="6"/>
+  <text class="label" x="135" y="66" text-anchor="middle">VS Code live preview</text>
+  <text class="sub" x="135" y="86" text-anchor="middle">--devtools run --vscode</text>
+
+  <rect class="box" x="20" y="130" width="230" height="62" rx="6"/>
+  <text class="label" x="135" y="156" text-anchor="middle">Visual Studio embedded preview</text>
+  <text class="sub" x="135" y="176" text-anchor="middle">--devtools run --embed --embed-host-pid</text>
+
+  <rect class="box" x="20" y="220" width="230" height="62" rx="6"/>
+  <text class="label" x="135" y="246" text-anchor="middle">Doc screenshot pipeline</text>
+  <text class="sub" x="135" y="266" text-anchor="middle">--preview --vscode</text>
+
+  <!-- App process -->
+  <rect class="app" x="330" y="20" width="650" height="300" rx="8"/>
+  <text class="sub" x="345" y="40">App process (references Microsoft.UI.Reactor.Devtools, Reactor.DevtoolsSupport on)</text>
+
+  <rect class="host" x="360" y="60" width="270" height="110" rx="6"/>
+  <text class="label" x="495" y="86" text-anchor="middle">PreviewCaptureServer</text>
+  <text class="sub" x="495" y="106" text-anchor="middle">loopback HttpListener, Bearer token</text>
+  <text class="sub" x="495" y="124" text-anchor="middle">/frame /status /focus /components</text>
+  <text class="sub" x="495" y="142" text-anchor="middle">/preview /references</text>
+  <text class="sub" x="495" y="160" text-anchor="middle">/hwnd /embed/* (embed mode)</text>
+
+  <rect class="host" x="690" y="60" width="260" height="110" rx="6"/>
+  <text class="label" x="820" y="86" text-anchor="middle">DevtoolsHost</text>
+  <text class="sub" x="820" y="106" text-anchor="middle">mounts the previewed component</text>
+  <text class="sub" x="820" y="124" text-anchor="middle">switches it on /preview</text>
+  <text class="sub" x="820" y="142" text-anchor="middle">registered by a module initializer</text>
+
+  <rect class="box" x="360" y="200" width="590" height="90" rx="6"/>
+  <text class="label" x="655" y="226" text-anchor="middle">UI thread: preview window + live element tree</text>
+  <text class="sub" x="655" y="248" text-anchor="middle">frames are captured from the window; /references walks the tree</text>
+  <text class="sub" x="655" y="268" text-anchor="middle">(TreeWalker + ReferenceOverlay) on the dispatcher</text>
+
+  <!-- Edges -->
+  <path class="msg" d="M250,71 L358,95"/>
+  <path class="msg" d="M250,161 L358,125"/>
+  <path class="msg" d="M250,251 L358,150"/>
+  <text class="edge-label" x="262" y="60">CAPTURE_PORT /</text>
+  <text class="edge-label" x="262" y="74">CAPTURE_TOKEN</text>
+  <path class="msg" d="M630,115 L688,115"/>
+  <path class="msg" d="M495,170 L495,198"/>
+  <path class="msg" d="M820,170 L820,198"/>
+  <text class="edge-label" x="503" y="190">dispatcher hop</text>
+
+  <!-- Removed -->
+  <rect class="gone" x="20" y="350" width="960" height="100" rx="6"/>
+  <text class="label" x="40" y="376">Removed: the MCP server and its lockfile, the in-app dev menu (DevtoolsMenu, UseDevtools), mur devtools</text>
+  <text class="sub" x="40" y="400">Inspect, edit and automate a running app with the WinUI DevTools in the winapp CLI instead —</text>
+  <text class="sub" x="40" y="420">winapp run . --devtools on, winapp devtools inspect, winapp ui … — which attach from outside the app and need no package.</text>
+</svg>

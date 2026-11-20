@@ -344,6 +344,7 @@ internal sealed class PreviewCaptureServer : IDisposable
             return;
         }
 
+        // <snippet:capture-auth>
         // SECURITY (TASK-018): require bearer auth on every endpoint.
         if (!BearerMatches(ctx.Request.Headers["Authorization"]))
         {
@@ -352,6 +353,7 @@ internal sealed class PreviewCaptureServer : IDisposable
             response.Close();
             return;
         }
+        // </snippet:capture-auth>
 
         try
         {
@@ -588,7 +590,7 @@ internal sealed class PreviewCaptureServer : IDisposable
         {
             try
             {
-                var walker = new TreeWalker("main", new NodeRegistry());
+                var walker = new TreeWalker("main");
                 walker.Walk(_window.Content);
                 tcs.TrySetResult(SerializeReferenceGraph(ReferenceOverlay.Build(walker, "main")));
             }

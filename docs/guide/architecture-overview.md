@@ -408,8 +408,8 @@ synchronous handler that calls three setters produces one re-render.
 
 ### Tracing a render end-to-end
 
-When you need to know what happened on a single frame, enable the
-reconcile overlay from the [dev menu](dev-tooling.md) and watch the ETW
+When you need to know what happened on a single frame, turn on the
+[reconcile-highlight overlay](dev-tooling.md#runtime-overlays) and watch the ETW
 `ReactorEventSource` provider. The keywords are split so you can subscribe
 to `State`, `Render`, `Reconcile`, and `Effect` independently — each
 roughly corresponds to one box on the diagram above. The

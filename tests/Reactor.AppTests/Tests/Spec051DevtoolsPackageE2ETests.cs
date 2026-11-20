@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -9,7 +7,14 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 [TestClass]
 public sealed class Spec051DevtoolsPackageE2ETests
 {
-    private const string DevtoolsSwitchSnippet = "RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\"";
+    // The switch-off message leads with a Debug preview run, names the package, and offers the
+    // one-off ReactorDiagnostics opt-in (ReactorApp.EmitDevtoolsNotAvailableMessage).
+    private static readonly string[] SwitchOffGuidance =
+    [
+        "winapp run . --devtools on -- --preview <Name>",
+        "PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"",
+        "-p:ReactorDiagnostics=true",
+    ];
 
     [TestMethod]
     [TestCategory("Spec051")]
@@ -34,52 +39,44 @@ public sealed class Spec051DevtoolsPackageE2ETests
         _ = await stdoutTask;
 
         Assert.AreNotEqual(0, process.ExitCode, "--devtools run on a switch-off binary should exit non-zero.");
-        StringAssert.Contains(stderr, DevtoolsSwitchSnippet);
+        foreach (var expected in SwitchOffGuidance)
+            StringAssert.Contains(stderr, expected);
     }
 
     [TestMethod]
     [TestCategory("Spec051")]
-    public async Task Spec051_DevtoolsEndToEnd_SwitchOn_McpServerStarts()
+    public async Task Spec051_DevtoolsEndToEnd_SwitchOn_PreviewCaptureServerStarts()
     {
+        // The MCP server is gone; what the package still serves is the preview capture
+        // server the VS Code panel and the Visual Studio embedded preview launch with
+        // --vscode / --embed. Prove it starts in a NativeAOT binary and enforces its token.
         var exe = FindPublishedExe(
             "REACTOR_SPEC051_SWITCH_ON_EXE",
             Path.Combine("samples", "apps", "hello-world-aot-devtools-on"),
             "hello-world-aot-devtools-on.exe");
-        var projectId = Path.Combine(Path.GetTempPath(), $"reactor-spec051-{Guid.NewGuid():N}.csproj");
-        var lockfile = LockfilePathFor(projectId);
 
-        using var process = StartProcess(exe, ["--devtools", "run", "--mcp-port", "0", "--devtools-project", projectId]);
+        using var process = StartProcess(exe, ["--devtools", "run", "--vscode"]);
         try
         {
-            var ready = await WaitForReadyAsync(process, TimeSpan.FromSeconds(30));
-            Assert.AreEqual("devtools-ready", ready.GetProperty("event").GetString());
-            var endpoint = ready.GetProperty("endpoint").GetString();
-            Assert.IsFalse(string.IsNullOrWhiteSpace(endpoint), "ready payload should include endpoint.");
-
-            var token = await WaitForLockfileTokenAsync(lockfile, TimeSpan.FromSeconds(10));
+            var (port, token) = await WaitForCaptureEndpointAsync(process, TimeSpan.FromSeconds(30));
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-            {
-                Content = new StringContent(
-                    "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}",
-                    Encoding.UTF8,
-                    "application/json"),
-            };
-            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var status = $"http://127.0.0.1:{port}/status";
 
+            using (var anonymous = await client.GetAsync(status))
+                Assert.AreEqual(401, (int)anonymous.StatusCode, "/status without the bearer token must be rejected.");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, status);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             using var response = await client.SendAsync(request);
             var body = await response.Content.ReadAsStringAsync();
-            Assert.IsTrue(response.IsSuccessStatusCode, $"tools/list HTTP status {(int)response.StatusCode}: {body}");
+            Assert.IsTrue(response.IsSuccessStatusCode, $"/status HTTP status {(int)response.StatusCode}: {body}");
 
-            using var rpc = JsonDocument.Parse(body);
-            Assert.IsFalse(rpc.RootElement.TryGetProperty("error", out var error), error.ToString());
-            var tools = rpc.RootElement.GetProperty("result").GetProperty("tools");
-            Assert.IsTrue(tools.GetArrayLength() > 0, "tools/list should return at least one tool.");
+            using var json = JsonDocument.Parse(body);
+            Assert.AreEqual(port, json.RootElement.GetProperty("port").GetInt32(), body);
         }
         finally
         {
             KillProcess(process);
-            try { if (File.Exists(lockfile)) File.Delete(lockfile); } catch { }
         }
     }
 
@@ -134,59 +131,33 @@ public sealed class Spec051DevtoolsPackageE2ETests
         return dir ?? throw new DirectoryNotFoundException("Could not find repo root (Reactor.slnx).");
     }
 
-    private static async Task<JsonElement> WaitForReadyAsync(Process process, TimeSpan timeout)
+    private static async Task<(int Port, string Token)> WaitForCaptureEndpointAsync(Process process, TimeSpan timeout)
     {
+        int? port = null;
+        string? token = null;
         using var cts = new CancellationTokenSource(timeout);
-        while (!cts.IsCancellationRequested)
+        while (!cts.IsCancellationRequested && (port is null || token is null))
         {
-            var lineTask = process.StandardOutput.ReadLineAsync(cts.Token).AsTask();
             string? line;
-            try { line = await lineTask; }
+            try { line = await process.StandardOutput.ReadLineAsync(cts.Token); }
             catch (OperationCanceledException) { break; }
 
             if (line is null)
             {
                 var stderr = await process.StandardError.ReadToEndAsync();
-                Assert.Fail($"devtools process exited before ready. Exit={process.ExitCode}; stderr={stderr}");
+                Assert.Fail($"devtools process exited before announcing the capture endpoint. Exit={process.ExitCode}; stderr={stderr}");
+                break;
             }
 
-            if (line.Contains("devtools-ready", StringComparison.Ordinal))
-            {
-                using var document = JsonDocument.Parse(line);
-                return document.RootElement.Clone();
-            }
+            if (line.StartsWith("CAPTURE_PORT=", StringComparison.Ordinal) && int.TryParse(line["CAPTURE_PORT=".Length..], out var p))
+                port = p;
+            else if (line.StartsWith("CAPTURE_TOKEN=", StringComparison.Ordinal))
+                token = line["CAPTURE_TOKEN=".Length..];
         }
 
-        Assert.Fail("Timed out waiting for devtools-ready announcement.");
-        throw new UnreachableException();
-    }
-
-    private static async Task<string> WaitForLockfileTokenAsync(string lockfile, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            if (File.Exists(lockfile))
-            {
-                using var document = JsonDocument.Parse(await File.ReadAllTextAsync(lockfile));
-                if (document.RootElement.TryGetProperty("token", out var token) && token.GetString() is { Length: > 0 } value)
-                    return value;
-            }
-
-            await Task.Delay(100);
-        }
-
-        Assert.Fail($"Timed out waiting for devtools lockfile: {lockfile}");
-        throw new UnreachableException();
-    }
-
-    private static string LockfilePathFor(string projectIdentifier)
-    {
-        var canonical = Path.GetFullPath(projectIdentifier).Replace('/', '\\').ToLowerInvariant();
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
-        var builder = new StringBuilder(16);
-        for (var i = 0; i < 8; i++) builder.Append(bytes[i].ToString("x2"));
-        return Path.Combine(Path.GetTempPath(), "reactor-devtools", builder + ".json");
+        if (port is null || string.IsNullOrEmpty(token))
+            Assert.Fail("Timed out waiting for CAPTURE_PORT / CAPTURE_TOKEN.");
+        return (port!.Value, token!);
     }
 
     private static void KillProcess(Process process)

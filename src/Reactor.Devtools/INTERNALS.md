@@ -1,73 +1,41 @@
-# Reactor Devtools — MCP Surface
+# Reactor Devtools — In-App Preview Host
 
-This folder implements the `--devtools` runtime path: the MCP server that
-exposes `reactor.*` tools (tree, screenshot, click, state, fire, …), the
-`mur devtools` supervisor, and the rolling log that records every call.
+> **Deprecated.** This package is replaced by the WinUI DevTools in the winapp CLI
+> (`winapp run . --devtools on`). It stays, and keeps working, only for the component preview host,
+> the capture server and the `--embed` handshake that the VS Code live preview and the Visual
+> Studio embedded preview need, until winapp has its own previewer. The `mur devtools` CLI, this
+> package's MCP server (with its lockfile, call log and `--mcp-*` / `--devtools-log*` flags) and the
+> in-app dev menu (`DevtoolsMenu`, `UseDevtools`) have been **removed**.
 
-Reference specs: [024-ai-agent-devtools.md](../../Docs/specs/024-ai-agent-devtools.md),
-[task list](../../../../docs/specs/tasks/ai-agent-devtools-implementation.md).
+This folder implements the `--devtools run` / `--preview` runtime path: `DevtoolsHost` mounts the
+previewed component, and with `--vscode` (implied by `--embed`) `PreviewCaptureServer` serves
+`/frame`, `/status`, `/focus`, `/components`, `/preview`, `/references` and, in embed mode,
+`/hwnd` and `/embed/*`. `TreeWalker`, `NodeIdBuilder` and `ReferenceOverlay` remain only to build
+the `/references` payload.
 
 ## Security model
 
-The devtools surface is **developer-loop only**. It is not designed to be a
-production endpoint and ships with three hard gates:
+The preview host is **developer-loop only**. It is not a production endpoint and ships with three
+hard gates:
 
 1. **Opt in at build time and launch time.**
-   `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />`
-   is the build-time capability gate; `--devtools run` / `--devtools app` is the
-   session-time activation gate. Both must be present before the MCP server,
-   capture server, logger, or in-app dev menu is enabled. Samples keep the
-   MSBuild switch Debug-conditional so Release/AOT builds have no devtools
-   surface at all.
-2. **Loopback-only binding.** The MCP `HttpListener` binds to
-   `http://127.0.0.1:{port}/`. It is never exposed on any non-loopback adapter
-   and the `ScreenshotCapture` path only reads the local window.
-
-### Caveat: any local process can connect
-
-There is **no authentication on the MCP port in v1**. Any process running on
-the same machine as the app — including unrelated applications, browser
-tabs connecting over `fetch("http://127.0.0.1:NNNN/mcp", …)`, other user
-sessions with local access, etc. — can call every registered tool. That is
-acceptable for the dev-inner-loop use case (a human running `mur devtools`
-with an agent in the same terminal session), but it means:
-
-- **Do not run `mur devtools` in an environment with untrusted local
-  processes.** `reactor.fire` can reach any handler on the live component;
-  `reactor.state` can enumerate hook shapes; `reactor.click` can drive the UI.
-- **Do not enable `Reactor.DevtoolsSupport` in Release builds that ship to end users.**
-  The Debug-conditional MSBuild convention makes this hard to do by accident.
-- **Do not assume the MCP surface is safe to expose beyond localhost** — e.g.
-  via a reverse proxy, SSH tunnel with remote binding, or container port
-  forwarding to 0.0.0.0. Loopback is the only supported deployment.
-
-If v1 usage signals push us toward scenarios where these caveats bite
-(e.g., CI runners, remote pair-programming), we revisit with an auth story
-in a follow-up spec.
-
+   The `Reactor.DevtoolsSupport` feature switch is the build-time capability gate; `ReactorDiagnostics`
+   turns it on in Debug only, so Release/AOT builds have no devtools surface at all. `--devtools run`
+   (or `--preview <Name>`) is the launch-time gate, and the capture server starts only with
+   `--vscode` or `--embed`.
+2. **Loopback-only binding.** The capture server's `HttpListener` binds to
+   `http://127.0.0.1:{port}/` and is never exposed on a non-loopback adapter.
+3. **Per-launch bearer token.** Every request, including `/status`, must carry
+   `Authorization: Bearer <CAPTURE_TOKEN>`; the token is printed on stdout at startup for the
+   launching editor. State-changing endpoints (`/focus`, `/preview`, `/embed/*`) are POST-only;
+   `/preview` and `/embed/*` also require `application/json`, and `/focus` relies on the required
+   `Authorization` header, so a browser page can't drive them with a simple cross-origin request.
 ## Wire protocol versioning
 
 Embedded-preview HTTP endpoints advertise their protocol in `/status` as
 `"embed-v1"`. Any breaking change to the embed endpoints must bump the suffix
 (for example, `embed-v2`), and the Visual Studio extension must reject unknown
 protocol values rather than guessing compatibility.
-
-## Observability
-
-`DevtoolsLogger` writes one line per tool call to
-`%LOCALAPPDATA%/Reactor/devtools/{pid}.log` (Windows) or
-`$XDG_STATE_HOME/reactor/devtools/` (non-Windows). Files roll at 10 MB
-and we keep the newest five archives. Log level is configured via
-`--devtools-log-level off|error|call|trace` (default: `call`).
-
-Line shape (TSV — tab-separated; shown space-aligned below for readability):
-
-```text
-2026-04-18T12:34:56.789Z  tree  r:main/btn-inc  42ms  ok  0
-```
-
-Columns: UTC timestamp, tool name, selector (or `-`), latency, `ok`/`err`,
-JSON-RPC result code.
 
 ## ETW trace correlation
 
@@ -77,7 +45,8 @@ guarded by call-site `IsEnabled()` checks, so when no listener is attached
 the disabled path does no Stopwatch, type-name, or event-method work beyond
 a single word-sized flag read. Events cover reconcile passes, component
 render start/stop with trigger (self/parent), effects flush, child
-reconcile, state writes, unmounts, render errors, and MCP call start/stop.
+reconcile, state writes, unmounts, and render errors. (The MCP call start/stop
+events and the `Mcp` keyword are reserved but no longer emitted.)
 
 Keywords: `Reconcile=0x1`, `Render=0x2`, `State=0x4`, `Mcp=0x8`,
 `Lifecycle=0x10`, `Errors=0x20`. Full keyword mask = `0x3F`.
@@ -128,10 +97,3 @@ For a web-based timeline (Perfetto / Firefox Profiler / Speedscope /
 custom `EventSource` events, so a custom `.etl`-to-Chromium converter is
 required. One is tracked separately; when it lands, swap the `.etl` path
 into it and the resulting JSON drops into <https://ui.perfetto.dev/> directly.
-
-## `--print-config`
-
-`mur devtools --print-config [--mcp-port N]` emits JSON fragments for
-Claude Code, VS Code, and GitHub Copilot MCP configs, parameterized with
-the requested port. The tool never writes to disk — the user pastes the
-fragment they want into the target config file themselves.

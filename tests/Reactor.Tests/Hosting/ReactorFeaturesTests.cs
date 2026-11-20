@@ -31,16 +31,48 @@ public class ReactorFeaturesTests
         => TestSetup.WithDevtoolsSupportSwitch(false, static () => Assert.False(ReactorFeatures.IsDevtoolsSupported));
 
     [Fact]
-    public void DevtoolsCliParser_RecognizesDevtoolsVerbs_WithoutLoadingHandlers()
+    public void DevtoolsCliParser_RecognizesDevtoolsVerbs()
     {
-        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-port", "1234"]);
+        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "Counter", "--vscode"]);
 
         Assert.Equal(DevtoolsSubverb.Run, options.Subverb);
-        Assert.Equal(1234, options.McpPort);
+        Assert.Equal("Counter", options.ComponentName);
+        Assert.True(options.VsCodeMode);
         Assert.False(options.PreviewAndDevtoolsConflict);
-        Assert.DoesNotContain(
-            options.GetType().GetProperties().Select(p => p.PropertyType),
-            t => t.FullName == "Microsoft.UI.Reactor.Hosting.Devtools.DevtoolsMcpServer");
+    }
+
+    [Fact]
+    public void ReactorApp_Run_SwitchOnButNoPackage_PointsAtThePackage_NotTheSwitch()
+    {
+        // The switch is on by default in Debug, so there the missing piece is the package.
+        var originalError = Console.Error;
+        using var stderr = new StringWriter();
+        // Spend the one-time lazy load of the Devtools package first. Otherwise, when this test
+        // is the first to read Current, the load would register the real host after the null
+        // below, and it would try to start a WinUI preview.
+        _ = ReactorDevtoolsBootstrap.Current;
+        var previousHost = ReactorDevtoolsBootstrap.CurrentForTests;
+        var originalExitCode = Environment.ExitCode;
+
+        AppContext.SetSwitch(SwitchName, true);
+        ReactorDevtoolsBootstrap.RestoreForTests(null);
+        Console.SetError(stderr);
+
+        try
+        {
+            Assert.True(ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", "run"], title: "NoPackage", width: 320, height: 240));
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            ReactorDevtoolsBootstrap.RestoreForTests(previousHost);
+            AppContext.SetSwitch(SwitchName, TestSetup.ConfiguredDevtoolsSupport);
+            Environment.ExitCode = originalExitCode;
+            ReactorApp.ResetDevtoolsEnabledForTests();
+        }
+
+        Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Version=\"", stderr.ToString());
+        Assert.DoesNotContain("RuntimeHostConfigurationOption", stderr.ToString());
     }
 
     [Fact]
@@ -56,15 +88,17 @@ public class ReactorFeaturesTests
         try
         {
             var consumed = ReactorApp.TryRunDevtoolsForTest(
-                ["app.exe", "--devtools", "run", "--mcp-port", "1234"],
+                ["app.exe", "--devtools", "run", "--vscode"],
                 title: "Spec051",
                 width: 320,
                 height: 240);
 
             Assert.True(consumed);
-            Assert.Contains(
-                "RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\"",
-                stderr.ToString());
+            // Outside Debug, lead with the build that works, and name both requirements at once.
+            var text = stderr.ToString();
+            Assert.Contains("winapp run . --devtools on -- --preview <Name>", text);
+            Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"", text);
+            Assert.Contains("-p:ReactorDiagnostics=true", text);
             Assert.False(ReactorApp.DevtoolsEnabled);
         }
         finally

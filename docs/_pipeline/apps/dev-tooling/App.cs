@@ -33,9 +33,8 @@ class DevToolingApp : Component
 // Program entry point — this is the entire App.cs file:
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
-// Hot reload works when the app is launched under dotnet watch. Devtools
-// screenshot capture is enabled by the app project's Reactor.DevtoolsSupport
-// switch and activated by launching with --devtools.
+// Hot reload works when the app is launched under dotnet watch. Inspect the
+// running app with the WinUI DevTools: winapp run . --devtools on
 // </snippet:entry-point>
 
 // <snippet:function-entry>
@@ -95,62 +94,33 @@ public static class AppFlags
 }
 // </snippet:app-flags>
 
-// <snippet:devtools-gate>
-static class DevGate
-{
-    // UseDevtools() is a RenderContext extension, so it is reached from a
-    // function component's ctx (or any helper you hand the ctx to) — there is
-    // no Component-level forwarder. It returns true only when BOTH the
-    // Reactor.DevtoolsSupport build switch and `--devtools app` are present.
-    //
-    // The helper is named Use* because it consumes a hook slot: REACTOR_HOOKS_005
-    // only permits hook calls from Render() or a Use*-named method, so a helper
-    // called `Shell` here would warn in any project that copies this.
-    public static Element UseShell(RenderContext ctx)
-    {
-        var dev = ctx.UseDevtools();
-
-        return VStack(8,
-            MainContent(),
-            dev ? DebugOverlay() : Empty()
-        );
-    }
-
-    private static Element MainContent() => TextBlock("App content");
-
-    // Only *constructed* when dev is true. In retail the ternary costs one
-    // bool read plus one branch — no element tree, no children reconciled.
-    private static Element DebugOverlay() =>
-        TextBlock("debug overlay").Opacity(0.6);
-}
-// </snippet:devtools-gate>
-
-// <snippet:devtools-menu>
+// <snippet:debug-menu>
 static class DevMenu
 {
+    // Named Use* because it consumes a hook slot: REACTOR_HOOKS_005 only
+    // permits hook calls from Render() or a Use*-named method.
     public static Element UseTitleBar(RenderContext ctx)
     {
-        // Subscribe during render — not inside the menu builder. The builder
-        // lambda runs when the flyout opens, which is not a render pass, so a
-        // hook call in there would break hook ordering.
-        //
-        // Named Use* for the same reason as DevGate.UseShell: it consumes a
-        // hook slot, which REACTOR_HOOKS_005 requires be done from Render() or
-        // a Use*-named helper.
+        // Subscribe during render — not inside a menu item callback, which
+        // runs when the item is clicked rather than during a render pass.
         var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
 
         return HStack(8,
             TextBlock("My App"),
-            // DevtoolsMenu renders itself as a titlebar item only when
-            // UseDevtools() is true, so the same cost model carries over.
-            DevtoolsMenu(() => new MenuFlyoutItemBase[]
+#if DEBUG
+            // An ordinary menu, compiled into Debug builds only.
+            DropDownButton("Dev", MenuItems(new MenuFlyoutItemBase[]
             {
                 ToggleMenuItem("Debug UI", debugUI,
                     v => AppFlags.DebugUI.Value = v),
                 MenuSeparator(),
                 MenuItem("Clear cache", () => CacheService.Clear()),
                 MenuItem("Slow mode off", () => AppFlags.SlowMode.Value = false),
-            })
+            })),
+#endif
+            // Only *constructed* when the flag is on: in retail the ternary
+            // costs one bool read — no element tree, no children reconciled.
+            debugUI ? TextBlock("debug overlay").Opacity(0.6) : null
         );
     }
 }
@@ -160,4 +130,4 @@ static class CacheService
 {
     public static void Clear() { }
 }
-// </snippet:devtools-menu>
+// </snippet:debug-menu>

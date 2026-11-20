@@ -360,8 +360,7 @@ public class SelfTestBatch
         // The CLR's managed-exception tag is NOT NTSTATUS-shaped — 0xE0434352 & 0xF0000000 is
         // 0xE0000000, so the mask below does not catch it and it would otherwise fall through
         // with no verdict at all. That is the likeliest crash mode for a .NET host, so it gets
-        // its own branch. Same tag the Devtools stress runner already keys on
-        // (DevtoolsStressE2ERunner.cs) and MxcSandbox documents.
+        // its own branch. Same tag MxcSandbox documents.
         bool clrManaged = (uint)exitCode == 0xE0434352u;
 
         // NTSTATUS failure codes are 0xC0000000-shaped. Treat that whole space as

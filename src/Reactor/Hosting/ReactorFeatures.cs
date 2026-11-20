@@ -5,8 +5,8 @@ namespace Microsoft.UI.Reactor.Hosting;
 internal static class ReactorFeatures
 {
     /// <summary>
-    /// Build-time consent gate for the devtools subsystem (MCP server, preview
-    /// capture, lockfile registry, docking tools, log capture). Default off.
+    /// Build-time consent gate for the devtools subsystem (the in-app preview host
+    /// and its capture server, used by the VS Code and Visual Studio previews). Default off.
     ///
     /// Apps that need devtools enable the switch in their csproj:
     /// <code>
@@ -15,9 +15,8 @@ internal static class ReactorFeatures
     /// </code>
     /// With <c>Trim="true"</c> the ILC trimmer substitutes this property body
     /// with the configured constant at publish time, and every dead-arm
-    /// devtools call chain (DevtoolsMcpServer, PreviewCaptureServer,
-    /// LockfileRegistry, DevtoolsDockingTools, the System.Text.Json /
-    /// System.Net.Http tails) gets pruned. See spec 051.
+    /// devtools call chain (DevtoolsHost, PreviewCaptureServer, the
+    /// System.Text.Json / System.Net.Http tails) gets pruned. See spec 051.
     /// </summary>
     [FeatureSwitchDefinition("Reactor.DevtoolsSupport")]
     [FeatureGuard(typeof(RequiresDynamicCodeAttribute))]

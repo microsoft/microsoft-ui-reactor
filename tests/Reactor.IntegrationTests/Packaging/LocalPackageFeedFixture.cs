@@ -38,9 +38,9 @@ public sealed class LocalPackageFeedFixture : IDisposable
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 300_000);
-        // Devtools depends on Advanced (spec-062), and consumers can pull both
-        // transitively, so pack all three at the same version to keep a restore
-        // from falling through to NuGet.org and hitting an NU1605 downgrade.
+        // A consumer may reference Devtools and Advanced next to Reactor, so pack all
+        // three at the same version to keep a restore from falling through to
+        // NuGet.org and hitting an NU1605 downgrade.
         RunHelpers.RunDotnet(
             $"pack \"{Path.Join(RepoRoot, "src", "Reactor.Devtools", "Reactor.Devtools.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
             RepoRoot,

@@ -91,7 +91,7 @@ public class ExitCodeDescriptionTests
     /// it is NOT NTSTATUS-shaped: <c>0xE0434352 &amp; 0xF0000000</c> is <c>0xE0000000</c>, so the
     /// <c>0xC0000000</c> mask does not catch it and it would otherwise emit a bare raw value with
     /// no verdict. For a .NET host that is arguably the likeliest crash mode of all, and it is
-    /// already recognised elsewhere in the repo (DevtoolsStressE2ERunner, MxcSandbox).
+    /// already recognised elsewhere in the repo (MxcSandbox).
     /// </summary>
     [TestMethod]
     public void Clr_managed_exception_is_attributed_to_a_self_crash()
