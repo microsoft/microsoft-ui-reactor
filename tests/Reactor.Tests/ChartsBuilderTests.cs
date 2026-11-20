@@ -341,6 +341,23 @@ public class ChartsBuilderTests
     }
 
     [Fact]
+    public void LineChart_FiniteDefined_RejectsInfinitiesUnderConstantDomain()
+    {
+        // A flat series gives a zero-width domain, and LinearScale maps every input (±Infinity
+        // included) to the range midpoint — so the mapped coordinate alone would accept them.
+        var chart = Charts.LineChart(new[] { new DataPoint(0, 0) }, d => d.X, d => d.Y);
+        var flat = new LinearScale([0, 0], [0, 100]);
+        var defined = chart.FiniteDefined(new LinearScale([0, 4], [0, 100]), flat);
+
+        Assert.True(double.IsFinite(flat.Map(double.PositiveInfinity)));
+        Assert.True(defined(new DataPoint(1, 0), 0));
+        Assert.False(defined(new DataPoint(1, double.PositiveInfinity), 1));
+        Assert.False(defined(new DataPoint(1, double.NegativeInfinity), 2));
+        Assert.False(defined(new DataPoint(1, double.NaN), 3));
+        Assert.False(defined(new DataPoint(double.PositiveInfinity, 0), 4));
+    }
+
+    [Fact]
     public void PieChart_LabelView_NameProjection_FeedsSliceDescriptor_WhenNoLabelAccessor()
     {
         // Issue #162 #3: a LabelView without a string label/DataLabel previously fell

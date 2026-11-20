@@ -410,10 +410,14 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     private static (double min, double max) FiniteExtent(IEnumerable<T> data, Func<T, double> accessor) =>
         D3Extent.Extent(data, d => accessor(d) is var v && double.IsFinite(v) ? v : double.NaN);
 
-    // Points that map to a non-finite coordinate (NaN data, a log scale given 0) become gaps,
-    // as with D3's line.defined. Otherwise the path markup is rejected and nothing is drawn.
-    private Func<T, int, bool> FiniteDefined(LinearScale xScale, LinearScale yScale) =>
-        (d, _) => double.IsFinite(xScale.Map(XAccessor(d))) && double.IsFinite(yScale.Map(YAccessor(d)));
+    // Non-finite samples, and points that map to a non-finite coordinate, become gaps, as with
+    // D3's line.defined; otherwise the path markup is rejected and nothing is drawn. The raw values
+    // are checked too: a constant domain maps every input, ±Infinity included, to the range midpoint.
+    // Internal for unit tests.
+    internal Func<T, int, bool> FiniteDefined(LinearScale xScale, LinearScale yScale) =>
+        (d, _) => XAccessor(d) is var x && YAccessor(d) is var y
+            && double.IsFinite(x) && double.IsFinite(y)
+            && double.IsFinite(xScale.Map(x)) && double.IsFinite(yScale.Map(y));
 
     private Element[] RenderLine(IReadOnlyList<T> data, LinearScale xScale, LinearScale yScale)
     {
