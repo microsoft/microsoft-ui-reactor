@@ -468,10 +468,10 @@ copies (`mur --regen-api`), `animation.md.dt` and `modifier-system.md.dt`, and t
 
 | # | Change | Who notices | Mitigation |
 |---|---|---|---|
-| 1 | A user `.Set(fe => fe.Rotation / Scale / CenterPoint / RotationAxis / TransformMatrix = …)` on an element that **also** uses a Reactor transform modifier, a transition or a compositor feature. **Mount:** setters run before modifiers, and `GetElementVisual` migrates `Scale`, `Rotation`, `Translation` and `CenterPoint` (#1627), so those still work. It does **not** migrate `RotationAxis` or `TransformMatrix`, so a non-identity value there makes the handoff throw, even on a fresh control. **Update:** a setter that writes any of these facades after the handoff throws (Q8a). Today all of this works as long as no compositor feature is present | Apps mixing `.Set` facade writes with modifiers | Breaking. CHANGELOG `Changed`. Supported: the four migrated facades on mount. Rejected with a diagnostic: everything else. A `DiagnosticLog.Warning` names the modifier to use when the reconcile catches `UnauthorizedAccessException` from a setter **or from the handoff** on a Reactor-owned element. A follow-up analyzer could flag `.Set(x => x.Rotation = …)` next to transform modifiers |
+| 1 | A user `.Set(fe => fe.Rotation / Scale / CenterPoint / RotationAxis / TransformMatrix = …)` on an element that **also** uses a Reactor transform modifier, a transition or a compositor feature. **Mount:** setters run before modifiers, and `GetElementVisual` migrates `Scale`, `Rotation`, `Translation` and `CenterPoint` (#1627), so those still work. It does **not** migrate `RotationAxis` or `TransformMatrix`, so a non-identity value there makes the handoff throw, even on a fresh control. **Update:** a setter that writes any of these facades after the handoff throws (Q8a). Today all of this works as long as no compositor feature is present | Apps mixing `.Set` facade writes with modifiers | Breaking. CHANGELOG `Changed`. Supported: the four migrated facades on mount. Rejected with a diagnostic: everything else. A `DiagnosticLog.Warning` names the modifier to use when the reconcile catches `UnauthorizedAccessException` from a setter **or from the handoff** on a Reactor-owned element. `REACTOR_ANIM_004` catches it at build time and suggests the modifier (§9.1) |
 | 2 | Reading `fe.Scale`/`fe.Rotation`/`fe.CenterPoint` returns identity for values set by modifiers (Q8b) | Code reading facades back | Breaking (minor). Documented. Read `ElementCompositionPreview.GetElementVisual(fe).Scale` instead |
 | 3 | `fe.Translation` from user code is ignored once `.Translation()` (or a Translation channel) enabled translation on that element and it has rendered (F1a). It still works on elements that don't use those modifiers, which covers the existing drag samples (`InputGesturesDemo`, `PointerInputPage`) | Apps mixing both | Documented as "don't mix". Reactor stops zeroing the facade (§4.3) |
-| 4 | A user `.Set(fe => fe.OpacityTransition = …)`/`ScaleTransition`/… blocks the handoff (#1623's mechanism). On mount the setter runs first, so any Reactor transition, transform or compositor feature on the same element then throws at the handoff, even on a fresh control. After the handoff, the setter itself throws | Rare | Use the modifiers. Same diagnostic as row 1, which lands in layer 2, the first layer that makes this reachable without a compositor feature |
+| 4 | A user `.Set(fe => fe.OpacityTransition = …)`/`ScaleTransition`/… blocks the handoff (#1623's mechanism). On mount the setter runs first, so any Reactor transition, transform or compositor feature on the same element then throws at the handoff, even on a fresh control. After the handoff, the setter itself throws | Rare | Use the modifiers. `REACTOR_ANIM_004` (§9.1) catches it at build time. Same runtime diagnostic as row 1, which lands in layer 2, the first layer that makes this reachable without a compositor feature |
 | 5 | The `TranslationTransition` fallback animated layout moves (`Offset`). Now `TranslationTransition` animates `.Translation()` on every path, as XAML does | Apps relying on the fallback quirk | `Fixed`. `.LayoutAnimation()` is the API for layout moves |
 | 6 | The transition fallback curve goes from the compositor default (ease-out) to the XAML curve | Visual only | `Fixed` (parity) |
 | 7 | Transforms no longer exclude a control from the pool. Visual-lane controls are reused | none visible (P1 pixel-identical) | — |
@@ -479,6 +479,80 @@ copies (`mur --regen-api`), `animation.md.dt` and `modifier-system.md.dt`, and t
 | 9 | Reduced motion keeps disabling `.XxxTransition()` | none | §5.5 |
 | 10 | `PathElement.RenderTransform` | none, unchanged | — |
 | 11 | Third-party handlers that write facades on Reactor-owned controls | none in the repo (grep: only `AnimationHelper` and `ElementPool` write facades) | Same diagnostic as row 1 |
+
+### §9.1 Analyzers
+
+The runtime diagnostic in row 1 only fires once the code runs. Two build-time diagnostics catch the
+same mistakes at compile time and point to the modifier that works with the composition visual.
+
+**`REACTOR_ANIM_004` (Warning, `Reactor.Animation`). A facade transform is written through `.Set` on an
+element that uses the composition visual.**
+
+- *Matches.* A `.Set(...)` lambda, expression-bodied or block, that does one of these:
+  - assigns `Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix`, `OpacityTransition`,
+    `ScaleTransition`, `RotationTransition` or `TranslationTransition`;
+  - calls `StartAnimation`/`StopAnimation`;
+  - assigns `Translation`, but only when the chain also declares `.Translation()` (§4.3: the write would be silently ignored).
+
+  The target must be the lambda's parameter, and the member must resolve through the semantic model to
+  `Microsoft.UI.Xaml.UIElement`. A user type with its own `Rotation` property doesn't match, and neither
+  does a write to some other control. Lambda inspection reuses `SetLambdaHelpers`, as
+  `PoolResetSetAnalyzer` does.
+- *And.* The same fluent chain declares a modifier that takes the visual. The analyzer walks the chain
+  with `DuplicateAtomicModifierAnalyzer.GetReceiverInvocation` in both directions from the `.Set`. The
+  trigger set is a `VisualOwningModifiers` table in `ModifierTable`, and it grows with the rollout:
+  - **today:** `.Animate`, `.InteractionStates`, `.Transition`, `.Keyframes`, `.LayoutAnimation`;
+  - **layer 2:** the four `.XxxTransition()`;
+  - **layer 4:** `.Scale`, `.Rotation`, `.Translation`, `.CenterPoint`;
+  - **layer 5:** `.TransformOrigin`.
+- *Valid on `main` today.* With the current trigger set the diagnosed code already fails. A setter
+  re-running on update throws after the handoff (Q8a). `RotationAxis`/`TransformMatrix` and the XAML
+  transitions block the handoff at mount (#1623, §9 rows 1 and 4). So the rule can ship ahead of the
+  stack (layer 0 in §13).
+- *Message.* It names the modifier when one exists: `Rotation` → `.Rotation(…)`, `Scale` → `.Scale(…)`,
+  `CenterPoint` → `.CenterPoint(…)`, `Translation` → `.Translation(x, y, z)`, `OpacityTransition` →
+  `.OpacityTransition(duration)`, `ScaleTransition` and `TranslationTransition` → the same-named modifier,
+  and `RotationTransition` → `.RotationTransition(duration)`. `RotationAxis`, `TransformMatrix` and
+  `StartAnimation` have no modifier. Their message points to `.Keyframes`/`.Animate`, or to taking the
+  visual with `ElementCompositionPreview.GetElementVisual` in `.OnMount`.
+- *Code fix.* Mechanical rewrites only, under the same constraints as `PoolResetSetCodeFix`. The
+  assignment must be the lambda's only statement, and the right-hand side must map to the modifier's
+  parameters without evaluating anything twice:
+  - `fe.Rotation = e` → `.Rotation(e)`, and the same for `Scale` and `CenterPoint`;
+  - `fe.Translation = new Vector3(a, b, c)` → `.Translation(a, b, c)`;
+  - `fe.OpacityTransition = new ScalarTransition { Duration = d }` → `.OpacityTransition(d)`, and the same for `RotationTransition`;
+  - `fe.ScaleTransition = t` → `.ScaleTransition(t)`, and the same for `TranslationTransition`.
+
+  Any other shape gets the diagnostic without a fix.
+- *Accepted false negatives.* The rule misses three shapes, because none of them is visible from the
+  `.Set` chain:
+  - a visual-owning modifier on a wrapper (keyed `Memo`, a decorator) or in a chain split across variables;
+  - facade writes through `ElementRef.Current` or in event handlers (the drag samples);
+  - `.OnMount` callbacks. These could be added later if the matching proves as clean.
+
+**`REACTOR_MOD_002` widening (Info, layer 4).** After layer 4, `.Scale/.Rotation/.CenterPoint` are
+ungated writes to every element, which is the "application path verified" condition `ModifierTable`
+waits for. Their rows move from `DeliberatelyExcluded` to `Properties` (non-pool-reset). Any
+`.Set(fe => fe.Rotation = …)`, even on an element without compositor features, then suggests the
+modifier, because only the modifier composes with transitions, animations and `.TransformOrigin`.
+`Translation` stays excluded because of the signature mismatch, and `ANIM_004` covers its harmful case.
+The four `*Transition` rows stay excluded too. The `.Set` write and the modifier are no longer
+"different operations" after layer 2. But a plain element with only a `.Set` transition still works on
+the XAML path, so `ANIM_004` (when combined with visual-owning modifiers) is the right severity, not a
+blanket suggestion.
+
+Both rules belong in `src/Reactor.Analyzers`. Neither has a `mur check` mirror, the same as the rest of
+the `.Set` family (`POOL_001`, `MOD_002`). Before implementation, the `analyzer-dym` workflow runs an FP
+spike. Positives are the shapes above, and the deliberate fixture writes in
+`PooledFacadeTransformFixtures`, `TransformModifierFixtures` and `ItemsViewParkingFixtures` get
+`#pragma warning disable` with a reason. Negatives:
+
+- `fe.Opacity`;
+- `RenderTransform` (`PathElement`);
+- a user type with `Rotation`/`Scale` properties;
+- a write to a captured control other than the lambda parameter;
+- a `.Set` on a chain with no visual-owning modifier (today);
+- a `Translation` write without `.Translation()`.
 
 ## §10 AOT and trimming
 
@@ -604,6 +678,13 @@ mutation-checks its gating assertion (delete or no-op the code, confirm the chec
 - `TransformOrigin` modifier equality, `Merge`, skip and unset (pure records).
 - The `ResolveCurve` source order with `TranslationTransition` (pure).
 - `ModifierTable`/analyzer parity for the new modifier.
+- `REACTOR_ANIM_004` analyzer and code-fix tests (`tests/Reactor.Tests/AnalyzerTests/`): each §9.1
+  positive and negative, the code fix for every mechanical shape, no fix for multi-statement lambdas
+  or non-`new Vector3(...)` right-hand sides, and a parity test that `VisualOwningModifiers` names
+  exactly the modifiers whose Reactor implementation calls `AnimationHelper.GetElementVisual`. That
+  test reddens if a layer moves a modifier to the visual without updating the table.
+- `REACTOR_MOD_002` (layer 4): `ModifierTableIntegrityTests` passes with `Scale/Rotation/CenterPoint`
+  moved out of `DeliberatelyExcluded`.
 
 **Selftests (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`).** The RTB oracle is enough because every
 animation is now compositor-side.
@@ -651,13 +732,15 @@ this spec and the issue). Sizes are product lines excluding tests and docs.
 
 | # | Layer | Fixes | Size | Depends on |
 |---|---|---|---|---|
+| 0 | `REACTOR_ANIM_004` with today's trigger set and its code fix (§9.1). Independent, valid on `main` now | #1613/#1623-shaped user code | S (~250 incl. fix) | — |
 | 1 | `ImplicitAnimationSlots`. Route LayoutAnimation, Animate and the transition fallback through it, and widen the Update gate for removals | #1625, #1626 (the fallback and XAML removal arms) | S (~200) | — |
-| 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, and the §9 handoff diagnostic | #1623, #1624 (Opacity, Background) | M (~350) | 1 |
+| 2 | Compositor-only transitions. Fluent curve, `Components`, write-time `TranslationTransition` (with mask), reduced-motion gate, transition policy before setters on update, `BackgroundTransition` unset arm and pool clear, the §9 handoff diagnostic, and `.XxxTransition()` added to `VisualOwningModifiers` | #1623, #1624 (Opacity, Background) | M (~350) | 1 |
 | 3 | Pool lanes and the visual reset list | #1624 (rest), restores pooling for compositor-feature elements | M (~250) | 2 |
-| 4 | Transforms always on the visual. Remove the facade branches, lazy handoff with the effective-identity rule, stop zeroing `UIElement.Translation`, extend the diagnostic to setter facade writes | #1630 | M (~200 net, mostly deletions) | 3 (so transformed elements never lose pooling) |
+| 4 | Transforms always on the visual. Remove the facade branches, lazy handoff with the effective-identity rule, stop zeroing `UIElement.Translation`, extend the diagnostic to setter facade writes, transform modifiers added to `VisualOwningModifiers`, and the `REACTOR_MOD_002` widening | #1630 | M (~200 net, mostly deletions) | 3 (so transformed elements never lose pooling) |
 | 5 | `.TransformOrigin(x, y)`, the origin property set and `CenterPoint` ownership, navigation reuses it, api.txt ×2, docs templates, gallery samples | #773 | M (~300) | 4 |
 
-The `Curve.Linear` fix (§16) is independent and can land at any point.
+The `Curve.Linear` fix (§16) is independent and can land at any point. So can layer 0, whose
+`VisualOwningModifiers` table then grows in layers 2, 4 and 5.
 
 ## §14 Rejected alternatives
 
@@ -686,8 +769,8 @@ The `Curve.Linear` fix (§16) is independent and can land at any point.
    and `.Keyframes()` ignore the setting today. That's a separate decision.
 5. **`AnimateProperty.Offset`** is documented as "Translation" but animates layout `Offset`. Rename,
    or add a real `Translation` flag?
-6. **Analyzer.** Should `.Set(x => x.Rotation = …)` next to transform modifiers become a `REACTOR_*`
-   did-you-mean?
+6. **Analyzer scope.** §9.1 limits `REACTOR_ANIM_004` to `.Set` lambdas. Should it also cover `.OnMount`
+   callbacks and `ElementRef.Current` writes, which are harder to tie to a chain?
 7. **Pool lane caps.** Same 32 per lane, or a shared 32 per type?
 
 ## §16 Other defects found by the spike
