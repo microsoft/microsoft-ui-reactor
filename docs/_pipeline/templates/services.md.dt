@@ -1,0 +1,319 @@
+---
+title: "Services and dependency injection"
+app: services
+order: 13.5
+audience: intermediate
+goal: |
+  Show how components reach app services (data stores, clocks, settings,
+  HTTP clients, loggers) in a clean, testable way. Cover a plain service
+  provided through Context<T>, wiring Microsoft.Extensions.DependencyInjection
+  at startup, a UseService<T>() custom hook built from real hooks, services
+  whose data changes (UseExternalStore), scoped and disposable services and
+  their lifetime, fakes for tests and previews, and when plain props are the
+  better choice. State plainly that Reactor has no built-in container.
+tier: comprehensive
+---
+
+# Services and dependency injection
+
+Most apps have code that is not UI: a data store, a settings file, an HTTP
+client, a clock, a logger. Components need to reach that code, and tests need
+to replace it with fakes. Reactor does not ship a dependency injection
+container, and `ReactorApp` has no service-provider hook. You do not need one.
+Reactor's context system already passes values down the element tree to any
+component that asks for them. You can put a single service in a context. Or
+you can build a `Microsoft.Extensions.DependencyInjection` container at
+startup and put the whole `IServiceProvider` in a context, then resolve
+services with a small custom hook. This page shows both approaches, how scoped
+and disposable services follow the component lifecycle, how to swap in fakes,
+and when plain props are the better choice.
+
+This page builds on [Context](context.md) and [Hooks](hooks.md). All code
+comes from one compiled doc app,
+[`docs/_pipeline/apps/services`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/docs/_pipeline/apps/services).
+
+## Reference
+
+| Piece | Comes from | Purpose |
+|---|---|---|
+| `Context<T>` | Reactor | Carries one service, or the whole service provider, down the tree. |
+| `.Provide(context, value)` | Reactor modifier | Makes a value available to an element's subtree. |
+| `UseContext(context)` | Reactor hook | Reads the nearest provided value, or the context's default. |
+| `UseMemo`, `UseEffect` | Reactor hooks | Keep a resolved service stable. Dispose a scope on unmount. |
+| `UseExternalStore` | Reactor hook | Re-renders a component when a service reports a change. |
+| `ServiceCollection`, `BuildServiceProvider` | `Microsoft.Extensions.DependencyInjection` package | Register services and build the container at startup. |
+| `CreateScope()` | `Microsoft.Extensions.DependencyInjection` package | Creates a child provider for scoped services. |
+| `UseService<T>()`, `UseServiceScope()` | Your app (shown on this page) | Small custom hooks built from the Reactor hooks above. |
+
+Pick the lightest approach that works:
+
+- **A context per service.** Good for one to three services with no
+  lifetimes to manage.
+- **A container in a context.** Good when you have many services, need
+  scoped lifetimes, or share registrations with other .NET projects.
+- **A prop.** Best when a parent already has the value and only its child
+  needs it. See [when not to use DI](#when-not-to-use-di).
+
+## Provide a plain service through context
+
+A context can hold any value, including an interface. Give the context the
+real service as its default value. Production code then needs no provider at
+all, and any component can read the service with `UseContext`:
+
+```csharp snippet="services/plain-service"
+```
+
+To replace the service, provide a different value for a subtree. The
+`Greeting` component does not change:
+
+```csharp snippet="services/plain-service-fake"
+```
+
+The fake is a static field, so the provided value keeps the same identity on
+every render. A new object on every render re-renders every consumer. See
+[stabilizing the provided value](context.md#stabilizing-the-provided-value).
+
+## Wire up a dependency injection container
+
+When you have many services, register them in a container instead of
+creating one context each. This page uses
+`Microsoft.Extensions.DependencyInjection`, the standard .NET container. Add
+the package to your app project:
+
+```shell
+dotnet add package Microsoft.Extensions.DependencyInjection
+```
+
+Create one context that carries the provider. Its default is `null`, so a
+missing provider becomes a clear error instead of a silent fallback:
+
+```csharp snippet="services/service-context"
+```
+
+Build the container once, before `ReactorApp.Run`, and provide it on the root
+element:
+
+```csharp snippet="services/startup"
+```
+
+Every component under the root can now reach the provider. The diagram shows
+the tree the rest of this page builds:
+
+![Startup builds the service provider and the root element provides it through context. TodoList resolves a singleton store. EditorPanel creates a scope and provides the scoped provider to EditorBody, which resolves a scoped edit session. The scope is created when EditorPanel mounts and disposed when it unmounts.](images/services/provider-tree.svg)
+
+`validateScopes: true` tells the container to throw when code resolves a
+scoped service from the root provider. Turn it on so lifetime mistakes fail
+right away.
+
+## Write a UseService hook
+
+A custom hook hides the context lookup and the resolve call. It is a
+`RenderContext` extension method whose name starts with `Use`, built only
+from other hooks:
+
+```csharp snippet="services/use-service"
+```
+
+- `UseServiceProvider` reads the context and throws a clear error when no
+  provider is in scope.
+- `UseService<T>` wraps `GetRequiredService<T>()` in `UseMemo`, keyed on the
+  provider. A transient service is resolved once per component, not once per
+  render. If a nested scope supplies a different provider, the service is
+  resolved again.
+- Both hooks call their inner hooks unconditionally, in the same order on
+  every render, so they follow the [hook rules](hooks.md#hook-rules).
+
+Class components cannot call `RenderContext` extension methods directly.
+Wrap the body in `Memo(ctx => ...)`, the same convention as other
+[custom hooks](hooks.md#custom-hooks).
+
+## Services whose data changes
+
+Resolving a service does not make a component re-render when the service's
+data changes. If a service holds data that changes, give it a subscription
+and read it with `UseExternalStore`. Here is a small to-do store:
+
+```csharp snippet="services/todo-store"
+```
+
+The component resolves the store, then subscribes to it:
+
+```csharp snippet="services/consume-service"
+```
+
+Two rules from [external stores](hooks.md#external-stores) apply:
+
+- Pass a stable `subscribe` delegate. A method group such as
+  `store.Subscribe` is stable.
+- Return a snapshot that changes identity only when the data changes. The
+  store replaces its list on every change and never mutates it.
+
+The example store is not thread-safe. Call it from the UI thread, or add
+locking. For work that runs on background threads, see
+[Threading and dispatch](threading-and-dispatch.md).
+
+## Scoped and disposable services
+
+`Microsoft.Extensions.DependencyInjection` has three lifetimes:
+
+| Lifetime | Registered with | One instance per | Disposed when |
+|---|---|---|---|
+| Singleton | `AddSingleton` | root provider | the root provider is disposed |
+| Scoped | `AddScoped` | scope | the scope is disposed |
+| Transient | `AddTransient` | resolve call | the scope or root that resolved it is disposed |
+
+Reactor does not know about the container, so it never creates or disposes a
+scope for you. A component can own a scope with two hooks: `UseMemo` creates
+the scope on the first render, and the cleanup of `UseEffect` disposes it.
+The component then provides the scoped provider to its children:
+
+```csharp snippet="services/scoped-service"
+```
+
+Every component under `EditorPanel` that resolves `IEditSession` gets the same
+instance. Toggle the panel to see the lifetime. Closing it unmounts
+`EditorPanel`, the effect cleanup disposes the scope, and the scope disposes
+the `EditSession`. Opening it again creates a new scope and a new session ID:
+
+```csharp snippet="services/scoped-toggle"
+```
+
+The root provider usually lives as long as the app. Reactor does not dispose
+it. Treat singletons as app-lifetime objects, and do not rely on their
+`Dispose` running at exit.
+
+## Swap in fakes for tests and previews
+
+Because components only see the provider through context, a test or a
+preview can provide a different one. The component code stays the same:
+
+```csharp snippet="services/fake-services"
+```
+
+- **Test logic in the services.** A store, a parser or an API client is plain
+  C#. Test it with ordinary unit tests. It needs no Reactor at all.
+- **Keep components thin.** A component that resolves services renders
+  through `Memo`, and the `Memo` body runs only under the reconciler. Calling
+  `Render()` directly returns a `MemoElement` and does not run the body.
+- **Render the real tree under a fake provider** in a self-test or a preview
+  window, as `TodoListPreview` does. See [Testing](testing.md) for the test
+  tiers, and the
+  [mock provider pattern](context.md#testing-with-a-mock-provider) on the
+  context page.
+
+## When not to use DI
+
+Not every dependency is a service. If a parent already has the value and
+only its child needs it, pass it as a prop:
+
+```csharp snippet="services/props-instead"
+```
+
+`TodoList` resolves the store and passes `items.Count` to `CountBadge`.
+`CountBadge` works in any tree, with or without a provider, and is easy to
+reuse. Use a service when many distant components need the same object, or
+when the object owns resources or state that outlives a single component.
+Use [components](components.md) and props for everything else.
+
+<!-- ai:caveat -->
+Reactor has no built-in container. Every service you resolve comes from a
+context you provide, so three mistakes cause most problems. First, building
+the container inside `Render()` creates new singletons on every render and
+loses their state. Build it once at startup. Second, calling
+`GetRequiredService<T>()` in render without `UseMemo` creates a new transient
+on every render. Third, a scope created in render must be disposed in a
+`UseEffect` cleanup, or its disposable services are never disposed. With `validateScopes: true`, resolving a scoped service from
+the root provider throws `InvalidOperationException`. That error means a
+component is missing a scope above it, not that the registration is wrong.
+<!-- /ai:caveat -->
+
+## Patterns
+
+### One context per service for small apps
+
+Two or three services, each with a real default, need no container. Each
+context reads like a typed global that tests can override. This is the
+[plain service](#provide-a-plain-service-through-context) shape.
+
+### One container at the root for larger apps
+
+Register everything in one `ServiceCollection`, provide the provider at the
+root, and resolve with `UseService<T>()`. Registrations can be shared with
+other .NET projects, such as a class library or a command-line tool, that use
+the same container.
+
+### One scope per document or editor
+
+Give each long-lived view its own scope with `UseServiceScope()`, as
+`EditorPanel` does. Services such as an undo stack or an edit session then
+live exactly as long as the view. A [window](windows.md) root can own a scope
+the same way.
+
+### Resolve high, pass props low
+
+Resolve services near the top of a feature, then pass plain data and
+callbacks to small child components as props. Leaf components stay simple
+and reusable.
+
+## Common Mistakes
+
+### Building the container inside Render
+
+```csharp snippet="services/build-in-render-dont"
+```
+
+Every render builds a new container, new singletons and a new provider. The
+provided value changes identity, so every consumer re-renders, and the store
+loses its items. Build the provider once at startup, as in
+[the startup code](#wire-up-a-dependency-injection-container).
+
+### Resolving services in every leaf
+
+```csharp snippet="services/leaf-resolves-dont"
+```
+
+`TodoRow` resolves a service only to format one line. It can no longer render
+without a provider in context, and every row adds hook slots. Resolve once in
+the parent and pass the value as a prop.
+
+### Resolving a scoped service from the root
+
+With `validateScopes: true`, `UseService<IEditSession>()` throws when no
+component above it created a scope. Without the flag, the root provider
+returns one instance that it keeps for the whole app, which is rarely what a
+scoped registration means. Add a component that calls `UseServiceScope()`
+above the consumer.
+
+### Forgetting to subscribe to changes
+
+A component that resolves a store and reads `store.Items` directly shows the
+first snapshot and never updates. Read changing data through
+`UseExternalStore`, as `TodoList` does.
+
+## Tips
+
+**Say it plainly in code.** Name the context `AppServices.Provider` and the
+hook `UseService<T>()`. Readers then know where a dependency comes from
+without searching.
+
+**Give plain service contexts a real default.** Components then work without
+a provider in production, and tests provide only what they replace.
+
+**Keep the provided value stable.** Provide a provider, scope or service
+object that you created once. Never create it inline in `Render()`.
+
+**Turn on container validation.** `validateScopes: true` catches
+lifetime mistakes at the first resolve. `BuildServiceProvider` also has a
+`ServiceProviderOptions` overload with `ValidateOnBuild`, which checks that
+every registration can be constructed.
+
+**Prefer props for data.** A service is an object with behaviour. A count, a
+title or a selected ID is data. Pass data as props.
+
+## Next Steps
+
+- **[Context](context.md)** — how `Context<T>`, `.Provide` and `UseContext` work
+- **[Hooks](hooks.md)** — `UseMemo`, `UseEffect`, `UseExternalStore` and custom hooks
+- **[Testing](testing.md)** — test tiers, and where a fake provider fits
+- **[Persistence](persistence.md)** — save and load app state
+- **[Threading and dispatch](threading-and-dispatch.md)** — call services from background work safely

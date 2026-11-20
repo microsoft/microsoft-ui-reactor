@@ -6,22 +6,19 @@ executable — `dotnet publish` produces the deployable artifact and the
 framework itself adds nothing exotic to the project file.
 
 What you choose at publish time is the **shape** of that artifact: a
-packaged MSIX (the [`dotnet new reactor`](getting-started.md) default), an
+packaged MSIX (the [`dotnet new reactor`](install.md) default), an
 unpackaged folder, a single-file bundle, or a Native AOT native binary —
 each combined with a `win-x64` or `win-arm64` runtime identifier. The
-trade-offs are the same ones any WinUI 3 app faces; the Reactor-specific
-notes on this page cover what changes when your codebase leans on the
-reflection-driven pieces of the framework
-([`AutoColumns<T>`](data-system.md), devtools component discovery when
-`Reactor.DevtoolsSupport` is enabled, and the `UseObservableTree` INPC
-walker).
+trade-offs are the same ones any WinUI 3 app faces. Native AOT has its own
+page, [Native AOT](native-aot.md), because it changes what your code may
+do with reflection.
 
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|
 | Unpackaged | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. |
 | MSIX | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
 | Single-file | `PublishSingleFile=true`, `IncludeNativeLibrariesForSelfExtract=true` | `win-x64` / `win-arm64` (must be set) | One `.exe` that self-extracts the WinUI runtime to `%TEMP%/.net/` on first launch. |
-| Native AOT | `PublishAot=true`, `InvariantGlobalization=true` (recommended) | `win-x64` / `win-arm64` (required) | A native binary with no JIT, no `Assembly.GetTypes()`, no `Reflection.Emit`. Fastest cold start; trim-only. |
+| Native AOT | `PublishAot=true` | `win-x64` / `win-arm64` (required) | A native binary with no JIT and no runtime code generation. The code is trimmed, so reflection over types the compiler can't see fails. See [Native AOT](native-aot.md). |
 
 A scaffolded app starts out **packaged** by default: `dotnet new reactor` emits a
 `Package.appxmanifest` and sets `EnableMsixTooling`, so `dotnet run`
@@ -210,10 +207,10 @@ itself is only tested on x64 / ARM64.
 
 ## Native AOT
 
-Reactor's perf-bench projects publish under AOT and run cleanly —
-the framework is built to be AOT-compatible on its hot path. The
-shape is the same as any other AOT publish, with `PublishAot=true`
-and a runtime identifier:
+Native AOT compiles the app to native code at publish time. Set
+`PublishAot=true` in the project file and pass a runtime identifier when
+you publish. The repo's stress benchmark is an unpackaged app that turns it
+on:
 
 ```xml
 <PropertyGroup>
@@ -230,39 +227,11 @@ and a runtime identifier:
 </PropertyGroup>
 ```
 
-`dotnet publish -c Release -r win-x64` produces a native binary —
-no `coreclr.dll`, no JIT, ~50 ms cold start versus ~250 ms for the
-JIT-based build on the same hardware.
-
-The `dotnet new reactor` templates do **not** enable AOT — they ship
-`PublishReadyToRun` + `PublishTrimmed` for non-Debug configurations
-instead. To go all the way to AOT, add the properties to the scaffolded
-CSPROJ yourself:
-
-```xml
-<PropertyGroup Condition="'$(Configuration)' != 'Debug'">
-  <PublishAot>true</PublishAot>
-  <InvariantGlobalization>true</InvariantGlobalization>
-</PropertyGroup>
-```
-
-`InvariantGlobalization=true` is paired with `PublishAot`
-because the alternative — shipping the full ICU data — pulls in
-trim warnings that the AOT analyzer flags as actionable.
-
-> **Caveat:** **`AutoColumns<T>` and `Assembly.GetTypes()` are the two reflection
-> surfaces to know about.** `Factories.AutoColumns<T>()` walks
-> `typeof(T).GetProperties()` to build `FieldDescriptor`s for a
-> [`DataGrid<T>`](data-system.md), so the generic argument carries
-> `[DynamicallyAccessedMembers(PublicProperties | PublicConstructors)]`
-> — call it from your component and the AOT analyzer threads the
-> annotation back through your code. Hand-built `Column<T>(...)`
-> columns avoid the reflection entirely and are the safe choice for
-> trim-paranoid code. The devtools code path walks `Assembly.GetTypes()` to enumerate
-> component types when the app opts into `Reactor.DevtoolsSupport`, which
-> is incompatible with trimming and carries `[RequiresUnreferencedCode]`
-> on every method that touches it. Leave the switch off for retail/AOT
-> builds (the documented retail shape; see [Dev Tooling](dev-tooling.md)).
+Then publish with `dotnet publish -c Release -r win-x64` (or `win-arm64`).
+The [Native AOT](native-aot.md) guide covers the rest: what Reactor
+registers for you, which features use reflection and fail under AOT, how to
+read `IL2xxx` and `IL3xxx` warnings, devtools in AOT builds, and
+troubleshooting.
 
 ## Tips
 
@@ -270,7 +239,8 @@ trim warnings that the AOT analyzer flags as actionable.
 and gives you a real package identity; unpackaged + zip is the
 easiest direct-download story; single-file is the same shape as
 unpackaged with a slower first launch. AOT is independent of all
-three — apply it once the distribution shape is settled.
+three — apply it once the distribution shape is settled (see
+[Native AOT](native-aot.md)).
 
 **Publish for both architectures in CI from day one.** ARM64
 Windows on Snapdragon X is a real audience now; an x64-only build
@@ -280,7 +250,7 @@ and includes ARM64 — the missing piece is the second
 `dotnet publish -r win-arm64` invocation in the build pipeline.
 
 **Keep `Reactor.DevtoolsSupport` out of retail.** The
-[`Reactor.DevtoolsSupport`](dev-tooling.md) runtime host configuration
+[`Reactor.DevtoolsSupport`](devtools.md) runtime host configuration
 option is a capability gate that nothing user-visible depends on at
 runtime — but the code path it enables walks `Assembly.GetTypes()`.
 Leaving it off for Release/AOT builds drops the devtools trim warning
@@ -292,7 +262,7 @@ only add that package to app projects that intentionally expose
 **Only reference `Microsoft.UI.Reactor.Advanced` when you actually use
 it.** The optional, same-version
 [`Microsoft.UI.Reactor.Advanced`](win2d-canvas.md) package hosts the
-heavier optional subsystems (spec 062 §7): the Win2D canvas family
+heavier optional subsystems (spec 062 §7): the [Win2D canvas](win2d-canvas.md) family
 (`Win2DCanvas`, `Win2DAnimatedCanvas`, `Win2DVirtualCanvas`), the
 **data grid** (`DataGrid` / `Column` / `AutoColumns`), the **Markdown**
 renderer (`Markdown(...)`), the **charting** subsystem (`Charts` + the D3
@@ -302,7 +272,7 @@ those must add its `<PackageReference>`. Adding it also pulls
 your publish output and roots its WinRT activation chain for the AOT
 trimmer, so apps that use none of the Advanced subsystems should leave
 `Microsoft.UI.Reactor.Advanced` off their `<PackageReference>` list — that
-keeps both the moved subsystems and the Win2D native payload out of your
+keeps both the moved subsystems and that native payload out of your
 build. That split is the whole reason Advanced is a sibling package and not
 a folder inside `Microsoft.UI.Reactor.dll`.
 
@@ -341,7 +311,7 @@ the package and `RuntimeHostConfigurationOption
 Reactor.DevtoolsSupport=true`). That makes devtools available without
 turning them on: the default launch profile passes no arguments, so launch
 with `dotnet run -- --devtools app` and render `DevtoolsMenu(...)` to get the
-[in-app dev menu](dev-tooling.md#in-app-dev-menu) (see
+[in-app dev menu](devtools.md#in-app-dev-menu) (see
 [Running with devtools](getting-started.md#running-with-devtools)).
 The Reactor Visual
 Studio embedded-preview extension (spec 056) also relies on this
@@ -357,8 +327,8 @@ in Release too.
 
 ## Next Steps
 
-- **[Dev Tooling](dev-tooling.md)** — Previous: the inner-loop side of the build pipeline (`mur pack-local`, `dotnet watch`, hot reload).
-- **[Getting Started](getting-started.md)** — Where the `dotnet new reactor` templates that produce the packaged and unpackaged shapes come from.
-- **[Performance](performance.md)** — When you should reach for AOT (cold-start budgets, startup-perf benchmarks).
-- **[Perf Instrumentation](perf-instrumentation.md)** — The ETW / EventPipe pipeline that survives AOT publish unchanged.
-- **[Dev Tooling](dev-tooling.md)** — How the `Reactor.DevtoolsSupport` capability switch combines with `--devtools` activation.
+- **[Native AOT](native-aot.md)** — Publish a native binary, and keep reflection out of the code that ships.
+- **[Devtools](devtools.md)** — How the `Reactor.DevtoolsSupport` build switch combines with the `--devtools` launch flag.
+- **[Installation](install.md)** — Where the `dotnet new reactor` templates that produce the packaged and unpackaged shapes come from.
+- **[Performance](performance.md)** — Take a trace of your app and read where the time goes.
+- **[Perf Instrumentation](perf-instrumentation.md)** — The ETW / EventPipe events Reactor emits. Under Native AOT they need `EventSourceSupport=true`.
