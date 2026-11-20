@@ -150,9 +150,14 @@ public sealed partial class Reconciler
             DebugUIElementsCreated++;
             // Count only a control created for this element: a transparent keyed Memo, a
             // flyout decorator wrapping its target, or a RegisterType callback forwarding a
-            // child hands back a control its inner Mount already counted.
+            // child hands back a control its inner Mount already counted. Forwarding is only
+            // detectable while source publishing is on; guarded inline (as below) so ILC folds
+            // the publisher out of a build without Reactor.DevtoolsSupport.
             if (Diagnostics.ReactorPerfTrace.ComponentEnabled
-                && (ownsControl || registeredType && !ForwardsAnotherElement(control, element)))
+                && (ownsControl || registeredType
+                    && !(global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                        && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && ForwardsAnotherElement(control, element))))
                 Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
