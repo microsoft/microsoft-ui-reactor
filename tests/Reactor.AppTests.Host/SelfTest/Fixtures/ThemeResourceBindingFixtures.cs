@@ -57,14 +57,13 @@ internal static class ThemeResourceBindingFixtures
         resources.ThemeDictionaries["Light"] = lightDict;
         resources.ThemeDictionaries["Dark"] = darkDict;
         Application.Current.Resources.MergedDictionaries.Add(resources);
-        var host = h.CreateHost();
+        using var host = h.CreateHost();
         try
         {
             await body(host, lightDict);
         }
         finally
         {
-            host.Dispose();
             h.SetContent(null);
             Application.Current.Resources.MergedDictionaries.Remove(resources);
             await Harness.Render();
@@ -192,7 +191,7 @@ internal static class ThemeResourceBindingFixtures
 
             var tb = H.FindText("trb-style");
             H.Check("ThemeResourceBinding_Style_AuthorStyleKept",
-                ReferenceEquals(tb?.Style, style) && Math.Abs((tb?.FontSize ?? 0) - 31) < 0.01,
+                tb is not null && ReferenceEquals(tb.Style, style) && Math.Abs(tb.FontSize - 31) < 0.01,
                 $"fontSize={tb?.FontSize}");
             H.Check("ThemeResourceBinding_Style_ThemeRefApplied", ColorOf(tb?.Foreground) == LightColor);
 
@@ -321,7 +320,7 @@ internal static class ThemeResourceBindingFixtures
             await Harness.Render();
             var themed = H.FindText("trb-pool-themed");
             H.Check("ThemeResourceBinding_Pool_ThemedBound",
-                HasLocal(themed, WinUI.TextBlock.ForegroundProperty) && ColorOf(themed?.Foreground) == LightColor);
+                themed is not null && HasLocal(themed, WinUI.TextBlock.ForegroundProperty) && ColorOf(themed.Foreground) == LightColor);
 
             setPhase!(1);
             await Harness.Render();
@@ -593,6 +592,185 @@ internal static class ThemeResourceBindingFixtures
             H.Check("ThemeResourceBinding_HoverRemove_ClearedOnExit",
                 !HasLocal(border, WinUI.Border.BackgroundProperty) && !HasLocal(border, WinUI.Border.BorderBrushProperty),
                 $"bg={ColorOf(border.Background)} border={ColorOf(border.BorderBrush)}");
+
+            // A second hover cycle must not bring the removed binding's brushes back either.
+            Reconciler.SimulatePointerOverForTests(border, isOver: true);
+            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            H.Check("ThemeResourceBinding_HoverRemove_SecondCycleStaysCleared",
+                !HasLocal(border, WinUI.Border.BackgroundProperty) && !HasLocal(border, WinUI.Border.BorderBrushProperty),
+                $"bg={ColorOf(border.Background)} border={ColorOf(border.BorderBrush)}");
+        });
+    }
+
+    /// <summary>
+    /// An explicit brush modifier on a wrapper layer that shares the control (a keyed Memo)
+    /// beats the inner element's ThemeRef, including through a resource refresh: the inner
+    /// update can't see the wrapper's modifier, so the wrapper takes ownership when it writes.
+    /// </summary>
+    internal sealed class WrapperModifierBeatsInnerThemeRefOnRefresh(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKeys(H, ["TrbWrapperBrush"], null, async (host, light) =>
+        {
+            var explicitBrush = new SolidColorBrush(ExplicitColor);
+            // Theme.NotifyResourcesChanged re-renders every live host; keep it to this one.
+            using var isolation = ThemeResourceListeners.IsolateForTest(host);
+            host.Mount(_ => VStack(
+                Memo("trb-wrapper", () => TextBlock("trb-wrapper").Foreground(new ThemeRef("TrbWrapperBrush")))
+                    .Foreground(explicitBrush),
+                TextBlock("trb-wrapper-probe").Foreground(new ThemeRef("TrbWrapperBrush"))).RequestedTheme(ElementTheme.Light));
+            await Harness.Render();
+            var tb = H.FindText("trb-wrapper");
+            H.Check("ThemeResourceBinding_Wrapper_ExplicitWins", ReferenceEquals(tb?.Foreground, explicitBrush),
+                $"fg={ColorOf(tb?.Foreground)}");
+
+            var edited = Color.FromArgb(255, 250, 200, 0);
+            light["TrbWrapperBrush"] = new SolidColorBrush(edited);
+            Theme.NotifyResourcesChanged();
+            await host.WaitForIdleAsync();
+            H.Check("ThemeResourceBinding_Wrapper_RefreshRan",
+                await Harness.WaitFor(() => ColorOf(H.FindText("trb-wrapper-probe")?.Foreground) == edited));
+            H.Check("ThemeResourceBinding_Wrapper_ExplicitSurvivesRefresh", ReferenceEquals(tb?.Foreground, explicitBrush),
+                $"fg={ColorOf(tb?.Foreground)}");
+        });
+    }
+
+    /// <summary>
+    /// A resource refresh or a ThemeRef key change while an InteractionStates hover holds the
+    /// property keeps the hover brush, and leaving the hover installs the binding for the
+    /// current key.
+    /// </summary>
+    internal sealed class HoverSurvivesRefreshAndKeyChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKeys(H, ["TrbHoverKeyA"], "TrbHoverKeyB", async (host, _) =>
+        {
+            var hover = new SolidColorBrush(HoverColor);
+            using var isolation = ThemeResourceListeners.IsolateForTest(host);
+            Action<bool>? setSecondKey = null;
+            host.Mount(ctx =>
+            {
+                var (second, setter) = ctx.UseState(false);
+                setSecondKey = setter;
+                return VStack(
+                    Border(TextBlock("trb-hover-key"))
+                        .Background(new ThemeRef(second ? "TrbHoverKeyB" : "TrbHoverKeyA"))
+                        .InteractionStates(s => s.PointerOver(background: hover))).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+            var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-hover-key" });
+            H.Check("ThemeResourceBinding_HoverKey_Bound", ColorOf(border?.Background) == LightColor);
+            if (border is null) return;
+
+            Reconciler.SimulatePointerOverForTests(border, isOver: true);
+            Theme.NotifyResourcesChanged();
+            await host.WaitForIdleAsync();
+            H.Check("ThemeResourceBinding_HoverKey_HoverSurvivesRefresh", ReferenceEquals(border.Background, hover),
+                $"bg={ColorOf(border.Background)}");
+
+            setSecondKey!(true);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_HoverKey_HoverSurvivesKeyChange", ReferenceEquals(border.Background, hover),
+                $"bg={ColorOf(border.Background)}");
+
+            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            H.Check("ThemeResourceBinding_HoverKey_RestoresCurrentKey", ColorOf(border.Background) == OtherLightColor,
+                $"bg={ColorOf(border.Background)}");
+        });
+    }
+
+    /// <summary>
+    /// Replacing a border ThemeRef with an explicit brush during a hover makes that brush what
+    /// the hover restores on exit.
+    /// </summary>
+    internal sealed class ExplicitBorderBrushReplacingThemeRefDuringHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrbHoverBorderBrush", async host =>
+        {
+            var hover = new SolidColorBrush(HoverColor);
+            var explicitBrush = new SolidColorBrush(ExplicitColor);
+            Action<bool>? setExplicit = null;
+            host.Mount(ctx =>
+            {
+                var (useExplicit, setter) = ctx.UseState(false);
+                setExplicit = setter;
+                var border = Border(TextBlock("trb-hover-border")).BorderThickness(2)
+                    .InteractionStates(s => s.PointerOver(borderBrush: hover));
+                return VStack(useExplicit ? border.BorderBrush(explicitBrush) : border.BorderBrush(new ThemeRef("TrbHoverBorderBrush")))
+                    .RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+            var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-hover-border" });
+            H.Check("ThemeResourceBinding_HoverBorder_Bound", ColorOf(border?.BorderBrush) == LightColor);
+            if (border is null) return;
+
+            Reconciler.SimulatePointerOverForTests(border, isOver: true);
+            setExplicit!(true);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_HoverBorder_HoverKept", ReferenceEquals(border.BorderBrush, hover));
+            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            H.Check("ThemeResourceBinding_HoverBorder_ExplicitRestored", ReferenceEquals(border.BorderBrush, explicitBrush),
+                $"border={ColorOf(border.BorderBrush)}");
+        });
+    }
+
+    /// <summary>
+    /// A setter that takes a property over in the same render as the control's own
+    /// <c>RequestedTheme</c> and its ThemeRef key change keeps the property: the theme change
+    /// doesn't hide the takeover.
+    /// </summary>
+    internal sealed class SetterTakeoverWithOwnThemeChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKeys(H, ["TrbTakeoverA"], "TrbTakeoverB", async (host, _) =>
+        {
+            var setterBrush = new SolidColorBrush(ExplicitColor);
+            Action<bool>? setTakeover = null;
+            host.Mount(ctx =>
+            {
+                var (takeover, setter) = ctx.UseState(false);
+                setTakeover = setter;
+                var border = Border(TextBlock("trb-takeover"));
+                return VStack(takeover
+                    ? border.Set(b => b.Background = setterBrush).Background(new ThemeRef("TrbTakeoverB")).RequestedTheme(ElementTheme.Dark)
+                    : border.Background(new ThemeRef("TrbTakeoverA")).RequestedTheme(ElementTheme.Light));
+            });
+            await Harness.Render();
+            var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-takeover" });
+            H.Check("ThemeResourceBinding_Takeover_Bound", ColorOf(border?.Background) == LightColor);
+
+            setTakeover!(true);
+            await Harness.Render();
+            H.Check("ThemeResourceBinding_Takeover_SetterWins", ReferenceEquals(border?.Background, setterBrush),
+                $"bg={ColorOf(border?.Background)}");
+        });
+    }
+
+    /// <summary>
+    /// A state that never touches Background must not write back a brush the removed
+    /// Background binding resolved to when the states were set up.
+    /// </summary>
+    internal sealed class UnrelatedStateDoesNotResurrectRemovedBinding(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrbUnrelatedStateBrush", async host =>
+        {
+            Action<bool>? setThemed = null;
+            host.Mount(ctx =>
+            {
+                var (themed, setter) = ctx.UseState(true);
+                setThemed = setter;
+                var border = Border(TextBlock("trb-unrelated")).InteractionStates(s => s.PointerOver(opacity: 0.8f));
+                return VStack(themed ? border.Background(new ThemeRef("TrbUnrelatedStateBrush")) : border)
+                    .RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+            var border = H.FindControl<WinUI.Border>(b => b.Child is WinUI.TextBlock { Text: "trb-unrelated" });
+            H.Check("ThemeResourceBinding_Unrelated_Bound", ColorOf(border?.Background) == LightColor);
+            if (border is null) return;
+
+            setThemed!(false);
+            await Harness.Render();
+            Reconciler.SimulatePointerOverForTests(border, isOver: true);
+            Reconciler.SimulatePointerOverForTests(border, isOver: false);
+            H.Check("ThemeResourceBinding_Unrelated_StaysCleared", !HasLocal(border, WinUI.Border.BackgroundProperty),
+                $"bg={ColorOf(border.Background)}");
         });
     }
 }

@@ -166,7 +166,7 @@ public sealed partial class Reconciler
         {
             ClearDroppedThemeBindings(clearThFe, newEl.ThemeBindings);
             // What the surviving bindings hold before this render's setters and element
-            // properties run, so ApplyThemeBindings can tell whether one replaced them.
+            // properties run, so a binding one of them replaces can be handed over.
             if (newEl.ThemeBindings is not null)
                 themeSnapshot = SnapshotThemeBindings(clearThFe);
         }
@@ -354,6 +354,12 @@ public sealed partial class Reconciler
                 .ObserveAfterSetters(preModCtl);
         }
 
+        // Hand over the theme bindings this render's setters or element properties wrote over.
+        // Checked before ApplyModifiers, which can change this control's RequestedTheme and so
+        // re-resolve a binding without anyone having taken it over.
+        if (themeSnapshot.HasValues && ReferenceEquals(target, control) && target is FrameworkElement handOverFe)
+            ReleaseReplacedThemeBindings(handOverFe, themeSnapshot);
+
         // Set by BorderElement's built-in descriptor when it already released or replaced a removed
         // Background modifier before native setters ran; clearing here would discard both.
         var keepRemovedBackground = _backgroundRemovalHandled.Count > 0
@@ -402,8 +408,7 @@ public sealed partial class Reconciler
         // Apply theme-resource bindings (ThemeRef → live {ThemeResource}-equivalent binding).
         // After modifiers and setters, which it must not override (see ApplyThemeBindings).
         if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, newEl.ThemeBindings, modifiers, _resourceRefreshActive,
-                ReferenceEquals(target, control) ? themeSnapshot : default);
+            ApplyThemeBindings(thFe, newEl.ThemeBindings, modifiers, _resourceRefreshActive);
 
         // Apply per-control resource overrides (lightweight styling)
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
