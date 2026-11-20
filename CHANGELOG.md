@@ -43,6 +43,11 @@ Conventions for contributors:
 
 ### Changed
 
+- Opt-in Markdown text selection supports double-click to select a word and
+  triple-click to select a text surface, including drag extension by either unit.
+  Selection drags from inline links and release-mode custom link buttons do not
+  activate the link; clicking outside a message's text clears its selection (#1617).
+
 - Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
   without allocating fallback key strings. Explicit keys resembling the legacy
   fallback format retain their existing collision behavior (spec 042 §5).
@@ -141,6 +146,34 @@ Conventions for contributors:
   the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
   only reads the dictionaries itself when WinUI cannot find the key for that theme, never
   reading WinUI's own `XamlControlsResources` that way.
+
+- `ThemeRef` modifiers that go through the synthesized `{ThemeResource}` Style, ported from
+  the `SetThemeResourceBinding` work in PR #1618 so they don't wait for a new Windows App SDK
+  (PR #1636):
+  - `SplitView(...).PaneBackground(ThemeRef)` themes the pane background. It used to do
+    nothing, and replacing a `.PaneBackground(brush)` with it left the old brush in place.
+    Removing `.PaneBackground(brush)` now also restores the default pane background instead
+    of keeping the last brush. A loaded `SplitView` no longer crashes with
+    `ArgumentException` (E_INVALIDARG) when a `ThemeRef` modifier is added or removed on
+    re-render: the themed Style is built on `DefaultSplitViewStyle`.
+  - `.InteractionStates()` no longer freezes a `ThemeRef` `Background` or `Foreground`.
+    Leaving a state wrote back a brush captured at setup, which pinned the theme it had
+    then, and even an opacity-only state did so. Now a property is restored only when a
+    state wrote over it. An explicit `.Background(brush)` comes back as the element carries
+    it when the states end, including a brush a re-render set during a hover, and a themed
+    property is cleared so it follows the theme again.
+  - A `ThemeRef` modifier keeps the control's own `Style` (`.Set(c => c.Style = s)`,
+    `.ApplyStyle(...)`, `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `Title(...)`
+    and the other typography factories). The themed Style is built `BasedOn` it instead of
+    replacing it, and dropping the `ThemeRef` restores it (issue #522 path). A Style whose
+    `TargetType` is a third-party control type can't be a `BasedOn` of the WinUI type, so
+    there the themed Style still replaces it, and a warning is logged once. Direct callers
+    of `Reconciler.ApplyThemeBindings` get the same behaviour.
+  - A `ThemeRef` key containing a comma, brace, `=`, `|`, quote, space or backslash now
+    works. The key used to be written unquoted, so the Style failed to parse and every
+    `ThemeRef` on that element silently did nothing. A key that cannot be written at all
+    (both quote characters, a tab or line break) skips only that property and logs a
+    warning.
 
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no

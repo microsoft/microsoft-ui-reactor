@@ -71,43 +71,15 @@ internal static class ThemeResourceProbe
 
     /// <summary>
     /// The XAML of a <c>Border</c> style that sets <c>Tag</c> to <c>{ThemeResource key}</c>, or
-    /// null when the key cannot be written in a markup extension (it contains both quote
-    /// characters, or is empty) or in an XML attribute as it is (characters XML does not allow,
-    /// and tab, carriage return or line feed, which the attribute would turn into spaces).
+    /// null when the key cannot be written as a reference. The quoting and escaping rules are
+    /// <see cref="Reconciler.FormatThemeResourceReference"/>'s, shared with theme modifiers.
     /// </summary>
     internal static string? BuildStyleXaml(string resourceKey)
     {
-        if (string.IsNullOrEmpty(resourceKey) || !IsWritableAsAttribute(resourceKey)) return null;
-
-        // Quoted, so keys with spaces, commas, braces or '=' survive markup-extension parsing.
-        // Inside the quotes a backslash escapes the next character, so double it. A backslash
-        // does not escape the quote character itself, so a key containing ' uses " instead.
-        bool hasSingle = resourceKey.Contains('\'');
-        if (hasSingle && resourceKey.Contains('"')) return null;
-        char quote = hasSingle ? '"' : '\'';
-        var reference = "{ThemeResource " + quote + resourceKey.Replace("\\", "\\\\") + quote + "}";
-        var value = global::System.Security.SecurityElement.Escape(reference);
+        if (Reconciler.FormatThemeResourceReference(resourceKey) is not { } value) return null;
 
         return $"<Style xmlns='{XamlNamespace}' TargetType='Border'>"
             + $"<Setter Property='Tag' Value=\"{value}\"/>"
             + "</Style>";
-    }
-
-    // XML 1.0 Char, minus tab, CR and LF (an attribute value turns them into spaces). Checked by
-    // hand rather than with XmlConvert, which would pull System.Xml into every trimmed app.
-    private static bool IsWritableAsAttribute(string key)
-    {
-        for (int i = 0; i < key.Length; i++)
-        {
-            char c = key[i];
-            if (char.IsHighSurrogate(c))
-            {
-                if (i + 1 >= key.Length || !char.IsLowSurrogate(key[i + 1])) return false;
-                i++;
-                continue;
-            }
-            if (c < 0x20 || char.IsLowSurrogate(c) || c is '\uFFFE' or '\uFFFF') return false;
-        }
-        return true;
     }
 }

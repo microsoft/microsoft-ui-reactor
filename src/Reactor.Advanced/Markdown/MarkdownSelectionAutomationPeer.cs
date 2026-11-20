@@ -105,6 +105,13 @@ internal sealed partial class MarkdownSelectionRange(
         Normalize();
         if (unit is TextUnit.Document or TextUnit.Page)
         { _start = 0; _end = host.Document.Text.Length; return; }
+        if (unit is TextUnit.Word or TextUnit.Paragraph)
+        {
+            var range = host.Document.UnitAt(unit == TextUnit.Word ? MarkdownSelectionUnit.Word :
+                MarkdownSelectionUnit.Paragraph, _start);
+            (_start, _end) = (range.Start, range.End);
+            return;
+        }
         var boundaries = Boundaries(unit);
         _start = boundaries.LastOrDefault(i => i <= _start, 0);
         _end = boundaries.FirstOrDefault(i => i > _start, host.Document.Text.Length);
@@ -164,8 +171,12 @@ internal sealed partial class MarkdownSelectionRange(
         Normalize();
         if (count == 0) return 0;
         var result = MarkdownSelectionRangeMovement.Move(_start, _end, Boundaries(unit), count);
-        _start = result.Start;
-        _end = result.End;
+        if (unit == TextUnit.Paragraph && _start != _end && result.Moved != 0 && result.Start < host.Document.Text.Length)
+        {
+            var paragraph = host.Document.UnitAt(MarkdownSelectionUnit.Paragraph, result.Start);
+            (_start, _end) = (paragraph.Start, paragraph.End);
+        }
+        else (_start, _end) = (result.Start, result.End);
         return result.Moved;
     }
 
@@ -179,7 +190,9 @@ internal sealed partial class MarkdownSelectionRange(
     public int MoveEndpointByUnit(TextPatternRangeEndpoint endpoint, TextUnit unit, int count)
     {
         Normalize();
-        var boundaries = Boundaries(unit);
+        // The end of a Markdown paragraph precedes its inter-surface separator.
+        var boundaries = unit == TextUnit.Paragraph && endpoint == TextPatternRangeEndpoint.End
+            ? host.Document.ParagraphEndBoundaries : Boundaries(unit);
         var result = MarkdownSelectionRangeMovement.MoveEndpoint(Endpoint(endpoint), boundaries, count);
         SetEndpoint(endpoint, result.Offset);
         return result.Moved;
@@ -195,14 +208,9 @@ internal sealed partial class MarkdownSelectionRange(
         if (unit is TextUnit.Document or TextUnit.Page) return [0, text.Length];
         if (unit == TextUnit.Character)
             return global::System.Globalization.StringInfo.ParseCombiningCharacters(text).Append(text.Length).ToArray();
-        if (unit is TextUnit.Paragraph or TextUnit.Format)
-            return host.Document.Entries.Select(e => e.Start).Append(text.Length).Distinct().ToArray();
+        if (unit is TextUnit.Paragraph or TextUnit.Format) return host.Document.ParagraphBoundaries;
         if (unit == TextUnit.Line) return host.VisualLineBoundaries();
-        var boundaries = new List<int> { 0 };
-        for (int i = 1; i < text.Length; i++)
-            if (char.IsWhiteSpace(text[i]) != char.IsWhiteSpace(text[i - 1])) boundaries.Add(i);
-        boundaries.Add(text.Length);
-        return boundaries.ToArray();
+        return host.Document.WordBoundaries;
     }
     public void Select() { Normalize(); host.Select(_start, _end); }
     public void AddToSelection() => Select();
