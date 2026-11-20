@@ -174,8 +174,9 @@ Conventions for contributors:
 
 - A ThemeRef background or foreground on an element with `.InteractionStates(...)` keeps
   following the theme after the pointer leaves. Returning to the normal state used to write
-  back the brush captured when the states were set up, which froze the color at that theme
-  (winui3-integration proposal #22).
+  back the brush captured when the states were set up, which froze the color at that theme.
+  A state's background or foreground on an element with no normal brush is now cleared when the
+  state ends, instead of staying (winui3-integration proposal #22).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition

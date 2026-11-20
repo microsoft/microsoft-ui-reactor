@@ -769,11 +769,8 @@ public class ModifierTableIntegrityTests
             }
         }
 
-        foreach (var prop in ElementSpecificThemeProperties)
-        {
-            if (!themeGates.ContainsKey(prop))
-                problems.Add($"{prop}: listed as element-specific but GetThemeBindingProperty no longer maps it. Remove the row.");
-        }
+        foreach (var prop in ElementSpecificThemeProperties.Where(prop => !themeGates.ContainsKey(prop)))
+            problems.Add($"{prop}: listed as element-specific but GetThemeBindingProperty no longer maps it. Remove the row.");
 
         Assert.True(
             problems.Count == 0,

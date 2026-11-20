@@ -360,6 +360,11 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_UnknownKeyIsSkippedAndRetried",
         "ThemeResourceBinding_InteractionStatesRestoreKeepsForegroundLive",
         "ThemeResourceBinding_RemovalDuringHoverDoesNotResurrect",
+        "ThemeResourceBinding_WrapperModifierBeatsInnerThemeRefOnRefresh",
+        "ThemeResourceBinding_HoverSurvivesRefreshAndKeyChange",
+        "ThemeResourceBinding_ExplicitBorderBrushReplacingThemeRefDuringHover",
+        "ThemeResourceBinding_SetterTakeoverWithOwnThemeChange",
+        "ThemeResourceBinding_UnrelatedStateDoesNotResurrectRemovedBinding",
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         "NamedStyle_TypeRampStylesResolve",
@@ -2780,6 +2785,11 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_UnknownKeyIsSkippedAndRetried" => new ThemeResourceBindingFixtures.UnknownKeyIsSkippedAndRetried(harness),
         "ThemeResourceBinding_InteractionStatesRestoreKeepsForegroundLive" => new ThemeResourceBindingFixtures.InteractionStatesRestoreKeepsForegroundLive(harness),
         "ThemeResourceBinding_RemovalDuringHoverDoesNotResurrect" => new ThemeResourceBindingFixtures.RemovalDuringHoverDoesNotResurrect(harness),
+        "ThemeResourceBinding_WrapperModifierBeatsInnerThemeRefOnRefresh" => new ThemeResourceBindingFixtures.WrapperModifierBeatsInnerThemeRefOnRefresh(harness),
+        "ThemeResourceBinding_HoverSurvivesRefreshAndKeyChange" => new ThemeResourceBindingFixtures.HoverSurvivesRefreshAndKeyChange(harness),
+        "ThemeResourceBinding_ExplicitBorderBrushReplacingThemeRefDuringHover" => new ThemeResourceBindingFixtures.ExplicitBorderBrushReplacingThemeRefDuringHover(harness),
+        "ThemeResourceBinding_SetterTakeoverWithOwnThemeChange" => new ThemeResourceBindingFixtures.SetterTakeoverWithOwnThemeChange(harness),
+        "ThemeResourceBinding_UnrelatedStateDoesNotResurrectRemovedBinding" => new ThemeResourceBindingFixtures.UnrelatedStateDoesNotResurrectRemovedBinding(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),
