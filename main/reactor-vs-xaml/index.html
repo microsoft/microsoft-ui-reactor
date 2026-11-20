@@ -3877,15 +3877,16 @@ through <a href="../theming-tokens/"><code>ThemeRef</code></a> at reconcile time
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="c1">/// &lt;summary&gt;</span>
 <a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="c1">/// Resolves this theme reference using the element&#39;s actual theme.</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="c1">/// Walks the ThemeDictionaries in Application.Resources and MergedDictionaries</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="c1">/// to find the brush matching the element&#39;s effective theme (which respects</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="c1">/// per-element RequestedTheme overrides, not just the app-level theme).</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="c1">/// &lt;/summary&gt;</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">Brush</span><span class="o">?</span><span class="w"> </span><span class="n">Resolve</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">resourceKey</span><span class="p">,</span><span class="w"> </span><span class="n">FrameworkElement</span><span class="w"> </span><span class="n">fe</span><span class="p">)</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">themeName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GetEffectiveThemeName</span><span class="p">(</span><span class="n">fe</span><span class="p">);</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">ResolveForTheme</span><span class="p">(</span><span class="n">resourceKey</span><span class="p">,</span><span class="w"> </span><span class="n">themeName</span><span class="p">);</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="c1">/// The theme is the element&#39;s effective theme (which respects per-element</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="c1">/// RequestedTheme overrides, not just the app-level theme). WinUI resolves the</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="c1">/// key for that theme, as a &lt;c&gt;{ThemeResource}&lt;/c&gt; reference on an element in that</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="c1">/// theme would, instead of Reactor reading the theme dictionaries (issue #1534).</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="c1">/// &lt;/summary&gt;</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">Brush</span><span class="o">?</span><span class="w"> </span><span class="n">Resolve</span><span class="p">(</span><span class="kt">string</span><span class="w"> </span><span class="n">resourceKey</span><span class="p">,</span><span class="w"> </span><span class="n">FrameworkElement</span><span class="w"> </span><span class="n">fe</span><span class="p">)</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">themeName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GetEffectiveThemeName</span><span class="p">(</span><span class="n">fe</span><span class="p">);</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nf">ResolveForTheme</span><span class="p">(</span><span class="n">resourceKey</span><span class="p">,</span><span class="w"> </span><span class="n">themeName</span><span class="p">);</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">    </span><span class="p">}</span>
 </code></pre></div>
 <p>A <code>ResourceDictionary</code> (especially merged into <code>Application.Resources</code>)
 is the XAML way to declare named resources — brushes, doubles, styles
@@ -3895,10 +3896,14 @@ The latter resolves through the active <code>ThemeDictionaries[name]</code>.</p>
 <code>ThemeRef</code>, a readonly record struct holding a resource key. The
 static <a href="../theming-tokens/"><code>Theme</code></a> class names the most-used
 tokens (<code>Theme.Accent</code>, <code>Theme.CardBackground</code>, etc.); <code>Theme.Ref(key)</code>
-is the escape hatch for any other key. The reconciler walks
-<code>Application.Resources.ThemeDictionaries</code> exactly the way <code>{ThemeResource}</code>
-does, and re-resolves on <code>ActualThemeChanged</code> — so flipping the system
-theme updates every <code>Theme.Accent</code> brush without a re-render.</p>
+is the escape hatch for any other key. Theme modifiers such as
+<code>.Background(Theme.Accent)</code> set the property through a <code>{ThemeResource}</code>
+reference. <code>.Resources(...)</code> overrides ask WinUI to resolve the key the
+same way for the element's theme, and <code>ThemeRef.Resolve(key, isDark)</code>
+does it for the theme you pass, so a dark subtree in a light app gets
+the dark brush. Reactor re-resolves on
+<code>ActualThemeChanged</code> — so flipping the system theme updates every
+<code>Theme.Accent</code> brush without a re-render.</p>
 <h2 id="visualstatemanager-interactionstates-modifier">VisualStateManager → InteractionStates modifier<a class="headerlink" href="#visualstatemanager-interactionstates-modifier" title="Permanent link">&para;</a></h2>
 <p><code>VisualStateManager</code> in XAML drives state-machine animations: a control
 declares groups of named <code>VisualState</code>s (Normal / PointerOver /

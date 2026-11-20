@@ -3842,13 +3842,16 @@ literal at build time so the regression never reaches review.</p>
 </blockquote>
 <h2 id="how-resolution-works">How resolution works<a class="headerlink" href="#how-resolution-works" title="Permanent link">&para;</a></h2>
 <p><a href="../styling/"><code>ThemeRef</code></a> is a readonly record struct holding the
-resource key. When a modifier like <code>.Background(token)</code> reaches the
-reconciler, the framework walks from the materialized
-<a href="../components/"><code>FrameworkElement</code></a> up the visual tree looking for the
-nearest <code>RequestedTheme</code>, falls back to <code>ActualTheme</code>, then
-<code>Application.RequestedTheme</code>. The brush for the chosen theme name
-comes from <code>Application.Resources.ThemeDictionaries[name]</code> (or the
-nearest merged dictionary).</p>
+resource key. A modifier like <code>.Background(token)</code> sets the property
+through a <code>{ThemeResource}</code> reference, so WinUI picks the brush for the
+element's effective theme, including an ancestor's <code>RequestedTheme</code>.
+<code>.Resources(...)</code> overrides find the theme the same way (the nearest
+<code>RequestedTheme</code> up the tree, then <code>ActualTheme</code>, then
+<code>Application.RequestedTheme</code>), and <code>ThemeRef.Resolve(key, isDark)</code> uses
+the theme you pass. Both ask WinUI to resolve the key for that theme, as a
+<code>{ThemeResource}</code> reference on an element in that theme would. Reactor
+reads an app's own theme dictionaries itself only when WinUI can't find
+the key for that theme.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ThemeRefGood</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">Component</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="p">{</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="k">override</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="nf">Render</span><span class="p">()</span><span class="w"> </span><span class="o">=&gt;</span>
