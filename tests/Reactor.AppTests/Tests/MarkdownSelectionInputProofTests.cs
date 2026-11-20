@@ -158,6 +158,11 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             var customGlyph = Glyph(customLinkRange, 2);
             double customX = customGlyph[0] + customGlyph[2] / 2;
             double customY = customGlyph[1] + customGlyph[3] / 2;
+            var customDragGlyph = Glyph(customLinkRange, 9);
+            double customDragX = customDragGlyph[0] + customDragGlyph[2] / 2;
+            double customDragY = customDragGlyph[1] + customDragGlyph[3] / 2;
+            Console.WriteLine($"Custom link drag screen positions: ({customX},{customY}) to ({customDragX},{customDragY})");
+            Assert.IsTrue(Math.Abs(customDragX - customX) > 4, "Custom link glyphs must be farther apart than the drag threshold");
             Click(customX, customY);
             Wait(() => customButton.Current.HelpText == "Custom clicks 1", "custom link button click");
             Thread.Sleep((int)GetDoubleClickTime() + 1);
@@ -168,8 +173,10 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal) &&
                 outerText.GetSelection().Single().GetText(-1) == "",
                 "custom button press was routed without selecting a word");
-            var customDragGlyph = Glyph(customLinkRange, 9);
-            Point(customDragGlyph[0] + customDragGlyph[2] / 2, customDragGlyph[1] + customDragGlyph[3] / 2);
+            Point(customDragX, customDragY);
+            Assert.IsTrue(GetCursorPos(out var customDragCursor));
+            Assert.IsTrue(Math.Abs(customDragCursor.X - customDragX) <= 1 &&
+                Math.Abs(customDragCursor.Y - customDragY) <= 1, "Cursor reached the second custom link glyph");
             Console.WriteLine($"Custom button drag before release: routing={outer.Current.HelpText}");
             Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
                 "custom link button drag selects before release");

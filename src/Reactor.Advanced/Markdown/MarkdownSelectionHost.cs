@@ -1150,6 +1150,10 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private static IEnumerable<TextSegment> SurfaceTextSegments(MarkdownSelectionMarker marker)
     {
         if (!marker.Metadata.IsLink) return TextSegments(marker);
+        // A button template's text pointers need not supply distinct caret
+        // positions. Map the semantic label over the clickable control instead.
+        if (marker.Child is ButtonBase button)
+            return [new TextSegment(button, marker.Metadata.Text, null, marker)];
         var native = TextSegments(marker).ToArray();
         return string.Concat(native.Select(s => s.Text)) != marker.Metadata.Text
             ? [new TextSegment(marker.Child as FrameworkElement ?? marker, marker.Metadata.Text, null, marker)]
