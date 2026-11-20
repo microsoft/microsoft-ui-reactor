@@ -12,7 +12,7 @@ public class FixtureRegistryConsistencyTests
     [Theory]
     [InlineData("SelfTest/SelfTestFixtureRegistry.cs", 1000)]
     [InlineData("FixtureRegistry.cs", 50)]
-    public void RegisteredFixtureNamesAreUnique(string registryFile, int minimumCount)
+    public void RegistrationsAreConsistent(string registryFile, int minimumCount)
     {
         var repoRoot = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(repoRoot);
@@ -50,6 +50,15 @@ public class FixtureRegistryConsistencyTests
             var entry = Assert.IsType<TupleExpressionSyntax>(expression);
             var name = ReadName(entry.Arguments[0].Expression);
             Assert.True(names.Add(name), $"{registryFile} registers fixture '{name}' more than once.");
+
+            // The Packaged_ prefix selects the packaged identity checks, and the tier keeps the fixture
+            // out of the unpackaged corpus (issue #1154). Each needs the other.
+            var tier = entry.Arguments.Count > 2 ? entry.Arguments[2].Expression.ToString() : null;
+            var isPackagedName = name.StartsWith("Packaged_", StringComparison.Ordinal);
+            Assert.True(isPackagedName == (tier == "SelfTestTier.Packaged"),
+                isPackagedName
+                    ? $"{registryFile} registers '{name}' without SelfTestTier.Packaged. Add it as the entry's third element."
+                    : $"{registryFile} declares '{name}' as {tier}. Name it with the Packaged_ prefix or drop the tier.");
         }
 
         Assert.True(names.Count >= minimumCount,

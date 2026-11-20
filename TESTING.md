@@ -353,7 +353,7 @@ uses `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E uses
 because it determines SelfTest execution order and shard assignment, and E2E navigation order.
 
 `--list-fixtures` lists only SelfTest fixtures for the current host tier.
-`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names, and that an entry carries `SelfTestTier.Packaged` exactly when its name has the `Packaged_` prefix.
 
 Search the whole host tree for names from TAP output. *Fixture* names are registered in the table,
 and the class they map to is often spelled differently (`CenterOnCurrent_UsesCursorMonitor`
