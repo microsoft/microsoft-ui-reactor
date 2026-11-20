@@ -69,7 +69,8 @@ Conventions for contributors:
   still follows Light/Dark, high contrast and an ancestor `RequestedTheme`, and an explicit brush
   (`.Background(brush)`, a `.Set` setter, an element property) still wins over the ThemeRef. The
   bound value is now a local value, so `ReadLocalValue` reports the resolved brush where it used
-  to report unset. Requires the experimental Windows App SDK channel, like #1125.
+  to report unset. Requires the experimental Windows App SDK channel, like #1125
+  (winui3-integration proposal #22, issue #522).
 
 ### Deprecated
 
@@ -85,11 +86,13 @@ Conventions for contributors:
 ### Fixed
 
 - `SplitView(...).PaneBackground(ThemeRef)` now sets the pane background. The old Style-based
-  ThemeRef path had no mapping for `PaneBackground` and silently did nothing.
+  ThemeRef path had no mapping for `PaneBackground` and silently did nothing. A ThemeRef that
+  replaces an explicit `.PaneBackground(brush)` now takes effect too (winui3-integration proposal #22).
 
 - A ThemeRef background or foreground on an element with `.InteractionStates(...)` keeps
   following the theme after the pointer leaves. Returning to the normal state used to write
-  back the brush captured when the states were set up, which froze the color at that theme.
+  back the brush captured when the states were set up, which froze the color at that theme
+  (winui3-integration proposal #22).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition

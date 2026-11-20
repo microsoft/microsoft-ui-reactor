@@ -5965,8 +5965,16 @@ public sealed partial class Reconciler : IDisposable
         public InteractionStatesConfig Config = null!;
         public Brush? NormalBackground;
         public Brush? NormalForeground;
+        public bool BackgroundOverrideApplied;
+        public bool ForegroundOverrideApplied;
+        // Whether the property was a Reactor theme binding when the state took it over. If the
+        // binding is gone by the time the state ends, the property is cleared rather than given
+        // the resolved brush back as a fixed value.
+        public bool NormalBackgroundThemeBound;
+        public bool NormalForegroundThemeBound;
         public Brush? NormalBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
+        public bool NormalBorderBrushThemeBound;
         public bool BorderBrushOverrideApplied;
     }
 
@@ -6126,44 +6134,17 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
 
-        // Brush properties — direct set. A property returning to its normal value that Reactor
-        // theme-binds gets its binding back rather than the brush captured at setup, which would
-        // freeze it at the theme it had then.
+        // Brush properties — direct set. A state's brush is written over the normal value; when
+        // the state ends, a property Reactor theme-binds gets its binding back rather than the
+        // brush captured at setup, which would freeze it at the theme it had then.
         if (uie is FrameworkElement fe)
         {
-            var bg = values?.Background;
-            if (bg is not null || !TryRestoreThemeBinding(fe, "Background"))
-            {
-                bg ??= tracker.NormalBackground;
-                if (bg is not null)
-                {
-                    if (fe is WinUI.Panel p) p.Background = bg;
-                    else if (fe is WinUI.Control c) c.Background = bg;
-                    else if (fe is WinUI.Border b) b.Background = bg;
-                }
-            }
+            ApplyInteractionBrush(fe, "Background", values?.Background, tracker.NormalBackground,
+                ref tracker.BackgroundOverrideApplied, ref tracker.NormalBackgroundThemeBound);
+            ApplyInteractionBrush(fe, "Foreground", values?.Foreground, tracker.NormalForeground,
+                ref tracker.ForegroundOverrideApplied, ref tracker.NormalForegroundThemeBound);
 
-            var fg = values?.Foreground;
-            if (fg is not null || !TryRestoreThemeBinding(fe, "Foreground"))
-            {
-                fg ??= tracker.NormalForeground;
-                if (fg is not null)
-                {
-                    if (fe is WinUI.Control c) c.Foreground = fg;
-                    else if (fe is TextBlock tb) tb.Foreground = fg;
-                }
-            }
-
-            var borderProperty = fe switch
-            {
-                WinUI.Control => WinUI.Control.BorderBrushProperty,
-                WinUI.Border => WinUI.Border.BorderBrushProperty,
-                WinUI.Grid => WinUI.Grid.BorderBrushProperty,
-                WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
-                WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
-                _ => null,
-            };
-            if (borderProperty is not null)
+            if (GetThemeBindingProperty(fe, "BorderBrush") is { } borderProperty)
             {
                 if (values?.BorderBrush is { } borderBrush)
                 {
@@ -6172,6 +6153,7 @@ public sealed partial class Reconciler : IDisposable
                         // Capture the latest normal value before applying an override.
                         tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
                         tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
+                        tracker.NormalBorderBrushThemeBound = IsThemeBound(fe, "BorderBrush");
                         tracker.BorderBrushOverrideApplied = true;
                     }
                     fe.SetValue(borderProperty, borderBrush);
@@ -6180,7 +6162,7 @@ public sealed partial class Reconciler : IDisposable
                 {
                     if (!TryRestoreThemeBinding(fe, "BorderBrush"))
                     {
-                        if (tracker.NormalBorderBrushHasLocalValue)
+                        if (tracker.NormalBorderBrushHasLocalValue && !tracker.NormalBorderBrushThemeBound)
                             fe.SetValue(borderProperty, tracker.NormalBorderBrush);
                         else
                             fe.ClearValue(borderProperty);
@@ -6188,6 +6170,49 @@ public sealed partial class Reconciler : IDisposable
                     tracker.BorderBrushOverrideApplied = false;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="property"/>,
+    /// or restores the normal value once no state sets it. A theme-bound property is restored only
+    /// when a state actually overrode it, so a pointer transition never re-installs a binding (or
+    /// overwrites another writer) for a property no state touches.
+    /// </summary>
+    private static void ApplyInteractionBrush(
+        FrameworkElement fe, string property, Brush? stateBrush, Brush? normalBrush,
+        ref bool overrideApplied, ref bool normalThemeBound)
+    {
+        if (GetThemeBindingProperty(fe, property) is not { } dp)
+            return;
+        if (stateBrush is not null)
+        {
+            if (!overrideApplied)
+            {
+                normalThemeBound = IsThemeBound(fe, property);
+                overrideApplied = true;
+            }
+            fe.SetValue(dp, stateBrush);
+            return;
+        }
+
+        bool wasOverridden = overrideApplied;
+        overrideApplied = false;
+        if (IsThemeBound(fe, property))
+        {
+            if (wasOverridden)
+                TryRestoreThemeBinding(fe, property);
+        }
+        else if (normalThemeBound)
+        {
+            // The binding was dropped while the state held the property.
+            if (wasOverridden)
+                fe.ClearValue(dp);
+            normalThemeBound = false;
+        }
+        else if (normalBrush is not null)
+        {
+            fe.SetValue(dp, normalBrush);
         }
     }
 
@@ -8212,29 +8237,34 @@ public sealed partial class Reconciler : IDisposable
     /// <paramref name="modifiers"/> are the element's effective modifiers: an explicit brush
     /// modifier for the same property (<c>.Background(brush)</c> next to
     /// <c>.Background(ThemeRef)</c>) wins whatever the call order, as it did against the old
-    /// Style. A null <paramref name="bindings"/> drops every binding the control carries.
-    /// <paramref name="refresh"/> is set on a resource-refresh pass
+    /// Style. <paramref name="refresh"/> is set on a resource-refresh pass
     /// (<c>Theme.NotifyResourcesChanged</c>): a binding resolves its key when installed and only
     /// re-resolves on a theme change or reparent, so an edited dictionary entry is picked up by
-    /// installing it again.
+    /// installing it again. <paramref name="snapshot"/> holds the bound properties' local values
+    /// from before this Update's setters and element properties ran (see
+    /// <see cref="SnapshotThemeBindings"/>), so a binding one of them replaced is handed over
+    /// rather than installed again.
     /// </summary>
     internal static void ApplyThemeBindings(
         FrameworkElement fe,
-        IReadOnlyDictionary<string, ThemeRef>? bindings,
+        IReadOnlyDictionary<string, ThemeRef> bindings,
         ElementModifiers? modifiers,
-        bool refresh = false)
+        bool refresh = false,
+        ThemeBindingSnapshot snapshot = default)
     {
         var state = TryGetReactorState(fe, out var existingState) ? existingState : null;
         var bound = state?.ThemeResourceBindings;
 
-        // Drop bindings the element no longer declares. ApplyModifiers runs first, so a
-        // property an explicit modifier now owns already holds the modifier's brush: keep it.
+        // Drop bindings the element no longer declares. The reconciler already did this before
+        // the element's setters ran (ClearDroppedThemeBindings); this covers direct callers.
+        // ApplyModifiers runs first, so a property an explicit modifier now owns already holds
+        // the modifier's brush: keep it.
         if (bound is { Count: > 0 })
         {
             List<string>? stale = null;
             foreach (var name in bound.Keys)
             {
-                if (bindings is null || !bindings.ContainsKey(name))
+                if (!bindings.ContainsKey(name))
                     (stale ??= new List<string>()).Add(name);
             }
             if (stale is not null)
@@ -8248,8 +8278,6 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (bindings is null) return;
-
         foreach (var (name, themeRef) in bindings)
         {
             var dp = GetThemeBindingProperty(fe, name);
@@ -8262,12 +8290,20 @@ public sealed partial class Reconciler : IDisposable
                 continue;
             }
 
-            bool hasLocal = !ReferenceEquals(fe.ReadLocalValue(dp), DependencyProperty.UnsetValue);
+            var local = fe.ReadLocalValue(dp);
+            bool hasLocal = !ReferenceEquals(local, DependencyProperty.UnsetValue);
             if (bound is not null && bound.TryGetValue(name, out var boundKey))
             {
+                if (hasLocal && snapshot.WasReplaced(fe, name, local))
+                {
+                    // A setter or element property wrote over the binding during this render.
+                    // It wins, as a local value beat the old Style, and Reactor stops owning it.
+                    bound.Remove(name);
+                    continue;
+                }
                 // The binding is live. Installing it again would only replace a value written
-                // over it since (an InteractionStates brush, a setter), so re-bind only when the
-                // key changed, the value was cleared, or a refresh asks for re-resolution.
+                // over it outside a render (an InteractionStates brush), so re-bind only when
+                // the key changed, the value was cleared, or a refresh asks for re-resolution.
                 if (hasLocal && !refresh && string.Equals(boundKey, themeRef.ResourceKey, StringComparison.Ordinal))
                     continue;
             }
@@ -8297,12 +8333,84 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Issue #522 — counterpart to <see cref="ApplyThemeBindings(FrameworkElement, IReadOnlyDictionary{string, ThemeRef})"/>.
-    /// When an element on a recycled control transitions from having
-    /// <see cref="Element.ThemeBindings"/> to none, clear the properties Reactor bound so
-    /// e.g. the red Foreground from an Error arm does not bleed into a subsequent
-    /// Loading / Data render. Only those properties are cleared: an author <c>Style</c>, and
-    /// properties Reactor never bound, are left alone.
+    /// The local values of a control's theme-bound properties, read by Update before the
+    /// element's setters and element properties run. <c>ApplyThemeBindings</c> runs after them,
+    /// and a value that changed in between was written over the binding during this render.
+    /// </summary>
+    internal readonly struct ThemeBindingSnapshot
+    {
+        private readonly (string Name, object? Local)[]? _values;
+        private readonly ElementTheme _theme;
+
+        internal ThemeBindingSnapshot((string Name, object? Local)[] values, ElementTheme theme)
+        {
+            _values = values;
+            _theme = theme;
+        }
+
+        /// <summary>
+        /// Whether <paramref name="property"/>'s local value is no longer the one read before
+        /// this render's writes. A change of the control's own effective theme in between (its
+        /// <c>RequestedTheme</c> modifier) re-resolves the binding instead, so that case still
+        /// counts as Reactor's.
+        /// </summary>
+        internal bool WasReplaced(FrameworkElement fe, string property, object? local)
+        {
+            if (_values is null) return false;
+            foreach (var (name, before) in _values)
+            {
+                if (string.Equals(name, property, StringComparison.Ordinal))
+                    return !ReferenceEquals(before, local) && fe.ActualTheme == _theme;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>Reads <see cref="ThemeBindingSnapshot"/> for <paramref name="fe"/>; empty when nothing is bound.</summary>
+    internal static ThemeBindingSnapshot SnapshotThemeBindings(FrameworkElement fe)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { Count: > 0 } bound)
+            return default;
+        var values = new (string Name, object? Local)[bound.Count];
+        int i = 0;
+        foreach (var name in bound.Keys)
+            values[i++] = (name, GetThemeBindingProperty(fe, name) is { } dp ? fe.ReadLocalValue(dp) : null);
+        return new ThemeBindingSnapshot(values, fe.ActualTheme);
+    }
+
+    /// <summary>
+    /// Issue #522 — clears the theme bindings an Update's new element no longer declares
+    /// (<paramref name="keep"/> null drops them all), so e.g. the red Foreground from an Error
+    /// arm does not bleed into a subsequent Loading / Data render on the recycled control. Runs
+    /// before the element's setters and element properties, so a brush one of them writes in
+    /// place of a dropped ThemeRef survives. Only bound properties are cleared: an author
+    /// <c>Style</c>, and properties Reactor never bound, are left alone. A property an
+    /// InteractionStates state currently holds keeps that brush; the state's restore clears it.
+    /// </summary>
+    internal static void ClearDroppedThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef>? keep)
+    {
+        if (!TryGetReactorState(fe, out var state) || state.ThemeResourceBindings is not { } bound)
+            return;
+        List<string>? dropped = null;
+        foreach (var name in bound.Keys)
+        {
+            if (keep is null || !keep.ContainsKey(name))
+                (dropped ??= new List<string>()).Add(name);
+        }
+        if (dropped is null) return;
+        foreach (var name in dropped)
+        {
+            bound.Remove(name);
+            if (!IsInteractionOverrideActive(fe, name) && GetThemeBindingProperty(fe, name) is { } dp)
+                fe.ClearValue(dp);
+        }
+        if (bound.Count == 0)
+            state.ThemeResourceBindings = null;
+    }
+
+    /// <summary>
+    /// Clears every property Reactor theme-bound on <paramref name="fe"/>, for a control returning
+    /// to the pool (issue #522): a renter must not inherit the previous element's brushes.
     ///
     /// <para>Ownership lives in <see cref="ReactorState.ThemeResourceBindings"/> on the native
     /// control, so it survives a collected managed wrapper, unlike a
@@ -8319,6 +8427,18 @@ public sealed partial class Reconciler : IDisposable
                 fe.ClearValue(dp);
         }
     }
+
+    private static bool IsThemeBound(FrameworkElement fe, string property) =>
+        TryGetReactorState(fe, out var state) && state.ThemeResourceBindings?.ContainsKey(property) == true;
+
+    private static bool IsInteractionOverrideActive(FrameworkElement fe, string property) =>
+        _interactionTrackers.TryGetValue(fe, out var tracker) && property switch
+        {
+            "Background" => tracker.BackgroundOverrideApplied,
+            "Foreground" => tracker.ForegroundOverrideApplied,
+            "BorderBrush" => tracker.BorderBrushOverrideApplied,
+            _ => false,
+        };
 
     /// <summary>
     /// Re-installs the theme binding on <paramref name="property"/> when Reactor bound it, for

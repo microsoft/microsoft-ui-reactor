@@ -145,7 +145,7 @@ internal static class Issue522TextBlockStyleResetFixture
     /// The <c>.Foreground(ThemeRef(...))</c> path installs a theme-resource
     /// binding; when the next render drops it the recycler must clear the bound
     /// property on the same recycled control (in-place — no full remount so
-    /// subtree state is preserved). See <c>Reconciler.ClearThemeBindings</c>.
+    /// subtree state is preserved). See <c>Reconciler.ClearDroppedThemeBindings</c>.
     /// </summary>
     internal class ThemeForegroundClearedOnRemoval(Harness h) : SelfTestFixtureBase(h)
     {

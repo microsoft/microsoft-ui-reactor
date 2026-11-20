@@ -1495,7 +1495,7 @@ public abstract record Element
     // remove/change side of the contract. Returning false here routes the element through
     // full Update, where ApplyResourceOverrides(old, new) strips the dropped managed key
     // and applies the new value. This is symmetric with the ThemeBindings transition-away
-    // handling (ShallowEquals catches it + ClearThemeBindings on the Update path). Gated
+    // handling (ShallowEquals catches it + ClearDroppedThemeBindings on the Update path). Gated
     // behind the no-extras fast-path in ShallowEquals, so override-free cells pay nothing.
     // The CanSkipUpdate ThemeRefs gate is still required for the STEADY-STATE case (same
     // overrides, effective theme changed → ShallowEquals stays true → the gate forces the
@@ -5055,11 +5055,13 @@ public partial record SplitViewElement(
             },
         });
         return d
-            .OneWayConditional(
-                get:         static e => e.PaneBackground,
-                set:         static (c, v) => c.PaneBackground = v!,
-                shouldWrite: static e => e.PaneBackground is not null,
-                comparer:    SplitViewBrushReferenceComparer.Instance)
+            // Clearing a removed brush (rather than leaving it, as OneWayConditional does) lets a
+            // `.PaneBackground(ThemeRef)` that replaces it bind the property.
+            .OneWay(
+                get:      static e => e.PaneBackground is { } b ? Optional<Brush?>.Of(b) : Optional<Brush?>.Unset,
+                set:      static (c, v) => c.PaneBackground = v!,
+                dp:       WinUI.SplitView.PaneBackgroundProperty,
+                comparer: SplitViewBrushReferenceComparer.Instance)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitViewEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.SplitView, object>>(
                 subscribe:        static (c, h) => c.PaneOpening += h,
