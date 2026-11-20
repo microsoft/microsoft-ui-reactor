@@ -3734,8 +3734,17 @@ computation is itself behind the gate.</p>
 <p><code>ReconcileStop</code> is the most-consumed event in the catalog — every
 <a href="../reconciliation/">reconcile pass</a> emits exactly one of these, and
 the four counters (elements diffed, elements skipped, UI elements
-created, UI elements modified) are the per-pass cost summary that
-the <code>perf</code> CLI verbs read. Pairing <code>ReconcileStart</code> (event id 1) with
+created, UI elements modified) are the per-pass cost summary. A
+<code>dotnet-trace</code> or PerfView capture of <code>Microsoft-UI-Reactor</code> reads
+them off the payload, and so does an in-process
+<code>ReactorTrace.Subscribe</code> callback. The same reconciler counters also
+surface without a trace as <code>LastDiffed</code>, <code>LastSkipped</code>, <code>LastCreated</code>
+and <code>LastModified</code> on <code>ReactorHost.Stats</code> and <code>ReactorHostControl.Stats</code>
+(<code>RenderStats</code>), sampled about once a second from the latest pass. The raw
+<code>Microsoft-UI-Reactor-Perf</code> provider that <code>winapp perf</code> records does
+not carry them; its reconcile span counts child edits instead (see
+<a href="#recording-without-elevation">Recording without elevation</a>).
+Pairing <code>ReconcileStart</code> (event id 1) with
 <code>ReconcileStop</code> (event id 2) over <code>Task = Tasks.Reconcile</code> with
 <code>Start</code> / <code>Stop</code> opcodes is what makes the pair show up as a
 duration band in PerfView's timeline view instead of as two
