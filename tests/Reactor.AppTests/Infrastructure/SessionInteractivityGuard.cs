@@ -11,6 +11,16 @@ public enum SessionInteractivity
     Unknown,
 }
 
+public sealed record InputCapabilitySnapshot(
+    bool Succeeded, int NativeError, DateTimeOffset ProbeCompletedAtUtc,
+    DateTimeOffset? ContextStartedAtUtc, int? CallerProcessId, uint? CallerNativeThreadId,
+    int? CallerSessionId, string Context);
+
+internal readonly record struct CursorObservation(bool Succeeded, int NativeError, DateTimeOffset CompletedAtUtc);
+
+internal sealed record InputCapabilityContext(
+    DateTimeOffset StartedAtUtc, int ProcessId, uint NativeThreadId, int? SessionId, string Description);
+
 /// <summary>
 /// Detects when the test process can no longer drive the desktop — workstation
 /// locked, idle/timeout lock, or RDP/console disconnect. These conditions cause
@@ -192,40 +202,102 @@ public static partial class SessionInteractivityGuard
     }
 
     /// <summary>
-    /// True when this process can inject synthetic input (mouse/keyboard) onto the
-    /// active input desktop. A non-uiAccess process running off the interactive input
-    /// desktop — a disconnected/headless session, Session 0, or a remote session with
-    /// no console — gets ERROR_ACCESS_DENIED from <c>GetCursorPos</c>/<c>SendInput</c>
-    /// (the same UIPI boundary that makes winapp's own <c>click</c> verb fail here).
-    /// WinAppDriver dodged this because it ships as a signed <c>uiAccess="true"</c>
-    /// binary; winapp's native input verbs (<c>click</c>/<c>send-keys</c>/<c>drag</c>)
-    /// use raw SendInput under the hood and have no such privilege.
+    /// Retains the existing cursor-readability predicate. A successful cursor query
+    /// is a readiness prerequisite, not proof of foreground ownership or permission
+    /// for a later SendInput call. Use CaptureInputCapability for diagnostic evidence.
     /// </summary>
-    public static bool CanInjectInput() => GetCursorPos(out _);
+    public static bool CanInjectInput() => ProbeCursor().Succeeded;
 
     /// <summary>
-    /// Gate for the input-injection tests (real keystrokes / drag / tap). When the
-    /// process can't reach the input desktop, every native winapp <c>click</c>/<c>send-keys</c>/
-    /// <c>drag</c> call is silently swallowed (SendInput returns 0 / ACCESS_DENIED), which would
-    /// surface as a misleading assertion timeout. We mark those tests Inconclusive — not Failed —
-    /// exactly like the locked-desktop guard, because the failure is environmental.
-    /// On a real interactive desktop these tests execute normally.
+    /// Reads the cursor once, retaining its error before any context queries. This does
+    /// not call GetState, retry, switch desktops, activate a window or dispatch input.
+    /// Context is sampled afterward and is explicitly not an atomic readiness snapshot.
     /// </summary>
-    public static void EnsureInputInjectable(string operation)
+    public static InputCapabilitySnapshot CaptureInputCapability() =>
+        CompleteCursorObservation(ProbeCursor(), CaptureInputContext);
+
+    private static CursorObservation ProbeCursor() =>
+        ObserveCursor(static () => GetCursorPos(out _), Marshal.GetLastPInvokeError, static () => DateTimeOffset.UtcNow);
+
+    internal static CursorObservation ObserveCursor(
+        Func<bool> queryCursor, Func<int> readLastError, Func<DateTimeOffset> clock)
     {
-        if (CanInjectInput())
+        bool succeeded = queryCursor();
+        int error = readLastError();
+        return new CursorObservation(succeeded, error, clock());
+    }
+
+    internal static InputCapabilitySnapshot CompleteCursorObservation(
+        CursorObservation cursor, Func<InputCapabilityContext> readContext)
+    {
+        try
+        {
+            var context = readContext();
+            return new(cursor.Succeeded, cursor.NativeError, cursor.CompletedAtUtc,
+                context.StartedAtUtc, context.ProcessId, context.NativeThreadId, context.SessionId,
+                $"Metadata sampled after cursor probe; not atomic. {context.Description}");
+        }
+        catch (Exception error) when (error is global::System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+        {
+            return new(cursor.Succeeded, cursor.NativeError, cursor.CompletedAtUtc, null, null, null, null,
+                $"Post-probe metadata unavailable: {error.GetType().Name}: {error.Message}");
+        }
+    }
+
+    private static InputCapabilityContext CaptureInputContext()
+    {
+        var started = DateTimeOffset.UtcNow;
+        int pid = Environment.ProcessId;
+        uint tid = GetCurrentThreadId();
+        int? session = null;
+        string sessionError = "";
+        try
+        {
+            using var process = global::System.Diagnostics.Process.GetCurrentProcess();
+            session = process.SessionId;
+        }
+        catch (Exception error) when (error is global::System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+        {
+            sessionError = $"; session unavailable: {error.GetType().Name}: {error.Message}";
+        }
+
+        var threadDesktop = GetThreadDesktop(tid);
+        string threadDesktopName = threadDesktop == IntPtr.Zero
+            ? $"unavailable(err={Marshal.GetLastPInvokeError()})"
+            : ReadObjectName(threadDesktop) ?? "<name unavailable>";
+        // GetThreadDesktop returns a borrowed handle; do not close or switch it.
+        return new(started, pid, tid, session,
+            $"threadDesktop={threadDesktopName}; {Diagnose()}{sessionError}");
+    }
+
+    /// <summary>
+    /// Preserves the existing fail-closed classification: an unsuccessful cursor
+    /// query is Inconclusive, with the captured native error rather than an assumed 5.
+    /// </summary>
+    public static void EnsureInputInjectable(string operation) =>
+        EnsureInputInjectable(operation, ProbeCursor,
+            static cursor => CompleteCursorObservation(cursor, CaptureInputContext));
+
+    internal static void EnsureInputInjectable(string operation,
+        Func<CursorObservation> probeCursor, Func<CursorObservation, InputCapabilitySnapshot> captureContext)
+    {
+        var cursor = probeCursor();
+        if (cursor.Succeeded)
             return;
 
-        Assert.Inconclusive(
-            $"Cannot perform '{operation}': this process cannot inject synthetic input " +
-            "onto the interactive desktop (GetCursorPos/SendInput return ACCESS_DENIED). " +
-            "That happens in a disconnected/headless/Session-0 context, or for any " +
-            "non-uiAccess process under UIPI — the same boundary that makes winapp's " +
-            "click verb fail here. WinAppDriver bypassed it via its signed uiAccess " +
-            "binary. Treating input-injection tests as Inconclusive (not Failed); they " +
-            "run on a real interactive desktop. The native winapp send-keys/drag verbs " +
-            "used here are themselves SendInput under the hood, so this environmental gate " +
-            "still applies.");
+        var snapshot = captureContext(cursor);
+        string detail = cursor.NativeError switch
+        {
+            0 => "no extended error code was reported",
+            ERROR_ACCESS_DENIED => "ERROR_ACCESS_DENIED was reported",
+            _ => "native error captured; cause not inferred"
+        };
+        string pid = snapshot.CallerProcessId?.ToString() ?? "<unavailable>";
+        string tid = snapshot.CallerNativeThreadId?.ToString() ?? "<unavailable>";
+        string session = snapshot.CallerSessionId?.ToString() ?? "<unavailable>";
+        string contextTime = snapshot.ContextStartedAtUtc?.ToString("O") ?? "<unavailable>";
+        Assert.Inconclusive(FormattableString.Invariant(
+            $"Cannot perform '{operation}': GetCursorPos returned false; nativeError={cursor.NativeError} ({detail}). Probe completed={cursor.CompletedAtUtc:O}. Caller PID={pid}; native TID={tid}; session={session}; context started={contextTime}. {snapshot.Context} No input was dispatched by this check. Treating the input test as Inconclusive."));
     }
 
     /// <summary>
@@ -293,6 +365,12 @@ public static partial class SessionInteractivityGuard
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetCursorPos(out POINT lpPoint);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial uint GetCurrentThreadId();
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    private static partial IntPtr GetThreadDesktop(uint dwThreadId);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial IntPtr GetProcessWindowStation();

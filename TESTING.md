@@ -1068,8 +1068,20 @@ Headless preparation (no host launch or package registration):
 ```powershell
 dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
 dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
-dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InputCapabilityDiagnosticsTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
 ```
+
+For a separately authorized read-only readiness capture,
+`SessionInteractivityGuard.CaptureInputCapability()` records one `GetCursorPos`
+result and its immediate native error before sampling caller/desktop metadata.
+Error zero on a failed call is reported as unknown, never fabricated as
+`ACCESS_DENIED`. Metadata is labeled as later, non-atomic context; it does not
+prove the reason for the earlier result. `GetState()` remains a separate probe:
+`Active` does not establish that its WTS query succeeded or guarantee foreground
+ownership, and cursor readability does not prove a future input call is allowed.
+The existing failure remains Inconclusive and prevents dispatch without retry.
+`InputCapabilityDiagnosticsTests` checks this reporting with fake observations,
+without making native readiness calls.
 
 Compilation and headless helper tests are **not runtime input passes**. To execute
 the new cases, obtain explicit authorization for an unlocked, interactive Windows
