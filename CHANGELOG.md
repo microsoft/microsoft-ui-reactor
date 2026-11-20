@@ -135,6 +135,18 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Resolving a theme resource for the theme the app is not using returns that theme's
+  brush and no longer changes the brush for the whole app (issue #1534).** WinUI creates a
+  theme dictionary entry the first time it is read, using the app's theme. Reactor read the
+  entries from code, so in a Light app `ThemeRef.Resolve("ControlFillColorSecondaryBrush",
+  isDark: true)` returned the Light color, and every Dark element using that key showed the
+  Light color from then on. Most theme keys were affected in both directions. The same lookup
+  backed `.Resources(...)` overrides with theme tokens under an element with the other
+  `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
+  the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
+  only reads the dictionaries itself when WinUI cannot find the key for that theme, never
+  reading WinUI's own `XamlControlsResources` that way.
+
 - `ThemeRef` modifiers that go through the synthesized `{ThemeResource}` Style, ported from
   the `SetThemeResourceBinding` work in PR #1618 so they don't wait for a new Windows App SDK
   (PR #1636):
