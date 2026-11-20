@@ -8668,8 +8668,7 @@ public sealed partial class Reconciler : IDisposable
     /// The key is quoted, so commas, braces, '=' and spaces survive markup-extension parsing.
     /// Inside the quotes a backslash escapes the next character, so it is doubled. A backslash
     /// does not escape the quote character itself, so a key containing ' is quoted with ".
-    /// The same rules as the ThemeRef probe in PR #1633; one helper should serve both once it
-    /// lands.
+    /// Shared with the ThemeRef probe (<see cref="ThemeResourceProbe"/>).
     /// </remarks>
     internal static string? FormatThemeResourceReference(string? resourceKey)
     {
