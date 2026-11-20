@@ -1339,6 +1339,15 @@ public static partial class ReactorApp
             {
                 RootMountSite = rootMountSite,
             };
+            // Checked here, not in the package: a Devtools package from another release can fail to
+            // JIT TryHandleCommandLine against this core and would crash before its own check ran.
+            if (DevtoolsPackageMismatchMessage(host.GetType().Assembly) is { } mismatch)
+            {
+                Console.Error.WriteLine(mismatch);
+                Environment.ExitCode = 2;
+                if (exitOnUnavailable) Environment.Exit(2);
+                return true;
+            }
             return host.TryHandleCommandLine(request);
         }
 
@@ -1351,26 +1360,60 @@ public static partial class ReactorApp
 
     private static void EmitDevtoolsNotAvailableMessage()
     {
+        var packageReference =
+            $"  <PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Version=\"{ReactorPackageVersion()}\" Condition=\"'$(Configuration)' == 'Debug'\" />";
         if (!ReactorFeatures.IsDevtoolsSupported)
         {
+            // The switch is on by default in Debug, so this branch is a non-Debug build (or an
+            // explicit opt-out): lead with the build that works, not with a snippet for this one.
             Console.Error.WriteLine(
-                "[reactor] The in-app preview host (--devtools run / --preview) needs the Reactor.DevtoolsSupport switch, which this build has off. " +
-                "It is on by default in Debug; for this configuration, add the following to your csproj and rebuild:");
-            Console.Error.WriteLine("  <ReactorDiagnostics>true</ReactorDiagnostics>");
+                "[reactor] The in-app preview host (--devtools run / --preview) is off in this build: it needs the Reactor.DevtoolsSupport switch, which is on only in Debug. " +
+                "Run a Debug build instead, for example `dotnet run -c Debug -- --preview <Name>`. It also needs the Microsoft.UI.Reactor.Devtools package, referenced for Debug:");
+            Console.Error.WriteLine(packageReference);
             Console.Error.WriteLine(
-                "  (or <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />, which an explicit ReactorDiagnostics=false overrides)");
+                "[reactor] To use it in this configuration anyway, add <ReactorDiagnostics>true</ReactorDiagnostics> to the csproj and drop the Condition from the reference. Don't ship a build made that way.");
         }
         else
         {
             Console.Error.WriteLine(
                 "[reactor] The in-app preview host (--devtools run / --preview) needs the Microsoft.UI.Reactor.Devtools package, which this app does not reference. " +
-                "Add it for Debug builds, at the same version as Microsoft.UI.Reactor, and rebuild:");
+                "Add it at the same version as Microsoft.UI.Reactor, and rebuild:");
+            Console.Error.WriteLine(packageReference);
             Console.Error.WriteLine(
-                $"  <PackageReference Include=\"Microsoft.UI.Reactor.Devtools\" Version=\"{ReactorPackageVersion()}\" Condition=\"'$(Configuration)' == 'Debug'\" />");
+                "[reactor] (The Condition keeps it out of Release. If you turned ReactorDiagnostics on outside Debug, drop the Condition for that build.)");
         }
         Console.Error.WriteLine(
             "[reactor] The in-app preview host is deprecated and kept for component previews (--preview <Name>) and the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");
     }
+
+    /// <summary>
+    /// The message for a Microsoft.UI.Reactor.Devtools assembly from another build than this
+    /// core, or <c>null</c> when they match (or the host is not the package, e.g. a test host).
+    /// </summary>
+    internal static string? DevtoolsPackageMismatchMessage(global::System.Reflection.Assembly hostAssembly)
+    {
+        if (!string.Equals(hostAssembly.GetName().Name, "Microsoft.UI.Reactor.Devtools", StringComparison.Ordinal))
+            return null;
+        return DevtoolsPackageMismatchMessage(InformationalVersion(typeof(ReactorApp).Assembly), InformationalVersion(hostAssembly));
+    }
+
+    internal static string? DevtoolsPackageMismatchMessage(string coreVersion, string devtoolsVersion)
+    {
+        if (string.Equals(coreVersion, devtoolsVersion, StringComparison.Ordinal))
+            return null;
+        return
+            "[reactor] Microsoft.UI.Reactor and Microsoft.UI.Reactor.Devtools are from different builds, so the preview host can't start." + Environment.NewLine +
+            $"[reactor]   Microsoft.UI.Reactor:          {coreVersion}" + Environment.NewLine +
+            $"[reactor]   Microsoft.UI.Reactor.Devtools: {devtoolsVersion}" + Environment.NewLine +
+            $"[reactor] Reference Microsoft.UI.Reactor.Devtools at Version=\"{coreVersion.Split('+')[0]}\". " +
+            "With 0.0.0-local packages, run `mur pack-local`, delete bin/obj for this app, then restore and build again.";
+    }
+
+    private static string InformationalVersion(global::System.Reflection.Assembly assembly) =>
+        global::System.Reflection.CustomAttributeExtensions
+            .GetCustomAttribute<global::System.Reflection.AssemblyInformationalVersionAttribute>(assembly)?.InformationalVersion
+        ?? assembly.GetName().Version?.ToString()
+        ?? "<unknown>";
 
     /// <summary>The package version of Microsoft.UI.Reactor (informational version without the commit suffix).</summary>
     private static string ReactorPackageVersion()

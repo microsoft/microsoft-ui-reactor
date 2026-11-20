@@ -751,6 +751,35 @@ public class DevtoolsHostCliTests
 #pragma warning restore IL2026
     }
 
+    // The preview reports Run's call site only for the root that call mounts.
+    [Fact]
+    public void PreviewRootMountSite_KeepsRunSiteOnlyForTheAppsOwnRoot()
+    {
+        var site = new SourceLocation("App.cs", 12, 0);
+
+        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), typeof(AppRoot)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), typeof(OtherComponent)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, hostRoot: null, typeof(OtherComponent)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(runSite: null, typeof(AppRoot), typeof(AppRoot)));
+    }
+
+    // An older Devtools package can't JIT against this core, so core compares the builds first.
+    [Fact]
+    public void DevtoolsPackageMismatch_ReportsBothVersions_AndTheVersionToReference()
+    {
+        Assert.Null(ReactorApp.DevtoolsPackageMismatchMessage("0.2.0+abc", "0.2.0+abc"));
+
+        var message = ReactorApp.DevtoolsPackageMismatchMessage("0.2.0+abc", "0.1.1+def");
+        Assert.NotNull(message);
+        Assert.Contains("0.1.1+def", message);
+        Assert.Contains("Version=\"0.2.0\"", message);
+
+        // Only the real package is checked: a host from any other assembly (a test fake) is not.
+        Assert.Null(ReactorApp.DevtoolsPackageMismatchMessage(typeof(DevtoolsHostCliTests).Assembly));
+        Assert.Null(ReactorApp.DevtoolsPackageMismatchMessage(typeof(DevtoolsHost).Assembly));
+        Assert.NotNull(ReactorApp.DevtoolsPackageMismatchMessage("0.2.0", "0.2.0-local"));
+    }
+
     // --x/--y place the capture window on a monitor whose scale matches the
     // repo's capture convention when that is not the primary display. Capture is
     // PrintWindow over the live HWND in physical pixels, so the monitor's DPI is

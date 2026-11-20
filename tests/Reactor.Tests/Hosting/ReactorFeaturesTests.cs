@@ -94,9 +94,11 @@ public class ReactorFeaturesTests
                 height: 240);
 
             Assert.True(consumed);
-            Assert.Contains(
-                "RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\"",
-                stderr.ToString());
+            // Outside Debug, lead with the build that works, and name both requirements at once.
+            var text = stderr.ToString();
+            Assert.Contains("dotnet run -c Debug", text);
+            Assert.Contains("PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"", text);
+            Assert.Contains("<ReactorDiagnostics>true</ReactorDiagnostics>", text);
             Assert.False(ReactorApp.DevtoolsEnabled);
         }
         finally

@@ -171,4 +171,37 @@ internal static class ReferenceOverlaySelfHostFixtures
             H.Check("ReferenceOverlay_NodeIds_AllUnique", ids.Count > 2 && ids.Distinct(StringComparer.Ordinal).Count() == ids.Count);
         }
     }
+
+    /// <summary>
+    /// TASK-013: the node and depth caps keep a runaway tree from pinning the dispatcher.
+    /// The same tree is walked uncapped (control), with a node cap below its size, and with a
+    /// depth cap above the root but below the TextBlocks.
+    /// </summary>
+    internal sealed class WalkCapsBoundTheWalk(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(Enumerable.Range(0, 12).Select(i => (Microsoft.UI.Reactor.Core.Element)TextBlock($"Ovl_Cap_{i}")).ToArray()));
+
+            await Harness.Render();
+            var rendered = await Harness.WaitFor(() =>
+                H.FindControl<WinUI.TextBlock>(t => t.Text == "Ovl_Cap_11") is not null);
+
+            var full = new TreeWalker("main");
+            full.Walk(H.Window.Content);
+            var allTextBlocks = full.WalkedElements.OfType<WinUI.TextBlock>().Count(t => t.Text.StartsWith("Ovl_Cap_", StringComparison.Ordinal));
+
+            var nodeCapped = new TreeWalker("main", maxNodes: 5, maxDepth: TreeWalker.MaxDepth);
+            nodeCapped.Walk(H.Window.Content);
+
+            var depthCapped = new TreeWalker("main", maxNodes: TreeWalker.MaxNodes, maxDepth: 1);
+            depthCapped.Walk(H.Window.Content);
+
+            H.Check("ReferenceOverlay_WalkCaps_UncappedWalkSeesEveryTextBlock", rendered && allTextBlocks == 12 && full.WalkedElements.Count > 12);
+            H.Check("ReferenceOverlay_WalkCaps_NodeCapStopsTheWalk", nodeCapped.WalkedElements.Count is > 0 and <= 5);
+            H.Check("ReferenceOverlay_WalkCaps_DepthCapStopsDescent",
+                depthCapped.WalkedElements.Count > 0 && !depthCapped.WalkedElements.OfType<WinUI.TextBlock>().Any());
+        }
+    }
 }

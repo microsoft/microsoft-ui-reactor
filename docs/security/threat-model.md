@@ -74,7 +74,7 @@ Developer machine
 Three things to notice:
 
 1. **Reactor.dll runs inside the consuming app's process.** It has no separate process, no service, no daemon.
-2. The dev-time HTTP servers and the `mur` CLI are *not* shipped to end users. They are developer-loop tooling; in a production app build the developer simply doesn't pass `--preview` / `--devtools` and the servers never instantiate.
+2. The dev-time preview capture server and the `mur` CLI are *not* shipped to end users. They are developer-loop tooling; in a production app build the developer simply doesn't pass `--preview` / `--devtools` and the server never instantiates.
 3. There is no arrow leaving the box. **There is no Reactor process that talks to the network or to another machine.**
 
 ### 4.1 Artifacts produced
@@ -104,7 +104,7 @@ These are facts about the shipped framework. Each was verified during the 2026-0
 | Asset | Where it lives | Who can reach it | Threat if compromised |
 |---|---|---|---|
 | Consuming-app process integrity | Host EXE memory | Same process, same user | Same as any in-process library defect — code execution at host's trust level |
-| Dev-time loopback ports (preview / devtools) | Localhost, kernel-owned port table | Same-user processes that can read the stdout banner | Read of preview frames; remote-control of the developer's running app window (focus steal, component switch) |
+| Dev-time loopback port (preview capture server) | Localhost, kernel-owned port table | Same-user processes that can read the stdout banner | Read of preview frames; remote-control of the developer's running app window (focus steal, component switch) |
 | Per-launch bearer tokens | Process memory + dev stdout | Same-user, same-machine | Same as above — token *is* the dev surface's auth |
 | Source-ported OSS (Yoga, md4c, D3) | Repo source, compiled into Reactor.dll | Anyone who can submit a PR | Smuggled defect in a parser — runs at consuming-app trust level |
 
@@ -160,7 +160,7 @@ The in-app MCP server, its stdio variant and its per-project lockfile have been 
 | Same-machine other-user attack | Loopback is per-machine; segregation between user accounts on Windows means another local user could reach it but lacks the bearer token (token never written outside the process owner's stdout) | `GenerateToken` |
 | Token brute-force | 256-bit random from `RandomNumberGenerator.Fill`; constant-time compare; per-launch (no replay across runs) | `GenerateToken`, `BearerMatches` |
 | DNS rebinding (web-page tricks browser into requesting a `127.0.0.1` URL with attacker-controlled Host) | Host header allow-list enforced before auth: rejects with 421 anything other than `127.0.0.1:<port>` / `localhost:<port>` | `IsAllowedHost` |
-| Cross-origin browser CSRF | (a) Origin allow-list parsed via `Uri` (not `StartsWith`); (b) state-mutating endpoints require POST + `Content-Type: application/json` (not a CORS "simple request") | `IsAllowedOrigin`, `HandleSwitchComponent` |
+| Cross-origin browser CSRF | (a) Origin allow-list parsed via `Uri` (not `StartsWith`); (b) state-mutating endpoints are POST-only; `/preview` and `/embed/*` also require `Content-Type: application/json` (not a CORS "simple request"), and `/focus` relies on the required `Authorization` header, which is not CORS-safelisted either | `IsAllowedOrigin`, `HandleSwitchComponent`, `TryReadEmbedJson`, `HandleFocus` |
 | Reflected XSS via `<img src=…/focus>` | `/focus` is POST-only (returns 405 for GET) | `HandleFocus` |
 | Slow-loris / connection exhaustion | `HeaderWait`, `EntityBody`, `IdleConnection`, `RequestQueue` all bounded at 10–15 s | `Start` |
 | Threadpool exhaustion | 16-way dispatch gate; over-quota requests get HTTP 503 with `Retry-After: 1` | `_dispatchGate`, `ListenAsync` |

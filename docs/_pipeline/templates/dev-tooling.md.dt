@@ -222,7 +222,7 @@ or `headless`).
 kinds, keys, and the `App.cs:67` call site of each element — across every window.
 Reactor selectors such as `"<Counter>/Button"`, `key=t1`, and `App.cs:67` work in
 both `winapp devtools` and `winapp ui`. AI agents use the same CLI with `--json`
-and the `winui-devtools` skill; the MCP server is not carried over. Add `--watch` to `winapp run` to rebuild on rude edits and re-attach DevTools automatically.
+and the `winui-devtools` skill; the MCP server is not carried over. Use `--watch` instead of `--detach` to rebuild on rude edits and re-attach DevTools automatically (winapp doesn't combine the two).
 
 | `mur devtools` (removed) | use instead |
 |---|---|
@@ -357,7 +357,8 @@ To capture a running app from a script, launch it with
 `winapp ui screenshot -a <app>`; neither needs anything in the project.
 Reactor's own doc pipeline works differently: it launches each doc app
 under the in-app preview host (`--preview`, which needs the deprecated
-package) to switch components, and captures the window in-process. See
+package) to switch components, and captures the window with winapp's UI
+Automation library. See
 [`docs/contributing/doc-pipeline.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
 for that harness.
 

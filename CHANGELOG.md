@@ -94,7 +94,7 @@ Conventions for contributors:
   The package still works and **stays until winapp has its own previewer**: its in-app component
   preview host (`winapp run . --devtools on -- --preview <Name>`) and capture server run the VS Code live
   preview panel and the Visual Studio embedded preview, which have no winapp equivalent yet. Keep it
-  Debug-only (which does not warn) if you use either preview. The `Reactor.DevtoolsSupport` switch
+  Debug-only (which does not warn) if you use component previews or either editor preview. The `Reactor.DevtoolsSupport` switch
   is **not** deprecated: `ReactorDiagnostics` (on by default in Debug) turns it on, and the WinUI
   DevTools need it to read C# call sites (`ReactorSource`), so a project no longer has to declare it
   itself. Reactor keeps its library diagnostics: source mapping, `ReactorTrace` / the
@@ -160,6 +160,11 @@ Conventions for contributors:
   The preview host used `Run<T>`'s own root factory whenever there was one, so it mounted `T` while
   the window title said `<Name>`. `Run<T>`'s root, and its mount site, are used only when no
   component is named or the named one is `T`.
+
+- An app that references `Microsoft.UI.Reactor.Devtools` from a different release than
+  `Microsoft.UI.Reactor` now gets a message naming both versions and exit code 2 from
+  `--devtools run` / `--preview`, instead of a `MissingMethodException`. The version check moved from
+  the package into `Microsoft.UI.Reactor`, because an older package can fail before its own check runs.
 
 - `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
   (or estimate), and spacing after rerenders. Removing and re-adding the callback

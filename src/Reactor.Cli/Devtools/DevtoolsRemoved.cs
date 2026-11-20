@@ -35,7 +35,7 @@ internal static class DevtoolsRemoved
     /// <summary>The full table, in help order. Every verb <c>mur devtools</c> accepted has a row.</summary>
     internal static readonly IReadOnlyList<DevtoolsVerbMapping> Mappings = new DevtoolsVerbMapping[]
     {
-        new(LaunchKey, "mur devtools [project]", LaunchEquivalent + "  (add --watch to rebuild on rude edits and re-attach automatically; --detach for agents; no package or build switch needed)", true),
+        new(LaunchKey, "mur devtools [project]", LaunchEquivalent + "  (add --watch to rebuild on rude edits and re-attach automatically, or --detach for agents, not both; no package or build switch needed)", true),
         new("--component", "mur devtools --component <Name>", PreviewNote, true),
         new("components", "components", PreviewNote, true),
         new("switch", "switch <component>", PreviewNote, true),
@@ -115,10 +115,13 @@ internal static class DevtoolsRemoved
             if (!first.StartsWith('-') && s_byKey.TryGetValue(first, out var verb))
                 return verb;
         }
-        if (args.Any(a => a is "--print-config" or "--mcp-port"))
+        if (args.Contains("--print-config"))
             return s_byKey["--print-config"];
+        // A component preview has a replacement; a pinned MCP port next to it does not.
         if (args.Contains("--component"))
             return s_byKey["--component"];
+        if (args.Contains("--mcp-port"))
+            return s_byKey["--print-config"];
         // Anything else was the launcher: `mur devtools [project]`.
         return s_byKey[LaunchKey];
     }

@@ -24,6 +24,8 @@ internal sealed class TreeWalker
     public const int MaxDepth = 64;
 
     private readonly string _windowId;
+    private readonly int _maxNodes;
+    private readonly int _maxDepth;
     private int _visited;
 
     /// <summary>
@@ -44,9 +46,16 @@ internal sealed class TreeWalker
     /// <summary>Framework elements visited by the last <see cref="Walk"/>, in document order.</summary>
     public IReadOnlyList<FrameworkElement> WalkedElements => _walkedElements;
 
-    public TreeWalker(string windowId)
+    public TreeWalker(string windowId) : this(windowId, MaxNodes, MaxDepth)
+    {
+    }
+
+    /// <summary>Test seam: a walker with smaller caps, so a selftest can prove they bound the walk.</summary>
+    internal TreeWalker(string windowId, int maxNodes, int maxDepth)
     {
         _windowId = windowId;
+        _maxNodes = maxNodes;
+        _maxDepth = maxDepth;
     }
 
     /// <summary>Walks the subtree rooted at <paramref name="root"/>, replacing the previous walk's ids.</summary>
@@ -63,7 +72,7 @@ internal sealed class TreeWalker
     {
         // SECURITY (TASK-013): cap node count and recursion depth so a hostile
         // template loop or deeply nested layout cannot freeze the UI dispatcher.
-        if (_visited >= MaxNodes || depth >= MaxDepth) return;
+        if (_visited >= _maxNodes || depth >= _maxDepth) return;
         _visited++;
 
         var typeName = element.GetType().Name;

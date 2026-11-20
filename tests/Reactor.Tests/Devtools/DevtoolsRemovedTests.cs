@@ -108,6 +108,7 @@ public class DevtoolsRemovedTests
     [InlineData(new[] { "--print-config" }, "mur devtools --print-config / --mcp-port", "not carried over")]
     [InlineData(new[] { "--component", "Counter" }, "mur devtools --component <Name>", "winapp run . --devtools on -- --preview <Name>")]
     [InlineData(new[] { "MyApp.csproj", "--component", "Counter" }, "mur devtools --component <Name>", "--preview <Name>")]
+    [InlineData(new[] { "--component", "Counter", "--mcp-port", "9000" }, "mur devtools --component <Name>", "--preview <Name>")]
     [InlineData(new[] { "session" }, "mur devtools session list", "winapp devtools list")]
     [InlineData(new[] { "session", "clean", "--dry-run" }, "mur devtools session clean", "not lockfiles")]
     [InlineData(new[] { "tree", "--pretty" }, "mur devtools tree", "winapp devtools inspect")]

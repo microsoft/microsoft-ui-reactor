@@ -77,6 +77,15 @@ if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is {
     {
         RootMountSite = rootMountSite,
     };
+    // Checked here, not in the package: a Devtools package from another release can fail to
+    // JIT TryHandleCommandLine against this core and would crash before its own check ran.
+    if (DevtoolsPackageMismatchMessage(host.GetType().Assembly) is { } mismatch)
+    {
+        Console.Error.WriteLine(mismatch);
+        Environment.ExitCode = 2;
+        if (exitOnUnavailable) Environment.Exit(2);
+        return true;
+    }
     return host.TryHandleCommandLine(request);
 }
 
@@ -173,7 +182,7 @@ if (!BearerMatches(ctx.Request.Headers["Authorization"]))
 
 | Endpoint | Used by | What it does |
 |---|---|---|
-| `GET /frame` | VS Code panel | Latest captured frame as PNG (the doc screenshot pipeline captures with winapp instead) |
+| `GET /frame` | VS Code panel | Latest captured frame as JPEG (the doc screenshot pipeline captures with winapp instead) |
 | `GET /status` | Both extensions | Liveness, port, frame rate and embed protocol version |
 | `POST /focus` | VS Code panel | Brings the preview window forward |
 | `GET /components` | Both extensions | The app's previewable components |
@@ -213,7 +222,7 @@ does not allocate per frame when its flag is off.
 
 Launch the app the way the doc screenshot pipeline does — `--preview <Component>
 --vscode` — and read `CAPTURE_PORT` and `CAPTURE_TOKEN` from stdout. Then use
-`GET /frame` with the bearer token for a PNG of the window (the doc pipeline itself
+`GET /frame` with the bearer token for a JPEG of the window (the doc pipeline itself
 takes its pixels with winapp's screen capture instead), and
 `POST /preview` with `{"component":"<Name>"}` to switch components without a
 relaunch. For anything beyond pixels — the tree, properties, clicks — use the

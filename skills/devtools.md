@@ -13,7 +13,7 @@ what to run instead and exits `1`. Reactor's developer tools are the **WinUI Dev
 in the winapp CLI** — nothing to add to the project:
 
 ```bash
-winapp run . --devtools on --detach   # add --watch to rebuild on rude edits and re-attach
+winapp run . --devtools on --detach   # or --watch instead of --detach: hot reload, rebuild on rude edits, re-attach
 winapp devtools inspect            # component tree, element kinds, keys, App.cs call sites
 ```
 

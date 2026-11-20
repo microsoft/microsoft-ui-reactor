@@ -77,9 +77,17 @@ public sealed class DevtoolsDeprecationTargetsTests : IDisposable
         foreach (var property in properties) psi.ArgumentList.Add($"-p:{property}");
 
         using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+        // Drain both pipes concurrently and bound the wait, so a hung msbuild fails this test
+        // instead of blocking the whole unit run.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(120_000))
+        {
+            process.Kill(entireProcessTree: true);
+            Assert.Fail("dotnet msbuild did not finish within 120 s.");
+        }
+        var stdout = stdoutTask.GetAwaiter().GetResult();
+        var stderr = stderrTask.GetAwaiter().GetResult();
         Assert.True(process.ExitCode == 0, $"dotnet msbuild failed ({process.ExitCode}):\n{stdout}\n{stderr}");
         return stdout + stderr;
     }

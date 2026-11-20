@@ -9,21 +9,22 @@
 > **What stays, and why:** this package — now only the component preview host, the preview
 > capture server and the `--embed` handshake — keeps working, because
 > the **VS Code live preview panel** and the **Visual Studio embedded preview** run on it and winapp
-> has no previewer yet. If you use either preview, keep the package (Debug-only). It goes only once
+> has no previewer yet. If you use component previews (`--preview <Name>`) or either editor preview,
+> keep the package (Debug-only). It goes only once
 > winapp has its own previewer. Builds that reference it outside Debug show
 > warning `REACTOR_DEVTOOLS_001`
 > (suppress with `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
 > `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
 >
 > **Migrate:**
-> 1. If you don't use the VS Code live preview or the Visual Studio embedded preview, remove
+> 1. If you don't use component previews, the VS Code live preview or the Visual Studio embedded preview, remove
 >    `<PackageReference Include="Microsoft.UI.Reactor.Devtools" … />` from your project, and any
 >    launch profile that passes `--devtools`. The `Reactor.DevtoolsSupport` switch is not
 >    deprecated: `ReactorDiagnostics` turns it on in Debug and the WinUI DevTools need it for C#
 >    call sites, so an explicit `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" … />`
 >    is redundant in Debug but harmless; don't set it to `false`.
 > 2. Keep a Debug build (source mapping stays on in Debug through `Microsoft.UI.Reactor`).
-> 3. Launch with `winapp run . --devtools on` (add `--watch` to rebuild on rude edits and re-attach automatically, `--detach` when an agent drives it).
+> 3. Launch with `winapp run . --devtools on` (add `--watch` to rebuild on rude edits and re-attach automatically, or `--detach` when an agent drives it; winapp doesn't combine the two).
 > 4. AI agents: use the winapp CLI with `--json` and the `winui-devtools` skill. The MCP server
 >    has been removed.
 >

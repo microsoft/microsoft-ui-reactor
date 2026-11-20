@@ -20,9 +20,6 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Optional devtools package implementation; invoked only through the devtools host gate.")]
     public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
     {
-        if (TryReportPackageMismatch())
-            return true;
-
         var options = request.Options;
 
         var embedValidationError = GetOptionalStringProperty(options, "EmbedValidationError");
@@ -42,29 +39,6 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             default:
                 return false;
         }
-    }
-
-    private static bool TryReportPackageMismatch()
-    {
-        var coreVersion = GetInformationalVersion(typeof(ReactorApp).Assembly);
-        var devtoolsVersion = GetInformationalVersion(typeof(DevtoolsHost).Assembly);
-        if (string.Equals(coreVersion, devtoolsVersion, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        Console.Error.WriteLine("[reactor] Microsoft.UI.Reactor and Microsoft.UI.Reactor.Devtools package payloads do not match.");
-        Console.Error.WriteLine($"[reactor]   Microsoft.UI.Reactor:          {coreVersion}");
-        Console.Error.WriteLine($"[reactor]   Microsoft.UI.Reactor.Devtools: {devtoolsVersion}");
-        Console.Error.WriteLine("[reactor] This usually means NuGet restored stale 0.0.0-local package contents. Run `mur pack-local`, delete bin/obj for this app, then restore/build again.");
-        return true;
-    }
-
-    private static string GetInformationalVersion(Assembly assembly)
-    {
-        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? assembly.GetName().Version?.ToString()
-            ?? "<unknown>";
     }
 
     private static string? GetOptionalStringProperty<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(T instance, string propertyName)
@@ -201,7 +175,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 WindowWidth: width,
                 WindowHeight: height,
                 FullScreen: fullScreen,
-                RootMountSite: initialComponentType == hostRoot ? rootMountSite : null,
+                RootMountSite: PreviewRootMountSite(rootMountSite, hostRoot, initialComponentType),
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
                     : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height, fullScreen));
@@ -216,6 +190,13 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
 
         return true;
     }
+
+    /// <summary>
+    /// <c>Run&lt;T&gt;</c>'s call site belongs to <c>T</c>: a preview of another component
+    /// (<c>--preview Other</c>) must not report it as that component's mount site.
+    /// </summary>
+    internal static SourceLocation? PreviewRootMountSite(SourceLocation? runSite, Type? hostRoot, Type previewedType) =>
+        hostRoot is not null && previewedType == hostRoot ? runSite : null;
 
     /// <summary>
     /// The root the preview mounts first: <c>Run&lt;T&gt;</c>'s own factory when the previewed

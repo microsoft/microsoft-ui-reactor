@@ -5,7 +5,7 @@
     winapp CLI, which need nothing in the project: `winapp run . (dash-dash)devtools on`.
     The package stays, and keeps working, for the in-app component preview host that the
     VS Code live preview and the Visual Studio embedded preview need, until winapp has its
-    own previewer. Apps that use either preview keep it Debug-only, which is why this warns
+    own previewer. Apps that use a preview keep it Debug-only, which is why this warns
     only outside Debug: the `dotnet new reactor` templates reference it in Debug for the
     Visual Studio embedded preview, and a new app should not start with a warning. NuGet's
     package deprecation metadata covers Debug-only references.
@@ -25,7 +25,7 @@
           BeforeTargets="CoreCompile"
           Condition="'$(Configuration)' != 'Debug' and '$(Configuration)' != '' and '@(PackageReference->AnyHaveMetadataValue('Identity', 'Microsoft.UI.Reactor.Devtools'))' == 'true' and '$(ReactorSuppressDevtoolsDeprecationWarning)' != 'true' and '$(DesignTimeBuild)' != 'true' and !$([System.String]::Copy(';$(NoWarn);').Replace(',', ';').Replace(' ', '').Contains(';REACTOR_DEVTOOLS_001;'))">
     <Warning Code="REACTOR_DEVTOOLS_001"
-             Text="Microsoft.UI.Reactor.Devtools is deprecated: inspect and drive the app with the WinUI DevTools in the winapp CLI ('winapp run . --devtools on'), which need no package. Keep this package only for the VS Code live preview or the Visual Studio embedded preview, and reference it only in Debug; it stays until winapp has its own previewer. Otherwise remove the PackageReference. Suppress with &lt;NoWarn&gt;%24(NoWarn);REACTOR_DEVTOOLS_001&lt;/NoWarn&gt; or &lt;ReactorSuppressDevtoolsDeprecationWarning&gt;true&lt;/ReactorSuppressDevtoolsDeprecationWarning&gt;."
+             Text="Microsoft.UI.Reactor.Devtools is deprecated: inspect and drive the app with the WinUI DevTools in the winapp CLI ('winapp run . --devtools on'), which need no package. Keep this package only for component previews (--preview &lt;Name&gt;), the VS Code live preview or the Visual Studio embedded preview, and reference it only in Debug; it stays until winapp has its own previewer. Otherwise remove the PackageReference. Suppress with &lt;NoWarn&gt;%24(NoWarn);REACTOR_DEVTOOLS_001&lt;/NoWarn&gt; or &lt;ReactorSuppressDevtoolsDeprecationWarning&gt;true&lt;/ReactorSuppressDevtoolsDeprecationWarning&gt;."
              HelpLink="https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/Reactor.Devtools/README.md" />
   </Target>
 </Project>
