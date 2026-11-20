@@ -177,6 +177,22 @@ public class ModifierTableIntegrityTests
         Assert.All(ModifierTable.VisualOwningModifiers, row => Assert.False(string.IsNullOrWhiteSpace(row.Value)));
     }
 
+    [Fact]
+    public void ANIM_004_Members_Are_Never_Mapped_For_MOD_002()
+    {
+        // Spec 066 §9.1: one .Set write must never get both REACTOR_ANIM_004 and REACTOR_MOD_002,
+        // which would also offer two competing fixes on the same .Set. MOD_002 only fires for
+        // members mapped in Properties, so none of ANIM_004's members may be mapped there.
+        var both = FacadeTransformSetAnalyzer.FacadeMembers.Keys
+            .Append("Translation")
+            .Where(ModifierTable.Properties.ContainsKey)
+            .ToList();
+
+        Assert.True(
+            both.Count == 0,
+            $"These REACTOR_ANIM_004 members are mapped in ModifierTable.Properties: [{string.Join(", ", both)}].");
+    }
+
     // ── Staleness ────────────────────────────────────────────────────────────
 
     [Fact]

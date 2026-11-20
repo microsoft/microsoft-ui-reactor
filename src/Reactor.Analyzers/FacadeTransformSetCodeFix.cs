@@ -12,16 +12,14 @@ namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
 /// Code fix for REACTOR_ANIM_004: rewrites <c>x.Set(fe =&gt; fe.Rotation = e)</c> to
-/// <c>x.Rotation(e)</c>, and the same for <c>Scale</c>, <c>CenterPoint</c>,
-/// <c>ScaleTransition</c> and <c>TranslationTransition</c>.
-/// <c>fe.OpacityTransition = new ScalarTransition { Duration = d }</c> becomes
-/// <c>.OpacityTransition(d)</c>, and the same for <c>RotationTransition</c>.
+/// <c>x.Rotation(e)</c>, and the same for <c>Scale</c> and <c>CenterPoint</c>.
 /// </summary>
 /// <remarks>
 /// Offered only when the analyzer stamped <see cref="FacadeTransformSetAnalyzer.FixModifierKey"/>:
-/// the assignment is the lambda's only statement, the right-hand side maps onto the modifier's
-/// parameters, and the rewritten call binds (spec 066 §9.1). The <c>Translation</c> arm never gets
-/// a fix, because adding <c>.Translation(...)</c> next to the existing call would be dead code.
+/// the assignment is the lambda's only statement, the right-hand side doesn't read the lambda
+/// parameter, and the rewritten call binds (spec 066 §9.1). The <c>Translation</c> arm never gets
+/// a fix, because adding <c>.Translation(...)</c> next to the existing call would be dead code. The
+/// <c>*Transition</c> rows get one in spec 066 layer 2, once their modifiers stop blocking the handoff.
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(FacadeTransformSetCodeFix))]
 [Shared]
@@ -54,15 +52,7 @@ public sealed class FacadeTransformSetCodeFix : CodeFixProvider
             if (setInvocation is null || setInvocation.Expression is not MemberAccessExpressionSyntax setAccess)
                 continue;
 
-            if (!FacadeTransformSetAnalyzer.FacadeMembers.TryGetValue(
-                    ((MemberAccessExpressionSyntax)assignment.Left).Name.Identifier.Text, out var info))
-            {
-                continue;
-            }
-
-            var arguments = FacadeTransformSetAnalyzer.BuildModifierArguments(assignment, info.Shape);
-            if (arguments is null)
-                continue;
+            var arguments = FacadeTransformSetAnalyzer.BuildModifierArguments(assignment);
 
             context.RegisterCodeFix(
                 CodeAction.Create(

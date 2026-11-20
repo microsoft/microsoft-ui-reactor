@@ -135,11 +135,11 @@ namespace Microsoft.UI.Reactor
     // ── Positives: each facade member, each trigger ─────────────────────────
 
     [Fact]
-    public async Task Rotation_With_Animate_Reports_And_Fixes_To_Rotation()
+    public async Task Rotation_With_LayoutAnimation_Reports_And_Fixes_To_Rotation()
     {
         await VerifyFixAsync(
-            @"class C { Element M() => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}); }",
-            @"class C { Element M() => Border().Animate(Curve.Ease).Rotation(45); }");
+            @"class C { Element M() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}); }",
+            @"class C { Element M() => Border().LayoutAnimation().Rotation(45); }");
     }
 
     [Fact]
@@ -149,7 +149,7 @@ namespace Microsoft.UI.Reactor
             @"class C { Element M() => Border().LayoutAnimation().Set(fe => {|#0:fe.Rotation = 45|}); }",
             new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning)
                 .WithLocation(0)
-                .WithMessage("'.Set(...)' writes 'UIElement.Rotation', but '.LayoutAnimation(...)' on the same element takes its composition visual, after which WinUI rejects that facade write. Use '.Rotation(degrees)' instead."));
+                .WithMessage("'.Set(...)' writes 'UIElement.Rotation', but '.LayoutAnimation(...)' on the same element takes its composition visual, after which WinUI rejects the write. Use '.Rotation(degrees)' instead."));
     }
 
     [Fact]
@@ -169,35 +169,28 @@ namespace Microsoft.UI.Reactor
     }
 
     [Fact]
-    public async Task OpacityTransition_With_Duration_Fixes_To_The_Duration_Overload()
+    public async Task Transitions_Report_With_Removal_Advice_And_No_Fix()
     {
-        await VerifyFixAsync(
-            @"class C { Element M() => Border().InteractionStates().Set(fe => {|REACTOR_ANIM_004:fe.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) }|}); }",
-            @"class C { Element M() => Border().InteractionStates().OpacityTransition(TimeSpan.FromMilliseconds(200)); }");
-    }
+        // On main the .XxxTransition() modifiers set the same XAML property, which blocks the
+        // handoff too (#1623), so the rule must not steer to them until spec 066 layer 2.
+        var source = @"
+class C
+{
+    Element A() => Border().InteractionStates().Set(fe => {|#0:fe.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) }|});
+    Element B() => Border().SpringLayoutAnimation().Set(fe => {|#1:fe.RotationTransition = new ScalarTransition()|});
+    Element C2() => Border().LayoutAnimation().Set(fe => {|#2:fe.ScaleTransition = new Vector3Transition()|});
+    Element D(Microsoft.UI.Xaml.Controls.ScrollViewer sv) => Border().ScrollLinked(sv).Set(fe => {|#3:fe.TranslationTransition = new Vector3Transition()|});
+}";
+        await VerifyAsync(
+            source,
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.OpacityTransition', but '.InteractionStates(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove it, because '.OpacityTransition(...)' sets the same XAML transition and also blocks the handoff. Animate the change with '.Animate(...)' instead."),
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(1),
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(2),
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(3));
 
-    [Fact]
-    public async Task RotationTransition_Without_Duration_Fixes_To_The_Parameterless_Call()
-    {
-        await VerifyFixAsync(
-            @"class C { Element M() => Border().SpringLayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.RotationTransition = new ScalarTransition()|}); }",
-            @"class C { Element M() => Border().SpringLayoutAnimation().RotationTransition(); }");
-    }
-
-    [Fact]
-    public async Task ScaleTransition_Fixes_To_The_Same_Named_Modifier()
-    {
-        await VerifyFixAsync(
-            @"class C { Element M() => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = new Vector3Transition()|}); }",
-            @"class C { Element M() => Border().Animate(Curve.Ease).ScaleTransition(new Vector3Transition()); }");
-    }
-
-    [Fact]
-    public async Task TranslationTransition_With_ScrollLinked_Fixes()
-    {
-        await VerifyFixAsync(
-            @"class C { Element M(Microsoft.UI.Xaml.Controls.ScrollViewer sv) => Border().ScrollLinked(sv).Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = new Vector3Transition()|}); }",
-            @"class C { Element M(Microsoft.UI.Xaml.Controls.ScrollViewer sv) => Border().ScrollLinked(sv).TranslationTransition(new Vector3Transition()); }");
+        var unfixed = Markup(source, 4);
+        await VerifyFixAsync(unfixed, unfixed);
     }
 
     [Fact]
@@ -214,32 +207,31 @@ class C
         {|#2:fe.StartAnimation(a)|};
     });
 }";
-        const string advice = "No modifier covers it: animate it with '.Keyframes(...)' or '.Animate(...)', or take the visual with ElementCompositionPreview.GetElementVisual in '.OnMount(...)'.";
         await VerifyAsync(
             source,
             new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(0)
-                .WithMessage("'.Set(...)' writes 'UIElement.RotationAxis', but '.Animate(...)' on the same element takes its composition visual, after which WinUI rejects that facade write. " + advice),
+                .WithMessage("'.Set(...)' writes 'UIElement.RotationAxis', but '.Animate(...)' on the same element takes its composition visual, after which WinUI rejects the write. No modifier covers it, so animate it with '.Keyframes(...)' or '.Animate(...)', or take the visual with ElementCompositionPreview.GetElementVisual in '.OnMount(...)'."),
             new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(1),
             new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(2)
-                .WithMessage("'.Set(...)' calls 'UIElement.StartAnimation', but '.Animate(...)' on the same element takes its composition visual, after which WinUI rejects that facade write. " + advice));
+                .WithMessage("'.Set(...)' calls 'UIElement.StartAnimation', but '.Animate(...)' on the same element takes its composition visual, after which WinUI rejects the call. Start the animation on the visual instead, taken with ElementCompositionPreview.GetElementVisual in '.OnMount(...)', or use '.Keyframes(...)' or '.Animate(...)'."));
 
-        var unfixed = source.Replace("{|#0:", "{|REACTOR_ANIM_004:").Replace("{|#1:", "{|REACTOR_ANIM_004:").Replace("{|#2:", "{|REACTOR_ANIM_004:");
+        var unfixed = Markup(source, 3);
         await VerifyFixAsync(unfixed, unfixed);
     }
 
     [Fact]
     public async Task Translation_With_Translation_Modifier_Reports_Its_Own_Message_And_No_Fix()
     {
-        // #1642: no visual-owning modifier is needed, .Translation(...) alone overrides the write.
+        // #1642: no visual-owning modifier is needed, .Translation(...) alone conflicts with the write.
         var source = @"class C { Element M() => Border().Translation(0, 0, 4).Set(fe => {|#0:fe.Translation = new Vector3(100, 0, 0)|}); }";
         await VerifyAsync(
             source,
             new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning)
                 .WithLocation(0)
-                .WithMessage("'.Set(...)' writes 'UIElement.Translation', which is ignored because '.Translation(...)' owns translation on this element. Remove the write or merge the value into the existing '.Translation(...)' call."));
+                .WithMessage("'.Set(...)' writes 'UIElement.Translation', which conflicts with '.Translation(...)' on this element. The modifier overrides it on mount, and WinUI ignores it once translation is enabled on the composition visual. Remove the write or merge the value into the existing '.Translation(...)' call."));
 
-        var fixable = source.Replace("{|#0:", "{|REACTOR_ANIM_004:");
-        await VerifyFixAsync(fixable, fixable);
+        var unfixed = Markup(source, 1);
+        await VerifyFixAsync(unfixed, unfixed);
     }
 
     // ── Diagnostic without a fix ────────────────────────────────────────────
@@ -250,7 +242,7 @@ class C
         var source = @"
 class C
 {
-    Element M() => Border().Animate(Curve.Ease).Set(fe =>
+    Element M() => Border().LayoutAnimation().Set(fe =>
     {
         {|REACTOR_ANIM_004:fe.Rotation = 45|};
         fe.Opacity = 0.5;
@@ -264,27 +256,54 @@ class C
     {
         // .Rotation(10) runs after the setter and wins today; moving 45 into a later
         // .Rotation(45) would make it win instead.
-        var source = @"class C { Element M() => Border().Rotation(10).Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}); }";
+        var source = @"class C { Element M() => Border().Rotation(10).LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}); }";
         await VerifyFixAsync(source, source);
     }
 
     [Fact]
-    public async Task Null_Or_Maybe_Null_Transition_Does_Not_Fix()
+    public async Task Animate_On_The_Chain_Blocks_The_Fix()
     {
-        // .ScaleTransition(null) enables the default transition; the .Set clears it.
+        // The .Set value is migrated to the visual without animating; .Rotation(45) would animate in.
+        var source = @"class C { Element M() => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}); }";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
+    public async Task Right_Hand_Side_Reading_The_Parameter_Does_Not_Fix()
+    {
+        // Case A would not compile once the lambda is gone. Case B would compile, but 'fe' would
+        // then bind to the field and read 90 instead of the control's rotation.
         var source = @"
 class C
 {
-    Element A() => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = null|});
-    Element B(Vector3Transition? t) => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = t|});
+    Microsoft.UI.Xaml.Controls.Border fe = new Microsoft.UI.Xaml.Controls.Border { Rotation = 90 };
+
+    Element A() => Border().LayoutAnimation().Set(b => {|REACTOR_ANIM_004:b.CenterPoint = new Vector3(b.Rotation, 0, 0)|});
+    Element B() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.Rotation = fe.Rotation + 5|});
 }";
         await VerifyFixAsync(source, source);
     }
 
     [Fact]
-    public async Task ScalarTransition_From_A_Variable_Does_Not_Fix()
+    public async Task Comment_Or_Directive_In_The_Lambda_Does_Not_Fix()
     {
-        var source = @"class C { Element M(ScalarTransition t) => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.OpacityTransition = t|}); }";
+        var source = @"
+class C
+{
+    Element A() => Border().LayoutAnimation().Set(fe =>
+    {
+        // tilt the badge
+        {|REACTOR_ANIM_004:fe.Rotation = 45|};
+    });
+
+    Element B() => Border().LayoutAnimation().Set(fe =>
+#if DEBUG
+        fe.Rotation = 45
+#else
+        {|REACTOR_ANIM_004:fe.Rotation = 0|}
+#endif
+    );
+}";
         await VerifyFixAsync(source, source);
     }
 
@@ -292,10 +311,16 @@ class C
     public async Task Ambiguous_Target_Typed_Scale_Does_Not_Fix()
     {
         // .Scale has float and Vector3 overloads, so '.Scale(new(2, 2, 1))' would not bind.
-        var source = @"class C { Element M() => Border().Animate(Curve.Ease).Set(fe => {|REACTOR_ANIM_004:fe.Scale = new(2, 2, 1)|}); }";
+        var source = @"class C { Element M() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.Scale = new(2, 2, 1)|}); }";
         await VerifyFixAsync(source, source);
     }
 
+    private static string Markup(string source, int count)
+    {
+        for (var i = 0; i < count; i++)
+            source = source.Replace("{|#" + i + ":", "{|REACTOR_ANIM_004:");
+        return source;
+    }
     // ── Negatives (spec 066 §9.1) ───────────────────────────────────────────
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -22,8 +23,9 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// </para>
 /// <para>
 /// <c>UIElement.Translation</c> is different: it stays writable after the handoff, so it is only
-/// reported when the chain declares <c>.Translation(...)</c>, which overrides the facade write
-/// (#1642). That arm has its own message and no code fix.
+/// reported when the chain declares <c>.Translation(...)</c>, which conflicts with the facade
+/// write and makes WinUI ignore it once translation is enabled on the visual (#1642). That arm
+/// has its own message and no code fix.
 /// </para>
 /// <para>
 /// Matching is limited to what the <c>.Set</c> chain shows. A visual-owning modifier on a
@@ -48,40 +50,31 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     private const string TranslationName = "Translation";
     private const string StartAnimationName = "StartAnimation";
 
-    /// <summary>How a facade write maps onto its modifier's arguments.</summary>
-    internal enum FixShape
-    {
-        /// <summary>No modifier exists; the diagnostic carries advice only.</summary>
-        None,
-
-        /// <summary>The right-hand side is the modifier's argument: <c>fe.Rotation = e</c> → <c>.Rotation(e)</c>.</summary>
-        Value,
-
-        /// <summary>
-        /// <c>fe.OpacityTransition = new ScalarTransition { Duration = d }</c> → <c>.OpacityTransition(d)</c>.
-        /// </summary>
-        ScalarTransitionDuration,
-    }
-
     internal readonly struct FacadeMember
     {
-        public FacadeMember(string? modifier, string advice, FixShape shape)
+        public FacadeMember(string? modifier, string advice)
         {
             Modifier = modifier;
             Advice = advice;
-            Shape = shape;
         }
 
-        /// <summary>The Reactor modifier to rewrite to, or null when there is none.</summary>
+        /// <summary>
+        /// The Reactor modifier the code fix rewrites to (<c>fe.Rotation = e</c> →
+        /// <c>.Rotation(e)</c>), or null when no modifier works on <c>main</c> today.
+        /// </summary>
         public string? Modifier { get; }
 
         public string Advice { get; }
-
-        public FixShape Shape { get; }
     }
 
     private const string NoModifierAdvice =
-        "No modifier covers it: animate it with '.Keyframes(...)' or '.Animate(...)', or take the visual with ElementCompositionPreview.GetElementVisual in '.OnMount(...)'";
+        "No modifier covers it, so animate it with '.Keyframes(...)' or '.Animate(...)', or take the visual with ElementCompositionPreview.GetElementVisual in '.OnMount(...)'";
+
+    // The .XxxTransition() modifiers still set the same XAML property on main, which blocks the
+    // handoff just as the .Set write does (#1623), so suggesting them would not help. Spec 066
+    // layer 2 moves them to the compositor; that change switches these rows to the modifier.
+    private static string TransitionAdvice(string modifier) =>
+        "Remove it, because '." + modifier + "(...)' sets the same XAML transition and also blocks the handoff. Animate the change with '.Animate(...)' instead";
 
     /// <summary>
     /// <c>UIElement</c> members the rule matches, other than <c>Translation</c>, keyed by member
@@ -92,30 +85,31 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     internal static readonly IReadOnlyDictionary<string, FacadeMember> FacadeMembers =
         new Dictionary<string, FacadeMember>(System.StringComparer.Ordinal)
         {
-            ["Rotation"] = new("Rotation", "Use '.Rotation(degrees)' instead", FixShape.Value),
-            ["Scale"] = new("Scale", "Use '.Scale(...)' instead", FixShape.Value),
-            ["CenterPoint"] = new("CenterPoint", "Use '.CenterPoint(...)' instead", FixShape.Value),
-            ["OpacityTransition"] = new("OpacityTransition", "Use '.OpacityTransition(duration)' instead", FixShape.ScalarTransitionDuration),
-            ["RotationTransition"] = new("RotationTransition", "Use '.RotationTransition(duration)' instead", FixShape.ScalarTransitionDuration),
-            ["ScaleTransition"] = new("ScaleTransition", "Use '.ScaleTransition(...)' instead", FixShape.Value),
-            ["TranslationTransition"] = new("TranslationTransition", "Use '.TranslationTransition(...)' instead", FixShape.Value),
-            ["RotationAxis"] = new(null, NoModifierAdvice, FixShape.None),
-            ["TransformMatrix"] = new(null, NoModifierAdvice, FixShape.None),
-            [StartAnimationName] = new(null, NoModifierAdvice, FixShape.None),
+            ["Rotation"] = new("Rotation", "Use '.Rotation(degrees)' instead"),
+            ["Scale"] = new("Scale", "Use '.Scale(...)' instead"),
+            ["CenterPoint"] = new("CenterPoint", "Use '.CenterPoint(...)' instead"),
+            ["OpacityTransition"] = new(null, TransitionAdvice("OpacityTransition")),
+            ["RotationTransition"] = new(null, TransitionAdvice("RotationTransition")),
+            ["ScaleTransition"] = new(null, TransitionAdvice("ScaleTransition")),
+            ["TranslationTransition"] = new(null, TransitionAdvice("TranslationTransition")),
+            ["RotationAxis"] = new(null, NoModifierAdvice),
+            ["TransformMatrix"] = new(null, NoModifierAdvice),
+            [StartAnimationName] = new(null,
+                "Start the animation on the visual instead, taken with ElementCompositionPreview.GetElementVisual in '.OnMount(...)', or use '.Keyframes(...)' or '.Animate(...)'"),
         };
 
     private static readonly LocalizableString Title =
         "Facade transform written through .Set on an element that uses the composition visual";
 
     private static readonly LocalizableString MessageFormat =
-        "'.Set(...)' {0}, but '.{1}(...)' on the same element takes its composition visual, after which WinUI rejects that facade write. {2}.";
+        "'.Set(...)' {0}, but '.{1}(...)' on the same element takes its composition visual, after which WinUI rejects the {2}. {3}.";
 
     private static readonly LocalizableString Description =
         "Once an element's composition visual has been taken, WinUI throws on writes to the UIElement " +
         "transform facades (Rotation, Scale, CenterPoint, RotationAxis, TransformMatrix, the XAML " +
         "*Transition properties) and on UIElement.StartAnimation. A .Set setter re-runs on every update, " +
         "so the write throws after the handoff, and RotationAxis, TransformMatrix and the transitions also " +
-        "block the handoff on mount. Use the matching Reactor modifier, which writes the visual.";
+        "block the handoff on mount. Use the matching Reactor modifier where one exists, which writes the visual.";
 
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
@@ -127,16 +121,18 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         description: Description);
 
     private static readonly LocalizableString TranslationTitle =
-        "UIElement.Translation written through .Set is ignored next to .Translation(...)";
+        "UIElement.Translation written through .Set conflicts with .Translation(...)";
 
     private static readonly LocalizableString TranslationMessageFormat =
-        "'.Set(...)' writes 'UIElement.Translation', which is ignored because '.Translation(...)' owns translation on this element. Remove the write or merge the value into the existing '.Translation(...)' call.";
+        "'.Set(...)' writes 'UIElement.Translation', which conflicts with '.Translation(...)' on this element. The modifier overrides it on mount, and WinUI ignores it once translation is enabled on the composition visual. Remove the write or merge the value into the existing '.Translation(...)' call.";
 
     private static readonly LocalizableString TranslationDescription =
-        "The '.Translation(...)' modifier owns the element's translation: Reactor applies it after .Set " +
-        "setters, and once it has enabled translation on the composition visual WinUI silently ignores " +
-        "facade Translation writes (#1642). Adding another '.Translation(...)' would not help, because " +
-        "the modifier merges last-wins, so the value has to be merged by hand.";
+        "The '.Translation(...)' modifier and a .Set write fight over the same translation. Reactor applies " +
+        "modifiers after .Set setters, so the modifier wins on mount, while the setter re-runs on every update " +
+        "and wins whenever the modifier's value is unchanged. Once the modifier has enabled translation on the " +
+        "composition visual, WinUI silently ignores facade Translation writes (#1642). Adding another " +
+        "'.Translation(...)' would not help, because the modifier merges last-wins, so the value has to be " +
+        "merged by hand.";
 
     private static readonly DiagnosticDescriptor TranslationRule = new(
         DiagnosticId,
@@ -230,25 +226,21 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             var properties = ImmutableDictionary<string, string?>.Empty;
             if (assignment is not null
                 && info.Modifier is { } modifier
-                && IsFixable(invocation, setAccess, lambda, assignment, info, model, ct))
+                && IsFixable(invocation, setAccess, lambda, paramName, assignment, modifier, model, ct))
             {
                 properties = properties.Add(FixModifierKey, modifier);
             }
-
-            var what = assignment is null
-                ? "calls 'UIElement." + name + "'"
-                : "writes 'UIElement." + name + "'";
 
             context.ReportDiagnostic(Diagnostic.Create(
                 Rule,
                 node.GetLocation(),
                 properties,
-                what,
+                (assignment is null ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
                 owningModifier,
+                assignment is null ? "call" : "write",
                 info.Advice));
         }
     }
-
     /// <summary>
     /// The first modifier on the <c>.Set</c>'s fluent chain, in either direction, whose name
     /// passes <paramref name="isMatch"/> and which binds to a Reactor extension method.
@@ -315,8 +307,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         InvocationExpressionSyntax setInvocation,
         MemberAccessExpressionSyntax setAccess,
         ExpressionSyntax lambda,
+        string paramName,
         AssignmentExpressionSyntax assignment,
-        FacadeMember info,
+        string modifier,
         SemanticModel model,
         CancellationToken ct)
     {
@@ -324,31 +317,29 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         if (SetLambdaHelpers.TryGetLambdaAssignment(lambda) != assignment)
             return false;
 
-        // The rewrite deletes the whole invocation; a directive inside it would be unbalanced.
-        if (setInvocation.ContainsDirectives)
+        // The lambda is deleted, so a right-hand side that reads its parameter
+        // ('fe.CenterPoint = new((float)fe.ActualWidth / 2, ...)') would not compile, or would
+        // silently bind to an outer symbol of the same name.
+        if (SetLambdaHelpers.ReferencesIdentifier(assignment.Right, paramName))
             return false;
 
-        // A null write clears the property, but the transition modifiers treat null as "use the
-        // default transition", so the rewrite would turn a clear into an enable.
-        if (PoolResetSetAnalyzer.IsNullOrDefault(assignment.Right))
+        // The rewrite deletes the whole invocation; a directive inside it would be unbalanced,
+        // and a comment inside it would be lost.
+        if (setInvocation.ContainsDirectives || lambda.DescendantTrivia().Any(PoolResetSetCodeFix.IsComment))
             return false;
-        if (info.Shape == FixShape.Value
-            && model.GetTypeInfo(assignment.Right, ct).Nullability.FlowState == NullableFlowState.MaybeNull)
-        {
-            return false;
-        }
 
-        if (info.Shape == FixShape.ScalarTransitionDuration && !IsScalarTransition(assignment.Right, model, ct))
+        // With .Animate on the chain the modifier animates to its value on mount, where the .Set
+        // value was migrated to the visual without animating. That is a visible change.
+        if (FindChainModifier(setInvocation, model, ct, static n => n == "Animate") is not null)
             return false;
 
         // Modifiers run after setters, so an earlier same-name modifier currently wins. Moving
         // the value into a later modifier call would make it win instead.
-        if (ReceiverCalls(setAccess.Expression, info.Modifier!))
+        if (setAccess.Expression is InvocationExpressionSyntax receiver
+            && DuplicateAtomicModifierAnalyzer.CollectSameNameOccurrences(receiver, modifier).Count > 0)
+        {
             return false;
-
-        var arguments = BuildModifierArguments(assignment, info.Shape);
-        if (arguments is null)
-            return false;
+        }
 
         // Bind the rewrite where the .Set stands. This rejects overload ambiguity (target-typed
         // 'new(...)' against .Scale's float and Vector3 overloads), type mismatches, and a
@@ -357,73 +348,18 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
                 setAccess.Expression.WithoutTrivia(),
-                SyntaxFactory.IdentifierName(info.Modifier!)),
-            arguments);
+                SyntaxFactory.IdentifierName(modifier)),
+            BuildModifierArguments(assignment));
         var bound = model.GetSpeculativeSymbolInfo(
             setInvocation.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression).Symbol;
-        return bound is IMethodSymbol method && method.Name == info.Modifier && IsReactorExtension(method);
-    }
-
-    private static bool IsScalarTransition(ExpressionSyntax value, SemanticModel model, CancellationToken ct)
-    {
-        var type = model.GetTypeInfo(value, ct).Type;
-        return type is not null
-            && type.Name == "ScalarTransition"
-            && type.ContainingNamespace?.ToDisplayString() == XamlNamespace;
-    }
-
-    private static bool ReceiverCalls(ExpressionSyntax receiver, string modifier)
-    {
-        for (var node = receiver as InvocationExpressionSyntax;
-             node is not null;
-             node = DuplicateAtomicModifierAnalyzer.GetReceiverInvocation(node))
-        {
-            if (DuplicateAtomicModifierAnalyzer.GetFluentMethodName(node) == modifier)
-                return true;
-        }
-        return false;
+        return bound is IMethodSymbol method && method.Name == modifier && IsReactorExtension(method);
     }
 
     /// <summary>
-    /// The modifier's argument list for a fixable write, or null when the right-hand side has no
-    /// mechanical mapping. Shared with <see cref="FacadeTransformSetCodeFix"/>.
+    /// The modifier's argument list for a fixable write: the right-hand side, unchanged.
+    /// Shared with <see cref="FacadeTransformSetCodeFix"/>.
     /// </summary>
-    internal static ArgumentListSyntax? BuildModifierArguments(AssignmentExpressionSyntax assignment, FixShape shape)
-    {
-        switch (shape)
-        {
-            case FixShape.Value:
-                return SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(assignment.Right.WithoutTrivia())));
-
-            case FixShape.ScalarTransitionDuration:
-                // Only 'new ScalarTransition()' / 'new()' with no constructor arguments and an
-                // initializer that sets nothing but Duration. Anything else is left to the author.
-                if (assignment.Right is not BaseObjectCreationExpressionSyntax creation
-                    || creation.ArgumentList is { Arguments.Count: > 0 })
-                {
-                    return null;
-                }
-
-                var initializer = creation.Initializer;
-                if (initializer is null || initializer.Expressions.Count == 0)
-                    return SyntaxFactory.ArgumentList();
-
-                if (initializer.Expressions.Count != 1
-                    || initializer.Expressions[0] is not AssignmentExpressionSyntax
-                    {
-                        Left: IdentifierNameSyntax { Identifier.Text: "Duration" },
-                    } duration
-                    || !duration.IsKind(SyntaxKind.SimpleAssignmentExpression))
-                {
-                    return null;
-                }
-
-                return SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(duration.Right.WithoutTrivia())));
-
-            default:
-                return null;
-        }
-    }
+    internal static ArgumentListSyntax BuildModifierArguments(AssignmentExpressionSyntax assignment) =>
+        SyntaxFactory.ArgumentList(
+            SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(assignment.Right.WithoutTrivia())));
 }

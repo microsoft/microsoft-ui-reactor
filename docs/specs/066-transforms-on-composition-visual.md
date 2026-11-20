@@ -583,7 +583,13 @@ element that uses the composition visual.**
   visual with `ElementCompositionPreview.GetElementVisual` in `.OnMount`. The `Translation` arm only
   fires when the chain already declares `.Translation()`, so it gets its own message instead of a
   suggestion: "this write is ignored because `.Translation(…)` owns translation on this element; remove
-  it or merge the value into the existing `.Translation(…)`" (#1642).
+  it or merge the value into the existing `.Translation(…)`" (#1642). *As shipped in layer 0:* on `main`
+  a plain `.Translation(…)` still writes the facade, so the write is overridden on mount and wins on
+  later updates rather than being ignored. The message says the two conflict, and that WinUI ignores the
+  write once translation is enabled on the visual. Until layer 2, the four `*Transition` rows don't
+  suggest their modifier either. On `main` the `.XxxTransition()` modifiers set the same XAML property
+  and block the handoff too (#1623), so the message says to remove the write and animate with
+  `.Animate(…)`. Layer 2 switches these rows to the modifier.
 - *Code fix.* Mechanical rewrites only, under the same constraints as `PoolResetSetCodeFix`. The
   assignment must be the lambda's only statement, and the right-hand side must map to the modifier's
   parameters without evaluating anything twice:
@@ -594,6 +600,13 @@ element that uses the composition visual.**
   The `Translation` arm has no rewrite. Adding `.Translation(…)` would duplicate the existing call,
   and `ModifyVisual` merges last-wins, so the added call would be dead code. Any other shape also gets
   the diagnostic without a fix.
+
+  *As shipped in layer 0:* only the `Rotation`, `Scale` and `CenterPoint` rewrites are on. The four
+  transition rewrites wait for layer 2, because on `main` they would still block the handoff (#1623).
+  The fix is also declined in three cases. One is when the right-hand side reads the lambda parameter,
+  because the lambda is deleted and the name would fail to bind or rebind to an outer symbol. Another
+  is when the lambda holds a comment or a directive. The last is when `.Animate` is on the chain, where
+  the modifier would animate in on mount while the `.Set` value was migrated without animating.
 - *Accepted false negatives.* The rule misses three shapes, because none of them is visible from the
   `.Set` chain:
   - a visual-owning modifier on a wrapper (keyed `Memo`, a decorator) or in a chain split across variables;

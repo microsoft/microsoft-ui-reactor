@@ -45,11 +45,12 @@ Conventions for contributors:
   the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
   `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix` or one of the `*Transition` properties,
   or calls `StartAnimation`, on a chain that also uses `.Animate`, `.InteractionStates`,
-  `.Transition`, `.Keyframes`, `.LayoutAnimation` or `.ScrollLinked`. Those modifiers take the
-  visual, and WinUI then throws on facade writes. A code fix rewrites a single-assignment `.Set` to
-  the matching modifier (`.Rotation(…)`, `.OpacityTransition(duration)`, …). The rule also flags a
-  `.Set` `Translation` write next to `.Translation(…)`, which ignores it (the build-time half of
-  #1642), with its own message and no fix.
+  `.Transition`, `.Keyframes`, `.LayoutAnimation`/`.SpringLayoutAnimation` or `.ScrollLinked`. Those
+  modifiers take the visual, and WinUI then throws on facade writes. A code fix rewrites a
+  single-assignment `.Set` of `Rotation`, `Scale` or `CenterPoint` to the matching modifier. The rule
+  also flags a `.Set` `Translation` write next to `.Translation(…)`, which conflicts with it and is
+  ignored once translation is enabled on the visual (the build-time half of #1642). That arm has its
+  own message and no fix.
 
 ### Changed
 

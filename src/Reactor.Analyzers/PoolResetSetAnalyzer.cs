@@ -607,7 +607,7 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
     /// value — so the explicit null write silently stops happening, which is exactly the
     /// class of silent behaviour change this gate exists to prevent.
     /// </remarks>
-    internal static bool IsNullOrDefault(ExpressionSyntax expression)
+    private static bool IsNullOrDefault(ExpressionSyntax expression)
     {
         while (true)
         {

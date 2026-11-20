@@ -451,7 +451,7 @@ internal static class SetLambdaHelpers
     /// purpose: a shadowing declaration that happens to reuse the name only costs a declined
     /// fix, whereas missing a real reference emits broken code.
     /// </remarks>
-    private static bool ReferencesIdentifier(SyntaxNode expression, string identifier)
+    internal static bool ReferencesIdentifier(SyntaxNode expression, string identifier)
         => expression.DescendantNodesAndSelf()
             .OfType<IdentifierNameSyntax>()
             .Any(name => string.Equals(name.Identifier.Text, identifier, StringComparison.Ordinal));

@@ -674,9 +674,9 @@ internal static class ModifierTable
             // onto it), and the analyzer cannot see the later facade writes from event handlers
             // or ElementRef.Current that would then throw. Keeping them out also means one .Set
             // write never gets both a REACTOR_ANIM_004 and a REACTOR_MOD_002 diagnostic.
-            ["Scale"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
-            ["Rotation"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
-            ["CenterPoint"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["Scale"] = "Spec 066 layer 4 moves the modifier onto the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["Rotation"] = "Spec 066 layer 4 moves the modifier onto the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["CenterPoint"] = "Spec 066 layer 4 moves the modifier onto the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
 
             // Candidates, deliberately unmapped pending verification of how they reach the
             // control. Mapping one wrongly ships a code fix that compiles and does nothing,
