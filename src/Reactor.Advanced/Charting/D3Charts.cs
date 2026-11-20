@@ -250,7 +250,6 @@ public static class D3Charts
     {
         return new()
         {
-            Data = pathData != null ? PathDataParser.Parse(pathData) : null,
             PathDataString = pathData,
             Stroke = stroke,
             Fill = fill,
@@ -263,7 +262,6 @@ public static class D3Charts
     {
         return new()
         {
-            Data = pathData != null ? PathDataParser.Parse(pathData) : null,
             PathDataString = pathData,
             Stroke = stroke,
             Fill = fill,

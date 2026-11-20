@@ -81,8 +81,8 @@ geometry, `BitmapImage`, or **`AutomationPeer`-derived** type) — you get a `CO
 If a target needs one, it is NOT a unit target → drop it (note why) or move to a selftest.
 Internal seams are testable: `InternalsVisibleTo("Reactor.Tests")` is set in
 `src/Reactor/Reactor.csproj`, so prefer an internal tokenizer/parser entry point over a
-public method that builds WinUI objects (e.g. `PathDataParser.ParseTokens(pathData)`
-vs the public `Parse`). Before writing an E2E, check for an existing reflection selftest
+public method that builds WinUI objects (e.g. `BrushHelper.ParseColor(color)`, which
+returns a `Windows.UI.Color` value, vs the public `Parse`, which builds a `SolidColorBrush`). Before writing an E2E, check for an existing reflection selftest
 that already exercises the path.
 
 ### 3. Add narrowly-scoped tests

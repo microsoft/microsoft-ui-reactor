@@ -29,19 +29,98 @@ internal static class AnimationHelper
             || (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
                 && (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
 
-    private static void MarkCompositionWrite(UIElement element, string property)
+    private static void MarkCompositionWrite(UIElement element, string property, float value)
+    {
+        var state = MarkCompositionWrite(element, property);
+        if (property == "Rotation") (state.TransformRest ??= new()).RotationDegrees = value;
+    }
+
+    private static void MarkCompositionWrite(UIElement element, string property, Vector3 value)
+    {
+        var state = MarkCompositionWrite(element, property);
+        if (property == "Scale") (state.TransformRest ??= new()).Scale = value;
+        else if (property == "Translation") (state.TransformRest ??= new()).Translation = value;
+    }
+
+    private static Reconciler.ReactorState MarkCompositionWrite(UIElement element, string property)
     {
         var state = Reconciler.GetOrCreateReactorState(element);
         var flag = PropertyFlag(property);
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
+        return state;
     }
 
     private static Visual GetAnimationVisual(UIElement element)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var visual = GetElementVisual(element);
         ElementPool.MarkCompositorTainted(element);
+        return visual;
+    }
+
+    /// <summary>
+    /// Returns the element's handoff visual. Every Reactor feature that needs the visual of a
+    /// user element must take it here rather than from <see cref="ElementCompositionPreview"/>.
+    /// </summary>
+    /// <remarks>
+    /// WinUI refuses <c>GetElementVisual</c> while <see cref="UIElement.Scale"/>,
+    /// <see cref="UIElement.Rotation"/> or <see cref="UIElement.CenterPoint"/> holds a non-identity
+    /// value, and refuses facade writes after the handoff (#1613). This therefore resets any such
+    /// facade value to identity, takes the visual, writes the same value to it, and marks it as a
+    /// composition write so later modifier updates and unsets follow it to the visual.
+    /// <see cref="UIElement.Translation"/> does not block the handoff and stays writable after it,
+    /// but it moves too, so that the visual's Translation is the only one and features that
+    /// animate it start from the right value. The facade is read on every call rather than
+    /// cached so that a Translation written to the facade later is moved as well.
+    /// </remarks>
+    internal static Visual GetElementVisual(UIElement element)
+    {
+        var scale = element.Scale;
+        var rotation = element.Rotation;
+        var translation = element.Translation;
+        var center = element.CenterPoint;
+        bool moveScale = scale != Vector3.One, moveRotation = rotation != 0;
+        bool moveTranslation = translation != Vector3.Zero, moveCenter = center != Vector3.Zero;
+        if (!(moveScale || moveRotation || moveTranslation || moveCenter))
+            return ElementCompositionPreview.GetElementVisual(element);
+
+        if (moveScale) element.Scale = Vector3.One;
+        if (moveRotation) element.Rotation = 0;
+        if (moveTranslation) element.Translation = Vector3.Zero;
+        if (moveCenter) element.CenterPoint = Vector3.Zero;
+
+        Visual visual;
+        try
+        {
+            visual = ElementCompositionPreview.GetElementVisual(element);
+        }
+        catch
+        {
+            // Something else still blocks the handoff; leave the element as it was.
+            if (moveScale) element.Scale = scale;
+            if (moveRotation) element.Rotation = rotation;
+            if (moveTranslation) element.Translation = translation;
+            if (moveCenter) element.CenterPoint = center;
+            throw;
+        }
+        // The visual now carries transforms that pool cleanup does not reset, so the element
+        // must not be pooled even when the caller does not mark it.
+        ElementPool.MarkCompositorTainted(element);
+
+        // Facade Rotation is in degrees; RotationAngle is in radians.
+        if (moveScale) visual.Scale = scale;
+        if (moveRotation) visual.RotationAngle = rotation * MathF.PI / 180f;
+        if (moveTranslation)
+        {
+            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+            visual.Properties.InsertVector3("Translation", translation);
+        }
+        if (moveCenter) visual.CenterPoint = center;
+        if (moveScale) MarkCompositionWrite(element, "Scale", scale);
+        if (moveRotation) MarkCompositionWrite(element, "Rotation", rotation);
+        if (moveTranslation) MarkCompositionWrite(element, "Translation", translation);
+        if (moveCenter) MarkCompositionWrite(element, "CenterPoint");
         return visual;
     }
 
@@ -54,6 +133,15 @@ internal static class AnimationHelper
     {
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
         var flag = PropertyFlag(property);
+        if (state?.TransformRest is { } rest)
+        {
+            switch (property)
+            {
+                case "Scale": rest.Scale = Vector3.One; break;
+                case "Rotation": rest.RotationDegrees = 0; break;
+                case "Translation": rest.Translation = Vector3.Zero; break;
+            }
+        }
         if (state is null || (state.CompositionModifierProperties & flag) == 0)
         {
             if (property == "Opacity") return;
@@ -176,7 +264,7 @@ internal static class AnimationHelper
                 SetScalarDirect(element, property, value);
                 return;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 
     /// <summary>
@@ -399,7 +487,7 @@ internal static class AnimationHelper
                 SetVector3Direct(element, property, value);
                 return;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 
     private static Curve? ResolveCurve(UIElement element, string property, Element? source, bool respectPropertyFlags)
@@ -449,7 +537,7 @@ internal static class AnimationHelper
             element.Opacity = value;
             visual.Opacity = value;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 
     private static void SetVector3Direct(UIElement element, string property, Vector3 value)
@@ -479,7 +567,7 @@ internal static class AnimationHelper
                 break;
             case "CenterPoint": visual.CenterPoint = value; break;
         }
-        MarkCompositionWrite(element, property);
+        MarkCompositionWrite(element, property, value);
     }
 }
 
@@ -499,7 +587,7 @@ public static class CompositorProvider
     public static Compositor EnsureCompositor(UIElement element)
     {
         if (_current is not null) return _current;
-        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var visual = AnimationHelper.GetElementVisual(element);
         _current = visual.Compositor;
         return _current;
     }

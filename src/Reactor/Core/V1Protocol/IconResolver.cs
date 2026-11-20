@@ -119,16 +119,7 @@ internal static class IconResolver
     };
 
     internal static WinUI.PathIconSource? CreatePathIconSource(PathIconData pi)
-    {
-        var src = new WinUI.PathIconSource();
-        if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
-            is Microsoft.UI.Xaml.Media.Geometry geo)
-        {
-            src.Data = geo;
-        }
-        return src;
-    }
+        => new WinUI.PathIconSource { Data = PathMarkup.Convert(pi.Data) };
 
     internal static WinUI.FontIcon CreateFontIcon(FontIconData fi)
     {
@@ -152,16 +143,7 @@ internal static class IconResolver
     }
 
     internal static WinUI.PathIcon CreatePathIcon(PathIconData pi)
-    {
-        var icon = new WinUI.PathIcon();
-        if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
-            is Microsoft.UI.Xaml.Media.Geometry geo)
-        {
-            icon.Data = geo;
-        }
-        return icon;
-    }
+        => new WinUI.PathIcon { Data = PathMarkup.Convert(pi.Data) };
 
     internal static Symbol ParseSymbol(string name)
     {
