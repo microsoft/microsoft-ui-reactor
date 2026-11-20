@@ -146,6 +146,46 @@ Conventions for contributors:
   including a Flyout target's own keyframes and modifier animations, keep running (spec 066
   §7.3, issue #1641).
 
+- **Resolving a theme resource for the theme the app is not using returns that theme's
+  brush and no longer changes the brush for the whole app (issue #1534).** WinUI creates a
+  theme dictionary entry the first time it is read, using the app's theme. Reactor read the
+  entries from code, so in a Light app `ThemeRef.Resolve("ControlFillColorSecondaryBrush",
+  isDark: true)` returned the Light color, and every Dark element using that key showed the
+  Light color from then on. Most theme keys were affected in both directions. The same lookup
+  backed `.Resources(...)` overrides with theme tokens under an element with the other
+  `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
+  the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
+  only reads the dictionaries itself when WinUI cannot find the key for that theme, never
+  reading WinUI's own `XamlControlsResources` that way.
+
+- `ThemeRef` modifiers that go through the synthesized `{ThemeResource}` Style, ported from
+  the `SetThemeResourceBinding` work in PR #1618 so they don't wait for a new Windows App SDK
+  (PR #1636):
+  - `SplitView(...).PaneBackground(ThemeRef)` themes the pane background. It used to do
+    nothing, and replacing a `.PaneBackground(brush)` with it left the old brush in place.
+    Removing `.PaneBackground(brush)` now also restores the default pane background instead
+    of keeping the last brush. A loaded `SplitView` no longer crashes with
+    `ArgumentException` (E_INVALIDARG) when a `ThemeRef` modifier is added or removed on
+    re-render: the themed Style is built on `DefaultSplitViewStyle`.
+  - `.InteractionStates()` no longer freezes a `ThemeRef` `Background` or `Foreground`.
+    Leaving a state wrote back a brush captured at setup, which pinned the theme it had
+    then, and even an opacity-only state did so. Now a property is restored only when a
+    state wrote over it. An explicit `.Background(brush)` comes back as the element carries
+    it when the states end, including a brush a re-render set during a hover, and a themed
+    property is cleared so it follows the theme again.
+  - A `ThemeRef` modifier keeps the control's own `Style` (`.Set(c => c.Style = s)`,
+    `.ApplyStyle(...)`, `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `Title(...)`
+    and the other typography factories). The themed Style is built `BasedOn` it instead of
+    replacing it, and dropping the `ThemeRef` restores it (issue #522 path). A Style whose
+    `TargetType` is a third-party control type can't be a `BasedOn` of the WinUI type, so
+    there the themed Style still replaces it, and a warning is logged once. Direct callers
+    of `Reconciler.ApplyThemeBindings` get the same behaviour.
+  - A `ThemeRef` key containing a comma, brace, `=`, `|`, quote, space or backslash now
+    works. The key used to be written unquoted, so the Style failed to parse and every
+    `ThemeRef` on that element silently did nothing. A key that cannot be written at all
+    (both quote characters, a tab or line break) skips only that property and logs a
+    warning.
+
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no
   longer throws during reconcile and replaces the host content with the error
@@ -328,6 +368,25 @@ Conventions for contributors:
   and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
   instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
   also skip the write and leave the right-to-left value on the control.
+- **`Curve.Linear` animates at constant speed (spec 066 §16, issue #1640).** Its compositor
+  keyframes had no easing function, so the compositor's default ease-out applied and a
+  linear animation was already about two-thirds of the way at 30% of its duration. Every linear
+  path now passes a linear easing function: `.Animate(Curve.Linear(...))`,
+  `AnimationScope.WithAnimation(Curve.Linear(...))`, `.InteractionStates(..., Curve.Linear(...))`,
+  `.Transition(..., Curve.Linear(...))` enter and exit animations, and the compositor fallback
+  for `.OpacityTransition()`, `.RotationTransition()`, `.ScaleTransition()` and
+  `.TranslationTransition()` on an element whose visual was already handed out. That fallback
+  is built on the linear curve, so it is now linear too. Spec 066 later moves it to the XAML
+  transition curve.
+
+- ReactorGallery search keeps complete samples that contain ellipses in comments
+  or display text, restoring the Pan and `OpacityTransition` examples in
+  `winapp find-ui --source reactor`. Code elisions, map-token fill-ins, and placeholders
+  in URI-shaped string literals are filtered, including Image and MediaPlayerElement
+  sources and displayed URI templates. An independent coverage check catches missing
+  cards even after index regeneration
+  ([issue #1020](https://github.com/microsoft/microsoft-ui-reactor/issues/1020),
+  [spec 064 §3.2](docs/specs/064-search-index-framework-concepts.md#32-every-clean-card-is-emitted)).
 
 ### Security
 

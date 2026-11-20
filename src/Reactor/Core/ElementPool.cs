@@ -302,8 +302,11 @@ public sealed class ElementPool : IDisposable
         // not transitioned) does not. Without clearing here, a control that
         // was themed would carry that Style into the pool and the next
         // unrelated element to rent it would inherit the prior brushes.
-        // Gated on Style being non-null so non-themed controls (the common
-        // case) skip the redundant COM call.
+        // ClearThemeBindings also drops Reactor's ownership marker, so the
+        // pooled control holds no reference to the previous renter's themed
+        // Style. Gated on Style being non-null so non-themed controls (the
+        // common case) skip the redundant COM call.
+        Reconciler.ClearThemeBindings(fe);
         if (fe.Style is not null)
             fe.ClearValue(FrameworkElement.StyleProperty);
 

@@ -255,9 +255,10 @@ public readonly record struct ThemeRef(string ResourceKey)
 
     /// <summary>
     /// Resolves this theme reference using the element's actual theme.
-    /// Walks the ThemeDictionaries in Application.Resources and MergedDictionaries
-    /// to find the brush matching the element's effective theme (which respects
-    /// per-element RequestedTheme overrides, not just the app-level theme).
+    /// The theme is the element's effective theme (which respects per-element
+    /// RequestedTheme overrides, not just the app-level theme). WinUI resolves the
+    /// key for that theme, as a <c>{ThemeResource}</c> reference on an element in that
+    /// theme would, instead of Reactor reading the theme dictionaries (issue #1534).
     /// </summary>
     internal static Brush? Resolve(string resourceKey, FrameworkElement fe)
     {
@@ -275,10 +276,14 @@ Reactor exposes the same WinUI theme dictionaries through
 `ThemeRef`, a readonly record struct holding a resource key. The
 static [`Theme`](theming-tokens.md) class names the most-used
 tokens (`Theme.Accent`, `Theme.CardBackground`, etc.); `Theme.Ref(key)`
-is the escape hatch for any other key. The reconciler walks
-`Application.Resources.ThemeDictionaries` exactly the way `{ThemeResource}`
-does, and re-resolves on `ActualThemeChanged` — so flipping the system
-theme updates every `Theme.Accent` brush without a re-render.
+is the escape hatch for any other key. Theme modifiers such as
+`.Background(Theme.Accent)` set the property through a `{ThemeResource}`
+reference. `.Resources(...)` overrides ask WinUI to resolve the key the
+same way for the element's theme, and `ThemeRef.Resolve(key, isDark)`
+does it for the theme you pass, so a dark subtree in a light app gets
+the dark brush. Reactor re-resolves on
+`ActualThemeChanged` — so flipping the system theme updates every
+`Theme.Accent` brush without a re-render.
 
 ## VisualStateManager → InteractionStates modifier
 

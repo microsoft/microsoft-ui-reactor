@@ -738,6 +738,9 @@ public class ModifierTableIntegrityTests
 
         foreach (var (prop, themeGate) in themeGates.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
+            if (ElementSpecificThemeProperties.Contains(prop))
+                continue;
+
             if (!applyGates.TryGetValue(prop, out var applyGate))
             {
                 problems.Add(
@@ -766,10 +769,20 @@ public class ModifierTableIntegrityTests
             }
         }
 
+        foreach (var prop in ElementSpecificThemeProperties.Where(prop => !themeGates.ContainsKey(prop)))
+            problems.Add($"{prop}: listed as element-specific but GetDependencyPropertyName no longer maps it. Remove the row.");
+
         Assert.True(
             problems.Count == 0,
             "Reconciler's two applicability copies have drifted:\n  " + string.Join("\n  ", problems));
     }
+
+    /// <summary>
+    /// ThemeRef properties that come from one element's own extension rather than a common
+    /// modifier, so <c>ApplyModifiers</c> has no brush counterpart to agree with.
+    /// <c>PaneBackground</c> is <c>SplitViewElement.PaneBackground(ThemeRef)</c>.
+    /// </summary>
+    private static readonly HashSet<string> ElementSpecificThemeProperties = new(StringComparer.Ordinal) { "PaneBackground" };
 
     /// <summary>
     /// Property name → the WinUI type names <c>Reconciler.GetDependencyPropertyName</c> will emit a

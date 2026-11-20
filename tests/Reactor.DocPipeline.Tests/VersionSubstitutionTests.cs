@@ -109,7 +109,7 @@ public class VersionSubstitutionTests
         // Integration: prove VersionSource resolves against the actual repo
         // Directory.Build.props and returns the real pinned value, so a broken
         // regex or a renamed element is caught.
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var fromReader = VersionSource.ReadPublicVersion(repoRoot);
 
         var raw = global::System.IO.File.ReadAllText(
@@ -206,18 +206,5 @@ public class VersionSubstitutionTests
         {
             global::System.IO.Directory.Delete(emptyDir, recursive: true);
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new global::System.IO.DirectoryInfo(global::System.AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new global::System.InvalidOperationException("Could not locate repo root (Reactor.slnx) from test base dir.");
     }
 }
