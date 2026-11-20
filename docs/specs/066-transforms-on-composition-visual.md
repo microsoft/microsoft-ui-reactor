@@ -1,6 +1,6 @@
 # Spec 066 — Transform modifiers on the composition visual
 
-> Status: **proposed** (2026-11-20). Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
+> Status: **accepted** (2026-11-20), not yet implemented. Rollout in §13. Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
 > Plans fixes for [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
 > [#1624](https://github.com/microsoft/microsoft-ui-reactor/issues/1624),
 > [#1625](https://github.com/microsoft/microsoft-ui-reactor/issues/1625),
