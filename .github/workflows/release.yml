@@ -508,7 +508,7 @@ jobs:
             ### `Microsoft.UI.Reactor.Devtools.${{ steps.version.outputs.version }}.nupkg` — **deprecated** devtools host (debug + VS preview)
 
             **Deprecated:** inspect and drive apps with the WinUI DevTools in the
-            winapp CLI (`winapp run . --devtools`) instead. The package stays, for
+            winapp CLI (`winapp run . --devtools on`) instead. The package stays, for
             its in-app component preview host, until winapp has its own previewer:
             the VS Code live preview and the Visual Studio embedded preview need it.
             Referenced by the scaffolded `dotnet new reactor` csproj in a Debug-only

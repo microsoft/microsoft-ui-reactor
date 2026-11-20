@@ -1,7 +1,7 @@
 # Reactor Devtools — In-App Preview Host
 
 > **Deprecated.** This package is replaced by the WinUI DevTools in the winapp CLI
-> (`winapp run . --devtools`). It stays, and keeps working, only for the component preview host,
+> (`winapp run . --devtools on`). It stays, and keeps working, only for the component preview host,
 > the capture server and the `--embed` handshake that the VS Code live preview and the Visual
 > Studio embedded preview need, until winapp has its own previewer. The `mur devtools` CLI, this
 > package's MCP server (with its lockfile, call log and `--mcp-*` / `--devtools-log*` flags) and the

@@ -10,7 +10,7 @@ using static Microsoft.UI.Reactor.Factories;
 // here in one screen: a scalar accessibility edge, a list edge, a directed cycle,
 // and a deliberately-unresolved edge you can toggle. Launch the app with
 // `--devtools run`, open the VS Code preview and hit the **References** toggle (or
-// launch with `winapp run . --devtools` and read the References section of
+// launch with `winapp run . --devtools on` and read the References section of
 // `winapp devtools get-property <selector>`) to watch the edges and the
 // cycle / unresolved diagnostics update live.
 class ReferenceGraphDemo : Component
@@ -34,7 +34,7 @@ class ReferenceGraphDemo : Component
                 "Each section below declares a reactive reference edge — the same edges " +
                 "the devtools 'references' overlay visualizes. Open the References overlay " +
                 "in the VS Code preview (or read the References section of " +
-                "`winapp devtools get-property <selector>` under `winapp run . --devtools`) to " +
+                "`winapp devtools get-property <selector>` under `winapp run . --devtools on`) to " +
                 "see them, plus the cycle and unresolved diagnostics, update live."),
 
             // 1. Scalar accessibility edge: LabeledBy → one target.

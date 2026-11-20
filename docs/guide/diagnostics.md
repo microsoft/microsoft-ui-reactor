@@ -294,7 +294,7 @@ routes above — they cost less and emit a richer format.
 The in-app `reactor.logs` MCP tool has been removed with the rest of the MCP
 server in the deprecated `Microsoft.UI.Reactor.Devtools` package. To read a running
 app's output while you work, launch it with the WinUI DevTools
-(`winapp run . --devtools`) and use `winapp devtools logs [--follow]`. To get
+(`winapp run . --devtools on`) and use `winapp devtools logs [--follow]`. To get
 `Microsoft-UI-Reactor` events into that output, or into your own logger, subscribe
 in process with `ReactorTrace.Subscribe` (above) and write them where you want
 them; for a file to hand to someone else, use the environment-variable or

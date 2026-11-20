@@ -6,7 +6,7 @@ editor asks for it, runs a loopback capture server that streams frames, lists
 components, switches the previewed component, draws the reference graph, and
 hands the window to Visual Studio for embedding. Everything else — inspecting and
 editing a running app, UI automation, logs, agents — is the WinUI DevTools in the
-winapp CLI (`winapp run . --devtools`), which attaches from outside the app and
+winapp CLI (`winapp run . --devtools on`), which attaches from outside the app and
 needs nothing in your project. The preview host is zero-cost in retail: without the
 `Reactor.DevtoolsSupport` switch the package's code is trimmed and a `--devtools`
 argument only prints how to enable it.
@@ -16,7 +16,7 @@ argument only prints how to enable it.
 > **Deprecated.** This page describes the in-app preview host in the
 > `Microsoft.UI.Reactor.Devtools` package. Its MCP server, its in-app dev menu
 > (`DevtoolsMenu`, `UseDevtools`) and the `mur devtools` CLI have been **removed**; use
-> the WinUI DevTools in the winapp CLI (`winapp run . --devtools`) — see
+> the WinUI DevTools in the winapp CLI (`winapp run . --devtools on`) — see
 > [Dev Tooling](dev-tooling.md#winui-devtools-winapp) for the mapping. The package stays
 > (deprecated) until winapp has its own previewer, because the VS Code live preview and
 > the Visual Studio embedded preview run on it; this page goes with it. The
@@ -107,7 +107,7 @@ internal static string? RemovedSubverbMessage(string[] args, int devtoolsIdx)
     if (devtoolsIdx + 1 >= args.Length) return null;
     return args[devtoolsIdx + 1].ToLowerInvariant() switch
     {
-        "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools",
+        "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools on",
         "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
         "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
         _ => null,
@@ -201,7 +201,7 @@ Launch the app the way the doc screenshot pipeline does — `--preview <Componen
 takes its pixels with winapp's screen capture instead), and
 `POST /preview` with `{"component":"<Name>"}` to switch components without a
 relaunch. For anything beyond pixels — the tree, properties, clicks — use the
-WinUI DevTools (`winapp run . --devtools`, then `winapp devtools inspect` or
+WinUI DevTools (`winapp run . --devtools on`, then `winapp devtools inspect` or
 `winapp ui click`) instead of extending the capture server.
 
 ### Adding an endpoint
@@ -219,7 +219,7 @@ the payload stays NativeAOT-safe.
 
 The preview host renders and streams; it does not inspect. Component trees,
 properties, state, handlers and UI automation are the WinUI DevTools:
-`winapp run . --devtools`, then `winapp devtools inspect` or `winapp ui ...`.
+`winapp run . --devtools on`, then `winapp devtools inspect` or `winapp ui ...`.
 
 ### Shipping the switch in Release
 

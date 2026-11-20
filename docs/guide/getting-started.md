@@ -875,7 +875,7 @@ The developer tools for a running Reactor app are the WinUI DevTools in the
 the app, so nothing goes in your project — launch a Debug build with:
 
 ```powershell
-winapp run . --devtools
+winapp run . --devtools on
 ```
 
 Then inspect the component tree, edit properties and state, or drive the UI with
@@ -889,7 +889,7 @@ WinUI DevTools need it for C# call sites. The default launch profile passes no
 arguments. If your template pack also has an `"<AppName> (Unpackaged, Devtools)"`
 profile, what it does depends on its argument: a bare `--devtools` starts the app
 under that preview host, while `--devtools app` (the in-app dev menu session) now
-prints the winapp command to use and exits `2` — use `winapp run . --devtools`
+prints the winapp command to use and exits `2` — use `winapp run . --devtools on`
 instead. The in-app dev menu (`DevtoolsMenu`, `UseDevtools`) has been removed. The
 [dev tooling](dev-tooling.md) page covers the full inner loop.
 

@@ -137,7 +137,7 @@ void ShowHelp()
     Console.WriteLine("  loc validate     Check ICU syntax and parameter consistency");
     Console.WriteLine("  loc status       Show translation coverage per locale");
     Console.WriteLine("  loc prune        Find unused localization keys");
-    Console.WriteLine("  devtools         Removed: prints the winapp equivalent (`winapp run . --devtools`) and exits 1");
+    Console.WriteLine("  devtools         Removed: prints the winapp equivalent (`winapp run . --devtools on`) and exits 1");
     Console.WriteLine("  check [path]     Build and emit one-line diagnostics with skill-file pointers");
     Console.WriteLine("  pack-local       Pack the in-source framework to <repo>/local-nupkgs/ as 0.0.0-local");
     Console.WriteLine("  clean-local      Remove local packages, NuGet cache entries, and templates");
@@ -277,7 +277,7 @@ int CreateProject(string name)
     Console.WriteLine();
     Console.WriteLine("To inspect the running app (component tree, C# call sites, state, live edits)");
     Console.WriteLine("with the WinUI DevTools in the winapp CLI; AI agents use the winui-devtools skill:");
-    Console.WriteLine($"    winapp run . --devtools");
+    Console.WriteLine($"    winapp run . --devtools on");
 
     return 0;
 }

@@ -20,7 +20,7 @@
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
-    <Description>DEPRECATED: use the WinUI DevTools in the winapp CLI instead (`winapp run . --devtools`; agents: the winui-devtools skill). Still needed for the VS Code live preview and the Visual Studio embedded preview until winapp has its own previewer.</Description>
+    <Description>DEPRECATED: use the WinUI DevTools in the winapp CLI instead (`winapp run . --devtools on`; agents: the winui-devtools skill). Still needed for the VS Code live preview and the Visual Studio embedded preview until winapp has its own previewer.</Description>
     <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;deprecated</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>

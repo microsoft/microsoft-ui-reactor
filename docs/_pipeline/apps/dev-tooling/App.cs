@@ -34,7 +34,7 @@ class DevToolingApp : Component
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
 // Hot reload works when the app is launched under dotnet watch. Inspect the
-// running app with the WinUI DevTools: winapp run . --devtools
+// running app with the WinUI DevTools: winapp run . --devtools on
 // </snippet:entry-point>
 
 // <snippet:function-entry>

@@ -130,7 +130,7 @@ Crossing requires:
 
 ### 6.2 Boundary B (removed): External MCP client ↔ DevtoolsMcpServer
 
-The in-app MCP server, its stdio variant and its per-project lockfile have been removed from `Microsoft.UI.Reactor.Devtools`, together with the `mur devtools` client. Agents inspect and drive a running app with the winapp CLI (`winapp run . --devtools`), which is a separate product with its own threat model.
+The in-app MCP server, its stdio variant and its per-project lockfile have been removed from `Microsoft.UI.Reactor.Devtools`, together with the `mur devtools` client. Agents inspect and drive a running app with the winapp CLI (`winapp run . --devtools on`), which is a separate product with its own threat model.
 
 **There is no second trust boundary.** No remote endpoint, no privilege transition, no AppContainer crossing, no user-mode ↔ kernel-mode transition. The framework runs entirely at the host app's trust level.
 

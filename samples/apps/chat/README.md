@@ -34,10 +34,10 @@ Run the app:
 dotnet run --project samples\apps\chat\App\ChatSample.csproj
 ```
 
-Run with the WinUI DevTools attached (`winapp run … --devtools`; Reactor's own `-- --devtools run` is deprecated):
+Run with the WinUI DevTools attached (`winapp run … --devtools on`; Reactor's own `-- --devtools on run` is deprecated):
 
 ```powershell
-winapp run samples\apps\chat\App\ChatSample.csproj --devtools
+winapp run samples\apps\chat\App\ChatSample.csproj --devtools on
 ```
 
 ## Reusing the UI

@@ -495,7 +495,7 @@ public static partial class ReactorApp
     /// and the deprecated Microsoft.UI.Reactor.Devtools package referenced, <c>--devtools run</c>
     /// starts the in-app preview host that the VS Code and Visual Studio previews use
     /// (component switching and listing). To inspect a running app, use the WinUI DevTools:
-    /// <c>winapp run . --devtools</c>.
+    /// <c>winapp run . --devtools on</c>.
     /// </summary>
     /// <param name="title">Window caption text.</param>
     /// <param name="width">Initial DIP width; <c>null</c> defers to the OS.</param>
@@ -1357,7 +1357,7 @@ public static partial class ReactorApp
         Console.Error.WriteLine(
             "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
         Console.Error.WriteLine(
-            "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools`; that needs no package.");
+            "[reactor] The in-app preview host is deprecated and kept only for the VS Code and Visual Studio previews. To inspect a running app, launch it with `winapp run . --devtools on`; that needs no package.");
     }
 
     internal static void ResetDevtoolsEnabledForTests()

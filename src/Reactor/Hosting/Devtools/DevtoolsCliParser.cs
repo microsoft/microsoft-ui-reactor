@@ -285,7 +285,7 @@ internal static class DevtoolsCliParser
         if (devtoolsIdx + 1 >= args.Length) return null;
         return args[devtoolsIdx + 1].ToLowerInvariant() switch
         {
-            "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools",
+            "app" => "'--devtools app' was removed with the in-app dev menu. Inspect the running app with the WinUI DevTools: winapp run . --devtools on",
             "screenshot" => "'--devtools screenshot' was removed. Use: winapp ui screenshot -a <app>",
             "tree" => "'--devtools tree' was removed. Use: winapp devtools inspect",
             _ => null,
@@ -314,7 +314,7 @@ internal static class DevtoolsCliParser
         var found = RemovedFlags.Where(f => args.Contains(f, StringComparer.Ordinal)).ToArray();
         return found.Length == 0
             ? null
-            : $"Ignoring {string.Join(", ", found)}: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools";
+            : $"Ignoring {string.Join(", ", found)}: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools on";
     }
 
     private static bool IsExplicitDevtoolsRun(string[] args, int devtoolsIdx)

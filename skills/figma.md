@@ -29,7 +29,7 @@ Translate Figma designs built with the [Windows UI Kit (Community)](https://www.
 6. Agent applies `design.md` best practices (typography, layout, accessibility)
 7. Agent generates Component `.cs` files
 8. Agent scaffolds project if needed (`mur --create`)
-9. Agent launches app via `winapp run MyApp --devtools --detach`
+9. Agent launches app via `winapp run MyApp --devtools on --detach`
 10. Agent verifies via `winapp devtools inspect` and `winapp ui screenshot` (WinUI DevTools in the winapp CLI; see the `winui-devtools` skill)
 11. Agent iterates until structure matches
 
@@ -434,7 +434,7 @@ public class <ComponentName> : Component
 
 ```bash
 # 1. Build and launch with the WinUI DevTools (winapp CLI; `mur devtools` has been removed)
-winapp run MyApp --devtools --detach
+winapp run MyApp --devtools on --detach
 
 # 2. Verify structure (components, element kinds, C# call sites)
 winapp devtools inspect
@@ -442,7 +442,7 @@ winapp devtools inspect
 # 3. Capture screenshot
 winapp ui screenshot -a MyApp --output preview.png
 
-# 4. After editing code, rely on .NET Hot Reload. Launch with `winapp run MyApp --devtools --watch`
+# 4. After editing code, rely on .NET Hot Reload. Launch with `winapp run MyApp --devtools on --watch`
 #    instead of step 1 to rebuild on rude edits and re-attach DevTools automatically
 
 # 5. Re-verify

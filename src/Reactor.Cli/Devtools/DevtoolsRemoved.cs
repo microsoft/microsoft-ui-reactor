@@ -11,7 +11,7 @@ internal sealed record DevtoolsVerbMapping(string Key, string MurForm, string Wi
 
 /// <summary>
 /// <c>mur devtools</c> has been removed. Reactor's developer tools are the WinUI DevTools in
-/// the winapp CLI (<c>winapp run . --devtools</c>). Every <c>mur devtools …</c> invocation —
+/// the winapp CLI (<c>winapp run . --devtools on</c>). Every <c>mur devtools …</c> invocation —
 /// including bare <c>mur devtools</c> and <c>--help</c> — does nothing but tell the user what to
 /// run instead, on stderr, and exits with <see cref="ExitCode"/>.
 /// </summary>
@@ -21,9 +21,9 @@ internal static class DevtoolsRemoved
     internal const int ExitCode = 1;
 
     internal const string LaunchKey = "(launch)";
-    internal const string LaunchEquivalent = "winapp run . --devtools";
-    internal const string WatchEquivalent = "winapp run . --devtools --watch";
-    internal const string PreviewEquivalent = "winapp run . --devtools -- --preview <Name>";
+    internal const string LaunchEquivalent = "winapp run . --devtools on";
+    internal const string WatchEquivalent = "winapp run . --devtools on --watch";
+    internal const string PreviewEquivalent = "winapp run . --devtools on -- --preview <Name>";
     internal const string ReferencesKey = "references";
     internal const string AgentSkill = "winui-devtools";
 

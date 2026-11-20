@@ -181,7 +181,7 @@ public class CliFlagParsingTests
     }
 
     [Theory]
-    [InlineData("app", "winapp run . --devtools")]
+    [InlineData("app", "winapp run . --devtools on")]
     [InlineData("screenshot", "winapp ui screenshot")]
     [InlineData("tree", "winapp devtools inspect")]
     [InlineData("TREE", "winapp devtools inspect")]
@@ -241,14 +241,14 @@ public class CliFlagParsingTests
 
         Assert.NotNull(notice);
         Assert.StartsWith($"Ignoring {flag}:", notice);
-        Assert.Contains("winapp run . --devtools", notice);
+        Assert.Contains("winapp run . --devtools on", notice);
     }
 
     [Fact]
     public void RemovedFlagsNotice_ListsEveryRemovedFlag_AndIsNullWithoutThem()
     {
         Assert.Equal(
-            "Ignoring --mcp-port, --mcp-transport: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools",
+            "Ignoring --mcp-port, --mcp-transport: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools on",
             DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", "--mcp-transport", "stdio", "--mcp-port", "1"]));
         // Lookalikes and surviving flags are not removed flags.
         Assert.Null(DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", "--vscode", "--fps", "5", "--mcp-portx", "1"]));
@@ -524,7 +524,7 @@ public class DevtoolsHostCliTests
     }
 
     [Theory]
-    [InlineData("app", "winapp run . --devtools")]
+    [InlineData("app", "winapp run . --devtools on")]
     [InlineData("screenshot", "winapp ui screenshot")]
     [InlineData("tree", "winapp devtools inspect")]
     public void TryRunDevtoolsForTest_RemovedSubverb_PrintsTheWinappCommandAndExits2_BeforeTheSupportGate(string verb, string winapp)

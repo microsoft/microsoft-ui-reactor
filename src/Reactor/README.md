@@ -106,7 +106,7 @@ From here, the same model scales to real apps. The [getting started guide](https
 ## Related Packages
 
 - [`Microsoft.UI.Reactor.Advanced`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Advanced) — optional components with heavier native/graphics dependencies (Win2D canvas, charts).
-- [`Microsoft.UI.Reactor.Devtools`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Devtools) — **deprecated**: use `winapp run . --devtools` (WinUI DevTools in the winapp CLI) instead. Its in-app component preview host serves the VS Code live preview and the Visual Studio embedded preview until winapp has its own previewer.
+- [`Microsoft.UI.Reactor.Devtools`](https://www.nuget.org/packages/Microsoft.UI.Reactor.Devtools) — **deprecated**: use `winapp run . --devtools on` (WinUI DevTools in the winapp CLI) instead. Its in-app component preview host serves the VS Code live preview and the Visual Studio embedded preview until winapp has its own previewer.
 
 ## Feedback & Contributing
 

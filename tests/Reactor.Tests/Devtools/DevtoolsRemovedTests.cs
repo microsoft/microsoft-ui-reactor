@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 
 /// <summary>
 /// `mur devtools` has been removed in favour of the WinUI DevTools in the winapp CLI
-/// (`winapp run . --devtools`). Every invocation only tells the user what to run instead,
+/// (`winapp run . --devtools on`). Every invocation only tells the user what to run instead,
 /// on stderr, and exits with <see cref="DevtoolsRemoved.ExitCode"/>.
 /// </summary>
 public class DevtoolsRemovedTests
@@ -56,7 +56,7 @@ public class DevtoolsRemovedTests
     public void Mapping_MatchesTheShippedWinappCommands()
     {
         Assert.Equal("winapp devtools logs [--follow]", Row("logs").WinappForm);
-        Assert.StartsWith("winapp run . --devtools --watch", Row("reload").WinappForm);
+        Assert.StartsWith("winapp run . --devtools on --watch", Row("reload").WinappForm);
         Assert.StartsWith("winapp devtools call DevTools.negotiate", Row("version").WinappForm);
         Assert.StartsWith("winapp devtools invoke-handler <selector> <event>", Row("fire").WinappForm);
         Assert.StartsWith("winapp devtools get-property <selector>", Row("references").WinappForm);
@@ -73,7 +73,7 @@ public class DevtoolsRemovedTests
     public void PreviewRows_PointAtTheInAppPreviewHost(string key)
     {
         var row = Row(key);
-        Assert.StartsWith("winapp run . --devtools -- --preview <Name>", row.WinappForm);
+        Assert.StartsWith("winapp run . --devtools on -- --preview <Name>", row.WinappForm);
         Assert.Contains("Microsoft.UI.Reactor.Devtools package", row.WinappForm);
     }
 
@@ -103,10 +103,10 @@ public class DevtoolsRemovedTests
     }
 
     [Theory]
-    [InlineData(new[] { "MyApp.csproj" }, "mur devtools [project]", "winapp run . --devtools")]
+    [InlineData(new[] { "MyApp.csproj" }, "mur devtools [project]", "winapp run . --devtools on")]
     [InlineData(new[] { "MyApp.csproj", "--mcp-port", "9000" }, "mur devtools --print-config / --mcp-port", "not carried over")]
     [InlineData(new[] { "--print-config" }, "mur devtools --print-config / --mcp-port", "not carried over")]
-    [InlineData(new[] { "--component", "Counter" }, "mur devtools --component <Name>", "winapp run . --devtools -- --preview <Name>")]
+    [InlineData(new[] { "--component", "Counter" }, "mur devtools --component <Name>", "winapp run . --devtools on -- --preview <Name>")]
     [InlineData(new[] { "MyApp.csproj", "--component", "Counter" }, "mur devtools --component <Name>", "--preview <Name>")]
     [InlineData(new[] { "session" }, "mur devtools session list", "winapp devtools list")]
     [InlineData(new[] { "session", "clean", "--dry-run" }, "mur devtools session clean", "not lockfiles")]

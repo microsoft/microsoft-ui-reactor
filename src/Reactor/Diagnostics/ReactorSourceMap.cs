@@ -28,7 +28,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// can find where each component starts — one allocation per component, never per
 /// leaf.</para>
 ///
-/// <para><b>Who turns it on.</b> <c>winapp run --devtools</c> launches the app with
+/// <para><b>Who turns it on.</b> <c>winapp run --devtools on</c> launches the app with
 /// <c>REACTOR_SOURCEMAP=1</c> (see below) and <c>REACTOR_DIAGNOSTICS=1</c> (microsoft/winappCli#1197), and <c>ReactorApp</c> sets <see cref="Enabled"/> when the process was launched
 /// under the in-app preview host (<c>--devtools run</c>), so a retail session never
 /// pays. It is public-settable so a host that embeds its own inspector (or a

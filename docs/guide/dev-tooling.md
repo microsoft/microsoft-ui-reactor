@@ -16,7 +16,7 @@ intend to ship.
 
 > **`mur devtools` has been removed.** Reactor's developer tools are the
 > [WinUI DevTools in the winapp CLI](#winui-devtools-winapp), which need nothing in
-> your project: `winapp run . --devtools`. Every `mur devtools` command now only
+> your project: `winapp run . --devtools on`. Every `mur devtools` command now only
 > prints its winapp equivalent and exits `1`. The in-app MCP server and the in-app
 > dev menu (`DevtoolsMenu`, `UseDevtools`) have been removed too. The
 > `Microsoft.UI.Reactor.Devtools` package remains, deprecated, only for the in-app
@@ -45,7 +45,7 @@ preview workflow:
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
 // Hot reload works when the app is launched under dotnet watch. Inspect the
-// running app with the WinUI DevTools: winapp run . --devtools
+// running app with the WinUI DevTools: winapp run . --devtools on
 ```
 
 The app entry point is an ordinary `ReactorApp.Run` call; there is no
@@ -226,10 +226,15 @@ DevTools attached:
 
 <!-- ai:lock -->
 ```
-winapp run . --devtools --detach
+winapp run . --devtools on --detach
 winapp devtools inspect
 ```
 <!-- /ai:lock -->
+
+DevTools are on by default for WinUI projects outside CI, so a plain
+`winapp run .` attaches them too; `--devtools on` asks for them explicitly and
+fails instead of launching without them. `--devtools` takes a value (`on`, `off`
+or `headless`).
 
 `inspect` shows the tree your C# created — `<Counter>` component rows, element
 kinds, keys, and the `App.cs:67` call site of each element — across every window.
@@ -239,7 +244,7 @@ and the `winui-devtools` skill; the MCP server is not carried over. Add `--watch
 
 | `mur devtools` (removed) | use instead |
 |---|---|
-| `mur devtools [project]` | `winapp run . --devtools` (add `--watch` for hot reload with automatic re-attach) |
+| `mur devtools [project]` | `winapp run . --devtools on` (add `--watch` for hot reload with automatic re-attach) |
 | `session list` / `session clean` | `winapp devtools list` / not needed |
 | `version` | `winapp devtools call DevTools.negotiate` (reports the Reactor version) |
 | `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
@@ -254,9 +259,9 @@ and the `winui-devtools` skill; the MCP server is not carried over. Add `--watch
 | `--print-config`, `call <tool>` (MCP) | Not carried over: the matching winapp command with `--json` |
 | `windows.close`, `shutdown`, `call docking.*` | No tool equivalent: app behavior — drive the app's UI with `winapp ui` |
 | `logs` | `winapp devtools logs [--follow]` |
-| `reload` | `winapp run . --devtools --watch` |
+| `reload` | `winapp run . --devtools on --watch` |
 | References overlay (`call references`) | `winapp devtools get-property <selector>` (References section) |
-| `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools -- --preview <Name>` — the preview host lives in the app, so for now the app must reference `Microsoft.UI.Reactor.Devtools` |
+| `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools on -- --preview <Name>` — the preview host lives in the app, so for now the app must reference `Microsoft.UI.Reactor.Devtools` |
 
 `mur devtools --help` prints the complete mapping. Every `mur devtools` command
 prints its winapp equivalent to stderr and exits `1`; none of them runs anything.
@@ -268,7 +273,7 @@ prints its winapp equivalent to stderr and exits `1`; none of them runs anything
 > from `Microsoft.UI.Reactor.Devtools` (with the `--mcp-port`, `--mcp-transport`,
 > `--devtools-log-level`, `--devtools-logs*` and `--devtools-project` flags and the
 > `--devtools app|screenshot|tree` verbs). Use
-> [`winapp run . --devtools`](#winui-devtools-winapp) and the winapp CLI with
+> [`winapp run . --devtools on`](#winui-devtools-winapp) and the winapp CLI with
 > `--json`; agents load the `winui-devtools` skill.
 
 ## VS Code Panel
@@ -304,7 +309,7 @@ token before any endpoint probe, including `/status`.
 
 The in-app dev menu (`DevtoolsMenu(...)` and `UseDevtools()`) has been removed.
 Inspecting and editing a running app is the job of the WinUI DevTools overlay
-toolbar (`winapp run . --devtools`). For app-specific switches — a debug overlay,
+toolbar (`winapp run . --devtools on`). For app-specific switches — a debug overlay,
 a "clear cache" command — build an ordinary menu and compile it into Debug builds
 only:
 
@@ -469,7 +474,7 @@ without resetting your state.
 ### Expecting the WinUI DevTools under a bare `dotnet watch run`
 
 The WinUI DevTools attach only when you launch through
-`winapp run . --devtools` (add `--watch` for hot reload with automatic
+`winapp run . --devtools on` (add `--watch` for hot reload with automatic
 re-attach). A bare `dotnet watch run` starts the app without them.
 ## Tips
 

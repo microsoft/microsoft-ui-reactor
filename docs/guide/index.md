@@ -164,7 +164,7 @@ first; everyone else can follow the order.
 
 ### 7. Tooling & process
 
-- **[Dev Tooling](dev-tooling.md)** — `mur` CLI, the WinUI DevTools (`winapp run . --devtools`), VS Code panel, dotnet watch
+- **[Dev Tooling](dev-tooling.md)** — `mur` CLI, the WinUI DevTools (`winapp run . --devtools on`), VS Code panel, dotnet watch
 - **[VS Extension](vs-extension.md)** — Rough experimental embedded preview for Visual Studio 2026 (18.x)
 - **[Testing](testing.md)** — Headless renderer, structural assertions, async test patterns
 - **[Performance](performance.md)** — ETW, EventDispatch, flame graphs

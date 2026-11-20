@@ -349,7 +349,7 @@ passes `--devtools app` now prints the winapp command and exits `2`, because
 the in-app dev menu has been removed (see
 [Running with devtools](getting-started.md#running-with-devtools)).
 To inspect or drive a running app, use the WinUI DevTools in the winapp
-CLI (`winapp run . --devtools`), which need no package. Keep the
+CLI (`winapp run . --devtools on`), which need no package. Keep the
 Debug-only boundary in place: Release builds drop the package so the
 trim / AOT analyzers stay quiet, and a reference outside Debug gets
 build warning `REACTOR_DEVTOOLS_001`.

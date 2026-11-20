@@ -23,13 +23,13 @@
 >    call sites, so an explicit `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" … />`
 >    is redundant in Debug but harmless; don't set it to `false`.
 > 2. Keep a Debug build (source mapping stays on in Debug through `Microsoft.UI.Reactor`).
-> 3. Launch with `winapp run . --devtools` (add `--watch` to rebuild on rude edits and re-attach automatically, `--detach` when an agent drives it).
+> 3. Launch with `winapp run . --devtools on` (add `--watch` to rebuild on rude edits and re-attach automatically, `--detach` when an agent drives it).
 > 4. AI agents: use the winapp CLI with `--json` and the `winui-devtools` skill. The MCP server
 >    has been removed.
 >
 > | Reactor DevTools | use instead |
 > |---|---|
-> | `mur devtools [project]` | `winapp run . --devtools` (add `--watch` for hot reload with automatic re-attach) |
+> | `mur devtools [project]` | `winapp run . --devtools on` (add `--watch` for hot reload with automatic re-attach) |
 > | `mur devtools session list` | `winapp devtools list` |
 > | `version` | `winapp devtools call DevTools.negotiate` (reports the Reactor version) |
 > | `tree`, `ancestors` | `winapp devtools inspect [<selector> --ancestors]` |
@@ -44,9 +44,9 @@
 > | `--print-config`, `call <tool>` / MCP endpoint | Not carried over (`winapp … --json` + `winui-devtools` skill) |
 > | `windows.close`, `shutdown`, `call docking.*` | No tool equivalent: app behavior (drive the app's UI with `winapp ui`) |
 > | `logs` | `winapp devtools logs [--follow]` |
-> | `reload` | `winapp run . --devtools --watch` |
+> | `reload` | `winapp run . --devtools on --watch` |
 > | References overlay (`call references`) | `winapp devtools get-property <selector>` (References section) |
-> | `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools -- --preview <Name>` — the preview host is in this package, so keep it referenced (Debug-only) for that |
+> | `--component`, `components`, `switch`, `windows.open` | `winapp run . --devtools on -- --preview <Name>` — the preview host is in this package, so keep it referenced (Debug-only) for that |
 > | VS Code panel, Visual Studio embedded preview | No winapp equivalent yet; they launch the app directly and need this package |
 >
 > Reactor apps work with `winapp devtools` selectors such as `"<Counter>/Button"`, `key=t1`
@@ -80,7 +80,7 @@ The VS Code extension and the Visual Studio extension launch the app themselves
 alongside the WinUI DevTools:
 
 ```shell
-winapp run . --devtools -- --preview <ComponentName>
+winapp run . --devtools on -- --preview <ComponentName>
 ```
 
 or, without winapp, `dotnet run -- --devtools run <ComponentName>`. `--devtools app`,

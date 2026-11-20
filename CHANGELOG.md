@@ -86,7 +86,63 @@ Conventions for contributors:
 
 ### Deprecated
 
+- **The `Microsoft.UI.Reactor.Devtools` package is deprecated** in favour of the WinUI DevTools in
+  the winapp CLI (`winapp run . --devtools on`), which need no package. A project that references it
+  outside Debug gets build warning `REACTOR_DEVTOOLS_001` (suppress with
+  `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
+  `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
+  The package still works and **stays until winapp has its own previewer**: its in-app component
+  preview host (`winapp run . --devtools on -- --preview <Name>`) and capture server run the VS Code live
+  preview panel and the Visual Studio embedded preview, which have no winapp equivalent yet. Keep it
+  Debug-only (which does not warn) if you use either preview. The `Reactor.DevtoolsSupport` switch
+  is **not** deprecated: `ReactorDiagnostics` (on by default in Debug) turns it on, and the WinUI
+  DevTools need it to read C# call sites (`ReactorSource`), so a project no longer has to declare it
+  itself. Reactor keeps its library diagnostics: source mapping, `ReactorTrace` / the
+  `Microsoft-UI-Reactor` EventSource, and hot reload.
+
 ### Removed
+
+- **`mur devtools` has been removed.** Reactor's developer tools are the WinUI DevTools in the
+  winapp CLI: `winapp run . --devtools on` (`--watch` for hot reload with automatic re-attach); agents
+  use the winapp CLI with `--json` and the `winui-devtools` skill — the MCP client, `--print-config`
+  and `call` are not carried over. The supervisor/launcher, every named verb, `session list/clean`,
+  the lockfile reader, endpoint discovery, port ownership and the MCP client are gone. Every
+  `mur devtools …` invocation — including bare `mur devtools` and `--help` — now only prints the
+  winapp equivalent to stderr and **exits 1** (`mur devtools --help` prints the full table), for
+  example `mur devtools tree` → `winapp devtools inspect`, `fire` →
+  `winapp devtools invoke-handler <selector> <event>`, `logs` → `winapp devtools logs [--follow]`,
+  `--component <Name>` → `winapp run . --devtools on -- --preview <Name>` (needs the package).
+  `windows.close`, `shutdown` and the `docking.*` tools have no tool equivalent (app behavior).
+  There is no opt-out. `mur --create` now points at `winapp run . --devtools on`.
+
+- **The in-app MCP server and the in-app dev menu have been removed from
+  `Microsoft.UI.Reactor.Devtools`** (breaking). Inspect, edit and automate a running app with the
+  WinUI DevTools instead (`winapp run . --devtools on`; agents: the winapp CLI with `--json` and the
+  `winui-devtools` skill). What went:
+  - the MCP server (HTTP `/mcp` and stdio), its per-project lockfile under
+    `%TEMP%\reactor-devtools\`, its call log and log capture, and the `reload` / `docking.*` /
+    UI-automation / property / state / `fire` tools;
+  - the `--mcp-port`, `--mcp-transport`, `--devtools-log-level`, `--devtools-logs`,
+    `--devtools-logs-capacity` and `--devtools-project` flags (now ignored), and the
+    `--devtools app`, `--devtools screenshot` and `--devtools tree` verbs, which now print the
+    winapp command to use (`winapp run . --devtools on`, `winapp ui screenshot`,
+    `winapp devtools inspect`) and exit 2;
+  - the public `Factories.DevtoolsMenu(...)` and `RenderContext.UseDevtools()` APIs, the
+    `DevtoolsSubverb.App` / `Screenshot` / `Tree` values, the `McpTransport` enum, and the
+    corresponding `DevtoolsCliOptions` members (`McpPort`, `Transport`, `LogLevel`,
+    `ScreenshotOutputPath`, `ProjectIdentifier`, `LogsDisabled`, `LogsCapacityMb`).
+
+  **Migrating off the dev menu:** use the DevTools overlay toolbar for inspection. For
+  app-specific switches, build an ordinary menu (`DropDownButton("Dev", MenuItems(...))`) inside
+  `#if DEBUG`; replace `ctx.UseDevtools()` with `#if DEBUG` (or `ReactorApp.DevtoolsEnabled`, which
+  is now true only under the in-app preview host); turn on the reconcile-highlight overlay with
+  `ReactorFeatureFlags.HighlightReconcileChanges = true`; read keyed-list warnings from
+  `ReactorDiagnostics.RecentKeyedListWarnings`. **What stays:** the component preview host, the
+  preview capture server (`/frame`, `/status`, `/focus`, `/components`, `/preview`,
+  `/references`) and the Visual Studio `--embed` handshake, which the VS Code live preview and
+  the Visual Studio embedded preview need — unchanged. The `McpCallStart` / `McpCallStop` ETW
+  events stay declared but are no longer emitted. The package no longer depends on
+  `Microsoft.UI.Reactor.Advanced`, `Microsoft.Extensions.Logging.Abstractions` or `MessageFormat`.
 
 - **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
   2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
@@ -358,63 +414,7 @@ Conventions for contributors:
 
 ### Deprecated
 
-- **The `Microsoft.UI.Reactor.Devtools` package is deprecated** in favour of the WinUI DevTools in
-  the winapp CLI (`winapp run . --devtools`), which need no package. A project that references it
-  outside Debug gets build warning `REACTOR_DEVTOOLS_001` (suppress with
-  `<NoWarn>$(NoWarn);REACTOR_DEVTOOLS_001</NoWarn>` or
-  `<ReactorSuppressDevtoolsDeprecationWarning>true</ReactorSuppressDevtoolsDeprecationWarning>`).
-  The package still works and **stays until winapp has its own previewer**: its in-app component
-  preview host (`winapp run . --devtools -- --preview <Name>`) and capture server run the VS Code live
-  preview panel and the Visual Studio embedded preview, which have no winapp equivalent yet. Keep it
-  Debug-only (which does not warn) if you use either preview. The `Reactor.DevtoolsSupport` switch
-  is **not** deprecated: `ReactorDiagnostics` (on by default in Debug) turns it on, and the WinUI
-  DevTools need it to read C# call sites (`ReactorSource`), so a project no longer has to declare it
-  itself. Reactor keeps its library diagnostics: source mapping, `ReactorTrace` / the
-  `Microsoft-UI-Reactor` EventSource, and hot reload.
-
 ### Removed
-
-- **`mur devtools` has been removed.** Reactor's developer tools are the WinUI DevTools in the
-  winapp CLI: `winapp run . --devtools` (`--watch` for hot reload with automatic re-attach); agents
-  use the winapp CLI with `--json` and the `winui-devtools` skill — the MCP client, `--print-config`
-  and `call` are not carried over. The supervisor/launcher, every named verb, `session list/clean`,
-  the lockfile reader, endpoint discovery, port ownership and the MCP client are gone. Every
-  `mur devtools …` invocation — including bare `mur devtools` and `--help` — now only prints the
-  winapp equivalent to stderr and **exits 1** (`mur devtools --help` prints the full table), for
-  example `mur devtools tree` → `winapp devtools inspect`, `fire` →
-  `winapp devtools invoke-handler <selector> <event>`, `logs` → `winapp devtools logs [--follow]`,
-  `--component <Name>` → `winapp run . --devtools -- --preview <Name>` (needs the package).
-  `windows.close`, `shutdown` and the `docking.*` tools have no tool equivalent (app behavior).
-  There is no opt-out. `mur --create` now points at `winapp run . --devtools`.
-
-- **The in-app MCP server and the in-app dev menu have been removed from
-  `Microsoft.UI.Reactor.Devtools`** (breaking). Inspect, edit and automate a running app with the
-  WinUI DevTools instead (`winapp run . --devtools`; agents: the winapp CLI with `--json` and the
-  `winui-devtools` skill). What went:
-  - the MCP server (HTTP `/mcp` and stdio), its per-project lockfile under
-    `%TEMP%\reactor-devtools\`, its call log and log capture, and the `reload` / `docking.*` /
-    UI-automation / property / state / `fire` tools;
-  - the `--mcp-port`, `--mcp-transport`, `--devtools-log-level`, `--devtools-logs`,
-    `--devtools-logs-capacity` and `--devtools-project` flags (now ignored), and the
-    `--devtools app`, `--devtools screenshot` and `--devtools tree` verbs, which now print the
-    winapp command to use (`winapp run . --devtools`, `winapp ui screenshot`,
-    `winapp devtools inspect`) and exit 2;
-  - the public `Factories.DevtoolsMenu(...)` and `RenderContext.UseDevtools()` APIs, the
-    `DevtoolsSubverb.App` / `Screenshot` / `Tree` values, the `McpTransport` enum, and the
-    corresponding `DevtoolsCliOptions` members (`McpPort`, `Transport`, `LogLevel`,
-    `ScreenshotOutputPath`, `ProjectIdentifier`, `LogsDisabled`, `LogsCapacityMb`).
-
-  **Migrating off the dev menu:** use the DevTools overlay toolbar for inspection. For
-  app-specific switches, build an ordinary menu (`DropDownButton("Dev", MenuItems(...))`) inside
-  `#if DEBUG`; replace `ctx.UseDevtools()` with `#if DEBUG` (or `ReactorApp.DevtoolsEnabled`, which
-  is now true only under the in-app preview host); turn on the reconcile-highlight overlay with
-  `ReactorFeatureFlags.HighlightReconcileChanges = true`; read keyed-list warnings from
-  `ReactorDiagnostics.RecentKeyedListWarnings`. **What stays:** the component preview host, the
-  preview capture server (`/frame`, `/status`, `/focus`, `/components`, `/preview`,
-  `/references`) and the Visual Studio `--embed` handshake, which the VS Code live preview and
-  the Visual Studio embedded preview need — unchanged. The `McpCallStart` / `McpCallStop` ETW
-  events stay declared but are no longer emitted. The package no longer depends on
-  `Microsoft.UI.Reactor.Advanced`, `Microsoft.Extensions.Logging.Abstractions` or `MessageFormat`.
 
 ### Fixed
 

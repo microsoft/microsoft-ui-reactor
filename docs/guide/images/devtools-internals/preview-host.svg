@@ -67,5 +67,5 @@
   <rect class="gone" x="20" y="350" width="960" height="100" rx="6"/>
   <text class="label" x="40" y="376">Removed: the MCP server and its lockfile, the in-app dev menu (DevtoolsMenu, UseDevtools), mur devtools</text>
   <text class="sub" x="40" y="400">Inspect, edit and automate a running app with the WinUI DevTools in the winapp CLI instead —</text>
-  <text class="sub" x="40" y="420">winapp run . --devtools, winapp devtools inspect, winapp ui … — which attach from outside the app and need no package.</text>
+  <text class="sub" x="40" y="420">winapp run . --devtools on, winapp devtools inspect, winapp ui … — which attach from outside the app and need no package.</text>
 </svg>
