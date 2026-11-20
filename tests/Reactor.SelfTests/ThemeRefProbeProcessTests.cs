@@ -110,4 +110,11 @@ public class ThemeRefProbeProcessTests
 
     [TestMethod]
     public void Resolve_Of_A_Missing_Key_Keeps_App_Correct() => AssertProbePasses("missing-key");
+
+    /// <summary>
+    /// The dictionary-walk fallback must never read WinUI's own theme entries, including when
+    /// <c>XamlControlsResources</c> is <c>Application.Resources</c> itself, as in every Reactor app.
+    /// </summary>
+    [TestMethod]
+    public void Fallback_Walk_Never_Reads_WinUI_Theme_Entries() => AssertProbePasses("fallback-walk");
 }

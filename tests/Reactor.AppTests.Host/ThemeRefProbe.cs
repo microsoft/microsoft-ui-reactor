@@ -62,7 +62,14 @@ internal static class ThemeRefProbe
     /// </summary>
     internal const string RawReadScenario = "raw-read";
 
-    internal static readonly string[] Scenarios = [NoneScenario, ResolveScenario, ResolveElementScenario, ResourceOverrideScenario, MissingKeyScenario, RawReadScenario];
+    /// <summary>
+    /// The dictionary-walk fallback alone, for each real key and the opposite theme. In a Reactor
+    /// app <c>Application.Resources</c> is <c>XamlControlsResources</c>, so this proves the
+    /// walk skips WinUI's theme dictionaries at the root as well as among merged dictionaries.
+    /// </summary>
+    internal const string FallbackWalkScenario = "fallback-walk";
+
+    internal static readonly string[] Scenarios = [NoneScenario, ResolveScenario, ResolveElementScenario, ResourceOverrideScenario, MissingKeyScenario, RawReadScenario, FallbackWalkScenario];
 
     // Keys whose Light and Dark values differ, so the two borders can tell the themes apart.
     internal static readonly string[] Keys =
@@ -137,7 +144,7 @@ internal static class ThemeRefProbe
                     var appColor = BorderColor(window.NativeWindow.Content, AppTag + key);
                     var read = firstRead[key];
                     var distinct = oppositeColor is not null && appColor is not null && oppositeColor != appColor;
-                    var readOk = scenario is NoneScenario or MissingKeyScenario || (read is not null && read == oppositeColor);
+                    var readOk = scenario is NoneScenario or MissingKeyScenario or FallbackWalkScenario || (read is not null && read == oppositeColor);
                     pass &= distinct && readOk;
                     Console.WriteLine(
                         $"{KeyMarker} {key} read={read ?? "null"} opposite={oppositeColor ?? "null"} app={appColor ?? "null"} distinct={distinct} readOk={readOk}");
@@ -163,6 +170,8 @@ internal static class ThemeRefProbe
             case MissingKeyScenario:
                 ThemeRef.Resolve("ReactorThemeRefProbe_NoSuchKey_" + key, isDark: theme == ElementTheme.Dark);
                 return null;
+            case FallbackWalkScenario:
+                return Format(ThemeRef.ResolveFromDictionariesForTest(key, theme == ElementTheme.Dark ? "Dark" : "Light"));
             case RawReadScenario:
                 return Format(ReadThemeDictionaries(Application.Current.Resources, key, theme == ElementTheme.Dark ? "Dark" : "Light")
                     ?? ReadThemeDictionaries(Application.Current.Resources, key, "Default"));
