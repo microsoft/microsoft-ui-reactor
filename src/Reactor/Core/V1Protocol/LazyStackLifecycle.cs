@@ -86,6 +86,8 @@ internal static class LazyStackLifecycle
                 // Phase 1 OC<ReactorRow> binding shape.
                 var fresh = BuildListState(reconciler, repeater, n);
                 Reconciler.SetListState(repeater, fresh);
+                // A rebind replaces what the host shows (perf `changes`).
+                Reconciler.CountPerfChanges();
                 repeater.ItemsSource = fresh.Source;
                 var factory = n.CreateFactory(reconciler, requestRerender, reconciler._pool);
                 n.AttachListStateToFactory(factory, fresh);
@@ -110,6 +112,8 @@ internal static class LazyStackLifecycle
         {
             var fresh = BuildListState(reconciler, repeater, n);
             Reconciler.SetListState(repeater, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            Reconciler.CountPerfChanges();
             repeater.ItemsSource = fresh.Source;
             n.AttachListStateToFactory(factory, fresh);
             return;
