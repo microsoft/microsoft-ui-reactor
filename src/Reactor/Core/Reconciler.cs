@@ -8445,7 +8445,14 @@ public sealed partial class Reconciler : IDisposable
             setters.Append("<Setter Property='").Append(dp).Append("' Value=\"").Append(reference).Append("\"/>");
         }
 
-        if (setters.Length == 0) return;
+        // No property can be bound (every key was unrepresentable): take off a themed Style a
+        // previous render applied, so a property whose key just became unrepresentable is left
+        // unset rather than keeping the old brush. The app's own Style is restored, not cleared.
+        if (setters.Length == 0)
+        {
+            ClearThemeBindings(fe);
+            return;
+        }
 
         Style style;
         try
@@ -8460,12 +8467,13 @@ public sealed partial class Reconciler : IDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
+            // A parse failure (for example a resource key WinUI can't find) says nothing about the
+            // base: BasedOn is only validated when the Style is applied. So the base is not marked
+            // incompatible here, and a corrected key on a later render still builds on it.
             Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
                 "ApplyThemeBindings",
                 ex);
-            if (authorBase is not null)
-                RetryWithoutAuthorBase(fe, bindings, authorBase, authorBaseId);
             return;
         }
 

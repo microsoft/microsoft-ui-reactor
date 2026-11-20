@@ -533,13 +533,18 @@ internal static class ThemeRefStyleFixtures
             {
                 var (count, setter) = ctx.UseState(0);
                 setCount = setter;
-                return VStack(Button($"trs-bad-key-{count}")
-                    .Background(new ThemeRef(BadKey))
-                    .Foreground(new ThemeRef("TrsGoodBrush"))).RequestedTheme(ElementTheme.Light);
+                return VStack(
+                    Button($"trs-bad-key-{count}")
+                        .Background(new ThemeRef(BadKey))
+                        .Foreground(new ThemeRef("TrsGoodBrush")),
+                    Button("trs-bad-switch").Background(new ThemeRef(count == 0 ? "TrsGoodBrush" : BadKey)))
+                    .RequestedTheme(ElementTheme.Light);
             });
             await Harness.Render();
 
             var button = H.FindControl<WinUI.Button>(b => b.Content is "trs-bad-key-0");
+            H.Check("ThemeRefStyle_BadKey_Switch_GoodKeyThemed",
+                ColorOf(H.FindControl<WinUI.Button>(b => b.Content is "trs-bad-switch")?.Background) == LightColor);
             H.Check("ThemeRefStyle_BadKey_OtherPropertyThemed", ColorOf(button?.Foreground) == LightColor,
                 $"fg={ColorOf(button?.Foreground)}");
             H.Check("ThemeRefStyle_BadKey_OwnPropertyNotSet",
@@ -549,6 +554,13 @@ internal static class ThemeRefStyleFixtures
             setCount!(1);
             await Harness.Render();
             H.Check("ThemeRefStyle_BadKey_ReRenderStillThemed", ColorOf(button?.Foreground) == LightColor);
+
+            // A key that becomes unrepresentable on a later render takes its brush with it: the
+            // themed Style the earlier render applied doesn't keep the old binding alive.
+            var switched = H.FindControl<WinUI.Button>(b => b.Content is "trs-bad-switch");
+            H.Check("ThemeRefStyle_BadKey_Switch_BadKeyDropsOldBrush",
+                switched is not null && ColorOf(switched.Background) != LightColor,
+                $"bg={ColorOf(switched?.Background)}");
 
             // EventListener callbacks do not flow under NativeAOT publish; the JIT run covers it.
             if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
@@ -561,6 +573,41 @@ internal static class ThemeRefStyleFixtures
             {
                 H.Skip("ThemeRefStyle_BadKey_WarnedOnce", "EventListener callbacks do not flow under NativeAOT publish");
             }
+        });
+    }
+
+    /// <summary>
+    /// A ThemeRef key WinUI can't find fails to build, which says nothing about the app's Style.
+    /// Once the key is corrected the themed Style must still be built on that Style, not replace it.
+    /// </summary>
+    internal sealed class MissingKeyKeepsAuthorBase(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsMissingFixedBrush", async host =>
+        {
+            var style = new Style(typeof(WinUI.TextBlock));
+            style.Setters.Add(new Setter(WinUI.TextBlock.FontSizeProperty, 29d));
+            Action<bool>? setFixed = null;
+            host.Mount(ctx =>
+            {
+                var (isFixed, setter) = ctx.UseState(false);
+                setFixed = setter;
+                return VStack(TextBlock("trs-missing").Set(t => t.Style = style)
+                    .Foreground(new ThemeRef(isFixed ? "TrsMissingFixedBrush" : "TrsNoSuchBrushAnywhere")))
+                    .RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+
+            var tb = H.FindText("trs-missing");
+            H.Check("ThemeRefStyle_MissingKey_AuthorStyleKept", tb is not null && Math.Abs(tb.FontSize - 29) < 0.01,
+                $"fontSize={tb?.FontSize}");
+
+            setFixed!(true);
+            await Harness.Render();
+            H.Check("ThemeRefStyle_MissingKey_Fixed_Themed", ColorOf(tb?.Foreground) == LightColor,
+                $"fg={ColorOf(tb?.Foreground)}");
+            H.Check("ThemeRefStyle_MissingKey_Fixed_AuthorStyleKept",
+                tb is not null && Math.Abs(tb.FontSize - 29) < 0.01 && ReferenceEquals(tb.Style?.BasedOn, style),
+                $"fontSize={tb?.FontSize}");
         });
     }
 
