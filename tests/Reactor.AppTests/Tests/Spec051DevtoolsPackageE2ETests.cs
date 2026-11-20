@@ -7,7 +7,14 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 [TestClass]
 public sealed class Spec051DevtoolsPackageE2ETests
 {
-    private const string DevtoolsSwitchSnippet = "RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\"";
+    // The switch-off message leads with a Debug preview run, names the package, and offers the
+    // one-off ReactorDiagnostics opt-in (ReactorApp.EmitDevtoolsNotAvailableMessage).
+    private static readonly string[] SwitchOffGuidance =
+    [
+        "winapp run . --devtools on -- --preview <Name>",
+        "PackageReference Include=\"Microsoft.UI.Reactor.Devtools\"",
+        "-p:ReactorDiagnostics=true",
+    ];
 
     [TestMethod]
     [TestCategory("Spec051")]
@@ -32,7 +39,8 @@ public sealed class Spec051DevtoolsPackageE2ETests
         _ = await stdoutTask;
 
         Assert.AreNotEqual(0, process.ExitCode, "--devtools run on a switch-off binary should exit non-zero.");
-        StringAssert.Contains(stderr, DevtoolsSwitchSnippet);
+        foreach (var expected in SwitchOffGuidance)
+            StringAssert.Contains(stderr, expected);
     }
 
     [TestMethod]
@@ -138,6 +146,7 @@ public sealed class Spec051DevtoolsPackageE2ETests
             {
                 var stderr = await process.StandardError.ReadToEndAsync();
                 Assert.Fail($"devtools process exited before announcing the capture endpoint. Exit={process.ExitCode}; stderr={stderr}");
+                break;
             }
 
             if (line.StartsWith("CAPTURE_PORT=", StringComparison.Ordinal) && int.TryParse(line["CAPTURE_PORT=".Length..], out var p))
