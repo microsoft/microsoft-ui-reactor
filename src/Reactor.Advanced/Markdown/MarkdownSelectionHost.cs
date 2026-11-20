@@ -94,11 +94,10 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal void InvalidateDocument()
     {
         _documentDirty = true;
-        bool hasTextListener = _automationPeer is not null
-            && AutomationPeer.ListenerExists(AutomationEvents.TextPatternOnTextChanged);
-        if (_loaded && !_trackingLayout && !_refreshPending &&
-            (FocusState != FocusState.Unfocused || hasTextListener))
+        if (_loaded && !_trackingLayout && !_refreshPending)
         {
+            // A real content/layout invalidation gets one coalesced refresh; idle scopes
+            // remain detached from the window-wide LayoutUpdated event.
             _refreshPending = true;
             UpdateLayoutTracking();
         }

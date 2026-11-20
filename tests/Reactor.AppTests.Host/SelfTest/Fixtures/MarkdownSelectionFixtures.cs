@@ -408,7 +408,8 @@ internal static partial class MarkdownSelectionFixtures
                 && paragraph.GetText(-1) == "second beta end";
             bool movedBackward = paragraph.Move(Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph, -1) == -1
                 && paragraph.GetText(-1) == "first alpha tail";
-            H.Check("MdSelection_UiaParagraphMoveAcrossSurfaces", movedForward && movedBackward);
+            H.Check("MdSelection_UiaParagraphMoveForwardAcrossSurfaces", movedForward);
+            H.Check("MdSelection_UiaParagraphMoveBackwardAcrossSurfaces", movedBackward);
             var alpha = document.FindText("alpha", false, false);
             var beta = document.FindText("beta", false, false);
             H.Check("MdSelection_AlphaHasOneChild", alpha.GetChildren().Length == 1);
@@ -498,7 +499,7 @@ internal static partial class MarkdownSelectionFixtures
                     Microsoft.UI.Xaml.Automation.Text.TextPatternRangeEndpoint.Start) == 0);
             var word = peer.Range(1, 1);
             word.ExpandToEnclosingUnit(Microsoft.UI.Xaml.Automation.Text.TextUnit.Word);
-            H.Check("MdSelection_UiaWordBoundary", word.GetText(-1) == "one");
+            H.Check("MdSelection_UiaWordBoundary", word.GetText(-1) == "one ");
             word.ExpandToEnclosingUnit(Microsoft.UI.Xaml.Automation.Text.TextUnit.Paragraph);
             H.Check("MdSelection_UiaParagraphBoundary", word.GetText(-1) == selection.Document.Text);
             word.Select();

@@ -134,6 +134,7 @@ internal sealed partial class MarkdownSelectionMarker : UserControl
 
     internal MarkdownSelectionMarker()
     {
+        SizeChanged += (_, _) => InvalidateEnclosingScope();
         Loaded += (_, _) =>
         {
             InvalidateEnclosingScope();

@@ -177,6 +177,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             double innerX = innerGlyph[0] + innerGlyph[2] / 2;
             double innerY = innerGlyph[1] + innerGlyph[3] / 2;
             MultiClick(innerX, innerY, 2);
+            Console.WriteLine($"Inner double-click selection={innerText.GetSelection().Single().GetText(-1)}; routing={inner.Current.HelpText}");
             Assert.AreEqual("inner ", innerText.GetSelection().Single().GetText(-1),
                 "Double-click selects the word with trailing whitespace");
             Click(innerX, innerY);

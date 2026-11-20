@@ -171,9 +171,12 @@ internal sealed partial class MarkdownSelectionRange(
         Normalize();
         if (count == 0) return 0;
         var result = MarkdownSelectionRangeMovement.Move(_start, _end, Boundaries(unit), count);
-        _start = result.Start;
-        _end = unit == TextUnit.Paragraph && result.Moved != 0 && result.Start < result.End
-            ? host.Document.UnitAt(MarkdownSelectionUnit.Paragraph, _start).End : result.End;
+        if (unit == TextUnit.Paragraph && result.Moved != 0 && result.Start < host.Document.Text.Length)
+        {
+            var paragraph = host.Document.UnitAt(MarkdownSelectionUnit.Paragraph, result.Start);
+            (_start, _end) = (paragraph.Start, paragraph.End);
+        }
+        else (_start, _end) = (result.Start, result.End);
         return result.Moved;
     }
 
