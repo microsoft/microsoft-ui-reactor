@@ -119,7 +119,7 @@ internal static class SetLambdaHelpers
     /// The expression body or block body of a lambda, or <c>null</c> when the node is not a
     /// lambda at all.
     /// </summary>
-    private static SyntaxNode? GetLambdaBody(ExpressionSyntax lambdaExpr) =>
+    internal static SyntaxNode? GetLambdaBody(ExpressionSyntax lambdaExpr) =>
         lambdaExpr switch
         {
             SimpleLambdaExpressionSyntax simple => (SyntaxNode?)simple.ExpressionBody ?? simple.Block,

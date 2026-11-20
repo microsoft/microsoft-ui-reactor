@@ -193,6 +193,20 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         foreach (var call in startAnimationCalls)
             candidates.Add((call, call.Expression, StartAnimationName, null));
 
+        // 'fe.Rotation++' writes the facade too, but it is not an assignment.
+        var increments = TopLevelExpressions(lambda)
+            .Select(expression => expression switch
+            {
+                PostfixUnaryExpressionSyntax postfix when postfix.IsKind(SyntaxKind.PostIncrementExpression) || postfix.IsKind(SyntaxKind.PostDecrementExpression) => (Node: expression, Operand: postfix.Operand),
+                PrefixUnaryExpressionSyntax prefix when prefix.IsKind(SyntaxKind.PreIncrementExpression) || prefix.IsKind(SyntaxKind.PreDecrementExpression) => (Node: expression, Operand: prefix.Operand),
+                _ => (Node: expression, Operand: (ExpressionSyntax?)null),
+            })
+            .Where(write => write.Operand is MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax target } access
+                && target.Identifier.Text == paramName
+                && IsAssignedMember(access.Name.Identifier.Text));
+        foreach (var (node, operand) in increments)
+            candidates.Add((node, operand!, ((MemberAccessExpressionSyntax)operand!).Name.Identifier.Text, null));
+
         if (candidates.Count == 0)
             return;
 
@@ -240,9 +254,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 Rule,
                 node.GetLocation(),
                 properties,
-                (assignment is null ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
+                (name == StartAnimationName ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
                 owningModifier,
-                assignment is null ? "call" : "write",
+                name == StartAnimationName ? "call" : "write",
                 info.Advice));
         }
     }
@@ -258,8 +272,15 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         System.Func<string, bool> isMatch,
         bool requireReactorExtension = true)
     {
+        // The walk stays on links that return the .Set's own element type. A wrapper such as
+        // .Semantics() returns a different element, and the modifiers past it belong to that
+        // element's control, not to the one the .Set writes.
+        var elementType = model.GetTypeInfo(setInvocation, ct).Type;
+        if (elementType is null)
+            return null;
+
         for (var node = DuplicateAtomicModifierAnalyzer.GetReceiverInvocation(setInvocation);
-             node is not null;
+             node is not null && IsSameElement(node);
              node = DuplicateAtomicModifierAnalyzer.GetReceiverInvocation(node))
         {
             if (Matches(node))
@@ -270,7 +291,8 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         SyntaxNode current = setInvocation;
         while (current.Parent is MemberAccessExpressionSyntax access
                && access.Expression == current
-               && access.Parent is InvocationExpressionSyntax outer)
+               && access.Parent is InvocationExpressionSyntax outer
+               && IsSameElement(outer))
         {
             if (Matches(outer))
                 return DuplicateAtomicModifierAnalyzer.GetFluentMethodName(outer);
@@ -278,6 +300,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         }
 
         return null;
+
+        bool IsSameElement(InvocationExpressionSyntax link) =>
+            SymbolEqualityComparer.Default.Equals(model.GetTypeInfo(link, ct).Type, elementType);
 
         bool Matches(InvocationExpressionSyntax link) =>
             DuplicateAtomicModifierAnalyzer.GetFluentMethodName(link) is { } name
@@ -293,6 +318,18 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         return ns is not null
             && (ns == "Microsoft.UI.Reactor" || ns.StartsWith("Microsoft.UI.Reactor.", System.StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The lambda's expression body, or the expressions of its block's top-level expression
+    /// statements, the same scope <see cref="SetLambdaHelpers.GetLambdaAssignments"/> uses.
+    /// </summary>
+    private static IEnumerable<ExpressionSyntax> TopLevelExpressions(ExpressionSyntax lambda) =>
+        SetLambdaHelpers.GetLambdaBody(lambda) switch
+        {
+            ExpressionSyntax expression => new[] { expression },
+            BlockSyntax block => block.Statements.OfType<ExpressionStatementSyntax>().Select(statement => statement.Expression),
+            _ => System.Array.Empty<ExpressionSyntax>(),
+        };
 
     /// <summary>A member name the rule matches as an assignment target.</summary>
     private static bool IsAssignedMember(string name) =>

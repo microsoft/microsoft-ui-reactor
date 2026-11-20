@@ -64,6 +64,7 @@ namespace Microsoft.UI.Xaml.Controls
     // A user control that hides the facade with its own property.
     public class Spinner : Border { public new float Rotation { get; set; } }
     public class ContentDialog : Microsoft.UI.Xaml.FrameworkElement { }
+    public class SemanticPanel : Microsoft.UI.Xaml.FrameworkElement { }
 }
 
 namespace Microsoft.UI.Xaml.Controls.Primitives
@@ -79,6 +80,7 @@ namespace Microsoft.UI.Reactor
     public class BorderElement : Element { public BorderElement Set(Action<Border> configure) => this; }
     public class PopupElement : Element { public PopupElement Set(Action<Microsoft.UI.Xaml.Controls.Primitives.Popup> configure) => this; }
     public class ContentDialogElement : Element { public ContentDialogElement Set(Action<ContentDialog> configure) => this; }
+    public class SemanticElement : Element { public SemanticElement Set(Action<SemanticPanel> configure) => this; }
     public class PathElement : Element { public PathElement Set(Action<Microsoft.UI.Xaml.Shapes.Path> configure) => this; }
     public class SpinnerElement : Element { public SpinnerElement Set(Action<Spinner> configure) => this; }
 
@@ -99,6 +101,7 @@ namespace Microsoft.UI.Reactor
     public static class ElementExtensions
     {
         public static T Animate<T>(this T el, Curve curve) where T : Element => el;
+        public static SemanticElement Semantics<T>(this T el) where T : Element => new SemanticElement();
         public static T InteractionStates<T>(this T el) where T : Element => el;
         public static T Transition<T>(this T el) where T : Element => el;
         public static T Keyframes<T>(this T el, string name) where T : Element => el;
@@ -338,6 +341,18 @@ class C
     }
 
     [Fact]
+    public async Task Increment_And_Decrement_Report_Without_A_Fix()
+    {
+        var source = @"
+class C
+{
+    Element A() => Border().LayoutAnimation().Set(b => {|REACTOR_ANIM_004:b.Rotation++|});
+    Element B() => Border().LayoutAnimation().Set(b => { {|REACTOR_ANIM_004:--b.Rotation|}; });
+}";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
     public async Task Right_Hand_Side_With_Side_Effects_Does_Not_Fix()
     {
         // A setter evaluates its value while the element is applied; a modifier argument while
@@ -425,6 +440,20 @@ class C
     Element A() => new PopupElement().LayoutAnimation().Set(p => p.Rotation = 45);
     Element B() => new PopupElement().Translation(0, 0, 4).Set(p => p.Translation = new Vector3(1, 0, 0));
     Element D() => new ContentDialogElement().Animate(Curve.Ease).Set(d => d.Scale = Vector3.One);
+}");
+    }
+
+    [Fact]
+    public async Task Chain_Walk_Stops_At_A_Wrapper_Element()
+    {
+        // .Semantics() wraps the element in a SemanticElement, so modifiers past it take the
+        // wrapper's visual, and modifiers before it belong to the inner element.
+        await VerifyAsync(@"
+class C
+{
+    Element A() => Border().Set(b => b.Rotation = 45).Semantics().LayoutAnimation();
+    Element B() => Border().Set(b => b.Translation = new Vector3(1, 0, 0)).Semantics().Translation(0, 0, 4);
+    Element D() => Border().LayoutAnimation().Semantics().Set(s => s.Rotation = 45);
 }");
     }
 
