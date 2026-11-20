@@ -669,16 +669,54 @@ internal static class ModifierTable
 
             ["Resources"] = "Modifier takes an Action<ResourceBuilder>; the property is a ResourceDictionary.",
 
-            // Candidates, deliberately unmapped pending verification of how VisualModifiers
-            // reach the control. Mapping one wrongly ships a code fix that compiles and does
-            // nothing, which is the failure this table exists to prevent — so they stay out
-            // until the application path is confirmed the way ApplyModifiers was.
-            ["Scale"] = "Candidate: routed through VisualModifiers; application path not yet verified against a control-type gate.",
-            ["Rotation"] = "Candidate: routed through VisualModifiers; application path not yet verified.",
-            ["CenterPoint"] = "Candidate: routed through VisualModifiers; application path not yet verified.",
+            // Spec 066 §9.1: a blanket MOD_002 suggestion would rewrite working code on a plain
+            // element into code that takes the visual (spec 066 layer 4 moves these modifiers
+            // onto it), and the analyzer cannot see the later facade writes from event handlers
+            // or ElementRef.Current that would then throw. Keeping them out also means one .Set
+            // write never gets both a REACTOR_ANIM_004 and a REACTOR_MOD_002 diagnostic.
+            ["Scale"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["Rotation"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["CenterPoint"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+
+            // Candidates, deliberately unmapped pending verification of how they reach the
+            // control. Mapping one wrongly ships a code fix that compiles and does nothing,
+            // which is the failure this table exists to prevent.
             ["TabIndex"] = "Candidate: Control-gated in ApplyModifiers, but WinUI also declares TabIndex on UIElement; needs the same gate treatment as Padding before mapping.",
             ["TabNavigation"] = "Candidate: Control-only property; not yet verified against ApplyModifiers.",
             ["XYFocusKeyboardNavigation"] = "Candidate: UIElement property; not yet verified against ApplyModifiers.",
+        };
+
+    /// <summary>
+    /// Fluent modifiers that take the element's composition visual
+    /// (<c>ElementCompositionPreview.GetElementVisual</c>), keyed by method name, with where
+    /// the reconciler takes it. <c>REACTOR_ANIM_004</c> fires when a <c>.Set</c> on the same
+    /// chain writes a facade transform that WinUI rejects once the visual is taken.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Spec 066 §9.1. The set grows with that spec's rollout, one row per modifier that
+    /// starts taking the visual: layer 2 adds the four <c>.XxxTransition()</c>, layer 4
+    /// <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> and <c>.CenterPoint</c>, and layer 5
+    /// <c>.TransformOrigin</c>. Add a row in the same change that makes the modifier take the
+    /// visual, never earlier: before that the facade write still works, so the warning would be
+    /// a false positive.
+    /// </para>
+    /// <para>
+    /// The analyzer confirms each match through the semantic model (a Reactor extension method),
+    /// so a user method of the same name does not trigger it. <c>ModifierTableIntegrityTests</c>
+    /// checks every row names a real <c>ElementExtensions</c> modifier.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<string, string> VisualOwningModifiers =
+        new Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["Animate"] = "Reconciler.ApplyPropertyAnimation takes the visual to install its implicit animations.",
+            ["InteractionStates"] = "Reconciler.TransitionToState takes the visual on the first state change to animate it.",
+            ["Transition"] = "Reconciler.ApplyEnterTransition/ApplyExitTransition take the visual to animate enter and exit.",
+            ["Keyframes"] = "Reconciler.ApplyKeyframeAnimations takes the visual to start the keyframe animation.",
+            ["LayoutAnimation"] = "Reconciler.ApplyLayoutAnimation takes the visual to install its Offset/Size implicit animations.",
+            ["SpringLayoutAnimation"] = "Sets the same LayoutAnimation config as .LayoutAnimation, so Reconciler.ApplyLayoutAnimation takes the visual.",
+            ["ScrollLinked"] = "Reconciler.ApplyScrollAnimation takes the visual through AnimationHelper.GetElementVisual to bind its expressions.",
         };
 
     // ── Attached properties ──────────────────────────────────────────────────

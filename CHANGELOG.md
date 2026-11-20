@@ -41,6 +41,16 @@ Conventions for contributors:
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
+- **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
+  the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
+  `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix` or one of the `*Transition` properties,
+  or calls `StartAnimation`, on a chain that also uses `.Animate`, `.InteractionStates`,
+  `.Transition`, `.Keyframes`, `.LayoutAnimation` or `.ScrollLinked`. Those modifiers take the
+  visual, and WinUI then throws on facade writes. A code fix rewrites a single-assignment `.Set` to
+  the matching modifier (`.Rotation(…)`, `.OpacityTransition(duration)`, …). The rule also flags a
+  `.Set` `Translation` write next to `.Translation(…)`, which ignores it (the build-time half of
+  #1642), with its own message and no fix.
+
 ### Changed
 
 - Opt-in Markdown text selection supports double-click to select a word and

@@ -154,6 +154,29 @@ public class ModifierTableIntegrityTests
             "An unexplained exclusion is indistinguishable from an oversight.");
     }
 
+    [Fact]
+    public void Every_Visual_Owning_Modifier_And_ANIM_004_Fix_Target_Is_A_Real_Generic_Modifier()
+    {
+        // REACTOR_ANIM_004 binds both its trigger set and its rewrite targets by name. A row
+        // naming a modifier that does not exist never triggers, and a fix target that does not
+        // exist would make the analyzer's speculative bind fail and silently drop the fix.
+        var names = ModifierTable.VisualOwningModifiers.Keys
+            .Concat(FacadeTransformSetAnalyzer.FacadeMembers.Values
+                .Select(member => member.Modifier)
+                .OfType<string>());
+
+        var missing = names
+            .Where(name => !DeclaredGenericModifiers.Value.Contains(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            missing.Count == 0,
+            "REACTOR_ANIM_004 names modifiers that ElementExtensions/FlexExtensions do not declare " +
+            $"in the fluent '(this T el, ...)' shape: [{string.Join(", ", missing)}].");
+        Assert.All(ModifierTable.VisualOwningModifiers, row => Assert.False(string.IsNullOrWhiteSpace(row.Value)));
+    }
+
     // ── Staleness ────────────────────────────────────────────────────────────
 
     [Fact]
