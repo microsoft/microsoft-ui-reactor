@@ -4497,7 +4497,7 @@ the GPU — Reactor's render loop is never involved:</p>
 <p><img alt="Interaction states" src="../images/animation/interaction-states.png" /></p>
 <p>The builder supports <code>.PointerOver(...)</code>, <code>.Pressed(...)</code>, and
 <code>.Focused(...)</code>. Each accepts optional <code>opacity</code>, <code>scale</code>, <code>translation</code>,
-<code>rotation</code>, <code>background</code>, <code>foreground</code>, and <code>borderBrush</code> parameters. Pass
+<code>rotation</code> (degrees, clockwise, like <code>.Rotation()</code>), <code>background</code>, <code>foreground</code>, <code>borderBrush</code> parameters. Pass
 a <code>curve:</code> parameter for spring or ease transitions between states.</p>
 <p>States combine with <code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code>, and
 <code>.CenterPoint()</code> on the same element. A state's <code>scale</code>, <code>translation</code>, and
@@ -4622,7 +4622,7 @@ Define keyframes at progress points from 0.0 to 1.0:</p>
 <p><img alt="Keyframe animation" src="../images/animation/keyframes.png" /></p>
 <p>The builder supports <code>.Duration(ms)</code>, <code>.Loop()</code> for infinite repeat, and
 <code>.At(progress, opacity?, scale?, translation?, rotation?, easing?)</code> for
-each keyframe. Keyframes run on the compositor — no managed-code
+each keyframe, with <code>rotation</code> in degrees like <code>.Rotation()</code>. Keyframes run on the compositor — no managed-code
 involvement during playback.</p>
 <h2 id="choreography">Choreography<a class="headerlink" href="#choreography" title="Permanent link">&para;</a></h2>
 <p><code>AnimationScope.WithAnimationAsync()</code> returns a <code>Task</code> that completes when
