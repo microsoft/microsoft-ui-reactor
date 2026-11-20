@@ -81,7 +81,7 @@ export default defineConfig({
       { label: "Get started", path: "/get-started" },
       { label: "Guides", path: "/guides" },
       { label: "Controls", path: "/controls" },
-      { label: "Recipes", path: "/recipes" },
+      { label: "Tools", path: "/tools" },
       { label: "API reference", path: "/reference" },
       { label: "How it works", path: "/how-it-works" },
     ],

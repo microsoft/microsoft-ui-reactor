@@ -1,16 +1,18 @@
 {
-  "$comment": "Site structure for docs/_website. scripts/sync.mjs reads it to place each docs/guide page. A page in docs/guide that is placed nowhere fails the strict sync. `as` renames the destination file (and so the URL); `glob` takes every still-unplaced file that matches, so order the groups from specific to general.",
+  "$comment": "Site structure for docs/_website. scripts/sync.mjs reads it to place each docs/guide page. A page in docs/guide that is placed nowhere fails the strict sync. `as` renames the destination file (and so the URL); `glob` takes every still-unplaced file that matches, so order the groups from specific to general. `redirects` lists old URLs of pages that were removed or merged; each `to` must be a live page.",
   "ignore": ["README.md"],
+  "redirects": [{ "from": "/reactor-vs-xaml", "to": "/get-started/xaml-developers" }],
   "groups": [
     {
       "dir": "get-started",
       "title": "Get started",
       "pages": [
         { "file": "index.md", "as": "index", "label": "Overview" },
-        { "file": "getting-started.md", "as": "quickstart", "label": "Quickstart" },
+        { "file": "install.md", "label": "Installation" },
+        { "file": "getting-started.md", "as": "first-app", "label": "Your first app" },
         { "file": "thinking-in-reactor.md", "label": "Thinking in Reactor" },
         { "file": "xaml-developers.md", "label": "Coming from XAML" },
-        { "file": "reactor-vs-xaml.md", "label": "Reactor vs XAML" },
+        { "file": "samples.md", "label": "Samples" },
         { "file": "cheat-sheet.md", "label": "Cheat sheet" },
         { "file": "rules-of-reactor.md", "label": "Rules of Reactor" }
       ]
@@ -48,8 +50,10 @@
         { "file": "windows.md", "label": "Windows" },
         { "file": "windowing-advanced.md", "label": "Advanced windowing" },
         { "file": "docking.md", "label": "Docking windows" },
+        { "file": "desktop-integration.md", "label": "Desktop integration" },
         { "file": "async-resources.md", "label": "Async resources" },
-        { "file": "persistence.md", "label": "Persistence" }
+        { "file": "persistence.md", "label": "Persistence" },
+        { "file": "services.md", "label": "Services and DI" }
       ]
     },
     {
@@ -60,16 +64,24 @@
         { "file": "localization.md", "label": "Localization" },
         { "file": "testing.md", "label": "Testing" },
         { "file": "performance.md", "label": "Performance" },
-        { "file": "packaging.md", "label": "Packaging" }
+        { "file": "packaging.md", "label": "Packaging" },
+        { "file": "native-aot.md", "label": "Native AOT" }
       ]
     },
     {
-      "dir": "guides/05-(developer-tools)",
-      "title": "Developer tools",
+      "dir": "guides/05-recipes",
+      "title": "Recipes",
       "pages": [
-        { "file": "dev-tooling.md", "label": "Dev tooling" },
-        { "file": "vs-extension.md", "label": "VS extension" },
-        { "file": "diagnostics.md", "label": "Diagnostics" }
+        { "file": "recipes/index.md", "label": "All recipes" },
+        { "file": "recipes/command-palette.md", "label": "Command palette" },
+        { "file": "recipes/drag-reorder.md", "label": "Drag reorder" },
+        { "file": "recipes/login.md", "label": "Login" },
+        { "file": "recipes/master-detail.md", "label": "Master detail" },
+        { "file": "recipes/modal-dialog.md", "label": "Modal dialog" },
+        { "file": "recipes/multi-step-form.md", "label": "Multi-step form" },
+        { "file": "recipes/paginated-list.md", "label": "Paginated list" },
+        { "file": "recipes/search-with-suggestions.md", "label": "Search with suggestions" },
+        { "file": "recipes/settings-page.md", "label": "Settings page" }
       ]
     },
     {
@@ -98,19 +110,31 @@
       ]
     },
     {
-      "dir": "recipes",
-      "title": "Recipes",
+      "dir": "tools",
+      "title": "Tools",
+      "pages": [{ "file": "dev-tooling.md", "as": "index", "label": "Overview" }]
+    },
+    {
+      "dir": "tools/01-(inner-loop)",
+      "title": "Inner loop",
       "pages": [
-        { "file": "recipes/index.md", "label": "Recipes" },
-        { "file": "recipes/command-palette.md", "label": "Command palette" },
-        { "file": "recipes/drag-reorder.md", "label": "Drag reorder" },
-        { "file": "recipes/login.md", "label": "Login" },
-        { "file": "recipes/master-detail.md", "label": "Master detail" },
-        { "file": "recipes/modal-dialog.md", "label": "Modal dialog" },
-        { "file": "recipes/multi-step-form.md", "label": "Multi-step form" },
-        { "file": "recipes/paginated-list.md", "label": "Paginated list" },
-        { "file": "recipes/search-with-suggestions.md", "label": "Search with suggestions" },
-        { "file": "recipes/settings-page.md", "label": "Settings page" }
+        { "file": "hot-reload.md", "label": "Hot reload and live preview" },
+        { "file": "devtools.md", "label": "Devtools" },
+        { "file": "vs-extension.md", "label": "Editor extensions" }
+      ]
+    },
+    {
+      "dir": "tools/02-(ai)",
+      "title": "AI",
+      "pages": [{ "file": "build-with-ai.md", "label": "Build with AI" }]
+    },
+    {
+      "dir": "tools/03-(code-quality)",
+      "title": "Code quality",
+      "pages": [
+        { "file": "analyzers.md", "label": "Analyzers" },
+        { "file": "mur-cli.md", "label": "mur CLI" },
+        { "file": "diagnostics.md", "label": "Diagnostics" }
       ]
     },
     { "dir": "how-it-works", "title": "How it works" },

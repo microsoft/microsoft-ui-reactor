@@ -11,6 +11,7 @@ import {
   mkdocsSlug,
   planPlacement,
   redirectsFor,
+  checkRedirects,
   rewriteTarget,
   routeFor,
   sync,
@@ -82,6 +83,30 @@ describe("routes and redirects", () => {
       ["hooks.md", { dest: "02-(core)/hooks.md" }],
     ]);
     assert.deepEqual(redirectsFor(placements), [{ from: "/charting", to: "/controls/charting" }]);
+  });
+
+  test("hand-written redirects join the generated ones and win on the same URL", () => {
+    const placements = new Map([
+      ["charting.md", { dest: "controls/charting.md" }],
+      ["xaml-developers.md", { dest: "get-started/xaml-developers.md" }],
+    ]);
+    const extra = [
+      { from: "/reactor-vs-xaml", to: "/get-started/xaml-developers" },
+      { from: "/charting", to: "/get-started/xaml-developers" },
+    ];
+    assert.deepEqual(redirectsFor(placements, extra), [
+      { from: "/charting", to: "/get-started/xaml-developers" },
+      { from: "/reactor-vs-xaml", to: "/get-started/xaml-developers" },
+      { from: "/xaml-developers", to: "/get-started/xaml-developers" },
+    ]);
+  });
+
+  test("a hand-written redirect must leave a dead URL for a live page", () => {
+    const placements = new Map([["charting.md", { dest: "controls/charting.md" }]]);
+    assert.deepEqual(checkRedirects([{ from: "/old", to: "/controls/charting" }], placements), []);
+    assert.match(checkRedirects([{ from: "/controls/charting", to: "/controls/charting" }], placements)[0], /still lives there/);
+    assert.match(checkRedirects([{ from: "/old", to: "/nowhere" }], placements)[0], /no page lives at/);
+    assert.match(checkRedirects([{ from: "old", to: "/controls/charting" }], placements)[0], /start with \//);
   });
 });
 

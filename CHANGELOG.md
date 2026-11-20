@@ -206,15 +206,37 @@ Conventions for contributors:
   page opens with a banner for the latest Reactor post on the Windows developer blog, links to
   the new Showcase page, and explains that Reactor builds native WinUI 3 apps in C# next to a
   live counter example. It then leads into
-  Get started, Guides, Controls, Recipes, API reference and How it works. Showcase lists the
-  sample apps in the repo, each with a link to its source. The site tabs are now Get started,
-  Guides, Controls, Recipes, API reference and How it works ("Internals" is renamed). Get
-  started also holds the cheat sheet and the rules of Reactor, and Guides is grouped into
-  Core concepts, Layout and styling, Building apps, Ship your app, Developer tools, and
-  Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
+  Get started, the developer tools, Guides, Controls, Recipes, API reference and How it works.
+  Showcase lists the sample apps in the repo, each with a link to its source. The site tabs
+  are now Get started, Guides, Controls, Tools, API reference and How it works ("Internals" is
+  renamed). Get started also holds the cheat sheet and the rules of Reactor. Guides is grouped
+  into Core concepts, Layout and styling, Building apps, Ship your app, Recipes, and Interop
+  and migration. Tools collects hot reload, Devtools, the Visual Studio and VS Code
+  extensions, AI agent support, the analyzers, the `mur` CLI and diagnostics. Old page URLs
+  still redirect, and `nav.json` can now list extra redirects for pages that were merged or
+  renamed. The site now uses the Reactor icon.
   The site header and social cards show the WinUI logo next to the Reactor name.
   Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
   issue form. The cards use soft color gradients drawn in CSS, so they need no image files.
+
+- **New and rewritten pages in the user guide.** Get started has a new Installation page, a
+  step-by-step "Your first app" tutorial (it replaces "Getting started"), and "Thinking in
+  Reactor". "Reactor vs. XAML" is merged into "Coming from XAML", and its old URL redirects.
+  Tools has new pages for hot reload and live preview, Devtools, the analyzers (one section
+  per `REACTOR_*` ID), the `mur` CLI, and building with AI agents. New guides cover Native
+  AOT, the sample apps, services and dependency injection, and desktop integration (tray
+  icons, the taskbar, launch activation, file pickers, the clipboard, and drag and drop).
+  The README now describes the WordPuzzle sample correctly as a sliding tile puzzle.
+
+- **The API reference covers the whole public API.** It used to list only the hooks. The
+  generator now writes a page for every public hook, component, element, factory group,
+  modifier group and type, from the XML docs and the built `Microsoft.UI.Reactor.dll`.
+  Pages are grouped into 18 categories, such as Hosting and windows, Theming, Data,
+  Animation and Validation.
+  Each entry shows its signature, a parameter table with defaults, examples and links to the
+  matching guide. Links from the guides go to the right section of the right page. Run
+  `compile --reference-only` to regenerate only the reference, and add
+  `--reference-nav-out <path>` to also write its `nav.json` groups.
 
 ### Deprecated
 

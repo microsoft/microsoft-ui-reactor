@@ -258,15 +258,35 @@ export function planPlacement(nav, guideFiles, { lenient = false } = {}) {
   return { placements, groups, errors, warnings };
 }
 
-/** One redirect per page whose MkDocs URL differs from its new one. */
-export function redirectsFor(placements) {
-  const redirects = [];
+/**
+ * One redirect per page whose MkDocs URL differs from its new one, plus the
+ * redirects nav.json lists by hand for pages that were removed or merged.
+ */
+export function redirectsFor(placements, extra = []) {
+  const redirects = new Map();
   for (const [file, { dest }] of placements) {
     const from = mkdocsRoute(file);
     const to = routeFor(dest);
-    if (from !== to && from !== "/") redirects.push({ from, to });
+    if (from !== to && from !== "/") redirects.set(from, { from, to });
   }
-  return redirects.sort((a, b) => a.from.localeCompare(b.from));
+  for (const { from, to } of extra) redirects.set(from, { from, to });
+  return [...redirects.values()].sort((a, b) => a.from.localeCompare(b.from));
+}
+
+/** Problems with nav.json's hand-written redirects: each must leave a dead URL for a live page. */
+export function checkRedirects(extra, placements) {
+  const live = new Set([...placements.values()].map(({ dest }) => routeFor(dest)));
+  const errors = [];
+  for (const { from, to } of extra) {
+    if (typeof from !== "string" || !from.startsWith("/") || typeof to !== "string" || !to.startsWith("/")) {
+      errors.push(`nav.json redirect ${JSON.stringify({ from, to })} needs a "from" and a "to" that start with /.`);
+    } else if (live.has(from)) {
+      errors.push(`nav.json redirects ${from}, but a page still lives there.`);
+    } else if (!live.has(to)) {
+      errors.push(`nav.json redirects ${from} to ${to}, which no page lives at.`);
+    }
+  }
+  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -505,6 +525,8 @@ export function sync({ lenient, ref, guide, out }) {
   const nav = JSON.parse(fs.readFileSync(path.join(out, "nav.json"), "utf8"));
   const files = listMarkdown(guide).filter((file) => !file.startsWith("images/"));
   const { placements, groups, errors, warnings } = planPlacement(nav, files, { lenient });
+  const extraRedirects = nav.redirects ?? [];
+  errors.push(...checkRedirects(extraRedirects, placements));
   if (errors.length) return { errors, warnings };
 
   const routes = new Map([...placements].map(([file, { dest }]) => [file, routeFor(dest)]));
@@ -538,7 +560,7 @@ export function sync({ lenient, ref, guide, out }) {
   fs.rmSync(images, { recursive: true, force: true });
   if (fs.existsSync(path.join(guide, "images"))) fs.cpSync(path.join(guide, "images"), images, { recursive: true });
 
-  const redirects = redirectsFor(placements);
+  const redirects = redirectsFor(placements, extraRedirects);
   fs.writeFileSync(path.join(out, REDIRECTS_FILE), `${JSON.stringify(redirects, null, 2)}\n`);
 
   return { errors, warnings, pages: placements.size, groups: groups.length, redirects: redirects.length };
