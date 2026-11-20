@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// process-wide and order-dependent, so it is tested in a fresh process by
 /// <c>ThemeRefProbeProcessTests</c> driving <c>--themeref-probe</c>. These fixtures cover what
 /// can be checked in a shared process: the resolved brush matches the theme asked for, odd keys
-/// survive the markup, and the fallback keeps resolving keys the old walk found.
+/// resolve through WinUI, and the fallback keeps resolving keys the old walk found.
 /// </remarks>
 internal static class ThemeRefResolutionFixtures
 {
@@ -106,7 +106,8 @@ internal static class ThemeRefResolutionFixtures
 
     /// <summary>
     /// Keys with characters that are special in a markup extension or in XML resolve through the
-    /// probe, to the instance in the dictionary.
+    /// probe, to the instance in the dictionary. <c>SetThemeResourceBinding</c> takes the key as
+    /// it is, so none of them needs quoting or the dictionary walk (issue #1634).
     /// </summary>
     internal sealed class OddKeysResolveThroughProbe(Harness h) : SelfTestFixtureBase(h)
     {
@@ -123,11 +124,11 @@ internal static class ThemeRefResolutionFixtures
                 "ReactorTest\"Key",
                 "ReactorTest\\Key\\Backslash",
                 "ReactorTest<Key>&Amp",
+                "ReactorTest'Both\"Quotes",
+                "ReactorTest\tTab\nLineFeed",
             ];
-            const string BothQuotes = "ReactorTest'Both\"Quotes";
             var dict = new ResourceDictionary();
             foreach (var key in keys) dict[key] = new SolidColorBrush(Microsoft.UI.Colors.Red);
-            dict[BothQuotes] = new SolidColorBrush(Microsoft.UI.Colors.Blue);
             Application.Current.Resources.MergedDictionaries.Add(dict);
             ThemeRef.InvalidateResolutionCache();
             try
@@ -140,11 +141,7 @@ internal static class ThemeRefResolutionFixtures
                         $"key=[{key}] found={found} value={value}");
                 }
 
-                // A key with both quote characters cannot be written as a reference; the walk
-                // still finds it.
-                H.Check("ThemeRefProbe_BothQuotes_NotProbed", !ThemeResourceProbe.TryResolve(BothQuotes, ElementTheme.Dark, out _));
-                H.Check("ThemeRefProbe_BothQuotes_ResolvesByWalk",
-                    ReferenceEquals(ThemeRef.Resolve(BothQuotes, isDark: true), dict[BothQuotes]));
+                H.Check("ThemeRefProbe_EmptyKey_NotProbed", !ThemeResourceProbe.TryResolve("", ElementTheme.Dark, out _));
             }
             finally
             {
@@ -181,7 +178,7 @@ internal static class ThemeRefResolutionFixtures
             ThemeRef.InvalidateResolutionCache();
             try
             {
-                // WinUI checks a reference against the app theme when it loads it, so neither
+                // WinUI checks the key against the app theme when the binding is set, so neither
                 // key resolves through the probe for the opposite theme: only the walk finds them.
                 var probeOpposite = ThemeResourceProbe.TryResolve(OppositeOnlyKey, appIsDark ? ElementTheme.Light : ElementTheme.Dark, out _);
                 var probeDefault = ThemeResourceProbe.TryResolve(DefaultOnlyKey, appIsDark ? ElementTheme.Light : ElementTheme.Dark, out _);
@@ -196,10 +193,10 @@ internal static class ThemeRefResolutionFixtures
                     ReferenceEquals(ThemeRef.Resolve(DefaultOnlyKey, isDark: !appIsDark), defaultBrush)
                     && ReferenceEquals(ThemeRef.Resolve(DefaultOnlyKey, isDark: appIsDark), defaultBrush));
 
-                // A key only the app theme defines: resolving it for the app theme caches the
-                // probe's style, and applying that cached style for the other theme, where the
-                // key is missing, must not throw. It then falls back to the walk, whose last step
-                // is the plain lookup that finds the app theme's entry, as before the probe.
+                // A key only the app theme defines: the probe resolves it for the app theme, and
+                // for the other theme, where the key is missing, it must not throw. It then falls
+                // back to the walk, whose last step is the plain lookup that finds the app theme's
+                // entry, as before the probe.
                 H.Check("ThemeRefFallback_AppOnlyKey_AppTheme",
                     ReferenceEquals(ThemeRef.Resolve(AppOnlyKey, isDark: appIsDark), appBrush));
                 Brush? other = null;

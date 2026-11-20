@@ -96,7 +96,9 @@ Conventions for contributors:
   the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
   only reads the dictionaries itself when WinUI cannot find the key for that theme. Because the
   lookup is WinUI's `{ThemeResource}` resolution, a Windows contrast theme applies to
-  `ThemeRef.Resolve` the way it applies to `{ThemeResource}`.
+  `ThemeRef.Resolve` the way it applies to `{ThemeResource}`. The lookup uses
+  `FrameworkElement.SetThemeResourceBinding`, so keys with characters that markup cannot hold
+  resolve through WinUI too (issue #1634).
 
 - `SplitView(...).PaneBackground(ThemeRef)` now sets the pane background. The old Style-based
   ThemeRef path had no mapping for `PaneBackground` and silently did nothing. A ThemeRef that

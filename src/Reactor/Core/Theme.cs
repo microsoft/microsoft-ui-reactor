@@ -127,8 +127,8 @@ public readonly record struct ThemeRef(string ResourceKey)
         // ResourceDictionary defining that key is merged in after this first
         // resolve (a dictionary add fires no theme-change event, so the cache
         // wouldn't be cleared). Unknown keys are rare, so each resolve of one simply
-        // looks again: since issue #1534 that is a failed WinUI parse plus the dictionary
-        // walk (roughly 1.5 ms on a dev machine), so don't resolve a missing key per cell.
+        // looks again: since issue #1534 that is a failed WinUI lookup plus the dictionary
+        // walk (about 1 ms on a dev machine), so don't resolve a missing key per cell.
         if (resolved is not null)
             s_resolutionCache[cacheKey] = (generation, resolved);
         return resolved;
