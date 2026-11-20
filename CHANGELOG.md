@@ -222,6 +222,10 @@ Conventions for contributors:
   preserves the native viewer and its single subscription, which is detached when
   the component unmounts (spec 017, VirtualList).
 
+- Tight Markdown list items keep their leading text before child lists, headings,
+  blockquotes, and code blocks. Ordered numbering is preserved across nesting
+  levels, including in cross-block text selection (PR #1628).
+
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
   animations. Removing `.Opacity()` also releases its compositor override so styles
