@@ -659,6 +659,45 @@ internal static class ThemeRefStyleFixtures
     }
 
     /// <summary>
+    /// A themed control returned to the pool goes back without the themed Style or Reactor's
+    /// ownership marker for it, so the next renter starts clean and nothing keeps the previous
+    /// renter's Style alive.
+    /// </summary>
+    internal sealed class PoolReturnDropsThemedStyle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsPoolBrush", async host =>
+        {
+            Action<int>? setPhase = null;
+            host.Mount(ctx =>
+            {
+                var (phase, setter) = ctx.UseState(0);
+                setPhase = setter;
+                return phase switch
+                {
+                    0 => VStack(Title("trs-pool-themed").Foreground(new ThemeRef("TrsPoolBrush"))).RequestedTheme(ElementTheme.Light),
+                    1 => VStack().RequestedTheme(ElementTheme.Light),
+                    _ => VStack(TextBlock("trs-pool-plain")).RequestedTheme(ElementTheme.Light),
+                };
+            });
+            await Harness.Render();
+            var themed = H.FindText("trs-pool-themed");
+            H.Check("ThemeRefStyle_Pool_Themed", themed is not null && ColorOf(themed.Foreground) == LightColor
+                && Reconciler.HasThemeStyleMarkerForTests(themed));
+
+            setPhase!(1);
+            await Harness.Render();
+            setPhase!(2);
+            await Harness.Render();
+
+            var plain = H.FindText("trs-pool-plain");
+            H.Check("ThemeRefStyle_Pool_SameInstanceRented", plain is not null && ReferenceEquals(plain, themed));
+            H.Check("ThemeRefStyle_Pool_StyleCleared", plain is not null && plain.Style is null && ColorOf(plain.Foreground) != LightColor,
+                $"fg={ColorOf(plain?.Foreground)}");
+            H.Check("ThemeRefStyle_Pool_MarkerCleared", plain is not null && !Reconciler.HasThemeStyleMarkerForTests(plain));
+        });
+    }
+
+    /// <summary>
     /// The themed-Style cache key keeps a resource key containing '|' or '=' apart from a
     /// different binding set that would otherwise spell the same key, so the second element does
     /// not get the first element's cached Style.

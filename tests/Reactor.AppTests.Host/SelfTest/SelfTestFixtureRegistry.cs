@@ -360,6 +360,7 @@ internal static class SelfTestFixtureRegistry
         "ThemeRefStyle_KeyNeedsQuoting",
         "ThemeRefStyle_UnrepresentableKeySkipsOnlyItsProperty",
         "ThemeRefStyle_MissingKeyKeepsAuthorBase",
+        "ThemeRefStyle_PoolReturnDropsThemedStyle",
         "ThemeRefStyle_CacheKeyDoesNotCollide",
         "ThemeRefStyle_ThirdPartyStyleFallsBack",
         // Named-style (.ApplyStyle) resolution against live app resources —
@@ -2780,6 +2781,7 @@ internal static class SelfTestFixtureRegistry
         "ThemeRefStyle_KeyNeedsQuoting" => new ThemeRefStyleFixtures.ThemeRefKeyNeedsQuoting(harness),
         "ThemeRefStyle_UnrepresentableKeySkipsOnlyItsProperty" => new ThemeRefStyleFixtures.UnrepresentableKeySkipsOnlyItsProperty(harness),
         "ThemeRefStyle_MissingKeyKeepsAuthorBase" => new ThemeRefStyleFixtures.MissingKeyKeepsAuthorBase(harness),
+        "ThemeRefStyle_PoolReturnDropsThemedStyle" => new ThemeRefStyleFixtures.PoolReturnDropsThemedStyle(harness),
         "ThemeRefStyle_CacheKeyDoesNotCollide" => new ThemeRefStyleFixtures.CacheKeyDoesNotCollide(harness),
         "ThemeRefStyle_ThirdPartyStyleFallsBack" => new ThemeRefStyleFixtures.ThirdPartyStyleFallsBack(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.

@@ -682,6 +682,10 @@ public sealed partial class Reconciler : IDisposable
         _incompatibleBaseStyleIds.Clear();
     }
 
+    // Test seam: whether Reactor's themed-Style ownership marker is set on a control.
+    internal static bool HasThemeStyleMarkerForTests(FrameworkElement fe)
+        => fe.GetValue(ReactorAppliedThemeStyleProperty) is Style;
+
 
     /// <summary>
     /// Thread-static stagger context for enter transitions. When a parent with StaggerConfig
