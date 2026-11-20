@@ -353,6 +353,13 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_MountResolvesAncestorTheme",
         "ThemeResourceBinding_InteractionStatesRestoreKeepsBindingLive",
         "ThemeResourceBinding_SplitViewPaneBackground",
+        "ThemeResourceBinding_PoolReturnClearsBoundForeground",
+        "ThemeResourceBinding_PartialRemovalKeepsSameRenderWrites",
+        "ThemeResourceBinding_ReplacedBindingIsHandedOver",
+        "ThemeResourceBinding_ModifierAddedOverBoundThemeRefWins",
+        "ThemeResourceBinding_UnknownKeyIsSkippedAndRetried",
+        "ThemeResourceBinding_InteractionStatesRestoreKeepsForegroundLive",
+        "ThemeResourceBinding_RemovalDuringHoverDoesNotResurrect",
         // Named-style (.ApplyStyle) resolution against live app resources —
         // the only tier that can prove a style key actually resolves.
         "NamedStyle_TypeRampStylesResolve",
@@ -2766,6 +2773,13 @@ internal static class SelfTestFixtureRegistry
         "ThemeResourceBinding_MountResolvesAncestorTheme" => new ThemeResourceBindingFixtures.MountResolvesAncestorTheme(harness),
         "ThemeResourceBinding_InteractionStatesRestoreKeepsBindingLive" => new ThemeResourceBindingFixtures.InteractionStatesRestoreKeepsBindingLive(harness),
         "ThemeResourceBinding_SplitViewPaneBackground" => new ThemeResourceBindingFixtures.SplitViewPaneBackground(harness),
+        "ThemeResourceBinding_PoolReturnClearsBoundForeground" => new ThemeResourceBindingFixtures.PoolReturnClearsBoundForeground(harness),
+        "ThemeResourceBinding_PartialRemovalKeepsSameRenderWrites" => new ThemeResourceBindingFixtures.PartialRemovalKeepsSameRenderWrites(harness),
+        "ThemeResourceBinding_ReplacedBindingIsHandedOver" => new ThemeResourceBindingFixtures.ReplacedBindingIsHandedOver(harness),
+        "ThemeResourceBinding_ModifierAddedOverBoundThemeRefWins" => new ThemeResourceBindingFixtures.ModifierAddedOverBoundThemeRefWins(harness),
+        "ThemeResourceBinding_UnknownKeyIsSkippedAndRetried" => new ThemeResourceBindingFixtures.UnknownKeyIsSkippedAndRetried(harness),
+        "ThemeResourceBinding_InteractionStatesRestoreKeepsForegroundLive" => new ThemeResourceBindingFixtures.InteractionStatesRestoreKeepsForegroundLive(harness),
+        "ThemeResourceBinding_RemovalDuringHoverDoesNotResurrect" => new ThemeResourceBindingFixtures.RemovalDuringHoverDoesNotResurrect(harness),
         // Named-style (.ApplyStyle) resolution against live app resources.
         "NamedStyle_TypeRampStylesResolve" => new NamedStyleResolutionFixture.TypeRampStylesResolve(harness),
         "NamedStyle_NewRampKeysAreDistinctAndNonDefault" => new NamedStyleResolutionFixture.NewRampKeysAreDistinctAndNonDefault(harness),

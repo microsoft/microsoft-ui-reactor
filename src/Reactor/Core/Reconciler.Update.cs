@@ -149,21 +149,27 @@ public sealed partial class Reconciler
             return null; // null = keep existing control as-is
         }
 
-        // Issue #522 — when the element transitions away from ThemeBindings,
-        // clear the theme bindings we installed on the previous render.
+        // Issue #522 — when the element drops some or all of its ThemeBindings,
+        // clear the theme bindings we installed for them on the previous render.
         // Without this, e.g. the red Foreground from .Foreground(ThemeRef(
         // "SystemFillColorCriticalBrush")) on an AsyncValue Error arm bleeds
-        // into the next Loading / Data arm on the recycled control.
+        // into the next Loading / Data arm on the recycled control. This runs
+        // before the handler, so a setter or element property that writes a
+        // brush in place of the dropped ThemeRef keeps it.
         //
         // Ownership is tracked on the control's ReactorState (the properties
         // and keys we bound); we deliberately avoid ConditionalWeakTable
         // per-FrameworkElement tracking (fragile under RCW churn) and we avoid
         // forcing a fresh Mount (would needlessly lose subtree state for
         // container elements like .Background(ThemeRef(...)) on a VStack).
-        if (oldEl.ThemeBindings is not null && newEl.ThemeBindings is null
-            && control is FrameworkElement clearThFe)
+        ThemeBindingSnapshot themeSnapshot = default;
+        if (oldEl.ThemeBindings is not null && control is FrameworkElement clearThFe)
         {
-            ClearThemeBindings(clearThFe);
+            ClearDroppedThemeBindings(clearThFe, newEl.ThemeBindings);
+            // What the surviving bindings hold before this render's setters and element
+            // properties run, so ApplyThemeBindings can tell whether one replaced them.
+            if (newEl.ThemeBindings is not null)
+                themeSnapshot = SnapshotThemeBindings(clearThFe);
         }
         DebugUIElementsModified++;
 
@@ -402,7 +408,8 @@ public sealed partial class Reconciler
         // Apply theme-resource bindings (ThemeRef → live {ThemeResource}-equivalent binding).
         // After modifiers and setters, which it must not override (see ApplyThemeBindings).
         if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, newEl.ThemeBindings, modifiers, _resourceRefreshActive);
+            ApplyThemeBindings(thFe, newEl.ThemeBindings, modifiers, _resourceRefreshActive,
+                ReferenceEquals(target, control) ? themeSnapshot : default);
 
         // Apply per-control resource overrides (lightweight styling)
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)

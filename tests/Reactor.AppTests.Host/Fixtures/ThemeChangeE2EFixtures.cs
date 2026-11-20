@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.Fixtures;
 /// <c>ThemeRef.InvalidateResolutionCache()</c> + <c>RequestRender()</c>) end-to-end.
 ///
 /// <para><b>Why a CONCRETE ResourceOverride ThemeRef, not <c>.Foreground(Theme.X)</c>:</b>
-/// a <c>.Foreground(Theme.X)</c> binding compiles to a <c>{ThemeResource}</c> style setter that
+/// a <c>.Foreground(Theme.X)</c> binding compiles to a live theme-resource binding (<c>SetThemeResourceBinding</c>) that
 /// WinUI re-resolves NATIVELY on an effective-theme change — it would flip even if the Reactor
 /// wiring were broken (vacuous). A <c>.Resources(r =&gt; r.Set(key, Theme.Ref(key)))</c> override
 /// instead stores a CONCRETE <see cref="SolidColorBrush"/> in <c>fe.Resources[key]</c> that does
