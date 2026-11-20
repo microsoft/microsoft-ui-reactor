@@ -608,6 +608,32 @@ public sealed partial class Reconciler : IDisposable
             typeof(Reconciler),
             new PropertyMetadata(null));
 
+    // The app's own Style the applied themed Style was built BasedOn (null when there was none),
+    // so a re-apply wraps the same base instead of chaining another level, and
+    // ClearThemeBindings hands the control back to it. Read back from the control rather than
+    // from Style.BasedOn, for the same duplicate-RCW reason as ReactorAppliedThemeStyle.
+    private static readonly DependencyProperty ReactorThemeBaseStyleProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorThemeBaseStyle",
+            typeof(Style),
+            typeof(Reconciler),
+            new PropertyMetadata(null));
+
+    // Stamped on an app base Style: the id that keys the themed Styles built BasedOn it.
+    private static readonly DependencyProperty ReactorBaseStyleIdProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorBaseStyleId",
+            typeof(int),
+            typeof(Reconciler),
+            new PropertyMetadata(0));
+
+    private static int _nextBaseStyleId;
+
+    // Themed Styles built BasedOn an app Style, keyed "baseId#" + BuildCacheKey. Capped, since a
+    // base Style created on every render gets a new id each time.
+    private const int BasedStyleCacheCap = 256;
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _basedStyleCache = new();
+
     /// <summary>
     /// Builds a deterministic cache key for a style based on its target type and
     /// the set of ThemeRef bindings. Keys are sorted by property name so that
@@ -632,7 +658,11 @@ public sealed partial class Reconciler : IDisposable
     /// memory cleanup — not a correctness requirement since {ThemeResource}
     /// setters are live-resolved by WinUI.
     /// </summary>
-    internal static void ClearStyleCache() => _styleCache.Clear();
+    internal static void ClearStyleCache()
+    {
+        _styleCache.Clear();
+        _basedStyleCache.Clear();
+    }
 
 
     /// <summary>
@@ -6048,8 +6078,17 @@ public sealed partial class Reconciler : IDisposable
     {
         public InteractionState CurrentState;
         public InteractionStatesConfig Config = null!;
-        public Brush? NormalBackground;
-        public Brush? NormalForeground;
+        // Background/Foreground: the raw local value (DependencyProperty.UnsetValue when there was
+        // none) a state restores when it ends, captured when the state first writes over the
+        // property. With no local value the property is cleared, so a {ThemeResource} Style
+        // setter or the default style shows again. Active* is the brush the state wrote:
+        // anything else there when the state ends came from another writer and stands.
+        public object? NormalBackground;
+        public Brush? ActiveBackground;
+        public bool BackgroundOverrideApplied;
+        public object? NormalForeground;
+        public Brush? ActiveForeground;
+        public bool ForegroundOverrideApplied;
         public Brush? NormalBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
         public bool BorderBrushOverrideApplied;
@@ -6068,24 +6107,6 @@ public sealed partial class Reconciler : IDisposable
         {
             tracker = new InteractionStateTracker();
             _interactionTrackers[uie] = tracker;
-
-            // Capture normal brush values
-            if (uie is FrameworkElement fe)
-            {
-                tracker.NormalBackground = fe switch
-                {
-                    WinUI.Panel p => p.Background,
-                    WinUI.Control c => c.Background,
-                    WinUI.Border b => b.Background,
-                    _ => null,
-                };
-                tracker.NormalForeground = fe switch
-                {
-                    WinUI.Control c => c.Foreground,
-                    TextBlock tb => tb.Foreground,
-                    _ => null,
-                };
-            }
 
             // Register handlers
             uie.PointerEntered += OnInteractionPointerEntered;
@@ -6216,23 +6237,32 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
 
-        // Brush properties — direct set
+        // Brush properties — direct set. When a state ends, what the property held before the
+        // state wrote over it comes back: an explicit local brush is restored, and a property
+        // with no local value is cleared, so a ThemeRef's {ThemeResource} Style setter takes over
+        // again instead of a brush captured earlier that would pin the theme it had then.
         if (uie is FrameworkElement fe)
         {
-            var bg = values?.Background ?? tracker.NormalBackground;
-            if (bg is not null)
+            var backgroundProperty = fe switch
             {
-                if (fe is WinUI.Panel p) p.Background = bg;
-                else if (fe is WinUI.Control c) c.Background = bg;
-                else if (fe is WinUI.Border b) b.Background = bg;
-            }
+                WinUI.Panel => WinUI.Panel.BackgroundProperty,
+                WinUI.Control => WinUI.Control.BackgroundProperty,
+                WinUI.Border => WinUI.Border.BackgroundProperty,
+                _ => null,
+            };
+            if (backgroundProperty is not null)
+                ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
+                    ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
 
-            var fg = values?.Foreground ?? tracker.NormalForeground;
-            if (fg is not null)
+            var foregroundProperty = fe switch
             {
-                if (fe is WinUI.Control c) c.Foreground = fg;
-                else if (fe is TextBlock tb) tb.Foreground = fg;
-            }
+                WinUI.Control => WinUI.Control.ForegroundProperty,
+                TextBlock => TextBlock.ForegroundProperty,
+                _ => null,
+            };
+            if (foregroundProperty is not null)
+                ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
+                    ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
             var borderProperty = fe switch
             {
@@ -6266,6 +6296,45 @@ public sealed partial class Reconciler : IDisposable
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="dp"/>,
+    /// or, once no state sets it, puts back what the property held when the state took it
+    /// over: the captured local brush, or no local value at all. A property no state touched,
+    /// or one another writer replaced the state's brush on, is left alone.
+    /// </summary>
+    private static void ApplyInteractionBrush(
+        FrameworkElement fe, DependencyProperty dp, Brush? stateBrush,
+        ref object? normalLocal, ref Brush? activeBrush, ref bool overrideApplied)
+    {
+        if (stateBrush is not null)
+        {
+            if (!overrideApplied)
+            {
+                normalLocal = fe.ReadLocalValue(dp);
+                overrideApplied = true;
+            }
+            fe.SetValue(dp, stateBrush);
+            activeBrush = stateBrush;
+            return;
+        }
+
+        if (!overrideApplied)
+            return;
+        var normal = normalLocal;
+        var active = activeBrush;
+        normalLocal = null;
+        activeBrush = null;
+        overrideApplied = false;
+        if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
+            return;
+        // A local brush (or local null) is written back. No local value, or one that cannot be
+        // written back (a binding expression), clears the property to what styles supply.
+        if (normal is null or Brush)
+            fe.SetValue(dp, normal);
+        else
+            fe.ClearValue(dp);
     }
 
     /// <summary>The transform modifier values last written to an element's handed-out Visual.</summary>
@@ -8290,15 +8359,35 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
-        var targetType = GetStyleTargetType(fe);
+        // A Style the app put on the control (a .Set setter, .ApplyStyle, a named-style fluent
+        // such as .AccentButton(), a typography factory such as Title(...)) is kept: the themed
+        // Style is built BasedOn it rather than replacing it. When fe.Style is the themed Style
+        // Reactor wrote last time, its base is read back from the marker, so re-applying never
+        // chains another level. BasedOn cannot bring back an implicit (keyless) style, but an
+        // explicit Style had already replaced that.
+        var baseStyle = ResolveAuthorBaseStyle(fe) ?? GetRequiredFrameworkBaseStyle(fe);
+
+        // BasedOn requires the base's TargetType to equal or be a base of the derived one. The
+        // author Style was accepted by this control, so its TargetType is the control's type or
+        // a base of it: targeting the control's own type is always valid. The loose mapping is
+        // kept when there is no base, so those Styles stay shared across control types.
+        var targetType = baseStyle is null ? GetStyleTargetType(fe) : GetExactStyleTargetType(fe);
         if (targetType is null) return;
 
         var cacheKey = BuildCacheKey(targetType, bindings);
+        string? basedCacheKey = null;
+        if (baseStyle is not null && GetOrStampBaseStyleId(baseStyle) is { } baseId)
+            basedCacheKey = baseId.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "#" + cacheKey;
 
         // Cache hit: reuse the previously compiled Style
-        if (_styleCache.TryGetValue(cacheKey, out var cachedStyle))
+        if (baseStyle is null && _styleCache.TryGetValue(cacheKey, out var cachedStyle))
         {
-            ApplyStyleToElement(fe, cachedStyle);
+            ApplyStyleToElement(fe, cachedStyle, null);
+            return;
+        }
+        if (basedCacheKey is not null && _basedStyleCache.TryGetValue(basedCacheKey, out var cachedBasedStyle))
+        {
+            TryApplyBasedStyle(fe, cachedBasedStyle, baseStyle!);
             return;
         }
 
@@ -8308,21 +8397,26 @@ public sealed partial class Reconciler : IDisposable
         {
             var dp = GetDependencyPropertyName(fe, property);
             if (dp is null) continue;
-            var escapedResourceKey = global::System.Security.SecurityElement.Escape(themeRef.ResourceKey);
-            setters.Append($"<Setter Property='{dp}' Value='{{ThemeResource {escapedResourceKey}}}'/>");
+            if (FormatThemeResourceReference(themeRef.ResourceKey) is not { } reference)
+            {
+                WarnUnrepresentableThemeKey(themeRef.ResourceKey);
+                continue;
+            }
+            setters.Append("<Setter Property='").Append(dp).Append("' Value=\"").Append(reference).Append("\"/>");
         }
 
         if (setters.Length == 0) return;
 
+        Style style;
         try
         {
             var xaml =
                 $"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='{targetType}'>" +
                 setters.ToString() +
                 "</Style>";
-            var style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
-            _styleCache.TryAdd(cacheKey, style);
-            ApplyStyleToElement(fe, style);
+            style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+            if (baseStyle is not null)
+                style.BasedOn = baseStyle;
         }
         catch (Exception ex)
         {
@@ -8330,7 +8424,171 @@ public sealed partial class Reconciler : IDisposable
                 Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
                 "ApplyThemeBindings",
                 ex);
+            return;
         }
+
+        if (baseStyle is null)
+        {
+            _styleCache.TryAdd(cacheKey, style);
+            try
+            {
+                ApplyStyleToElement(fe, style, null);
+            }
+            catch (Exception ex)
+            {
+                Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                    "ApplyThemeBindings",
+                    ex);
+            }
+            return;
+        }
+
+        // Styles built for a base are cached per base identity, up to a cap: a base Style created
+        // anew on every render would otherwise grow the cache without bound. Past the cap, or
+        // when the base could not be stamped, the Style is built per apply, which is still correct.
+        if (TryApplyBasedStyle(fe, style, baseStyle)
+            && basedCacheKey is not null && _basedStyleCache.Count < BasedStyleCacheCap)
+            _basedStyleCache.TryAdd(basedCacheKey, style);
+    }
+
+    /// <summary>
+    /// Applies a themed Style built BasedOn <paramref name="baseStyle"/>. WinUI validates
+    /// BasedOn only when the Style is applied, so a base whose TargetType is unrelated to the
+    /// control (a subclass outside the WinUI namespaces) fails here; the author's Style is then
+    /// left as it was.
+    /// </summary>
+    private static bool TryApplyBasedStyle(FrameworkElement fe, Style style, Style baseStyle)
+    {
+        try
+        {
+            ApplyStyleToElement(fe, style, baseStyle);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (!ReferenceEquals(fe.Style, baseStyle))
+                fe.Style = baseStyle;
+            fe.ClearValue(ReactorAppliedThemeStyleProperty);
+            fe.ClearValue(ReactorThemeBaseStyleProperty);
+            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                "ApplyThemeBindings",
+                ex);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The Style the app put on <paramref name="fe"/>, or null when it has none. When
+    /// <c>fe.Style</c> is the themed Style Reactor applied, that is the base it was built on.
+    /// </summary>
+    private static Style? ResolveAuthorBaseStyle(FrameworkElement fe)
+    {
+        if (fe.Style is not { } current)
+            return null;
+        if (fe.GetValue(ReactorAppliedThemeStyleProperty) is Style owned && ReferenceEquals(current, owned))
+            return fe.GetValue(ReactorThemeBaseStyleProperty) as Style;
+        return current;
+    }
+
+    /// <summary>
+    /// For a control that cannot take a Style that doesn't carry its default look, that
+    /// default Style, so the themed Style is built on it like on an author base. A loaded
+    /// <c>SplitView</c> fails with E_INVALIDARG on any write to <c>Style</c> (an empty Style, or
+    /// clearing it) unless the new Style is BasedOn <c>DefaultSplitViewStyle</c>, which also makes
+    /// <see cref="ClearThemeBindings"/> restore that Style rather than clear it.
+    /// </summary>
+    private static Style? GetRequiredFrameworkBaseStyle(FrameworkElement fe)
+        => fe is WinUI.SplitView
+            && ResourceLookup.TryFind<Style>(Application.Current?.Resources, "DefaultSplitViewStyle", out var style)
+            ? style
+            : null;
+
+    /// <summary>
+    /// The name of the first WinUI type in <paramref name="fe"/>'s type hierarchy, which XAML
+    /// can resolve in the default namespace. Null for a control with no WinUI ancestor type.
+    /// </summary>
+    private static string? GetExactStyleTargetType(FrameworkElement fe)
+    {
+        for (var type = fe.GetType(); type is not null; type = type.BaseType)
+        {
+            if (type.Namespace is { } ns && ns.StartsWith("Microsoft.UI.Xaml", StringComparison.Ordinal))
+                return type.Name;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A process-unique id stamped on <paramref name="style"/>, which keys the Styles built
+    /// BasedOn it. Stored as an attached DP on the Style itself rather than in a table keyed by
+    /// the managed wrapper, which WinUI can hand out more than once for the same native object.
+    /// Null when the Style rejects the write.
+    /// </summary>
+    private static int? GetOrStampBaseStyleId(Style style)
+    {
+        try
+        {
+            if (style.GetValue(ReactorBaseStyleIdProperty) is int id && id != 0)
+                return id;
+            var next = global::System.Threading.Interlocked.Increment(ref _nextBaseStyleId);
+            style.SetValue(ReactorBaseStyleIdProperty, next);
+            return next;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The value of a <c>{ThemeResource}</c> setter for <paramref name="resourceKey"/>, escaped
+    /// for an XML attribute, or null when the key cannot be written in a markup extension: it
+    /// is empty, contains both quote characters, or contains characters an XML attribute does
+    /// not keep as they are (tab, carriage return, line feed, or characters XML does not allow).
+    /// </summary>
+    /// <remarks>
+    /// The key is quoted, so commas, braces, '=' and spaces survive markup-extension parsing.
+    /// Inside the quotes a backslash escapes the next character, so it is doubled. A backslash
+    /// does not escape the quote character itself, so a key containing ' is quoted with ".
+    /// Same rules as <c>ThemeResourceProbe.BuildStyleXaml</c> (#1633).
+    /// </remarks>
+    internal static string? FormatThemeResourceReference(string? resourceKey)
+    {
+        if (string.IsNullOrEmpty(resourceKey)) return null;
+        if (resourceKey.AsSpan().IndexOfAny('\t', '\r', '\n') >= 0) return null;
+        try
+        {
+            global::System.Xml.XmlConvert.VerifyXmlChars(resourceKey);
+        }
+        catch (global::System.Xml.XmlException)
+        {
+            return null;
+        }
+
+        bool hasSingle = resourceKey.Contains('\'');
+        if (hasSingle && resourceKey.Contains('"')) return null;
+        char quote = hasSingle ? '"' : '\'';
+        var reference = "{ThemeResource " + quote + resourceKey.Replace("\\", "\\\\") + quote + "}";
+        return global::System.Security.SecurityElement.Escape(reference);
+    }
+
+    // A ThemeRef is applied on every render, so one bad key would warn on every render. Warn
+    // once per key, up to a cap that bounds what a data-driven caller could retain.
+    private const int WarnedThemeKeysCap = 256;
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedThemeKeys = new();
+
+    private static void WarnUnrepresentableThemeKey(string? resourceKey)
+    {
+        var key = resourceKey ?? string.Empty;
+        if (!Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.IsWarningEnabled
+            || _warnedThemeKeys.Count >= WarnedThemeKeysCap
+            || !_warnedThemeKeys.TryAdd(key, 0))
+            return;
+        Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+            Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+            "ApplyThemeBindings",
+            $"ThemeRef key '{key}' cannot be written as a {{ThemeResource}} reference (it is empty, contains both quote characters, or contains a tab, line break or character XML does not allow), so the property it binds is left unset.");
     }
 
     /// <summary>
@@ -8343,11 +8601,11 @@ public sealed partial class Reconciler : IDisposable
     /// <para>Ownership is tracked via the
     /// <c>ReactorAppliedThemeStyleProperty</c> attached DP, which stores the
     /// Style instance we wrote on the most recent <see cref="ApplyThemeBindings"/>
-    /// call. <see cref="DependencyObject.ClearValue(DependencyProperty)"/>
-    /// on <see cref="FrameworkElement.StyleProperty"/> fires only when
-    /// <c>fe.Style</c> still references the same instance — preserving an
-    /// author Setter (e.g. <c>.Set(c =&gt; c.Style = mine)</c>) that may have
-    /// replaced our Style in between.</para>
+    /// call. The Style is dropped only when <c>fe.Style</c> still references the
+    /// same instance — preserving an author Setter (e.g.
+    /// <c>.Set(c =&gt; c.Style = mine)</c>) that may have replaced our Style in
+    /// between. When the themed Style was built <c>BasedOn</c> the app's own
+    /// Style, that base is restored instead of clearing <c>Style</c>.</para>
     ///
     /// <para>This avoids per-FrameworkElement tracking via
     /// <c>ConditionalWeakTable</c> (fragile under RCW churn) and is robust to
@@ -8359,8 +8617,15 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAppliedThemeStyleProperty) is not Style ownedStyle)
             return;
         if (ReferenceEquals(fe.Style, ownedStyle))
-            fe.ClearValue(FrameworkElement.StyleProperty);
+        {
+            // Hand the control back to the app's own Style when the themed one was built on it.
+            if (fe.GetValue(ReactorThemeBaseStyleProperty) is Style baseStyle)
+                fe.Style = baseStyle;
+            else
+                fe.ClearValue(FrameworkElement.StyleProperty);
+        }
         fe.ClearValue(ReactorAppliedThemeStyleProperty);
+        fe.ClearValue(ReactorThemeBaseStyleProperty);
     }
 
     /// <summary>
@@ -8369,19 +8634,32 @@ public sealed partial class Reconciler : IDisposable
     /// element's current effective theme (which may have changed due to a parent's
     /// <see cref="FrameworkElement.RequestedTheme"/> override).
     /// </summary>
-    private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle)
+    private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle, Style? baseStyle)
     {
         // Clearing first forces WinUI to process the subsequent set as a
         // genuine change, re-resolving {ThemeResource} values. Without this,
-        // re-applying the same cached Style reference is a no-op.
-        if (fe.Style is not null)
+        // re-applying the same cached Style reference is a no-op. With an app
+        // base Style, step through the base instead of null: dropping to the
+        // default style would swap a Template the base sets and rebuild it.
+        if (baseStyle is not null)
+        {
+            if (!ReferenceEquals(fe.Style, baseStyle))
+                fe.Style = baseStyle;
+        }
+        else if (fe.Style is not null)
+        {
             fe.Style = null;
+        }
         fe.Style = cachedStyle;
 
         // Track ownership for the symmetric ClearThemeBindings path (issue
         // #522). Always overwrite so an A → B ThemeBindings transition
         // updates the marker to the new Style.
         fe.SetValue(ReactorAppliedThemeStyleProperty, cachedStyle);
+        if (baseStyle is not null)
+            fe.SetValue(ReactorThemeBaseStyleProperty, baseStyle);
+        else
+            fe.ClearValue(ReactorThemeBaseStyleProperty);
     }
 
     private static string? GetStyleTargetType(FrameworkElement fe) => fe switch
@@ -8393,6 +8671,7 @@ public sealed partial class Reconciler : IDisposable
         WinUI.Button => "Button",
         WinUI.TextBox => "TextBox",
         TextBlock => "TextBlock",
+        WinUI.SplitView => "SplitView",
         WinUI.ContentControl => "ContentControl",
         WinUI.Panel => "Panel",
         WinUI.Control => "Control",
@@ -8408,6 +8687,8 @@ public sealed partial class Reconciler : IDisposable
         if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
             || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
             return "BorderBrush";
+        if (property == "PaneBackground" && fe is WinUI.SplitView)
+            return "PaneBackground";
         return null;
     }
 

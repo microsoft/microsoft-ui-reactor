@@ -130,6 +130,27 @@ Conventions for contributors:
 
 ### Fixed
 
+- `ThemeRef` modifiers that go through the synthesized `{ThemeResource}` Style, ported from
+  the `SetThemeResourceBinding` work in #1618 so they don't wait for a new Windows App SDK:
+  - `SplitView(...).PaneBackground(ThemeRef)` themes the pane background. It used to do
+    nothing, and replacing a `.PaneBackground(brush)` with it left the old brush in place.
+    A loaded `SplitView` also no longer crashes with `ArgumentException` (E_INVALIDARG) when
+    a `ThemeRef` modifier is added or removed on re-render: the themed Style is built on
+    `DefaultSplitViewStyle`.
+  - `.InteractionStates()` no longer freezes a `ThemeRef` `Background` or `Foreground`.
+    Leaving a state wrote back a brush captured at setup, which pinned the theme it had
+    then, and even an opacity-only state did so. Now a property is restored only when the
+    state wrote over it, an explicit `.Background(brush)` comes back as it was when the
+    state started, and a themed property is cleared so it follows the theme again.
+  - A `ThemeRef` modifier keeps the control's own `Style` (`.Set(c => c.Style = s)`,
+    `.ApplyStyle(...)`, `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `Title(...)`
+    and the other typography factories). The themed Style is built `BasedOn` it instead of
+    replacing it, and dropping the `ThemeRef` restores it (issue #522 path).
+  - A `ThemeRef` key containing a comma, brace, `=`, quote, space or backslash now works.
+    The key used to be written unquoted, so the Style failed to parse and every `ThemeRef`
+    on that element silently did nothing. A key that cannot be written at all (both quote
+    characters, a tab or line break) skips only that property and logs a warning.
+
 - Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
   non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no
   longer throws during reconcile and replaces the host content with the error
