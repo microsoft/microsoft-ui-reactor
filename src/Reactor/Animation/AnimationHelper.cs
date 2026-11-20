@@ -142,7 +142,7 @@ internal static class AnimationHelper
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
         // Rotation is degrees, but its compositor channel is RotationAngle (radians).
-        var compositorValue = property == "Rotation" ? DegreesToRadians(value) : value;
+        var compositorValue = property == "Rotation" ? float.DegreesToRadians(value) : value;
 
         switch (curve)
         {
@@ -423,14 +423,12 @@ internal static class AnimationHelper
     {
         "Opacity" => "Opacity",
         "Scale" => "Scale",
-        // Radians. Callers convert the degree value with DegreesToRadians.
+        // Radians. Callers convert the degree value with float.DegreesToRadians.
         "Rotation" => "RotationAngle",
         "Translation" => "Translation",
         "CenterPoint" => "CenterPoint",
         _ => property,
     };
-
-    internal static float DegreesToRadians(float degrees) => degrees * (MathF.PI / 180f);
 
     private static void SetScalarDirect(UIElement element, string property, float value)
     {
@@ -451,7 +449,7 @@ internal static class AnimationHelper
         // Write the RotationAngle channel, not RotationAngleInDegrees: implicit animations
         // (.Animate(), the RotationTransition fallback) are keyed on "RotationAngle" and only
         // trigger on a write to that exact property.
-        if (property == "Rotation") visual.RotationAngle = DegreesToRadians(value);
+        if (property == "Rotation") visual.RotationAngle = float.DegreesToRadians(value);
         else if (property == "Opacity")
         {
             element.Opacity = value;

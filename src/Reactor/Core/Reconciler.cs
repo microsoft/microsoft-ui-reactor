@@ -6129,7 +6129,7 @@ public sealed partial class Reconciler : IDisposable
 
         if (values?.Rotation.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetRotation = AnimationHelper.DegreesToRadians(values?.Rotation ?? 0f);
+            var targetRotation = float.DegreesToRadians(values?.Rotation ?? 0f);
             var rotationAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetRotation, curve);
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
@@ -6361,7 +6361,7 @@ public sealed partial class Reconciler : IDisposable
                 foreach (var kf in def.Keyframes)
                 {
                     if (!kf.Rotation.HasValue) continue;
-                    var radians = AnimationHelper.DegreesToRadians(kf.Rotation.Value);
+                    var radians = float.DegreesToRadians(kf.Rotation.Value);
                     if (kf.Easing.HasValue)
                     {
                         var e = kf.Easing.Value;

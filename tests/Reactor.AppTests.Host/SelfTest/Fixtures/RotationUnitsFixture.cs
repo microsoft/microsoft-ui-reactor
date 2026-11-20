@@ -33,7 +33,7 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
         var curve = Curve.Linear(50);
         // The running variant keeps a long transition in flight to prove Reactor's write triggers it.
         bool running = mode == "CompositorTransitionRunning";
-        var transitionDuration = TimeSpan.FromMilliseconds(running ? 60000 : 50);
+        var transitionDuration = TimeSpan.FromMilliseconds(running ? 600_000 : 50);
         bool compositorTransition = mode.StartsWith("CompositorTransition", StringComparison.Ordinal);
         Element Decorate(Element el) => mode switch
         {
@@ -95,12 +95,19 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
             await Settle();
 
             var bbox = await RedBoundsAsync(canvas);
-            // Under way, a 60 s transition has turned well under a degree from the unrotated rect.
+            // Under way, a 10 min transition has barely turned from the unrotated rect.
             var (x0, x1, y0, y1) = running ? (100, 200, 130, 170) : topLeftPivot ? (60, 100, 130, 230) : (130, 170, 100, 200);
             bool placed = bbox is { } b && Near(b.MinX, x0) && Near(b.MaxX, x1) && Near(b.MinY, y0) && Near(b.MaxY, y1);
             H.Check(name + (running ? "_TransitionInFlight" : "_RotatedNinetyDegrees"), placed, bbox is { } r
                 ? $"bbox=x[{r.MinX:F0},{r.MaxX:F0}] y[{r.MinY:F0},{r.MaxY:F0}] expected x[{x0},{x1}] y[{y0},{y1}]"
                 : "no red pixels rendered");
+            if (running)
+            {
+                // The getter returns the base value, so this proves the write landed, in radians,
+                // while the bounding box shows the transition is still playing toward it.
+                float angle = ElementCompositionPreview.GetElementVisual(target).RotationAngle;
+                H.Check(name + "_TargetIsNinetyDegrees", Math.Abs(angle - MathF.PI / 2) < 1e-3, $"RotationAngle={angle}");
+            }
         }
         finally { H.SetContent(null); }
     }
