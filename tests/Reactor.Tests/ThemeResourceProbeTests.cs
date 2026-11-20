@@ -14,8 +14,16 @@ public class ThemeResourceProbeTests
     [Theory]
     [InlineData("")]
     [InlineData("Both'And\"Quotes")]
+    [InlineData("Tab\tKey")]
+    [InlineData("Line\nKey")]
+    [InlineData("Control\u0001Key")]
     public void Keys_That_Cannot_Be_Written_As_A_Reference_Are_Not_Probed(string key)
         => Assert.Null(ThemeResourceProbe.BuildStyleXaml(key));
+
+    // Not an InlineData case: test-case serialization replaces a lone surrogate before it runs.
+    [Fact]
+    public void Key_With_A_Lone_Surrogate_Is_Not_Probed()
+        => Assert.Null(ThemeResourceProbe.BuildStyleXaml("Lone" + '\uD800' + "Surrogate"));
 
     [Theory]
     [InlineData("ControlFillColorSecondaryBrush", "{ThemeResource 'ControlFillColorSecondaryBrush'}")]

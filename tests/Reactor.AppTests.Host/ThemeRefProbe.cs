@@ -26,7 +26,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host;
 /// returned and what the two borders show. Pass when the opposite-theme border differs from
 /// the app-theme border (the entry was not overwritten with the app theme's value) and the
 /// first read equals the opposite-theme border. The <see cref="NoneScenario"/> run does no
-/// first read, so it is the positive control: it shows the two borders can differ.</para>
+/// first read, so it is the positive control: it shows the two borders can differ.
+/// <see cref="RawReadScenario"/> is the negative control: it does the old read and must fail.</para>
 /// <para>The app theme comes from the system setting and cannot be changed once WinUI has
 /// started, so the direction under test is whichever is opposite on the machine.</para>
 /// </remarks>
@@ -46,7 +47,22 @@ internal static class ThemeRefProbe
     /// <summary>A <c>.Resources(...)</c> override with a theme token, mounted under an opposite-theme ancestor.</summary>
     internal const string ResourceOverrideScenario = "resource-override";
 
-    internal static readonly string[] Scenarios = [NoneScenario, ResolveScenario, ResolveElementScenario, ResourceOverrideScenario];
+    /// <summary>
+    /// <c>ThemeRef.Resolve</c> of a key that exists nowhere, for the opposite theme, before the
+    /// real keys are used. It takes the dictionary-walk fallback through every theme dictionary,
+    /// which must not change WinUI's entries.
+    /// </summary>
+    internal const string MissingKeyScenario = "missing-key";
+
+    /// <summary>
+    /// Negative control: reads each key from the opposite theme's dictionary from code, as
+    /// Reactor did before issue #1534. This must still change WinUI's entry, so the run fails
+    /// with <c>distinct=False</c>. If it ever passes, the probe can no longer see the bug and
+    /// the other scenarios passing means nothing.
+    /// </summary>
+    internal const string RawReadScenario = "raw-read";
+
+    internal static readonly string[] Scenarios = [NoneScenario, ResolveScenario, ResolveElementScenario, ResourceOverrideScenario, MissingKeyScenario, RawReadScenario];
 
     // Keys whose Light and Dark values differ, so the two borders can tell the themes apart.
     internal static readonly string[] Keys =
@@ -108,7 +124,7 @@ internal static class ThemeRefProbe
                     var appColor = BorderColor(window.NativeWindow.Content, AppTag + key);
                     var read = firstRead[key];
                     var distinct = oppositeColor is not null && appColor is not null && oppositeColor != appColor;
-                    var readOk = scenario == NoneScenario || (read is not null && read == oppositeColor);
+                    var readOk = scenario is NoneScenario or MissingKeyScenario || (read is not null && read == oppositeColor);
                     pass &= distinct && readOk;
                     Console.WriteLine(
                         $"{KeyMarker} {key} read={read ?? "null"} opposite={oppositeColor ?? "null"} app={appColor ?? "null"} distinct={distinct} readOk={readOk}");
@@ -131,6 +147,12 @@ internal static class ThemeRefProbe
     {
         switch (scenario)
         {
+            case MissingKeyScenario:
+                ThemeRef.Resolve("ReactorThemeRefProbe_NoSuchKey_" + key, isDark: theme == ElementTheme.Dark);
+                return null;
+            case RawReadScenario:
+                return Format(ReadThemeDictionaries(Application.Current.Resources, key, theme == ElementTheme.Dark ? "Dark" : "Light")
+                    ?? ReadThemeDictionaries(Application.Current.Resources, key, "Default"));
             case ResolveScenario:
                 return Format(ThemeRef.Resolve(key, isDark: theme == ElementTheme.Dark));
             case ResolveElementScenario:
@@ -153,6 +175,19 @@ internal static class ThemeRefProbe
     }
 
     private static string? Format(Brush? brush) => (brush as SolidColorBrush)?.Color.ToString();
+
+    // The read Reactor did before issue #1534, kept only for the negative control.
+    private static Brush? ReadThemeDictionaries(ResourceDictionary resources, string key, string themeName)
+    {
+        if (resources.ThemeDictionaries.TryGetValue(themeName, out var themed)
+            && themed is ResourceDictionary dictionary
+            && dictionary.TryGetValue(key, out var value)
+            && value is Brush brush)
+            return brush;
+        foreach (var merged in resources.MergedDictionaries)
+            if (ReadThemeDictionaries(merged, key, themeName) is { } found) return found;
+        return null;
+    }
 
     private static string? BorderColor(UIElement? root, string tag)
     {

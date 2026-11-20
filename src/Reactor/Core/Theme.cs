@@ -31,9 +31,12 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// </summary>
     /// <remarks>
     /// The brush is the one a <c>{ThemeResource}</c> reference gets on an element in that theme,
-    /// so either theme can be resolved whatever theme the app uses, and the lookup follows
-    /// WinUI's own rules, including the Windows contrast themes. Returns null when the key is
-    /// not found or is not a <see cref="Brush"/>. Call it on the UI thread.
+    /// so either theme can be resolved whatever theme the app uses. The lookup goes through
+    /// WinUI's own <c>{ThemeResource}</c> resolution, so its rules apply, including the
+    /// <c>Default</c> fallback and the theme dictionaries WinUI uses for a Windows contrast
+    /// theme. Only keys WinUI cannot resolve for that theme are read from the Light, Dark and
+    /// Default dictionaries directly. Returns null when the key is not found or is not a
+    /// <see cref="Brush"/>. Call it on the UI thread.
     /// </remarks>
     public static Brush? Resolve(string resourceKey, bool isDark)
     {

@@ -162,6 +162,7 @@ internal static class ThemeRefResolutionFixtures
     {
         private const string OppositeOnlyKey = "ReactorTest_OppositeThemeOnlyBrush";
         private const string DefaultOnlyKey = "ReactorTest_DefaultOnlyBrush";
+        private const string AppOnlyKey = "ReactorTest_AppThemeOnlyBrush";
 
         public override async Task RunAsync()
         {
@@ -170,10 +171,11 @@ internal static class ThemeRefResolutionFixtures
             var opposite = appIsDark ? "Light" : "Dark";
             var oppositeBrush = new SolidColorBrush(Microsoft.UI.Colors.Red);
             var defaultBrush = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var appBrush = new SolidColorBrush(Microsoft.UI.Colors.Blue);
 
             var dict = new ResourceDictionary();
-            dict.ThemeDictionaries["Light"] = opposite == "Light" ? new ResourceDictionary { [OppositeOnlyKey] = oppositeBrush } : new ResourceDictionary();
-            dict.ThemeDictionaries["Dark"] = opposite == "Dark" ? new ResourceDictionary { [OppositeOnlyKey] = oppositeBrush } : new ResourceDictionary();
+            dict.ThemeDictionaries["Light"] = opposite == "Light" ? new ResourceDictionary { [OppositeOnlyKey] = oppositeBrush } : new ResourceDictionary { [AppOnlyKey] = appBrush };
+            dict.ThemeDictionaries["Dark"] = opposite == "Dark" ? new ResourceDictionary { [OppositeOnlyKey] = oppositeBrush } : new ResourceDictionary { [AppOnlyKey] = appBrush };
             dict.ThemeDictionaries["Default"] = new ResourceDictionary { [DefaultOnlyKey] = defaultBrush };
             Application.Current.Resources.MergedDictionaries.Add(dict);
             ThemeRef.InvalidateResolutionCache();
@@ -193,6 +195,21 @@ internal static class ThemeRefResolutionFixtures
                 H.Check("ThemeRefFallback_DefaultOnlyKey",
                     ReferenceEquals(ThemeRef.Resolve(DefaultOnlyKey, isDark: !appIsDark), defaultBrush)
                     && ReferenceEquals(ThemeRef.Resolve(DefaultOnlyKey, isDark: appIsDark), defaultBrush));
+
+                // A key only the app theme defines: resolving it for the app theme caches the
+                // probe's style, and applying that cached style for the other theme, where the
+                // key is missing, must not throw. It then falls back to the walk, whose last step
+                // is the plain lookup that finds the app theme's entry, as before the probe.
+                H.Check("ThemeRefFallback_AppOnlyKey_AppTheme",
+                    ReferenceEquals(ThemeRef.Resolve(AppOnlyKey, isDark: appIsDark), appBrush));
+                Brush? other = null;
+                Exception? thrown = null;
+                try { other = ThemeRef.Resolve(AppOnlyKey, isDark: !appIsDark); }
+                catch (Exception ex) { thrown = ex; }
+                var walkResult = Application.Current.Resources.TryGetValue(AppOnlyKey, out var found) ? found as Brush : null;
+                H.Check("ThemeRefFallback_AppOnlyKey_OtherThemeMatchesWalk",
+                    thrown is null && ReferenceEquals(other, walkResult),
+                    $"thrown={thrown?.GetType().Name} other={other} walk={walkResult}");
             }
             finally
             {

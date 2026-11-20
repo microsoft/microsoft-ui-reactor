@@ -72,11 +72,21 @@ internal static class ThemeResourceProbe
     /// <summary>
     /// The XAML of a <c>Border</c> style that sets <c>Tag</c> to <c>{ThemeResource key}</c>, or
     /// null when the key cannot be written in a markup extension (it contains both quote
-    /// characters, or is empty).
+    /// characters, or is empty) or in an XML attribute as it is (characters XML does not allow,
+    /// and tab, carriage return or line feed, which the attribute would turn into spaces).
     /// </summary>
     internal static string? BuildStyleXaml(string resourceKey)
     {
         if (string.IsNullOrEmpty(resourceKey)) return null;
+        if (resourceKey.AsSpan().IndexOfAny('\t', '\r', '\n') >= 0) return null;
+        try
+        {
+            global::System.Xml.XmlConvert.VerifyXmlChars(resourceKey);
+        }
+        catch (global::System.Xml.XmlException)
+        {
+            return null;
+        }
 
         // Quoted, so keys with spaces, commas, braces or '=' survive markup-extension parsing.
         // Inside the quotes a backslash escapes the next character, so double it. A backslash

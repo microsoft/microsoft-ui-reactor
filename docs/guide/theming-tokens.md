@@ -117,13 +117,15 @@ property update on the host, not a re-render of the component.
 ## How resolution works
 
 [`ThemeRef`](styling.md) is a readonly record struct holding the
-resource key. When a modifier like `.Background(token)` reaches the
-reconciler, the framework walks from the materialized
-[`FrameworkElement`](components.md) up the visual tree looking for the
-nearest `RequestedTheme`, falls back to `ActualTheme`, then
-`Application.RequestedTheme`. The brush for the chosen theme name
-comes from `Application.Resources.ThemeDictionaries[name]` (or the
-nearest merged dictionary).
+resource key. A modifier like `.Background(token)` sets the property
+through a `{ThemeResource}` reference, so WinUI picks the brush for the
+element's effective theme, including an ancestor's `RequestedTheme`.
+`.Resources(...)` overrides and `ThemeRef.Resolve` find the theme the
+same way (the nearest `RequestedTheme` up the tree, then `ActualTheme`,
+then `Application.RequestedTheme`) and ask WinUI to resolve the key for
+it, as a `{ThemeResource}` reference on an element in that theme would.
+Reactor reads the theme dictionaries itself only when WinUI can't find
+the key for that theme.
 
 ```csharp
 class ThemeRefGood : Component
