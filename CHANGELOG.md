@@ -345,6 +345,16 @@ Conventions for contributors:
   and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
   instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
   also skip the write and leave the right-to-left value on the control.
+- **`Curve.Linear` animates at constant speed (spec 066 §16, issue #1640).** Its compositor
+  keyframes had no easing function, so the compositor's default ease-out applied and a
+  linear animation was already about two-thirds of the way at 30% of its duration. Every linear
+  path now passes a linear easing function: `.Animate(Curve.Linear(...))`,
+  `AnimationScope.WithAnimation(Curve.Linear(...))`, `.InteractionStates(..., Curve.Linear(...))`,
+  `.Transition(..., Curve.Linear(...))` enter and exit animations, and the compositor fallback
+  for `.OpacityTransition()`, `.RotationTransition()`, `.ScaleTransition()` and
+  `.TranslationTransition()` on an element whose visual was already handed out. That fallback
+  is built on the linear curve, so it is now linear too. Spec 066 later moves it to the XAML
+  transition curve.
 
 - ReactorGallery search keeps complete samples that contain ellipses in comments
   or display text, restoring the Pan and `OpacityTransition` examples in
