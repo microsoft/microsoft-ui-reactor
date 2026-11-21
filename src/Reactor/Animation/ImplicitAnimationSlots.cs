@@ -240,10 +240,13 @@ internal static class ImplicitAnimationSlots
                 if (key == TranslationKey) return;
                 var timing = AnimationHelper.TransitionTiming.Of(value);
                 // A transition modifier builds a new transition object on every render. Keep the
-                // published animation while the timing is unchanged.
+                // published animation while the timing is unchanged and no .Stagger() delay is on
+                // it: a parent re-applies its delays after its children update, so a fresh key
+                // drops the delay of a removed stagger, as building one on every render did.
                 if (claims.PublishedTransition(key) is { } published && published.Timing == timing
                     && visual.ImplicitAnimations is { } current && current.TryGetValue(key, out var existing)
-                    && ReferenceEquals(existing, published.Animation))
+                    && ReferenceEquals(existing, published.Animation)
+                    && existing is KeyFrameAnimation { DelayTime.Ticks: 0 })
                     return;
                 animation = AnimationHelper.CreateTransitionAnimation(visual.Compositor, key, timing);
                 claims.RememberTransition(key, timing, animation);

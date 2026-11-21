@@ -554,6 +554,39 @@ internal static class CompositorTransitionFixtures
         }
     }
 
+    /// <summary>
+    /// The transition-animation cache doesn't keep a removed <c>.Stagger()</c> delay: after the
+    /// parent drops it, the child's Opacity key has no delay. While the stagger stays, the
+    /// second child's key keeps its delay (the positive control).
+    /// </summary>
+    internal sealed class StaggerRemoved(Harness h) : TransitionFixture(h, "CompositorTransitions_StaggerRemoved")
+    {
+        private static readonly TimeSpan Step = TimeSpan.FromMilliseconds(250);
+
+        private static Element Staggered(double opacity, bool stagger)
+        {
+            var panel = VStack(Target().OpacityTransition(Long), Target().Opacity(opacity).OpacityTransition(Long));
+            return stagger ? panel.Stagger(Step) : panel;
+        }
+
+        private TimeSpan? SecondDelay()
+        {
+            var child = ((Panel)Control).Children[1];
+            return ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is { } keys
+                && keys.TryGetValue("Opacity", out var anim) && anim is KeyFrameAnimation kfa ? kfa.DelayTime : null;
+        }
+
+        protected override async Task Run()
+        {
+            await Mount(Staggered(1, stagger: true));
+            await Update(Staggered(0.9, stagger: true));
+            H.Check(Name + "_PositiveControl_KeptWhileStaggered", SecondDelay() == Step, $"delay={SecondDelay()}");
+            await Update(Staggered(0.9, stagger: false));
+            await Update(Staggered(0.8, stagger: false));
+            H.Check(Name + "_DelayDroppedWithStagger", SecondDelay() == TimeSpan.Zero, $"delay={SecondDelay()}");
+        }
+    }
+
     /// <summary>#1626, Background arm: dropping <c>.BackgroundTransition()</c> clears the XAML property.</summary>
     internal sealed class BackgroundRemoved(Harness h) : TransitionFixture(h, "CompositorTransitions_BackgroundRemoved")
     {
