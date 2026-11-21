@@ -538,6 +538,33 @@ internal static class PoolLaneFixtures
                 static c => c.BackgroundTransition, static (c, t) => c.BackgroundTransition = t);
             await BrushTransition<WinUI.Border>(p + "_Border", text => Border(TextBlock(text)),
                 static c => c.BackgroundTransition, static (c, t) => c.BackgroundTransition = t);
+
+            // XAML pushes UIElement.Opacity to the visual only when it changes, so an implicit
+            // style's opacity on both renters must survive the reset.
+            using (var lab = new Lab(H))
+            {
+                var style = new Style(typeof(WinUI.Border));
+                style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.65));
+                lab.Root.Resources[typeof(WinUI.Border)] = style;
+                var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
+                await lab.Show(null);
+                var renter = await lab.Show(Target("R").Animate(Curve.Linear(100)));
+                H.Check(p + "_StyledOpacity_Recycled", renter is not null && ReferenceEquals(renter, first));
+                var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
+                H.Check(p + "_StyledOpacity_Kept", Math.Abs(opacity - 0.65f) < 0.01f, $"visual={opacity} element={renter?.Opacity}");
+            }
+
+            // An enter fade writes 0 to the visual and animates from there. Removed mid-fade, the
+            // control must not leave its next renter invisible.
+            using (var lab = new Lab(H))
+            {
+                var first = await lab.Show(Target("F").Transition(Animation.Transition.Enter(Animation.Transition.Fade), Curve.Linear(60000)));
+                await lab.Show(null);
+                var renter = await lab.Show(Target("R").Animate(Curve.Linear(100)));
+                H.Check(p + "_InterruptedFade_Recycled", renter is not null && ReferenceEquals(renter, first));
+                var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
+                H.Check(p + "_InterruptedFade_Visible", Math.Abs(opacity - 1f) < 0.01f, $"visual={opacity}");
+            }
         }
 
         private async Task BrushTransition<TControl>(string p, Func<string, Element> build,

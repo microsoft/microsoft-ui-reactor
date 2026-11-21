@@ -2773,7 +2773,11 @@ public sealed partial class Reconciler : IDisposable
         if (poolable && typeof(FrameworkElement).IsAssignableFrom(typeof(T)))
         {
             var rented = _pool.TryRent(typeof(T), visualLane);
-            if (rented is T t) return t;
+            if (rented is T t)
+            {
+                if (visualLane && ElementPool.IsVisualTaken(rented)) ElementPool.SyncOpacityWhenLoaded(rented);
+                return t;
+            }
         }
         return factory is not null ? factory() : new T();
     }
