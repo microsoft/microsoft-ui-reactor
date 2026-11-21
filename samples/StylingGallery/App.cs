@@ -26,7 +26,7 @@ class StylingGalleryApp : Component
                 Tab("RequestedTheme",       ScrollView(Component<RequestedThemeDemo>())) with { IsClosable = false },
                 Tab("UseColorScheme",       ScrollView(Component<ColorSchemeDemo>())) with { IsClosable = false },
                 Tab("Lightweight Styling",  ScrollView(Component<LightweightStylingDemo>())) with { IsClosable = false },
-                Tab("Style Caching",        ScrollView(Component<StyleCachingDemo>())) with { IsClosable = false }
+                Tab("Theme Bindings",       ScrollView(Component<ThemeBindingsDemo>())) with { IsClosable = false }
             ).Grid(row: 1))
         // Spec 033 §6 — Mica window backdrop. Tab pages set their own card
         // backgrounds to float above the material.
@@ -360,24 +360,24 @@ class LightweightStylingDemo : Component
 }
 
 // ════════════════════════════════════════════════════════════════════════
-//  Tab 5: Style Caching
+//  Tab 5: Theme Bindings
 // ════════════════════════════════════════════════════════════════════════
 
-class StyleCachingDemo : Component
+class ThemeBindingsDemo : Component
 {
     public override Element Render()
     {
         var (count, setCount) = UseState(50);
 
         return VStack(20,
-            SectionHeader("Style Caching",
-                "XamlReader.Load() is called once per unique (TargetType + ThemeRef bindings) " +
-                "combination, then cached. Rendering 100 elements with the same theme binding " +
-                "only parses XAML once."),
+            SectionHeader("Theme Bindings",
+                "Each ThemeRef modifier binds its property with FrameworkElement.SetThemeResourceBinding, " +
+                "the code equivalent of {ThemeResource}. No Style is built or assigned, so a control's " +
+                "own Style keeps applying."),
 
-            SubHeading("Cached Theme Binding Grid"),
-            TextBlock($"Each card below uses .Background(Theme.CardBackground) — all {count} share " +
-                 "a single cached Style object. Try increasing the count.")
+            SubHeading("Theme Binding Grid"),
+            TextBlock($"Each of the {count} cards below uses .Background(Theme.CardBackground) and " +
+                 ".WithBorder(Theme.CardStroke). Try increasing the count.")
                 .Foreground(Theme.SecondaryText),
 
             HStack(12,
@@ -400,10 +400,9 @@ class StyleCachingDemo : Component
                 ).ToArray()
             ),
 
-            SubHeading("Cache Invalidation"),
-            TextBlock("The cache is cleared on theme change (Light/Dark toggle). This is conservative " +
-                 "memory cleanup — WinUI's {ThemeResource} setters handle the actual theme switch " +
-                 "natively. Clearing the cache just frees memory from the old theme's compiled styles.")
+            SubHeading("Theme Changes"),
+            TextBlock("Toggle Light/Dark and every card follows. WinUI re-resolves each binding on a " +
+                 "theme or high-contrast change, so Reactor doesn't re-render anything for it.")
                 .Foreground(Theme.SecondaryText)
         ).Padding(24);
     }

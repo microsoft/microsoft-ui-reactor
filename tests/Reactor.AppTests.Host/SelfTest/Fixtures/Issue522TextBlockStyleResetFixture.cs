@@ -20,11 +20,17 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///
 /// A second arm covers the matching <c>.Foreground(ThemeRef(...))</c> bleed:
 /// <c>Reconciler.Update</c> only applied <c>ThemeBindings</c> when the
-/// <i>new</i> element had bindings, so a previously-applied themed Style
+/// <i>new</i> element had bindings, so a previously-applied theme binding
 /// remained on the control after a transition back to "no bindings".
 /// </summary>
 internal static class Issue522TextBlockStyleResetFixture
 {
+    private static bool HasLocal(DependencyObject? d, DependencyProperty p) =>
+        d is not null && !ReferenceEquals(DependencyProperty.UnsetValue, d.ReadLocalValue(p));
+
+    private static global::Windows.UI.Color? FgColor(WinUI.TextBlock? tb) =>
+        (tb?.Foreground as Microsoft.UI.Xaml.Media.SolidColorBrush)?.Color;
+
     /// <summary>
     /// Heading → plain TextBlock recycles the same control; FontSize / Weight
     /// must reset (local DP cleared) so the plain TextBlock renders at the
@@ -136,10 +142,10 @@ internal static class Issue522TextBlockStyleResetFixture
     }
 
     /// <summary>
-    /// The <c>.Foreground(ThemeRef(...))</c> path applies a cached Style; when
-    /// the next render drops the theme binding the recycler must clear that
-    /// Style on the same recycled control (in-place — no full remount so
-    /// subtree state is preserved). See <c>Reconciler.ClearThemeBindings</c>.
+    /// The <c>.Foreground(ThemeRef(...))</c> path installs a theme-resource
+    /// binding; when the next render drops it the recycler must clear the bound
+    /// property on the same recycled control (in-place — no full remount so
+    /// subtree state is preserved). See <c>Reconciler.ClearDroppedThemeBindings</c>.
     /// </summary>
     internal class ThemeForegroundClearedOnRemoval(Harness h) : SelfTestFixtureBase(h)
     {
@@ -160,8 +166,8 @@ internal static class Issue522TextBlockStyleResetFixture
 
             var errorTb = H.FindText("payload");
             H.Check("Issue522_Theme_ErrorMounted", errorTb is not null);
-            H.Check("Issue522_Theme_ErrorHasStyleApplied",
-                errorTb is not null && errorTb.Style is not null);
+            H.Check("Issue522_Theme_ErrorHasThemeBinding",
+                HasLocal(errorTb, WinUI.TextBlock.ForegroundProperty));
 
             var priorControl = errorTb;
 
@@ -178,10 +184,8 @@ internal static class Issue522TextBlockStyleResetFixture
             H.Check("Issue522_Theme_SameControlReused",
                 plainTb is not null && ReferenceEquals(plainTb, priorControl));
 
-            // The synthesized themed Style must be cleared so the Foreground
-            // falls back to the theme default.
-            H.Check("Issue522_Theme_StyleClearedAfterRemoval",
-                plainTb is not null && plainTb.Style is null);
+            // The theme binding must be cleared so the Foreground falls back to
+            // the theme default.
             H.Check("Issue522_Theme_ForegroundLocalCleared",
                 plainTb is not null
                     && ReferenceEquals(
@@ -260,8 +264,8 @@ internal static class Issue522TextBlockStyleResetFixture
 
             var error = H.FindTextContaining("Error:");
             H.Check("Issue522_E2E_ErrorMounted", error is not null);
-            H.Check("Issue522_E2E_ErrorHasThemedStyle",
-                error is not null && error.Style is not null);
+            H.Check("Issue522_E2E_ErrorHasThemeBinding",
+                HasLocal(error, WinUI.TextBlock.ForegroundProperty));
 
             // ── Bump dep again → Loading (Heading) → Data ──
             bumpDep!(2);
@@ -269,9 +273,7 @@ internal static class Issue522TextBlockStyleResetFixture
 
             var loading2 = H.FindText("Loading url...");
             H.Check("Issue522_E2E_LoadingAfterError_Mounted", loading2 is not null);
-            // The Error arm's themed Style must not survive into Loading's Heading.
-            H.Check("Issue522_E2E_LoadingAfterError_StyleCleared",
-                loading2 is not null && loading2.Style is null);
+            // The Error arm's theme binding must not survive into Loading's Heading.
             H.Check("Issue522_E2E_LoadingAfterError_ForegroundCleared",
                 loading2 is not null
                     && ReferenceEquals(
@@ -296,8 +298,7 @@ internal static class Issue522TextBlockStyleResetFixture
                     && ReferenceEquals(
                         DependencyProperty.UnsetValue,
                         data2.ReadLocalValue(WinUI.TextBlock.FontWeightProperty)));
-            H.Check("Issue522_E2E_FinalData_StyleCleared",
-                data2 is not null && data2.Style is null);
+
             H.Check("Issue522_E2E_FinalData_ForegroundCleared",
                 data2 is not null
                     && ReferenceEquals(
@@ -335,8 +336,8 @@ internal static class Issue522TextBlockStyleResetFixture
 
             var themedBorder = H.FindControl<Microsoft.UI.Xaml.Controls.Border>(_ => true);
             H.Check("Issue522_Container_ThemedMounted", themedBorder is not null);
-            H.Check("Issue522_Container_HasStyle",
-                themedBorder is not null && themedBorder.Style is not null);
+            H.Check("Issue522_Container_HasBoundBackground",
+                HasLocal(themedBorder, Microsoft.UI.Xaml.Controls.Border.BackgroundProperty));
 
             setThemed!(false);
             await Harness.Render();
@@ -345,8 +346,9 @@ internal static class Issue522TextBlockStyleResetFixture
             H.Check("Issue522_Container_PlainMounted", plainBorder is not null);
             H.Check("Issue522_Container_BorderIdentityPreserved",
                 plainBorder is not null && ReferenceEquals(plainBorder, themedBorder));
-            H.Check("Issue522_Container_StyleCleared",
-                plainBorder is not null && plainBorder.Style is null);
+            H.Check("Issue522_Container_BackgroundCleared",
+                plainBorder is not null
+                    && !HasLocal(plainBorder, Microsoft.UI.Xaml.Controls.Border.BackgroundProperty));
             H.Check("Issue522_Container_InnerTextStillPresent",
                 H.FindText("inner-content") is not null);
         }
@@ -355,9 +357,9 @@ internal static class Issue522TextBlockStyleResetFixture
     /// <summary>
     /// Three TextBlocks each have <c>.Foreground(ThemeRef("Critical"))</c>.
     /// Removing the theme from the middle one must NOT affect the other two.
-    /// Pinned because <c>_styleCache</c> is content-addressed and a single
-    /// Style instance is shared across all three controls — clearing one
-    /// must not be observable on the siblings.
+    /// Pinned because WinUI shares the resolved brush across every binding to
+    /// the same key, so clearing one control must not be observable on the
+    /// siblings.
     /// </summary>
     internal class SharedStyleAcrossMultipleElements_IsolatedRemoval(Harness h) : SelfTestFixtureBase(h)
     {
@@ -384,13 +386,11 @@ internal static class Issue522TextBlockStyleResetFixture
             var c0 = H.FindText("tb-c");
             H.Check("Issue522_Shared_AllMounted",
                 a0 is not null && b0 is not null && c0 is not null);
-            H.Check("Issue522_Shared_AllHaveStyle_Initial",
-                a0?.Style is not null && b0?.Style is not null && c0?.Style is not null);
-            // Style sharing — content-addressed cache means a single Style instance.
-            H.Check("Issue522_Shared_StyleInstanceShared",
-                a0 is not null && b0 is not null && c0 is not null
-                    && ReferenceEquals(a0.Style, b0.Style)
-                    && ReferenceEquals(b0.Style, c0.Style));
+            H.Check("Issue522_Shared_AllBound_Initial",
+                HasLocal(a0, WinUI.TextBlock.ForegroundProperty)
+                    && HasLocal(b0, WinUI.TextBlock.ForegroundProperty)
+                    && HasLocal(c0, WinUI.TextBlock.ForegroundProperty));
+            var critical = FgColor(a0);
 
             setMiddleThemed!(false);
             await Harness.Render();
@@ -401,65 +401,62 @@ internal static class Issue522TextBlockStyleResetFixture
             // Sibling controls are reused (no remount cascade from a peer's transition).
             H.Check("Issue522_Shared_SiblingsReused",
                 ReferenceEquals(a1, a0) && ReferenceEquals(c1, c0));
-            // Sibling styles survive.
-            H.Check("Issue522_Shared_SiblingAStyleSurvives", a1?.Style is not null);
-            H.Check("Issue522_Shared_SiblingCStyleSurvives", c1?.Style is not null);
+            // Sibling bindings survive, still showing the critical brush.
+            H.Check("Issue522_Shared_SiblingABindingSurvives",
+                HasLocal(a1, WinUI.TextBlock.ForegroundProperty) && FgColor(a1) == critical);
+            H.Check("Issue522_Shared_SiblingCBindingSurvives",
+                HasLocal(c1, WinUI.TextBlock.ForegroundProperty) && FgColor(c1) == critical);
             // Middle gets cleared in place.
             H.Check("Issue522_Shared_MiddleReused", ReferenceEquals(b1, b0));
-            H.Check("Issue522_Shared_MiddleStyleCleared", b1?.Style is null);
+            H.Check("Issue522_Shared_MiddleBindingCleared",
+                b1 is not null && !HasLocal(b1, WinUI.TextBlock.ForegroundProperty));
         }
     }
 
     /// <summary>
-    /// A theme change (<c>ActualThemeChanged</c>) historically called
-    /// <c>Reconciler.ClearStyleCache</c>, but that breaks <c>ClearThemeBindings</c>
-    /// when a coincident ThemeBindings removal happens in the same render frame
-    /// (the post-clear cache returns a different Style instance from the one
-    /// currently on the control). This fixture simulates the sequence
-    /// programmatically — clears the cache, then drives a transition away from
-    /// theme bindings — and asserts the in-place clear still fires.
+    /// A theme change re-renders every host (<c>ActualThemeChanged</c> →
+    /// <c>RequestRender</c>), so the ThemeBindings removal can land in the same
+    /// render as an effective-theme change. The removal must still clear the
+    /// bound property: the binding was installed against the old theme, and the
+    /// clear must not depend on what it currently resolves to.
     /// </summary>
-    internal class ThemeBindingsRemoval_AfterCacheClear_StillWorks(Harness h) : SelfTestFixtureBase(h)
+    internal class ThemeBindingsRemoval_DuringThemeToggle_StillWorks(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
-            Action<bool>? setThemed = null;
+            Action? flip = null;
             host.Mount(ctx =>
             {
-                var (themed, setter) = ctx.UseState(true);
-                setThemed = setter;
-                return themed
-                    ? TextBlock("cache-clear-victim").Foreground(new ThemeRef("SystemFillColorCriticalBrush"))
-                    : TextBlock("cache-clear-victim");
+                var (themed, setThemed) = ctx.UseState(true);
+                var (theme, setTheme) = ctx.UseState(ElementTheme.Light);
+                flip = () => { setThemed(false); setTheme(ElementTheme.Dark); };
+                var tb = themed
+                    ? TextBlock("toggle-victim").Foreground(new ThemeRef("SystemFillColorCriticalBrush"))
+                    : TextBlock("toggle-victim");
+                return VStack(tb).RequestedTheme(theme);
             });
 
             await Harness.Render();
-            var tb0 = H.FindText("cache-clear-victim");
-            H.Check("Issue522_CacheClear_ThemedMounted",
-                tb0 is not null && tb0.Style is not null);
+            var tb0 = H.FindText("toggle-victim");
+            H.Check("Issue522_ThemeToggle_ThemedMounted",
+                HasLocal(tb0, WinUI.TextBlock.ForegroundProperty));
 
-            // Simulate the historical ClearStyleCache call. After this, the
-            // next ApplyThemeBindings (if any) would create a NEW Style
-            // instance for the same key. We're testing that the clear path
-            // doesn't depend on the cache surviving across the transition.
-            Microsoft.UI.Reactor.Core.Reconciler.ClearStyleCache();
-
-            setThemed!(false);
+            flip!();
             await Harness.Render();
 
-            var tb1 = H.FindText("cache-clear-victim");
-            H.Check("Issue522_CacheClear_SameControl",
+            var tb1 = H.FindText("toggle-victim");
+            H.Check("Issue522_ThemeToggle_SameControl",
                 tb1 is not null && ReferenceEquals(tb1, tb0));
-            H.Check("Issue522_CacheClear_StyleClearedDespiteCacheClear",
-                tb1 is not null && tb1.Style is null);
+            H.Check("Issue522_ThemeToggle_BindingCleared",
+                tb1 is not null && !HasLocal(tb1, WinUI.TextBlock.ForegroundProperty));
         }
     }
 
     /// <summary>
-    /// Cycle ThemeRef A → B → A on the same control. Catches the case where
-    /// <c>ApplyStyleToElement</c> replaces the Style and any property that
-    /// existed only in the previous Style's setters falls back correctly.
+    /// Cycle ThemeRef A → B → A on the same control. Each step must re-bind the
+    /// property to the new key (a live binding to the old key would otherwise be
+    /// left in place as "still bound").
     /// </summary>
     internal class ThemeRef_CycleAcrossDifferentKeys(Harness h) : SelfTestFixtureBase(h)
     {
@@ -471,7 +468,6 @@ internal static class Issue522TextBlockStyleResetFixture
             {
                 var (step, setter) = ctx.UseState(0);
                 setStep = setter;
-                // Use distinct ThemeRefs so each step is a different cache key.
                 return step switch
                 {
                     0 => TextBlock("cycle").Foreground(new ThemeRef("SystemFillColorCriticalBrush")),
@@ -482,29 +478,26 @@ internal static class Issue522TextBlockStyleResetFixture
 
             await Harness.Render();
             var step0 = H.FindText("cycle");
-            var styleA = step0?.Style;
-            H.Check("Issue522_Cycle_Step0_HasStyleA", styleA is not null);
+            var colorA = FgColor(step0);
+            H.Check("Issue522_Cycle_Step0_BoundA",
+                HasLocal(step0, WinUI.TextBlock.ForegroundProperty) && colorA is not null);
 
             setStep!(1);
             await Harness.Render();
             var step1 = H.FindText("cycle");
+            var colorB = FgColor(step1);
             H.Check("Issue522_Cycle_Step1_SameControl",
                 step1 is not null && ReferenceEquals(step1, step0));
-            H.Check("Issue522_Cycle_Step1_DifferentStyle",
-                step1?.Style is not null && !ReferenceEquals(step1.Style, styleA));
-            var styleB = step1?.Style;
+            H.Check("Issue522_Cycle_Step1_DifferentBrush",
+                colorB is not null && colorB != colorA);
 
             setStep!(2);
             await Harness.Render();
             var step2 = H.FindText("cycle");
             H.Check("Issue522_Cycle_Step2_SameControl",
                 step2 is not null && ReferenceEquals(step2, step0));
-            // Returning to A: content-addressed cache returns the same Style
-            // instance we used in step 0.
-            H.Check("Issue522_Cycle_Step2_StyleA_Reused",
-                step2?.Style is not null && ReferenceEquals(step2.Style, styleA));
-            H.Check("Issue522_Cycle_Step2_NotStyleB",
-                step2?.Style is not null && !ReferenceEquals(step2.Style, styleB));
+            H.Check("Issue522_Cycle_Step2_BackToA",
+                FgColor(step2) is { } c2 && c2 == colorA && c2 != colorB);
         }
     }
 }

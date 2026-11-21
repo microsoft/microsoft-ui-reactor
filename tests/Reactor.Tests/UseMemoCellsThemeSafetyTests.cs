@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor.Tests;
 /// only safe when NO child is theme-sensitive. Narrowed per #758: "theme-sensitive"
 /// here means a child carrying a <c>ResourceOverrides.ThemeRef</c> (a CONCRETE brush
 /// resolved at reconcile). A <c>ThemeBindings</c>-only child is NOT theme-sensitive —
-/// its <c>{ThemeResource}</c> setters self-heal natively on the effective-theme change
+/// its live theme-resource bindings self-heal natively on the effective-theme change
 /// even when the subtree is skipped (proven live in
 /// <c>ThemeBindingsSkipSelfHealFixtures</c>), so reusing the array for it is safe.
 /// </summary>
@@ -126,7 +126,7 @@ public class UseMemoCellsThemeSafetyTests
         var second = ctx.UseMemoCells<int>(items, (v, i) => ThemeBindingCell($"v={v}"), "deps");
 
         // Narrowed per #758: a ThemeBindings-only child is NOT theme-sensitive — its
-        // {ThemeResource} setter self-heals natively even when the container
+        // live theme-resource binding self-heals natively even when the container
         // ShallowEquals-skips the subtree. So the same-array reuse fast path is now
         // retained for it (was previously forced to a fresh array). Reverting the
         // ChildDiffHints.IsThemeSensitive arm makes this go red (NotSame).
