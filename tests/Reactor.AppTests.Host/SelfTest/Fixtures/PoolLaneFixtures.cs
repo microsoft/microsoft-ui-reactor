@@ -149,6 +149,10 @@ internal static class PoolLaneFixtures
                 {
                     var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;
                     H.SetContent(freshRoot);
+                    // Capture only once the fresh stage has the same layout size as the rented one.
+                    for (int i = 0; i < 20 && (freshRoot.ActualWidth != lab.Root.ActualWidth
+                        || freshRoot.ActualHeight != lab.Root.ActualHeight); i++)
+                        await Harness.Render(16);
                     await Harness.Render();
                     int diff = rented.Diff(await Snap.CaptureAsync(freshRoot));
                     H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff}");
@@ -383,6 +387,50 @@ internal static class PoolLaneFixtures
             }
             H.Check(p + "_FacadeWriteWorks", second is not null);
             H.Check(p + "_NotFromVisualLane", !ReferenceEquals(second, taken));
+        }
+    }
+
+    /// <summary>A control returned twice is pooled once, in either lane, so two renters never share it.</summary>
+    internal sealed class ReturnTwice(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await Task.CompletedTask;
+            foreach (bool taken in new[] { false, true })
+            {
+                string p = "ElementPoolLanes_ReturnTwice_" + (taken ? "Visual" : "Plain");
+                using var pool = new ElementPool();
+                var border = new WinUI.Border();
+                if (taken) AnimationHelper.GetElementVisual(border);
+                pool.Return(border);
+                pool.Return(border);
+                H.Check(p + "_RentedOnce", ReferenceEquals(pool.TryRent(typeof(WinUI.Border), visualLane: taken), border)
+                    && pool.TryRent(typeof(WinUI.Border), visualLane: taken) is null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A keyed <c>Memo</c> over a control can declare keyframes the control's own unmount cleanup
+    /// doesn't reach. The visual reset drops their trigger entries, so a renter with the same
+    /// keyframe name and trigger still plays.
+    /// </summary>
+    internal sealed class MemoKeyframes(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static KeyframeBuilder Pulse(KeyframeBuilder k) => k.Duration(60000).At(0f, opacity: 0.5f).At(1f, opacity: 1f);
+
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_MemoKeyframes";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Memo("k", static () => Target("M")).Keyframes("pulse", 1, Pulse));
+            H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            await lab.Show(null);
+
+            var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
+            H.Check(p + "_Recycled", ReferenceEquals(renter, first));
+            H.Check(p + "_RenterPlays", renter is not null
+                && Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
         }
     }
 }
