@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Navigation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -46,6 +47,8 @@ internal static class ImplicitAnimationSlotsFixtures
 
         public sealed override async Task RunAsync()
         {
+            // Transitions honour the system's animation setting (spec 066 §5.5); these check motion.
+            using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
             try { await Run(); }
             catch (Exception ex) { H.Check(Name + "_NoThrow", false, $"{ex.GetType().Name}: {ex.Message}"); }
             finally
@@ -138,26 +141,27 @@ internal static class ImplicitAnimationSlotsFixtures
         }
     }
 
-    /// <summary>#1626, XAML arm: dropping a transition modifier clears the XAML transition property.</summary>
-    internal sealed class RemovedXamlTransitionClears(Harness h) : SlotsFixture(h, "ImplicitSlots_RemovedXamlTransitionClears")
+    /// <summary>
+    /// #1626: dropping a transition modifier releases its compositor key (or, for Translation, its
+    /// write-time claim). Since spec 066 layer 2 the XAML properties are never set.
+    /// </summary>
+    internal sealed class RemovedTransitionClears(Harness h) : SlotsFixture(h, "ImplicitSlots_RemovedTransitionClears")
     {
         protected override async Task Run()
         {
             await Mount(Target().OpacityTransition().ScaleTransition().RotationTransition().TranslationTransition());
             var c = Control;
-            H.Check(Name + "_Installed", c.OpacityTransition is not null && c.ScaleTransition is not null
-                && c.RotationTransition is not null && c.TranslationTransition is not null);
+            H.Check(Name + "_Installed", Keys() == "Opacity,RotationAngle,Scale" && ImplicitAnimationSlots.TranslationTransition(c) is not null,
+                $"keys={Keys()}");
+            H.Check(Name + "_XamlUnset", c.OpacityTransition is null && c.ScaleTransition is null
+                && c.RotationTransition is null && c.TranslationTransition is null);
 
             // Dropping one keeps the others.
             await Update(Target().ScaleTransition().RotationTransition().TranslationTransition());
-            H.Check(Name + "_OpacityCleared", c.OpacityTransition is null);
-            H.Check(Name + "_OthersKept", c.ScaleTransition is not null && c.RotationTransition is not null
-                && c.TranslationTransition is not null);
+            H.Check(Name + "_OpacityCleared", Keys() == "RotationAngle,Scale", $"keys={Keys()}");
 
             await Update(Target());
-            H.Check(Name + "_ScaleCleared", c.ScaleTransition is null);
-            H.Check(Name + "_RotationCleared", c.RotationTransition is null);
-            H.Check(Name + "_TranslationCleared", c.TranslationTransition is null);
+            H.Check(Name + "_AllCleared", Keys() == "-" && ImplicitAnimationSlots.TranslationTransition(c) is null, $"keys={Keys()}");
         }
     }
 
@@ -443,6 +447,50 @@ internal static class ImplicitAnimationSlotsFixtures
             H.Check(Name + "_NestedInnerRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(750) && Claims() == 1,
                 $"duration={KeyDuration("Offset")} claims={Claims()}");
 
+            // Transitions on the outer layer follow a replaced control (spec 066 §5 on the
+            // replaced-control path of Update): the child's type changes under them.
+            var outerOpacity = TimeSpan.FromMilliseconds(640);
+            static Element Outer(Element child, TimeSpan opacity) => new SlotsForwarder(child)
+                .OpacityTransition(opacity).TranslationTransition(new Vector3Transition { Duration = opacity });
+            await Update(Outer(Target(), outerOpacity));
+            var before = Control;
+            await Update(Outer(Button40(), outerOpacity));
+            H.Check(Name + "_TransitionsReplaced", !ReferenceEquals(before, Control) && ElementPool.IsVisualTaken(Control)
+                && KeyDuration("Opacity") == outerOpacity && ImplicitAnimationSlots.TranslationTransition(Control) is not null,
+                $"replaced={!ReferenceEquals(before, Control)} keys={Keys()} duration={KeyDuration("Opacity")}");
+            H.Check(Name + "_TransitionsReplacedAnimate", await Animates("Opacity", Outer(Button40().Opacity(0.5), outerOpacity)));
+
+            // .Animate() per channel through forwarders that name no source target: the middle
+            // layer's Offset declaration animates the leaf's Translation write, past the outer and
+            // leaf Opacity-only declarations. Without it, the write jumps.
+            static Element Three(float x, bool middle)
+            {
+                Element inner = new SlotsForwarder(Target().Animate(Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0));
+                if (middle) inner = inner.Animate(Curve.Linear(3000), AnimateProperty.Offset);
+                return new SlotsForwarder(inner).Animate(Curve.Linear(1000), AnimateProperty.Opacity);
+            }
+            await Update(Three(10, middle: true));
+            await Update(Three(20, middle: true));
+            H.Check(Name + "_ThreeLayerChannelLookup", await Animates("Translation", Three(40, middle: true)));
+            await Update(Three(10, middle: false));
+            await Update(Three(20, middle: false));
+            H.Check(Name + "_ThreeLayerChannelLookup_NegativeControl", !await Animates("Translation", Three(40, middle: false)));
+
+            // The same lookup when the Translation write comes from the outer layer and the inner
+            // layers declare nothing but .Animate(): their shared-control edges are still kept.
+            static Element OuterWrite(float x, bool middle)
+            {
+                Element inner = new SlotsForwarder(Target().Animate(Curve.Linear(1000), AnimateProperty.Opacity));
+                if (middle) inner = inner.Animate(Curve.Linear(3000), AnimateProperty.Offset);
+                return new SlotsForwarder(inner).Animate(Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0);
+            }
+            await Update(OuterWrite(10, middle: true));
+            await Update(OuterWrite(20, middle: true));
+            H.Check(Name + "_OuterWriteChannelLookup", await Animates("Translation", OuterWrite(40, middle: true)));
+            await Update(OuterWrite(10, middle: false));
+            await Update(OuterWrite(20, middle: false));
+            H.Check(Name + "_OuterWriteChannelLookup_NegativeControl", !await Animates("Translation", OuterWrite(40, middle: false)));
+
             // Featureless forwarders around a leaf whose control is replaced: the leaf's claim
             // must still be released when its layout animation goes.
             static Element Bare(Element leaf) => new SlotsForwarder(new SlotsForwarder(leaf));
@@ -505,6 +553,10 @@ internal static class ImplicitAnimationSlotsFixtures
             await Update(Shift(20).Animate(Curve.Linear(30), AnimateProperty.Opacity).OpacityTransition());
             await Update(Shift(30).OpacityTransition());
             H.Check(Name + "_TransitionRetained", VisualTranslation() == new Vector3(30, 0, 0), $"translation={VisualTranslation()}");
+
+            // Dropping the last transition still moves the setter's value: the visual stays taken.
+            await Update(Shift(40));
+            H.Check(Name + "_TransitionRemoved", VisualTranslation() == new Vector3(40, 0, 0), $"translation={VisualTranslation()}");
         }
     }
 }

@@ -61,7 +61,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
         TransitionEngine.NormalizeVisual(global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(incoming));
         TransitionEngine.ClearHitTestSuppression(outgoing);
         TransitionEngine.ClearHitTestSuppression(incoming);
-        global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(incoming).Opacity = 0;
+        TransitionEngine.SetOpacityNow(incoming, 0);
         var sources = Collect(reconciler, outgoing);
         var targets = Collect(reconciler, incoming);
         var source = FindUnique(sources, key, out _);
