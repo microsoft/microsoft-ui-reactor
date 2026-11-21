@@ -1698,6 +1698,11 @@ public sealed partial class Reconciler : IDisposable
         internal AnimateProperty DeferredModifierResets;
         // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
         internal Animation.ImplicitAnimationClaims? ImplicitClaims;
+        // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
+        // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
+        internal bool VisualTaken;
+        // A navigation transition's completion can still reach the control after it leaves the tree.
+        internal bool PoolExcluded;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -2652,6 +2657,7 @@ public sealed partial class Reconciler : IDisposable
         ArgumentNullException.ThrowIfNull(handler);
         EnsureRegistrableElementType(typeof(TElement), typeof(TControl), "RegisterHandler");
         _v1Handlers.Add(typeof(TElement), new V1Protocol.V1HandlerAdapter<TElement, TControl>(handler));
+        (_externalHandlerTypes ??= new()).Add(typeof(TElement));
     }
 
     /// <summary>
@@ -2753,15 +2759,72 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public T RentControl<T>(PoolPolicy<T>? policy = null, Func<T>? factory = null) where T : class, new()
     {
+        // The lane belongs to the first control a mount rents, never to a later one.
+        bool visualLane = _rentContext.VisualLane;
+        _rentContext = _rentContext with { Armed = false };
         // Default = poolable; only skip the pool when the policy explicitly opts out.
         bool poolable = policy?.IsPoolable != false;
         if (poolable && typeof(FrameworkElement).IsAssignableFrom(typeof(T)))
         {
-            var rented = _pool.TryRent(typeof(T));
+            var rented = _pool.TryRent(typeof(T), visualLane);
             if (rented is T t) return t;
         }
         return factory is not null ? factory() : new T();
     }
+
+    // Spec 066 §7.2: which pool lane the control the current mount rents may come from.
+    private PoolRentContext _rentContext;
+
+    // Element types registered on this reconciler by app code. Their handlers may write facades.
+    private HashSet<Type>? _externalHandlerTypes;
+
+    /// <summary>
+    /// Spec 066 §7.2. A mount may rent from the visual lane only when it declares a feature that
+    /// takes the visual (<i>demand</i>), and nothing in the chain over the control can write a
+    /// facade that throws on a taken visual but works on a fresh control: no setters or mount
+    /// callbacks (<i>blocked</i>), and a built-in handler (<i>candidate</i>). Demand also comes
+    /// from a transparent keyed <c>Memo</c> over the element. A setter or callback anywhere above
+    /// a mount that hasn't rented yet blocks it. Anything unknown takes the plain lane.
+    /// </summary>
+    internal readonly record struct PoolRentContext(bool Armed, bool Transparent, bool Demand, bool Blocked, bool Candidate)
+    {
+        public bool VisualLane => Armed && Candidate && Demand && !Blocked;
+    }
+
+    internal static PoolRentContext ForMount(Element element, ElementModifiers? modifiers, PoolRentContext outer)
+    {
+        var (candidate, setters) = VisualLaneShape(element);
+        // The layers landed so far: ModifierTable.VisualOwningModifiers (spec 066 §9.1).
+        bool demand = element.AnimationConfig is not null || element.ElementTransition is not null
+            || element.InteractionStates is not null || element.KeyframeAnimations is not null
+            || element.LayoutAnimation is not null || element.ScrollAnimation is not null
+            || (outer.Armed && outer.Transparent && outer.Demand);
+        bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
+            || (outer.Armed && outer.Blocked);
+        return new(Armed: true, Transparent: element is KeyedMemoElement, demand, blocked, candidate);
+    }
+
+    // The built-in element types whose handler rents a poolable control, and whether this
+    // declaration carries .Set setters.
+    private static (bool Candidate, bool Setters) VisualLaneShape(Element element) => element switch
+    {
+        BorderElement e => (true, e.Setters.Length > 0),
+        StackElement e => (true, e.Setters.Length > 0),
+        GridElement e => (true, e.Setters.Length > 0),
+        CanvasElement e => (true, e.Setters.Length > 0),
+        TextBlockElement e => (true, e.Setters.Length > 0),
+        RichTextBlockElement e => (true, e.Setters.Length > 0),
+        ScrollViewerElement e => (true, e.Setters.Length > 0),
+        ViewboxElement e => (true, e.Setters.Length > 0),
+        ProgressElement e => (true, e.Setters.Length > 0),
+        ProgressRingElement e => (true, e.Setters.Length > 0),
+        ImageElement e => (true, e.Setters.Length > 0),
+        InfoBadgeElement e => (true, e.Setters.Length > 0),
+        ButtonElement e => (true, e.Setters.Length > 0),
+        TextBoxElement e => (true, e.Setters.Length > 0),
+        ToggleSwitchElement e => (true, e.Setters.Length > 0),
+        _ => (false, false),
+    };
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.5) — return a control to its per-type pool,
@@ -4936,11 +4999,13 @@ public sealed partial class Reconciler : IDisposable
     // Controls still in a child collection only while their exit transition plays (removal is
     // deferred to its completion). ChildReconciler steps past them: they belong to no element of
     // the old child list, so they would otherwise misalign it with the collection.
-    private HashSet<UIElement>? _exitingControls;
+    // Each exit is keyed to a token, so a completion that outlived its exit (the control was torn
+    // down with an ancestor, pooled and possibly rented again) can tell it is no longer current.
+    private Dictionary<UIElement, object>? _exitingControls;
 
     internal bool HasExitingControls => _exitingControls is { Count: > 0 };
 
-    internal bool IsExiting(UIElement control) => _exitingControls?.Contains(control) == true;
+    internal bool IsExiting(UIElement control) => _exitingControls?.ContainsKey(control) == true;
 
     // Up to this many in-flight exits, probing the collection once per exit beats reading it.
     // A probe is one native IndexOf (a pointer scan, no managed allocation); a read is a
@@ -4959,27 +5024,38 @@ public sealed partial class Reconciler : IDisposable
         if (_exitingControls is not { Count: > 0 } exiting) return false;
         if (exiting.Count <= ExitProbeLimit)
         {
-            foreach (var control in exiting)
+            foreach (var control in exiting.Keys)
                 if (children.IndexOf(control) >= 0) return true;
             return false;
         }
         int count = children.Count;
         for (int i = 0; i < count; i++)
-            if (exiting.Contains(children.Get(i))) return true;
+            if (exiting.ContainsKey(children.Get(i))) return true;
         return false;
     }
 
     // An exit animation starts now; the removal (and its unmount count) comes after it, outside the pass.
-    private void BeginExit(UIElement control)
+    private void BeginExit(UIElement control, object exit)
     {
         CountPerfChanges();
-        (_exitingControls ??= new()).Add(control);
+        (_exitingControls ??= new())[control] = exit;
     }
 
     private void EndExit(UIElement control)
     {
         if (_exitingControls is { Count: > 0 } exiting)
             exiting.Remove(control);
+    }
+
+    // Ends the exit only while it is still the control's current one. A control torn down with
+    // an ancestor mid-exit already ended it and may be back in the pool, possibly rented again.
+    private bool EndExit(UIElement control, object exit)
+    {
+        if (_exitingControls is not { Count: > 0 } exiting
+            || !exiting.TryGetValue(control, out var current) || !ReferenceEquals(current, exit))
+            return false;
+        exiting.Remove(control);
+        return true;
     }
     /// <summary>
     /// Removes a child from its collection with exit transition support.
@@ -4994,10 +5070,10 @@ public sealed partial class Reconciler : IDisposable
         if (transition?.GetExitTransition() is not null)
         {
             // Defer removal: play exit animation, then remove + pool on completion.
-            BeginExit(control);
+            var exit = new object();
+            BeginExit(control, exit);
             ApplyExitTransition(control, transition, () =>
             {
-                EndExit(control);
                 // Find current index — it may have shifted if earlier items were removed.
                 for (int i = 0; i < children.Count; i++)
                 {
@@ -5008,7 +5084,7 @@ public sealed partial class Reconciler : IDisposable
                     }
                 }
                 UnmountAndPool(control);
-            });
+            }, exit);
             return;
         }
 
@@ -5018,10 +5094,10 @@ public sealed partial class Reconciler : IDisposable
         // best-effort: if Composition throws we fall through to the
         // synchronous remove below.
         var ambient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+        var ambientExit = new object();
         if (ambient is { HasEffect: true }
-            && TryApplyAmbientExit(control, ambient.Kind, onComplete: () =>
+            && TryApplyAmbientExit(control, ambient.Kind, ambientExit, onComplete: () =>
             {
-                EndExit(control);
                 for (int i = 0; i < children.Count; i++)
                 {
                     if (ReferenceEquals(children.Get(i), control))
@@ -5033,7 +5109,7 @@ public sealed partial class Reconciler : IDisposable
                 UnmountAndPool(control);
             }))
         {
-            BeginExit(control);
+            BeginExit(control, ambientExit);
             return;
         }
 
@@ -5050,7 +5126,7 @@ public sealed partial class Reconciler : IDisposable
     /// the request (headless / disposed contexts) so the caller falls back
     /// to synchronous removal.
     /// </summary>
-    private static bool TryApplyAmbientExit(UIElement control, AnimationKind kind, Action onComplete)
+    private bool TryApplyAmbientExit(UIElement control, AnimationKind kind, object exit, Action onComplete)
     {
         var curve = Microsoft.UI.Reactor.Core.Internal.AnimationKindMap.ToCurve(kind);
         if (curve is null) return false;
@@ -5058,9 +5134,6 @@ public sealed partial class Reconciler : IDisposable
         try
         {
             var visual = AnimationHelper.GetElementVisual(control);
-            // As ApplyExitTransition: a control whose visual was handed out must not be pooled
-            // (and so cannot be re-rented while its fade, and the removal after it, is pending).
-            ElementPool.MarkCompositorTainted(control);
             var compositor = visual.Compositor;
             var batch = compositor.CreateScopedBatch(global::Microsoft.UI.Composition.CompositionBatchTypes.Animation);
             var anim = Microsoft.UI.Reactor.Animation.AnimationHelper.CreateScalarTargetAnimation(compositor, 0f, curve);
@@ -5068,6 +5141,9 @@ public sealed partial class Reconciler : IDisposable
             batch.End();
             batch.Completed += (_, _) =>
             {
+                // As ApplyExitTransition: the pool's visual reset already restored a control
+                // whose exit ended early, and it may belong to another renter now.
+                if (!EndExit(control, exit)) return;
                 // Reset opacity so a recycled element doesn't reappear
                 // invisible if it gets re-mounted later.
                 visual.Opacity = 1f;
@@ -5113,10 +5189,10 @@ public sealed partial class Reconciler : IDisposable
             // It will be positioned by layout but the animation (fade/slide) makes
             // it visually leave. We insert it right after the replacement.
             children.Insert(index + 1, oldControl);
-            BeginExit(oldControl);
+            var exit = new object();
+            BeginExit(oldControl, exit);
             ApplyExitTransition(oldControl, transition, () =>
             {
-                EndExit(oldControl);
                 for (int i = 0; i < children.Count; i++)
                 {
                     if (ReferenceEquals(children.Get(i), oldControl))
@@ -5126,7 +5202,7 @@ public sealed partial class Reconciler : IDisposable
                     }
                 }
                 UnmountAndPool(oldControl);
-            });
+            }, exit);
             return true;
         }
 
@@ -5768,7 +5844,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ApplyLayoutAnimation(UIElement uie, LayoutAnimationConfig config, int slot = 0)
     {
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
@@ -5846,7 +5922,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ApplyPropertyAnimation(UIElement uie, AnimationConfig config, int slot = 0)
     {
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
@@ -5898,7 +5974,7 @@ public sealed partial class Reconciler : IDisposable
     {
         var enter = transition.GetEnterTransition();
         if (enter is null) return;
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
 
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
@@ -5918,12 +5994,18 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Applies exit transition before unmount: animates out, then invokes onComplete to remove/pool.
+    /// <paramref name="onComplete"/> runs only while <paramref name="exit"/> is still the control's
+    /// current exit (see <see cref="BeginExit"/>).
     /// </summary>
-    internal void ApplyExitTransition(UIElement uie, ElementTransition transition, Action onComplete, int staggerIndex = 0, TimeSpan staggerDelay = default)
+    internal void ApplyExitTransition(UIElement uie, ElementTransition transition, Action onComplete, object exit, int staggerIndex = 0, TimeSpan staggerDelay = default)
     {
-        var exit = transition.GetExitTransition();
-        if (exit is null) { onComplete(); return; }
-        ElementPool.MarkCompositorTainted(uie);
+        var exitTransition = transition.GetExitTransition();
+        if (exitTransition is null)
+        {
+            if (EndExit(uie, exit)) onComplete();
+            return;
+        }
+        ElementPool.MarkVisualTaken(uie);
 
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
@@ -5935,11 +6017,14 @@ public sealed partial class Reconciler : IDisposable
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var delay = staggerIndex > 0 ? TimeSpan.FromTicks(staggerDelay.Ticks * staggerIndex) : TimeSpan.Zero;
 
-        ApplyTransitionAnimations(uie, visual, compositor, exit, curve, isEnter: false, delay);
+        ApplyTransitionAnimations(uie, visual, compositor, exitTransition, curve, isEnter: false, delay);
 
         batch.End();
         batch.Completed += (_, _) =>
         {
+            // A control torn down with an ancestor mid-exit was already pooled, and the pool's
+            // visual reset restored it (spec 066 §7.3). It may belong to another renter now.
+            if (!EndExit(uie, exit)) return;
             // Reset visual state after exit
             visual.Opacity = 1;
             visual.Offset = Vector3.Zero;
@@ -6101,7 +6186,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ApplyInteractionStates(UIElement uie, InteractionStatesConfig config)
     {
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
         if (!_interactionTrackers.TryGetValue(uie, out var tracker))
         {
             tracker = new InteractionStateTracker();
@@ -6449,7 +6534,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ApplyKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
     {
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
@@ -6699,6 +6784,29 @@ public sealed partial class Reconciler : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Spec 066 §7.3 step 4: drops the composition bookkeeping of a control whose visual was
+    /// reset for the pool, so the next renter starts without the previous renter's ownership.
+    /// </summary>
+    internal static void ForgetCompositionState(UIElement uie)
+    {
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            state.CompositionModifierProperties = default;
+            state.TransformRest = null;
+            state.KeyframeChannelOwners = null;
+            state.DeferredModifierResets = default;
+            state.ImplicitClaims = null;
+        }
+        ClearInteractionStates(uie);
+        if (_keyframeTriggerValues.Count == 0) return;
+        List<(UIElement, string)>? stale = null;
+        foreach (var key in _keyframeTriggerValues.Keys)
+            if (ReferenceEquals(key.Item1, uie)) (stale ??= []).Add(key);
+        if (stale is not null)
+            foreach (var key in stale) _keyframeTriggerValues.Remove(key);
+    }
+
     private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)
         => shared is null || ReferenceEquals(own, shared) ? own : own is null ? shared : [.. own, .. shared];
 
@@ -6712,7 +6820,7 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyScrollAnimation(UIElement uie, ScrollAnimationConfig config)
     {
         if (config.ScrollViewer is null) return;
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var scrollPropertySet = ElementCompositionPreview.GetScrollViewerManipulationPropertySet(config.ScrollViewer);

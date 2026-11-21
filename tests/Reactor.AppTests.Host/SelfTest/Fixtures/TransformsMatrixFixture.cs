@@ -340,7 +340,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         await Shot();
         string facadeChannel = TransformsMatrixRecorder.Channel(facadeOnly);
         var handed = Rect();
-        ElementPool.MarkCompositorTainted(handed);
+        ElementPool.MarkVisualTaken(handed);
         ElementCompositionPreview.GetElementVisual(handed).Scale = new Vector3(2, 2, 1);
         string visualChannel = TransformsMatrixRecorder.Channel(handed);
         Check("Channel", facadeChannel == "taken=0 facade=S" && visualChannel == "taken=1 facade=- visual=S", $"facade='{facadeChannel}' visual='{visualChannel}'");
@@ -377,7 +377,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
         // Pool residue: a taken visual with an implicit key and a running animation reads as such.
         var dirty = Rect();
-        ElementPool.MarkCompositorTainted(dirty);
+        ElementPool.MarkVisualTaken(dirty);
         var dv = ElementCompositionPreview.GetElementVisual(dirty);
         var dkey = compositor.CreateScalarKeyFrameAnimation();
         dkey.InsertExpressionKeyFrame(1, "this.FinalValue");
@@ -462,7 +462,9 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 /// <summary>
 /// §12.1 E pool soak: seeded random churn of elements with random features. After every step that
 /// returned controls to the pool, plain probe elements rent them and must pass the reset invariants:
-/// identity facades, no XAML transitions, and a visual that was never taken. The counts go into
+/// identity facades, no XAML transitions, and a visual that was never taken. Visual probes (an
+/// element that takes the visual itself) rent from the visual lane and must pass the §7.3 reset
+/// invariants: an identity visual, no implicit keys and no running animation. The counts go into
 /// the ledger, so a layer that fixes a leak (#1624, #1639, #1643) declares it there.
 /// </summary>
 internal sealed class PoolSoak(Border host)
@@ -484,9 +486,12 @@ internal sealed class PoolSoak(Border host)
         var random = new Random(Seed);
         using var reconciler = new Reconciler();
         var live = new List<Spec>();
-        int created = 0, rented = 0;
+        int created = 0, rented = 0, visualRented = 0;
         var pooled = new HashSet<UIElement>();
-        var violations = new SortedDictionary<string, int>(StringComparer.Ordinal) { ["facade"] = 0, ["taken"] = 0, ["xaml"] = 0 };
+        var violations = new SortedDictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["facade"] = 0, ["taken"] = 0, ["xaml"] = 0, ["visual"] = 0, ["keys"] = 0, ["anims"] = 0,
+        };
         string threw = "-";
         Element Stage(IEnumerable<Element> children) => VStack([.. children]).Width(Model.StageSize).Height(Model.StageSize);
         Element current = Stage([]);
@@ -517,13 +522,31 @@ internal sealed class PoolSoak(Border host)
                 if (removed.Count == 0) continue;
                 pooled.UnionWith(removed);
 
-                // Plain probes rent whatever the pool now holds, are checked, then go back.
-                Render(Stage(live.Select(Build).Concat(Enumerable.Range(0, removed.Count).Select(i => Probe().WithKey($"probe{i}")))));
+                // Plain probes rent whatever the plain lane now holds, visual probes the visual
+                // lane (spec 066 §7.2). Each is checked, then goes back.
+                var visualLane = pooled.Where(ElementPool.IsVisualTaken).ToHashSet();
+                Render(Stage(live.Select(Build)
+                    .Concat(Enumerable.Range(0, removed.Count).Select(i => Probe().WithKey($"probe{i}")))
+                    .Concat(Enumerable.Range(0, removed.Count).Select(i => VisualProbe().WithKey($"vprobe{i}")))));
                 await TransformsMatrixRecorder.Frames(1);
-                var probes = stage.Children.OfType<StackPanel>().Where(static p => p.Width == ProbeWidth).ToList();
+                var probes = stage.Children.OfType<StackPanel>().Where(static p => p.Width is ProbeWidth or VisualProbeWidth).ToList();
                 foreach (var probe in probes)
                 {
                     if (!pooled.Contains(probe)) continue;
+                    if (probe.Width == VisualProbeWidth)
+                    {
+                        // A visual probe falls back to the plain lane when the visual lane is empty.
+                        if (!visualLane.Contains(probe)) continue;
+                        visualRented++;
+                        var v = ElementCompositionPreview.GetElementVisual(probe);
+                        bool translated = v.Properties.TryGetVector3("Translation", out var tr) == CompositionGetValueStatus.Succeeded && tr != Vector3.Zero;
+                        if (v.Opacity != 1 || v.Scale != Vector3.One || v.RotationAngle != 0 || v.CenterPoint != Vector3.Zero
+                            || !v.TransformMatrix.IsIdentity || translated || probe.Translation != Vector3.Zero)
+                            violations["visual"]++;
+                        if (v.ImplicitAnimations is { Count: > 0 }) violations["keys"]++;
+                        if (SoakChannels.Any(ch => TransformsMatrixRecorder.Controller(v, ch) is not null)) violations["anims"]++;
+                        continue;
+                    }
                     rented++;
                     if (probe.Scale != Vector3.One || probe.Rotation != 0 || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
                         violations["facade"]++;
@@ -554,13 +577,21 @@ internal sealed class PoolSoak(Border host)
         f["steps"] = steps.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
         f["created"] = created.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
         f["rented"] = rented.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+        f["visualRented"] = visualRented.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
         f["violations"] = string.Join(" ", violations.Select(kv => $"{kv.Key}={kv.Value}"));
         return record;
     }
 
     private const double ProbeWidth = 30;
+    private const double VisualProbeWidth = 32;
+    private static readonly string[] SoakChannels = ["Opacity", "Scale", "RotationAngle", "CenterPoint", "Translation"];
 
     private static Element Probe() => VStack().Width(ProbeWidth).Height(10).Background("#FF0000FF");
+
+    // InteractionStates takes the visual (spec 066 §9.1) but installs nothing until hovered, so
+    // whatever the probe's visual holds was left by the pool.
+    private static Element VisualProbe() => VStack().Width(VisualProbeWidth).Height(10).Background("#FF0000FF")
+        .InteractionStates(static b => b.PointerOver(scale: 1.1f));
 
     private static Element Build(Spec s)
     {

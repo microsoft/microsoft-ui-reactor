@@ -86,7 +86,7 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
                 H.Check(name + "_CompositorFallback", visual.ImplicitAnimations?.ContainsKey("RotationAngle") == true);
             }
             if (mode == "TaintedDirect" || compositorTransition)
-                H.Check(name + "_VisualHandedOut", ElementPool.IsCompositorTainted(target));
+                H.Check(name + "_VisualHandedOut", ElementPool.IsVisualTaken(target));
 
             void Apply() => reconciler.Update(initial, rotated, target, () => { });
             if (mode == "Ambient") AnimationScope.WithAnimation(curve, Apply);

@@ -1,38 +1,37 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Core;
 
 /// <summary>
-/// Per-CLR-type pool (cap 32) that recycles unmounted WinUI FrameworkElement instances.
-/// V1: pools only non-interactive controls (no event handlers to worry about).
+/// Per-CLR-type pool (cap 32 per lane) that recycles unmounted WinUI FrameworkElement instances.
 /// </summary>
+/// <remarks>
+/// Each type has two lanes (spec 066 §7.2). The plain lane holds controls whose composition
+/// visual was never taken. The visual lane holds controls whose visual was taken, reset to a
+/// fresh control's pixels by <see cref="ResetTakenVisual"/>. Such a control still refuses the
+/// facade transforms and the XAML implicit transitions, so only an element that takes the
+/// visual itself and has no setters rents from it.
+/// </remarks>
 public sealed class ElementPool : IDisposable
 {
     /// <summary>
-    /// Tracks UIElements that have had GetElementVisual() called on them.
-    /// These elements permanently lose the ability to use XAML implicit transition APIs
-    /// (OpacityTransition, ScaleTransition, etc.), so they must not be pooled — a future
-    /// user of the element might need those APIs.
+    /// Records that the element's composition visual was handed out. The marker lives on the
+    /// native control, so every managed wrapper sees it, and it is never cleared.
     /// </summary>
-    private static readonly ConditionalWeakTable<UIElement, object> _compositorTainted = new();
+    internal static void MarkVisualTaken(UIElement element)
+        => Reconciler.GetOrCreateReactorState(element).VisualTaken = true;
 
-    /// <summary>
-    /// Marks a UIElement as having been accessed via GetElementVisual().
-    /// Called by reconciler code that touches the composition Visual.
-    /// </summary>
-    internal static void MarkCompositorTainted(UIElement element)
-    {
-        _compositorTainted.AddOrUpdate(element, true);
-    }
+    internal static bool IsVisualTaken(UIElement element)
+        => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { VisualTaken: true };
 
-    internal static bool IsCompositorTainted(UIElement element)
-    {
-        return _compositorTainted.TryGetValue(element, out _);
-    }
+    /// <summary>Keeps the control out of the pool for good. A pending navigation completion may still reach it.</summary>
+    internal static void ExcludeFromPool(UIElement element)
+        => Reconciler.GetOrCreateReactorState(element).PoolExcluded = true;
 
     private const int MaxPerType = 32;
 
@@ -44,7 +43,7 @@ public sealed class ElementPool : IDisposable
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// The exact runtime types <see cref="TryRent"/> and <see cref="Return"/> recycle.
+    /// The exact runtime types <see cref="TryRent(Type, bool)"/> and <see cref="Return"/> recycle.
     /// Membership is tested with <see cref="HashSet{T}.Contains"/> on
     /// <see cref="object.GetType"/>, so it is an <em>exact</em>-type set: a subclass of a
     /// listed type is not poolable. <c>CheckBox</c> and <c>RelativePanel</c> are the cases
@@ -92,6 +91,7 @@ public sealed class ElementPool : IDisposable
     };
 
     private readonly Dictionary<Type, Stack<FrameworkElement>> _pools = new();
+    private readonly Dictionary<Type, Stack<FrameworkElement>> _visualPools = new();
 
     // A scratch panel used to force WinUI to fully process parent detachment.
     // Adding then removing from this panel ensures WinUI's internal parent
@@ -125,23 +125,29 @@ public sealed class ElementPool : IDisposable
     }
 
     /// <summary>
-    /// Try to rent an element of the given type from the pool.
-    /// Returns null if the pool is empty or the type is not poolable.
+    /// Try to rent an element of the given type from the plain lane.
+    /// Returns null if the lane is empty or the type is not poolable.
+    /// </summary>
+    public FrameworkElement? TryRent(Type type) => TryRent(type, visualLane: false);
+
+    /// <summary>
+    /// Rents from the visual lane first when <paramref name="visualLane"/> is true, then from the
+    /// plain lane. The caller decides the lane from the declarations being mounted (spec 066 §7.2).
     /// </summary>
     // <snippet:pool-rent>
-    public FrameworkElement? TryRent(Type type)
+    internal FrameworkElement? TryRent(Type type, bool visualLane)
     {
         if (!Enabled) return null;
         if (!PoolableTypes.Contains(type)) return null;
+        if (visualLane && _visualPools.TryGetValue(type, out var taken) && taken.Count > 0) return taken.Pop();
         if (!_pools.TryGetValue(type, out var stack) || stack.Count == 0) return null;
-        var item = stack.Pop();
-        return item;
+        return stack.Pop();
     }
     // </snippet:pool-rent>
 
     /// <summary>
     /// Return an element to the pool after unmount. Cleans it first.
-    /// Silently drops if the type is not poolable or the pool is full.
+    /// Silently drops if the type is not poolable or its lane is full.
     /// </summary>
     // <snippet:pool-return>
     public void Return(FrameworkElement element)
@@ -150,22 +156,23 @@ public sealed class ElementPool : IDisposable
         var type = element.GetType();
         if (!PoolableTypes.Contains(type)) return;
 
-        // Don't pool elements that had GetElementVisual() called — they permanently
-        // lose XAML implicit transition API access (OpacityTransition, etc.).
-        if (IsCompositorTainted(element)) return;
+        // The lane follows the native control's marker, whichever wrapper reached it (#1643).
+        var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+        if (state?.PoolExcluded == true) return;
+        var lanes = state?.VisualTaken == true ? _visualPools : _pools;
 
         // Issue #1614: attaching an implicit transform transition permanently locks
         // RenderTransform (nulling the transition does not release it), so such a control is
-        // no longer interchangeable with a fresh one. Same reasoning as the taint check above.
-        // This is the fast path; the catch around CleanElement below is the backstop for a
-        // control whose transition was attached and later removed.
+        // no longer interchangeable with a fresh one. This is the fast path; the catch around
+        // CleanElement below is the backstop for a control whose transition was attached and
+        // later removed.
         if (element.ScaleTransition is not null || element.RotationTransition is not null
             || element.TranslationTransition is not null) return;
 
-        if (!_pools.TryGetValue(type, out var stack))
+        if (!lanes.TryGetValue(type, out var stack))
         {
             stack = new Stack<FrameworkElement>();
-            _pools[type] = stack;
+            lanes[type] = stack;
         }
 
         if (stack.Count >= MaxPerType) return;
@@ -188,11 +195,12 @@ public sealed class ElementPool : IDisposable
         {
             CleanElement(element);
         }
-        catch (UnauthorizedAccessException)
+        catch (Exception e) when (e is UnauthorizedAccessException or ArgumentException)
         {
             // Issue #1614: WinUI refused a transform reset (RenderTransform or a facade is
-            // still locked). The control can't be made interchangeable with a fresh one, so
-            // drop it rather than fail the reconcile that is unmounting it.
+            // still locked, for example by a user .Set write), or a visual reset failed. The
+            // control can't be made interchangeable with a fresh one, so drop it rather than
+            // fail the reconcile that is unmounting it.
             return;
         }
         stack.Push(element);
@@ -235,6 +243,9 @@ public sealed class ElementPool : IDisposable
         foreach (var stack in _pools.Values)
             stack.Clear();
         _pools.Clear();
+        foreach (var stack in _visualPools.Values)
+            stack.Clear();
+        _visualPools.Clear();
         _scratchPanel = null;
     }
 
@@ -274,6 +285,11 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(FrameworkElement.VerticalAlignmentProperty);
         fe.ClearValue(UIElement.OpacityProperty);
         fe.ClearValue(UIElement.VisibilityProperty);
+        // Spec 066 §7.3: a control whose visual was taken goes to the visual lane, reset to a
+        // fresh control's pixels. Its Rotation, Scale, CenterPoint, RotationAxis and
+        // TransformMatrix facades refuse every write, even identity, so they are skipped below.
+        bool visualTaken = IsVisualTaken(fe);
+        if (visualTaken) ResetTakenVisual(fe);
         // Issue #1614: WinUI treats RenderTransform and the facade transforms (Rotation, Scale,
         // Translation, CenterPoint, RotationAxis, TransformMatrix) as mutually exclusive, and
         // touching one while the other is engaged throws UnauthorizedAccessException. Reset the
@@ -281,12 +297,15 @@ public sealed class ElementPool : IDisposable
         // one. They are plain properties, not DPs, so the reset assigns the identity value. Each
         // write is guarded: an untransformed control pays no extra write, and one using
         // RenderTransform (whose facades must read identity) is never written through a facade.
-        if (fe.Rotation != 0f) fe.Rotation = 0f;
-        if (fe.Scale != Vector3.One) fe.Scale = Vector3.One;
-        if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
-        if (fe.CenterPoint != Vector3.Zero) fe.CenterPoint = Vector3.Zero;
-        if (fe.RotationAxis != Vector3.UnitZ) fe.RotationAxis = Vector3.UnitZ;
-        if (!fe.TransformMatrix.IsIdentity) fe.TransformMatrix = Matrix4x4.Identity;
+        if (!visualTaken)
+        {
+            if (fe.Rotation != 0f) fe.Rotation = 0f;
+            if (fe.Scale != Vector3.One) fe.Scale = Vector3.One;
+            if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
+            if (fe.CenterPoint != Vector3.Zero) fe.CenterPoint = Vector3.Zero;
+            if (fe.RotationAxis != Vector3.UnitZ) fe.RotationAxis = Vector3.UnitZ;
+            if (!fe.TransformMatrix.IsIdentity) fe.TransformMatrix = Matrix4x4.Identity;
+        }
         // The facades must be released first: RenderTransform rejects a write while one is
         // engaged. If it is still locked (a transform transition was attached at some point),
         // the clear throws and Return drops the control.
@@ -475,6 +494,21 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(Layout.FlexPanel.RightProperty);
         fe.ClearValue(Layout.FlexPanel.BottomProperty);
 
+        // Issue #1639: .ThemeTransitions(...) writes these, and a renter that declares none would
+        // otherwise animate its children with the previous renter's transitions. Cleared before
+        // the type-specific arms below empty the children, so the removal doesn't play them.
+        switch (fe)
+        {
+            case WinUI.Panel themedPanel:
+                themedPanel.ClearValue(WinUI.Panel.ChildrenTransitionsProperty);
+                break;
+            case WinUI.Border themedBorder:
+                themedBorder.ClearValue(WinUI.Border.ChildTransitionsProperty);
+                break;
+            case WinUI.ContentControl themedContent:
+                themedContent.ClearValue(WinUI.ContentControl.ContentTransitionsProperty);
+                break;
+        }
         // Type-specific cleanup
         switch (fe)
         {
@@ -578,9 +612,52 @@ public sealed class ElementPool : IDisposable
         }
     }
 
+    // Spec 066 §7.3 step 1. StopAnimation leaves the last animated value, so step 3 writes identity after it.
+    private static readonly string[] TakenVisualChannels =
+    [
+        "Opacity", "Scale", "RotationAngle", "RotationAngleInDegrees", "CenterPoint",
+        "Offset", "Size", "Orientation", "AnchorPoint", "TransformMatrix",
+    ];
+
+    /// <summary>
+    /// The spec 066 §7.3 reset list: makes a control whose visual was taken pixel-identical to a
+    /// fresh one. The visual itself stays taken. Offset and Size are left to layout.
+    /// </summary>
+    private static void ResetTakenVisual(FrameworkElement fe)
+    {
+        var visual = ElementCompositionPreview.GetElementVisual(fe);
+        // Translation is a property-set entry that exists only once translation was enabled;
+        // stopping or writing a missing entry throws ArgumentException (#1641).
+        bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+        foreach (var channel in TakenVisualChannels)
+            visual.StopAnimation(channel);
+        if (hasTranslation) visual.StopAnimation("Translation");
+
+        // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
+        // this drops keys no claim owns, for example ones user code installed.
+        visual.ImplicitAnimations = null;
+
+        visual.Opacity = 1;
+        visual.Scale = Vector3.One;
+        visual.RotationAngle = 0;
+        visual.RotationAxis = Vector3.UnitZ;
+        visual.CenterPoint = Vector3.Zero;
+        visual.AnchorPoint = Vector2.Zero;
+        visual.Orientation = Quaternion.Identity;
+        visual.TransformMatrix = Matrix4x4.Identity;
+        visual.Clip = null;
+        if (hasTranslation) visual.Properties.InsertVector3("Translation", Vector3.Zero);
+        ElementCompositionPreview.SetIsTranslationEnabled(fe, false);
+        // The Translation facade stays writable after the handoff, and a user .Set may have
+        // written it next to a Reactor feature.
+        if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
+
+        Reconciler.ForgetCompositionState(fe);
+    }
+
     public void Dispose()
     {
-        foreach (var stack in _pools.Values)
+        foreach (var stack in _pools.Values.Concat(_visualPools.Values))
         {
             while (stack.Count > 0)
             {
@@ -592,5 +669,6 @@ public sealed class ElementPool : IDisposable
             }
         }
         _pools.Clear();
+        _visualPools.Clear();
     }
 }
