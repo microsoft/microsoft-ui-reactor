@@ -6828,6 +6828,7 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Spec 066 §7.3 step 4: drops the composition bookkeeping of a control whose visual was
     /// reset for the pool, so the next renter starts without the previous renter's ownership.
+    /// The keyframe trigger entries are already gone: unmount clears them for every declared entry.
     /// </summary>
     internal static void ForgetCompositionState(UIElement uie)
     {
@@ -6840,12 +6841,6 @@ public sealed partial class Reconciler : IDisposable
             state.ImplicitClaims = null;
         }
         ClearInteractionStates(uie);
-        if (_keyframeTriggerValues.Count == 0) return;
-        List<(UIElement, string)>? stale = null;
-        foreach (var key in _keyframeTriggerValues.Keys)
-            if (ReferenceEquals(key.Item1, uie)) (stale ??= []).Add(key);
-        if (stale is not null)
-            foreach (var key in stale) _keyframeTriggerValues.Remove(key);
     }
 
     private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)
@@ -6973,6 +6968,8 @@ public sealed partial class Reconciler : IDisposable
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
             ConnectedAnimationFrameGate.Prepared(key);
+            // WinUI captures the source at the next frame, so the pool must not reset or rent it first.
+            ElementPool.ExcludeFromPool(control);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {

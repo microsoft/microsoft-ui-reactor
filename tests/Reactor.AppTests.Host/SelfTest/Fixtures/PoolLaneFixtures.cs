@@ -107,6 +107,7 @@ internal static class PoolLaneFixtures
                 visual.Scale = new Vector3(1.5f, 1.5f, 1);
                 visual.RotationAngleInDegrees = 20;
                 visual.CenterPoint = new Vector3(10, 5, 0);
+                visual.IsVisible = false;
                 // The reset writes no Offset (layout owns it), so only its StopAnimation ends this one.
                 var offset = visual.Compositor.CreateVector3KeyFrameAnimation();
                 offset.InsertKeyFrame(1, new Vector3(40, 0, 0));
@@ -132,7 +133,7 @@ internal static class PoolLaneFixtures
                 if (second is null) return;
 
                 H.Check(p + "_IdentityVisual", visual.Opacity == 1 && visual.Scale == Vector3.One && visual.RotationAngle == 0
-                    && visual.CenterPoint == Vector3.Zero && visual.TransformMatrix.IsIdentity && visual.Clip is null,
+                    && visual.CenterPoint == Vector3.Zero && visual.TransformMatrix.IsIdentity && visual.Clip is null && visual.IsVisible,
                     $"opacity={visual.Opacity} scale={visual.Scale} rotation={visual.RotationAngle} center={visual.CenterPoint}");
                 H.Check(p + "_TranslationZero", second.Translation == Vector3.Zero
                     && (visual.Properties.TryGetVector3("Translation", out var t) != CompositionGetValueStatus.Succeeded || t == Vector3.Zero),
@@ -159,6 +160,17 @@ internal static class PoolLaneFixtures
                 await lab.Show(renter.Opacity(0.5));
                 H.Check(p + "_WriteDoesNotAnimate", !Running(visual, "Opacity") && Math.Abs(visual.Opacity - 0.5) < 0.001,
                     $"opacity={visual.Opacity}");
+            }
+
+            // A brush transition coexists with the handoff, so the visual lane clears it.
+            using (var lab = new Lab(H))
+            {
+                var transitioned = await lab.Show(VStack(TextBlock("bg")).BackgroundTransition(TimeSpan.FromSeconds(1)).LayoutAnimation());
+                H.Check(p + "_BackgroundTransitionApplied", transitioned is WinUI.StackPanel { BackgroundTransition: not null });
+                await lab.Show(null);
+                var renter = await lab.Show(VStack(TextBlock("bg2")).LayoutAnimation());
+                H.Check(p + "_BackgroundTransitionCleared", ReferenceEquals(renter, transitioned)
+                    && renter is WinUI.StackPanel { BackgroundTransition: null });
             }
         }
     }

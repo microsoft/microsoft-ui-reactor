@@ -638,6 +638,7 @@ public sealed class ElementPool : IDisposable
         visual.ImplicitAnimations = null;
 
         visual.Opacity = 1;
+        visual.IsVisible = true;
         visual.Scale = Vector3.One;
         visual.RotationAngle = 0;
         visual.RotationAxis = Vector3.UnitZ;
@@ -651,6 +652,13 @@ public sealed class ElementPool : IDisposable
         // The Translation facade stays writable after the handoff, and a user .Set may have
         // written it next to a Reactor feature.
         if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
+        // A brush transition coexists with the handoff, so a visual-lane renter would inherit it.
+        // Spec 066 layer 2 clears it in both lanes.
+        switch (fe)
+        {
+            case WinUI.Grid grid when grid.BackgroundTransition is not null: grid.BackgroundTransition = null; break;
+            case WinUI.StackPanel stack when stack.BackgroundTransition is not null: stack.BackgroundTransition = null; break;
+        }
 
         Reconciler.ForgetCompositionState(fe);
     }
