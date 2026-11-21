@@ -340,8 +340,16 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
     private async Task ObserveActiveCore(OrderedDictionary<string, string> f, MatrixStep step)
     {
-        if (Model.Active(_case, step) is not { } pose || Target is not { } t) return;
+        if (Model.Active(_case, step) is not { } pose) return;
         string name = MatrixCase.StepName(step);
+        if (Target is not { } t)
+        {
+            // The model expects a pose here (an exit still running), but the control is already gone.
+            f["active"] = "none";
+            ModelDifferences.Add((name, "active"));
+            return;
+        }
+
         if (_case.Feature == FeatureAxis.InteractionStates)
         {
             Reconciler.SimulatePointerOverForTests(t, isOver: true);

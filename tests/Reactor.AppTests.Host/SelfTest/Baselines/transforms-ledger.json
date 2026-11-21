@@ -65,7 +65,7 @@
       "removeFeature": { "threw": "-", "pose": "120,150,230,194", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "120,150,230,194", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "120,150,230,194", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=1 diff=0 taken=0 xaml=-", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=orig diff=0 keys=- anims=-", "pose": "120,150,220,190", "model": "ok", "diag": "-" }
     },
@@ -364,7 +364,7 @@
       "removeFeature": { "threw": "-", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=Translation keys=untaken", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=- anims=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" }
     },
@@ -442,7 +442,7 @@
       "removeFeature": { "threw": "-", "pose": "170,150,280,194", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "170,150,280,194", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "170,150,280,194", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=- anims=-", "pose": "180,150,280,190", "model": "ok", "diag": "-" }
     },
@@ -541,7 +541,7 @@
       "removeFeature": { "threw": "-", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "120,150,220,190", "model": "pose", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=1 diff=0 taken=0 xaml=-", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=orig diff=0 keys=- anims=-", "pose": "120,150,220,190", "model": "ok", "diag": "-" }
     },
@@ -771,7 +771,7 @@
       "removeFeature": { "threw": "-", "pose": "125,150,225,190", "screen": "125,151,225,191", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "125,150,225,190", "screen": "125,151,225,191", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=Rotation keys=untaken", "pose": "125,150,225,190", "screen": "125,151,225,191", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "120,150,220,190", "screen": "120,151,220,191", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=- anims=-", "pose": "120,150,220,190", "screen": "120,151,220,191", "model": "ok", "diag": "-" }
     },
@@ -1017,7 +1017,7 @@
       "removeFeature": { "threw": "-", "pose": "75,150,275,230", "screen": "75,151,275,231", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "75,150,275,230", "screen": "75,151,275,231", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=1 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=orig diff=0 keys=untaken anims=untaken", "pose": "130,150,280,210", "screen": "130,151,280,211", "model": "ok", "diag": "-" }
     },
@@ -1583,7 +1583,7 @@
       "removeFeature": { "threw": "-", "pose": "80,150,120,250", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "80,150,120,250", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=Opacity keys=untaken", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=untaken anims=untaken", "pose": "100,150,206,234", "model": "ok", "diag": "-" }
     },
@@ -1868,7 +1868,7 @@
       "removeFeature": { "threw": "-", "pose": "76,150,120,260", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "76,150,120,260", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "120,150,230,194", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "120,150,220,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=untaken anims=untaken", "pose": "100,150,206,234", "model": "ok", "diag": "-" }
     },
@@ -2266,7 +2266,7 @@
       "removeFeature": { "threw": "-", "pose": "110,180,220,224", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "110,180,220,224", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=Translation keys=untaken", "pose": "170,150,280,194", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=- anims=-", "pose": "160,160,260,200", "model": "ok", "diag": "-" }
     },
@@ -2443,7 +2443,7 @@
       "removeFeature": { "threw": "-", "pose": "173,149,282,193", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "173,149,282,193", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "170,150,280,194", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=1 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=orig diff=0 keys=untaken anims=untaken", "pose": "180,150,280,190", "model": "ok", "diag": "-" }
     },
@@ -2673,7 +2673,7 @@
       "removeFeature": { "threw": "-", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=Rotation keys=untaken", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=untaken anims=untaken", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" }
     },
@@ -2919,7 +2919,7 @@
       "removeFeature": { "threw": "-", "pose": "230,110,310,310", "screen": "230,111,310,311", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "230,110,310,310", "screen": "230,111,310,311", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=untaken", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=1 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=orig diff=0 keys=untaken anims=untaken", "pose": "150,107,310,233", "screen": "150,108,310,234", "model": "ok", "diag": "-" }
     },
@@ -3218,7 +3218,7 @@
       "removeFeature": { "threw": "-", "pose": "230,110,310,310", "screen": "230,111,310,311", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "pose": "230,110,310,310", "screen": "230,111,310,311", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=Translation keys=untaken", "pose": "175,150,275,190", "screen": "175,151,275,191", "model": "ok", "diag": "-" },
-      "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
+      "unmount": { "threw": "-", "active": "none", "removed": "1", "model": "active", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=untaken anims=untaken", "pose": "150,107,310,233", "screen": "150,108,310,234", "model": "ok", "diag": "-" }
     },
