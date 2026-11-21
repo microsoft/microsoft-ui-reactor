@@ -519,13 +519,17 @@ internal static class PoolLaneFixtures
                 lab.Root.Resources[typeof(WinUI.Border)] = style;
                 var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
                 await lab.Show(null);
+                int writes = ElementPool.OpacitySyncWritesForTests;
                 var renter = await lab.Show(Target("R").Animate(Curve.Linear(100)));
                 H.Check(p + "_StyledOpacity_Recycled", renter is not null && ReferenceEquals(renter, first));
                 H.Check(p + "_StyledOpacity_Synced", await OpacitySynced(renter));
                 var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
                 H.Check(p + "_StyledOpacity_Kept", Math.Abs(opacity - 0.65f) < 0.01f, $"visual={opacity} element={renter?.Opacity}");
-                // The renter's .Animate() key must not fade to the style's value.
-                H.Check(p + "_StyledOpacity_NoFade", renter is not null && !Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
+                // The renter's .Animate() key must not fade to the style's value. Only the sync's own write
+                // is judged: XAML may push the style itself on re-entry, which starts the key too.
+                int syncWrites = ElementPool.OpacitySyncWritesForTests - writes;
+                H.Check(p + "_StyledOpacity_NoFade", renter is not null && (syncWrites == 0 || !Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity")),
+                    $"syncWrites={syncWrites}");
             }
 
             // A visual written before the renter loads (navigation hiding a .LayoutAnimation() page)
@@ -543,11 +547,14 @@ internal static class PoolLaneFixtures
                 if (renter is null) return;
                 H.Check(p + "_HiddenBeforeLoad_PendingBeforeAttach", ElementPool.IsOpacitySyncPending(renter));
                 ElementCompositionPreview.GetElementVisual(renter).Opacity = 0;
+                int writes = ElementPool.OpacitySyncWritesForTests;
                 lab.Root.Children.Add(renter);
-                // The sync ran after the write, so the visual keeping 0 isn't just a sync that hasn't run.
+                // The sync ran after the write, so not writing isn't just a sync that hasn't run.
                 H.Check(p + "_HiddenBeforeLoad_Synced", await OpacitySynced(renter));
-                var opacity = ElementCompositionPreview.GetElementVisual(renter).Opacity;
-                H.Check(p + "_HiddenBeforeLoad_Kept", opacity == 0, $"visual={opacity}");
+                // XAML may push the style's opacity itself on re-entry, so the oracle is the sync's own
+                // write, not the visual's final value.
+                H.Check(p + "_HiddenBeforeLoad_Kept", ElementPool.OpacitySyncWritesForTests == writes,
+                    $"syncWrites={ElementPool.OpacitySyncWritesForTests - writes} visual={ElementCompositionPreview.GetElementVisual(renter).Opacity}");
                 lab.Root.Children.Remove(renter);
                 lab.Reconciler.UnmountChild(renter);
 

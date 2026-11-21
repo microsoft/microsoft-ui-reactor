@@ -797,7 +797,13 @@ public sealed class ElementPool : IDisposable
         }
         visual.Opacity = opacity;
         if (implicitOpacity is not null) visual.ImplicitAnimations!["Opacity"] = implicitOpacity;
+        OpacitySyncWritesForTests++;
     }
+
+    // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts the opacity writes the
+    // sync made. XAML may push a styled opacity itself when a control re-enters the tree, so the
+    // visual's final value can't tell whether the sync wrote.
+    internal static int OpacitySyncWritesForTests;
 
     public void Dispose()
     {
