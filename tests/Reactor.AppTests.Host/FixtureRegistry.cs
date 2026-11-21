@@ -175,6 +175,14 @@ internal static class FixtureRegistry
         ("DragDrop_TypedReorder", static ctx => DragDropE2EFixtures.TypedReorderTest(ctx)),
         ("DragDrop_TextFormat", static ctx => DragDropE2EFixtures.TextFormatTest(ctx)),
 
+        // Toolkit gallery pages, with read-only native observations for real-input tests.
+        ("ToolkitInput_RangeSelector", static _ => ToolkitInputFixtures.Build("range")),
+        ("ToolkitInput_RichSuggestBox", static _ => ToolkitInputFixtures.Build("rsb")),
+        ("ToolkitInput_TokenizingTextBox", static _ => ToolkitInputFixtures.Build("tokens")),
+        ("ToolkitInput_ContentSizer", static _ => ToolkitInputFixtures.Build("csz")),
+        ("ToolkitInput_PropertySizer", static _ => ToolkitInputFixtures.Build("psz")),
+        ("ToolkitInput_GridSplitter", static _ => ToolkitInputFixtures.Build("splitter")),
+
         // Devtools UX (spec 028 — E2E validation)
         ("DevtoolsUx_MenuAndToggle", static ctx => DevtoolsUxFixtures.DevtoolsUxTest(ctx)),
 

@@ -32,6 +32,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'InputGuardClassification.ps1')
 
 $roots = @()
 foreach ($p in $Path) { if (Test-Path $p) { $roots += (Resolve-Path $p).Path } }
@@ -67,11 +68,10 @@ $resEnvInconclusive = 0
 # desktop, or no input injection). If any of these appear the interactivity guard actually fired — a
 # potential failure-masking signal — so surface them loudly instead of folding them into the benign
 # "prerequisite skip" bucket.
-$guardMsgRegex = 'cannot inject synthetic input|workstation is|locked desktop|disconnected session'
 $prereqMsgRegex = 'published|REACTOR_SPEC051|DISCOVER_PUBLISHED|missing executable'
 
 function Get-InconclusiveCategory([string]$msg) {
-    if ($msg -match $guardMsgRegex) { return 'Environmental/guard' }
+    if (Test-InputGuardMessage $msg) { return 'Environmental/guard' }
     if ($msg -match $prereqMsgRegex) { return 'Prerequisite' }
     return 'Other'
 }

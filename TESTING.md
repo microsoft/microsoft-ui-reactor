@@ -1003,6 +1003,7 @@ E2E test classes (across two host apps):
 | `AccessibilityInteractionTests` | WinUI | Keyboard nav, live regions, headings, semantic panels |
 | `EventHandlerTests` | WinUI | OnTapped, OnSizeChanged, OnPointerPressed, OnKeyDown, UseReducer |
 | `DataGridTests` | WinUI | Click-to-edit, keyboard commit |
+| `ToolkitInputTests` | WinUI | Toolkit range thumbs, suggestion/token input, sizer drags, actual Tab focus |
 | `WinFormsInteropTests` | WinForms | XAML Island rendering, tab navigation, UIA across boundaries |
 
 ```bash
@@ -1021,6 +1022,91 @@ enough that queue ordering makes a timing-sensitive race always won or always lo
 or `1`) for that environment and tool version. If the defect is *when* state is read rather than
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
+
+### Toolkit real-input cases (#1601)
+
+`ToolkitInputTests` hosts the actual `samples/apps/wct-controls` pages and mappings,
+not parallel test-only adapters. Both test hosts import the same sample sources and
+dependencies. The six `ToolkitInput_*` routes expose only range, rich suggestions,
+tokenizing text and the three sizers; they never navigate to the camera page.
+The host adds template-part automation IDs and read-only, sequenced native observations.
+Tests require an observation newer than the first post-action read, so a rejected
+range edit cannot pass on a stale pre-drag value.
+
+The eight cases cover accepted and rejected drags of both range thumbs, two
+Down/Enter rich-suggestion commits, typed token conversion/free text/removal,
+ContentSizer height, PropertySizer target width and both bounds, GridSplitter
+column widths, and forward/reverse focus traversal through the range thumbs.
+Keyboard tests use `App.SendKeys(..., viaSendInput: true)` without a focus target;
+pointer actions use `App.Click`/`App.Drag`. UIA Invoke is used only by the existing
+fixture navigator/reset infrastructure, never as the interaction under test.
+Drag diagnostics are captured in MSTest output/TRX: the pre-drag source bounds,
+DPI and requested destination, followed by the unmodified successful CLI JSON
+with its resolved endpoints. These are input geometry, not native manipulation
+deltas; do not infer the latter from pointer displacement alone.
+ContentSizer additionally buffers native manipulation starting/started/delta/completed
+events, initial target size and drag settings, then publishes them as HelpText only
+after completion. Its oracle derives the exact declared height from the native
+cumulative deltas and captured initial ActualHeight using Toolkit's truncation and
+bounds contract, not raw pointer distance. It requires a fresh completed gesture,
+nonzero movement in the intended direction, matching CLI coordinates/window,
+independent advertised-target identity and measurements, and an unchanged sizer
+sibling. Forward and reverse gestures each use their own start size. Only settled
+layout retains the existing two-DIP rounding tolerance; declared height must match
+exactly. The observers do not mark events handled, change manipulation settings or
+request renders during input. `ContentSizerOracleTests` exercises this validation
+headlessly without starting the host.
+GridSplitter has a separate oracle for its native Columns/PreviousAndNext,
+two-star-column contract. It captures the advertised grid/panes independently,
+checks stable definition identities and exact native star weights from initial
+ActualWidths plus/minus the signed cumulative delta, then checks settled pane
+geometry and the unchanged pixel middle column/grid/row. Native bounds reject
+invalid candidate pairs; this is not PropertySizer's clamp contract.
+`GridSplitterOracleTests` covers the pure calculation and evidence validation.
+RangeSelector keyboard **value** changes remain unsupported by the sample's
+controlled mapping because this Toolkit version does not raise `ValueChanged`
+for them. Tab traversal does not claim to cover that limitation.
+
+Headless preparation (no host launch or package registration):
+
+```powershell
+dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+pwsh -NoProfile -File tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InputCapabilityDiagnosticsTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+```
+
+For a separately authorized read-only readiness capture,
+`SessionInteractivityGuard.CaptureInputCapability()` records one `GetCursorPos`
+result and its immediate native error before sampling caller/desktop metadata.
+Error zero on a failed call is reported as unknown, never fabricated as
+`ACCESS_DENIED`. Metadata is labeled as later, non-atomic context; it does not
+prove the reason for the earlier result. `GetState()` remains a separate probe:
+`Active` does not establish that its WTS query succeeded or guarantee foreground
+ownership, and cursor readability does not prove a future input call is allowed.
+The existing failure remains Inconclusive and prevents dispatch without retry.
+CI's skipped-input gate and stress reporting recognize the stable
+`[REACTOR_E2E_INPUT_BLOCKED]` marker, independently of the precise native error
+wording, so these Inconclusive results cannot be mistaken for executed passes.
+`InputCapabilityDiagnosticsTests` checks this reporting with fake observations,
+without making native readiness calls.
+
+Compilation and headless helper tests are **not runtime input passes**. To execute
+the new cases, obtain explicit authorization for an unlocked, interactive Windows
+desktop with input injection available, the pinned SDK/.NET runtime and a working
+`winapp ui` CLI. Reserve that desktop for the run, with no simultaneous user input,
+other UI automation or selftests. No camera access, OS settings changes, elevation
+or Appx installation/registration is needed. After authorization, the bounded run is:
+
+```powershell
+$env:REACTOR_E2E_RETRIES = '0'
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ToolkitInputTests" --report-trx --report-trx-filename toolkit-input.trx
+```
+
+Require eight executed passes, not skips/inconclusive results. Stop on detected
+human input and seek renewed authorization rather than trying another transport
+or host. Runtime checks and mutation checks remain necessary before closing #1601;
+the authored test inventory alone does not establish coverage.
 
 ### The suite runs as one named winapp workflow
 
