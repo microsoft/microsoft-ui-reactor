@@ -258,6 +258,17 @@ than guessing meaning from `Grid`/`StackPanel` shapes. `Surface(text, content,
 separatorAfter: "\n")` supplies exact **visible plain text**, never Markdown
 or HTML source. List markers have no separator before their content; table
 cells use tabs and rows use newlines. No final separator is copied.
+
+With a mouse, click to place the caret, Shift+click to extend selection,
+double-click to select a word (including trailing spaces), and triple-click
+to select a text surface such as a paragraph, table cell, or code block.
+Triple-click excludes the separator between surfaces; dragging can extend
+selection by whole words or surfaces and includes any separators crossed.
+An ordinary click activates a link. Dragging from a link selects text instead,
+including on custom `LinkBuilder` buttons that use the default release click
+mode. A primary click outside the message's text clears its highlight and collapses the
+text range without consuming the new click. Keyboard link activation stays native.
+
 Surface wrappers own outer margins, sizing, alignment and Grid/Canvas/Flex
 placement; these are lifted off the inner element and applied exactly once.
 Inner padding and presentation styling remain on the content. Apps can normalize

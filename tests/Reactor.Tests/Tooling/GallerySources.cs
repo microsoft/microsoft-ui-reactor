@@ -43,7 +43,7 @@ static class GallerySources
     /// <summary>Includes supporting source files so constants and partial types bind across files.</summary>
     public static IReadOnlyList<(string Path, SyntaxNode Root)> AllSources() => ReadSources(GalleryDir());
 
-    static IReadOnlyList<(string Path, SyntaxNode Root)> ReadSources(string directory)
+    internal static IReadOnlyList<(string Path, SyntaxNode Root)> ReadSources(string directory)
     {
         Assert.True(Directory.Exists(directory), $"gallery source directory not found at {directory}");
 

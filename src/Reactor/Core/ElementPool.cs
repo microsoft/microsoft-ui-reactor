@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -153,6 +154,14 @@ public sealed class ElementPool : IDisposable
         // lose XAML implicit transition API access (OpacityTransition, etc.).
         if (IsCompositorTainted(element)) return;
 
+        // Issue #1614: attaching an implicit transform transition permanently locks
+        // RenderTransform (nulling the transition does not release it), so such a control is
+        // no longer interchangeable with a fresh one. Same reasoning as the taint check above.
+        // This is the fast path; the catch around CleanElement below is the backstop for a
+        // control whose transition was attached and later removed.
+        if (element.ScaleTransition is not null || element.RotationTransition is not null
+            || element.TranslationTransition is not null) return;
+
         if (!_pools.TryGetValue(type, out var stack))
         {
             stack = new Stack<FrameworkElement>();
@@ -175,7 +184,17 @@ public sealed class ElementPool : IDisposable
             return;
         }
 
-        CleanElement(element);
+        try
+        {
+            CleanElement(element);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Issue #1614: WinUI refused a transform reset (RenderTransform or a facade is
+            // still locked). The control can't be made interchangeable with a fresh one, so
+            // drop it rather than fail the reconcile that is unmounting it.
+            return;
+        }
         stack.Push(element);
     }
 
@@ -255,6 +274,22 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(FrameworkElement.VerticalAlignmentProperty);
         fe.ClearValue(UIElement.OpacityProperty);
         fe.ClearValue(UIElement.VisibilityProperty);
+        // Issue #1614: WinUI treats RenderTransform and the facade transforms (Rotation, Scale,
+        // Translation, CenterPoint, RotationAxis, TransformMatrix) as mutually exclusive, and
+        // touching one while the other is engaged throws UnauthorizedAccessException. Reset the
+        // facades so a recycled control can't hand its previous renter's transform to the next
+        // one. They are plain properties, not DPs, so the reset assigns the identity value. Each
+        // write is guarded: an untransformed control pays no extra write, and one using
+        // RenderTransform (whose facades must read identity) is never written through a facade.
+        if (fe.Rotation != 0f) fe.Rotation = 0f;
+        if (fe.Scale != Vector3.One) fe.Scale = Vector3.One;
+        if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
+        if (fe.CenterPoint != Vector3.Zero) fe.CenterPoint = Vector3.Zero;
+        if (fe.RotationAxis != Vector3.UnitZ) fe.RotationAxis = Vector3.UnitZ;
+        if (!fe.TransformMatrix.IsIdentity) fe.TransformMatrix = Matrix4x4.Identity;
+        // The facades must be released first: RenderTransform rejects a write while one is
+        // engaged. If it is still locked (a transform transition was attached at some point),
+        // the clear throws and Return drops the control.
         fe.ClearValue(FrameworkElement.RenderTransformProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
         // A context flyout is a live object graph owned by the previous renter's component.
@@ -267,8 +302,11 @@ public sealed class ElementPool : IDisposable
         // not transitioned) does not. Without clearing here, a control that
         // was themed would carry that Style into the pool and the next
         // unrelated element to rent it would inherit the prior brushes.
-        // Gated on Style being non-null so non-themed controls (the common
-        // case) skip the redundant COM call.
+        // ClearThemeBindings also drops Reactor's ownership marker, so the
+        // pooled control holds no reference to the previous renter's themed
+        // Style. Gated on Style being non-null so non-themed controls (the
+        // common case) skip the redundant COM call.
+        Reconciler.ClearThemeBindings(fe);
         if (fe.Style is not null)
             fe.ClearValue(FrameworkElement.StyleProperty);
 

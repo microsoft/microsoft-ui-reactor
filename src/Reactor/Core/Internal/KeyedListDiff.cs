@@ -170,7 +170,12 @@ internal static class KeyedListDiff
         bool rentedKeys = newCount != 0;
         try
         {
-            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, newKeys, newCount);
+            var stats = ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, attribution, newKeys, newCount);
+            // What the host shows changed by the rows inserted, removed or moved (a bailout
+            // re-realizes the list: one change). Row content is counted where it is reconciled.
+            if (stats.Bailout || stats.AnyOps)
+                Reconciler.CountPerfChanges(stats.Bailout ? 1u : (uint)(stats.Inserts + stats.Removes + stats.Moves));
+            return stats;
         }
         finally
         {

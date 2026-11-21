@@ -237,8 +237,7 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-                if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
+                ReportPerfStateChange("UseState", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
@@ -250,14 +249,26 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-                if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
+                ReportPerfStateChange("UseState", changed);
                 if (changed) _requestRerender?.Invoke();
             }
         }
         return Setter;
     }
     // </snippet:set-state>
+
+    /// <summary>
+    /// Reports a state-hook write on the <c>Microsoft-UI-Reactor-Perf</c> provider: the verbose
+    /// <c>StateChange</c> event, and the call toward the open render or effects span's
+    /// <c>stateSets</c> (<see cref="ComponentPerfTally"/>). Two static gate reads when nobody listens.
+    /// </summary>
+    private void ReportPerfStateChange(string hook, bool changed)
+    {
+        if (Diagnostics.ReactorPerfTrace.StateEnabled)
+            Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), hook, changed);
+        if (Diagnostics.ReactorPerfTrace.StateSetsEnabled)
+            ComponentPerfTally.NoteStateSet();
+    }
 
     /// <summary>
     /// Declares a piece of state with a functional updater variant.
@@ -323,8 +334,7 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
-                if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
@@ -338,8 +348,7 @@ public sealed class RenderContext
                         global::System.Diagnostics.Tracing.EventLevel.Verbose,
                         Diagnostics.ReactorEventSource.Keywords.State))
                     Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
-                if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
         }
@@ -411,8 +420,7 @@ public sealed class RenderContext
                     changed = !EqualityComparer<TState>.Default.Equals(prev, next);
                     if (changed) h.Value = next;
                 }
-                if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed) _requestRerender?.Invoke();
             }
             else
@@ -421,8 +429,7 @@ public sealed class RenderContext
                 var prev = h.Value;
                 var next = reducer(prev, action);
                 bool changed = !EqualityComparer<TState>.Default.Equals(prev, next);
-                if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                    Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseReducer", changed);
+                ReportPerfStateChange("UseReducer", changed);
                 if (changed)
                 {
                     h.Value = next;
@@ -965,12 +972,14 @@ public sealed class RenderContext
 
     private Action<T> MakePersistedSetter<T>(PersistedHookState<T> h)
     {
+        bool MarshalSetter(T newValue)
+            => MarshalIfOffUIThread("UsePersisted", () => Setter(newValue));
+
         void Setter(T newValue)
         {
-            if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             bool changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
-            if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UsePersisted", changed);
+            ReportPerfStateChange("UsePersisted", changed);
             if (changed)
             {
                 h.Value = newValue;

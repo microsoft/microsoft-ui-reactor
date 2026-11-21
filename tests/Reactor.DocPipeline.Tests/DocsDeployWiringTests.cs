@@ -271,7 +271,7 @@ public sealed class DocsDeployWiringTests
     [Fact]
     public void The_verifier_and_its_regression_suite_are_present()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var paths = new[] { "verify-docs-deployment.mjs", "verify-docs-deployment.test.mjs" }
             .Select(name => Path.Join(repoRoot, ".github", "scripts", name));
 
@@ -314,22 +314,10 @@ public sealed class DocsDeployWiringTests
 
     private static YamlMappingNode LoadWorkflow()
     {
-        var path = Path.Join(FindRepoRoot(), ".github", "workflows", "docs.yml");
+        var path = Path.Join(TestRepo.Root, ".github", "workflows", "docs.yml");
         var stream = new YamlStream();
         using var reader = new StringReader(File.ReadAllText(path));
         stream.Load(reader);
         return (YamlMappingNode)stream.Documents[0].RootNode;
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("Reactor repo root not found from test cwd.");
     }
 }

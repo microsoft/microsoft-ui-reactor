@@ -282,7 +282,7 @@ internal static class NavigationHostLifecycle
             if (useAnimation)
             {
                 // Mount new content at Opacity 0 alongside old content
-                var inVisual = ElementCompositionPreview.GetElementVisual(newChildControl!);
+                var inVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(newChildControl!);
                 ElementPool.MarkCompositorTainted(newChildControl!);
                 inVisual.Opacity = 0;
                 grid.Children.Add(newChildControl!);

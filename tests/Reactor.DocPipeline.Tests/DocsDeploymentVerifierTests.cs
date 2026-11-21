@@ -44,7 +44,7 @@ public sealed class DocsDeploymentVerifierTests
     [Fact]
     public async Task Deployment_verifier_cases_pass()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var testScript = Path.Join(repoRoot, ".github", "scripts", "verify-docs-deployment.test.mjs");
 
         Assert.True(
@@ -129,17 +129,5 @@ public sealed class DocsDeploymentVerifierTests
                 + "The live-site verifier is the only check that can catch a stranded deployment, so its "
                 + "regression suite must not shrink. If cases were deliberately removed or merged, lower "
                 + $"{nameof(MinimumCases)} in this file with the reason in the commit message.");
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("Reactor repo root not found from test cwd.");
     }
 }
