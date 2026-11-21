@@ -387,6 +387,29 @@ internal static class ImplicitAnimationSlotsFixtures
             H.Check(Name + "_ReplacedInstalled", Keys() == "Offset", $"keys={Keys()}");
             await Update(new SlotsForwarder(Button40()));
             H.Check(Name + "_ReplacedInnerRemoved", Keys() == "-", $"keys={Keys()}");
+
+            // Three layers, each with its own layout animation, across a replacement.
+            static Element Nested(Element child, int inner, int? middle, int? outer)
+            {
+                Element mid = new SlotsForwarder(child.LayoutAnimation(TimeSpan.FromMilliseconds(inner)));
+                if (middle is { } m) mid = mid.LayoutAnimation(TimeSpan.FromMilliseconds(m));
+                Element top = new SlotsForwarder(mid);
+                return outer is { } o ? top.LayoutAnimation(TimeSpan.FromMilliseconds(o)) : top;
+            }
+            int Claims() => (Control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims?.Count ?? 0;
+
+            await Update(Nested(Target(), 700, 800, 900));
+            H.Check(Name + "_NestedOuterWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(900) && Claims() == 3,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Nested(Button40(), 730, 830, 930));
+            H.Check(Name + "_NestedReplacedOuterWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(930) && Claims() == 3,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Nested(Button40(), 740, 840, null));
+            H.Check(Name + "_NestedMiddleRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(840) && Claims() == 2,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Nested(Button40(), 750, null, null));
+            H.Check(Name + "_NestedInnerRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(750) && Claims() == 1,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
         }
     }
 

@@ -32,30 +32,34 @@ public sealed partial class Reconciler
     // Mount frames are numbered as they start, so a frame nested in another has a higher number.
     // A control whose claims were made by a deeper frame was forwarded to this layer by its
     // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
-    // so those claims move one slot inward before this layer claims.
-    private int _mountFrames, _lastClaimFrame, _lastStampFrame;
-    // Weak so the marker never keeps an element graph alive after its render.
-    private WeakReference<Element>? _lastStampElement;
+    // so those claims move one slot inward before this layer claims. Each Mount that handles the
+    // claims then records itself as their outermost owner.
+    private int _mountFrames, _lastClaimFrame;
 
     private void StampImplicitClaims(UIElement control, int frame, Element element)
     {
         if (ImplicitAnimationSlots.Claims(control) is not { } claims) return;
-        claims.MountFrame = frame;
-        if (frame > _lastClaimFrame) _lastClaimFrame = frame;
-        _lastStampFrame = frame;
-        if (_lastStampElement is null) _lastStampElement = new(element);
-        else _lastStampElement.SetTarget(element);
+        Stamp(claims, frame, element);
     }
 
-    // `self` is the element a replaced control belongs to: when its own Mount made the claims,
-    // they are this layer's, not a forwarded child's.
-    private void ShiftForwardedClaims(UIElement control, int frame, Element? self = null)
+    private void Stamp(ImplicitAnimationClaims claims, int frame, Element element)
+    {
+        claims.MountFrame = frame;
+        if (claims.MountOwner is null) claims.MountOwner = new(element);
+        else claims.MountOwner.SetTarget(element);
+        if (frame > _lastClaimFrame) _lastClaimFrame = frame;
+    }
+
+    // In Mount, `layer` is the element being mounted: it shifts and becomes the owner. In
+    // Update's replaced-control path, `self` is the updating element: when its own Mount is
+    // the outermost owner, that Mount already numbered the claims.
+    private void ShiftForwardedClaims(UIElement control, int frame, Element? layer = null, Element? self = null)
     {
         if (_lastClaimFrame <= frame || ImplicitAnimationSlots.Claims(control) is not { } claims
             || claims.MountFrame <= frame) return;
-        if (self is not null && claims.MountFrame == _lastStampFrame
-            && _lastStampElement?.TryGetTarget(out var stamped) == true && ReferenceEquals(stamped, self)) return;
+        if (self is not null && claims.MountOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, self)) return;
         claims.ShiftInward();
+        if (layer is not null) Stamp(claims, frame, layer);
     }
 
     /// <summary>
@@ -472,7 +476,7 @@ public sealed partial class Reconciler
         if (replacedControl)
         {
             implicitSlot = 0;
-            ShiftForwardedClaims(target, mountMark, newEl);
+            ShiftForwardedClaims(target, mountMark, self: newEl);
         }
         var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
         if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)

@@ -236,7 +236,7 @@ public sealed partial class Reconciler
         // inner element just claimed implicit keys on. Those claims move one slot inward, so the
         // outermost layer is slot 0, as Update counts it (spec 066 §6.1).
         if (control is not null)
-            ShiftForwardedClaims(control, mountFrame);
+            ShiftForwardedClaims(control, mountFrame, layer: element);
 
         // Apply transitions after mounting (runs after .Set() callbacks)
         if (control is not null && (element.ImplicitTransitions is not null || element.ThemeTransitions is not null))

@@ -52,6 +52,9 @@ internal sealed class ImplicitAnimationClaims
     /// <summary>The reconciler Mount frame that last claimed on this control (see Reconciler.Mount).</summary>
     internal int MountFrame;
 
+    /// <summary>The outermost element whose Mount handled this control's claims, held weakly.</summary>
+    internal WeakReference<object>? MountOwner;
+
     internal int Count => _claims.Count;
 
     internal void Add<TSink>(TSink sink, string key, ImplicitFeature feature, int slot, object value)
