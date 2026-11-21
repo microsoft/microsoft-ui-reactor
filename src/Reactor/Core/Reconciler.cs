@@ -1698,6 +1698,9 @@ public sealed partial class Reconciler : IDisposable
         internal AnimateProperty DeferredModifierResets;
         // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
         internal Animation.ImplicitAnimationClaims? ImplicitClaims;
+        // Names this control holds keyframe trigger entries under, whichever layer declared them,
+        // so the pool's visual reset drops exactly those (spec 066 §7.3 step 4).
+        internal HashSet<string>? KeyframeNames;
         // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
         // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
         internal bool VisualTaken;
@@ -6615,6 +6618,7 @@ public sealed partial class Reconciler : IDisposable
         ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
+        var names = Reconciler.GetOrCreateReactorState(uie).KeyframeNames ??= new(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
@@ -6622,6 +6626,7 @@ public sealed partial class Reconciler : IDisposable
             bool hasPrevious = _keyframeTriggerValues.TryGetValue(key, out var previous);
             bool changed = KeyframeTriggerChanged(hasPrevious, previous.Trigger, entry.Trigger);
             _keyframeTriggerValues[key] = (entry.Trigger, previous.Started);
+            names.Add(entry.Name);
             if (!changed) continue;
 
             var def = entry.Definition;
@@ -6865,6 +6870,8 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Spec 066 §7.3 step 4: drops the composition bookkeeping of a control whose visual was
     /// reset for the pool, so the next renter starts without the previous renter's ownership.
+    /// Keyframe trigger entries go by the names the control recorded, so a layer unmount didn't
+    /// reach (a keyed <c>Memo</c> over the control) leaves none behind.
     /// </summary>
     internal static void ForgetCompositionState(UIElement uie)
     {
@@ -6875,14 +6882,13 @@ public sealed partial class Reconciler : IDisposable
             state.KeyframeChannelOwners = null;
             state.DeferredModifierResets = default;
             state.ImplicitClaims = null;
+            if (state.KeyframeNames is { } names)
+            {
+                foreach (var name in names) _keyframeTriggerValues.Remove((uie, name));
+                state.KeyframeNames = null;
+            }
         }
         ClearInteractionStates(uie);
-        if (_keyframeTriggerValues.Count == 0) return;
-        List<(UIElement, string)>? stale = null;
-        foreach (var key in _keyframeTriggerValues.Keys)
-            if (ReferenceEquals(key.Item1, uie)) (stale ??= []).Add(key);
-        if (stale is not null)
-            foreach (var key in stale) _keyframeTriggerValues.Remove(key);
     }
 
     private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)
@@ -7010,6 +7016,8 @@ public sealed partial class Reconciler : IDisposable
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
             ConnectedAnimationFrameGate.Prepared(key);
+            // WinUI captures the source at the next frame, so the pool must not reset or rent it first.
+            ElementPool.ExcludeFromPool(control);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {

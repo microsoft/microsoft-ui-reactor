@@ -107,6 +107,7 @@ internal static class PoolLaneFixtures
                 visual.Scale = new Vector3(1.5f, 1.5f, 1);
                 visual.RotationAngleInDegrees = 20;
                 visual.CenterPoint = new Vector3(10, 5, 0);
+                visual.IsVisible = false;
                 // The reset writes no Offset (layout owns it), so only its StopAnimation ends this one.
                 var offset = visual.Compositor.CreateVector3KeyFrameAnimation();
                 offset.InsertKeyFrame(1, new Vector3(40, 0, 0));
@@ -132,7 +133,7 @@ internal static class PoolLaneFixtures
                 if (second is null) return;
 
                 H.Check(p + "_IdentityVisual", visual.Opacity == 1 && visual.Scale == Vector3.One && visual.RotationAngle == 0
-                    && visual.CenterPoint == Vector3.Zero && visual.TransformMatrix.IsIdentity && visual.Clip is null,
+                    && visual.CenterPoint == Vector3.Zero && visual.TransformMatrix.IsIdentity && visual.Clip is null && visual.IsVisible,
                     $"opacity={visual.Opacity} scale={visual.Scale} rotation={visual.RotationAngle} center={visual.CenterPoint}");
                 H.Check(p + "_TranslationZero", second.Translation == Vector3.Zero
                     && (visual.Properties.TryGetVector3("Translation", out var t) != CompositionGetValueStatus.Succeeded || t == Vector3.Zero),
@@ -148,6 +149,10 @@ internal static class PoolLaneFixtures
                 {
                     var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;
                     H.SetContent(freshRoot);
+                    // Capture only once the fresh stage has the same layout size as the rented one.
+                    for (int i = 0; i < 20 && (freshRoot.ActualWidth != lab.Root.ActualWidth
+                        || freshRoot.ActualHeight != lab.Root.ActualHeight); i++)
+                        await Harness.Render(16);
                     await Harness.Render();
                     int diff = rented.Diff(await Snap.CaptureAsync(freshRoot));
                     H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff}");
@@ -159,6 +164,17 @@ internal static class PoolLaneFixtures
                 await lab.Show(renter.Opacity(0.5));
                 H.Check(p + "_WriteDoesNotAnimate", !Running(visual, "Opacity") && Math.Abs(visual.Opacity - 0.5) < 0.001,
                     $"opacity={visual.Opacity}");
+            }
+
+            // A brush transition coexists with the handoff, so the visual lane clears it.
+            using (var lab = new Lab(H))
+            {
+                var transitioned = await lab.Show(VStack(TextBlock("bg")).BackgroundTransition(TimeSpan.FromSeconds(1)).LayoutAnimation());
+                H.Check(p + "_BackgroundTransitionApplied", transitioned is WinUI.StackPanel { BackgroundTransition: not null });
+                await lab.Show(null);
+                var renter = await lab.Show(VStack(TextBlock("bg2")).LayoutAnimation());
+                H.Check(p + "_BackgroundTransitionCleared", ReferenceEquals(renter, transitioned)
+                    && renter is WinUI.StackPanel { BackgroundTransition: null });
             }
         }
     }
@@ -421,6 +437,50 @@ internal static class PoolLaneFixtures
             }
             H.Check(p + "_FacadeWriteWorks", second is not null);
             H.Check(p + "_NotFromVisualLane", !ReferenceEquals(second, taken));
+        }
+    }
+
+    /// <summary>A control returned twice is pooled once, in either lane, so two renters never share it.</summary>
+    internal sealed class ReturnTwice(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await Task.CompletedTask;
+            foreach (bool taken in new[] { false, true })
+            {
+                string p = "ElementPoolLanes_ReturnTwice_" + (taken ? "Visual" : "Plain");
+                using var pool = new ElementPool();
+                var border = new WinUI.Border();
+                if (taken) AnimationHelper.GetElementVisual(border);
+                pool.Return(border);
+                pool.Return(border);
+                H.Check(p + "_RentedOnce", ReferenceEquals(pool.TryRent(typeof(WinUI.Border), visualLane: taken), border)
+                    && pool.TryRent(typeof(WinUI.Border), visualLane: taken) is null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A keyed <c>Memo</c> over a control can declare keyframes the control's own unmount cleanup
+    /// doesn't reach. The visual reset drops their trigger entries, so a renter with the same
+    /// keyframe name and trigger still plays.
+    /// </summary>
+    internal sealed class MemoKeyframes(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static KeyframeBuilder Pulse(KeyframeBuilder k) => k.Duration(60000).At(0f, opacity: 0.5f).At(1f, opacity: 1f);
+
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_MemoKeyframes";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Memo("k", static () => Target("M")).Keyframes("pulse", 1, Pulse));
+            H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            await lab.Show(null);
+
+            var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
+            H.Check(p + "_Recycled", ReferenceEquals(renter, first));
+            H.Check(p + "_RenterPlays", renter is not null
+                && Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
         }
     }
 }

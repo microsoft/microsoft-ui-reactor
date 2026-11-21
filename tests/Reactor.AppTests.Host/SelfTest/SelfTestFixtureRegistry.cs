@@ -2276,6 +2276,8 @@ internal static class SelfTestFixtureRegistry
         ("ElementPoolLanes_ImplicitTransitions", static harness => new PoolLaneFixtures.ImplicitTransitionResidue(harness)),
         ("ElementPoolLanes_ExitTornDown", static harness => new PoolLaneFixtures.ExitTornDown(harness)),
         ("ElementPoolLanes_AppHandler", static harness => new PoolLaneFixtures.AppHandler(harness)),
+        ("ElementPoolLanes_ReturnTwice", static harness => new PoolLaneFixtures.ReturnTwice(harness)),
+        ("ElementPoolLanes_MemoKeyframes", static harness => new PoolLaneFixtures.MemoKeyframes(harness)),
         ("ControlledOptionalCustomerRepro", static harness => new ControlledOptionalCustomerRepro.Execution(harness)),
         ("ControlledOptionalSelectionFamily", static harness => new ControlledOptionalSelectionFamilyFixture.Execution(harness)),
         ("ControlledOptionalToggleFamily", static harness => new ControlledOptionalToggleFamilyFixture.Execution(harness)),

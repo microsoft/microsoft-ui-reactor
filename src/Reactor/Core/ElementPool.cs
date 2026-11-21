@@ -92,6 +92,9 @@ public sealed class ElementPool : IDisposable
 
     private readonly Dictionary<Type, Stack<FrameworkElement>> _pools = new();
     private readonly Dictionary<Type, Stack<FrameworkElement>> _visualPools = new();
+    // Controls on a stack, so a second Return of the same control is a no-op. The stack holds the
+    // wrapper, so its identity is stable for as long as the control is pooled.
+    private readonly HashSet<FrameworkElement> _pooled = new(ReferenceEqualityComparer.Instance);
 
     // A scratch panel used to force WinUI to fully process parent detachment.
     // Adding then removing from this panel ensures WinUI's internal parent
@@ -139,11 +142,17 @@ public sealed class ElementPool : IDisposable
     {
         if (!Enabled) return null;
         if (!PoolableTypes.Contains(type)) return null;
-        if (visualLane && _visualPools.TryGetValue(type, out var taken) && taken.Count > 0) return taken.Pop();
+        if (visualLane && _visualPools.TryGetValue(type, out var taken) && taken.Count > 0) return Rented(taken.Pop());
         if (!_pools.TryGetValue(type, out var stack) || stack.Count == 0) return null;
-        return stack.Pop();
+        return Rented(stack.Pop());
     }
     // </snippet:pool-rent>
+
+    private FrameworkElement Rented(FrameworkElement element)
+    {
+        _pooled.Remove(element);
+        return element;
+    }
 
     /// <summary>
     /// Return an element to the pool after unmount. Cleans it first.
@@ -155,6 +164,9 @@ public sealed class ElementPool : IDisposable
         if (!Enabled) return;
         var type = element.GetType();
         if (!PoolableTypes.Contains(type)) return;
+        // A handler may return its control through UnmountContext.ReturnControl and the engine
+        // return it again. Pushing it twice would hand one control to two renters.
+        if (_pooled.Contains(element)) return;
 
         // The lane follows the native control's marker, whichever wrapper reached it (#1643).
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
@@ -196,6 +208,7 @@ public sealed class ElementPool : IDisposable
             return;
         }
         stack.Push(element);
+        _pooled.Add(element);
     }
 
     /// <summary>
@@ -238,6 +251,7 @@ public sealed class ElementPool : IDisposable
         foreach (var stack in _visualPools.Values)
             stack.Clear();
         _visualPools.Clear();
+        _pooled.Clear();
         _scratchPanel = null;
     }
 
@@ -639,6 +653,7 @@ public sealed class ElementPool : IDisposable
         visual.ImplicitAnimations = null;
 
         visual.Opacity = 1;
+        visual.IsVisible = true;
         visual.Scale = Vector3.One;
         visual.RotationAngle = 0;
         visual.RotationAxis = Vector3.UnitZ;
@@ -652,6 +667,13 @@ public sealed class ElementPool : IDisposable
         // The Translation facade stays writable after the handoff, and a user .Set may have
         // written it next to a Reactor feature.
         if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
+        // A brush transition coexists with the handoff, so a visual-lane renter would inherit it.
+        // Spec 066 layer 2 clears it in both lanes.
+        switch (fe)
+        {
+            case WinUI.Grid grid when grid.BackgroundTransition is not null: grid.BackgroundTransition = null; break;
+            case WinUI.StackPanel stack when stack.BackgroundTransition is not null: stack.BackgroundTransition = null; break;
+        }
 
         Reconciler.ForgetCompositionState(fe);
     }
@@ -671,5 +693,6 @@ public sealed class ElementPool : IDisposable
         }
         _pools.Clear();
         _visualPools.Clear();
+        _pooled.Clear();
     }
 }
