@@ -779,7 +779,8 @@ holds the channel), `motion` (per changed channel: `ANIMATING`, `JUMPED`, `NOT-A
 `curve` (progress at a quarter of the time, in steps of 0.2: linear reads 0.2, the Fluent
 (0.8,0,0.2,1) ease 0.0, the compositor's default ease-out 0.6), `running` (animations still going
 when the step settled), `residue` (transitions still installed after `removeModifier`, #1626, or `remounted` when a keyed `Memo` replaced the control),
-`hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
+`opacity` (the settled opacity at the target's centre, in steps of 0.05, so a lost update reads 1.00
+instead of 0.80), `hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
 Motion is controller-driven, layout `Offset` included: each new animation is paused and seeked to
 its start, 25%, 50% and 100%, measured from where it actually starts, so no verdict depends on
 wall-clock timing. Two things RenderTargetBitmap can't see are recorded as such rather than

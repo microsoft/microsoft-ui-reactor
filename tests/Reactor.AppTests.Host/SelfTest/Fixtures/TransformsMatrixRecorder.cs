@@ -296,6 +296,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
                 var expected = Model.Bounds(ExpectedPose(step), Rtl, Model.Shift(_case, step));
                 if (box is null || !box.Value.Near(expected, TransformsLedger.Tolerance)) ModelDifferences.Add((name, "pose"));
                 if (_case.UserCode == UserCodeAxis.TranslationDrag) f[TransformsLedger.ScreenField] = ObserveScreen(name, expected);
+                f["opacity"] = ObserveOpacity(snap, box, step, name);
                 if (geometry) ObserveGeometry(f, t, step);
                 if (channels || geometry) f["channel"] = Channel(t);
             }
@@ -314,6 +315,27 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     }
 
     private Pose ExpectedPose(MatrixStep step) => Model.Expected(_case, step);
+
+    /// <summary>
+    /// The settled opacity, read at the centre of the observed target, so a lost opacity update
+    /// (1 instead of 0.8) shows even though the pose can't tell them apart. A declared looping
+    /// keyframe moves it on purpose, so it's not read there.
+    /// </summary>
+    private string ObserveOpacity(Snap snap, Box? box, MatrixStep step, string name)
+    {
+        if (LoopDeclared(step)) return "loop";
+        if (box is not { } b) return "none";
+        string seen = ReadOpacity(snap, b, Declare(step).AltBackground);
+        if (seen != Model.OpacityFromGreen(Model.Green(Model.Opacity(step), Declare(step).AltBackground), Declare(step).AltBackground))
+            ModelDifferences.Add((name, "opacity"));
+        return seen;
+    }
+
+    internal static string ReadOpacity(Snap snap, Box target, bool altBackground) =>
+        Model.OpacityFromGreen(snap.Green((target.X0 + target.X1) / 2, (target.Y0 + target.Y1) / 2), altBackground);
+
+    private bool LoopDeclared(MatrixStep step) =>
+        _case.Feature == FeatureAxis.Keyframes && _case.Variant == VariantAxis.B && Declare(step).Feature;
 
     /// <summary>
     /// A facade Translation written after the visual's translation is enabled reads applied under
@@ -458,7 +480,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
                 verdict = Verdict(Math.Abs(span) < 0.05 ? end : (mid - start) / span, end);
                 if (verdict == Model.Animating && Math.Abs(span) >= 0.05)
                 {
-                    double Bucket(double q) => Math.Round((q - start) / span / 0.2) * 0.2 is var b && b == 0 ? 0 : b;
+                    double Bucket(double q) => Math.Round((q - start) / span / 0.2) * 0.2 is var b && Math.Abs(b) < 0.01 ? 0 : b;
                     if (Math.Abs(Bucket(quarter) - Bucket(quarterAgain)) < 0.01)
                         curves.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"{ch}={Bucket(quarter):F1}"));
                     else
@@ -721,7 +743,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         Visual visual;
         try { visual = ElementCompositionPreview.GetElementVisual(t); }
         catch (UnauthorizedAccessException) { return null; }
-        bool loopDeclared = _case.Feature == FeatureAxis.Keyframes && _case.Variant == VariantAxis.B && Declare(step).Feature;
+        bool loopDeclared = LoopDeclared(step);
         var running = new[] { "Scale", "RotationAngle", "Translation", "CenterPoint", "Opacity" }
             .Where(ch => !(ch == "Opacity" && loopDeclared))
             .Where(ch => Controller(visual, ch) is not null)

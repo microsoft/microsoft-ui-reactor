@@ -340,6 +340,15 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         double g08 = (await Shot()).Green(center.Item1, center.Item2);
         Check("Opacity", g1 < 10 && Math.Abs(g08 / (255 * (1 - Model.OpacityB)) - 1) < 0.2, $"opaque G={g1:F0} 0.8 G={g08:F0}");
 
+        // Settled opacity: the recorder's reading tells a lost update (1) from the declared 0.8.
+        r.Opacity = 1;
+        var opaqueShot = await Shot();
+        string settled1 = opaqueShot.RedBox() is { } ob ? TransformsMatrixRecorder.ReadOpacity(opaqueShot, ob, false) : "none";
+        r.Opacity = Model.OpacityB;
+        var fadedShot = await Shot();
+        string settled08 = fadedShot.RedBox() is { } fb ? TransformsMatrixRecorder.ReadOpacity(fadedShot, fb, false) : "none";
+        Check("SettledOpacity", settled1 == "1.00" && settled08 == "0.80", $"opacity 1 read {settled1}, 0.8 read {settled08}");
+
         // Motion: a seeked compositor animation reads mid-way at 50%; a direct write reads JUMPED.
         r = Rect();
         await Shot();
@@ -619,7 +628,8 @@ internal sealed class PoolSoak(Border host)
                     rented++;
                     if (probe.Scale != Vector3.One || Math.Abs(probe.Rotation) > 1e-4f || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
                         violations["facade"]++;
-                    if (probe.OpacityTransition is not null || probe.BackgroundTransition is not null || probe.ChildrenTransitions is { Count: > 0 })
+                    if (probe.OpacityTransition is not null || probe.BackgroundTransition is not null || probe.ScaleTransition is not null
+                        || probe.RotationTransition is not null || probe.TranslationTransition is not null || probe.ChildrenTransitions is { Count: > 0 })
                         violations["xaml"]++;
                     try { probe.Rotation = 0; }
                     catch (UnauthorizedAccessException) { violations["taken"]++; }
