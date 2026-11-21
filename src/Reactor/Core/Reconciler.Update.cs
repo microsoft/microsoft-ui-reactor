@@ -24,6 +24,10 @@ namespace Microsoft.UI.Reactor.Core;
 
 public sealed partial class Reconciler
 {
+    // The depth of the layer being updated in its control's shared-target chain, 0 for the
+    // outermost (spec 066 §6.1). It names that layer's implicit animation claims.
+    private int _implicitSlot;
+
     /// <summary>
     /// Diffs oldEl vs newEl and patches the existing control. Returns null if patched in-place,
     /// or a replacement UIElement if the control type changed at runtime.
@@ -32,6 +36,7 @@ public sealed partial class Reconciler
     {
         DebugElementsDiffed++;
         var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
+        int implicitSlot = modifierParent is null ? 0 : _implicitSlot + 1;
         var modifierTarget = newEl;
         var mountedModifierTarget = modifierParent is null ? null : RecordModifierTarget(control, modifierParent, modifierTarget);
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
@@ -203,6 +208,8 @@ public sealed partial class Reconciler
         var previousModifierUpdate = ModifierUpdate;
         if (!ReferenceEquals(ModifierUpdate.Control, control))
             ModifierUpdate = (control, newEl, modifiers);
+        var previousImplicitSlot = _implicitSlot;
+        _implicitSlot = implicitSlot;
 
         UIElement? result;
         bool registeredType = false;
@@ -219,14 +226,12 @@ public sealed partial class Reconciler
 
         // Setters and nested targets run inside handlers, before ApplyModifiers.
         // Release outgoing implicit channels before any of them can write a value.
+        // A key another feature still claims (layout keeps Offset) stays with that feature.
         if (oldEl.AnimationConfig is { } previousAnimation)
         {
             var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
-            // Offset belongs to layout when both renders retain that declaration.
-            if (oldEl.LayoutAnimation?.AnimateOffset == true && newEl.LayoutAnimation?.AnimateOffset == true)
-                properties &= ~AnimateProperty.Offset;
             if (properties != default)
-                ClearPropertyAnimation(control, properties);
+                ClearPropertyAnimation(control, properties, implicitSlot);
         }
 
         var keyframes = newEl.KeyframeAnimations;
@@ -420,19 +425,29 @@ public sealed partial class Reconciler
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
             ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
 
-        // Apply transitions after update (re-applies when transition config changes)
-        if (newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
-            ApplyTransitions(target, newEl.ImplicitTransitions, newEl.ThemeTransitions);
+        // Apply transitions after update (re-applies when transition config changes). A
+        // transition the old element had is released here too, so the gate includes it (#1626).
+        // A replaced control is new to this layer: its inner layers just mounted it, so this layer
+        // claims as Mount does, at slot 0 above their claims (spec 066 §6.1).
+        bool replacedControl = result is not null && !ReferenceEquals(result, control);
+        if (replacedControl)
+        {
+            implicitSlot = 0;
+            if (!ownsControl) ImplicitAnimationSlots.ShiftInward(target);
+        }
+        var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
+        if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
+            ApplyTransitions(target, previousTransitions, newEl.ImplicitTransitions, newEl.ThemeTransitions, implicitSlot);
 
         // Apply or clear Composition-layer layout animation
         if (newEl.LayoutAnimation is not null)
-            ApplyLayoutAnimation(target, newEl.LayoutAnimation);
-        else if (oldEl.LayoutAnimation is not null)
-            ClearLayoutAnimation(target);
+            ApplyLayoutAnimation(target, newEl.LayoutAnimation, implicitSlot);
+        else if (oldEl.LayoutAnimation is not null && !replacedControl)
+            ClearLayoutAnimation(target, implicitSlot);
 
         // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
-            ApplyPropertyAnimation(target, newEl.AnimationConfig, newEl.LayoutAnimation);
+            ApplyPropertyAnimation(target, newEl.AnimationConfig, implicitSlot);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
@@ -468,6 +483,7 @@ public sealed partial class Reconciler
         finally
         {
             ModifierUpdate = previousModifierUpdate;
+            _implicitSlot = previousImplicitSlot;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();
@@ -1691,9 +1707,7 @@ public sealed partial class Reconciler
         // Offset — letting the implicit animation observe WinUI's own
         // assignment is what makes the move read correctly without us
         // racing the layout pass.
-        var coll = compositor.CreateImplicitAnimationCollection();
-        coll["Offset"] = anim;
-        visual.ImplicitAnimations = coll;
+        ImplicitAnimationSlots.Claim(container, "Offset", ImplicitFeature.Move, 0, anim);
     }
 
 
