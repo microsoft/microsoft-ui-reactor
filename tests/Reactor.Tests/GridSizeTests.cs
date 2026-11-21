@@ -197,7 +197,7 @@ public class GridSizeTests
     /// Spec 033 §1: the canonical track string for star-weight 1 is <c>"*"</c>,
     /// not <c>"1*"</c>. Verify the round-trip stays canonical so the typed and
     /// string factories produce byte-identical track arrays in
-    /// <see cref="GridDefinition"/> for the most common shape.
+    /// <see cref="global::Microsoft.UI.Reactor.Core.GridDefinition"/> for the most common shape.
     /// </summary>
     [Fact]
     public void Grid_Typed_Factory_Star1_Produces_Canonical_Asterisk_Track()
@@ -211,10 +211,10 @@ public class GridSizeTests
     }
 
     /// <summary>
-    /// Spec 033 §5.9: the typed <see cref="Factories.Grid(GridSize[], GridSize[], Element?[])"/>
+    /// Spec 033 §5.9: the typed <see cref="Factories.Grid(GridSize[], GridSize[], global::Microsoft.UI.Reactor.Core.Element[])"/>
     /// factory must serialize every canonical <see cref="GridSize"/> shape — Auto,
     /// star (weight 1, integer, and fractional), and pixel (zero and fractional) —
-    /// into the expected canonical track strings on <see cref="GridDefinition"/>.
+    /// into the expected canonical track strings on <see cref="global::Microsoft.UI.Reactor.Core.GridDefinition"/>.
     /// Element-wise, typed-only (no dependency on the removed string overload).
     /// </summary>
     [Fact]

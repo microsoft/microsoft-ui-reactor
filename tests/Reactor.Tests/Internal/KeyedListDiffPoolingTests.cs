@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Tests.Internal;
 /// <summary>
 /// Regression coverage for the per-diff allocation-elimination work
 /// (issue #653): the keyed list diff now rents its working buffers from
-/// <see cref="System.Buffers.ArrayPool{T}"/> and reuses <see cref="ReactorListState.Scratch"/>
+/// <see cref="global::System.Buffers.ArrayPool{T}"/> and reuses <see cref="ReactorListState.Scratch"/>
 /// for the duplicate scan, and the no-op / empty fast paths now run ABOVE the
 /// duplicate check. These tests assert that pooling never corrupts results —
 /// across sequential diffs that share the pool, across interleaved diffs on
