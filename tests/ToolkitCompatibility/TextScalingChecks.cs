@@ -39,6 +39,9 @@ internal static class TextScalingChecks
         Program.Results.Note($"Text-scale {role}: text='{text.Text}'; enabled={text.IsTextScaleFactorEnabled}; trimmed={text.IsTextTrimmed}; " +
             $"allocated={text.ActualWidth}x{text.ActualHeight}; font={text.FontFamily.Source}/{text.FontSize}; " +
             $"wrapping={text.TextWrapping}; maxLines={text.MaxLines}; theme={text.ActualTheme}; rasterizationScale={text.XamlRoot.RasterizationScale}");
+        Program.Results.Note($"Text-scale {role}: desired={text.DesiredSize}; " +
+            $"layout-slot={Native.Primitives.LayoutInformation.GetLayoutSlot(text)}; margin={text.Margin}; " +
+            $"layout-rounding={text.UseLayoutRounding}; width={text.Width}; min-width={text.MinWidth}; max-width={text.MaxWidth}");
         TextScalingMeasurements.RequireText(role, text.Text, text.IsTextScaleFactorEnabled, text.IsTextTrimmed);
 
         // Measure the full text at the real OS scale with the same typography, but no
@@ -67,9 +70,23 @@ internal static class TextScalingChecks
         };
         probe.Measure(new Size(text.TextWrapping == TextWrapping.NoWrap ? double.PositiveInfinity : text.ActualWidth,
             double.PositiveInfinity));
-        Program.Results.Note($"Text-scale {role}: full-text required={probe.DesiredSize.Width}x{probe.DesiredSize.Height}");
+        var required = probe.DesiredSize;
+        Program.Results.Note($"Text-scale {role}: full-text required={required.Width}x{required.Height}; probe-layout-rounding={probe.UseLayoutRounding}");
+        // Preserve the original assertion result while diagnosing the probe's reflow.
+        probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Program.Results.Note($"Text-scale {role} diagnostic only: unconstrained={probe.DesiredSize}");
+        double desiredWidth = text.DesiredSize.Width - text.Margin.Left - text.Margin.Right;
+        if (double.IsFinite(desiredWidth) && desiredWidth > 0)
+        {
+            probe.Measure(new Size(desiredWidth, double.PositiveInfinity));
+            Program.Results.Note($"Text-scale {role} diagnostic only: desired-width-constraint={desiredWidth}; required={probe.DesiredSize}");
+        }
+        probe.UseLayoutRounding = text.UseLayoutRounding;
+        probe.Measure(new Size(text.TextWrapping == TextWrapping.NoWrap ? double.PositiveInfinity : text.ActualWidth,
+            double.PositiveInfinity));
+        Program.Results.Note($"Text-scale {role} diagnostic only: matched-layout-rounding={probe.UseLayoutRounding}; required={probe.DesiredSize}");
         TextScalingMeasurements.RequireFits(role, text.ActualWidth, text.ActualHeight,
-            probe.DesiredSize.Width, probe.DesiredSize.Height);
+            required.Width, required.Height);
 
         var root = ReactorApp.PrimaryWindow!.NativeWindow.Content;
         DependencyObject? current = text;
