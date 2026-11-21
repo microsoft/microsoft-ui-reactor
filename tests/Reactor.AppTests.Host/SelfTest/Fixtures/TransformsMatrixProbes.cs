@@ -158,18 +158,6 @@ internal static class TransformsMatrixProbes
             return;
         }
 
-        // Positive control, Q1f: after SetIsTranslationEnabled and a render, a facade Translation
-        // write is ignored on screen, while RenderTargetBitmap still reports it applied.
-        var q = Rect(canvas);
-        await TransformsMatrixRecorder.Settle();
-        ElementCompositionPreview.SetIsTranslationEnabled(q, true);
-        await TransformsMatrixRecorder.Settle();
-        q.Translation = new Vector3(100, 0, 0);
-        await TransformsMatrixRecorder.Settle(300);
-        double rtb = (await Snap.CaptureAsync(host)).RedBox() is { } a ? (a.X0 - Left) / 100 : double.NaN;
-        double screen = Screen(host, h).RedBox() is { } s ? (s.X0 - Left) / 100 : double.NaN;
-        Log($"Q1f control: rtb={rtb:F2} screen={screen:F2} ({(screen < 0.1 && rtb > 0.9 ? "reproduced" : "NOT reproduced")})");
-
         // §5.1 parity evidence: XAML transition progress at 25/50/75% of a 3 s duration, next to the
         // (0.8,0,0.2,1) curve layer 2 adopts. §6.3: the same with the write made before attaching.
         foreach (var (label, writeFirst) in new[] { ("ScaleTransition attach-then-write", false), ("ScaleTransition write-then-attach", true) })
@@ -226,7 +214,7 @@ internal static class TransformsMatrixProbes
     }
 
     /// <summary>PrintWindow(PW_RENDERFULLCONTENT) of the host's window region, which sees compositor-side XAML transitions.</summary>
-    private static Snap Screen(FrameworkElement target, Harness h)
+    internal static Snap Screen(FrameworkElement target, Harness h)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(h.Window);
         GetWindowRect(hwnd, out var wr);

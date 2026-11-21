@@ -88,5 +88,5 @@ jobs:
           name: transforms-matrix-${{ env.REACTOR_TRANSFORMS_MATRIX }}
           path: |
             ${{ runner.temp }}/transforms-matrix.tap
-            ${{ runner.temp }}/transforms-ledger.json
+            ${{ runner.temp }}/transforms-ledger*.json
           if-no-files-found: ignore
