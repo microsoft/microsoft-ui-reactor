@@ -10,9 +10,9 @@ namespace Microsoft.UI.Reactor.Tests;
 public class FixtureRegistryConsistencyTests
 {
     [Theory]
-    [InlineData("SelfTest/SelfTestFixtureRegistry.cs", "Create", 1000)]
-    [InlineData("FixtureRegistry.cs", "Build", 50)]
-    public void AllFixturesMatchesFactory(string registryFile, string factoryName, int minimumCount)
+    [InlineData("SelfTest/SelfTestFixtureRegistry.cs", 1000)]
+    [InlineData("FixtureRegistry.cs", 50)]
+    public void RegistrationsAreConsistent(string registryFile, int minimumCount)
     {
         var repoRoot = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(repoRoot);
@@ -25,12 +25,9 @@ public class FixtureRegistryConsistencyTests
         var root = tree.GetRoot(cancellationToken);
         var registry = Assert.Single(root.DescendantNodes().OfType<ClassDeclarationSyntax>(),
             type => type.Identifier.ValueText == Path.GetFileNameWithoutExtension(path));
-        var allFixtures = Assert.Single(registry.Members.OfType<FieldDeclarationSyntax>()
-            .SelectMany(field => field.Declaration.Variables), field => field.Identifier.ValueText == "AllFixtures");
-        var initializer = Assert.IsType<CollectionExpressionSyntax>(allFixtures.Initializer?.Value);
-        var factory = Assert.Single(registry.Members.OfType<MethodDeclarationSyntax>(),
-            method => method.Identifier.ValueText == factoryName);
-        var dispatch = Assert.IsType<SwitchExpressionSyntax>(factory.ExpressionBody?.Expression);
+        var registrations = Assert.Single(registry.Members.OfType<FieldDeclarationSyntax>()
+            .SelectMany(field => field.Declaration.Variables), field => field.Identifier.ValueText == "Registrations");
+        var initializer = Assert.IsType<CollectionExpressionSyntax>(registrations.Initializer?.Value);
 
         SemanticModel? model = null;
         string ReadName(ExpressionSyntax expression)
@@ -46,36 +43,26 @@ public class FixtureRegistryConsistencyTests
             return (string)constant.Value!;
         }
 
-        var listed = new HashSet<string>(StringComparer.Ordinal);
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in initializer.Elements)
         {
-            var name = ReadName(Assert.IsType<ExpressionElementSyntax>(item).Expression);
-            Assert.True(listed.Add(name), $"{registryFile} lists fixture '{name}' more than once in AllFixtures.");
+            var expression = Assert.IsType<ExpressionElementSyntax>(item).Expression;
+            var entry = Assert.IsType<TupleExpressionSyntax>(expression);
+            var name = ReadName(entry.Arguments[0].Expression);
+            Assert.True(names.Add(name), $"{registryFile} registers fixture '{name}' more than once.");
+
+            // The Packaged_ prefix selects the packaged identity checks, and the tier keeps the fixture
+            // out of the unpackaged corpus (issue #1154). Each needs the other.
+            var tier = entry.Arguments.Count > 2 ? entry.Arguments[2].Expression.ToString() : null;
+            var isPackagedName = name.StartsWith("Packaged_", StringComparison.Ordinal);
+            Assert.True(isPackagedName == (tier == "SelfTestTier.Packaged"),
+                isPackagedName
+                    ? $"{registryFile} registers '{name}' without SelfTestTier.Packaged. Add it as the entry's third element."
+                    : $"{registryFile} declares '{name}' as {tier}. Name it with the Packaged_ prefix or drop the tier.");
         }
 
-        Assert.Single(dispatch.Arms, arm => arm.Pattern is DiscardPatternSyntax);
-        var registered = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var arm in dispatch.Arms)
-        {
-            Assert.True(arm.WhenClause is null,
-                $"{registryFile} has a guarded {factoryName}() arm for `{arm.Pattern}`.");
-            if (arm.Pattern is DiscardPatternSyntax)
-                continue;
-
-            var name = ReadName(Assert.IsType<ConstantPatternSyntax>(arm.Pattern).Expression);
-            Assert.True(registered.Add(name), $"{registryFile} registers fixture '{name}' more than once in {factoryName}().");
-        }
-
-        Assert.True(listed.Count >= minimumCount && registered.Count >= minimumCount,
-            $"Expected at least {minimumCount} fixture names on each side of {registryFile}. " +
-            $"AllFixtures has {listed.Count} and {factoryName}() has {registered.Count}.");
-
-        var onlyListed = listed.Except(registered, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-        var onlyRegistered = registered.Except(listed, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-        Assert.True(onlyListed.Length == 0 && onlyRegistered.Length == 0,
-            $"{registryFile} has inconsistent fixture registrations.\n" +
-            $"In AllFixtures but missing from {factoryName}(): {string.Join(", ", onlyListed)}\n" +
-            $"In {factoryName}() but missing from AllFixtures: {string.Join(", ", onlyRegistered)}");
+        Assert.True(names.Count >= minimumCount,
+            $"Expected at least {minimumCount} fixture names in {registryFile}, but found {names.Count}.");
     }
 
     private static SyntaxTree ParseFile(string path, CancellationToken cancellationToken) =>

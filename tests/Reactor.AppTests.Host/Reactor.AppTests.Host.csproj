@@ -106,4 +106,6 @@
          same surface against the native renderer. -->
   </ItemGroup>
 
+  <Import Project="ToolkitInputSamples.props" />
+
 </Project>

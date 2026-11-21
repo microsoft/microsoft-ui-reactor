@@ -52,7 +52,7 @@ public class SingleFileGuideHeaderTests
     [Fact]
     public void DocumentedTargetFramework_MatchesTheFrameworkProject()
     {
-        var root = RepoRoot();
+        var root = TestRepo.Root;
         var expected = FrameworkTfm(root);
 
         var guide = File.ReadAllText(Path.Join(root, GuideTemplate));
@@ -102,7 +102,7 @@ public class SingleFileGuideHeaderTests
     [Fact]
     public void DotnetDeltaDirective_SitsInTheSecondBlockOnly()
     {
-        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
+        var guide = File.ReadAllText(Path.Join(TestRepo.Root, GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         // Two header blocks: the complete file, then the unpackaged delta. If the section is
@@ -133,7 +133,7 @@ public class SingleFileGuideHeaderTests
     [Fact]
     public void PrimaryHeader_DeclaresExactlyTheDocumentedDirectives()
     {
-        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
+        var guide = File.ReadAllText(Path.Join(TestRepo.Root, GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         Assert.Equal(2, blocks.Count);
@@ -176,7 +176,7 @@ public class SingleFileGuideHeaderTests
     [InlineData("#:property UseWinUI=true")]
     public void PrimaryHeader_DeclaresTheLoadBearingDirectives(string directive)
     {
-        var guide = File.ReadAllText(Path.Join(RepoRoot(), GuideTemplate));
+        var guide = File.ReadAllText(Path.Join(TestRepo.Root, GuideTemplate));
         var blocks = HeaderBlocks(guide);
 
         Assert.Equal(2, blocks.Count);
@@ -221,22 +221,5 @@ public class SingleFileGuideHeaderTests
 
         Assert.True(match.Success, $"No <TargetFramework> found in {FrameworkProject}.");
         return match.Groups["tfm"].Value.Trim();
-    }
-
-    private static string RepoRoot()
-    {
-        // Anchor on the solution file, not on .git: in a git worktree .git is a *file*, so a
-        // Directory.Exists probe walks past the root and returns null. Mirrors FindRepoRoot in
-        // InlineSnippetLedgerTests.
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null
-               && !File.Exists(Path.Join(dir, "Reactor.slnx"))
-               && !Directory.Exists(Path.Join(dir, ".git")))
-        {
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        Assert.NotNull(dir);
-        return dir!;
     }
 }

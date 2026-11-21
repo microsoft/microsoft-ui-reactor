@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\tools\Reactor.DocPipeline\Reactor.DocPipeline.csproj" />
+    <!-- Share only the root finder with the CLI. -->
+    <Compile Include="..\..\src\Reactor.Cli\Pack\RepoRootFinder.cs" Link="RepoRootFinder.cs" />
   </ItemGroup>
 
   <ItemGroup>

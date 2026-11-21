@@ -37,6 +37,8 @@ dotnet test tests/Reactor.Tests -p:Platform=x64 && dotnet test tests/Reactor.Sel
 
 `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries. `Reactor.PackagedTests` does the same for `Reactor.PackagedTests.Host`.
 
+For `Reactor.DocPipeline.Tests`, see [Running the doc pipeline tests](docs/contributing/doc-pipeline.md#running-the-doc-pipeline-tests).
+
 ## Flag translation
 
 The suites moved to Microsoft.Testing.Platform when xunit.v3 v4 removed VSTest
@@ -232,6 +234,7 @@ Some tests here parse repo *sources* with Roslyn rather than exercising Reactor 
 | `GallerySnippetAgreementTests` | A `SampleCard` snippet uses a lowerCamelCase name that does not exist in the live code beside it — the snippet renamed, or the card did and the snippet did not. Direction is snippet → live only: a snippet may omit, it may not invent. |
 | `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. Also checks [PUA glyph fonts](#pua-glyph-fonts-in-gallery-samples) in live gallery code and displayed snippets. |
 | `SearchIndexGeneratorTests` | `samples/ReactorGallery/reactor-search-index.json` is stale. Regenerate with `dotnet run --project tools/Reactor.SearchIndex`. |
+| `SearchIndexCoverageTests` | A routed Gallery card is missing or out of order in the index, or a [manifest entry](tests/Reactor.Tests/Tooling/SearchIndexCoverageTests.cs) no longer names a source card. This check still catches omissions after index regeneration. |
 
 A snippet-agreement failure names the page, line, card title and identifier, and says which of the two sides to move. There is no allowlist: fix the snippet or fix the card.
 
@@ -342,22 +345,20 @@ locating and running the Host so every mode agrees on where the binary lives; it
 configuration and TFM stamped into the test assembly by `Reactor.SelfTests.csproj`, so
 `dotnet test -c Release` finds the Release Host rather than a stale Debug one.
 
-### Fixture registration is two-place — and what that does to name searches
+### Fixture registration and TAP names
 
-For SelfTest, add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. For E2E, add it to
-`AllFixtures` **and** to the `Build()` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
+Register each fixture with one name and factory in the ordered `Registrations` table. SelfTest
+uses `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E uses
+`tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Keep the relative order of existing entries
+because it determines SelfTest execution order and shard assignment, and E2E navigation order.
 
 `--list-fixtures` lists only SelfTest fixtures for the current host tier.
-`FixtureRegistryConsistencyTests` in `Reactor.Tests` compares `AllFixtures` with the factory
-switch for both SelfTest and E2E. It reports each fixture registered on just one side and
-identifies where the registration is missing.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names, and that an entry carries `SelfTestTier.Packaged` exactly when its name has the `Packaged_` prefix.
 
-That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
-carries two kinds of name and they live in different files: *fixture* names (registry only, and
-the class they map to is often spelled differently — `CenterOnCurrent_UsesCursorMonitor` →
-`CenterOnCurrentUsesCursorMonitor`) and *check* names (string literals in `H.Check(...)` inside
-`Fixtures/`). Neither location is a superset:
+Search the whole host tree for names from TAP output. *Fixture* names are registered in the table,
+and the class they map to is often spelled differently (`CenterOnCurrent_UsesCursorMonitor`
+maps to `CenterOnCurrentUsesCursorMonitor`). *Check* names come from `H.Check(...)` in the
+fixture implementations.
 
 | probe | blind spot |
 |---|---|
@@ -434,7 +435,7 @@ to silence a flake, fix the flake instead — a skip makes the flake invisible r
 A skip is a per-run observation; tier applicability is a fixed property of the fixture, so a skip
 would restate the same permanent fact on every run and accumulate in the amber inventory — which is
 what [#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154) was. Declare the tier in
-`SelfTestFixtureRegistry.TierRequirements` instead and the fixture is simply not selected; see §3.
+its `SelfTestFixtureRegistry.Registrations` entry instead and the fixture is simply not selected; see §3.
 
 For raw-TAP consumers (the AOT job pipes `--self-test` straight to a `.tap` artifact and greps
 `^not ok `), the Host emits a `# Total skipped fixtures: N` trailer — placed *after*
@@ -577,7 +578,7 @@ This shape cost six separate investigations before it was diagnosed (issue #988)
 | `Run aborted by dispatcher-starvation hang on fixture 'X' (FailFast did not land; the wrapper's budget killed the process)` | Same signal, but the process would not die even under `FailFast`. **Still causal**, and the extra clause is the diagnosis: it points below the CLR — a native lock or a wedged UI thread. | Debug `X` as above, but expect a native cause. A dump is worth more than a managed stack here. |
 | `Run aborted: suite exceeded its <N>s budget with fixture 'X' in flight (POSITIONAL attribution…)` | The suite ran out of its shared budget with no hang signal. `X` was merely in flight. | Look at the reported elapsed-vs-budget, **not** at `X`. `--filter X` removes the other ~1400 fixtures that shared the budget — it removes the cause, so it passes whether or not `X` is healthy, in *either* direction. |
 | `Run aborted after fixture 'X'` / `Run aborted before fixture 'X'` — with ` (Host died mid-run with no '# Total failures:' trailer — NOT a budget kill; issue #978)` | The Host process stopped mid-fixture on its own (usually a native crash). **This is not #988**, and raising the budget does nothing for it. | Read the exit-code classification in the message first. Check the tail output and stderr for the native fault. |
-| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Look at teardown, not at `X`. Issue #680 (0xC0000005 at final process exit) is one known cause; the other is two-place fixture registration — a name `--list-fixtures` reports that the run's `Create()` switch does not produce. |
+| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Start with teardown and the TAP output. Issue #680 (0xC0000005 at final process exit) is a known teardown cause. Compare missing fixture names with `--list-fixtures` for the same Host binary, tier, and shard. |
 
 > **Do not let the two "arbitrary victim" failures collapse into one.** A budget kill (#988) and a silent mid-run death (#978) look nearly identical from outside: one fixture blamed, everything after it missing, and the victim moving between runs. The discriminator is the **`# Total failures:` trailer** — a budget kill interrupts a Host that *would* have printed it, whereas a Host that dies mid-fixture never reaches it. Prefer the trailer over elapsed time: timing corroborates but cannot decide, because a slow machine and a fast crash produce overlapping durations. The abort reasons above state which one fired, so this is readable off any skipped fixture without a re-run.
 
@@ -900,18 +901,18 @@ git branch -D coexist-probe
 
 ### Writing a packaged fixture
 
-Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,
-and both are load-bearing. **Gate** the fixture body:
+Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Add the
+fixture's name and factory to `SelfTestFixtureRegistry.Registrations`. Then configure the
+packaged tier in two steps. **Gate** the fixture body.
 
 ```csharp
 if (!PackagedIdentityFixtures.RequirePackagedTier(H, this)) return;
 ```
 
-and **declare** its tier in `SelfTestFixtureRegistry.TierRequirements`, beside its entry in
-`AllFixtures`:
+**Declare** the tier as the third element of the fixture's `Registrations` entry.
 
 ```csharp
-["Packaged_MyNewThing"] = SelfTestTier.Packaged,
+("Packaged_MyNewThing", static harness => new MyNewThingFixture(harness), SelfTestTier.Packaged),
 ```
 
 Register it with the **`Packaged_`** prefix — that is what the shim's
@@ -1002,6 +1003,7 @@ E2E test classes (across two host apps):
 | `AccessibilityInteractionTests` | WinUI | Keyboard nav, live regions, headings, semantic panels |
 | `EventHandlerTests` | WinUI | OnTapped, OnSizeChanged, OnPointerPressed, OnKeyDown, UseReducer |
 | `DataGridTests` | WinUI | Click-to-edit, keyboard commit |
+| `ToolkitInputTests` | WinUI | Toolkit range thumbs, suggestion/token input, sizer drags, actual Tab focus |
 | `WinFormsInteropTests` | WinForms | XAML Island rendering, tab navigation, UIA across boundaries |
 
 ```bash
@@ -1020,6 +1022,91 @@ enough that queue ordering makes a timing-sensitive race always won or always lo
 or `1`) for that environment and tool version. If the defect is *when* state is read rather than
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
+
+### Toolkit real-input cases (#1601)
+
+`ToolkitInputTests` hosts the actual `samples/apps/wct-controls` pages and mappings,
+not parallel test-only adapters. Both test hosts import the same sample sources and
+dependencies. The six `ToolkitInput_*` routes expose only range, rich suggestions,
+tokenizing text and the three sizers; they never navigate to the camera page.
+The host adds template-part automation IDs and read-only, sequenced native observations.
+Tests require an observation newer than the first post-action read, so a rejected
+range edit cannot pass on a stale pre-drag value.
+
+The eight cases cover accepted and rejected drags of both range thumbs, two
+Down/Enter rich-suggestion commits, typed token conversion/free text/removal,
+ContentSizer height, PropertySizer target width and both bounds, GridSplitter
+column widths, and forward/reverse focus traversal through the range thumbs.
+Keyboard tests use `App.SendKeys(..., viaSendInput: true)` without a focus target;
+pointer actions use `App.Click`/`App.Drag`. UIA Invoke is used only by the existing
+fixture navigator/reset infrastructure, never as the interaction under test.
+Drag diagnostics are captured in MSTest output/TRX: the pre-drag source bounds,
+DPI and requested destination, followed by the unmodified successful CLI JSON
+with its resolved endpoints. These are input geometry, not native manipulation
+deltas; do not infer the latter from pointer displacement alone.
+ContentSizer additionally buffers native manipulation starting/started/delta/completed
+events, initial target size and drag settings, then publishes them as HelpText only
+after completion. Its oracle derives the exact declared height from the native
+cumulative deltas and captured initial ActualHeight using Toolkit's truncation and
+bounds contract, not raw pointer distance. It requires a fresh completed gesture,
+nonzero movement in the intended direction, matching CLI coordinates/window,
+independent advertised-target identity and measurements, and an unchanged sizer
+sibling. Forward and reverse gestures each use their own start size. Only settled
+layout retains the existing two-DIP rounding tolerance; declared height must match
+exactly. The observers do not mark events handled, change manipulation settings or
+request renders during input. `ContentSizerOracleTests` exercises this validation
+headlessly without starting the host.
+GridSplitter has a separate oracle for its native Columns/PreviousAndNext,
+two-star-column contract. It captures the advertised grid/panes independently,
+checks stable definition identities and exact native star weights from initial
+ActualWidths plus/minus the signed cumulative delta, then checks settled pane
+geometry and the unchanged pixel middle column/grid/row. Native bounds reject
+invalid candidate pairs; this is not PropertySizer's clamp contract.
+`GridSplitterOracleTests` covers the pure calculation and evidence validation.
+RangeSelector keyboard **value** changes remain unsupported by the sample's
+controlled mapping because this Toolkit version does not raise `ValueChanged`
+for them. Tab traversal does not claim to cover that limitation.
+
+Headless preparation (no host launch or package registration):
+
+```powershell
+dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+pwsh -NoProfile -File tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InputCapabilityDiagnosticsTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+```
+
+For a separately authorized read-only readiness capture,
+`SessionInteractivityGuard.CaptureInputCapability()` records one `GetCursorPos`
+result and its immediate native error before sampling caller/desktop metadata.
+Error zero on a failed call is reported as unknown, never fabricated as
+`ACCESS_DENIED`. Metadata is labeled as later, non-atomic context; it does not
+prove the reason for the earlier result. `GetState()` remains a separate probe:
+`Active` does not establish that its WTS query succeeded or guarantee foreground
+ownership, and cursor readability does not prove a future input call is allowed.
+The existing failure remains Inconclusive and prevents dispatch without retry.
+CI's skipped-input gate and stress reporting recognize the stable
+`[REACTOR_E2E_INPUT_BLOCKED]` marker, independently of the precise native error
+wording, so these Inconclusive results cannot be mistaken for executed passes.
+`InputCapabilityDiagnosticsTests` checks this reporting with fake observations,
+without making native readiness calls.
+
+Compilation and headless helper tests are **not runtime input passes**. To execute
+the new cases, obtain explicit authorization for an unlocked, interactive Windows
+desktop with input injection available, the pinned SDK/.NET runtime and a working
+`winapp ui` CLI. Reserve that desktop for the run, with no simultaneous user input,
+other UI automation or selftests. No camera access, OS settings changes, elevation
+or Appx installation/registration is needed. After authorization, the bounded run is:
+
+```powershell
+$env:REACTOR_E2E_RETRIES = '0'
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ToolkitInputTests" --report-trx --report-trx-filename toolkit-input.trx
+```
+
+Require eight executed passes, not skips/inconclusive results. Stop on detected
+human input and seek renewed authorization rather than trying another transport
+or host. Runtime checks and mutation checks remain necessary before closing #1601;
+the authored test inventory alone does not establish coverage.
 
 ### The suite runs as one named winapp workflow
 

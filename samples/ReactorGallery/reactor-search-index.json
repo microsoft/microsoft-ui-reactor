@@ -2158,6 +2158,11 @@
           "code": "var (tapLog, setTapLog) = UseState(\"Tap, double-tap, or right-tap the card.\");\n\nBorder(TextBlock(tapLog))\n    .IsTabStop(true)\n    .AutomationName(\"Tap surface\")\n    .OnTapped((_, _) => setTapLog(\"Tapped.\"))\n    .OnDoubleTapped((_, _) => setTapLog(\"Double-tapped.\"))\n    .OnRightTapped((_, _) => setTapLog(\"Right-tapped.\"))\n    .OnLongPress(onTriggered: () => setTapLog(\"Long-pressed.\"), enableMouseEmulation: true)\n    // Reachable by Tab is not the same as operable — pair the tap with Enter/Space.\n    .OnKeyDown((_, e) =>\n    {\n        if (e.Key is not (VirtualKey.Enter or VirtualKey.Space)) return;\n        setTapLog(\"Activated from the keyboard.\");\n        e.Handled = true;\n    })"
         },
         {
+          "header": "Pan — drag with the phase lifecycle",
+          "language": "csharp",
+          "code": "var (offsetX, moveX) = UseReducer(0.0);\nvar (offsetY, moveY) = UseReducer(0.0);\n\nBorder(TextBlock(\"Drag me\"))\n    .OnPan(\n        onChanged: e =>\n        {\n            // Functional updaters, NOT setOffsetX(offsetX + ...): several onChanged\n            // callbacks can land between two renders, and each would read the same\n            // stale captured value and overwrite the one before it.\n            moveX(x => x + e.Delta.X);\n            moveY(y => y + e.Delta.Y);\n        },\n        minimumDistance: 4)\n    .Translation((float)offsetX, (float)offsetY, 0)"
+        },
+        {
           "header": "Pinch and rotate",
           "language": "csharp",
           "code": "var (scale, scaleBy) = UseReducer(1.0f);\nvar (angle, rotateBy) = UseReducer(0f);\n\nBorder(TextBlock(\"Pinch or rotate me\"))\n    .OnPinch(onChanged: e => scaleBy(s => s * (float)e.ScaleDelta))\n    .OnRotate(onChanged: e => rotateBy(a => a + (float)e.AngleDelta))\n    .Scale(scale)\n    .Rotation(angle)"
@@ -3271,6 +3276,11 @@
       "nugetPackage": "Microsoft.UI.Reactor",
       "galleryRoute": "transitions",
       "samples": [
+        {
+          "header": "OpacityTransition",
+          "language": "csharp",
+          "code": "var (visible, setVisible) = UseState(true);\n\nTextBlock(\"Opacity is animated, not toggled\")\n    .Opacity(visible ? 1.0 : 0.0)\n    .OpacityTransition(TimeSpan.FromMilliseconds(400))\n// Omit the TimeSpan for the 300ms default. Fading to 0 leaves the element in the tree\n// and still occupying its layout slot -- use .Transition(...) if you want it to leave."
+        },
         {
           "header": "ScaleTransition",
           "language": "csharp",

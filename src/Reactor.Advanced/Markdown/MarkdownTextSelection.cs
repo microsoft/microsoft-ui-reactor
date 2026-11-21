@@ -6,6 +6,7 @@ using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Data.Text;
 
 namespace Microsoft.UI.Reactor.Markdown;
 
@@ -113,6 +114,7 @@ internal sealed record MarkdownSelectionElement(Element Content, SelectionRole R
     internal string Text { get; init; } = "";
     internal string SeparatorAfter { get; init; } = "\n";
     internal bool IsVisible { get; init; } = true;
+    internal bool IsLink { get; init; }
 }
 
 internal sealed partial class MarkdownSelectionMarker : UserControl
@@ -132,13 +134,23 @@ internal sealed partial class MarkdownSelectionMarker : UserControl
 
     internal MarkdownSelectionMarker()
     {
+        SizeChanged += (_, _) => InvalidateEnclosingScope();
         Loaded += (_, _) =>
         {
+            InvalidateEnclosingScope();
             if (Metadata.Role == SelectionRole.Surface && !HasSelectionScope)
                 DiagnosticLog.Warning(LogCategory.Markdown, "TextSelection",
                     "A selectable Markdown surface has no enclosing MarkdownTextSelection.Scope. " +
                     "Wrap the complete message in Scope; TextSelection alone does not provide selection.");
         };
+        Unloaded += (_, _) => InvalidateEnclosingScope();
+    }
+
+    internal void InvalidateEnclosingScope()
+    {
+        for (DependencyObject? parent = this; parent is not null;
+            parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+            if (parent is MarkdownSelectionHost host) { host.InvalidateDocument(); return; }
     }
 }
 
@@ -170,19 +182,18 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
         }
         if (control is MarkdownSelectionHost host)
         {
-            host.Options = newEl.Options!;
+            if (!ReferenceEquals(host.Options, newEl.Options)) host.Options = newEl.Options!;
             host.SetContent(ctx.ReconcileChild(oldEl.Content, newEl.Content, host.Body));
-            host.InvalidateDocument();
-            // LayoutUpdated refreshes after the native text tree settles, not mid-reconciliation.
         }
         else
         {
             var marker = (MarkdownSelectionMarker)control;
             marker.Metadata = newEl;
             marker.Child = ctx.ReconcileChild(oldEl.Content, newEl.Content, marker.Child);
-            for (DependencyObject? parent = marker; parent is not null;
-                parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
-                if (parent is MarkdownSelectionHost owner) { owner.InvalidateDocument(); break; }
+            if (oldEl.Text != newEl.Text || oldEl.SeparatorAfter != newEl.SeparatorAfter
+                || oldEl.Role != newEl.Role || oldEl.IsVisible != newEl.IsVisible
+                || oldEl.IsLink != newEl.IsLink)
+                marker.InvalidateEnclosingScope();
         }
         return control;
     }
@@ -206,6 +217,46 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
 }
 
 internal readonly record struct SelectionPart(object Identity, string Text, string Separator);
+
+internal struct MarkdownClickSequence
+{
+    private object? _surface;
+    private ulong _timestamp;
+    private double _x, _y;
+    private int _count;
+
+    internal bool IsPending => _count != 0;
+    internal object? Surface => _surface;
+
+    internal int Press(object surface, ulong timestamp, double x, double y,
+        ulong maxInterval, double halfWidth, double halfHeight)
+    {
+        bool near = ReferenceEquals(surface, _surface) && timestamp >= _timestamp &&
+            timestamp - _timestamp <= maxInterval &&
+            Math.Abs(x - _x) <= halfWidth && Math.Abs(y - _y) <= halfHeight;
+        _count = near && _count < 3 ? _count + 1 : 1;
+        (_surface, _timestamp, _x, _y) = (surface, timestamp, x, y);
+        return _count;
+    }
+
+    internal void Reset() => this = default;
+}
+
+internal enum MarkdownSelectionUnit { Character, Word, Paragraph }
+
+internal readonly record struct MarkdownSelectionSpan(int Start, int End)
+{
+    internal (int Anchor, int Caret) ExtendTo(MarkdownSelectionSpan target) =>
+        target.Start < Start ? (End, target.Start) : (Start, Math.Max(End, target.End));
+
+    internal static MarkdownSelectionSpan At(int[] boundaries, int offset)
+    {
+        if (boundaries.Length < 2) return default;
+        int index = Array.BinarySearch(boundaries, offset);
+        index = Math.Clamp(index >= 0 ? index : ~index - 1, 0, boundaries.Length - 2);
+        return new(boundaries[index], boundaries[index + 1]);
+    }
+}
 
 internal static class MarkdownSelectionRangeMovement
 {
@@ -270,7 +321,66 @@ internal sealed class MarkdownSelectionDocument
     internal int End => Math.Max(Anchor, Caret);
     internal string SelectedText => Text[Start..End];
     private int[] _graphemes = [];
+    private int[]? _wordBoundaries;
+    private int[]? _paragraphBoundaries;
+    private int[]? _paragraphEndBoundaries;
     internal Action<bool, bool>? Changed { get; set; }
+
+    internal int[] ParagraphBoundaries => _paragraphBoundaries ??=
+        Entries.Where(entry => entry.Text.Length > 0).Select(entry => entry.Start)
+            .Append(Text.Length).Prepend(0).Distinct().ToArray();
+
+    internal int[] ParagraphEndBoundaries => _paragraphEndBoundaries ??=
+        Entries.Where(entry => entry.Text.Length > 0).Select(entry => entry.End)
+            .Append(Text.Length).Prepend(0).Distinct().ToArray();
+
+    internal int[] WordBoundaries => _wordBoundaries ??= BuildWordBoundaries();
+
+    private int[] BuildWordBoundaries()
+    {
+        List<int> boundaries = [0];
+        var segmenter = new SelectableWordsSegmenter("und");
+        foreach (var entry in Entries)
+        {
+            Add(entry.Start);
+            int position = 0;
+            foreach (var token in segmenter.GetTokens(entry.Text))
+            {
+                var span = token.SourceTextSegment;
+                int start = (int)span.StartPosition;
+                int end = start + (int)span.Length;
+                if (end <= position) continue;
+                Add(entry.Start + Math.Max(start, position));
+                // Include trailing horizontal whitespace, but not a visual line break
+                // or an explicit separator between semantic surfaces.
+                while (end < entry.Text.Length && (entry.Text[end] == '\t' ||
+                    char.GetUnicodeCategory(entry.Text[end]) == UnicodeCategory.SpaceSeparator))
+                    end++;
+                Add(entry.Start + end);
+                position = end;
+            }
+            Add(entry.End);
+        }
+        Add(Text.Length);
+        return boundaries.ToArray();
+
+        void Add(int boundary)
+        {
+            if (boundary > boundaries[^1]) boundaries.Add(boundary);
+        }
+    }
+
+    internal MarkdownSelectionSpan UnitAt(MarkdownSelectionUnit unit, int offset, Entry? hitEntry = null)
+    {
+        if (unit == MarkdownSelectionUnit.Character) return new(offset, offset);
+        var entry = hitEntry ?? EntryAt(offset);
+        if (entry is null || entry.End == entry.Start) return new(offset, offset);
+        if (unit == MarkdownSelectionUnit.Paragraph) return new(entry.Start, entry.End);
+        // A hit on the last caret in this surface still belongs to this surface,
+        // even if the following surface starts there with no explicit separator.
+        if (hitEntry is not null) offset = Math.Clamp(offset, entry.Start, entry.End - 1);
+        return MarkdownSelectionSpan.At(WordBoundaries, offset);
+    }
 
     internal Entry? EntryAt(int offset)
     {
@@ -307,6 +417,7 @@ internal sealed class MarkdownSelectionDocument
         Entries = next;
         Text = value;
         _graphemes = StringInfo.ParseCombiningCharacters(value);
+        _wordBoundaries = _paragraphBoundaries = _paragraphEndBoundaries = null;
         Anchor = Math.Clamp(anchor, 0, Text.Length);
         Caret = Math.Clamp(caret, 0, Text.Length);
         Changed?.Invoke(textChanged, selectionChanged);
@@ -353,13 +464,20 @@ internal sealed class MarkdownSelectionDocument
         if (old is null) return Math.Min(offset, length);
         var replacement = next.FirstOrDefault(e => ReferenceEquals(e.Identity, old.Identity));
         if (replacement is null) return Math.Min(offset, length);
-        int local = Math.Clamp(offset - old.Start, 0, old.Text.Length);
-        var (prefix, suffix) = CommonEdges(old.Text, replacement.Text);
-        if (local > prefix)
-            local = local >= old.Text.Length - suffix
-                ? replacement.Text.Length - (old.Text.Length - local)
+        return replacement.Start + RemapLocalOffset(offset - old.Start, old.Text, replacement.Text);
+    }
+
+    internal static int RemapLocalOffset(int local, string oldText, string newText, bool followsInsertion = false)
+    {
+        local = Math.Clamp(local, 0, oldText.Length);
+        if (oldText == newText) return local;
+        var (prefix, suffix) = CommonEdges(oldText, newText);
+        if (local > prefix || (followsInsertion && local == prefix && local < oldText.Length &&
+            prefix + suffix == oldText.Length && newText.Length > oldText.Length))
+            local = local >= oldText.Length - suffix
+                ? newText.Length - (oldText.Length - local)
                 : prefix;
-        return replacement.Start + Math.Clamp(local, 0, replacement.Text.Length);
+        return Math.Clamp(local, 0, newText.Length);
     }
 
     internal void Select(int anchor, int caret)
