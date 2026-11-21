@@ -147,10 +147,10 @@ public class ImplicitAnimationClaimsTests
     }
 
     [Fact]
-    public void DeferredRelease_ReclaimingTheSameValue_StillPublishes()
+    public void DeferredRelease_ClaimsWaitForTheFlush()
     {
-        // The post-setter apply re-claims with the same transition instance, which would
-        // otherwise look like no change.
+        // The post-setter apply re-claims the transition, possibly with the same instance; an
+        // outer layer sharing the control may still write after it, so only the flush publishes.
         var sink = new RecordingSink();
         var claims = new ImplicitAnimationClaims();
         claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "transition");
@@ -158,11 +158,24 @@ public class ImplicitAnimationClaimsTests
         claims.Release(sink, "Scale", ImplicitFeature.Animate, 0, deferRestore: true);
 
         claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "transition");
+        Assert.False(sink.Keys.ContainsKey("Scale"));
 
-        Assert.Equal("transition", sink.Keys["Scale"]);
-        sink.Log.Clear();
         claims.FlushDeferred(sink);
-        Assert.Empty(sink.Log);
+        Assert.Equal("transition", sink.Keys["Scale"]);
+    }
+
+    [Fact]
+    public void ReclaimingTheWinner_WithTheSameInstance_Republishes()
+    {
+        // A reused transition object may carry a new Duration; its compositor key must follow.
+        var sink = new RecordingSink();
+        var claims = new ImplicitAnimationClaims();
+        claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "t");
+        sink.Log.Clear();
+
+        claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "t");
+
+        Assert.Equal(["+Scale=t"], sink.Log);
     }
 
     [Fact]

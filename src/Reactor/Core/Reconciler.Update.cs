@@ -27,6 +27,8 @@ public sealed partial class Reconciler
     // The depth of the layer being updated in its control's shared-target chain, 0 for the
     // outermost (spec 066 §6.1). It names that layer's implicit animation claims.
     private int _implicitSlot;
+    // Set when a layer of the control being updated deferred an implicit key's restore.
+    private bool _implicitDeferred;
     // Mount frames are numbered as they start, so a frame nested in another has a higher number.
     // A control whose claims were made by a deeper frame was forwarded to this layer by its
     // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
@@ -239,6 +241,9 @@ public sealed partial class Reconciler
             ModifierUpdate = (control, newEl, modifiers);
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
+        // Each control's outermost layer scopes the deferred releases of its whole chain.
+        var previousImplicitDeferred = _implicitDeferred;
+        if (modifierParent is null) _implicitDeferred = false;
 
         UIElement? result;
         bool registeredType = false;
@@ -256,15 +261,15 @@ public sealed partial class Reconciler
         // Setters and nested targets run inside handlers, before ApplyModifiers.
         // Release outgoing implicit channels before any of them can write a value.
         // A key another feature still claims (layout keeps Offset) stays with that feature, and a
-        // claim that takes a released key over returns after the setters (FlushDeferred below).
-        bool releasedAnimation = false;
+        // claim that takes a released key over returns once the outermost layer sharing this
+        // control has written its values (FlushDeferred below).
         if (oldEl.AnimationConfig is { } previousAnimation)
         {
             var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
             if (properties != default)
             {
                 ClearPropertyAnimation(control, properties, implicitSlot);
-                releasedAnimation = true;
+                _implicitDeferred = true;
             }
         }
 
@@ -482,7 +487,7 @@ public sealed partial class Reconciler
         // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, implicitSlot);
-        if (releasedAnimation && !replacedControl)
+        if (modifierParent is null && _implicitDeferred && !replacedControl)
             ImplicitAnimationSlots.FlushDeferred(target);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
@@ -520,6 +525,7 @@ public sealed partial class Reconciler
         {
             ModifierUpdate = previousModifierUpdate;
             _implicitSlot = previousImplicitSlot;
+            if (modifierParent is null) _implicitDeferred = previousImplicitDeferred;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();

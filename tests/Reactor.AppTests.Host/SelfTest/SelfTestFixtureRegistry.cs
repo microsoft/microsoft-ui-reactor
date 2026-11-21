@@ -882,6 +882,8 @@ internal static class SelfTestFixtureRegistry
         ("ImplicitSlots_AmbientMoveKeepsLayout", static harness => new ImplicitAnimationSlotsFixtures.AmbientMoveKeepsLayout(harness)),
         ("ImplicitSlots_OpaqueForwarderChain", static harness => new ImplicitAnimationSlotsFixtures.OpaqueForwarderChain(harness)),
         ("ImplicitSlots_SetterTranslationMigrates", static harness => new ImplicitAnimationSlotsFixtures.SetterTranslationMigrates(harness)),
+        ("ImplicitSlots_ReusedTransitionRepublishes", static harness => new ImplicitAnimationSlotsFixtures.ReusedTransitionRepublishes(harness)),
+        ("ImplicitSlots_NestedDeferralWaitsForOuterWrites", static harness => new ImplicitAnimationSlotsFixtures.NestedDeferralWaitsForOuterWrites(harness)),
         ("ConnectedAnimation_MountUnmount", static harness => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness)),
         ("ConnectedAnimation_StartsAcrossReplace", static harness => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness)),
         ("ConnectedAnimation_NoSourceDoesNotStart", static harness => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness)),

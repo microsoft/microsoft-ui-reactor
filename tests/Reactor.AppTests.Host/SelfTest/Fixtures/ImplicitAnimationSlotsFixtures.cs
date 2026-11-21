@@ -317,6 +317,54 @@ internal static class ImplicitAnimationSlotsFixtures
     }
 
     /// <summary>
+    /// A transition instance reused with a new Duration rebuilds its compositor key.
+    /// </summary>
+    internal sealed class ReusedTransitionRepublishes(Harness h) : SlotsFixture(h, "ImplicitSlots_ReusedTransitionRepublishes")
+    {
+        protected override async Task Run()
+        {
+            var transition = new Vector3Transition { Duration = TimeSpan.FromMilliseconds(300) };
+            await Mount(TakesVisual(Target()));
+            await Update(TakesVisual(Target()).ScaleTransition(transition));
+            H.Check(Name + "_Installed", KeyDuration("Scale") == TimeSpan.FromMilliseconds(300), $"duration={KeyDuration("Scale")}");
+
+            transition.Duration = TimeSpan.FromMilliseconds(900);
+            await Update(TakesVisual(Target()).Width(101).ScaleTransition(transition));
+            H.Check(Name + "_NewDuration", KeyDuration("Scale") == TimeSpan.FromMilliseconds(900), $"duration={KeyDuration("Scale")}");
+        }
+    }
+
+    /// <summary>
+    /// A flyout drops <c>.Animate(Scale)</c> and changes its scale while its target keeps a
+    /// transition: the target's re-claim must not bring the transition back before the flyout
+    /// writes its scale, and the transition is back once the update ends.
+    /// </summary>
+    internal sealed class NestedDeferralWaitsForOuterWrites(Harness h) : SlotsFixture(h, "ImplicitSlots_NestedDeferralWaitsForOuterWrites")
+    {
+        private static readonly TimeSpan TransitionTime = TimeSpan.FromMilliseconds(777);
+
+        private static Element Chain(bool transition, bool animate, float scale)
+        {
+            var target = TakesVisual(Target());
+            var flyout = Flyout(transition ? target.ScaleTransition(new Vector3Transition { Duration = TransitionTime }) : target,
+                TextBlock("slots"));
+            Element outer = animate ? flyout.Animate(Curve.Linear(3000), AnimateProperty.Scale) : flyout;
+            return outer.Scale(scale);
+        }
+
+        protected override async Task Run()
+        {
+            await Mount(Chain(transition: false, animate: true, scale: 1));
+            await Update(Chain(transition: true, animate: true, scale: 1));
+            H.Check(Name + "_AnimateWins", KeyDuration("Scale") == TimeSpan.FromMilliseconds(3000), $"duration={KeyDuration("Scale")}");
+
+            bool animated = await Animates("Scale", Chain(transition: true, animate: false, scale: 1.5f));
+            H.Check(Name + "_OuterWriteJumps", !animated);
+            H.Check(Name + "_TransitionBack", KeyDuration("Scale") == TransitionTime, $"duration={KeyDuration("Scale")}");
+        }
+    }
+
+    /// <summary>
     /// A decorator that forwards its child's control without naming it as its source target
     /// still counts as a layer: Update reaches its child one slot deeper, so Mount must too.
     /// </summary>

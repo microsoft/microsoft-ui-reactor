@@ -61,6 +61,9 @@ internal sealed class ImplicitAnimationClaims
         int i = IndexOf(key, feature, slot);
         if (i >= 0) _claims[i] = new(key, feature, slot, value);
         else _claims.Add(new(key, feature, slot, value));
+        // A re-claimed winner republishes even when it's the same instance: a transition object
+        // can be reused with a changed Duration, and its compositor key is built from it.
+        if (ReferenceEquals(Effective(key), value)) before = null;
         Publish(sink, key, before);
     }
 
@@ -74,7 +77,9 @@ internal sealed class ImplicitAnimationClaims
         if (deferRestore && Effective(key) is { } next && !ReferenceEquals(before, next))
         {
             // The key leaves now and its next claim returns at FlushDeferred, so writes made in
-            // between (an update's setters) don't animate with an animation that just took over.
+            // between (the setters and modifiers of every layer sharing the control) don't
+            // animate with an animation that just took over. Claims and releases on the key
+            // until then wait for the flush too.
             sink.Remove(key);
             (_deferred ??= []).Add(key);
             return;
@@ -130,9 +135,9 @@ internal sealed class ImplicitAnimationClaims
 
     private void Publish<TSink>(TSink sink, string key, object? before) where TSink : IImplicitAnimationSink
     {
+        if (_deferred?.Contains(key) == true) return;
         var after = Effective(key);
-        if (ReferenceEquals(before, after) && _deferred?.Contains(key) != true) return;
-        _deferred?.Remove(key);
+        if (ReferenceEquals(before, after)) return;
         if (after is null) sink.Remove(key);
         else sink.Insert(key, after);
     }
