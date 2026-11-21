@@ -796,6 +796,39 @@ internal static class AnimationCombinationTests
             await RunReplacedChannelCase("KFRemoveKeepsReplacedChannel");
             await RunDroppedEntryCase("KFDropStopsEntry");
             await RunSetterTranslationCase("KFRemoveMovesSetterTranslation");
+            await RunFacadeResetCase("KFRemoveKeepsSetterReset");
+        }
+
+        // A facade Translation written outside Reactor (a ref) and reset by the setter in the
+        // update that removes the keyframes must not be moved to the visual first.
+        async Task RunFacadeResetCase(string name)
+        {
+            var before = Border(TextBlock(name)).Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, rotation: 0f).At(1f, rotation: 360f));
+            var after = Border(TextBlock(name)).Set(static b => b.Translation = Vector3.Zero);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                target.Translation = new Vector3(10, 0, 0);
+
+                H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+
+                bool moved = visual.Properties.TryGetVector3("Translation", out var translation) == CompositionGetValueStatus.Succeeded
+                    && translation != Vector3.Zero;
+                H.Check(name + "_NotMovedToVisual", !moved && target.Translation == Vector3.Zero,
+                    $"visual={translation} facade={target.Translation}");
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         // Removing keyframes in the update that changes a facade Translation setter still moves

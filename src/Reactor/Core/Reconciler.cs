@@ -6687,7 +6687,9 @@ public sealed partial class Reconciler : IDisposable
             if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)
                 || !ownedOnly || noCompositor || state.Started is not { } started)
                 continue;
-            try { owner ??= AnimationHelper.GetElementVisual(uie); }
+            // Started controllers mean the visual was already handed out. Look it up without
+            // moving facade transforms, which the caller does after the handler's setters.
+            try { owner ??= ElementCompositionPreview.GetElementVisual(uie); }
             catch { noCompositor = true; continue; }
             foreach (var (property, controller) in started)
                 StopKeyframeTarget(owner, property, controller);
