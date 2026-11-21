@@ -1,0 +1,11 @@
+{
+  "known": [
+    { "case": "*.Opacity.*", "part": "*", "issue": "#1623", "note": "A XAML OpacityTransition blocks the handoff, so hover, WithAnimation, an enter or exit and keyframes throw, and later updates keep throwing." },
+    { "case": "*.Scale.*", "part": "*", "issue": "#1623", "note": "A XAML ScaleTransition blocks the handoff, as above." },
+    { "case": "*.Rotation.*", "part": "*", "issue": "#1623", "note": "A XAML RotationTransition blocks the handoff, as above." },
+    { "case": "*.Translation.*", "part": "*", "issue": "#1623", "note": "A XAML TranslationTransition blocks the handoff, as above." },
+    { "case": "*.*.Keyframes", "dims": "*variant=B*", "step": "change", "part": "motion:Opacity", "issue": "#1651", "note": "A declared .Opacity() change overrides a looping keyframe entry on opacity, which the model says holds the channel." },
+    { "case": "*", "dims": "*user=SetFacade*", "part": "*", "issue": "§9 row 1", "note": "A .Set facade Scale write mixed with modifiers: the setter re-runs and clobbers or is migrated, and throws once the visual is taken." },
+    { "case": "*", "dims": "*user=TranslationDrag*", "part": "*", "issue": "§9 row 3", "note": "A facade Translation drag mixed with .Translation(): on main the last writer wins, and resets zero the drag." }
+  ]
+}

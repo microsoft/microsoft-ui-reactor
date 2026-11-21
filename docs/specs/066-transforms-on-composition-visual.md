@@ -891,6 +891,40 @@ pre-existing difference with an issue link. The model isn't bent to fit it.
 group is unchanged. Mutation results are recorded. The soak is clean (layers 3–5). Perf is re-measured
 (layers 3–4). CHANGELOG lines cite the §9 rows they introduce.
 
+#### F. Layer V results
+
+Layer V landed the harness as `TransformsMatrixFixture` and the ledger in
+`tests/Reactor.AppTests.Host/SelfTest/Baselines/` (how to use it: TESTING.md, "Transforms matrix and
+behaviour ledger"). The generator yields 7 × 6 × 9 = 378 triples until layer 5 adds `TransformOrigin`.
+What it measured on `main` at 28a872255, which later layers can rely on:
+
+- **Implicit animations expose a controller** (`TransformsMatrix_Instrument_ImplicitController`), so
+  transition cases use the controller-driven path. Two controller facts shape the harness: resuming a
+  paused animation at progress 1 never completes it, and stopping a paused one reverts to its base value,
+  so the recorder finishes an animation by resuming it from the middle. A finished animation also keeps
+  its controller, so `TryGetAnimationController` is not a "still running" test.
+- **Layout `Offset` animations aren't linear.** `ApplyLayoutAnimation` inserts its keyframe without an
+  easing function, so the compositor's ease-out applies (about 0.87 of the move at mid-duration), the
+  same defect as #1640 on a path layer E didn't touch (#1652). The wall-clock verdict samples at a quarter of the
+  duration for that reason.
+- **§5.2 and §5.3 re-measured with seeked controllers** (`@probe` in the ledger): the two-keyframe
+  `Components = X` implicit Scale animates X and jumps Y, and an explicit `Translation` animation with
+  the (0.8,0,0.2,1) ease is mid-way at 50%. Both are `ANIMATING`, not `UNCLEAR`.
+- **§6.3 write-then-attach, compositor side:** a visual write made before the implicit key is attached
+  (before the element enters the tree) jumps, while attach-then-write animates. The XAML side needs a
+  screen capture with system animations on; the full run logs it as `# TransformsMatrix screen:` lines
+  when the desktop allows. If the two paths differ, it gets a §9 row before layer 2 lands.
+- **Model disagreements on `main`** are listed in `transforms-ledger.known.json`: #1623 for every case
+  with a XAML transform or opacity transition plus a compositor feature, §9 row 1 for `.Set` facade
+  writes, §9 row 3 for facade `Translation` drags, and #1651 (a declared `.Opacity()` change overrides a
+  looping keyframe entry, which the model says holds the channel).
+- **The pool soak** finds plain renters inheriting XAML transitions (#1624, #1639) and no taken visuals
+  or leftover facades.
+- **Budget.** A case takes about 3.2 s locally (20 minutes for all 378), so the full matrix runs only in
+  the `Transforms matrix` workflow. The normal selftest corpus runs a 9-case sample (every value of every
+  dimension at least once) and a short soak in about 45 s.
+- **Not automated here:** the gallery screenshot diff in E stays a manual per-layer step.
+
 ### §12.2 Fixtures per layer
 
 **Unit (`tests/Reactor.Tests`, headless).**

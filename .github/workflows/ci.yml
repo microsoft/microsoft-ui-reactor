@@ -133,6 +133,25 @@ jobs:
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj -p:Platform=x64
 
+      - name: Extract the base transforms ledger
+        # Spec 066 §12.1 C.2: TransformsMatrixTests checks that every change between the behaviour
+        # ledger on the PR's base commit and this PR's ledger is declared. The base copy is fetched
+        # here because the checkout is shallow. Outside a pull request there is no base to diff.
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $ledger = 'tests/Reactor.AppTests.Host/SelfTest/Baselines/transforms-ledger.json'
+          if (-not $env:BASE_SHA) { "REACTOR_TRANSFORMS_LEDGER_BASE=skip" >> $env:GITHUB_ENV; exit 0 }
+          git fetch --no-tags --depth=1 origin $env:BASE_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't fetch the base commit $env:BASE_SHA." }
+          git cat-file -e "$($env:BASE_SHA):$ledger" 2>$null
+          if ($LASTEXITCODE -ne 0) { "REACTOR_TRANSFORMS_LEDGER_BASE=absent" >> $env:GITHUB_ENV; exit 0 }
+          $out = Join-Path $env:RUNNER_TEMP 'transforms-ledger.base.json'
+          git show "$($env:BASE_SHA):$ledger" | Out-File -Encoding utf8NoBOM $out
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't read $ledger at $env:BASE_SHA." }
+          "REACTOR_TRANSFORMS_LEDGER_BASE=$out" >> $env:GITHUB_ENV
+
       - name: Test (Reactor.Tests)
         # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
         # skills/reactor.api.txt. Without them, building Reactor.Tests regenerates the

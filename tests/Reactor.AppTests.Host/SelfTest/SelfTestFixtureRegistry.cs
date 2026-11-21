@@ -984,6 +984,9 @@ internal static class SelfTestFixtureRegistry
         ("ModifierTransform_Handoff_Transition", static harness => new TransformVisualHandoffFixture(harness, "Transition")),
         ("ModifierTransform_Handoff_Keyframes", static harness => new TransformVisualHandoffFixture(harness, "Keyframes")),
         ("ModifierTransform_Handoff_Animate", static harness => new TransformVisualHandoffFixture(harness, "Animate")),
+        // Spec 066 §12.1: the transforms matrix and behaviour ledger. A fixed sample here; the full
+        // matrix runs in the Transforms matrix workflow (REACTOR_TRANSFORMS_MATRIX=full).
+        ("TransformsMatrix", static harness => new TransformsMatrixFixture(harness)),
         ("AnimCombo_SpringAlone", static harness => new AnimationCombinationTests.AnimateSpringAlone(harness)),
         ("AnimCombo_EaseTargeted", static harness => new AnimationCombinationTests.AnimateEaseTargeted(harness)),
         ("AnimCombo_LayoutAlone", static harness => new AnimationCombinationTests.LayoutAnimAlone(harness)),

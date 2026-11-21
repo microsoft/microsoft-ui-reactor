@@ -753,6 +753,94 @@ A native crash terminates the AOT process — the per-fixture managed watchdog c
 
 **4. Expected pass count.** As of 2026-10-05, an AOT run of the suite produces: 1598 fixtures total → 19 skipped, 0 failed. Seventeen of those skips come from `DefaultAotSkipPatterns` (they are the ones tagged `# SKIP crashes/hangs under NativeAOT`); `SelfTestVerdict_OnlySkips_PositiveControl` is skipped by design on every run; and `ValCov_Issue1262_PredicateCancellationReported` self-skips its checks because `EventListener` callbacks do not flow under a NativeAOT publish. The skip list covers fixtures that exercise subsystems documented as not-yet-AOT-clean in [`docs/aot-support.md`](docs/aot-support.md) (PropertyGrid auto-discovery, three Devtools fixtures whose reflection targets get trimmed — `fire`'s handler lookup, `state`'s hook read, and DependencyProperty discovery for `properties`/`setProperty` — `UseObservable` on POCOs, hot-reload state migration, XAML-metadata-dependent control hosting). When you fix one of those subsystems, drop the corresponding entries from `DefaultAotSkipPatterns` — `SelfTestRunner.ValidateDefaultSkipPatterns` aborts the run (TAP `Bail out!`, exit 1) if an entry stops matching a real fixture, but nothing detects an entry that has merely started *passing*, so re-probe periodically.
 
+### Transforms matrix and behaviour ledger
+
+Spec 066 (transforms on the composition visual, [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630))
+lands as a stack of layers, and each one must change behaviour only on purpose. The
+`TransformsMatrix` selftest ([`TransformsMatrixFixture.cs`](tests/Reactor.AppTests.Host/SelfTest/Fixtures/TransformsMatrixFixture.cs),
+spec 066 §12.1) records what every combination of transform modifiers, implicit transitions and
+compositor features actually does, and compares it with a ledger committed before the first layer.
+
+**The matrix.** Every *Transform × Transition × Feature* triple (7 × 6 × 9 = 378 cases), with the
+wrapper (direct, keyed `Memo`, `ModifiedElement`), flow direction, reduced motion, user code (a
+`.Set` facade write, a facade `Translation` drag) and a sub-variant assigned so that every pair of
+values across all eight dimensions occurs at least once. The generator is seeded, and a case id is
+just its triple, for example `Scale.Opacity.Animate`, so ids never change when the pairwise
+assignment does. Layer 5 adds `TransformOrigin` to the transform axis.
+
+**What a case records.** Each case runs one lifecycle — `mount`, `change` (the declared values),
+`removeFeature`, `addFeature`, `removeModifier`, `unmount`, `rentPlain` and `rentTransformed`
+(rent from the pool as a plain and as a transformed element) — and records, per step: `threw`,
+`pose` (the RenderTargetBitmap bounding box), `active` (the pose while hover, an enter or an exit
+holds the channel), `motion` (per changed channel: `ANIMATING`, `JUMPED`, `NOT-APPLIED`, `HELD`),
+`hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
+Motion is controller-driven: new animations are paused and seeked to 50% and 100%, so no verdict
+depends on wall-clock timing. Two things RenderTargetBitmap can't see are recorded as such rather
+than guessed: a XAML transition in flight (`unobservable`) and a lone `CenterPoint` (`invisible`).
+`model` says whether the step agrees with the analytic composition model
+([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs));
+each disagreement on `main` must be listed, with its issue or §9 row, in
+`transforms-ledger.known.json`. Don't bend the model to fit `main`.
+
+Before recording or comparing, the fixture runs a positive and a negative control for every
+oracle (`TransformsMatrix_Instrument_*`) and stops if one fails. A pool soak (`@soak.short`,
+`@soak.full`) churns random elements and checks every plain renter for leftover facades, XAML
+transitions and a taken visual. The full run also records platform probes (`@probe`) and, with
+an interactive desktop and system animations on, logs PrintWindow evidence for the XAML transition
+curve (`# TransformsMatrix screen:` lines), which is never recorded because it depends on the desktop.
+
+**Three files** in [`tests/Reactor.AppTests.Host/SelfTest/Baselines/`](tests/Reactor.AppTests.Host/SelfTest/Baselines/):
+
+| File | Written by | Contents |
+|---|---|---|
+| `transforms-ledger.json` | the recorder; never edit it by hand | One line per case step. Your PR's diff of it shows reviewers exactly which behaviours changed |
+| `transforms-ledger.expected.json` | you, per PR | One entry per intended change: `{ "case", "step", "field", "before", "after", "reason" }`. Selectors take `*`; the reason starts with `§9 row N` or `fixes #NNNN` |
+| `transforms-ledger.known.json` | you | Where `main` disagrees with the composition model, with the issue or §9 row |
+
+**Modes.** `REACTOR_TRANSFORMS_MATRIX` picks one:
+
+```powershell
+# Default, in the normal (sharded) selftest corpus: the controls, a fixed seeded sample (the
+# control group, then cases until every value of every dimension appears; 9 today) and a short
+# soak, compared with the ledger. About 45 s.
+dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter TransformsMatrix
+
+# Every case, the full soak and the probes, compared with the ledger. About 22 minutes locally.
+$env:REACTOR_TRANSFORMS_MATRIX = 'full'
+
+# The same run, but it rewrites transforms-ledger.json instead of comparing.
+$env:REACTOR_TRANSFORMS_MATRIX = 'record'
+
+# Narrow a full or record run: `|`-separated `*` patterns over case ids. A filtered record
+# replaces only the matching cases in the ledger.
+$env:REACTOR_TRANSFORMS_MATRIX_FILTER = 'Scale.*.Animate|@soak.short'
+```
+
+A mismatch reruns the case up to three times before it fails, poses compare within ±2 DIP, and
+a record keeps a committed value that the new observation matches within that tolerance, so
+regenerating the ledger only rewrites lines whose behaviour changed. Under NativeAOT the `diag`
+field isn't compared, because `EventListener` callbacks don't flow there.
+
+**Declaring a change (every layer after V).**
+
+1. Run the record mode and commit the regenerated `transforms-ledger.json`. Read its diff.
+2. Add one entry per intended change to `transforms-ledger.expected.json`, citing the spec 066
+   §9 row it introduces or the issue it fixes. Remove a `known.json` entry whose case now agrees
+   with the model; a full run fails on known entries that no longer match anything.
+3. `TransformsMatrixTests.Ledger_ChangesFromTheBase_AreAllDeclared` (in `Reactor.Tests`, every
+   PR) diffs your ledger against the one on the PR's **base** commit. An undeclared difference
+   fails with a ready-to-paste entry; so does an expectation that matches no difference (stale).
+   The control group (`None.None.None`) can't change at all except its `rentTransformed` step,
+   and no expectation can excuse it.
+4. Expectations are per PR. The next PR starts from your merged ledger, so it must empty the file.
+
+**CI.** The `Transforms matrix` workflow
+([`.github/workflows/transforms-matrix.yml`](.github/workflows/transforms-matrix.yml)) runs the
+full mode on PRs labelled `transforms-matrix` (every spec 066 layer PR) and nightly on `main`,
+where any difference from `main`'s own ledger is a regression or a flaky case. A manual run with
+`mode: record` uploads a regenerated ledger as an artifact, for when your machine records
+different poses than a hosted runner. The matrix never runs inside the sharded selftest corpus.
+
 ---
 
 ## 3. Packaged selftest (`tests/Reactor.PackagedTests`) — MSTest + TAP, under MSIX identity

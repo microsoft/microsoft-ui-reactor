@@ -1,0 +1,80 @@
+# Spec 066 §12.1: the full transforms validation matrix (378 cases, the pool soak and the platform
+# probes), checked against the behaviour ledger committed in
+# tests/Reactor.AppTests.Host/SelfTest/Baselines/transforms-ledger.json.
+#
+#   • Pull requests: only when labelled `transforms-matrix`, which every spec 066 layer PR carries.
+#     Every PR's normal Selftests job already runs a fixed seeded sample of the matrix.
+#   • Nightly on main: any difference from main's own ledger is a regression or a flaky case.
+#   • Manual: `mode: record` regenerates the ledger on a hosted runner and uploads it as an
+#     artifact, for a PR author whose machine records different poses.
+#
+# The matrix runs here, never inside the sharded selftest corpus, because it takes about
+# 15-25 minutes. See TESTING.md, "Transforms matrix and behaviour ledger".
+name: Transforms matrix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  schedule:
+    - cron: '41 9 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '`full` compares with the committed ledger; `record` regenerates it as an artifact'
+        type: choice
+        options: [full, record]
+        default: full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  matrix:
+    name: Transforms matrix (${{ inputs.mode || 'full' }})
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'transforms-matrix')
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      REACTOR_TRANSFORMS_MATRIX: ${{ inputs.mode || 'full' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            10.0.x
+            11.0.x
+
+      - name: Restore
+        run: dotnet restore tests/Reactor.AppTests.Host/Reactor.AppTests.Host.csproj -p:Platform=x64
+
+      - name: Build
+        run: dotnet build tests/Reactor.AppTests.Host/Reactor.AppTests.Host.csproj --no-restore -c Debug -p:Platform=x64
+
+      - name: Run the matrix
+        shell: pwsh
+        run: |
+          $env:REACTOR_TRANSFORMS_LEDGER_OUT = Join-Path $env:RUNNER_TEMP 'transforms-ledger.json'
+          $tap = Join-Path $env:RUNNER_TEMP 'transforms-matrix.tap'
+          dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter TransformsMatrix | Tee-Object -FilePath $tap
+          $code = $LASTEXITCODE
+          $failed = @(Select-String -Path $tap -Pattern '^not ok ').Count
+          $passed = @(Select-String -Path $tap -Pattern '^ok TransformsMatrix_').Count
+          "### Transforms matrix ($env:REACTOR_TRANSFORMS_MATRIX)`n`n$passed passed, $failed failed." >> $env:GITHUB_STEP_SUMMARY
+          if ($passed -eq 0) { throw 'No TransformsMatrix check ran; the fixture filter matched nothing.' }
+          exit $code
+
+      - name: Upload the TAP output and the recorded ledger
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: transforms-matrix-${{ inputs.mode || 'full' }}
+          path: |
+            ${{ runner.temp }}/transforms-matrix.tap
+            ${{ runner.temp }}/transforms-ledger.json
+          if-no-files-found: ignore
