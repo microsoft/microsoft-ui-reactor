@@ -554,26 +554,38 @@ internal static class PoolLaneFixtures
     }
 
     /// <summary>
-    /// A keyed <c>Memo</c>'s <c>.ScrollLinked</c> runs on the control under it, and the control's
-    /// unmount doesn't reach it. The visual reset stops the expression, so it doesn't move the renter.
+    /// Layout writes a visual's Offset only when the position changes, so whatever moved the visual
+    /// last would stay on a renter at the same position: a stopped <c>.ScrollLinked</c> expression
+    /// (direct, or a keyed <c>Memo</c>'s, which the control's unmount doesn't reach) or a direct write
+    /// through the visual. The visual reset puts the layout offset back.
     /// </summary>
-    internal sealed class MemoScrollLinked(Harness h) : SelfTestFixtureBase(h)
+    internal sealed class LayoutOffset(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
-            const string p = "ElementPoolLanes_MemoScrollLinked";
             var viewer = new WinUI.ScrollViewer();
+            await Case("Memo", Memo("k", static () => Target("M"))
+                .ScrollLinked(viewer, static b => b.Expression("Offset.Y", "40")), null);
+            await Case("Direct", Target("D").ScrollLinked(viewer, static b => b.Expression("Offset.Y", "40")), null);
+            await Case("VisualWrite", Target("W").Animate(Curve.Linear(100)),
+                static fe => ElementCompositionPreview.GetElementVisual(fe).Offset = new Vector3(0, 40, 0));
+        }
+
+        private async Task Case(string name, Element moved, Action<FrameworkElement>? move)
+        {
+            string p = "ElementPoolLanes_LayoutOffset_" + name;
             using var lab = new Lab(H);
-            var first = await lab.Show(Memo("k", static () => Target("M"))
-                .ScrollLinked(viewer, static b => b.Expression("Offset.Y", "40")));
+            var first = await lab.Show(moved);
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            if (first is null) return;
+            move?.Invoke(first);
+            await Harness.Render();
             await lab.Show(null);
 
             var renter = Target("R").Animate(Curve.Linear(100));
             var rentedControl = await lab.Show(renter);
             H.Check(p + "_Recycled", ReferenceEquals(rentedControl, first));
             if (rentedControl is null) return;
-            // Layout doesn't rewrite an unchanged position, so only the reset puts the offset back.
             var offset = ElementCompositionPreview.GetElementVisual(rentedControl).Offset;
             H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f,
                 $"visual={offset} layout={rentedControl.ActualOffset}");
