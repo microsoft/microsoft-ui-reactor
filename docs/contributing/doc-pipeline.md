@@ -160,6 +160,11 @@ dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic archit
 dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overview overview
 ```
 
+For `render-diagrams --topic` and the first argument to `new-diagram`, use a path
+relative to `docs/_pipeline/diagrams`. Both commands report an error on stderr
+and return exit code `1` if the topic is rooted or normalizes to a path outside
+that directory.
+
 ### Running the doc pipeline tests
 
 Run the xUnit suite from the repository root.

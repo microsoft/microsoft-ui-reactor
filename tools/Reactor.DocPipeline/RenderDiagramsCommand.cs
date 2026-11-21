@@ -32,7 +32,16 @@ internal static class RenderDiagramsCommand
         }
 
         IMermaidRunner mermaid = new MmdcRunner();
-        var result = DiagramProcessor.Process(diagramsRoot, imagesRoot, mermaid, topic);
+        DiagramProcessor.DiagramResult result;
+        try
+        {
+            result = DiagramProcessor.Process(diagramsRoot, imagesRoot, mermaid, topic);
+        }
+        catch (DocPipelineException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
 
         Console.WriteLine($"Diagrams: {result.CopiedSvgs.Count} copied, {result.SkippedSvgs.Count} skipped (identical), {result.RenderedMermaid.Count} rendered, {result.CachedMermaid.Count} cached.");
         foreach (var f in result.Findings)
