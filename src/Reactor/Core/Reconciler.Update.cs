@@ -27,6 +27,40 @@ public sealed partial class Reconciler
     // The depth of the layer being updated in its control's shared-target chain, 0 for the
     // outermost (spec 066 §6.1). It names that layer's implicit animation claims.
     private int _implicitSlot;
+    // Set when a layer of the control being updated deferred an implicit key's restore.
+    private bool _implicitDeferred;
+    // Mount frames are numbered as they start, so a frame nested in another has a higher number.
+    // A control whose claims were made by a deeper frame was forwarded to this layer by its
+    // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
+    // so those claims move one slot inward before this layer claims. Each Mount that handles the
+    // claims then records itself as their outermost owner.
+    private int _mountFrames, _lastClaimFrame;
+
+    private void StampImplicitClaims(UIElement control, int frame, Element element)
+    {
+        if (ImplicitAnimationSlots.Claims(control) is not { } claims) return;
+        Stamp(claims, frame, element);
+    }
+
+    private void Stamp(ImplicitAnimationClaims claims, int frame, Element element)
+    {
+        claims.MountFrame = frame;
+        if (claims.MountOwner is null) claims.MountOwner = new(element);
+        else claims.MountOwner.SetTarget(element);
+        if (frame > _lastClaimFrame) _lastClaimFrame = frame;
+    }
+
+    // In Mount, `layer` is the element being mounted: it shifts and becomes the owner. In
+    // Update's replaced-control path, `self` is the updating element: when its own Mount is
+    // the outermost owner, that Mount already numbered the claims.
+    private void ShiftForwardedClaims(UIElement control, int frame, Element? layer = null, Element? self = null)
+    {
+        if (_lastClaimFrame <= frame || ImplicitAnimationSlots.Claims(control) is not { } claims
+            || claims.MountFrame <= frame) return;
+        if (self is not null && claims.MountOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, self)) return;
+        claims.ShiftInward();
+        if (layer is not null) Stamp(claims, frame, layer);
+    }
 
     /// <summary>
     /// Diffs oldEl vs newEl and patches the existing control. Returns null if patched in-place,
@@ -35,6 +69,7 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        int mountMark = _mountFrames;
         var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
         int implicitSlot = modifierParent is null ? 0 : _implicitSlot + 1;
         var modifierTarget = newEl;
@@ -210,6 +245,9 @@ public sealed partial class Reconciler
             ModifierUpdate = (control, newEl, modifiers);
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
+        // Each control's outermost layer scopes the deferred releases of its whole chain.
+        var previousImplicitDeferred = _implicitDeferred;
+        if (modifierParent is null) _implicitDeferred = false;
 
         UIElement? result;
         bool registeredType = false;
@@ -226,12 +264,17 @@ public sealed partial class Reconciler
 
         // Setters and nested targets run inside handlers, before ApplyModifiers.
         // Release outgoing implicit channels before any of them can write a value.
-        // A key another feature still claims (layout keeps Offset) stays with that feature.
+        // A key another feature still claims (layout keeps Offset) stays with that feature, and a
+        // claim that takes a released key over returns once the outermost layer sharing this
+        // control has written its values (FlushDeferred below).
         if (oldEl.AnimationConfig is { } previousAnimation)
         {
             var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
             if (properties != default)
+            {
                 ClearPropertyAnimation(control, properties, implicitSlot);
+                _implicitDeferred = true;
+            }
         }
 
         var keyframes = newEl.KeyframeAnimations;
@@ -433,7 +476,7 @@ public sealed partial class Reconciler
         if (replacedControl)
         {
             implicitSlot = 0;
-            if (!ownsControl) ImplicitAnimationSlots.ShiftInward(target);
+            ShiftForwardedClaims(target, mountMark, self: newEl);
         }
         var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
         if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
@@ -448,6 +491,8 @@ public sealed partial class Reconciler
         // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, implicitSlot);
+        if (modifierParent is null && _implicitDeferred && !replacedControl)
+            ImplicitAnimationSlots.FlushDeferred(target);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
@@ -484,6 +529,7 @@ public sealed partial class Reconciler
         {
             ModifierUpdate = previousModifierUpdate;
             _implicitSlot = previousImplicitSlot;
+            if (modifierParent is null) _implicitDeferred = previousImplicitDeferred;
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();

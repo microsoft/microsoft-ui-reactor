@@ -781,11 +781,18 @@ Motion is controller-driven, layout `Offset` included: each new animation is pau
 its start, 25%, 50% and 100%, measured from where it actually starts, so no verdict depends on
 wall-clock timing. Two things RenderTargetBitmap can't see are recorded as such rather than
 guessed: a XAML transition in flight (`unobservable`) and a lone `CenterPoint` (`invisible`). An
-inconclusive verdict fails the case after its reruns.
+inconclusive verdict fails the case after its reruns, and so does a compositor that stops producing
+frames. Facade `Translation` drag cases also record `screen`, the PrintWindow pose, because
+RenderTargetBitmap reports a drag the screen doesn't show once translation is enabled (spec 066
+§12.2, Q1f; it reproduced over RDP in the spike, not on hosted runners, and each run logs which). It
+needs an interactive desktop (hosted runners have one): without one the instrument is skipped, the
+field reads `skip`, which matches any value, and a record run with a desktop replaces a recorded
+`skip` with the real pose.
 
 `model` says whether the step agrees with the analytic composition model
 ([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs)),
-and the ledger pins every disagreement exactly. Each disagreement on `main` must be attributed
+and the ledger pins every disagreement exactly (a throw or a `screen` pose is pinned by its own field).
+Each disagreement on `main`, a throw included, must be attributed
 by exactly one rule in `transforms-ledger.known.json`, and a full run fails on a rule that no
 longer matches anything. Don't bend the model to fit `main`.
 
@@ -832,7 +839,8 @@ $env:REACTOR_TRANSFORMS_MATRIX_FILTER = 'Scale.*.Animate|@soak.short'
 A mismatch or an inconclusive oracle reruns the case up to three times before it fails, and
 poses compare within ±2 DIP. Record mode reruns a changed case once to confirm the change, and
 keeps a committed value that the new observation matches within tolerance, so regenerating the
-ledger only rewrites lines whose behaviour changed. Under NativeAOT the `diag` field isn't
+ledger only rewrites lines whose behaviour changed. If any check fails (an oracle, a model rule, a
+change that doesn't reproduce), it writes `transforms-ledger.rejected.json` instead of the ledger. Under NativeAOT the `diag` field isn't
 compared, because `EventListener` callbacks don't flow there.
 
 **Declaring a change (every layer after V).**

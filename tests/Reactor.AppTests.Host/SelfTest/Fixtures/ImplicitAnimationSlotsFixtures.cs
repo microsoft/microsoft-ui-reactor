@@ -2,6 +2,8 @@ using System.Numerics;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -311,6 +313,141 @@ internal static class ImplicitAnimationSlotsFixtures
             H.Check("ImplicitSlots_AmbientMoveKeepsLayout_LayoutOffsetWins",
                 offset is KeyFrameAnimation { Duration: var d } && d == Layout, $"offset={offset?.GetType().Name}");
             H.Check("ImplicitSlots_AmbientMoveKeepsLayout_SizeKept", collection?.ContainsKey("Size") == true);
+        }
+    }
+
+    /// <summary>
+    /// A transition instance reused with a new Duration rebuilds its compositor key.
+    /// </summary>
+    internal sealed class ReusedTransitionRepublishes(Harness h) : SlotsFixture(h, "ImplicitSlots_ReusedTransitionRepublishes")
+    {
+        protected override async Task Run()
+        {
+            var transition = new Vector3Transition { Duration = TimeSpan.FromMilliseconds(300) };
+            await Mount(TakesVisual(Target()));
+            await Update(TakesVisual(Target()).ScaleTransition(transition));
+            H.Check(Name + "_Installed", KeyDuration("Scale") == TimeSpan.FromMilliseconds(300), $"duration={KeyDuration("Scale")}");
+
+            transition.Duration = TimeSpan.FromMilliseconds(900);
+            await Update(TakesVisual(Target()).Width(101).ScaleTransition(transition));
+            H.Check(Name + "_NewDuration", KeyDuration("Scale") == TimeSpan.FromMilliseconds(900), $"duration={KeyDuration("Scale")}");
+        }
+    }
+
+    /// <summary>
+    /// A flyout drops <c>.Animate(Scale)</c> and changes its scale while its target keeps a
+    /// transition: the target's re-claim must not bring the transition back before the flyout
+    /// writes its scale, and the transition is back once the update ends.
+    /// </summary>
+    internal sealed class NestedDeferralWaitsForOuterWrites(Harness h) : SlotsFixture(h, "ImplicitSlots_NestedDeferralWaitsForOuterWrites")
+    {
+        private static readonly TimeSpan TransitionTime = TimeSpan.FromMilliseconds(777);
+
+        private static Element Chain(bool transition, bool animate, float scale)
+        {
+            var target = TakesVisual(Target());
+            var flyout = Flyout(transition ? target.ScaleTransition(new Vector3Transition { Duration = TransitionTime }) : target,
+                TextBlock("slots"));
+            Element outer = animate ? flyout.Animate(Curve.Linear(3000), AnimateProperty.Scale) : flyout;
+            return outer.Scale(scale);
+        }
+
+        protected override async Task Run()
+        {
+            await Mount(Chain(transition: false, animate: true, scale: 1));
+            await Update(Chain(transition: true, animate: true, scale: 1));
+            H.Check(Name + "_AnimateWins", KeyDuration("Scale") == TimeSpan.FromMilliseconds(3000), $"duration={KeyDuration("Scale")}");
+
+            bool animated = await Animates("Scale", Chain(transition: true, animate: false, scale: 1.5f));
+            H.Check(Name + "_OuterWriteJumps", !animated);
+            H.Check(Name + "_TransitionBack", KeyDuration("Scale") == TransitionTime, $"duration={KeyDuration("Scale")}");
+        }
+    }
+
+    /// <summary>
+    /// A decorator that forwards its child's control without naming it as its source target
+    /// still counts as a layer: Update reaches its child one slot deeper, so Mount must too.
+    /// </summary>
+    internal sealed class OpaqueForwarderChain(Harness h) : SlotsFixture(h, "ImplicitSlots_OpaqueForwarderChain")
+    {
+        static OpaqueForwarderChain() =>
+            ControlRegistry.RegisterDecorator<SlotsForwarder>(static () => new SlotsForwarderHandler());
+
+        private static Element Button40() => Button("slots").Width(100).Height(40).HAlign(HorizontalAlignment.Left);
+
+        protected override async Task Run()
+        {
+            await Mount(new SlotsForwarder(Target().LayoutAnimation()));
+            H.Check(Name + "_Installed", Keys() == "Offset", $"keys={Keys()}");
+            await Update(new SlotsForwarder(Target()));
+            H.Check(Name + "_InnerRemoved", Keys() == "-", $"keys={Keys()}");
+
+            // The child's type changes, so the forwarder hands back a new control.
+            await Update(new SlotsForwarder(Button40().LayoutAnimation()));
+            H.Check(Name + "_ReplacedInstalled", Keys() == "Offset", $"keys={Keys()}");
+            await Update(new SlotsForwarder(Button40()));
+            H.Check(Name + "_ReplacedInnerRemoved", Keys() == "-", $"keys={Keys()}");
+
+            // Three layers, each with its own layout animation, across a replacement.
+            static Element Nested(Element child, int inner, int? middle, int? outer)
+            {
+                Element mid = new SlotsForwarder(child.LayoutAnimation(TimeSpan.FromMilliseconds(inner)));
+                if (middle is { } m) mid = mid.LayoutAnimation(TimeSpan.FromMilliseconds(m));
+                Element top = new SlotsForwarder(mid);
+                return outer is { } o ? top.LayoutAnimation(TimeSpan.FromMilliseconds(o)) : top;
+            }
+            int Claims() => (Control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims?.Count ?? 0;
+
+            await Update(Nested(Target(), 700, 800, 900));
+            H.Check(Name + "_NestedOuterWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(900) && Claims() == 3,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Nested(Button40(), 730, 830, 930));
+            H.Check(Name + "_NestedReplacedOuterWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(930) && Claims() == 3,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Nested(Button40(), 740, 840, null));
+            H.Check(Name + "_NestedMiddleRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(840) && Claims() == 2,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Nested(Button40(), 750, null, null));
+            H.Check(Name + "_NestedInnerRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(750) && Claims() == 1,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+        }
+    }
+
+    internal sealed record SlotsForwarder(Element Target) : Element;
+
+    private sealed class SlotsForwarderHandler : IDecoratorElementHandler<SlotsForwarder>
+    {
+        public UIElement Mount(MountContext context, SlotsForwarder element) => context.MountChild(element.Target)!;
+        public UIElement Update(UpdateContext context, SlotsForwarder oldEl, SlotsForwarder newEl, UIElement control)
+            => context.ReconcileChild(oldEl.Target, newEl.Target, control)!;
+        public V1UnmountDisposition Unmount(UnmountContext context, SlotsForwarder? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+    }
+
+    /// <summary>
+    /// Releasing a layout animation or a transition still moves a facade Translation that a setter
+    /// wrote in the same update onto the visual those features took.
+    /// </summary>
+    internal sealed class SetterTranslationMigrates(Harness h) : SlotsFixture(h, "ImplicitSlots_SetterTranslationMigrates")
+    {
+        private static BorderElement Shift(float x) => Target().Set(b => b.Translation = new Vector3(x, 0, 0));
+
+        private Vector3 VisualTranslation()
+        {
+            ElementCompositionPreview.GetElementVisual(Control).Properties.TryGetVector3("Translation", out var value);
+            return value;
+        }
+
+        protected override async Task Run()
+        {
+            await Mount(Shift(10).LayoutAnimation());
+            H.Check(Name + "_MountedOnVisual", VisualTranslation() == new Vector3(10, 0, 0), $"translation={VisualTranslation()}");
+            await Update(Shift(20));
+            H.Check(Name + "_LayoutRemoved", VisualTranslation() == new Vector3(20, 0, 0), $"translation={VisualTranslation()}");
+
+            await Update(Shift(20).Animate(Curve.Linear(30), AnimateProperty.Opacity).OpacityTransition());
+            await Update(Shift(30).OpacityTransition());
+            H.Check(Name + "_TransitionRetained", VisualTranslation() == new Vector3(30, 0, 0), $"translation={VisualTranslation()}");
         }
     }
 }

@@ -50,6 +50,18 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
     private Border _caseHost = null!, _freshHost = null!;
 
+    // The PrintWindow oracle, once its controls pass; null without an interactive desktop.
+    private Func<FrameworkElement, Snap>? _screen;
+
+    // False once any check fails, so record mode never overwrites the ledger with an invalid recording.
+    private bool _clean = true;
+
+    private void Check(string name, bool ok, string detail)
+    {
+        H.Check(name, ok, detail);
+        _clean &= ok;
+    }
+
     public override async Task RunAsync()
     {
         var mode = CurrentMode;
@@ -74,7 +86,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             if (mode != Mode.Sample && CaseFilter is { } filter) cases = cases.Where(c => Matches(filter, c.Id)).ToList();
             bool everything = mode != Mode.Sample && CaseFilter is null;
 
-            var recorder = new TransformsMatrixRecorder(_caseHost, _freshHost, diagnostics);
+            var recorder = new TransformsMatrixRecorder(_caseHost, _freshHost, diagnostics, _screen);
             var observed = new TransformsLedger();
             var usedKnown = new Dictionary<KnownDifference, int>();
             var times = new List<double>();
@@ -95,21 +107,29 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             {
                 if (CaseFilter is { } f && !Matches(f, id)) continue;
                 observed.Cases[id] = await Compare(id, committed, mode, () => new PoolSoak(_caseHost).RunAsync(steps));
+                CheckConclusive(id, observed.Cases[id]);
             }
 
             if (mode != Mode.Sample && (CaseFilter is null || Matches(CaseFilter, "@probe")))
+            {
                 observed.Cases["@probe"] = await Compare("@probe", committed, mode, () => TransformsMatrixProbes.RunAsync(_caseHost, H));
+                CheckConclusive("@probe", observed.Cases["@probe"]);
+            }
 
             if (everything)
             {
                 foreach (var k in known) Console.WriteLine($"# TransformsMatrix known rule {k}: {usedKnown.GetValueOrDefault(k)} disagreement(s)");
                 var stale = known.Where(k => !usedKnown.ContainsKey(k)).ToList();
-                H.Check("TransformsMatrix_KnownDifferencesCurrent", stale.Count == 0,
+                Check("TransformsMatrix_KnownDifferencesCurrent", stale.Count == 0,
                     $"{stale.Count} entries in {TransformsLedger.KnownFile} match no model disagreement anymore. Remove them "
                     + "(and declare the ledger change they reflect): " + string.Join("; ", stale));
             }
 
             if (mode == Mode.Record) WriteLedger(committed, observed, everything);
+        }
+        catch (FrameTimeoutException ex)
+        {
+            Check("TransformsMatrix_Rendering", false, $"{ex.Message}. The run stopped, and the ledger wasn't written.");
         }
         finally
         {
@@ -120,14 +140,15 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
     private async Task<LedgerCase> ObserveCase(TransformsMatrixRecorder recorder, MatrixCase c, TransformsLedger committed, Mode mode)
     {
         var record = await Compare(c.Id, committed, mode, () => recorder.ObserveAsync(c), recorder);
-        H.Check($"TransformsMatrix_{c.Id}_Conclusive", recorder.Inconclusive.Count == 0, string.Join("; ", recorder.Inconclusive));
+        Check($"TransformsMatrix_{c.Id}_Conclusive", recorder.Inconclusive.Count == 0, string.Join("; ", recorder.Inconclusive));
         return record;
     }
 
     /// <summary>
     /// Observes a case; on a ledger mismatch or an inconclusive oracle, reruns it up to
-    /// <see cref="Retries"/> times (§12.1 C.5). Record mode reruns until two observations agree or
-    /// one matches the committed ledger, at most twice, so an intended change costs two runs, not four.
+    /// <see cref="Retries"/> times (§12.1 C.5). Record mode reruns until one observation matches the
+    /// committed ledger or two agree, at most twice, so an intended change costs two runs, not four. A
+    /// case the ledger doesn't have yet always needs two agreeing runs.
     /// </summary>
     private async Task<LedgerCase> Compare(string id, TransformsLedger committed, Mode mode, Func<Task<LedgerCase>> observe,
         TransformsMatrixRecorder? recorder = null)
@@ -138,8 +159,9 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         LedgerCase? previous = null;
         for (int run = 1; run <= (mode == Mode.Record ? 2 : Retries); run++)
         {
-            bool inconclusive = recorder?.Inconclusive.Count > 0;
-            if (!inconclusive && (diffs.Count == 0 || expected is null)) break;
+            bool inconclusive = recorder?.Inconclusive.Count > 0 || Unclear(record);
+            if (!inconclusive && expected is not null && diffs.Count == 0) break;
+            if (mode != Mode.Record && !inconclusive && expected is null) break;
             if (mode == Mode.Record && !inconclusive && previous is not null && Differences(id, previous, record).Count == 0) break;
             Console.WriteLine($"# TransformsMatrix {id}: {diffs.Count} difference(s) from the ledger{(inconclusive ? ", inconclusive" : "")}, rerun {run}");
             previous = record;
@@ -149,18 +171,31 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
         if (mode == Mode.Record)
         {
+            // A change or a new case is recorded only once two observations agree; three different ones are noise.
+            bool confirmed = (expected is not null && diffs.Count == 0) || (previous is not null && Differences(id, previous, record).Count == 0);
+            Check($"TransformsMatrix_{id}_Stable", confirmed, expected is null
+                ? $"{id} is new and its observations disagreed, so the recording isn't reproducible: {string.Join(" | ", Differences(id, previous, record).Take(8))}"
+                : $"{id} differed from the ledger and between its reruns, so the recording isn't reproducible: {string.Join(" | ", diffs.Take(8))}");
             foreach (var d in diffs) Console.WriteLine($"# TransformsMatrix ledger change: {d}");
             if (expected is not null) TransformsLedger.KeepUnchanged(expected, record);
             return record;
         }
 
-        H.Check($"TransformsMatrix_{id}", diffs.Count == 0, expected is null
+        Check($"TransformsMatrix_{id}", diffs.Count == 0, expected is null
             ? $"{id} isn't in {TransformsLedger.LedgerFile}. Regenerate the ledger (see TESTING.md, \"Transforms matrix and behaviour ledger\")."
             : $"observed behaviour differs from {TransformsLedger.LedgerFile}: {string.Join(" | ", diffs.Take(8))}. "
               + "If the change is intended, regenerate the ledger with REACTOR_TRANSFORMS_MATRIX=record and declare each change "
               + $"in {TransformsLedger.ExpectedFile} with its §9 row or issue (TESTING.md, \"Transforms matrix and behaviour ledger\").");
         return record;
     }
+
+    /// <summary>An <c>UNCLEAR</c> verdict means an oracle couldn't decide, so the observation can't become a baseline.</summary>
+    private static bool Unclear(LedgerCase record) =>
+        record.Steps.Values.Any(static s => s.Values.Any(static v => v.Contains("UNCLEAR", StringComparison.Ordinal)));
+
+    private void CheckConclusive(string id, LedgerCase record) =>
+        Check($"TransformsMatrix_{id}_Conclusive", !Unclear(record), $"{id} has a verdict no oracle could decide after its reruns: "
+            + string.Join("; ", record.Steps.SelectMany(s => s.Value.Where(static f => f.Value.Contains("UNCLEAR", StringComparison.Ordinal)).Select(f => $"{s.Key}.{f.Key}={f.Value}"))));
 
     /// <summary>Each model disagreement must be attributed by exactly one rule in the known file.</summary>
     private void CheckModel(MatrixCase c, TransformsMatrixRecorder recorder, List<KnownDifference> known, Dictionary<KnownDifference, int> used)
@@ -174,10 +209,11 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             else problems.Add($"{step}/{part} matches {matches.Count} rules ({string.Join("; ", matches)}); narrow them so one applies");
         }
 
-        H.Check($"TransformsMatrix_{c.Id}_Model", problems.Count == 0,
+        Check($"TransformsMatrix_{c.Id}_Model", problems.Count == 0,
             $"{c.Id} ({c.Dims}) disagrees with the composition model: {string.Join(" | ", problems)}. If main is wrong, attribute it in "
             + $"{TransformsLedger.KnownFile} with the issue or §9 row; if the model is wrong, fix CompositionModel. Never bend the model to fit main.");
     }
+
     private void WriteLedger(TransformsLedger committed, TransformsLedger observed, bool everything)
     {
         var output = new TransformsLedger { Seed = MatrixGenerator.DefaultSeed };
@@ -192,7 +228,14 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         }
 
         string path = Environment.GetEnvironmentVariable("REACTOR_TRANSFORMS_LEDGER_OUT") is { Length: > 0 } p ? p
-            : global::System.IO.Path.Combine(RepoRoot() ?? AppContext.BaseDirectory, TransformsLedger.BaselineDirectory, TransformsLedger.LedgerFile);
+            : global::System.IO.Path.Join(RepoRoot() ?? AppContext.BaseDirectory, TransformsLedger.BaselineDirectory, TransformsLedger.LedgerFile);
+        if (!_clean)
+        {
+            // Keep the observations for triage, but never where a commit or the workflow artifact would take them as the ledger.
+            path = global::System.IO.Path.ChangeExtension(path, ".rejected.json");
+            Console.WriteLine("# TransformsMatrix a check failed, so the ledger was not updated");
+        }
+
         global::System.IO.File.WriteAllText(path, output.Write());
         Console.WriteLine($"# TransformsMatrix wrote {output.Cases.Count} cases to {path}");
     }
@@ -212,7 +255,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
     private static string? RepoRoot()
     {
         for (var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (global::System.IO.File.Exists(global::System.IO.Path.Combine(dir.FullName, "Reactor.slnx"))) return dir.FullName;
+            if (global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx"))) return dir.FullName;
         return null;
     }
 
@@ -222,7 +265,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
     /// </summary>
     private static string ReadBaseline(string file)
     {
-        if (RepoRoot() is { } root && global::System.IO.Path.Combine(root, TransformsLedger.BaselineDirectory, file) is var path
+        if (RepoRoot() is { } root && global::System.IO.Path.Join(root, TransformsLedger.BaselineDirectory, file) is var path
             && global::System.IO.File.Exists(path))
             return global::System.IO.File.ReadAllText(path);
         using var stream = typeof(TransformsMatrixFixture).Assembly.GetManifestResourceStream("TransformsMatrix." + file)
@@ -400,6 +443,56 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         var plainMove = await LayoutMove(animated: false);
         Check("LayoutOffset", animatedMove.Mid > 0.05 && animatedMove.Mid < 0.95 && animatedMove.End > 0.9
             && plainMove.Mid is double.NaN && plainMove.End > 0.9, $"animated={animatedMove} plain={plainMove}");
+        // Screen (§12.2): with an interactive desktop, PrintWindow must show a facade Translation write
+        // and then its reset. Q1f, where the screen drops a write that RenderTargetBitmap reports
+        // applied, reproduced over RDP in the spike but not on hosted runners, so it's logged as a
+        // platform fact rather than gating the oracle. Drag cases then record the screen pose; without a desktop they record "skip".
+        _screen = null;
+        _caseHost.Child = canvas;
+        Rect();
+        await Shot();
+        if (TransformsMatrixProbes.Screen(_caseHost, H).RedBox() is { } seen && seen.Near(identity, 3))
+        {
+            r = Rect();
+            await Shot();
+            r.Translation = new Vector3(100, 0, 0);
+            var applied = await ReadTranslation();
+            r.Translation = Vector3.Zero;
+            var reset = await ReadTranslation();
+            // Q1f as the spike ran it: visual taken, translation enabled, an implicit "Translation" key, rendered.
+            r = Rect();
+            await Shot();
+            var tv = ElementCompositionPreview.GetElementVisual(r);
+            ElementCompositionPreview.SetIsTranslationEnabled(r, true);
+            var tkey = compositor.CreateVector3KeyFrameAnimation();
+            tkey.InsertExpressionKeyFrame(1, "this.FinalValue");
+            tkey.Duration = TimeSpan.FromMilliseconds(TransformsMatrixRecorder.MotionMs);
+            tkey.Target = "Translation";
+            var tkeys = compositor.CreateImplicitAnimationCollection();
+            tkeys["Translation"] = tkey;
+            tv.ImplicitAnimations = tkeys;
+            await Shot();
+            r.Translation = new Vector3(100, 0, 0);
+            var q1f = await ReadTranslation(TransformsMatrixRecorder.MotionMs + 300);
+            tv.ImplicitAnimations = null;
+            Check("Screen", applied.Rtb > 0.9 && applied.Screen > 0.9 && reset.Rtb < 0.1 && reset.Screen < 0.1,
+                $"written rtb={applied.Rtb:F2} screen={applied.Screen:F2}, reset rtb={reset.Rtb:F2} screen={reset.Screen:F2} (expected 1/1, then 0/0)");
+            Console.WriteLine($"# TransformsMatrix screen: Q1f rtb={q1f.Rtb:F2} screen={q1f.Screen:F2} "
+                + (q1f.Rtb > 0.9 && q1f.Screen < 0.1 ? "(reproduced: drag cases need the screen pose)" : "(not reproduced on this desktop)"));
+            _screen = target => TransformsMatrixProbes.Screen(target, H);
+        }
+        else
+        {
+            H.Skip("TransformsMatrix_Instrument_Screen", "PrintWindow can't see the window (no interactive desktop), so drag cases record screen=skip");
+        }
+
+        async Task<(double Rtb, double Screen)> ReadTranslation(int ms = 300)
+        {
+            await TransformsMatrixRecorder.Settle(ms);
+            static double X(Snap s) => s.RedBox() is { } b ? (b.X0 - Model.Left) / 100 : double.NaN;
+            return (X(await Snap.CaptureAsync(_caseHost)), X(TransformsMatrixProbes.Screen(_caseHost, H)));
+        }
+
         // Diagnostics: a warning emitted during a step is seen, and nothing is reported otherwise.
         diagnostics.Reset();
         string quiet = diagnostics.Describe();
@@ -529,11 +622,11 @@ internal sealed class PoolSoak(Border host)
                     .Concat(Enumerable.Range(0, removed.Count).Select(i => Probe().WithKey($"probe{i}")))
                     .Concat(Enumerable.Range(0, removed.Count).Select(i => VisualProbe().WithKey($"vprobe{i}")))));
                 await TransformsMatrixRecorder.Frames(1);
-                var probes = stage.Children.OfType<StackPanel>().Where(static p => p.Width is ProbeWidth or VisualProbeWidth).ToList();
-                foreach (var probe in probes)
+                bool IsWidth(StackPanel p, double w) => Math.Abs(p.Width - w) < 0.5;
+                var probes = stage.Children.OfType<StackPanel>().Where(p => IsWidth(p, ProbeWidth) || IsWidth(p, VisualProbeWidth)).ToList();
+                foreach (var probe in probes.Where(pooled.Contains))
                 {
-                    if (!pooled.Contains(probe)) continue;
-                    if (probe.Width == VisualProbeWidth)
+                    if (IsWidth(probe, VisualProbeWidth))
                     {
                         // A visual probe falls back to the plain lane when the visual lane is empty.
                         if (!visualLane.Contains(probe)) continue;
@@ -546,9 +639,8 @@ internal sealed class PoolSoak(Border host)
                         if (v.ImplicitAnimations?.Any(static kv => kv.Key != "Offset") == true) violations["keys"]++;
                         if (SoakChannels.Any(ch => TransformsMatrixRecorder.Controller(v, ch) is not null)) violations["anims"]++;
                         continue;
-                    }
-                    rented++;
-                    if (probe.Scale != Vector3.One || probe.Rotation != 0 || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
+                    }                    rented++;
+                    if (probe.Scale != Vector3.One || Math.Abs(probe.Rotation) > 1e-4f || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
                         violations["facade"]++;
                     if (probe.OpacityTransition is not null || probe.BackgroundTransition is not null || probe.ChildrenTransitions is { Count: > 0 })
                         violations["xaml"]++;
@@ -561,7 +653,7 @@ internal sealed class PoolSoak(Border host)
                 pooled.UnionWith(probes);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException and not FrameTimeoutException)
         {
             threw = $"{ex.GetType().Name}@{step}";
         }

@@ -30,7 +30,16 @@ internal sealed class TransformsLedger
     public const string KnownFile = "transforms-ledger.known.json";
 
     /// <summary>Fields holding DIP coordinates, compared within ±<see cref="Tolerance"/> (§12.1 C.5).</summary>
-    public static readonly string[] GeometricFields = ["pose", "active", "uia", "ttv"];
+    public static readonly string[] GeometricFields = ["pose", "active", "uia", "ttv", ScreenField];
+
+    /// <summary>The PrintWindow pose of a facade Translation drag (spec 066 §12.2, Q1f).</summary>
+    public const string ScreenField = "screen";
+
+    /// <summary>
+    /// A run without an interactive desktop (a locked or disconnected session) can't see the screen, so a skip
+    /// matches any value either way, and recording replaces a recorded skip with a real value.
+    /// </summary>
+    public const string ScreenSkipped = "skip";
 
     public const double Tolerance = 2;
 
@@ -90,7 +99,7 @@ internal sealed class TransformsLedger
     /// <summary>Equality for one field: exact, except geometric fields, which allow ±2 DIP per number.</summary>
     public static bool FieldEquals(string field, string? a, string? b)
     {
-        if (a == b) return true;
+        if (a == b || (field == ScreenField && (a == ScreenSkipped || b == ScreenSkipped))) return true;
         if (a is null || b is null || Array.IndexOf(GeometricFields, field) < 0) return false;
         var ta = Tokens(a);
         var tb = Tokens(b);
@@ -100,14 +109,16 @@ internal sealed class TransformsLedger
             bool na = double.TryParse(ta[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var da);
             bool nb = double.TryParse(tb[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var db);
             if (na != nb) return false;
-            if (na ? Math.Abs(da - db) > Tolerance : ta[i] != tb[i]) return false;
+            // NaN or infinity never sits within the tolerance of anything: it must match exactly.
+            bool finite = na && double.IsFinite(da) && double.IsFinite(db);
+            if (finite ? Math.Abs(da - db) > Tolerance : ta[i] != tb[i]) return false;
         }
 
         return true;
     }
 
-    /// <summary>Every field that differs between two records of the same case.</summary>
-    public static IEnumerable<LedgerDifference> CompareCase(string id, LedgerCase? before, LedgerCase? after)
+    /// <summary>Every field that differs between two records of the same case; <paramref name="exact"/> drops the geometric tolerance.</summary>
+    public static IEnumerable<LedgerDifference> CompareCase(string id, LedgerCase? before, LedgerCase? after, bool exact = false)
     {
         if (before?.Dims != after?.Dims) yield return new LedgerDifference(id, "dims", "dims", before?.Dims, after?.Dims);
         var steps = (before?.Steps.Keys ?? Enumerable.Empty<string>()).Concat(after?.Steps.Keys ?? Enumerable.Empty<string>()).Distinct(StringComparer.Ordinal);
@@ -122,7 +133,7 @@ internal sealed class TransformsLedger
                 string? bv = null, av = null;
                 b?.TryGetValue(field, out bv);
                 a?.TryGetValue(field, out av);
-                if (!FieldEquals(field, bv, av)) yield return new LedgerDifference(id, step, field, bv, av);
+                if (exact ? bv != av : !FieldEquals(field, bv, av)) yield return new LedgerDifference(id, step, field, bv, av);
             }
         }
     }
@@ -149,8 +160,8 @@ internal sealed class TransformsLedger
         foreach (var (step, fields) in observed.Steps)
         {
             if (!committed.Steps.TryGetValue(step, out var old)) continue;
-            foreach (var key in fields.Keys.ToArray())
-                if (old.TryGetValue(key, out var v) && FieldEquals(key, v, fields[key])) fields[key] = v;
+            var unchanged = fields.Keys.Where(key => old.TryGetValue(key, out var v) && v != ScreenSkipped && FieldEquals(key, v, fields[key])).ToArray();
+            foreach (var key in unchanged) fields[key] = old[key];
         }
     }
 
@@ -215,10 +226,14 @@ internal sealed record LedgerCheck(
         IReadOnlyList<LedgerExpectation>? baseExpectations = null)
     {
         if (baseExpectations is not null && expectations.SequenceEqual(baseExpectations)) expectations = [];
+        string rent = MatrixCase.StepName(MatrixStep.RentTransformed);
         var diffs = TransformsLedger.Diff(baseLedger, head);
-        // The control group can't be excused: only its rent-as-transformed step may change (layer 4).
-        var control = diffs.Where(d => d.Case == ControlGroupId && d.Step != MatrixCase.StepName(MatrixStep.RentTransformed)).ToList();
-        var declarable = diffs.Except(control).ToList();
+        // The control group stays byte-identical (§12.1 C.3), so it's compared without the geometric
+        // tolerance, and no expectation can excuse it. Only its rent-as-transformed step may change (layer 4).
+        baseLedger.Cases.TryGetValue(ControlGroupId, out var baseControl);
+        head.Cases.TryGetValue(ControlGroupId, out var headControl);
+        var control = TransformsLedger.CompareCase(ControlGroupId, baseControl, headControl, exact: true).Where(d => d.Step != rent).ToList();
+        var declarable = diffs.Where(d => d.Case != ControlGroupId || d.Step == rent).ToList();
         var undeclared = declarable.Where(d => !expectations.Any(e => e.Matches(d))).ToList();
         var stale = expectations.Where(e => !declarable.Any(e.Matches)).ToList();
         var bad = expectations.Where(e => !LedgerExpectation.ReasonPattern.IsMatch(e.Reason)).ToList();
