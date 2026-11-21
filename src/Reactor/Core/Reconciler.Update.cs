@@ -529,7 +529,17 @@ public sealed partial class Reconciler
         {
             ModifierUpdate = previousModifierUpdate;
             _implicitSlot = previousImplicitSlot;
-            if (modifierParent is null) _implicitDeferred = previousImplicitDeferred;
+            if (modifierParent is null)
+            {
+                // An update that threw after a deferred release still restores the keys it held
+                // back, or a later claim on them would wait for a flush that never comes.
+                if (_implicitDeferred)
+                {
+                    try { ImplicitAnimationSlots.FlushDeferred(control); }
+                    catch { /* Don't mask the exception that ended the update. */ }
+                }
+                _implicitDeferred = previousImplicitDeferred;
+            }
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();

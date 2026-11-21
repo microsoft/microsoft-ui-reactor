@@ -365,6 +365,38 @@ internal static class ImplicitAnimationSlotsFixtures
     }
 
     /// <summary>
+    /// An update that throws after <c>.Animate()</c> released a key still restores the transition
+    /// it held back, so a retry on the same control animates with the transition.
+    /// </summary>
+    internal sealed class DeferredRestoreSurvivesThrow(Harness h) : SlotsFixture(h, "ImplicitSlots_DeferredRestoreSurvivesThrow")
+    {
+        private static readonly TimeSpan TransitionTime = TimeSpan.FromMilliseconds(777);
+
+        protected override async Task Run()
+        {
+            await Mount(TakesVisual(Target()));
+            await Update(TakesVisual(Target()).OpacityTransition(TransitionTime)
+                .Animate(Curve.Linear(3000), AnimateProperty.Opacity));
+            H.Check(Name + "_AnimateWins", KeyDuration("Opacity") == TimeSpan.FromMilliseconds(3000), $"duration={KeyDuration("Opacity")}");
+
+            bool threw = false;
+            try
+            {
+                await Update(TakesVisual(Target()).OpacityTransition(TransitionTime)
+                    .Set(static _ => throw new InvalidOperationException("slots")));
+            }
+            catch (InvalidOperationException) { threw = true; }
+            H.Check(Name + "_UpdateThrew", threw);
+            H.Check(Name + "_RestoredAfterThrow", KeyDuration("Opacity") == TransitionTime, $"duration={KeyDuration("Opacity")}");
+
+            // The retry diffs against the last render that succeeded, so it runs the release (and
+            // its flush) again; the transition must still be the key afterwards.
+            await Update(TakesVisual(Target()).OpacityTransition(TransitionTime));
+            H.Check(Name + "_RetryKeepsTransition", KeyDuration("Opacity") == TransitionTime, $"duration={KeyDuration("Opacity")}");
+        }
+    }
+
+    /// <summary>
     /// A decorator that forwards its child's control without naming it as its source target
     /// still counts as a layer: Update reaches its child one slot deeper, so Mount must too.
     /// </summary>
