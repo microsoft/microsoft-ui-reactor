@@ -280,8 +280,7 @@ public static class GalleryControls
     public static Element PageHeader(string title, string description) =>
         VStack(4,
             TextBlock(title)
-                .ApplyStyle("TitleTextBlockStyle")
-                .Bold(),
+                .ApplyStyle("TitleTextBlockStyle"),
             TextBlock(description)
                 .Foreground(Theme.SecondaryText)
                 .HAlign(HorizontalAlignment.Left)

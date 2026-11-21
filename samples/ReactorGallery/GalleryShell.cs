@@ -12,20 +12,22 @@ class GalleryShell : Component
     static readonly Dictionary<string, string> CategoryIcons = new()
     {
         ["Basic Input"] = "\uE73A",
-        ["Collections"] = "\uE8A9",
+        ["Collections"] = "\uE80A",
         ["Data"] = "\uE7C3",
-        ["Date and Time"] = "\uE787",
-        ["Dialogs and Flyouts"] = "\uE8BD",
+        ["Date and Time"] = "\uEC92",
+        ["Dialogs and Flyouts"] = "\uE15F",
         ["Fundamentals"] = "\uE8F1",
         ["Layout"] = "\uE8A1",
-        ["Media"] = "\uE8B9",
-        ["Menus and Toolbars"] = "\uE700",
-        ["Navigation"] = "\uE8B0",
-        ["Status and Info"] = "\uE946",
+        ["Media"] = "\uE173",
+        ["Menus and Toolbars"] = "\uE74E",
+        ["Navigation"] = "\uE700",
+        ["Status and Info"] = "\uE8F2",
         ["System"] = "\uE770",
         ["Text"] = "\uE8D2",
         ["Patterns"] = "\uE943",
-        ["Styles"] = "\uE790",
+        ["Styles"] = "\uE2B1",
+        ["Design"] = "\uEB3C",
+        ["Motion"] = "\uE945",
     };
 
     public override Element Render()
@@ -98,7 +100,7 @@ class GalleryShell : Component
         // Design, Fundamentals and System are not control categories — they sit above the
         // "Controls" header as their own top-level entries rather than inside it.
         NavigationViewItemData CategoryNavItem(string category, string glyph) =>
-            NavItem(category, tag: GalleryRoutes.CategorySlug(category)) with
+            NavItem(ControlRegistry.CategoryDisplayName(category), tag: GalleryRoutes.CategorySlug(category)) with
             {
                 IconElement = FontIcon(glyph),
                 Children = ControlRegistry.All
@@ -116,7 +118,7 @@ class GalleryShell : Component
         {
             NavItem("Home", tag: GalleryRoutes.HomeTag) with { IconElement = FontIcon("\uE80F") },
             CategoryNavItem("Fundamentals", "\uE8F1"),
-            CategoryNavItem("Design", "\uE790"),
+            CategoryNavItem("Design", "\uEB3C"),
             CategoryNavItem("System", "\uE770"),
             NavItemHeader("Controls"),
         }
@@ -150,7 +152,7 @@ class GalleryShell : Component
                 .Where(c => c.Category == categoryName)
                 .ToArray();
 
-            content = CardListPage("category:" + selectedTag, categoryName,
+            content = CardListPage("category:" + selectedTag, ControlRegistry.CategoryDisplayName(categoryName),
                 ControlRegistry.IsControlCategory(categoryName)
                     ? $"{controls.Length} controls in this category"
                     : $"{controls.Length} topics in this category",
