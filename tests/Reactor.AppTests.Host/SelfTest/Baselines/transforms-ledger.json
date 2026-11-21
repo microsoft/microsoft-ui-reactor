@@ -2690,7 +2690,7 @@
     "Translation.Rotation.Animate": {
       "dims": "wrapper=Decorator flow=Ltr motion=Enabled user=TranslationDrag variant=B",
       "mount": { "threw": "-", "running": "Translation,Opacity", "pose": "145,160,245,200", "screen": "145,161,245,201", "opacity": "1.00", "hit": "1,1,1", "uia": "100,40", "ttv": "145,160;245,200", "channel": "taken=1 facade=T visual=T", "model": "pose", "diag": "-" },
-      "change": { "threw": "-", "motion": "Translation=ANIMATING Opacity=ANIMATING", "curve": "Translation=0.0 Opacity=0.2", "running": "-", "pose": "180,180,280,220", "screen": "180,181,280,221", "opacity": "0.80", "channel": "taken=1 facade=- visual=T", "model": "ok", "diag": "-" },
+      "change": { "threw": "-", "motion": "Translation=ANIMATING Opacity=ANIMATING", "curve": "Translation=0.2 Opacity=0.2", "running": "-", "pose": "180,180,280,220", "screen": "180,181,280,221", "opacity": "0.80", "channel": "taken=1 facade=- visual=T", "model": "ok", "diag": "-" },
       "removeFeature": { "threw": "-", "running": "-", "pose": "180,180,280,220", "screen": "180,181,280,221", "opacity": "0.80", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "running": "-", "pose": "180,180,280,220", "screen": "180,181,280,221", "opacity": "0.80", "model": "ok", "diag": "-" },
       "removeModifier": { "threw": "-", "residue": "xaml=- keys=CenterPoint,Offset,Opacity,RotationAngle,Scale", "running": "-", "pose": "120,150,220,190", "screen": "120,151,220,191", "opacity": "0.80", "model": "pose", "diag": "-" },
