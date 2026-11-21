@@ -174,7 +174,13 @@ public sealed class ToolkitInputTests : AppTestBase
     {
         NavigateToFixtureFresh("ToolkitInput_RangeSelector");
         WaitForObservation("20|80");
-        App.Click("ToolkitInput.MinThumb");
+        // A pointer press on the Toolkit thumb starts manipulation without focusing it.
+        // Enter its tab stops from the real button immediately after the range instead.
+        App.Click("Range.Reset");
+        WaitForText("ToolkitInput.Focus", "Range.Reset");
+        App.SendKeys("shift+tab", viaSendInput: true);
+        WaitForText("ToolkitInput.Focus", "ToolkitInput.MaxThumb");
+        App.SendKeys("shift+tab", viaSendInput: true);
         WaitForText("ToolkitInput.Focus", "ToolkitInput.MinThumb");
         // No --target or UiElement.SendKeys: either could focus the destination and
         // conceal broken Tab routing. This checks focus, not unsupported keyboard values.
