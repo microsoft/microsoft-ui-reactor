@@ -1706,6 +1706,8 @@ public sealed partial class Reconciler : IDisposable
         internal bool VisualTaken;
         // A navigation transition's completion can still reach the control after it leaves the tree.
         internal bool PoolExcluded;
+        // A connected-animation source: an excluded return still drops the element it hosted.
+        internal bool ReleaseWhenExcluded;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -4757,8 +4759,11 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
     {
+        // A control kept out of the pool isn't reused, and a connected-animation source keeps its
+        // hover brushes for the snapshot WinUI takes on the next frame.
         if (element?.InteractionStates is not null)
-            ClearInteractionStates(control, restoreBrushes: true);
+            ClearInteractionStates(control,
+                restoreBrushes: control.GetValue(ReactorAttached.StateProperty) is not ReactorState { PoolExcluded: true });
         if (element?.KeyframeAnimations is not null)
             ClearKeyframeAnimations(control, element.KeyframeAnimations);
         if (element?.ScrollAnimation is not null)
@@ -6839,7 +6844,11 @@ public sealed partial class Reconciler : IDisposable
                         return;
                     }
                 }
-                if (!retained) _keyframeTriggerValues.Remove(key);
+                if (!retained)
+                {
+                    _keyframeTriggerValues.Remove(key);
+                    state.KeyframeNames?.Remove(nameKey);
+                }
                 else if (!replayed)
                 {
                     owners[property] = owner with { Scope = current };
@@ -6866,8 +6875,9 @@ public sealed partial class Reconciler : IDisposable
         foreach (var entry in entries)
         {
             if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
-            if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)
-                || !ownedOnly || noCompositor || state.Started is not { } started)
+            if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)) continue;
+            if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState { KeyframeNames: { } names }) names.Remove(entry.Name);
+            if (!ownedOnly || noCompositor || state.Started is not { } started)
                 continue;
             // Started controllers mean the visual was already handed out. Look it up without
             // moving facade transforms, which the caller does after the handler's setters.
@@ -7061,7 +7071,8 @@ public sealed partial class Reconciler : IDisposable
             _preparedConnectedAnimationKeys.Add(key);
             ConnectedAnimationFrameGate.Prepared(key);
             // WinUI captures the source at the next frame, so the pool must not reset or rent it first.
-            ElementPool.ExcludeFromPool(control);
+            // Its return still drops the element it hosted, so a callback can't reach the old component.
+            ElementPool.ExcludeFromPool(control, releaseOnReturn: true);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {

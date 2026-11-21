@@ -369,6 +369,38 @@ internal static class ImplicitAnimationSlotsFixtures
     }
 
     /// <summary>
+    /// An update that throws after <c>.Animate()</c> released a key still restores the transition
+    /// it held back, so a retry on the same control animates with the transition.
+    /// </summary>
+    internal sealed class DeferredRestoreSurvivesThrow(Harness h) : SlotsFixture(h, "ImplicitSlots_DeferredRestoreSurvivesThrow")
+    {
+        private static readonly TimeSpan TransitionTime = TimeSpan.FromMilliseconds(777);
+
+        protected override async Task Run()
+        {
+            await Mount(TakesVisual(Target()));
+            await Update(TakesVisual(Target()).OpacityTransition(TransitionTime)
+                .Animate(Curve.Linear(3000), AnimateProperty.Opacity));
+            H.Check(Name + "_AnimateWins", KeyDuration("Opacity") == TimeSpan.FromMilliseconds(3000), $"duration={KeyDuration("Opacity")}");
+
+            bool threw = false;
+            try
+            {
+                await Update(TakesVisual(Target()).OpacityTransition(TransitionTime)
+                    .Set(static _ => throw new InvalidOperationException("slots")));
+            }
+            catch (InvalidOperationException) { threw = true; }
+            H.Check(Name + "_UpdateThrew", threw);
+            H.Check(Name + "_RestoredAfterThrow", KeyDuration("Opacity") == TransitionTime, $"duration={KeyDuration("Opacity")}");
+
+            // The retry diffs against the last render that succeeded, so it runs the release (and
+            // its flush) again; the transition must still be the key afterwards.
+            await Update(TakesVisual(Target()).OpacityTransition(TransitionTime));
+            H.Check(Name + "_RetryKeepsTransition", KeyDuration("Opacity") == TransitionTime, $"duration={KeyDuration("Opacity")}");
+        }
+    }
+
+    /// <summary>
     /// A decorator that forwards its child's control without naming it as its source target
     /// still counts as a layer: Update reaches its child one slot deeper, so Mount must too.
     /// </summary>
@@ -443,6 +475,31 @@ internal static class ImplicitAnimationSlotsFixtures
             await Update(Three(10, middle: false));
             await Update(Three(20, middle: false));
             H.Check(Name + "_ThreeLayerChannelLookup_NegativeControl", !await Animates("Translation", Three(40, middle: false)));
+
+            // Featureless forwarders around a leaf whose control is replaced: the leaf's claim
+            // must still be released when its layout animation goes.
+            static Element Bare(Element leaf) => new SlotsForwarder(new SlotsForwarder(leaf));
+            await Update(Bare(Target().LayoutAnimation()));
+            await Update(Bare(Button40().LayoutAnimation()));
+            H.Check(Name + "_BareReplacedInstalled", Keys() == "Offset", $"keys={Keys()}");
+            await Update(Bare(Button40()));
+            H.Check(Name + "_BareReplacedRemoved", Keys() == "-" && Claims() == 0, $"keys={Keys()} claims={Claims()}");
+            await Update(Bare(Target().LayoutAnimation()));
+            await Update(Bare(Target()));
+            H.Check(Name + "_BareMountedRemoved", Keys() == "-" && Claims() == 0, $"keys={Keys()} claims={Claims()}");
+
+            // The middle forwarder claims in Update on a replaced control its featureless leaf
+            // mounted; the outer forwarder must still number it one slot inward.
+            static Element Mixed(Element leaf, bool middle) =>
+                new SlotsForwarder(middle ? new SlotsForwarder(leaf).LayoutAnimation(TimeSpan.FromMilliseconds(800)) : new SlotsForwarder(leaf))
+                    .Animate(Curve.Linear(900), AnimateProperty.Offset);
+            await Update(Mixed(Target(), middle: true));
+            await Update(Mixed(Button40(), middle: true));
+            H.Check(Name + "_MixedReplacedLayoutWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(800) && Claims() == 2,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Mixed(Button40(), middle: false));
+            H.Check(Name + "_MixedMiddleRemoved", KeyDuration("Offset") == TimeSpan.FromMilliseconds(900) && Claims() == 1,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
         }
     }
 

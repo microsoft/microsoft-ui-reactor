@@ -29,9 +29,17 @@ public sealed class ElementPool : IDisposable
     internal static bool IsVisualTaken(UIElement element)
         => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { VisualTaken: true };
 
-    /// <summary>Keeps the control out of the pool for good. A pending navigation completion may still reach it.</summary>
-    internal static void ExcludeFromPool(UIElement element)
-        => Reconciler.GetOrCreateReactorState(element).PoolExcluded = true;
+    /// <summary>
+    /// Keeps the control out of the pool for good. A pending navigation completion may still reach it.
+    /// With <paramref name="releaseOnReturn"/>, a return still drops the element and handlers it
+    /// hosted, without touching its pixels.
+    /// </summary>
+    internal static void ExcludeFromPool(UIElement element, bool releaseOnReturn = false)
+    {
+        var state = Reconciler.GetOrCreateReactorState(element);
+        state.PoolExcluded = true;
+        state.ReleaseWhenExcluded |= releaseOnReturn;
+    }
 
     private const int MaxPerType = 32;
 
@@ -170,7 +178,15 @@ public sealed class ElementPool : IDisposable
 
         // The lane follows the native control's marker, whichever wrapper reached it (#1643).
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
-        if (state?.PoolExcluded == true) return;
+        if (state?.PoolExcluded == true)
+        {
+            if (state.ReleaseWhenExcluded)
+            {
+                Reconciler.ClearElementTag(element);
+                Reconciler.ClearCurrentEventHandlers(element);
+            }
+            return;
+        }
         var lanes = state?.VisualTaken == true ? _visualPools : _pools;
 
         if (!lanes.TryGetValue(type, out var stack))
@@ -652,17 +668,17 @@ public sealed class ElementPool : IDisposable
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
-        // Layout owns Offset and Size and writes them only when they change, so a stopped animation's
-        // last value, or a direct write through the visual, would stay. Put the layout values back.
-        // Sub-pixel differences are layout rounding.
-        var layoutOffset = fe.ActualOffset;
-        if (Vector3.DistanceSquared(visual.Offset, layoutOffset) > 0.25f) visual.Offset = layoutOffset;
-        var layoutSize = fe.ActualSize;
-        if (Vector2.DistanceSquared(visual.Size, layoutSize) > 0.25f) visual.Size = layoutSize;
-
         // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
-        // this drops keys no claim owns, for example ones user code installed.
+        // this drops keys no claim owns, for example ones user code installed. Before
+        // any write below, so none of them starts an implicit animation.
         visual.ImplicitAnimations = null;
+
+        // Layout owns Offset and writes it only when the position changes, so a stopped animation's
+        // last value, or a direct write through the visual, would stay. Put the layout offset back,
+        // unconditionally: a stopped expression's last value lands after this, so the getter can't
+        // tell yet, and this write follows the stop in the same batch. Size is left alone, because a
+        // fresh handoff visual doesn't reliably carry ActualSize.
+        visual.Offset = fe.ActualOffset;
 
         visual.Opacity = 1;
         visual.IsVisible = true;
