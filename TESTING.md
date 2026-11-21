@@ -766,7 +766,10 @@ wrapper (direct, keyed `Memo`, `ModifiedElement`), flow direction, reduced motio
 `.Set` facade write, a facade `Translation` drag) and a sub-variant assigned so that every pair of
 values across all eight dimensions occurs at least once. The generator is seeded, and a case id is
 just its triple, for example `Scale.Opacity.Animate`, so ids never change when the pairwise
-assignment does. Layer 5 adds `TransformOrigin` to the transform axis.
+assignment does. Reduced motion is `TransitionEngine.OverrideAnimationsEnabled`, which is what
+Reactor reads. On `main` only navigation transitions read it, and XAML implicit
+transitions follow the system setting, which a run doesn't change. Layer 2 makes `.XxxTransition()`
+read it (spec 066 §5.5), and declares the ledger change. Layer 5 adds `TransformOrigin` to the transform axis.
 
 **What a case records.** Each case runs one lifecycle — `mount`, `change` (the declared values),
 `removeFeature`, `addFeature`, `removeModifier`, `unmount`, `rentPlain` and `rentTransformed`
@@ -775,8 +778,9 @@ assignment does. Layer 5 adds `TransformOrigin` to the transform axis.
 holds the channel), `motion` (per changed channel: `ANIMATING`, `JUMPED`, `NOT-APPLIED`, `HELD`),
 `curve` (progress at a quarter of the time, in steps of 0.2: linear reads 0.2, the Fluent
 (0.8,0,0.2,1) ease 0.0, the compositor's default ease-out 0.6), `running` (animations still going
-when the step settled), `residue` (transitions still installed after `removeModifier`, #1626),
-`hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
+when the step settled), `residue` (transitions still installed after `removeModifier`, #1626, or `remounted` when a keyed `Memo` replaced the control),
+`opacity` (the settled opacity at the target's centre, in steps of 0.05, so a lost update reads 1.00
+instead of 0.80), `hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
 Motion is controller-driven, layout `Offset` included: each new animation is paused and seeked to
 its start, 25%, 50% and 100%, measured from where it actually starts, so no verdict depends on
 wall-clock timing. Two things RenderTargetBitmap can't see are recorded as such rather than

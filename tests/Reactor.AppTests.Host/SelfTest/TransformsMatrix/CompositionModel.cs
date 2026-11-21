@@ -130,6 +130,16 @@ internal static class CompositionModel
     /// </summary>
     public static double Green(double opacity, bool altBackground) => 255 * (1 - opacity) + (altBackground ? 0x20 : 0) * opacity;
 
+    /// <summary>
+    /// The settled opacity a measured green implies (the inverse of <see cref="Green"/>), in steps of
+    /// 0.05 so a pixel of noise can't change it: 1 reads <c>1.00</c> and 0.8 reads <c>0.80</c>.
+    /// </summary>
+    public static string OpacityFromGreen(double green, bool altBackground)
+    {
+        double opacity = (255 - green) / (255 - (altBackground ? 0x20 : 0));
+        return (Math.Round(opacity / 0.05) * 0.05).ToString("F2", CultureInfo.InvariantCulture);
+    }
+
     public static float Opacity(MatrixStep step) =>
         step is MatrixStep.Mount or MatrixStep.RentPlain or MatrixStep.RentTransformed ? OpacityA : OpacityB;
 

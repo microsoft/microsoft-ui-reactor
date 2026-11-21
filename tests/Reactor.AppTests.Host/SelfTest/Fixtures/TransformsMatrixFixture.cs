@@ -147,8 +147,9 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
     /// <summary>
     /// Observes a case; on a ledger mismatch or an inconclusive oracle, reruns it up to
     /// <see cref="Retries"/> times (§12.1 C.5). Record mode reruns until one observation matches the
-    /// committed ledger or two agree, at most twice, so an intended change costs two runs, not four. A
-    /// case the ledger doesn't have yet always needs two agreeing runs.
+    /// committed ledger or any two conclusive ones agree, at most twice, so an intended change costs two
+    /// runs, and one outlier between two agreeing runs doesn't reject it. A case the ledger doesn't
+    /// have yet always needs two agreeing runs.
     /// </summary>
     private async Task<LedgerCase> Compare(string id, TransformsLedger committed, Mode mode, Func<Task<LedgerCase>> observe,
         TransformsMatrixRecorder? recorder = null)
@@ -156,15 +157,16 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         committed.Cases.TryGetValue(id, out var expected);
         var record = await observe();
         var diffs = Differences(id, expected, record);
-        LedgerCase? previous = null;
+        var earlier = new List<LedgerCase>();
+        bool Agrees() => earlier.Any(o => Differences(id, o, record).Count == 0);
         for (int run = 1; run <= (mode == Mode.Record ? 2 : Retries); run++)
         {
             bool inconclusive = recorder?.Inconclusive.Count > 0 || Unclear(record);
             if (!inconclusive && expected is not null && diffs.Count == 0) break;
             if (mode != Mode.Record && !inconclusive && expected is null) break;
-            if (mode == Mode.Record && !inconclusive && previous is not null && Differences(id, previous, record).Count == 0) break;
+            if (mode == Mode.Record && !inconclusive && Agrees()) break;
             Console.WriteLine($"# TransformsMatrix {id}: {diffs.Count} difference(s) from the ledger{(inconclusive ? ", inconclusive" : "")}, rerun {run}");
-            previous = record;
+            if (!inconclusive) earlier.Add(record);
             record = await observe();
             diffs = Differences(id, expected, record);
         }
@@ -172,9 +174,9 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         if (mode == Mode.Record)
         {
             // A change or a new case is recorded only once two observations agree; three different ones are noise.
-            bool confirmed = (expected is not null && diffs.Count == 0) || (previous is not null && Differences(id, previous, record).Count == 0);
+            bool confirmed = (expected is not null && diffs.Count == 0) || Agrees();
             Check($"TransformsMatrix_{id}_Stable", confirmed, expected is null
-                ? $"{id} is new and its observations disagreed, so the recording isn't reproducible: {string.Join(" | ", Differences(id, previous, record).Take(8))}"
+                ? $"{id} is new and its observations disagreed, so the recording isn't reproducible: {string.Join(" | ", Differences(id, earlier.LastOrDefault(), record).Take(8))}"
                 : $"{id} differed from the ledger and between its reruns, so the recording isn't reproducible: {string.Join(" | ", diffs.Take(8))}");
             foreach (var d in diffs) Console.WriteLine($"# TransformsMatrix ledger change: {d}");
             if (expected is not null) TransformsLedger.KeepUnchanged(expected, record);
@@ -339,6 +341,15 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         r.Opacity = Model.OpacityB;
         double g08 = (await Shot()).Green(center.Item1, center.Item2);
         Check("Opacity", g1 < 10 && Math.Abs(g08 / (255 * (1 - Model.OpacityB)) - 1) < 0.2, $"opaque G={g1:F0} 0.8 G={g08:F0}");
+
+        // Settled opacity: the recorder's reading tells a lost update (1) from the declared 0.8.
+        r.Opacity = 1;
+        var opaqueShot = await Shot();
+        string settled1 = opaqueShot.RedBox() is { } ob ? TransformsMatrixRecorder.ReadOpacity(opaqueShot, ob, false) : "none";
+        r.Opacity = Model.OpacityB;
+        var fadedShot = await Shot();
+        string settled08 = fadedShot.RedBox() is { } fb ? TransformsMatrixRecorder.ReadOpacity(fadedShot, fb, false) : "none";
+        Check("SettledOpacity", settled1 == "1.00" && settled08 == "0.80", $"opacity 1 read {settled1}, 0.8 read {settled08}");
 
         // Motion: a seeked compositor animation reads mid-way at 50%; a direct write reads JUMPED.
         r = Rect();
@@ -619,7 +630,8 @@ internal sealed class PoolSoak(Border host)
                     rented++;
                     if (probe.Scale != Vector3.One || Math.Abs(probe.Rotation) > 1e-4f || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
                         violations["facade"]++;
-                    if (probe.OpacityTransition is not null || probe.BackgroundTransition is not null || probe.ChildrenTransitions is { Count: > 0 })
+                    if (probe.OpacityTransition is not null || probe.BackgroundTransition is not null || probe.ScaleTransition is not null
+                        || probe.RotationTransition is not null || probe.TranslationTransition is not null || probe.ChildrenTransitions is { Count: > 0 })
                         violations["xaml"]++;
                     try { probe.Rotation = 0; }
                     catch (UnauthorizedAccessException) { violations["taken"]++; }

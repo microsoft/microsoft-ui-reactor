@@ -95,10 +95,12 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             await Step(record, MatrixStep.AddFeature, async _ => { Render(StageOf(Declare(MatrixStep.AddFeature))); await Settle(); }, rest: true);
             await Step(record, MatrixStep.RemoveModifier, async f =>
             {
+                var before = Target;
                 Render(StageOf(Declare(MatrixStep.RemoveModifier)));
                 await Settle();
-                // #1626: a removed transition must not stay installed, idle until the next write.
-                if (Target is { } t) f["residue"] = TransitionResidue(t);
+                // #1626: a removed transition must not stay installed, idle until the next write. A
+                // replaced control (a keyed Memo whose key changed) never had it, so it says nothing.
+                if (Target is { } t) f["residue"] = ReferenceEquals(t, before) ? TransitionResidue(t) : "remounted";
             }, rest: true);
             if (!await Step(record, MatrixStep.Unmount, async f =>
             {
@@ -294,6 +296,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
                 var expected = Model.Bounds(ExpectedPose(step), Rtl, Model.Shift(_case, step));
                 if (box is null || !box.Value.Near(expected, TransformsLedger.Tolerance)) ModelDifferences.Add((name, "pose"));
                 if (_case.UserCode == UserCodeAxis.TranslationDrag) f[TransformsLedger.ScreenField] = ObserveScreen(name, expected);
+                f["opacity"] = ObserveOpacity(snap, box, step, name);
                 if (geometry) ObserveGeometry(f, t, step);
                 if (channels || geometry) f["channel"] = Channel(t);
             }
@@ -312,6 +315,27 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     }
 
     private Pose ExpectedPose(MatrixStep step) => Model.Expected(_case, step);
+
+    /// <summary>
+    /// The settled opacity, read at the centre of the observed target, so a lost opacity update
+    /// (1 instead of 0.8) shows even though the pose can't tell them apart. A declared looping
+    /// keyframe moves it on purpose, so it's not read there.
+    /// </summary>
+    private string ObserveOpacity(Snap snap, Box? box, MatrixStep step, string name)
+    {
+        if (LoopDeclared(step)) return "loop";
+        if (box is not { } b) return "none";
+        string seen = ReadOpacity(snap, b, Declare(step).AltBackground);
+        if (seen != Model.OpacityFromGreen(Model.Green(Model.Opacity(step), Declare(step).AltBackground), Declare(step).AltBackground))
+            ModelDifferences.Add((name, "opacity"));
+        return seen;
+    }
+
+    internal static string ReadOpacity(Snap snap, Box target, bool altBackground) =>
+        Model.OpacityFromGreen(snap.Green((target.X0 + target.X1) / 2, (target.Y0 + target.Y1) / 2), altBackground);
+
+    private bool LoopDeclared(MatrixStep step) =>
+        _case.Feature == FeatureAxis.Keyframes && _case.Variant == VariantAxis.B && Declare(step).Feature;
 
     /// <summary>
     /// A facade Translation written after the visual's translation is enabled reads applied under
@@ -340,8 +364,16 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
     private async Task ObserveActiveCore(OrderedDictionary<string, string> f, MatrixStep step)
     {
-        if (Model.Active(_case, step) is not { } pose || Target is not { } t) return;
+        if (Model.Active(_case, step) is not { } pose) return;
         string name = MatrixCase.StepName(step);
+        if (Target is not { } t)
+        {
+            // The model expects a pose here (an exit still running), but the control is already gone.
+            f["active"] = "none";
+            ModelDifferences.Add((name, "active"));
+            return;
+        }
+
         if (_case.Feature == FeatureAxis.InteractionStates)
         {
             Reconciler.SimulatePointerOverForTests(t, isOver: true);
@@ -396,8 +428,10 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         await Frames(2);
         if (!ReferenceEquals(Target, target))
         {
-            // A keyed Memo whose key changed replaced the control, so there is no motion to observe.
+            // The control was replaced, so there is no motion to observe. The model never remounts on a
+            // change (no case does on main), so it's a disagreement rather than a silent pass.
             f["motion"] = "remounted";
+            ModelDifferences.Add(("change", "motion:remounted"));
             return;
         }
 
@@ -421,18 +455,38 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             {
                 // Progress is measured from where this animation starts, not from the declared mount
                 // value: with user code the handoff can migrate a facade value first (§9 rows 1 and 3).
+                // A seek can take more than a frame to reach a capture, so each sample waits until two
+                // captures agree.
                 async Task<double> At(float progress)
                 {
                     ctl.Progress = progress;
                     await Frames(3);
-                    return Progress(ch, await Snap.CaptureAsync(caseHost));
+                    double last = Progress(ch, await Snap.CaptureAsync(caseHost));
+                    for (int i = 0; i < 5; i++)
+                    {
+                        await Frames(2);
+                        double now = Progress(ch, await Snap.CaptureAsync(caseHost));
+                        if (Math.Abs(now - last) < 0.01) break;
+                        last = now;
+                    }
+
+                    return last;
                 }
 
-                double start = await At(0.02f), quarter = await At(0.25f), mid = await At(0.5f), end = await At(1);
+                // The quarter is sampled twice, around the midpoint, so a stale capture of either one
+                // reads as a neighbour and the two disagree. The channel ends at 1 for the next one.
+                double start = await At(0.02f), quarter = await At(0.25f), mid = await At(0.5f), quarterAgain = await At(0.25f), end = await At(1);
                 double span = end - start;
                 verdict = Verdict(Math.Abs(span) < 0.05 ? end : (mid - start) / span, end);
                 if (verdict == Model.Animating && Math.Abs(span) >= 0.05)
-                    curves.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"{ch}={Math.Round((quarter - start) / span / 0.2) * 0.2:F1}"));
+                {
+                    double Bucket(double q) => Math.Round((q - start) / span / 0.2) * 0.2 is var b && Math.Abs(b) < 0.01 ? 0 : b;
+                    if (Math.Abs(Bucket(quarter) - Bucket(quarterAgain)) < 0.01)
+                        curves.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"{ch}={Bucket(quarter):F1}"));
+                    else
+                        Inconclusive.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture,
+                            $"change: {ch} curve samples at 25% disagree ({(quarter - start) / span:F2} then {(quarterAgain - start) / span:F2})"));
+                }
             }
             else
             {
@@ -677,7 +731,8 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// Waits out whatever still animates a transform or opacity channel when a step settles, so the
     /// rest pose is the end state (<c>.Animate()</c> animates mount values in, for example).
     /// Returns those channels, or null when Reactor never took the visual, so there is nothing a test
-    /// may safely read. A looping keyframe is left alone.
+    /// may safely read. A looping keyframe is left alone while it's declared; at any other step its
+    /// controller is a leftover, so it's reported like any other.
     /// </summary>
     private async Task<string?> SettleRunning(FrameworkElement t, MatrixStep step)
     {
@@ -688,8 +743,9 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         Visual visual;
         try { visual = ElementCompositionPreview.GetElementVisual(t); }
         catch (UnauthorizedAccessException) { return null; }
+        bool loopDeclared = LoopDeclared(step);
         var running = new[] { "Scale", "RotationAngle", "Translation", "CenterPoint", "Opacity" }
-            .Where(ch => !(ch == "Opacity" && _case.Feature == FeatureAxis.Keyframes && _case.Variant == VariantAxis.B))
+            .Where(ch => !(ch == "Opacity" && loopDeclared))
             .Where(ch => Controller(visual, ch) is not null)
             .ToList();
         if (running.Count > 0) await Finish(visual, running, MotionMs);
