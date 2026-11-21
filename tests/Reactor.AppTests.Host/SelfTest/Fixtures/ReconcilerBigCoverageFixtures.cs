@@ -1614,7 +1614,7 @@ internal static class ReconcilerBigCoverageFixtures
                             .At(0f, opacity: 0f,
                                 scale: new SysVec.Vector3(0.5f),
                                 translation: new SysVec.Vector3(20, 20, 0),
-                                rotation: 0.2f)
+                                rotation: 12f)
                             .At(1f, opacity: 1f,
                                 scale: SysVec.Vector3.One,
                                 translation: SysVec.Vector3.Zero,
@@ -1673,7 +1673,7 @@ internal static class ReconcilerBigCoverageFixtures
                             .Keyframes("anim", trigger, kf => kf
                                 .Duration(50)
                                 .At(0f, opacity: 0.4f, scale: new SysVec.Vector3(0.9f),
-                                    translation: new SysVec.Vector3(5, 0, 0), rotation: 0.05f)
+                                    translation: new SysVec.Vector3(5, 0, 0), rotation: 3f)
                                 .At(1f, opacity: 1f, scale: SysVec.Vector3.One,
                                     translation: SysVec.Vector3.Zero, rotation: 0f))
                         : (Element)TextBlock("kf-unmount-gone")
@@ -2289,7 +2289,7 @@ internal static class ReconcilerBigCoverageFixtures
             host.Mount(ctx => VStack(
                 TextBlock("is-target")
                     .InteractionStates(states => states
-                        .PointerOver(opacity: 0.7f, scale: 1.05f, rotation: 0.05f)
+                        .PointerOver(opacity: 0.7f, scale: 1.05f, rotation: 3f)
                         .Pressed(opacity: 0.5f) // inherits scale + rotation from PointerOver
                     )
             ));
@@ -2353,6 +2353,138 @@ internal static class ReconcilerBigCoverageFixtures
                 IconResolver.ResolveIconSource("DefinitelyNotASymbol"),
             };
             H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
+
+            // Path icons go through PathMarkup (XamlBindingHelper.ConvertValue — WinUI's native
+            // path-markup converter, no XamlReader). Natively parsed geometry does not expose
+            // its figures to code, so compare Bounds.
+            const string pathIconData = "F1 M0,0 l8,8 0,-8 z";
+            var expectedBounds = new global::Windows.Foundation.Rect(0, 0, 8, 8);
+            var converted = PathMarkup.Convert(pathIconData);
+            H.Check("PrivMount_PathMarkupConvert", converted?.Bounds == expectedBounds,
+                $"type={converted?.GetType().FullName ?? "null"} bounds={converted?.Bounds}");
+            // Full markup grammar: relative commands, compact numbers, arcs.
+            var roundedRect = PathMarkup.Convert("M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z");
+            H.Check("PrivMount_PathMarkupConvertRelativeArcs",
+                roundedRect?.Bounds == new global::Windows.Foundation.Rect(2, 2, 12, 12), $"bounds={roundedRect?.Bounds}");
+            H.Check("PrivMount_PathMarkupConvertBlankIsNull", PathMarkup.Convert("  ") is null && PathMarkup.Convert(null) is null);
+            // Markup the platform rejects (here a NaN coordinate, as corrupt chart data produces):
+            // Convert (author-written icon markup) throws as XAML would; TryConvert (data-driven
+            // paths) returns null so the path is not drawn.
+            Exception? convertError = null;
+            try { PathMarkup.Convert("M0,0 LNaN,5 L10,10"); }
+            catch (ArgumentException ex) { convertError = ex; }
+            H.Check("PrivMount_PathMarkupConvertRejectedThrows", convertError is not null);
+            var rejected = PathMarkup.TryConvert("M0,0 LNaN,5 L10,10");
+            H.Check("PrivMount_PathMarkupTryConvertRejectedIsNull", rejected is null, $"result={rejected?.Bounds}");
+
+            var iconSourceData = (IconResolver.ResolveIconSource(new PathIconData(pathIconData)) as WinXC.PathIconSource)?.Data;
+            H.Check("PrivMount_PathIconSourceGeometry", iconSourceData?.Bounds == expectedBounds, $"bounds={iconSourceData?.Bounds}");
+            var iconData = (IconResolver.ResolveIconForDescriptor(new PathIconData(pathIconData)) as WinXC.PathIcon)?.Data;
+            H.Check("PrivMount_PathIconGeometry", iconData?.Bounds == expectedBounds, $"bounds={iconData?.Bounds}");
+
+            // PathElement.PathDataString takes the same converter. Each phase is one update of the
+            // same live Path: geometry swaps keep the element's FillRule, rejected markup falls back
+            // to Data (and follows a Data swap), and removing the last geometry source clears it.
+            var fallbackA = new Microsoft.UI.Xaml.Media.RectangleGeometry { Rect = new global::Windows.Foundation.Rect(1, 2, 3, 4) };
+            var fallbackB = new Microsoft.UI.Xaml.Media.RectangleGeometry { Rect = new global::Windows.Foundation.Rect(5, 6, 7, 8) };
+            const string roundedMarkup = "M20 24a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H24a2 2 0 0 1-2-2z";
+            const string nanMarkup = "M20 24 LNaN,30";
+            var phases = new (string? Markup, Microsoft.UI.Xaml.Media.Geometry? Data)[]
+            {
+                (roundedMarkup, null),                // 0 mount
+                ("M0,0 L10,0 L10,10 Z", null),        // 1 markup swap
+                (nanMarkup, fallbackA),               // 2 rejected -> Data
+                (nanMarkup, fallbackB),               // 3 Data swap under unchanged markup
+                (nanMarkup, null),                    // 4 rejected, no Data -> cleared
+                ("M0,0 L10,10", null),                // 5
+                ("", null),                           // 6 markup -> "" clears
+                ("M0,0 L10,10", null),                // 7
+                (null, null),                         // 8 markup -> null clears
+                (null, fallbackA),                    // 9 Data only
+            };
+            var pathHost = H.CreateHost();
+            pathHost.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("PathMarkupNext", () => setPhase(phase + 1)),
+                    new PathElement
+                    {
+                        PathDataString = phases[phase].Markup,
+                        Data = phases[phase].Data,
+                        FillRule = Microsoft.UI.Xaml.Media.FillRule.Nonzero,
+                    }.AutomationName("PathMarkupProbe"));
+            });
+            await Harness.Render();
+            var mountedPath = H.FindControl<WinShapes.Path>(
+                p => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(p) == "PathMarkupProbe");
+            async Task NextPathPhase()
+            {
+                H.ClickButton("PathMarkupNext");
+                await Harness.Render();
+            }
+            bool HasBounds(double x, double y, double w, double h)
+                => mountedPath?.Data?.Bounds == new global::Windows.Foundation.Rect(x, y, w, h);
+            bool IsNonzero() => mountedPath?.Data is Microsoft.UI.Xaml.Media.PathGeometry { FillRule: Microsoft.UI.Xaml.Media.FillRule.Nonzero };
+            string Describe() => $"type={mountedPath?.Data?.GetType().Name ?? "null"} bounds={mountedPath?.Data?.Bounds} fill={(mountedPath?.Data as Microsoft.UI.Xaml.Media.PathGeometry)?.FillRule}";
+
+            H.Check("PrivMount_PathElementPathDataString", HasBounds(20, 22, 12, 12) && IsNonzero(), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementMarkupSwapKeepsFillRule", HasBounds(0, 0, 10, 10) && IsNonzero(), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementRejectedMarkupFallsBackToData", ReferenceEquals(mountedPath?.Data, fallbackA), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementFallbackDataSwap", ReferenceEquals(mountedPath?.Data, fallbackB), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementRejectedMarkupClears", mountedPath is not null && mountedPath.Data is null, Describe());
+            await NextPathPhase();
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementEmptyMarkupClears", mountedPath is not null && mountedPath.Data is null, Describe());
+            await NextPathPhase();
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementNullMarkupClears", mountedPath is not null && mountedPath.Data is null, Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementDataOnly", ReferenceEquals(mountedPath?.Data, fallbackA), Describe());
+
+            // A path icon whose markup changes is patched in place (same WinUI.PathIcon), and
+            // blank markup clears it, matching a fresh mount.
+            var iconHost = H.CreateHost();
+            iconHost.Mount(ctx =>
+            {
+                var (iconPhase, setIconPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("PathIconNext", () => setIconPhase(iconPhase + 1)),
+                    Icon(PathIcon(iconPhase switch { 0 => "M0,0 L8,8", 1 => "M0,0 L16,16", _ => "" }))
+                        .AutomationName("PathIconProbe"));
+            });
+            await Harness.Render();
+            var liveIcon = H.FindControl<WinXC.PathIcon>(
+                p => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(p) == "PathIconProbe");
+            H.Check("PrivMount_PathIconPatchMount", liveIcon?.Data?.Bounds == new global::Windows.Foundation.Rect(0, 0, 8, 8),
+                $"bounds={liveIcon?.Data?.Bounds}");
+            H.ClickButton("PathIconNext");
+            await Harness.Render();
+            var patchedIcon = H.FindControl<WinXC.PathIcon>(
+                p => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(p) == "PathIconProbe");
+            H.Check("PrivMount_PathIconPatchInPlace", liveIcon is not null && ReferenceEquals(liveIcon, patchedIcon)
+                && liveIcon.Data?.Bounds == new global::Windows.Foundation.Rect(0, 0, 16, 16), $"bounds={liveIcon?.Data?.Bounds}");
+            H.ClickButton("PathIconNext");
+            await Harness.Render();
+            H.Check("PrivMount_PathIconPatchBlankClears", liveIcon is not null && liveIcon.Data is null, $"bounds={liveIcon?.Data?.Bounds}");
+
+            // The Chart() builder turns non-finite points into gaps instead of emitting NaN markup
+            // that the platform rejects (which would leave the line and area undrawn), and keeps
+            // ±Infinity out of the scale domains so one bad sample can't collapse the whole chart.
+            var chartHost = H.CreateHost();
+            global::Microsoft.UI.Reactor.Hosting.XamlInterop.Register(chartHost.Reconciler);
+            double[] ys = [10, 40, double.NaN, 30, double.PositiveInfinity, 50, double.NegativeInfinity, 20];
+            chartHost.Mount(_ => VStack(
+                Microsoft.UI.Reactor.Charting.Charts.AreaChart(Enumerable.Range(0, ys.Length).ToArray(), i => i, i => ys[i])
+                    .Width(400).Height(300).ToElement()));
+            await Harness.Render();
+            var chartPaths = H.FindAllControls<WinShapes.Path>(_ => true);
+            H.Check("PrivMount_ChartNaNPointBecomesGap", chartPaths.Count >= 2 && chartPaths.All(p => p.Data is not null),
+                $"paths={chartPaths.Count} withData={chartPaths.Count(p => p.Data is not null)}");
 
             // The symbol-glyph fallback font must keep BOTH families: "Segoe Fluent
             // Icons" (Windows 11) and the "Segoe MDL2 Assets" tail (Windows 10, still a

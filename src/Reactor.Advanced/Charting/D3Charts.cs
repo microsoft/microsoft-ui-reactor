@@ -227,13 +227,13 @@ public static class D3Charts
     /// <summary>Creates a positioned rectangle on a Canvas.</summary>
     public static RectangleElement D3Rect(double x, double y, double width, double height) =>
         Rectangle()
-            .Width(Math.Max(0, width)).Height(Math.Max(0, height))
+            .Size(Math.Max(0, width), Math.Max(0, height))
             .Canvas(x, y);
 
     /// <summary>Creates a circle (ellipse) positioned at center (cx, cy) with radius r.</summary>
     public static EllipseElement D3Circle(double cx, double cy, double r) =>
         Ellipse()
-            .Width(r * 2).Height(r * 2)
+            .Size(r * 2, r * 2)
             .Canvas(cx - r, cy - r);
 
     /// <summary>Creates a line between two points.</summary>
@@ -250,7 +250,6 @@ public static class D3Charts
     {
         return new()
         {
-            Data = pathData != null ? PathDataParser.Parse(pathData) : null,
             PathDataString = pathData,
             Stroke = stroke,
             Fill = fill,
@@ -263,7 +262,6 @@ public static class D3Charts
     {
         return new()
         {
-            Data = pathData != null ? PathDataParser.Parse(pathData) : null,
             PathDataString = pathData,
             Stroke = stroke,
             Fill = fill,

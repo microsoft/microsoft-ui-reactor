@@ -157,8 +157,8 @@ adds only MSIX properties plus a `Package.appxmanifest`. The whole corpus runs u
 the alias stub inherits stdout while keeping package identity, which AUMID activation cannot do
 (it is brokered, so stdout can't be redirected at all).
 **Second gotcha:** a packaged fixture needs *two* declarations, not one. The
-`RequirePackagedTier` gate decides whether the body asserts; `SelfTestFixtureRegistry.TierRequirements`
-decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
+`RequirePackagedTier` gate decides whether the body asserts; the `SelfTestTier.Packaged` tier on its
+`SelfTestFixtureRegistry.Registrations` entry decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
 into the amber skip inventory on every unpackaged run forever (issue #1154). **The gate is not an
 independent identity check** — it and the tier filter share one entry-assembly predicate, so inside
 the packaged host it always returns true; `Packaged_IdentityGuard` failing its
@@ -273,7 +273,7 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   geometry, `BitmapImage`, or **`AutomationPeer`-derived** type — you get a `COMException`.
   Test only pure-managed logic + WinRT value structs/enums; push anything live to a
   selftest. Internal seams are fair game: `InternalsVisibleTo("Reactor.Tests")` is set, so
-  prefer an internal tokenizer/parser (e.g. `PathDataParser.ParseTokens(pathData)`)
+  prefer an internal tokenizer/parser (e.g. `BrushHelper.ParseColor(color)`)
   over a public method that builds WinUI objects.
 - In the `Microsoft.UI.Reactor.*.Tests` namespaces, `Microsoft.UI.System` shadows `System`
   — use `global::System.IO.Path`, `global::System.IO.File`, etc.

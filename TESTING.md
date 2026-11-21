@@ -37,6 +37,8 @@ dotnet test tests/Reactor.Tests -p:Platform=x64 && dotnet test tests/Reactor.Sel
 
 `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries. `Reactor.PackagedTests` does the same for `Reactor.PackagedTests.Host`.
 
+For `Reactor.DocPipeline.Tests`, see [Running the doc pipeline tests](docs/contributing/doc-pipeline.md#running-the-doc-pipeline-tests).
+
 ## Flag translation
 
 The suites moved to Microsoft.Testing.Platform when xunit.v3 v4 removed VSTest
@@ -232,6 +234,7 @@ Some tests here parse repo *sources* with Roslyn rather than exercising Reactor 
 | `GallerySnippetAgreementTests` | A `SampleCard` snippet uses a lowerCamelCase name that does not exist in the live code beside it — the snippet renamed, or the card did and the snippet did not. Direction is snippet → live only: a snippet may omit, it may not invent. |
 | `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. Also checks [PUA glyph fonts](#pua-glyph-fonts-in-gallery-samples) in live gallery code and displayed snippets. |
 | `SearchIndexGeneratorTests` | `samples/ReactorGallery/reactor-search-index.json` is stale. Regenerate with `dotnet run --project tools/Reactor.SearchIndex`. |
+| `SearchIndexCoverageTests` | A routed Gallery card is missing or out of order in the index, or a [manifest entry](tests/Reactor.Tests/Tooling/SearchIndexCoverageTests.cs) no longer names a source card. This check still catches omissions after index regeneration. |
 
 A snippet-agreement failure names the page, line, card title and identifier, and says which of the two sides to move. There is no allowlist: fix the snippet or fix the card.
 
@@ -342,25 +345,26 @@ locating and running the Host so every mode agrees on where the binary lives; it
 configuration and TFM stamped into the test assembly by `Reactor.SelfTests.csproj`, so
 `dotnet test -c Release` finds the Release Host rather than a stale Debug one.
 
-### Fixture registration is two-place — and what that does to name searches
+### Fixture registration and TAP names
 
-Selftest: add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`; miss the second and
-`--list-fixtures` reports a name the run cannot produce. E2E: add it to `AllFixtures` **and**
-to the `Build` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs` — `--list-fixtures`
-is selftest-only, so nothing warns you about the E2E half.
+Register each fixture with one name and factory in the ordered `Registrations` table. SelfTest
+uses `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E uses
+`tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Keep the relative order of existing entries
+because it determines SelfTest execution order and shard assignment, and E2E navigation order.
 
-That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
-carries two kinds of name and they live in different files: *fixture* names (registry only, and
-the class they map to is often spelled differently — `CenterOnCurrent_UsesCursorMonitor` →
-`CenterOnCurrentUsesCursorMonitor`) and *check* names (string literals in `H.Check(...)` inside
-`Fixtures/`). Neither location is a superset:
+`--list-fixtures` lists only SelfTest fixtures for the current host tier.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names, and that an entry carries `SelfTestTier.Packaged` exactly when its name has the `Packaged_` prefix.
+
+Search the whole host tree for names from TAP output. *Fixture* names are registered in the table,
+and the class they map to is often spelled differently (`CenterOnCurrent_UsesCursorMonitor`
+maps to `CenterOnCurrentUsesCursorMonitor`). *Check* names come from `H.Check(...)` in the
+fixture implementations.
 
 | probe | blind spot |
 |---|---|
 | grep `SelfTest/Fixtures/` only | fixture names whose class name differs |
 | grep `SelfTestFixtureRegistry.cs` only | check-only names — e.g. `WindowLevel_RuntimeFlip_Topmost`, `TabViewFill_Mounted`, `ExitTr_Removed` are all registry=0 |
-| **grep `tests/Reactor.AppTests.Host/` whole** | **literal names: none — use this** |
+| **grep `tests/Reactor.AppTests.Host/` whole** | A substring search can match a longer fixture name. Search for the full quoted fixture name. |
 
 One blind spot survives even the whole-tree grep: check names built by interpolation —
 `H.Check($"A11y_Role_{role}_Mounted", …)` — match no literal anywhere, so grepping the TAP name
@@ -431,7 +435,7 @@ to silence a flake, fix the flake instead — a skip makes the flake invisible r
 A skip is a per-run observation; tier applicability is a fixed property of the fixture, so a skip
 would restate the same permanent fact on every run and accumulate in the amber inventory — which is
 what [#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154) was. Declare the tier in
-`SelfTestFixtureRegistry.TierRequirements` instead and the fixture is simply not selected; see §3.
+its `SelfTestFixtureRegistry.Registrations` entry instead and the fixture is simply not selected; see §3.
 
 For raw-TAP consumers (the AOT job pipes `--self-test` straight to a `.tap` artifact and greps
 `^not ok `), the Host emits a `# Total skipped fixtures: N` trailer — placed *after*
@@ -574,7 +578,7 @@ This shape cost six separate investigations before it was diagnosed (issue #988)
 | `Run aborted by dispatcher-starvation hang on fixture 'X' (FailFast did not land; the wrapper's budget killed the process)` | Same signal, but the process would not die even under `FailFast`. **Still causal**, and the extra clause is the diagnosis: it points below the CLR — a native lock or a wedged UI thread. | Debug `X` as above, but expect a native cause. A dump is worth more than a managed stack here. |
 | `Run aborted: suite exceeded its <N>s budget with fixture 'X' in flight (POSITIONAL attribution…)` | The suite ran out of its shared budget with no hang signal. `X` was merely in flight. | Look at the reported elapsed-vs-budget, **not** at `X`. `--filter X` removes the other ~1400 fixtures that shared the budget — it removes the cause, so it passes whether or not `X` is healthy, in *either* direction. |
 | `Run aborted after fixture 'X'` / `Run aborted before fixture 'X'` — with ` (Host died mid-run with no '# Total failures:' trailer — NOT a budget kill; issue #978)` | The Host process stopped mid-fixture on its own (usually a native crash). **This is not #988**, and raising the budget does nothing for it. | Read the exit-code classification in the message first. Check the tail output and stderr for the native fault. |
-| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Look at teardown, not at `X`. Issue #680 (0xC0000005 at final process exit) is one known cause; the other is two-place fixture registration — a name `--list-fixtures` reports that the run's `Create()` switch does not produce. |
+| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Start with teardown and the TAP output. Issue #680 (0xC0000005 at final process exit) is a known teardown cause. Compare missing fixture names with `--list-fixtures` for the same Host binary, tier, and shard. |
 
 > **Do not let the two "arbitrary victim" failures collapse into one.** A budget kill (#988) and a silent mid-run death (#978) look nearly identical from outside: one fixture blamed, everything after it missing, and the victim moving between runs. The discriminator is the **`# Total failures:` trailer** — a budget kill interrupts a Host that *would* have printed it, whereas a Host that dies mid-fixture never reaches it. Prefer the trailer over elapsed time: timing corroborates but cannot decide, because a slow machine and a fast crash produce overlapping durations. The abort reasons above state which one fired, so this is readable off any skipped fixture without a re-run.
 
@@ -897,18 +901,18 @@ git branch -D coexist-probe
 
 ### Writing a packaged fixture
 
-Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,
-and both are load-bearing. **Gate** the fixture body:
+Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Add the
+fixture's name and factory to `SelfTestFixtureRegistry.Registrations`. Then configure the
+packaged tier in two steps. **Gate** the fixture body.
 
 ```csharp
 if (!PackagedIdentityFixtures.RequirePackagedTier(H, this)) return;
 ```
 
-and **declare** its tier in `SelfTestFixtureRegistry.TierRequirements`, beside its entry in
-`AllFixtures`:
+**Declare** the tier as the third element of the fixture's `Registrations` entry.
 
 ```csharp
-["Packaged_MyNewThing"] = SelfTestTier.Packaged,
+("Packaged_MyNewThing", static harness => new MyNewThingFixture(harness), SelfTestTier.Packaged),
 ```
 
 Register it with the **`Packaged_`** prefix — that is what the shim's

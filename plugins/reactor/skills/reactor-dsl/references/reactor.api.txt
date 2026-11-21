@@ -4217,9 +4217,6 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
-### static class PathDataParser
-Parse(string pathData) → Geometry
-
 ### record PathElement
 new()
 Brush Fill { get; init; }

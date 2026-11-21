@@ -130,7 +130,7 @@ public class MinimalCsprojDocTests
     {
         // End-to-end: the committed guide page a reader actually lands on must
         // show a concrete version, never the raw token.
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var generated = global::System.IO.File.ReadAllText(
             global::System.IO.Path.Join(repoRoot, "docs", "guide", "index.md"));
 
@@ -146,7 +146,7 @@ public class MinimalCsprojDocTests
     /// </summary>
     private static string ExtractMinimalSetupCsproj()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var templatePath = global::System.IO.Path.Join(
             repoRoot, "docs", "_pipeline", "templates", "index.md.dt");
 
@@ -168,18 +168,5 @@ public class MinimalCsprojDocTests
         Assert.True(close > open, "Unterminated ```xml block after the 'Minimal Project Setup' heading.");
 
         return string.Join("\n", lines[(open + 1)..close]);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new global::System.IO.DirectoryInfo(global::System.AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new global::System.InvalidOperationException("Could not locate repo root (Reactor.slnx) from test base dir.");
     }
 }

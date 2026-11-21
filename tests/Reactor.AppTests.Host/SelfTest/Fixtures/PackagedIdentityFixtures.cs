@@ -12,8 +12,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <remarks>
 /// <para>These live in the shared fixture corpus rather than in a packaged-only source
 /// set, so the two hosts stay a single body of tests. What differs is <i>selection</i>:
-/// they are declared <c>SelfTestTier.Packaged</c> in
-/// <c>SelfTestFixtureRegistry.TierRequirements</c>, so the unpackaged host neither lists
+/// they are declared <c>SelfTestTier.Packaged</c> on their
+/// <c>SelfTestFixtureRegistry.Registrations</c> entries, so the unpackaged host neither lists
 /// nor runs them — <c>--list-fixtures</c> is deliberately tier-dependent (issue #1154).
 /// They previously ran everywhere and self-skipped, which restated a permanent structural
 /// fact as a per-run observation and left three entries in the amber skip inventory on
@@ -111,8 +111,8 @@ internal static class PackagedIdentityFixtures
     /// host the fixture is declared <c>SelfTestTier.Packaged</c> and never selected (issue #1154).
     /// This is <b>not</b> a second, independent identity check.</para>
     /// <para>It is kept because it is the safety net for a <i>missing or wrong tier
-    /// declaration</i>, which is the mistake a contributor will actually make. Drop the
-    /// <c>TierRequirements</c> entry and the fixture runs unpackaged again — with the gate it
+    /// declaration</i>, which is the mistake a contributor will actually make. Drop the tier
+    /// from the fixture's <c>Registrations</c> entry and it runs unpackaged again — with the gate it
     /// degrades to a clean skip plus an amber inventory entry naming the reason, which is the
     /// "you forgot to declare it" signal; without it, <c>ApplicationData.Current</c> throws and
     /// the fixture reports an opaque <c>COMException</c> instead.</para>

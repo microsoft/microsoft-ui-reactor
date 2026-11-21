@@ -201,6 +201,8 @@ public sealed partial class Reconciler
             // erased-TItem changed under us) — full replacement.
             var fresh = BuildListStateForKeyedSource(source, ir);
             SetListState(ir, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            CountPerfChanges();
             ir.ItemsSource = fresh.Source;
             var factory = factorySource.CreateFactory(this, requestRerender, _pool);
             factorySource.AttachListStateToFactory(factory, fresh);
@@ -228,6 +230,8 @@ public sealed partial class Reconciler
         {
             var fresh = BuildListStateForKeyedSource(source, ir);
             SetListState(ir, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            CountPerfChanges();
             ir.ItemsSource = fresh.Source;
             factorySource.AttachListStateToFactory(factory, fresh);
             return;
@@ -286,6 +290,8 @@ public sealed partial class Reconciler
 
         var fresh = BuildListStateForKeyedSource(source, iv);
         SetListState(iv, fresh);
+        // A rebind replaces what the host shows (perf `changes`).
+        CountPerfChanges();
         iv.ItemsSource = fresh.Source;
         var replacementFactory = itemsViewSource.CreateFactory(this, requestRerender, _pool);
         itemsViewSource.AttachListStateToFactory(replacementFactory, fresh);
@@ -305,6 +311,8 @@ public sealed partial class Reconciler
         {
             var fresh = BuildListStateForKeyedSource(source, iv);
             SetListState(iv, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            CountPerfChanges();
             iv.ItemsSource = fresh.Source;
             itemsViewSource.AttachListStateToFactory(factory, fresh);
             return;
@@ -409,6 +417,8 @@ public sealed partial class Reconciler
         {
             var fresh = BuildListStateForKeyedSource(source, lvb);
             SetListState(lvb, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            CountPerfChanges();
             lvb.ItemsSource = fresh.Source;
         }
         else
@@ -502,6 +512,8 @@ public sealed partial class Reconciler
         {
             var fresh = BuildListStateForItems(items, keySelector, lvb, attribution);
             SetListState(lvb, fresh);
+            // A rebind replaces what the host shows (perf `changes`).
+            CountPerfChanges();
             lvb.ItemsSource = fresh.Source;
             // Refresh realized containers below so already-bound items pick
             // up new content even without a structural change.

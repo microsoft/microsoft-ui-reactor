@@ -679,7 +679,7 @@ jobs:
             10.0.x
             11.0.x
 
-      # Fuzz-free pass: walk the seed corpus once through both harness bodies.
+      # Fuzz-free pass: walk the seed corpus once through the markdown harness body.
       # Guards against harness rot (parser API drift, broken seed inputs) without
       # needing the libfuzzer-dotnet driver or SharpFuzz instrumentation tool in
       # the CI image. Using `dotnet run` keeps the invocation independent of the

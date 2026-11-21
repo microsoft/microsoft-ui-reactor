@@ -160,6 +160,25 @@ dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic archit
 dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overview overview
 ```
 
+### Running the doc pipeline tests
+
+Run the xUnit suite from the repository root.
+
+```powershell
+dotnet test tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64
+```
+
+Tests that read files from the checkout use [`TestRepo.Root`](../../tests/Reactor.DocPipeline.Tests/TestRepo.cs).
+It calls the shared [`RepoRootFinder`](../../src/Reactor.Cli/Pack/RepoRootFinder.cs),
+which walks up from `AppContext.BaseDirectory` until it finds a directory containing
+`src/Reactor/Reactor.csproj`. This selects the worktree containing the test output
+even when the process working directory is in a sibling checkout.
+
+[`TestRepoTests`](../../tests/Reactor.DocPipeline.Tests/TestRepoTests.cs) verifies
+this behavior by switching to a temporary directory with its own
+`src/Reactor/Reactor.csproj` and checking that `TestRepo.Root` still selects the
+checkout containing the test output.
+
 ### Which `Reactor.xml` the reference phase reads
 
 Phase 5.7 generates `docs/guide/reference/**` from the XML doc comments the C#

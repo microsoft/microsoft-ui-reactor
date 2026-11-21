@@ -33,6 +33,7 @@ public sealed partial class Reconciler
     // <snippet:mount-phase>
     public UIElement? Mount(Element element, Action requestRerender)
     {
+        var modifierTarget = element;
         // Unwrap legacy ModifiedElement (backward compat)
         ElementModifiers? modifiers = element.Modifiers;
         if (element is ModifiedElement mod)
@@ -131,7 +132,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
+            KeyedMemoElement km => MountKeyedMemo(km, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -147,6 +148,17 @@ public sealed partial class Reconciler
         if (control is not null)
         {
             DebugUIElementsCreated++;
+            // Count only a control created for this element: a transparent keyed Memo, a
+            // flyout decorator wrapping its target, or a RegisterType callback forwarding a
+            // child hands back a control its inner Mount already counted. Forwarding is only
+            // detectable while source publishing is on; guarded inline (as below) so ILC folds
+            // the publisher out of a build without Reactor.DevtoolsSupport.
+            if (Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (ownsControl || registeredType
+                    && !(global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                        && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && ForwardsAnotherElement(control, element))))
+                Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep
@@ -270,6 +282,17 @@ public sealed partial class Reconciler
         }
 
         NoteMountCompleted(boundaryRootsStart, control);
+        if (control is not null && _modifierMountParent is not null
+            && ReferenceEquals(prevReconcilingElement, _modifierMountParent))
+            (_modifierMounts ??= []).Add((control, modifierTarget));
+        return control;
+    }
+
+    private UIElement? MountKeyedMemo(KeyedMemoElement memo, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        var control = Mount(inner, requestRerender);
+        if (control is not null) RecordModifierTarget(control, memo, inner);
         return control;
     }
 
@@ -814,7 +837,7 @@ public sealed partial class Reconciler
 
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+            var visual = AnimationHelper.GetElementVisual(container);
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the
