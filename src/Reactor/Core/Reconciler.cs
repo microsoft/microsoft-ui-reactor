@@ -2820,6 +2820,7 @@ public sealed partial class Reconciler : IDisposable
         bool demand = element.AnimationConfig is not null || element.ElementTransition?.GetEnterTransition() is not null
             || element.KeyframeAnimations is not null
             || element.LayoutAnimation is not null || element.ScrollAnimation?.ScrollViewer is not null
+            || TakesVisual(element.ImplicitTransitions)
             || (outer.Armed && outer.Transparent && outer.Demand);
         bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
             || (outer.Armed && outer.Blocked);
@@ -5682,6 +5683,12 @@ public sealed partial class Reconciler : IDisposable
         {
             foreach (var setter in setters) setter(control);
         }
+        // Spec 066 §9 row 1: name the modifier when WinUI rejects a facade write after the
+        // handoff. The filter returns false, so the exception is unchanged.
+        catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(control))
+        {
+            throw;
+        }
         finally
         {
             if (state is not null) state.EchoSuppressScopeDepth--;
@@ -5813,30 +5820,65 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT,
         ThemeTransitions? themeT, int slot = 0)
     {
-        if (implicitT is not null || previous is not null)
+        ApplyImplicitTransitions(uie, previous, implicitT, slot);
+        ApplyThemeTransitions(uie, themeT);
+    }
+
+    /// <summary>True when the transitions include one that runs on the composition visual (spec 066 §5).</summary>
+    internal static bool TakesVisual(ImplicitTransitions? transitions)
+        => transitions is not null && (transitions.Opacity is not null || transitions.Scale is not null
+            || transitions.Rotation is not null || transitions.Translation is not null);
+
+    /// <summary>
+    /// Spec 066 §5. Opacity, Scale and Rotation transitions are implicit keys on the composition
+    /// visual, and Translation a write-time animation, all with the XAML curve. Reactor never sets
+    /// the <c>UIElement.*Transition</c> properties, which would block the handoff (#1623).
+    /// Background stays a XAML transition (§5.6). Update runs this before setters and modifiers,
+    /// so a value changed in the same reconcile follows the new policy (§6.3).
+    /// </summary>
+    internal static void ApplyImplicitTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT, int slot)
+    {
+        if (implicitT is null && previous is null) return;
+
+        var current = implicitT;
+        if (TakesVisual(implicitT))
         {
-            // Once Reactor's claims live on the handed-out visual, a facade Translation that a
-            // setter wrote in this update must move to the visual, as the fallback path always did.
-            if (ImplicitAnimationSlots.PublishedToVisual(uie))
-                AnimationHelper.GetElementVisual(uie);
-            // XAML while the visual hasn't been handed out, a compositor key once WinUI refuses the
-            // XAML property (.Animate(), enter transitions, a previous owner via the pool).
-            // ImplicitAnimationSlots picks the path and shares the keys with the other features.
-            ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, implicitT?.Opacity, slot);
-            ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, implicitT?.Rotation, slot);
-            ApplyTransitionChannel(uie, "Scale", previous?.Scale, implicitT?.Scale, slot);
-            ApplyTransitionChannel(uie, "Offset", previous?.Translation, implicitT?.Translation, slot);
-            if (implicitT?.Background is not null)
-            {
-                switch (uie)
-                {
-                    case WinUI.Grid g: g.BackgroundTransition = implicitT.Background; break;
-                    case WinUI.StackPanel sp: sp.BackgroundTransition = implicitT.Background; break;
-                    case WinUI.ContentPresenter cp: cp.BackgroundTransition = implicitT.Background; break;
-                }
-            }
+            // The visual is taken even with animations off, so readback, the pool lane and the
+            // setters that throw don't depend on the system setting (§9 rows 1 and 2).
+            AnimationHelper.GetElementVisual(uie);
+            // XAML transitions honour "Animation effects" and composition animations don't, so
+            // with the setting off no key is installed and Translation writes jump (§5.5).
+            if (!global::Microsoft.UI.Reactor.Navigation.TransitionEngine.AnimationsEnabled) current = null;
+        }
+        else if (ImplicitAnimationSlots.PublishedToVisual(uie))
+        {
+            // Taking it again keeps the migration of a facade Translation a setter wrote.
+            AnimationHelper.GetElementVisual(uie);
         }
 
+        ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, current?.Opacity, slot);
+        ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, current?.Rotation, slot);
+        ApplyTransitionChannel(uie, "Scale", previous?.Scale, current?.Scale, slot);
+        ApplyTransitionChannel(uie, ImplicitAnimationSlots.TranslationKey, previous?.Translation, current?.Translation, slot);
+
+        if (implicitT?.Background is { } background)
+            SetBackgroundTransition(uie, background);
+        else if (previous?.Background is not null)
+            SetBackgroundTransition(uie, null);
+    }
+
+    private static void SetBackgroundTransition(UIElement uie, BrushTransition? transition)
+    {
+        switch (uie)
+        {
+            case WinUI.Grid g: g.BackgroundTransition = transition; break;
+            case WinUI.StackPanel sp: sp.BackgroundTransition = transition; break;
+            case WinUI.ContentPresenter cp: cp.BackgroundTransition = transition; break;
+        }
+    }
+
+    internal static void ApplyThemeTransitions(UIElement uie, ThemeTransitions? themeT)
+    {
         if (themeT?.Children is { } children)
         {
             var tc = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
@@ -7367,7 +7409,7 @@ public sealed partial class Reconciler : IDisposable
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);
@@ -7382,28 +7424,28 @@ public sealed partial class Reconciler : IDisposable
         else if (!m.Scale.HasValue && oldM?.Scale.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Scale.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
         }
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
             AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe));
         else if (!m.Rotation.HasValue && oldM?.Rotation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Rotation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
         }
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
             AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe));
         else if (!m.Translation.HasValue && oldM?.Translation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
         }
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
             AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe));
         else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
         }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;

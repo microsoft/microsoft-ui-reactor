@@ -182,8 +182,9 @@ internal static class PoolLaneFixtures
                     static c => c.Rotation == 10 ? null : $"rotation={c.Rotation}"),
                 ("SetterWithDemand", Target("R").Set(static b => b.Rotation = 10).Animate(Curve.Linear(100)), false, null),
                 ("OnMountWithDemand", Target("R").Animate(Curve.Linear(100)).OnMount(static fe => fe.Rotation = 10), false, null),
-                // TranslationTransition stays on XAML until spec 066 layer 2, so it isn't demand yet.
-                ("TranslationTransitionOnly", Target("R").TranslationTransition(), false, null),
+                // Since spec 066 layer 2 every .XxxTransition() but Background takes the visual at mount.
+                ("TranslationTransitionOnly", Target("R").TranslationTransition(), true, null),
+                ("OpacityTransitionOnly", Target("R").OpacityTransition(), true, null),
                 ("IdentityTransformRef", Target("R").Scale(1).Rotation(0).Ref(probe), false, _ =>
                 {
                     try { probe.Current!.Rotation = 10; return null; }
@@ -256,6 +257,53 @@ internal static class PoolLaneFixtures
             H.Check(p + "_RentedFromVisualLane", ReferenceEquals(demanding, staggered));
         }
     }
+    /// <summary>
+    /// #1624: implicit transitions don't follow a pooled control to its next renter. Background
+    /// stays a XAML transition (spec 066 §5.6) and is cleared. A user <c>.Set</c> is the only way left to set
+    /// <c>OpacityTransition</c>, and such a control never reaches another renter. A compositor transition goes to the visual lane,
+    /// and its key doesn't reach the renter.
+    /// </summary>
+    internal sealed class ImplicitTransitionResidue(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_ImplicitTransitions";
+            using (var lab = new Lab(H))
+            {
+                var first = await lab.Show(VStack(TextBlock("b")).BackgroundTransition());
+                H.Check(p + "_BackgroundApplied", first is WinUI.StackPanel { BackgroundTransition: not null });
+                await lab.Show(null);
+                var second = await lab.Show(VStack(TextBlock("c")));
+                H.Check(p + "_BackgroundRecycled", ReferenceEquals(first, second));
+                H.Check(p + "_BackgroundCleared", second is WinUI.StackPanel { BackgroundTransition: null });
+            }
+
+            using (var lab = new Lab(H))
+            {
+                var first = await lab.Show(Target("o").Set(static b => b.OpacityTransition = new ScalarTransition()));
+                H.Check(p + "_UserOpacityApplied", first is { OpacityTransition: not null });
+                await lab.Show(null);
+                var second = await lab.Show(Target("p"));
+                // Like a transform transition, it locks RenderTransform, so the pool's reset is refused
+                // and the control is dropped rather than handed on.
+                H.Check(p + "_UserOpacityDropped", second is not null && !ReferenceEquals(first, second));
+                H.Check(p + "_UserOpacityNotInherited", second is { OpacityTransition: null });
+            }
+
+            using (var lab = new Lab(H))
+            {
+                var first = await lab.Show(Target("t").OpacityTransition().RotationTransition());
+                H.Check(p + "_CompositorTaken", first is not null && ElementPool.IsVisualTaken(first) && first.OpacityTransition is null);
+                await lab.Show(null);
+                var second = await lab.Show(Target("u").ScaleTransition());
+                H.Check(p + "_CompositorRecycled", ReferenceEquals(first, second));
+                if (second is null) return;
+                var keys = ElementCompositionPreview.GetElementVisual(second).ImplicitAnimations?.Select(kv => kv.Key).ToArray() ?? [];
+                H.Check(p + "_OnlyRenterKeys", keys.SequenceEqual(["Scale"]), string.Join(",", keys));
+            }
+        }
+    }
+
     /// <summary>#1639: theme transitions don't follow a pooled panel, border or button to its next renter.</summary>
     internal sealed class ThemeTransitions(Harness h) : SelfTestFixtureBase(h)
     {

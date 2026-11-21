@@ -302,6 +302,13 @@ public sealed partial class Reconciler
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
 
+        // Spec 066 §6.3: the transition policy (releases, new claims and the reduced-motion gate)
+        // runs before setters and modifier writes, so a value changed in the same reconcile moves
+        // as the new declaration says, and a removed transition doesn't animate it. A replaced
+        // control gets the transitions again below, as on mount.
+        if (oldEl.ImplicitTransitions is not null || newEl.ImplicitTransitions is not null)
+            ApplyImplicitTransitions(control, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot);
+
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
         //   (3) global `ControlRegistry`, (4) composition-primitive switch.
@@ -468,19 +475,24 @@ public sealed partial class Reconciler
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
             ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
 
-        // Apply transitions after update (re-applies when transition config changes). A
-        // transition the old element had is released here too, so the gate includes it (#1626).
-        // A replaced control is new to this layer: its inner layers just mounted it, so this layer
-        // claims as Mount does, at slot 0 above their claims (spec 066 §6.1).
+        // Theme transitions apply after the update. Implicit transitions already ran before the
+        // setters (spec 066 §6.3). A replaced control is new to this layer: its inner layers just
+        // mounted it, so this layer claims as Mount does, at slot 0 above their claims (§6.1).
         bool replacedControl = result is not null && !ReferenceEquals(result, control);
         if (replacedControl)
         {
             implicitSlot = 0;
             ShiftForwardedClaims(target, mountMark, self: newEl);
+            if (newEl.ImplicitTransitions is not null)
+                ApplyImplicitTransitions(target, null, newEl.ImplicitTransitions, implicitSlot);
         }
-        var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
-        if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
-            ApplyTransitions(target, previousTransitions, newEl.ImplicitTransitions, newEl.ThemeTransitions, implicitSlot);
+        else if (TakesVisual(newEl.ImplicitTransitions))
+        {
+            // Move a facade Translation a setter wrote in this update onto the visual.
+            AnimationHelper.GetElementVisual(target);
+        }
+        if (newEl.ThemeTransitions is not null)
+            ApplyThemeTransitions(target, newEl.ThemeTransitions);
 
         // Apply or clear Composition-layer layout animation
         if (newEl.LayoutAnimation is not null)

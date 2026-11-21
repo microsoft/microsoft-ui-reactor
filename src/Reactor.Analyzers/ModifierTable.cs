@@ -695,7 +695,7 @@ internal static class ModifierTable
     /// <remarks>
     /// <para>
     /// Spec 066 §9.1. The set grows with that spec's rollout, one row per modifier that
-    /// starts taking the visual: layer 2 adds the four <c>.XxxTransition()</c>, layer 4
+    /// starts taking the visual: layer 2 added the four <c>.XxxTransition()</c>, layer 4 adds
     /// <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> and <c>.CenterPoint</c>, and layer 5
     /// <c>.TransformOrigin</c>. Add a row in the same change that makes the modifier take the
     /// visual, never earlier: before that the facade write still works, so the warning would be
@@ -719,6 +719,12 @@ internal static class ModifierTable
             ["LayoutAnimation"] = "Reconciler.ApplyLayoutAnimation takes the visual to install its Offset/Size implicit animations.",
             ["SpringLayoutAnimation"] = "Sets the same LayoutAnimation config as .LayoutAnimation, so Reconciler.ApplyLayoutAnimation takes the visual.",
             ["ScrollLinked"] = "Reconciler.ApplyScrollAnimation takes the visual through AnimationHelper.GetElementVisual to bind its expressions.",
+            // Spec 066 layer 2: the transitions run on the compositor, so declaring one takes the
+            // visual at mount (Reconciler.ApplyImplicitTransitions), even with animations off.
+            ["OpacityTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual to install its Opacity implicit key.",
+            ["ScaleTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual to install its Scale implicit key.",
+            ["RotationTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual to install its RotationAngle implicit key.",
+            ["TranslationTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual, and AnimationHelper animates Translation writes on it.",
         };
 
     // ── Attached properties ──────────────────────────────────────────────────

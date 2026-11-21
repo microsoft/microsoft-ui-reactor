@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Navigation;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -46,6 +47,8 @@ internal static class ImplicitAnimationSlotsFixtures
 
         public sealed override async Task RunAsync()
         {
+            // Transitions honour the system's animation setting (spec 066 §5.5); these check motion.
+            using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
             try { await Run(); }
             catch (Exception ex) { H.Check(Name + "_NoThrow", false, $"{ex.GetType().Name}: {ex.Message}"); }
             finally
@@ -138,26 +141,27 @@ internal static class ImplicitAnimationSlotsFixtures
         }
     }
 
-    /// <summary>#1626, XAML arm: dropping a transition modifier clears the XAML transition property.</summary>
-    internal sealed class RemovedXamlTransitionClears(Harness h) : SlotsFixture(h, "ImplicitSlots_RemovedXamlTransitionClears")
+    /// <summary>
+    /// #1626: dropping a transition modifier releases its compositor key (or, for Translation, its
+    /// write-time claim). Since spec 066 layer 2 the XAML properties are never set.
+    /// </summary>
+    internal sealed class RemovedTransitionClears(Harness h) : SlotsFixture(h, "ImplicitSlots_RemovedTransitionClears")
     {
         protected override async Task Run()
         {
             await Mount(Target().OpacityTransition().ScaleTransition().RotationTransition().TranslationTransition());
             var c = Control;
-            H.Check(Name + "_Installed", c.OpacityTransition is not null && c.ScaleTransition is not null
-                && c.RotationTransition is not null && c.TranslationTransition is not null);
+            H.Check(Name + "_Installed", Keys() == "Opacity,RotationAngle,Scale" && ImplicitAnimationSlots.TranslationTransition(c) is not null,
+                $"keys={Keys()}");
+            H.Check(Name + "_XamlUnset", c.OpacityTransition is null && c.ScaleTransition is null
+                && c.RotationTransition is null && c.TranslationTransition is null);
 
             // Dropping one keeps the others.
             await Update(Target().ScaleTransition().RotationTransition().TranslationTransition());
-            H.Check(Name + "_OpacityCleared", c.OpacityTransition is null);
-            H.Check(Name + "_OthersKept", c.ScaleTransition is not null && c.RotationTransition is not null
-                && c.TranslationTransition is not null);
+            H.Check(Name + "_OpacityCleared", Keys() == "RotationAngle,Scale", $"keys={Keys()}");
 
             await Update(Target());
-            H.Check(Name + "_ScaleCleared", c.ScaleTransition is null);
-            H.Check(Name + "_RotationCleared", c.RotationTransition is null);
-            H.Check(Name + "_TranslationCleared", c.TranslationTransition is null);
+            H.Check(Name + "_AllCleared", Keys() == "-" && ImplicitAnimationSlots.TranslationTransition(c) is null, $"keys={Keys()}");
         }
     }
 

@@ -12,14 +12,16 @@ namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
 /// Code fix for REACTOR_ANIM_004: rewrites <c>x.Set(fe =&gt; fe.Rotation = e)</c> to
-/// <c>x.Rotation(e)</c>, and the same for <c>Scale</c> and <c>CenterPoint</c>.
+/// <c>x.Rotation(e)</c>, and the same for <c>Scale</c> and <c>CenterPoint</c>,
+/// <c>fe.OpacityTransition = new ScalarTransition { Duration = d }</c> to <c>.OpacityTransition(d)</c>
+/// (and <c>RotationTransition</c>), and <c>fe.ScaleTransition = t</c> to <c>.ScaleTransition(t)</c>
+/// (and <c>TranslationTransition</c>).
 /// </summary>
 /// <remarks>
 /// Offered only when the analyzer stamped <see cref="FacadeTransformSetAnalyzer.FixModifierKey"/>:
 /// the assignment is the lambda's only statement, the right-hand side doesn't read the lambda
 /// parameter, and the rewritten call binds (spec 066 §9.1). The <c>Translation</c> arm never gets
-/// a fix, because adding <c>.Translation(...)</c> next to the existing call would be dead code. The
-/// <c>*Transition</c> rows get one in spec 066 layer 2, once their modifiers stop blocking the handoff.
+/// a fix, because adding <c>.Translation(...)</c> next to the existing call would be dead code.
 /// </remarks>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(FacadeTransformSetCodeFix))]
 [Shared]
@@ -52,7 +54,8 @@ public sealed class FacadeTransformSetCodeFix : CodeFixProvider
             if (setInvocation is null || setInvocation.Expression is not MemberAccessExpressionSyntax setAccess)
                 continue;
 
-            var arguments = FacadeTransformSetAnalyzer.BuildModifierArguments(assignment);
+            if (FacadeTransformSetAnalyzer.BuildModifierArguments(assignment, modifier!) is not { } arguments)
+                continue;
 
             context.RegisterCodeFix(
                 CodeAction.Create(

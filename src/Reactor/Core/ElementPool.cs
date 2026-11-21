@@ -161,14 +161,6 @@ public sealed class ElementPool : IDisposable
         if (state?.PoolExcluded == true) return;
         var lanes = state?.VisualTaken == true ? _visualPools : _pools;
 
-        // Issue #1614: attaching an implicit transform transition permanently locks
-        // RenderTransform (nulling the transition does not release it), so such a control is
-        // no longer interchangeable with a fresh one. This is the fast path; the catch around
-        // CleanElement below is the backstop for a control whose transition was attached and
-        // later removed.
-        if (element.ScaleTransition is not null || element.RotationTransition is not null
-            || element.TranslationTransition is not null) return;
-
         if (!lanes.TryGetValue(type, out var stack))
         {
             stack = new Stack<FrameworkElement>();
@@ -305,6 +297,13 @@ public sealed class ElementPool : IDisposable
             if (fe.CenterPoint != Vector3.Zero) fe.CenterPoint = Vector3.Zero;
             if (fe.RotationAxis != Vector3.UnitZ) fe.RotationAxis = Vector3.UnitZ;
             if (!fe.TransformMatrix.IsIdentity) fe.TransformMatrix = Matrix4x4.Identity;
+            // Reactor never sets the XAML implicit transitions (spec 066 §5), so only a user .Set
+            // leaves one here (#1624). Any of them locks RenderTransform for good, so the clear
+            // below then throws and Return drops the control (§7.4).
+            if (fe.OpacityTransition is not null) fe.OpacityTransition = null;
+            if (fe.ScaleTransition is not null) fe.ScaleTransition = null;
+            if (fe.RotationTransition is not null) fe.RotationTransition = null;
+            if (fe.TranslationTransition is not null) fe.TranslationTransition = null;
         }
         // The facades must be released first: RenderTransform rejects a write while one is
         // engaged. If it is still locked (a transform transition was attached at some point),
@@ -497,10 +496,12 @@ public sealed class ElementPool : IDisposable
         // Issue #1639: .ThemeTransitions(...) writes these, and a renter that declares none would
         // otherwise animate its children with the previous renter's transitions. Cleared before
         // the type-specific arms below empty the children, so the removal doesn't play them.
+        // Issue #1624: the same for .BackgroundTransition(), in both lanes (spec 066 §5.6).
         switch (fe)
         {
             case WinUI.Panel themedPanel:
                 themedPanel.ClearValue(WinUI.Panel.ChildrenTransitionsProperty);
+                if (themedPanel.BackgroundTransition is not null) themedPanel.BackgroundTransition = null;
                 break;
             case WinUI.Border themedBorder:
                 themedBorder.ClearValue(WinUI.Border.ChildTransitionsProperty);

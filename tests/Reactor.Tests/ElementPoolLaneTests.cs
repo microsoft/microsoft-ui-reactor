@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Xaml;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -18,6 +21,10 @@ public class ElementPoolLaneTests
 
     private static BorderElement Target() => Border(TextBlock("x"));
 
+    // Only presence matters to ForMount, so an uninitialized wrapper stands in for the WinUI object.
+    private static T Sentinel<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors | DynamicallyAccessedMemberTypes.NonPublicConstructors)] T>()
+        where T : class => (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
+
     // Every ModifierTable.VisualOwningModifiers row, applied to an element. ScrollLinked needs a
     // live ScrollViewer, which this headless suite can't construct, so it's checked by shape only.
     private static Element? WithFeature(Element e, string feature) => feature switch
@@ -27,6 +34,11 @@ public class ElementPoolLaneTests
         "Keyframes" => e.Keyframes("k", 1, static k => k.Duration(30).At(0f, opacity: 0.5f).At(1f, opacity: 1f)),
         "LayoutAnimation" => e.LayoutAnimation(),
         "SpringLayoutAnimation" => e.SpringLayoutAnimation(),
+        // The transition modifiers build WinUI objects, which this suite can't construct.
+        "OpacityTransition" => e with { ImplicitTransitions = new() { Opacity = Sentinel<ScalarTransition>() } },
+        "ScaleTransition" => e with { ImplicitTransitions = new() { Scale = Sentinel<Vector3Transition>() } },
+        "RotationTransition" => e with { ImplicitTransitions = new() { Rotation = Sentinel<ScalarTransition>() } },
+        "TranslationTransition" => e with { ImplicitTransitions = new() { Translation = Sentinel<Vector3Transition>() } },
         // Takes the visual on the first state change, or needs a live ScrollViewer: see below.
         "InteractionStates" or "ScrollLinked" => null,
         _ => throw new Xunit.Sdk.XunitException(
@@ -51,6 +63,8 @@ public class ElementPoolLaneTests
         Assert.False(For(Target().Transition(Transition.Exit(Transition.Fade))).VisualLane);
         Assert.False(For(Target() with { ScrollAnimation = new ScrollAnimationConfig(null!, []) }).VisualLane);
         Assert.False(For(Target().InteractionStates(static b => b.PointerOver(scale: 1.1f))).VisualLane);
+        // BackgroundTransition stays a XAML transition (spec 066 §5.6).
+        Assert.False(For(Target() with { ImplicitTransitions = new() { Background = Sentinel<BrushTransition>() } }).VisualLane);
     }
     [Fact]
     public void No_feature_means_no_demand()
