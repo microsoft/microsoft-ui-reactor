@@ -114,7 +114,15 @@ public void Return(FrameworkElement element)
 
     // The lane follows the native control's marker, whichever wrapper reached it (#1643).
     var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
-    if (state?.PoolExcluded == true) return;
+    if (state?.PoolExcluded == true)
+    {
+        if (state.ReleaseWhenExcluded)
+        {
+            Reconciler.ClearElementTag(element);
+            Reconciler.ClearCurrentEventHandlers(element);
+        }
+        return;
+    }
     var lanes = state?.VisualTaken == true ? _visualPools : _pools;
 
     // Issue #1614: attaching an implicit transform transition permanently locks

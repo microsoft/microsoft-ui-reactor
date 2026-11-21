@@ -434,7 +434,9 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
    that was never inserted throws `ArgumentException` (measured in the perf run). Step 1 also stops a
    `.TransformOrigin` expression and looping keyframes.
 2. `ImplicitAnimationSlots.ReleaseAll` (`ImplicitAnimations = null`).
-3. Identity writes. `Opacity = 1`, `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
+3. Identity writes. `Opacity` goes back to the visual's static value read before step 1, which is what XAML last
+   pushed from `UIElement.Opacity`. XAML pushes only when that value changes, so any other write would leave the next
+   renter's style or modifier opacity unseen. Then `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
    `CenterPoint = Zero`, `AnchorPoint = Zero`, `Orientation = Identity`, `TransformMatrix = Identity`,
    zero relative adjustments, `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
    and then `UIElement.Translation = Zero` when it isn't already. That facade stays writable after the

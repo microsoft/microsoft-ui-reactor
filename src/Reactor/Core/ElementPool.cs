@@ -663,6 +663,10 @@ public sealed class ElementPool : IDisposable
         // Translation is a property-set entry that exists only once translation was enabled;
         // stopping or writing a missing entry throws ArgumentException (#1641).
         bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+        // XAML pushes UIElement.Opacity to the visual only when it differs from what it pushed
+        // last, and that is the static value until a stop lands. Restore exactly it, so the next
+        // renter's opacity (a style's, a modifier's or the default) still reaches the visual.
+        float xamlOpacity = visual.Opacity;
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
@@ -678,7 +682,7 @@ public sealed class ElementPool : IDisposable
         // fresh handoff visual doesn't reliably carry ActualSize.
         visual.Offset = fe.ActualOffset;
 
-        visual.Opacity = 1;
+        visual.Opacity = xamlOpacity;
         visual.IsVisible = true;
         visual.Scale = Vector3.One;
         visual.RotationAngle = 0;
@@ -687,10 +691,10 @@ public sealed class ElementPool : IDisposable
         visual.AnchorPoint = Vector2.Zero;
         visual.Orientation = Quaternion.Identity;
         visual.TransformMatrix = Matrix4x4.Identity;
-        // Layout writes Offset and Size but never the relative adjustments, so user code or an
-        // expression may have left them.
-        if (visual.RelativeOffsetAdjustment != Vector3.Zero) visual.RelativeOffsetAdjustment = Vector3.Zero;
-        if (visual.RelativeSizeAdjustment != Vector2.Zero) visual.RelativeSizeAdjustment = Vector2.Zero;
+        // Layout never writes the relative adjustments. Unconditional, like Offset: a stopped
+        // expression's last value lands after the stop.
+        visual.RelativeOffsetAdjustment = Vector3.Zero;
+        visual.RelativeSizeAdjustment = Vector2.Zero;
         visual.Clip = null;
         if (hasTranslation) visual.Properties.InsertVector3("Translation", Vector3.Zero);
         ElementCompositionPreview.SetIsTranslationEnabled(fe, false);

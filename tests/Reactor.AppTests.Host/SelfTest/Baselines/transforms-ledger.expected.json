@@ -1,6 +1,7 @@
 {
   "expectations": [
-    { "case": "*.*.Stagger", "step": "{mount,change}", "field": "channel", "reason": "fixes #1643: the stagger handoff now marks the child's visual as taken on the native control" },
+    { "case": "*.*.Stagger", "step": "mount", "field": "channel", "before": "taken=0 facade=T", "after": "taken=1 facade=T visual=-", "reason": "fixes #1643: the stagger handoff now marks the child's visual as taken on the native control" },
+    { "case": "*.*.Stagger", "step": "{mount,change}", "field": "channel", "before": "taken=0 facade=-", "after": "taken=1 facade=- visual=-", "reason": "fixes #1643: the stagger handoff now marks the child's visual as taken on the native control" },
     { "case": "*.*.Stagger", "step": "rentPlain", "field": "pool", "before": "recycled=0 diff=0 taken=1 xaml=-", "after": "recycled=0 diff=0 taken=0 xaml=-", "reason": "fixes #1643: a staggered child goes to the visual lane, so a plain renter never gets a taken visual" },
     { "case": "*.*.Stagger", "step": "rentTransformed", "field": "{running,pool}", "reason": "fixes #1643: a transformed renter is a plain-lane control, no longer the staggered child's taken visual" },
     { "case": "@soak.*", "step": "run", "field": "{rented,visualRented}", "reason": "fixes #1643: visual-lane probes rent the controls whose visual was taken (spec 066 §7.2), and plain probes rent more plain controls" },
