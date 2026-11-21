@@ -433,18 +433,38 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             {
                 // Progress is measured from where this animation starts, not from the declared mount
                 // value: with user code the handoff can migrate a facade value first (§9 rows 1 and 3).
+                // A seek can take more than a frame to reach a capture, so each sample waits until two
+                // captures agree.
                 async Task<double> At(float progress)
                 {
                     ctl.Progress = progress;
                     await Frames(3);
-                    return Progress(ch, await Snap.CaptureAsync(caseHost));
+                    double last = Progress(ch, await Snap.CaptureAsync(caseHost));
+                    for (int i = 0; i < 5; i++)
+                    {
+                        await Frames(2);
+                        double now = Progress(ch, await Snap.CaptureAsync(caseHost));
+                        if (Math.Abs(now - last) < 0.01) break;
+                        last = now;
+                    }
+
+                    return last;
                 }
 
-                double start = await At(0.02f), quarter = await At(0.25f), mid = await At(0.5f), end = await At(1);
+                // The quarter is sampled twice, around the midpoint, so a stale capture of either one
+                // reads as a neighbour and the two disagree. The channel ends at 1 for the next one.
+                double start = await At(0.02f), quarter = await At(0.25f), mid = await At(0.5f), quarterAgain = await At(0.25f), end = await At(1);
                 double span = end - start;
                 verdict = Verdict(Math.Abs(span) < 0.05 ? end : (mid - start) / span, end);
                 if (verdict == Model.Animating && Math.Abs(span) >= 0.05)
-                    curves.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"{ch}={Math.Round((quarter - start) / span / 0.2) * 0.2:F1}"));
+                {
+                    double Bucket(double q) => Math.Round((q - start) / span / 0.2) * 0.2 is var b && b == 0 ? 0 : b;
+                    if (Math.Abs(Bucket(quarter) - Bucket(quarterAgain)) < 0.01)
+                        curves.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"{ch}={Bucket(quarter):F1}"));
+                    else
+                        Inconclusive.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture,
+                            $"change: {ch} curve samples at 25% disagree ({(quarter - start) / span:F2} then {(quarterAgain - start) / span:F2})"));
+                }
             }
             else
             {
