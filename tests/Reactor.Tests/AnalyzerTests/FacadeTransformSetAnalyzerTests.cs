@@ -234,6 +234,8 @@ class C
     Element I() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = ((null)!)|});
     Element J() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.OpacityTransition = new ScalarTransition { Duration = default }|});
     Element K(bool zero, TimeSpan d) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.RotationTransition = new ScalarTransition { Duration = zero ? default : d }|});
+    Element L(Vector3Transition? maybe) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = maybe!|});
+    Element M2(bool on) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = (on ? new Vector3Transition() : null)!|});
 }";
         await VerifyFixAsync(source, source);
     }

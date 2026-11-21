@@ -7114,12 +7114,6 @@ public sealed partial class Reconciler : IDisposable
     private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
         => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
 
-    // The outermost element of the shared-target chain updating this control. ResolvePolicy
-    // looks for a channel's .Animate() declaration from here first, so the outermost one wins
-    // even when an inner layer writes the value (spec 066 §6.1).
-    private Element? GetModifierAnimationRoot(FrameworkElement control)
-        => ReferenceEquals(ModifierUpdate.Control, control) ? ModifierUpdate.Root : null;
-
     private Element? GetModifierAnimationSource(FrameworkElement control)
     {
         if (_reconcilingElement?.AnimationConfig is not null) return _reconcilingElement;
@@ -7248,6 +7242,44 @@ public sealed partial class Reconciler : IDisposable
                 next = ReactorSourceMap.DecoratorTarget(root);
             if (next is null && ModifierUpdate.Control?.GetValue(ReactorAttached.StateProperty)
                 is ReactorState { ModifierTargets: { } targets })
+                foreach (var target in targets)
+                    if (ReferenceEquals(target.Parent, root)) { next = target.Target; break; }
+            root = next;
+        }
+        return null;
+    }
+
+    private Func<UIElement, AnimateProperty, AnimationConfig?>? _channelAnimationLookup;
+
+    // Passed to AnimationHelper so a modifier write resolves its channel's .Animate() declaration
+    // over the whole shared-target chain (spec 066 §5.3, §6.1).
+    private Func<UIElement, AnimateProperty, AnimationConfig?> ChannelAnimationLookup => _channelAnimationLookup ??= FindChannelAnimation;
+
+    /// <summary>
+    /// The outermost <c>.Animate()</c> declaration in the shared-target chain updating
+    /// <paramref name="control"/> whose properties include <paramref name="channel"/>, walked the way
+    /// <see cref="FindRemainingModifierOwner"/> walks it: legacy wrappers, a handler's source target,
+    /// a decorator target, then the recorded shared-control edges. Null outside that update.
+    /// </summary>
+    private AnimationConfig? FindChannelAnimation(UIElement control, AnimateProperty channel)
+    {
+        if (!ReferenceEquals(ModifierUpdate.Control, control)) return null;
+        var root = ModifierUpdate.Root;
+        for (var depth = 0; root is not null && depth <= ReactorSourceMap.MaxDecoratorDepth; depth++)
+        {
+            while (true)
+            {
+                if (root.AnimationConfig is { } config && (config.Properties & channel) != 0) return config;
+                if (root is not ModifiedElement wrapped || depth++ > ReactorSourceMap.MaxDecoratorDepth) break;
+                root = wrapped.Inner;
+            }
+            var type = root.GetType();
+            Element? next = null;
+            if (_v1Handlers.TryGet(type, out var handler))
+                next = (handler as IV1SourceTargetResolver)?.GetSourceTarget(root);
+            else if (!_typeRegistry.ContainsKey(type))
+                next = ReactorSourceMap.DecoratorTarget(root);
+            if (next is null && control.GetValue(ReactorAttached.StateProperty) is ReactorState { ModifierTargets: { } targets })
                 foreach (var target in targets)
                     if (ReferenceEquals(target.Parent, root)) { next = target.Target; break; }
             root = next;
@@ -7426,11 +7458,11 @@ public sealed partial class Reconciler : IDisposable
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), GetModifierAnimationRoot(fe));
+            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), GetModifierAnimationRoot(fe));
+                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);
@@ -7441,32 +7473,32 @@ public sealed partial class Reconciler : IDisposable
         // Update already released final removals before handlers ran. Here only
         // restore surviving declarations; a second reset would overwrite new setters.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
-            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe), GetModifierAnimationRoot(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Scale.HasValue && oldM?.Scale.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Scale.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), GetModifierAnimationRoot(fe));
+                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
-            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe), GetModifierAnimationRoot(fe));
+            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Rotation.HasValue && oldM?.Rotation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Rotation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), GetModifierAnimationRoot(fe));
+                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
-            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe), GetModifierAnimationRoot(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Translation.HasValue && oldM?.Translation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), GetModifierAnimationRoot(fe));
+                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
-            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), GetModifierAnimationRoot(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), GetModifierAnimationRoot(fe));
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;

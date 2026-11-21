@@ -427,6 +427,22 @@ internal static class ImplicitAnimationSlotsFixtures
                 && KeyDuration("Opacity") == outerOpacity && ImplicitAnimationSlots.TranslationTransition(Control) is not null,
                 $"replaced={!ReferenceEquals(before, Control)} keys={Keys()} duration={KeyDuration("Opacity")}");
             H.Check(Name + "_TransitionsReplacedAnimate", await Animates("Opacity", Outer(Button40().Opacity(0.5), outerOpacity)));
+
+            // .Animate() per channel through forwarders that name no source target: the middle
+            // layer's Offset declaration animates the leaf's Translation write, past the outer and
+            // leaf Opacity-only declarations. Without it, the write jumps.
+            static Element Three(float x, bool middle)
+            {
+                Element inner = new SlotsForwarder(Target().Animate(Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0));
+                if (middle) inner = inner.Animate(Curve.Linear(3000), AnimateProperty.Offset);
+                return new SlotsForwarder(inner).Animate(Curve.Linear(1000), AnimateProperty.Opacity);
+            }
+            await Update(Three(10, middle: true));
+            await Update(Three(20, middle: true));
+            H.Check(Name + "_ThreeLayerChannelLookup", await Animates("Translation", Three(40, middle: true)));
+            await Update(Three(10, middle: false));
+            await Update(Three(20, middle: false));
+            H.Check(Name + "_ThreeLayerChannelLookup_NegativeControl", !await Animates("Translation", Three(40, middle: false)));
         }
     }
 

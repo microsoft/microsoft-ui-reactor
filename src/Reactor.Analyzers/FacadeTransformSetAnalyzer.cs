@@ -374,10 +374,11 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         if (IsScalarTransitionModifier(modifier) && !IsXamlType(model.GetTypeInfo(assignment.Right, ct).Type, "ScalarTransition"))
             return false;
         // The Vector3 modifiers turn a null argument into a default transition, where the write
-        // meant none. Only a value the compiler proves non-null moves.
+        // meant none. Only a value the compiler proves non-null moves, and a '!' proves nothing.
         if (modifier is "ScaleTransition" or "TranslationTransition"
             && assignment.Right is not BaseObjectCreationExpressionSyntax
-            && model.GetTypeInfo(assignment.Right, ct).Nullability.FlowState != NullableFlowState.NotNull)
+            && (ContainsSuppression(assignment.Right)
+                || model.GetTypeInfo(assignment.Right, ct).Nullability.FlowState != NullableFlowState.NotNull))
             return false;
         var moved = arguments.Arguments.Select(static argument => argument.Expression).ToList();
 
@@ -481,6 +482,10 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         return SyntaxFactory.ArgumentList(
             SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(right.WithoutTrivia())));
     }
+
+    /// <summary>A <c>!</c> suppression anywhere in the value, which hides a possible null from flow analysis.</summary>
+    private static bool ContainsSuppression(ExpressionSyntax value) =>
+        value.DescendantNodesAndSelf().Any(static node => node.IsKind(SyntaxKind.SuppressNullableWarningExpression));
 
     /// <summary>A literal <c>null</c> or <c>default</c>, through any mix of parentheses and <c>!</c> suppressions.</summary>
     private static bool IsNullValue(ExpressionSyntax value)

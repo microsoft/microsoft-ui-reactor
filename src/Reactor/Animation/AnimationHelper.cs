@@ -297,11 +297,11 @@ internal static class AnimationHelper
 
     /// <summary>
     /// Sets a scalar property on a UIElement, animating via the compositor when
-    /// <see cref="ResolvePolicy(UIElement, string, Element?, Element?)"/> finds a curve.
+    /// <see cref="ResolvePolicy(UIElement, string, Element?, Func{UIElement, AnimateProperty, AnimationConfig?})"/> finds a curve.
     /// </summary>
-    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null, Element? chainRoot = null)
+    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null, Func<UIElement, AnimateProperty, AnimationConfig?>? chainLookup = null)
     {
-        var curve = ResolvePolicy(element, property, source, chainRoot).Curve;
+        var curve = ResolvePolicy(element, property, source, chainLookup).Curve;
 
         if (curve is null)
         {
@@ -513,11 +513,11 @@ internal static class AnimationHelper
 
     /// <summary>
     /// Sets a Vector3 property on a UIElement, animating via the compositor when
-    /// <see cref="ResolvePolicy(UIElement, string, Element?, Element?)"/> finds a curve.
+    /// <see cref="ResolvePolicy(UIElement, string, Element?, Func{UIElement, AnimateProperty, AnimationConfig?})"/> finds a curve.
     /// </summary>
-    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null, Element? chainRoot = null)
+    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null, Func<UIElement, AnimateProperty, AnimationConfig?>? chainLookup = null)
     {
-        var (curve, components) = ResolvePolicy(element, property, source, chainRoot);
+        var (curve, components) = ResolvePolicy(element, property, source, chainLookup);
 
         if (curve is null)
         {
@@ -587,7 +587,8 @@ internal static class AnimationHelper
     /// mask. An implicit <c>"Translation"</c> key would never fire. Opacity, Scale and Rotation
     /// transitions are implicit keys on the visual, so a direct write starts them.
     /// </summary>
-    private static WritePolicy ResolvePolicy(UIElement element, string property, Element? source, Element? chainRoot = null)
+    private static WritePolicy ResolvePolicy(UIElement element, string property, Element? source,
+        Func<UIElement, AnimateProperty, AnimationConfig?>? chainLookup = null)
     {
         var ambient = AnimationScope.HasScope ? AnimationScope.Current : null;
         var channel = PropertyFlag(property);
@@ -596,11 +597,11 @@ internal static class AnimationHelper
         {
             // The outermost declaration that animates this channel: one that excludes it doesn't
             // hide an inner one that includes it, and an inner layer's write still finds an outer
-            // one. The search starts at the chain root, then at the writing layer, which a
-            // decorator that names no source target hides from the root.
-            Func<Element, AnimationConfig?> declares = el => el.AnimationConfig is { } c && (c.Properties & channel) != 0 ? c : null;
-            if (chainRoot is not null) config = Reconciler.FindMountedElementValue(element, declares, chainRoot);
-            config ??= Reconciler.FindMountedElementValue(element, declares, source);
+            // one. The reconciler walks the whole shared-target chain of an update; a mount, which
+            // has no chain yet, searches from the writing layer.
+            config = chainLookup?.Invoke(element, channel);
+            config ??= Reconciler.FindMountedElementValue(element,
+                el => el.AnimationConfig is { } c && (c.Properties & channel) != 0 ? c : null, source);
         }
         TransitionTiming? translation = null;
         if (ambient is null && property == "Translation"
@@ -609,7 +610,7 @@ internal static class AnimationHelper
         return ResolvePolicy(ambient, config, channel, translation);
     }
 
-    /// <summary>The pure part of <see cref="ResolvePolicy(UIElement, string, Element?, Element?)"/>.</summary>
+    /// <summary>The pure part of <see cref="ResolvePolicy(UIElement, string, Element?, Func{UIElement, AnimateProperty, AnimationConfig?})"/>.</summary>
     internal static WritePolicy ResolvePolicy(Curve? ambient, AnimationConfig? animate, AnimateProperty channel, TransitionTiming? translation)
     {
         if (ambient is not null) return new(ambient, AllComponents);

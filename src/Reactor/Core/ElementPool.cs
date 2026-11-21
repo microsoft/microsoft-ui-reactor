@@ -519,6 +519,7 @@ public sealed class ElementPool : IDisposable
                 break;
             case WinUI.Border themedBorder:
                 themedBorder.ClearValue(WinUI.Border.ChildTransitionsProperty);
+                if (themedBorder.BackgroundTransition is not null) themedBorder.BackgroundTransition = null;
                 break;
             case WinUI.ContentControl themedContent:
                 themedContent.ClearValue(WinUI.ContentControl.ContentTransitionsProperty);
@@ -681,14 +682,6 @@ public sealed class ElementPool : IDisposable
         // The Translation facade stays writable after the handoff, and a user .Set may have
         // written it next to a Reactor feature.
         if (fe.Translation != Vector3.Zero) fe.Translation = Vector3.Zero;
-        // A brush transition coexists with the handoff, so a visual-lane renter would inherit it.
-        // Spec 066 layer 2 clears it in both lanes.
-        switch (fe)
-        {
-            case WinUI.Panel panel when panel.BackgroundTransition is not null: panel.BackgroundTransition = null; break;
-            case WinUI.Border border when border.BackgroundTransition is not null: border.BackgroundTransition = null; break;
-        }
-
         Reconciler.ForgetCompositionState(fe);
     }
 
