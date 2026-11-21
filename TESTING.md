@@ -781,7 +781,11 @@ Motion is controller-driven, layout `Offset` included: each new animation is pau
 its start, 25%, 50% and 100%, measured from where it actually starts, so no verdict depends on
 wall-clock timing. Two things RenderTargetBitmap can't see are recorded as such rather than
 guessed: a XAML transition in flight (`unobservable`) and a lone `CenterPoint` (`invisible`). An
-inconclusive verdict fails the case after its reruns.
+inconclusive verdict fails the case after its reruns, and so does a compositor that stops producing
+frames. Facade `Translation` drag cases also record `screen`, the PrintWindow pose, because
+RenderTargetBitmap reports a drag the screen doesn't show once translation is enabled (spec 066
+§12.2, Q1f). It needs an interactive desktop: without one the instrument is skipped, the field reads
+`skip`, and a `skip` never counts as a change against a recorded value.
 
 `model` says whether the step agrees with the analytic composition model
 ([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs)),

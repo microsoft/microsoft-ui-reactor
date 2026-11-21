@@ -30,7 +30,13 @@ internal sealed class TransformsLedger
     public const string KnownFile = "transforms-ledger.known.json";
 
     /// <summary>Fields holding DIP coordinates, compared within ±<see cref="Tolerance"/> (§12.1 C.5).</summary>
-    public static readonly string[] GeometricFields = ["pose", "active", "uia", "ttv"];
+    public static readonly string[] GeometricFields = ["pose", "active", "uia", "ttv", ScreenField];
+
+    /// <summary>The PrintWindow pose of a facade Translation drag (spec 066 §12.2, Q1f).</summary>
+    public const string ScreenField = "screen";
+
+    /// <summary>A run without an interactive desktop can't see the screen. It says nothing about a recorded value.</summary>
+    public const string ScreenSkipped = "skip";
 
     public const double Tolerance = 2;
 
@@ -90,7 +96,7 @@ internal sealed class TransformsLedger
     /// <summary>Equality for one field: exact, except geometric fields, which allow ±2 DIP per number.</summary>
     public static bool FieldEquals(string field, string? a, string? b)
     {
-        if (a == b) return true;
+        if (a == b || (field == ScreenField && b == ScreenSkipped)) return true;
         if (a is null || b is null || Array.IndexOf(GeometricFields, field) < 0) return false;
         var ta = Tokens(a);
         var tb = Tokens(b);

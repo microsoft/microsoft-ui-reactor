@@ -149,6 +149,10 @@ public class TransformsMatrixTests
     [InlineData("pose", "120,150,220,190", "none", false)]
     [InlineData("pool", "recycled=1 diff=0", "recycled=0 diff=0", false)]
     [InlineData("motion", "Scale=ANIMATING", "Scale=JUMPED", false)]
+    // A run without a desktop says nothing about the recorded screen pose, but a recorded skip doesn't excuse a real one.
+    [InlineData("screen", "220,150,320,190", "skip", true)]
+    [InlineData("screen", "skip", "220,150,320,190", false)]
+    [InlineData("pose", "220,150,320,190", "skip", false)]
     public void FieldEquals_AllowsTwoDipsOnGeometryOnly(string field, string a, string b, bool equal) =>
         Assert.Equal(equal, TransformsLedger.FieldEquals(field, a, b));
 
@@ -300,7 +304,7 @@ public class TransformsMatrixTests
     private static string BaselinePath(string file)
     {
         var root = RepoRootFinder.FindRepoRoot() ?? throw new InvalidOperationException("repo root not found");
-        return Path.Combine(root, TransformsLedger.BaselineDirectory, file);
+        return Path.Join(root, TransformsLedger.BaselineDirectory, file);
     }
 
     [Fact]

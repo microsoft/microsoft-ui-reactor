@@ -26,7 +26,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// controller-driven: the recorder pauses each new animation and seeks it, so no verdict depends
 /// on wall-clock timing.
 /// </summary>
-internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost, DiagnosticsListener diagnostics)
+internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost, DiagnosticsListener diagnostics, Func<FrameworkElement, Snap>? screen)
 {
     /// <summary>A loop long enough never to wrap during a case.</summary>
     public const int LongMs = 60_000;
@@ -133,7 +133,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         finally
         {
             try { if (_stage is not null) _reconciler.UnmountChild(_stage); }
-            catch (Exception ex) { Console.WriteLine($"# TransformsMatrix {c.Id}: teardown threw {ex.GetType().Name}"); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { Console.WriteLine($"# TransformsMatrix {c.Id}: teardown threw {ex.GetType().Name}"); }
             caseHost.Child = null;
         }
 
@@ -267,8 +267,13 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         {
             await act(f);
         }
-        catch (Exception ex)
+        catch (FrameTimeoutException ex)
         {
+            Inconclusive.Add($"{name}: {ex.Message}");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Whatever the product throws is the observation: it's recorded, and the lifecycle goes on.
             f["threw"] = ex.GetType().Name;
             ok = false;
         }
@@ -286,11 +291,12 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
                 f["pose"] = box?.ToString() ?? "none";
                 var expected = Model.Bounds(ExpectedPose(step), Rtl, Model.Shift(_case, step));
                 if (box is null || !box.Value.Near(expected, TransformsLedger.Tolerance)) ModelDifferences.Add((name, "pose"));
+                if (_case.UserCode == UserCodeAxis.TranslationDrag) f[TransformsLedger.ScreenField] = ObserveScreen(name, expected);
                 if (geometry) ObserveGeometry(f, t, step);
                 if (channels || geometry) f["channel"] = Channel(t);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             f["observe"] = ex.GetType().Name;
             Inconclusive.Add($"{name}: observing threw {ex.GetType().Name}: {ex.Message}");
@@ -303,12 +309,25 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
     private Pose ExpectedPose(MatrixStep step) => Model.Expected(_case, step);
 
+    /// <summary>
+    /// A facade Translation written after the visual's translation is enabled reads applied under
+    /// RenderTargetBitmap but isn't on screen (spec 066 §12.2, Q1f), so drag cases also record the
+    /// PrintWindow pose, and the model verdict covers it. Without an interactive desktop it's skipped.
+    /// </summary>
+    private string ObserveScreen(string step, Box expected)
+    {
+        if (screen is null) return TransformsLedger.ScreenSkipped;
+        var box = screen(caseHost).RedBox();
+        if (box is null || !box.Value.Near(expected, TransformsLedger.Tolerance)) ModelDifferences.Add((step, TransformsLedger.ScreenField));
+        return box?.ToString() ?? "none";
+    }
+
     // A feature's own activation can throw (#1623: a XAML transition blocks the handoff). That's
     // recorded on the `active` field, and the lifecycle goes on.
     private async Task ObserveActive(OrderedDictionary<string, string> f, MatrixStep step)
     {
         try { await ObserveActiveCore(f, step); }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not FrameTimeoutException and not OutOfMemoryException)
         {
             f["active"] = "threw:" + ex.GetType().Name;
             ModelDifferences.Add((MatrixCase.StepName(step), "active"));
@@ -689,7 +708,11 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         var done = new TaskCompletionSource();
         EventHandler<object> onRendering = (_, _) => { if (++frames >= count) done.TrySetResult(); };
         CompositionTarget.Rendering += onRendering;
-        try { await Task.WhenAny(done.Task, Task.Delay(2000)); }
+        try
+        {
+            if (await Task.WhenAny(done.Task, Task.Delay(2000)) != done.Task)
+                throw new FrameTimeoutException($"waited 2 s for {count} frame(s) and got {frames}, so the compositor isn't rendering (a locked or disconnected session?)");
+        }
         finally { CompositionTarget.Rendering -= onRendering; }
     }
 
@@ -699,6 +722,12 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         if (ms > 0) await Task.Delay(ms);
     }
 }
+
+/// <summary>
+/// The compositor stopped producing frames, so any capture would be stale. It makes an observation
+/// inconclusive; it's never recorded as something the product threw.
+/// </summary>
+internal sealed class FrameTimeoutException(string message) : TimeoutException(message);
 
 /// <summary>A RenderTargetBitmap capture of a host, with the pose and opacity oracles.</summary>
 internal sealed record Snap(byte[] Pixels, int Width, int Height, double Sx, double Sy)
