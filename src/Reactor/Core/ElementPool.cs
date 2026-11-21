@@ -178,6 +178,8 @@ public sealed class ElementPool : IDisposable
 
         // The lane follows the native control's marker, whichever wrapper reached it (#1643).
         var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+        // A renter returned before it loaded must not stay on the window's layout list.
+        if (state is not null) StopOpacitySync(element, state);
         if (state?.PoolExcluded == true)
         {
             if (state.ReleaseWhenExcluded)
@@ -716,18 +718,52 @@ public sealed class ElementPool : IDisposable
     /// with its styles, the visual gets XAML's value, unless a Reactor feature owns the visual's
     /// opacity by then.
     /// </summary>
+    /// <remarks>
+    /// The first layout pass that finds the renter in the live tree runs it, before the frame that
+    /// shows the renter. <c>Loaded</c> alone isn't enough: WinUI can raise it late, or not at all for
+    /// a control re-added while its <c>Unloaded</c> is still pending. <c>Loaded</c> stays as the
+    /// trigger for a renter in a popup, whose tree doesn't reach the window's content.
+    /// </remarks>
     internal static void SyncOpacityWhenLoaded(FrameworkElement fe)
     {
-        fe.Loaded -= OnRenterLoaded;
+        var state = Reconciler.GetOrCreateReactorState(fe);
+        if (state.OpacitySyncLayoutHandler is not null) return;
+        EventHandler<object> onLayout = (_, _) =>
+        {
+            if (IsInLiveTree(fe)) SyncRenterOpacity(fe);
+        };
+        state.OpacitySyncLayoutHandler = onLayout;
+        fe.LayoutUpdated += onLayout;
         fe.Loaded += OnRenterLoaded;
     }
 
-    private static void OnRenterLoaded(object sender, RoutedEventArgs e)
+    /// <summary>Whether the renter still waits for <see cref="SyncOpacityWhenLoaded"/>.</summary>
+    internal static bool IsOpacitySyncPending(FrameworkElement fe)
+        => fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { OpacitySyncLayoutHandler: not null };
+
+    private static void StopOpacitySync(FrameworkElement fe, Reconciler.ReactorState state)
     {
-        var fe = (FrameworkElement)sender;
+        if (state.OpacitySyncLayoutHandler is not { } onLayout) return;
+        state.OpacitySyncLayoutHandler = null;
+        fe.LayoutUpdated -= onLayout;
         fe.Loaded -= OnRenterLoaded;
-        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-            && (state.PoolExcluded || (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0))
+    }
+
+    private static bool IsInLiveTree(FrameworkElement fe)
+    {
+        if (fe.XamlRoot?.Content is not { } root) return false;
+        for (DependencyObject? node = fe; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if (ReferenceEquals(node, root)) return true;
+        return false;
+    }
+
+    private static void OnRenterLoaded(object sender, RoutedEventArgs e) => SyncRenterOpacity((FrameworkElement)sender);
+
+    private static void SyncRenterOpacity(FrameworkElement fe)
+    {
+        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state) return;
+        StopOpacitySync(fe, state);
+        if (state.PoolExcluded || (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0)
             return;
         var visual = ElementCompositionPreview.GetElementVisual(fe);
         // Something wrote the visual since the reset (navigation hiding a page, user code), or

@@ -434,8 +434,9 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
    that was never inserted throws `ArgumentException` (measured in the perf run). Step 1 also stops a
    `.TransformOrigin` expression and looping keyframes.
 2. `ImplicitAnimationSlots.ReleaseAll` (`ImplicitAnimations = null`).
-3. Identity writes. `Opacity = 1`. XAML pushes `UIElement.Opacity` to the visual only when it changes, so when a
-   visual-lane renter loads, the visual gets its `UIElement.Opacity` unless a Reactor feature owns the visual's
+3. Identity writes. `Opacity = 1`. XAML pushes `UIElement.Opacity` to the visual only when it changes, so on the first
+   layout pass that finds a visual-lane renter in the live tree (or its `Loaded`, which WinUI can raise late or skip for a
+   re-added control), the visual gets its `UIElement.Opacity` unless a Reactor feature owns the visual's
    opacity by then, or something wrote the visual first (navigation hiding a page). The renter's implicit `Opacity`
    key is held back for that write, so the value shows without a fade. Otherwise a style or modifier opacity equal to the previous renter's would never reach it.
    Then `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
