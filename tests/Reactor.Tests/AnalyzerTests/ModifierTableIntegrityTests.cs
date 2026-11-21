@@ -755,11 +755,10 @@ public class ModifierTableIntegrityTests
     }
 
     /// <summary>
-    /// <c>Reconciler</c> carries a <b>second</b> copy of the same allow-list:
     /// <c>GetDependencyPropertyName</c> decides which properties a <c>ThemeRef</c> binding may emit
-    /// a <c>&lt;Setter&gt;</c> for. Nothing pins it to <c>ApplyModifiers</c>, so
-    /// <c>.Background(Theme.X)</c> and <c>.Background("#fff")</c> can silently disagree about which
-    /// controls they reach — and both analyzers would be right about only one of them.
+    /// a <c>&lt;Setter&gt;</c> for. Its allow-list matches <c>ApplyModifiers</c> by default.
+    /// A separate <see cref="ModifierInfo.ThemeControlGate"/> describes overloads such as
+    /// <c>Foreground(ThemeRef)</c>, which also reaches <c>RichTextBlock</c>.
     /// </summary>
     [Fact]
     public void GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table()
@@ -780,6 +779,18 @@ public class ModifierTableIntegrityTests
             if (ElementSpecificThemeProperties.Contains(prop))
                 continue;
 
+            ModifierTable.Properties.TryGetValue(prop, out var info);
+            if ((info?.ThemeControlGate ?? info?.ControlGate) is { } declared
+                && !themeGate.SetEquals(declared))
+            {
+                problems.Add(
+                    $"{prop}: ModifierTable declares [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
+                    $"but the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}].");
+            }
+
+            if (info?.ThemeControlGate is not null)
+                continue;
+
             if (!applyGates.TryGetValue(prop, out var applyGate))
             {
                 problems.Add(
@@ -797,19 +808,16 @@ public class ModifierTableIntegrityTests
                     "A modifier that works with a literal brush and not with a Theme token (or vice versa) is a " +
                     "silent, overload-dependent bug.");
             }
-
-            if (ModifierTable.Properties.TryGetValue(prop, out var info)
-                && info.ControlGate is { } declared
-                && !themeGate.SetEquals(declared))
-            {
-                problems.Add(
-                    $"{prop}: ModifierTable declares [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
-                    $"but the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}].");
-            }
         }
 
         foreach (var prop in ElementSpecificThemeProperties.Where(prop => !themeGates.ContainsKey(prop)))
             problems.Add($"{prop}: listed as element-specific but GetDependencyPropertyName no longer maps it. Remove the row.");
+
+        foreach (var (prop, info) in ModifierTable.Properties)
+        {
+            if (info.ThemeControlGate is not null && !themeGates.ContainsKey(prop))
+                problems.Add($"{prop}: declares a ThemeControlGate but GetDependencyPropertyName does not map it.");
+        }
 
         Assert.True(
             problems.Count == 0,
