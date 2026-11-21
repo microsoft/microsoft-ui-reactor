@@ -795,6 +795,40 @@ internal static class AnimationCombinationTests
             await RunSkippedPlaybackCase("KFRemoveStopsStartedChannel");
             await RunReplacedChannelCase("KFRemoveKeepsReplacedChannel");
             await RunDroppedEntryCase("KFDropStopsEntry");
+            await RunSetterTranslationCase("KFRemoveMovesSetterTranslation");
+        }
+
+        // Removing keyframes in the update that changes a facade Translation setter still moves
+        // the new value to the visual the keyframes took.
+        async Task RunSetterTranslationCase(string name)
+        {
+            static Element Shift(float x) => Border(TextBlock("KFRemoveMovesSetterTranslation"))
+                .Set(b => b.Translation = new Vector3(x, 0, 0));
+            var before = Shift(10).Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, rotation: 0f).At(1f, rotation: 360f));
+            var after = Shift(20);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                visual.Properties.TryGetVector3("Translation", out var mounted);
+                H.Check(name + "_MountedOnVisual", mounted == new Vector3(10, 0, 0), $"translation={mounted}");
+
+                H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+
+                visual.Properties.TryGetVector3("Translation", out var updated);
+                H.Check(name + "_UpdatedOnVisual", updated == new Vector3(20, 0, 0), $"translation={updated}");
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         // Dropping entry "a" while "b" stays stops a's loop and leaves b's running. Removing b

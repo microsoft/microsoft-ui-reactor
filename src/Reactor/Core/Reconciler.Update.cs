@@ -447,7 +447,13 @@ public sealed partial class Reconciler
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
             ApplyKeyframeAnimations(target, keyframes);
         }
-
+        else if (oldEl.KeyframeAnimations is not null)
+        {
+            // The keyframes took the visual, so facade transforms the setters wrote in this
+            // update must move to it, as the cleanup that used to run here did (#1641).
+            try { AnimationHelper.GetElementVisual(target); }
+            catch { /* No compositor (e.g. unit tests) */ }
+        }
         // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
         if (newEl.ScrollAnimation is not null)
             ApplyScrollAnimation(target, newEl.ScrollAnimation);
