@@ -555,6 +555,40 @@ internal static class CompositorTransitionFixtures
     }
 
     /// <summary>
+    /// An enter <c>.Transition()</c> starts from its own start value when the element also declares a
+    /// transition on that channel: the enter's start write doesn't fire the implicit key. The
+    /// positive control has no transition.
+    /// </summary>
+    internal sealed class EnterWithTransition(Harness h) : TransitionFixture(h, "CompositorTransitions_EnterWithTransition")
+    {
+        protected override async Task Run()
+        {
+            if (!await SeekedMotionVisible()) return;
+            foreach (bool transition in new[] { false, true })
+            {
+                Element e = Target().Transition(Animation.Transition.Scale(0.5f), Animation.Curve.Linear(60000));
+                if (transition) e = e.ScaleTransition(Vector(Long));
+                await Reset();
+                await Mount(e);
+                var visual = Visual;
+                double start = double.NaN;
+                if (TransformsMatrixRecorder.Controller(visual, "Scale") is { } controller)
+                {
+                    controller.Pause();
+                    controller.Progress = 0;
+                    await TransformsMatrixRecorder.Settle();
+                    start = await Box() is { } box ? (box.X1 - box.X0) / 100 : double.NaN;
+                    controller.Progress = 0.5f;
+                    controller.Resume();
+                    visual.StopAnimation("Scale");
+                }
+                H.Check(Name + (transition ? "_WithScaleTransition_StartsHalf" : "_PositiveControl_StartsHalf"),
+                    Math.Abs(start - 0.5) < 0.06, $"start={start:F3}");
+            }
+        }
+    }
+
+    /// <summary>
     /// A child's transition key keeps its <c>.Stagger()</c> delay while the stagger stays, so a write
     /// in an update starts staggered, and dropping the stagger clears the delay before the children
     /// write that update's values.

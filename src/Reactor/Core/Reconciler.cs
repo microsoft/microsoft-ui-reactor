@@ -6068,9 +6068,21 @@ public sealed partial class Reconciler : IDisposable
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var delay = staggerIndex > 0 ? TimeSpan.FromTicks(staggerDelay.Ticks * staggerIndex) : TimeSpan.Zero;
 
-        ApplyTransitionAnimations(uie, visual, compositor, enter, curve, isEnter: true, delay);
+        // The enter writes its start values straight to the visual. An implicit key on the same
+        // channel (a transition, .Animate()) would animate that write and the enter would start
+        // from where the element already is (spec 066 §6.1).
+        WithoutImplicitAnimations(visual, () => ApplyTransitionAnimations(uie, visual, compositor, enter, curve, isEnter: true, delay));
 
         batch.End();
+    }
+
+    private static void WithoutImplicitAnimations(Visual visual, Action write)
+    {
+        var implicitAnimations = visual.ImplicitAnimations;
+        if (implicitAnimations is null) { write(); return; }
+        visual.ImplicitAnimations = null;
+        try { write(); }
+        finally { visual.ImplicitAnimations = implicitAnimations; }
     }
 
     /// <summary>
@@ -6106,10 +6118,13 @@ public sealed partial class Reconciler : IDisposable
             // A control torn down with an ancestor mid-exit was already pooled, and the pool's
             // visual reset restored it (spec 066 §7.3). It may belong to another renter now.
             if (!EndExit(uie, exit)) return;
-            // Reset visual state after exit
-            visual.Opacity = 1;
-            visual.Offset = Vector3.Zero;
-            visual.Scale = Vector3.One;
+            // Reset visual state after exit, without animating it through an implicit key
+            WithoutImplicitAnimations(visual, () =>
+            {
+                visual.Opacity = 1;
+                visual.Offset = Vector3.Zero;
+                visual.Scale = Vector3.One;
+            });
             onComplete();
         };
     }
