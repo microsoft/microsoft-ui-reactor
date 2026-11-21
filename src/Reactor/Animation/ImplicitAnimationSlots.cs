@@ -116,7 +116,7 @@ internal sealed class ImplicitAnimationClaims
 }
 
 /// <summary>
-/// The only writer of <see cref="Visual.ImplicitAnimations"/> (spec 066 §6). Layout animation,
+/// The only writer of <c>Visual.ImplicitAnimations</c> (spec 066 §6). Layout animation,
 /// <c>.Animate()</c>, the implicit transitions and ambient moves claim keys here, so adding or
 /// removing one never drops another's key (#1625, #1626).
 /// </summary>
