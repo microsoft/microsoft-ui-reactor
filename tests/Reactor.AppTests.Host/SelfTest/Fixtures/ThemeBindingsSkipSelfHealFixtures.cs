@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <c>ResourceOverrides.ThemeRefs</c> arm).
 ///
 /// <para>THE CLAIM UNDER TEST: a <c>ThemeBindings</c> child
-/// (<c>.Foreground(Theme.X)</c> → a <c>{ThemeResource}</c> Style setter) whose
+/// (<c>.Foreground(Theme.X)</c> → a live theme-resource binding, <c>SetThemeResourceBinding</c>) whose
 /// <c>Update</c> is NEVER entered (child-level structural skip → <c>ApplyThemeBindings</c>
 /// is NOT re-applied) STILL re-themes when its effective theme changes — because WinUI
 /// re-resolves the live <c>{ThemeResource}</c> NATIVELY on the control's

@@ -38,7 +38,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// theme-sensitivity gate, these <c>{ThemeResource}</c> cells are NO LONGER
 /// theme-sensitive, so the structural fast path now ENGAGES over them (rather than
 /// being gated off) — and they still re-theme, because WinUI auto-re-resolves a
-/// <c>{ThemeResource}</c> Style setter on any effective-theme change. That native
+/// theme-resource binding (<c>SetThemeResourceBinding</c>) on any effective-theme change. That native
 /// self-heal is exactly why the gate could be narrowed; the deterministic
 /// skip-plus-self-heal proof (with a <c>DebugElementsDiffed</c> discriminator) lives in
 /// <c>ThemeBindingsSkipSelfHealFixtures</c>. The one snapshot a skip truly leaves
@@ -123,7 +123,7 @@ internal static class StructuralSkipFixtures
     /// brush re-resolves to the new effective theme even though it was structurally skipped.
     ///
     /// <para>NOT THE GATE TEETH (by construction it cannot be): WinUI auto-re-resolves a
-    /// <c>{ThemeResource}</c> Style setter on any effective-theme change, so the Foreground
+    /// theme-resource binding (<c>SetThemeResourceBinding</c>) on any effective-theme change, so the Foreground
     /// brush flips Light↔Dark whether the cell is re-applied OR structurally skipped. Its
     /// value is catching a fast path that DROPS or CORRUPTS themed cells. The authoritative
     /// deterministic teeth are headless

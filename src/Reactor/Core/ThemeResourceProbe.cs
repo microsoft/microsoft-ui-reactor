@@ -72,7 +72,7 @@ internal static class ThemeResourceProbe
     /// <summary>
     /// The XAML of a <c>Border</c> style that sets <c>Tag</c> to <c>{ThemeResource key}</c>, or
     /// null when the key cannot be written as a reference. The quoting and escaping rules are
-    /// <see cref="Reconciler.FormatThemeResourceReference"/>'s, shared with theme modifiers.
+    /// <see cref="Reconciler.FormatThemeResourceReference"/>'s.
     /// </summary>
     internal static string? BuildStyleXaml(string resourceKey)
     {
