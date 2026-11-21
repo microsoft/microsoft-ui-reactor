@@ -248,7 +248,6 @@ internal static class ImplicitAnimationSlots
         private CompositionAnimation TransitionAnimation(string key, object transition)
         {
             var compositor = TakeVisual().Compositor;
-            ElementPool.MarkCompositorTainted(element);
             if (transition is ScalarTransition scalar)
                 return AnimationHelper.CreateScalarImplicitAnimation(compositor, key, new LinearCurve(scalar.Duration));
             return AnimationHelper.CreateVector3ImplicitAnimation(compositor, key, new LinearCurve(((Vector3Transition)transition).Duration));

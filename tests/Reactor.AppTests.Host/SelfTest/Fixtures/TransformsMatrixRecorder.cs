@@ -421,7 +421,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         var target = Target!;
         var channels = Model.ChangedChannels(_case);
         Visual? Taken(FrameworkElement t) =>
-            ElementPool.IsCompositorTainted(t) || _case.Feature == FeatureAxis.Stagger ? ElementCompositionPreview.GetElementVisual(t) : null;
+            ElementPool.IsVisualTaken(t) || _case.Feature == FeatureAxis.Stagger ? ElementCompositionPreview.GetElementVisual(t) : null;
 
         var before = Taken(target) is { } v0 ? channels.ToDictionary(ch => ch, ch => Controller(v0, ch)) : [];
         write();
@@ -624,7 +624,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         if (NonZero(t.Rotation)) facade.Add("R");
         if (t.Translation != Vector3.Zero) facade.Add("T");
         if (t.CenterPoint != Vector3.Zero) facade.Add("C");
-        if (!ElementPool.IsCompositorTainted(t)) return $"taken=0 facade={Join(facade)}";
+        if (!ElementPool.IsVisualTaken(t)) return $"taken=0 facade={Join(facade)}";
         Visual v;
         try { v = ElementCompositionPreview.GetElementVisual(t); }
         catch (UnauthorizedAccessException) { return $"taken=refused facade={Join(facade)}"; }
@@ -688,7 +688,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         if (t.TranslationTransition is not null) xaml.Add("Translation");
         if (t is Panel { BackgroundTransition: not null }) xaml.Add("Background");
         string keys = "untaken";
-        if (ElementPool.IsCompositorTainted(t))
+        if (ElementPool.IsVisualTaken(t))
         {
             try
             {
@@ -705,7 +705,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     {
         // Taking the visual of a control with a facade transform throws (#1613), and it would be
         // the test's own handoff anyway. An untaken control can't hold implicit keys.
-        if (!ElementPool.IsCompositorTainted(t) && (t.Scale != Vector3.One || NonZero(t.Rotation) || t.CenterPoint != Vector3.Zero))
+        if (!ElementPool.IsVisualTaken(t) && (t.Scale != Vector3.One || NonZero(t.Rotation) || t.CenterPoint != Vector3.Zero))
             return "keys=untaken anims=untaken";
         var v = ElementCompositionPreview.GetElementVisual(t);
         var keys = v.ImplicitAnimations?.Select(kv => kv.Key).Order(StringComparer.Ordinal).ToArray() ?? [];
@@ -736,10 +736,10 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// </summary>
     private async Task<string?> SettleRunning(FrameworkElement t, MatrixStep step)
     {
-        // Stagger takes the visual without marking it (#1643), but only the original control has had
-        // it; a renter in the rent steps must not be touched.
+        // Stagger took the original control's visual (marked since #1643). A renter in the rent
+        // steps must not be touched.
         bool staggered = _case.Feature == FeatureAxis.Stagger && step < MatrixStep.Unmount;
-        if (!ElementPool.IsCompositorTainted(t) && !staggered) return null;
+        if (!ElementPool.IsVisualTaken(t) && !staggered) return null;
         Visual visual;
         try { visual = ElementCompositionPreview.GetElementVisual(t); }
         catch (UnauthorizedAccessException) { return null; }

@@ -23,11 +23,10 @@ internal static class AnimationHelper
         _ => default,
     };
 
-    // The pool marker follows wrapper identity; property ownership follows native identity.
+    // Both the handoff marker and property ownership follow native identity.
     private static bool ShouldWriteToVisual(UIElement element, string property)
-        => ElementPool.IsCompositorTainted(element)
-            || (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-                && (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
+        => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
+            && (state.VisualTaken || (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
 
     private static void MarkCompositionWrite(UIElement element, string property, float value)
     {
@@ -52,16 +51,12 @@ internal static class AnimationHelper
         return state;
     }
 
-    private static Visual GetAnimationVisual(UIElement element)
-    {
-        var visual = GetElementVisual(element);
-        ElementPool.MarkCompositorTainted(element);
-        return visual;
-    }
+    private static Visual GetAnimationVisual(UIElement element) => GetElementVisual(element);
 
     /// <summary>
     /// Returns the element's handoff visual. Every Reactor feature that needs the visual of a
-    /// user element must take it here rather than from <see cref="ElementCompositionPreview"/>.
+    /// user element must take it here rather than from <see cref="ElementCompositionPreview"/>,
+    /// because this is where the native <c>VisualTaken</c> marker is set (spec 066 §7.2, #1643).
     /// </summary>
     /// <remarks>
     /// WinUI refuses <c>GetElementVisual</c> while <see cref="UIElement.Scale"/>,
@@ -83,7 +78,11 @@ internal static class AnimationHelper
         bool moveScale = scale != Vector3.One, moveRotation = rotation != 0;
         bool moveTranslation = translation != Vector3.Zero, moveCenter = center != Vector3.Zero;
         if (!(moveScale || moveRotation || moveTranslation || moveCenter))
-            return ElementCompositionPreview.GetElementVisual(element);
+        {
+            var taken = ElementCompositionPreview.GetElementVisual(element);
+            ElementPool.MarkVisualTaken(element);
+            return taken;
+        }
 
         if (moveScale) element.Scale = Vector3.One;
         if (moveRotation) element.Rotation = 0;
@@ -104,9 +103,7 @@ internal static class AnimationHelper
             if (moveCenter) element.CenterPoint = center;
             throw;
         }
-        // The visual now carries transforms that pool cleanup does not reset, so the element
-        // must not be pooled even when the caller does not mark it.
-        ElementPool.MarkCompositorTainted(element);
+        ElementPool.MarkVisualTaken(element);
 
         // Facade Rotation is in degrees; RotationAngle is in radians.
         if (moveScale) visual.Scale = scale;
@@ -127,7 +124,7 @@ internal static class AnimationHelper
     /// <summary>
     /// Releases a modifier's facade or compositor write.
     /// Ordinary facade writes must not call GetElementVisual: handing out the visual
-    /// permanently disables XAML implicit transitions and makes the element unpoolable.
+    /// permanently disables XAML implicit transitions and moves the element to the pool's visual lane.
     /// </summary>
     internal static void ResetCompositionModifier(UIElement element, string property, AnimationController? expectedController = null)
     {
@@ -160,7 +157,7 @@ internal static class AnimationHelper
             {
                 // A different feature handed out the Visual. It already released the
                 // facade and owns its visual value; do not overwrite that value.
-                ElementPool.MarkCompositorTainted(element);
+                ElementPool.MarkVisualTaken(element);
                 return;
             }
         }

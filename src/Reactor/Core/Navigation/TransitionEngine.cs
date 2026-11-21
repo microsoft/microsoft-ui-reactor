@@ -27,13 +27,12 @@ internal static class TransitionEngine
         var outVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(outgoing);
         var inVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(incoming);
 
-        // GetElementVisual permanently costs an element the XAML implicit-transition APIs
-        // (OpacityTransition, ScaleTransition, …), so ElementPool refuses to pool anything it
-        // has been called on. Record that here as every Reconciler call site does — a navigation
-        // page is often a Border or Grid, which are poolable, so without this a page whose
-        // visual we animated could be handed to a later renter that needs those APIs.
-        Core.ElementPool.MarkCompositorTainted(outgoing);
-        Core.ElementPool.MarkCompositorTainted(incoming);
+        // A navigation's completion can still reach both pages after they leave the tree (it
+        // unmounts or caches the outgoing one and normalizes both visuals), so neither may go
+        // back to the pool, where a later renter could be handed a control that completion then
+        // tears down. Page roots are often Borders or Grids, which are poolable.
+        Core.ElementPool.ExcludeFromPool(outgoing);
+        Core.ElementPool.ExcludeFromPool(incoming);
 
         var compositor = outVisual.Compositor;
         var suppressesHitTesting = transition is SlideTransition;

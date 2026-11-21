@@ -68,7 +68,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
         else
         {
             var visual = ElementCompositionPreview.GetElementVisual(target);
-            H.Check(prefix + "_NotPoolableBeforeUnset", ElementPool.IsCompositorTainted(target));
+            H.Check(prefix + "_NotPoolableBeforeUnset", ElementPool.IsVisualTaken(target));
             foreach (string property in properties)
             {
                 var controller = visual.TryGetAnimationController(property);
@@ -91,7 +91,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
             H.Check(prefix + "_RotationReset", target.Rotation == 0, $"rotation={target.Rotation}");
             H.Check(prefix + "_TranslationReset", target.Translation == Vector3.Zero, $"translation={target.Translation}");
             H.Check(prefix + "_CenterPointReset", target.CenterPoint == Vector3.Zero, $"center={target.CenterPoint}");
-            H.Check(prefix + "_NotHandedOut", !ElementPool.IsCompositorTainted(target));
+            H.Check(prefix + "_NotHandedOut", !ElementPool.IsVisualTaken(target));
             // Prove the reset did not disable the XAML implicit transition API.
             target.ScaleTransition = new Vector3Transition();
         }
@@ -113,7 +113,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
                 $"translation={translation}");
             H.Check(prefix + "_CenterPointReset", visual.CenterPoint == Vector3.Zero, $"center={visual.CenterPoint}");
             H.Check(prefix + "_OpacityReset", Math.Abs(visual.Opacity - restoredOpacity) < 0.001, $"opacity={visual.Opacity}");
-            H.Check(prefix + "_NotPoolable", ElementPool.IsCompositorTainted(target));
+            H.Check(prefix + "_NotPoolable", ElementPool.IsVisualTaken(target));
             foreach (string property in properties)
                 H.Check(prefix + "_" + property + "Stopped", visual.TryGetAnimationController(property) is null);
 
@@ -172,7 +172,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                     () => reconciler.Update(before, after, target, () => { }));
                 var visual = ElementCompositionPreview.GetElementVisual(target);
                 H.Check(name + "_AnimationStarted", visual.TryGetAnimationController("Opacity") is not null);
-                H.Check(name + "_NotPoolableBeforeUnset", ElementPool.IsCompositorTainted(target));
+                H.Check(name + "_NotPoolableBeforeUnset", ElementPool.IsVisualTaken(target));
                 reconciler.Update(after, plain, target, () => { });
                 await Harness.Render();
                 H.Check(name + "_Reset", visual.Scale == Vector3.One && visual.RotationAngle == 0
@@ -202,7 +202,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             H.SetContent(target);
             await Harness.Render();
             var visual = ElementCompositionPreview.GetElementVisual(target);
-            H.Check($"TransformExternal_{property}_NotMarked", !ElementPool.IsCompositorTainted(target));
+            H.Check($"TransformExternal_{property}_NotMarked", !ElementPool.IsVisualTaken(target));
             switch (property)
             {
                 case "Scale": visual.Scale = new Vector3(1.7f); break;
@@ -847,7 +847,7 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
     }
 }
 
-/// <summary>Property ownership survives wrapper collection; the pool's wrapper-keyed marker does not.</summary>
+/// <summary>Property ownership and the pool's visual-taken marker both survive wrapper collection (#1643).</summary>
 internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTestFixtureBase(h)
 {
     public override async Task RunAsync()
@@ -876,7 +876,7 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
 
                 var target = (FrameworkElement)parent.Child!;
                 H.Check(name + "_FreshWrapper", !tracked.Wrappers.TryGetValue(target, out _));
-                H.Check(name + "_TaintMarkerLost", !ElementPool.IsCompositorTainted(target));
+                H.Check(name + "_VisualTakenSurvivesWrapper", ElementPool.IsVisualTaken(target));
                 var flag = property == "Opacity" ? AnimateProperty.Opacity : AnimateProperty.Offset;
                 var state = target.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
                 H.Check(name + "_NativeOwnershipSurvives", state is not null
@@ -891,12 +891,12 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
                     : visual.Properties.TryGetVector3("Translation", out var translation)
                         == Microsoft.UI.Composition.CompositionGetValueStatus.Succeeded
                         && translation == new Vector3(14, 7, 0) && target.Translation == Vector3.Zero);
-                H.Check(name + "_TaintMarkerRestored", ElementPool.IsCompositorTainted(target));
+                H.Check(name + "_TaintMarkerRestored", ElementPool.IsVisualTaken(target));
 
                 reconciler.Update(direct, plain, target, () => { });
                 H.Check(name + "_OwnershipReleasedButTaintRemains", state is not null
                     && (state.CompositionModifierProperties & flag) == 0
-                    && ElementPool.IsCompositorTainted(target));
+                    && ElementPool.IsVisualTaken(target));
             }
             finally { H.SetContent(null); }
         }
@@ -910,7 +910,7 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
         var target = (FrameworkElement)parent.Child!;
         AnimationScope.WithAnimation(Curve.Linear(60000),
             () => reconciler.Update(plain, active, target, () => { }));
-        H.Check(name + "_TaintMarkerBeforeCollection", ElementPool.IsCompositorTainted(target));
+        H.Check(name + "_TaintMarkerBeforeCollection", ElementPool.IsVisualTaken(target));
         var wrappers = new ConditionalWeakTable<FrameworkElement, object>();
         wrappers.Add(target, new object());
         return (wrappers, (Reconciler.ReactorState)target.GetValue(Reconciler.ReactorAttached.StateProperty));
