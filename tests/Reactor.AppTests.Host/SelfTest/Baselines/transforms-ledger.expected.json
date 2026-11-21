@@ -1,7 +1,6 @@
 {
   "expectations": [
     { "case": "*.*.Stagger", "step": "{mount,change}", "field": "channel", "reason": "fixes #1643: the stagger handoff now marks the child's visual as taken on the native control" },
-    { "case": "*.*.Stagger", "step": "removeModifier", "field": "residue", "before": "xaml=- keys=untaken", "after": "xaml=- keys=-", "reason": "fixes #1643: the residue probe now sees the staggered child's visual as taken" },
     { "case": "*.*.Stagger", "step": "rentPlain", "field": "pool", "before": "recycled=0 diff=0 taken=1 xaml=-", "after": "recycled=0 diff=0 taken=0 xaml=-", "reason": "fixes #1643: a staggered child goes to the visual lane, so a plain renter never gets a taken visual" },
     { "case": "*.*.Stagger", "step": "rentTransformed", "field": "{running,pool}", "reason": "fixes #1643: a transformed renter is a plain-lane control, no longer the staggered child's taken visual" },
     { "case": "@soak.*", "step": "run", "field": "{rented,visualRented}", "reason": "fixes #1643: visual-lane probes rent the controls whose visual was taken (spec 066 §7.2), and plain probes rent more plain controls" },
