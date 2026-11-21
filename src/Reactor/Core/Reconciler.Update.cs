@@ -52,14 +52,16 @@ public sealed partial class Reconciler
 
     // In Mount, `layer` is the element being mounted: it shifts and becomes the owner. In
     // Update's replaced-control path, `self` is the updating element: when its own Mount is
-    // the outermost owner, that Mount already numbered the claims.
-    private void ShiftForwardedClaims(UIElement control, int frame, Element? layer = null, Element? self = null)
+    // the outermost owner, that Mount already numbered the claims. `stampFrame` is the frame the
+    // layer records as the claims' owner (Mount's own frame, or a fresh one for a replacement).
+    private void ShiftForwardedClaims(UIElement control, int frame, Element? layer = null, Element? self = null,
+        int stampFrame = 0)
     {
         if (_lastClaimFrame <= frame || ImplicitAnimationSlots.Claims(control) is not { } claims
             || claims.MountFrame <= frame) return;
         if (self is not null && claims.MountOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, self)) return;
         claims.ShiftInward();
-        if (layer is not null) Stamp(claims, frame, layer);
+        if (layer is not null) Stamp(claims, stampFrame > 0 ? stampFrame : frame, layer);
     }
 
     /// <summary>
@@ -473,10 +475,14 @@ public sealed partial class Reconciler
         // A replaced control is new to this layer: its inner layers just mounted it, so this layer
         // claims as Mount does, at slot 0 above their claims (spec 066 §6.1).
         bool replacedControl = result is not null && !ReferenceEquals(result, control);
+        // A layer on a replaced control numbers its claims as a Mount layer does, under a frame
+        // newer than every outer layer's mark, so the layers above shift them in turn.
+        int replacedFrame = 0;
         if (replacedControl)
         {
             implicitSlot = 0;
-            ShiftForwardedClaims(target, mountMark, self: newEl);
+            replacedFrame = ++_mountFrames;
+            ShiftForwardedClaims(target, mountMark, layer: newEl, self: newEl, stampFrame: replacedFrame);
         }
         var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
         if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
@@ -491,6 +497,9 @@ public sealed partial class Reconciler
         // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, implicitSlot);
+        if (replacedControl && (newEl.ImplicitTransitions is not null || newEl.LayoutAnimation is not null
+            || newEl.AnimationConfig is not null))
+            StampImplicitClaims(target, replacedFrame, newEl);
         if (modifierParent is null && _implicitDeferred && !replacedControl)
             ImplicitAnimationSlots.FlushDeferred(target);
 
@@ -529,7 +538,17 @@ public sealed partial class Reconciler
         {
             ModifierUpdate = previousModifierUpdate;
             _implicitSlot = previousImplicitSlot;
-            if (modifierParent is null) _implicitDeferred = previousImplicitDeferred;
+            if (modifierParent is null)
+            {
+                // An update that threw after a deferred release still restores the keys it held
+                // back, or a later claim on them would wait for a flush that never comes.
+                if (_implicitDeferred)
+                {
+                    try { ImplicitAnimationSlots.FlushDeferred(control); }
+                    catch { /* Don't mask the exception that ended the update. */ }
+                }
+                _implicitDeferred = previousImplicitDeferred;
+            }
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();
