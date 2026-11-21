@@ -52,7 +52,7 @@ Yoga/Flex layout math.
   control whose composition visual was taken permanently refuses the facade
   transforms and the XAML implicit transitions, so `Return` puts it in the
   visual lane (after the §7.3 visual reset) by the native `ReactorState.VisualTaken`
-  marker, and only a mount that takes the visual itself and carries no setters or
+  marker, and only a mount that takes the visual at mount and carries no setters or
   mount callbacks rents from it. Flag:
   - new event wiring on a poolable control that bypasses the one-time
     `ControlEventStateBox` trampoline, or a handler that captures the element

@@ -2,6 +2,7 @@ using System.Numerics;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Hosting;
@@ -52,11 +53,16 @@ internal static class PoolLaneFixtures
 
         public async Task<FrameworkElement?> Show(Element? child, bool stagger = false)
         {
+            Set(child, stagger);
+            await Harness.Render();
+            return Child;
+        }
+
+        public void Set(Element? child, bool stagger = false)
+        {
             var next = Stage(child, stagger);
             Reconciler.Update(_current, next, Root, static () => { });
             _current = next;
-            await Harness.Render();
-            return Child;
         }
 
         public void Dispose()
@@ -120,8 +126,7 @@ internal static class PoolLaneFixtures
                 first.Translation = new Vector3(12, 0, 0);
 
                 await lab.Show(null);
-                // InteractionStates takes the visual but installs nothing until hovered.
-                var renter = Target("B").InteractionStates(static b => b.PointerOver(scale: 1.1f));
+                var renter = Target("B").LayoutAnimation();
                 second = await lab.Show(renter);
                 H.Check(p + "_Recycled", ReferenceEquals(first, second));
                 if (second is null) return;
@@ -134,8 +139,9 @@ internal static class PoolLaneFixtures
                     $"facade={second.Translation}");
                 H.Check(p + "_NoRunningAnimation", !Running(visual, "Opacity") && !Running(visual, "Scale")
                     && !Running(visual, "RotationAngle") && !Running(visual, "Offset"));
+                // Only the renter's own .LayoutAnimation() key.
                 var keys = visual.ImplicitAnimations?.Select(kv => kv.Key).ToArray() ?? [];
-                H.Check(p + "_NoImplicitKeys", keys.Length == 0, string.Join(",", keys));
+                H.Check(p + "_OnlyRenterKeys", keys.SequenceEqual(["Offset"]), string.Join(",", keys));
 
                 var rented = await Snap.CaptureAsync(lab.Root);
                 using (var fresh = new Reconciler())
@@ -179,6 +185,18 @@ internal static class PoolLaneFixtures
                 // TranslationTransition stays on XAML until spec 066 layer 2, so it isn't demand yet.
                 ("TranslationTransitionOnly", Target("R").TranslationTransition(), false, null),
                 ("IdentityTransformRef", Target("R").Scale(1).Rotation(0).Ref(probe), false, _ =>
+                {
+                    try { probe.Current!.Rotation = 10; return null; }
+                    catch (UnauthorizedAccessException) { return "the ref's facade write threw"; }
+                }),
+                // These take the visual only on hover or removal, so a fresh control's facades
+                // stay writable until then (spec 066 §7.2).
+                ("InteractionStatesOnly", Target("R").InteractionStates(static b => b.PointerOver(scale: 1.1f)).Ref(probe), false, _ =>
+                {
+                    try { probe.Current!.Rotation = 10; return null; }
+                    catch (UnauthorizedAccessException) { return "the ref's facade write threw"; }
+                }),
+                ("ExitOnlyTransition", Target("R").Transition(Animation.Transition.Exit(Animation.Transition.Fade)).Ref(probe), false, _ =>
                 {
                     try { probe.Current!.Rotation = 10; return null; }
                     catch (UnauthorizedAccessException) { return "the ref's facade write threw"; }
@@ -275,14 +293,24 @@ internal static class PoolLaneFixtures
     {
         public override async Task RunAsync()
         {
-            const string p = "ElementPoolLanes_ExitTornDown";
+            // A .Transition() exit, and the fade an ambient Animations.Animate removal plays.
+            await Case("ExitTornDown",
+                Target("E").Transition(Animation.Transition.Exit(Animation.Transition.Fade), Curve.Linear(400)).WithKey("e"),
+                static lab => lab.Set(null));
+            await Case("ExitTornDown_Ambient", Target("E").WithKey("e"),
+                static lab => Animations.Animate(AnimationKind.EaseIn, () => { lab.Set(null); return 0; }));
+        }
+
+        private async Task Case(string p, Element exiting, Action<Lab> remove)
+        {
+            p = "ElementPoolLanes_" + p;
             using var lab = new Lab(H);
-            var exitControl = await lab.Show(
-                Target("E").Transition(Animation.Transition.Exit(Animation.Transition.Fade), Curve.Linear(400)).WithKey("e"));
+            var exitControl = await lab.Show(exiting);
             H.Check(p + "_Mounted", exitControl is not null);
             if (exitControl is null) return;
 
-            await lab.Show(null);
+            remove(lab);
+            await Harness.Render();
             H.Check(p + "_ExitPlaying", lab.Reconciler.IsExiting(exitControl) && ReferenceEquals(lab.Child, exitControl));
             // What an ancestor's teardown does to a child it reaches mid-exit.
             lab.Root.Children.Remove(exitControl);
@@ -305,4 +333,44 @@ internal static class PoolLaneFixtures
             H.Check(p + "_RenterOpaque", renter is not null
                 && Math.Abs(ElementCompositionPreview.GetElementVisual(renter).Opacity - 1) < 0.001);
         }
-    }}
+    }
+
+    /// <summary>
+    /// An app handler for a built-in element may write a facade in its Mount, which works on a
+    /// fresh control. It must never be handed a visual-lane control (spec 066 §7.2).
+    /// </summary>
+    internal sealed class AppHandler(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed class RotatingBorderHandler : IElementHandler<BorderElement, WinUI.Border>
+        {
+            public WinUI.Border Mount(MountContext ctx, BorderElement element)
+            {
+                var border = ctx.RentControl<WinUI.Border>();
+                border.Rotation = 10;
+                return border;
+            }
+
+            public void Update(UpdateContext ctx, BorderElement oldEl, BorderElement newEl, WinUI.Border control) { }
+        }
+
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_AppHandler";
+            using var lab = new Lab(H);
+            lab.Reconciler.RegisterHandler(new RotatingBorderHandler());
+            var taken = await lab.Show(Target("T").Animate(Curve.Linear(100)));
+            H.Check(p + "_FirstTakesVisual", taken is not null && ElementPool.IsVisualTaken(taken));
+            await lab.Show(null);
+
+            FrameworkElement? second;
+            try { second = await lab.Show(Target("R").Animate(Curve.Linear(100))); }
+            catch (Exception ex)
+            {
+                H.Check(p + "_FacadeWriteWorks", false, $"{ex.GetType().Name}: {ex.Message}");
+                return;
+            }
+            H.Check(p + "_FacadeWriteWorks", second is not null);
+            H.Check(p + "_NotFromVisualLane", !ReferenceEquals(second, taken));
+        }
+    }
+}

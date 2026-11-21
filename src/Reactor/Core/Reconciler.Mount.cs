@@ -104,7 +104,7 @@ public sealed partial class Reconciler
         // _v1Handlers on first hit so arm 1 catches it next time.
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
-            if (_externalHandlerTypes?.Contains(element.GetType()) == true)
+            if (_rentContext.Candidate && MayUseAppHandler(element.GetType()))
                 _rentContext = _rentContext with { Candidate = false };
             control = v1Entry.Mount(element, requestRerender, this);
             ownsControl = v1Entry.OwnsControl(element);
@@ -118,6 +118,8 @@ public sealed partial class Reconciler
         }
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
+            if (_rentContext.Candidate && MayUseAppHandler(element.GetType()))
+                _rentContext = _rentContext with { Candidate = false };
             control = v1Entry.Mount(element, requestRerender, this);
             ownsControl = v1Entry.OwnsControl(element);
         }

@@ -399,7 +399,9 @@ context as a new argument. The **visual lane** is eligible only when both of the
   A transform counts only when its effective value isn't identity, the same rule as §3 invariant 2.
   An identity-only chain such as `Border().Scale(1).Ref(r)` would never take the visual on a fresh
   control, so it must not get a visual-lane control that would throw on a later facade write
-  through the ref.
+  through the ref. For the same reason a feature counts only when it takes the visual at mount:
+  `.InteractionStates` takes it on the first state change, an exit-only `.Transition` on removal,
+  and `.ScrollLinked` without a `ScrollViewer` never, so none of those is demand on its own.
 - *Compatibility.* No declaration in the chain carries setters (`.Set`, `.OnMount`-style callbacks) and
   the control isn't a custom or third-party handler. A setter could write a facade that throws on a
   rented visual-taken control but works on a fresh one. Example: `.Set(b => b.Rotation = 10).Scale(2)`

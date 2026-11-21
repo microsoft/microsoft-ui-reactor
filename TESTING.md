@@ -792,7 +792,9 @@ longer matches anything. Don't bend the model to fit `main`.
 Before recording or comparing, the fixture runs a positive and a negative control for every
 oracle (`TransformsMatrix_Instrument_*`) and stops if one fails. A pool soak (`@soak.short`,
 `@soak.full`) churns random elements and checks every plain renter for leftover facades, XAML
-transitions and a taken visual; its violation counts are in the ledger, so a layer that fixes a
+transitions and a taken visual, and every renter from the visual lane (`visualRented`, spec 066
+§7.2) for a non-identity visual, leftover implicit keys and running animations; its violation
+counts are in the ledger, so a layer that fixes a
 leak declares it. The full run also records platform probes (`@probe`) and, with an interactive
 desktop and system animations on, logs PrintWindow evidence for the XAML transition curve
 (`# TransformsMatrix screen:` lines), which is never recorded because it depends on the desktop.

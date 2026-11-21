@@ -543,7 +543,7 @@ internal sealed class PoolSoak(Border host)
                         if (v.Opacity != 1 || v.Scale != Vector3.One || v.RotationAngle != 0 || v.CenterPoint != Vector3.Zero
                             || !v.TransformMatrix.IsIdentity || translated || probe.Translation != Vector3.Zero)
                             violations["visual"]++;
-                        if (v.ImplicitAnimations is { Count: > 0 }) violations["keys"]++;
+                        if (v.ImplicitAnimations?.Any(static kv => kv.Key != "Offset") == true) violations["keys"]++;
                         if (SoakChannels.Any(ch => TransformsMatrixRecorder.Controller(v, ch) is not null)) violations["anims"]++;
                         continue;
                     }
@@ -588,10 +588,10 @@ internal sealed class PoolSoak(Border host)
 
     private static Element Probe() => VStack().Width(ProbeWidth).Height(10).Background("#FF0000FF");
 
-    // InteractionStates takes the visual (spec 066 §9.1) but installs nothing until hovered, so
-    // whatever the probe's visual holds was left by the pool.
+    // .LayoutAnimation() takes the visual at mount (spec 066 §7.2) and installs only its Offset key,
+    // so anything else the probe's visual holds was left by the pool.
     private static Element VisualProbe() => VStack().Width(VisualProbeWidth).Height(10).Background("#FF0000FF")
-        .InteractionStates(static b => b.PointerOver(scale: 1.1f));
+        .LayoutAnimation();
 
     private static Element Build(Spec s)
     {

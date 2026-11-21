@@ -2684,6 +2684,7 @@ public sealed partial class Reconciler : IDisposable
         // EnsureRegistrableElementType — reuse it.
         EnsureRegistrableElementType(typeof(TBase), typeof(TControl), "RegisterHandlerForDerivedTypes");
         _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1HandlerAdapter<TBase, TControl>(handler));
+        (_externalHandlerBaseTypes ??= new()).Add(typeof(TBase));
     }
 
     /// <summary>
@@ -2775,8 +2776,25 @@ public sealed partial class Reconciler : IDisposable
     // Spec 066 §7.2: which pool lane the control the current mount rents may come from.
     private PoolRentContext _rentContext;
 
-    // Element types registered on this reconciler by app code. Their handlers may write facades.
+    // Element types (exact, or a base of them) registered on this reconciler by app code. Their
+    // handlers may write facades.
     private HashSet<Type>? _externalHandlerTypes;
+    private List<Type>? _externalHandlerBaseTypes;
+
+    /// <summary>
+    /// Whether <paramref name="elementType"/> may mount through an app handler, which could write a
+    /// facade that throws on a visual-lane control (spec 066 §7.2). Covers per-host registrations,
+    /// derived-type registrations and global overrides of a built-in.
+    /// </summary>
+    private bool MayUseAppHandler(Type elementType)
+    {
+        if (_externalHandlerTypes?.Contains(elementType) == true || V1Protocol.ControlRegistry.IsContested(elementType))
+            return true;
+        if (_externalHandlerBaseTypes is { } bases)
+            foreach (var b in bases)
+                if (b.IsAssignableFrom(elementType)) return true;
+        return false;
+    }
 
     /// <summary>
     /// Spec 066 §7.2. A mount may rent from the visual lane only when it declares a feature that
@@ -2793,39 +2811,51 @@ public sealed partial class Reconciler : IDisposable
 
     internal static PoolRentContext ForMount(Element element, ElementModifiers? modifiers, PoolRentContext outer)
     {
-        var (candidate, setters) = VisualLaneShape(element);
-        // The layers landed so far: ModifierTable.VisualOwningModifiers (spec 066 §9.1).
-        bool demand = element.AnimationConfig is not null || element.ElementTransition is not null
-            || element.InteractionStates is not null || element.KeyframeAnimations is not null
-            || element.LayoutAnimation is not null || element.ScrollAnimation is not null
+        bool candidate = VisualLaneTypes.Contains(element.GetType());
+        bool setters = candidate && HasSetters(element);
+        // ModifierTable.VisualOwningModifiers (spec 066 §9.1), for the layers landed so far, when the
+        // feature takes the visual at mount. InteractionStates takes it on the first state change,
+        // an exit-only transition on removal, and a scroll link without a ScrollViewer never, so a
+        // fresh control keeps writable facades until then and those don't count.
+        bool demand = element.AnimationConfig is not null || element.ElementTransition?.GetEnterTransition() is not null
+            || element.KeyframeAnimations is not null
+            || element.LayoutAnimation is not null || element.ScrollAnimation?.ScrollViewer is not null
             || (outer.Armed && outer.Transparent && outer.Demand);
         bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
             || (outer.Armed && outer.Blocked);
         return new(Armed: true, Transparent: element is KeyedMemoElement, demand, blocked, candidate);
     }
 
-    // The built-in element types whose handler rents a poolable control, and whether this
-    // declaration carries .Set setters.
-    private static (bool Candidate, bool Setters) VisualLaneShape(Element element) => element switch
-    {
-        BorderElement e => (true, e.Setters.Length > 0),
-        StackElement e => (true, e.Setters.Length > 0),
-        GridElement e => (true, e.Setters.Length > 0),
-        CanvasElement e => (true, e.Setters.Length > 0),
-        TextBlockElement e => (true, e.Setters.Length > 0),
-        RichTextBlockElement e => (true, e.Setters.Length > 0),
-        ScrollViewerElement e => (true, e.Setters.Length > 0),
-        ViewboxElement e => (true, e.Setters.Length > 0),
-        ProgressElement e => (true, e.Setters.Length > 0),
-        ProgressRingElement e => (true, e.Setters.Length > 0),
-        ImageElement e => (true, e.Setters.Length > 0),
-        InfoBadgeElement e => (true, e.Setters.Length > 0),
-        ButtonElement e => (true, e.Setters.Length > 0),
-        TextBoxElement e => (true, e.Setters.Length > 0),
-        ToggleSwitchElement e => (true, e.Setters.Length > 0),
-        _ => (false, false),
-    };
+    // The built-in element types whose handler rents a poolable control. Exact types: a record
+    // derived from one may come with its own handler.
+    private static readonly HashSet<Type> VisualLaneTypes =
+    [
+        typeof(BorderElement), typeof(StackElement), typeof(GridElement), typeof(CanvasElement),
+        typeof(TextBlockElement), typeof(RichTextBlockElement), typeof(ScrollViewerElement),
+        typeof(ViewboxElement), typeof(ProgressElement), typeof(ProgressRingElement),
+        typeof(ImageElement), typeof(InfoBadgeElement), typeof(ButtonElement), typeof(TextBoxElement),
+        typeof(ToggleSwitchElement),
+    ];
 
+    private static bool HasSetters(Element element) => element switch
+    {
+        BorderElement e => e.Setters.Length > 0,
+        StackElement e => e.Setters.Length > 0,
+        GridElement e => e.Setters.Length > 0,
+        CanvasElement e => e.Setters.Length > 0,
+        TextBlockElement e => e.Setters.Length > 0,
+        RichTextBlockElement e => e.Setters.Length > 0,
+        ScrollViewerElement e => e.Setters.Length > 0,
+        ViewboxElement e => e.Setters.Length > 0,
+        ProgressElement e => e.Setters.Length > 0,
+        ProgressRingElement e => e.Setters.Length > 0,
+        ImageElement e => e.Setters.Length > 0,
+        InfoBadgeElement e => e.Setters.Length > 0,
+        ButtonElement e => e.Setters.Length > 0,
+        TextBoxElement e => e.Setters.Length > 0,
+        ToggleSwitchElement e => e.Setters.Length > 0,
+        _ => true,
+    };
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.5) — return a control to its per-type pool,
     /// after running the Q18 reset contract:

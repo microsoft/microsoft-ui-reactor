@@ -166,7 +166,7 @@ Conventions for contributors:
   control unpoolable, so every remove and remount built a new control and took its visual again.
   The pool now keeps those controls in a second lane, reset to a fresh control's pixels (animations
   stopped, implicit animations dropped, identity transforms), and hands them only to an element that
-  takes the visual itself and has no `.Set` setter or `.OnMount` callback, so user code never meets a
+  takes the visual at mount and has no `.Set` setter or `.OnMount` callback, so user code never meets a
   control whose `Rotation` or `Scale` write would throw. The marker that picks the lane now lives on
   the native control and is set on every handoff, so a staggered panel's children no longer reach a
   plain renter, where a `.Set(b => b.Rotation = …)` threw `UnauthorizedAccessException` (#1643). Both

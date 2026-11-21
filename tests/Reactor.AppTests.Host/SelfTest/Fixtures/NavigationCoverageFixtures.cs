@@ -800,6 +800,16 @@ internal static class NavigationCoverageFixtures
 
             H.Check("NavTaint_InstantSwapAlsoTaints",
                 IsPoolExcluded(suppressOut) && IsPoolExcluded(suppressIn));
+
+            // The pool takes an ordinary taken control into its visual lane, but not a page.
+            using var pool = new ElementPool();
+            var taken = new Border();
+            Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(taken);
+            pool.Return(outgoing);
+            pool.Return(taken);
+            H.Check("NavTaint_PoolRefusesPage",
+                ReferenceEquals(pool.TryRent(typeof(Border), visualLane: true), taken)
+                && pool.TryRent(typeof(Border), visualLane: true) is null);
         }
 
         private static bool IsPoolExcluded(Microsoft.UI.Xaml.UIElement e)

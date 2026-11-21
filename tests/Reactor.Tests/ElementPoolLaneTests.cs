@@ -18,24 +18,40 @@ public class ElementPoolLaneTests
 
     private static BorderElement Target() => Border(TextBlock("x"));
 
-    public static TheoryData<string> Features => new() { "Animate", "Transition", "InteractionStates", "Keyframes", "LayoutAnimation", "ScrollLinked" };
-
-    private static Element WithFeature(Element e, string feature) => feature switch
+    // Every ModifierTable.VisualOwningModifiers row, applied to an element. ScrollLinked needs a
+    // live ScrollViewer, which this headless suite can't construct, so it's checked by shape only.
+    private static Element? WithFeature(Element e, string feature) => feature switch
     {
         "Animate" => e.Animate(Curve.Linear(100)),
         "Transition" => e.Transition(Transition.Fade),
-        "InteractionStates" => e.InteractionStates(static b => b.PointerOver(scale: 1.1f)),
         "Keyframes" => e.Keyframes("k", 1, static k => k.Duration(30).At(0f, opacity: 0.5f).At(1f, opacity: 1f)),
         "LayoutAnimation" => e.LayoutAnimation(),
-        // ScrollLinked needs a live ScrollViewer, so set the declaration directly.
-        _ => e with { ScrollAnimation = new ScrollAnimationConfig(null!, []) },
+        "SpringLayoutAnimation" => e.SpringLayoutAnimation(),
+        // Takes the visual on the first state change, or needs a live ScrollViewer: see below.
+        "InteractionStates" or "ScrollLinked" => null,
+        _ => throw new Xunit.Sdk.XunitException(
+            $"ModifierTable.VisualOwningModifiers gained '{feature}'. Make Reconciler.ForMount count it as demand, then map it here."),
     };
 
-    [Theory]
-    [MemberData(nameof(Features))]
-    public void A_feature_that_takes_the_visual_is_demand(string feature)
-        => Assert.True(For(WithFeature(Target(), feature)).VisualLane);
+    [Fact]
+    public void Every_visual_owning_modifier_is_demand()
+    {
+        foreach (var feature in Microsoft.UI.Reactor.Analyzers.ModifierTable.VisualOwningModifiers.Keys)
+        {
+            if (WithFeature(Target(), feature) is { } declared)
+                Assert.True(For(declared).VisualLane, feature);
+        }
+    }
 
+    [Fact]
+    public void Features_that_take_no_visual_at_mount_are_not_demand()
+    {
+        // A fresh control keeps writable facades until these act, so a visual-lane control
+        // would refuse a write that works fresh.
+        Assert.False(For(Target().Transition(Transition.Exit(Transition.Fade))).VisualLane);
+        Assert.False(For(Target() with { ScrollAnimation = new ScrollAnimationConfig(null!, []) }).VisualLane);
+        Assert.False(For(Target().InteractionStates(static b => b.PointerOver(scale: 1.1f))).VisualLane);
+    }
     [Fact]
     public void No_feature_means_no_demand()
     {
@@ -51,9 +67,15 @@ public class ElementPoolLaneTests
         Assert.False(For(Target().Animate(Curve.Linear(100)).OnMount(static fe => fe.Rotation = 10)).VisualLane);
     }
 
+    private sealed record DerivedBorder() : BorderElement((Element?)null);
+
     [Fact]
     public void Only_built_in_poolable_elements_are_candidates()
-        => Assert.False(For(Expander("h", TextBlock("x")).Animate(Curve.Linear(100))).VisualLane);
+    {
+        Assert.False(For(Expander("h", TextBlock("x")).Animate(Curve.Linear(100))).VisualLane);
+        // A record derived from a built-in may come with its own handler.
+        Assert.False(For(new DerivedBorder().Animate(Curve.Linear(100))).VisualLane);
+    }
 
     [Fact]
     public void A_keyed_memo_passes_its_demand_and_setters_inward()

@@ -699,7 +699,9 @@ internal static class ModifierTable
     /// <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> and <c>.CenterPoint</c>, and layer 5
     /// <c>.TransformOrigin</c>. Add a row in the same change that makes the modifier take the
     /// visual, never earlier: before that the facade write still works, so the warning would be
-    /// a false positive.
+    /// a false positive. The same change makes <c>Reconciler.ForMount</c> count the modifier as
+    /// visual-lane demand for the element pool (spec 066 §7.2); <c>ElementPoolLaneTests</c> fails
+    /// until it does.
     /// </para>
     /// <para>
     /// The analyzer confirms each match through the semantic model (a Reactor extension method),

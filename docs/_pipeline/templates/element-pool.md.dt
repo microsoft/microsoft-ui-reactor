@@ -37,7 +37,7 @@ directly.
 ```csharp snippet="source:src/Reactor/Core/ElementPool.cs#pool-rent"
 ```
 
-![Element-pool state machine: a control starts unpooled, transitions to Rented on Mount, to Returning on Unmount, and back to Pooled after ForceDetach + CleanElement — unless the per-type cap is exceeded or WinUI refused the reset, in which case it falls out of pooling.](images/element-pool/rental-states.svg)
+![Element-pool state machine: a control starts unpooled, transitions to Rented on Mount, to Returning on Unmount, and back to Pooled after ForceDetach + CleanElement — unless the lane's cap is exceeded or WinUI refused the reset, in which case it falls out of pooling.](images/element-pool/rental-states.svg)
 
 `TryRent` is three checks and a pop: pool enabled, type in the
 poolable set, a non-empty lane. Anything that fails returns `null` and
@@ -78,13 +78,16 @@ identity write. So each type has two lanes:
 | Lane | Holds | Who rents from it |
 |---|---|---|
 | Plain | Controls whose visual was never taken | Everyone, as before |
-| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual itself and carries no `.Set` setters or `.OnMount` callbacks |
+| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual at mount (`.Animate()`, an enter `.Transition()`, `.Keyframes()`, `.LayoutAnimation()`, `.ScrollLinked()`) and carries no `.Set` setters or `.OnMount` callbacks |
 
 An eligible element takes from the visual lane first and falls back to
 the plain lane. Every other element only takes from the plain lane, so
 user code never meets a control it couldn't have met fresh: a
 `Border().Set(b => b.Rotation = 10)` gets a plain control, never one
-whose rotation facade would throw.
+whose rotation facade would throw. `.InteractionStates()` and an
+exit-only `.Transition()` don't make an element eligible, because a
+fresh control keeps writable facades until the first hover or the
+removal.
 
 `Return` picks the lane from a `VisualTaken` marker that every handoff
 sets on the native control's attached state, so it holds whichever
