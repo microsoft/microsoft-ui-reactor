@@ -101,7 +101,12 @@ is unchanged.
 The check requires exactly one realized header outside the content/icon/description
 slots, nonempty attached text with OS scaling enabled, and no native trimming.
 A separate native TextBlock measures the full text with matching typography and
-the current OS scale, without trimming, fixed height or a line cap. Required and
+the current OS scale, without trimming, fixed height or a line cap. For wrapped
+text, its width preserves the native measured content width within the arranged
+slot, accounting for margins and never shrinking below the actual text extent.
+This avoids rewrapping a single line when its fractional `ActualWidth` is slightly
+smaller than its rounded layout width. The probe retains native layout rounding.
+Required and
 allocated dimensions must be finite, positive and fit within one DIP of layout
 rounding. Each text box must also fit within every ancestor's rectangular bounds
 through the window content, with no collapsed or fully transparent ancestor.

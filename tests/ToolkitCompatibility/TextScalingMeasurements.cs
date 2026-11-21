@@ -18,6 +18,19 @@ internal static class TextScalingMeasurements
         Require(!trimmed, $"{role}: native text is trimmed.");
     }
 
+    internal static double ProbeWidth(string role, double actualWidth, double desiredWidth, double slotWidth,
+        double marginLeft, double marginRight)
+    {
+        Require(Positive(actualWidth) && Positive(desiredWidth) && Positive(slotWidth) &&
+            double.IsFinite(marginLeft) && double.IsFinite(marginRight),
+            $"{role}: invalid/empty measure or arrange width.");
+        double desiredContentWidth = desiredWidth - marginLeft - marginRight;
+        double slotContentWidth = slotWidth - marginLeft - marginRight;
+        Require(Positive(desiredContentWidth) && Positive(slotContentWidth),
+            $"{role}: margins leave no finite positive measure or arrange width.");
+        return Math.Max(actualWidth, Math.Min(desiredContentWidth, slotContentWidth));
+    }
+
     internal static void RequireFits(string role, double width, double height, double requiredWidth, double requiredHeight)
     {
         Require(Positive(width) && Positive(height) && Positive(requiredWidth) && Positive(requiredHeight),

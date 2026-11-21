@@ -36,12 +36,12 @@ internal static class TextScalingChecks
     private static void CheckText(Native.TextBlock text, string role)
     {
         Program.Check(CompatibilityRoot.IsAttached(text), $"{role}: TextBlock is not attached.");
+        var slot = Native.Primitives.LayoutInformation.GetLayoutSlot(text);
         Program.Results.Note($"Text-scale {role}: text='{text.Text}'; enabled={text.IsTextScaleFactorEnabled}; trimmed={text.IsTextTrimmed}; " +
             $"allocated={text.ActualWidth}x{text.ActualHeight}; font={text.FontFamily.Source}/{text.FontSize}; " +
             $"wrapping={text.TextWrapping}; maxLines={text.MaxLines}; theme={text.ActualTheme}; rasterizationScale={text.XamlRoot.RasterizationScale}");
         Program.Results.Note($"Text-scale {role}: desired={text.DesiredSize}; " +
-            $"layout-slot={Native.Primitives.LayoutInformation.GetLayoutSlot(text)}; margin={text.Margin}; " +
-            $"layout-rounding={text.UseLayoutRounding}; width={text.Width}; min-width={text.MinWidth}; max-width={text.MaxWidth}");
+            $"layout-slot={slot}; margin={text.Margin}; layout-rounding={text.UseLayoutRounding}");
         TextScalingMeasurements.RequireText(role, text.Text, text.IsTextScaleFactorEnabled, text.IsTextTrimmed);
 
         // Measure the full text at the real OS scale with the same typography, but no
@@ -64,29 +64,21 @@ internal static class TextScalingChecks
             FlowDirection = text.FlowDirection,
             Language = text.Language,
             Padding = text.Padding,
+            UseLayoutRounding = text.UseLayoutRounding,
             IsTextScaleFactorEnabled = true,
             TextTrimming = TextTrimming.None,
             MaxLines = 0
         };
-        probe.Measure(new Size(text.TextWrapping == TextWrapping.NoWrap ? double.PositiveInfinity : text.ActualWidth,
-            double.PositiveInfinity));
-        var required = probe.DesiredSize;
-        Program.Results.Note($"Text-scale {role}: full-text required={required.Width}x{required.Height}; probe-layout-rounding={probe.UseLayoutRounding}");
-        // Preserve the original assertion result while diagnosing the probe's reflow.
-        probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Program.Results.Note($"Text-scale {role} diagnostic only: unconstrained={probe.DesiredSize}");
-        double desiredWidth = text.DesiredSize.Width - text.Margin.Left - text.Margin.Right;
-        if (double.IsFinite(desiredWidth) && desiredWidth > 0)
-        {
-            probe.Measure(new Size(desiredWidth, double.PositiveInfinity));
-            Program.Results.Note($"Text-scale {role} diagnostic only: desired-width-constraint={desiredWidth}; required={probe.DesiredSize}");
-        }
-        probe.UseLayoutRounding = text.UseLayoutRounding;
-        probe.Measure(new Size(text.TextWrapping == TextWrapping.NoWrap ? double.PositiveInfinity : text.ActualWidth,
-            double.PositiveInfinity));
-        Program.Results.Note($"Text-scale {role} diagnostic only: matched-layout-rounding={probe.UseLayoutRounding}; required={probe.DesiredSize}");
+        // ActualWidth can be a fractional text extent below the rounded layout width;
+        // using that smaller extent as a fresh constraint can introduce an extra line.
+        double probeWidth = text.TextWrapping == TextWrapping.NoWrap ? double.PositiveInfinity :
+            TextScalingMeasurements.ProbeWidth(role, text.ActualWidth, text.DesiredSize.Width, slot.Width,
+                text.Margin.Left, text.Margin.Right);
+        probe.Measure(new Size(probeWidth, double.PositiveInfinity));
+        Program.Results.Note($"Text-scale {role}: probe-width={probeWidth}; " +
+            $"full-text required={probe.DesiredSize.Width}x{probe.DesiredSize.Height}; probe-layout-rounding={probe.UseLayoutRounding}");
         TextScalingMeasurements.RequireFits(role, text.ActualWidth, text.ActualHeight,
-            required.Width, required.Height);
+            probe.DesiredSize.Width, probe.DesiredSize.Height);
 
         var root = ReactorApp.PrimaryWindow!.NativeWindow.Content;
         DependencyObject? current = text;

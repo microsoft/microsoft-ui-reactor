@@ -41,6 +41,32 @@ public sealed class TextScalingMeasurementsTests
     }
 
     [Theory]
+    [InlineData(94.85712432861328, 95, 95, 0, 0, 95)]
+    [InlineData(59.5, 95, 60, 0, 0, 60)]
+    [InlineData(150, 95, 200, 0, 0, 150)]
+    [InlineData(94.85712432861328, 115, 135, 8, 12, 95)]
+    [InlineData(94.85712432861328, 75, 200, -10, -10, 95)]
+    [InlineData(79.75, 80, 200, 0, 0, 80)]
+    public void ProbeWidth_PreservesRoundedMeasurementWithinArrangeConstraint(double actual, double desired,
+        double slot, double left, double right, double expected)
+    {
+        Assert.Equal(expected, TextScalingMeasurements.ProbeWidth("Header", actual, desired, slot, left, right));
+    }
+
+    [Theory]
+    [InlineData(0, 95, 95, 0, 0)]
+    [InlineData(double.NaN, 95, 95, 0, 0)]
+    [InlineData(94, 0, 95, 0, 0)]
+    [InlineData(94, 95, double.PositiveInfinity, 0, 0)]
+    [InlineData(94, 95, 95, double.NaN, 0)]
+    [InlineData(94, 95, 95, 70, 30)]
+    public void ProbeWidth_RejectsInvalidLayout(double actual, double desired, double slot, double left, double right)
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            TextScalingMeasurements.ProbeWidth("Header", actual, desired, slot, left, right));
+    }
+
+    [Theory]
     [InlineData(98, 40, 100, 40)]
     [InlineData(100, 38, 100, 40)]
     [InlineData(100, 40, 102, 40)]
