@@ -241,17 +241,19 @@ internal static class ImplicitAnimationSlots
                 var timing = AnimationHelper.TransitionTiming.Of(value);
                 // A transition modifier builds a new transition object on every render. Keep the
                 // published animation while the timing is unchanged, with any .Stagger() delay on
-                // it, so a write in this update still starts staggered. Removing the stagger clears
-                // the delays before the children update (Reconciler.ClearStaggerDelays).
+                // it, so a write in this update still starts staggered. The update refreshes that
+                // delay before the child writes (Reconciler.RefreshStaggerDelay), and removing the
+                // stagger clears it (Reconciler.ClearStaggerDelays).
                 if (claims.PublishedTransition(key) is { } published && published.Timing == timing
                     && visual.ImplicitAnimations is { } current && current.TryGetValue(key, out var existing)
                     && ReferenceEquals(existing, published.Animation))
                     return;
                 animation = AnimationHelper.CreateTransitionAnimation(visual.Compositor, key, timing);
-                // A changed timing keeps the stagger delay the replaced key carried.
-                if (visual.ImplicitAnimations?.TryGetValue(key, out var replaced) == true && replaced is KeyFrameAnimation { DelayTime: var delay }
-                    && delay != TimeSpan.Zero && animation is KeyFrameAnimation fresh)
-                    fresh.DelayTime = delay;
+                // A key published after the stagger delays were applied (a new channel, or a
+                // changed timing) starts with this child's current delay.
+                if (Reconciler.StaggerDelayOf(element) is { } delay && delay != TimeSpan.Zero
+                    && Array.IndexOf(Reconciler.StaggerChannels, key) >= 0)
+                    AnimationHelper.SetDelay(animation, delay);
                 claims.RememberTransition(key, timing, animation);
             }
             else

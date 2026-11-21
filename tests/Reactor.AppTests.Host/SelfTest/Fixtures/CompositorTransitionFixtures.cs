@@ -626,6 +626,65 @@ internal static class CompositorTransitionFixtures
         }
     }
 
+    /// <summary>
+    /// The stagger delay a child's write in an update starts with is the one its parent's current
+    /// <c>.Stagger()</c> gives it at its new position, read from a child setter, which runs after the
+    /// transition policy and before the parent re-applies the delays: a changed stagger, a
+    /// reordered child and a key published in that update. Dropping the stagger leaves a delay the
+    /// child set on another key alone.
+    /// </summary>
+    internal sealed class StaggerUpdated(Harness h) : TransitionFixture(h, "CompositorTransitions_StaggerUpdated")
+    {
+        private static TimeSpan? _seen;
+
+        private static TimeSpan? KeyDelay(UIElement child, string key)
+            => ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is { } keys
+                && keys.TryGetValue(key, out var anim) && anim is KeyFrameAnimation keyFrame ? keyFrame.DelayTime : null;
+
+        private static BorderElement Probe(string key, double opacity, bool scale = false)
+        {
+            var child = Target().Opacity(opacity).OpacityTransition(Long);
+            if (scale) child = child.Scale(0.9f).ScaleTransition(new Vector3Transition { Duration = Long });
+            string probed = scale ? "Scale" : "Opacity";
+            return child.Set(b => _seen = KeyDelay(b, probed)).WithKey(key);
+        }
+
+        private static Element StaggeredPanel(TimeSpan step, params Element[] children) => VStack(children).Stagger(step);
+
+        protected override async Task Run()
+        {
+            var step = TimeSpan.FromMilliseconds(250);
+            await Mount(StaggeredPanel(step, Target().OpacityTransition(Long).WithKey("a"), Target().OpacityTransition(Long).WithKey("b")));
+
+            _seen = null;
+            await Update(StaggeredPanel(step * 2, Target().OpacityTransition(Long).WithKey("a"), Probe("b", 0.9)));
+            H.Check(Name + "_ChangedDelay", _seen == step * 2, $"seen={_seen}");
+
+            _seen = null;
+            await Update(StaggeredPanel(step * 2, Probe("b", 0.8), Target().OpacityTransition(Long).WithKey("a")));
+            H.Check(Name + "_Reordered", _seen == TimeSpan.Zero, $"seen={_seen}");
+
+            _seen = null;
+            await Update(StaggeredPanel(step * 2, Target().OpacityTransition(Long).WithKey("a"), Probe("b", 0.8, scale: true)));
+            H.Check(Name + "_AddedChannel", _seen == step * 2, $"seen={_seen}");
+
+            // A delay the child gave a key stagger doesn't use survives the stagger's removal.
+            var second = ((Panel)Control).Children[1];
+            var own = ElementCompositionPreview.GetElementVisual(second);
+            var ownAnimation = own.Compositor.CreateVector3KeyFrameAnimation();
+            ownAnimation.Target = "RotationAxis";
+            ownAnimation.InsertExpressionKeyFrame(1f, "this.FinalValue");
+            ownAnimation.Duration = Long;
+            ownAnimation.DelayTime = TimeSpan.FromMilliseconds(300);
+            own.ImplicitAnimations["RotationAxis"] = ownAnimation;
+            await Update(VStack(Target().OpacityTransition(Long).WithKey("a"),
+                Target().Opacity(0.8).Scale(0.9f).ScaleTransition(new Vector3Transition { Duration = Long }).OpacityTransition(Long).WithKey("b")));
+            H.Check(Name + "_OtherKeyKeepsDelay", KeyDelay(second, "RotationAxis") == TimeSpan.FromMilliseconds(300)
+                && KeyDelay(second, "Opacity") == TimeSpan.Zero,
+                $"rotationAxis={KeyDelay(second, "RotationAxis")} opacity={KeyDelay(second, "Opacity")}");
+        }
+    }
+
     /// <summary>#1626, Background arm: dropping <c>.BackgroundTransition()</c> clears the XAML property.</summary>
     internal sealed class BackgroundRemoved(Harness h) : TransitionFixture(h, "CompositorTransitions_BackgroundRemoved")
     {

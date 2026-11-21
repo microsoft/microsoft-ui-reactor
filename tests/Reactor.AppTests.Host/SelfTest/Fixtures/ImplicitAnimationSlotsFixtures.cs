@@ -476,6 +476,21 @@ internal static class ImplicitAnimationSlotsFixtures
             await Update(Three(20, middle: false));
             H.Check(Name + "_ThreeLayerChannelLookup_NegativeControl", !await Animates("Translation", Three(40, middle: false)));
 
+            // The same lookup when the Translation write comes from the outer layer and the inner
+            // layers declare nothing but .Animate(): their shared-control edges are still kept.
+            static Element OuterWrite(float x, bool middle)
+            {
+                Element inner = new SlotsForwarder(Target().Animate(Curve.Linear(1000), AnimateProperty.Opacity));
+                if (middle) inner = inner.Animate(Curve.Linear(3000), AnimateProperty.Offset);
+                return new SlotsForwarder(inner).Animate(Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0);
+            }
+            await Update(OuterWrite(10, middle: true));
+            await Update(OuterWrite(20, middle: true));
+            H.Check(Name + "_OuterWriteChannelLookup", await Animates("Translation", OuterWrite(40, middle: true)));
+            await Update(OuterWrite(10, middle: false));
+            await Update(OuterWrite(20, middle: false));
+            H.Check(Name + "_OuterWriteChannelLookup_NegativeControl", !await Animates("Translation", OuterWrite(40, middle: false)));
+
             // Featureless forwarders around a leaf whose control is replaced: the leaf's claim
             // must still be released when its layout animation goes.
             static Element Bare(Element leaf) => new SlotsForwarder(new SlotsForwarder(leaf));

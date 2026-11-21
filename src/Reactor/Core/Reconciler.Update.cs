@@ -247,6 +247,7 @@ public sealed partial class Reconciler
             ModifierUpdate = (control, newEl, modifiers);
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
+        var previousUpdateStagger = _updateStagger;
         // Each control's outermost layer scopes the deferred releases of its whole chain.
         var previousImplicitDeferred = _implicitDeferred;
         if (modifierParent is null) _implicitDeferred = false;
@@ -313,6 +314,10 @@ public sealed partial class Reconciler
         // .Stagger() releases them before the children write this update's values.
         if (oldEl.StaggerConfig is not null && newEl.StaggerConfig is null)
             ClearStaggerDelays(control);
+        // A kept .Stagger() gives each child its delay at its new position before the child writes.
+        RefreshStaggerDelay(control, newEl);
+        if (newEl.StaggerConfig is { } stagger && !ReferenceEquals(_updateStagger?.Panel, control))
+            _updateStagger = new UpdateStaggerScope(control, stagger.Delay);
         if (oldEl.ImplicitTransitions is not null || newEl.ImplicitTransitions is not null)
         {
             try { ApplyImplicitTransitions(control, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot); }
@@ -569,6 +574,7 @@ public sealed partial class Reconciler
         {
             ModifierUpdate = previousModifierUpdate;
             _implicitSlot = previousImplicitSlot;
+            _updateStagger = previousUpdateStagger;
             if (modifierParent is null)
             {
                 // An update that threw after a deferred release still restores the keys it held

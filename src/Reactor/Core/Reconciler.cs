@@ -1698,6 +1698,9 @@ public sealed partial class Reconciler : IDisposable
         internal AnimateProperty DeferredModifierResets;
         // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
         internal Animation.ImplicitAnimationClaims? ImplicitClaims;
+        // The delay a parent's .Stagger() gives this child's implicit animations, so a key
+        // published after the delays were applied (a new or retimed transition) starts staggered.
+        internal TimeSpan? StaggerDelay;
         // Names this control holds keyframe trigger entries under, whichever layer declared them,
         // so the pool's visual reset drops exactly those (spec 066 §7.3 step 4).
         internal HashSet<string>? KeyframeNames;
@@ -4486,6 +4489,21 @@ public sealed partial class Reconciler : IDisposable
         Element[] oldChildren, Element[] newChildren,
         PanelChildCollection childCollection, Action requestRerender, UIElement? parentControl)
     {
+        if (_updateStagger is { } stagger && parentControl is not null && ReferenceEquals(stagger.Panel, parentControl))
+        {
+            var previousChildren = stagger.Children;
+            stagger.Children = newChildren;
+            try { ReconcileChildrenTracedCore(oldChildren, newChildren, childCollection, requestRerender, parentControl); }
+            finally { stagger.Children = previousChildren; }
+            return;
+        }
+        ReconcileChildrenTracedCore(oldChildren, newChildren, childCollection, requestRerender, parentControl);
+    }
+
+    private void ReconcileChildrenTracedCore(
+        Element[] oldChildren, Element[] newChildren,
+        PanelChildCollection childCollection, Action requestRerender, UIElement? parentControl)
+    {
         // Skip the try/finally and event emits when neither provider wants the span.
         bool traceSource = Diagnostics.ReactorEventSource.Log.IsEnabled(
             global::System.Diagnostics.Tracing.EventLevel.Informational,
@@ -6591,17 +6609,66 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Removes the delays <see cref="ApplyStaggerDelays"/> set on a panel's children. Update runs
     /// it before the children update when the parent drops <c>.Stagger()</c>, so their writes in
-    /// that update start at once.
+    /// that update start at once. Only the channels stagger delays are reset: a child's own
+    /// delayed animation on another key keeps its delay.
     /// </summary>
     internal static void ClearStaggerDelays(UIElement parent)
     {
         if (parent is not WinUI.Panel panel) return;
         foreach (var child in panel.Children)
         {
+            if (child.GetValue(ReactorAttached.StateProperty) is ReactorState state) state.StaggerDelay = null;
             if (!ElementPool.IsVisualTaken(child)) continue;
-            if (ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is not { } keys) continue;
-            foreach (var entry in keys)
-                if (entry.Value is CompositionAnimation animation) AnimationHelper.SetDelay(animation, TimeSpan.Zero);
+            SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(child), TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>The implicit animation keys <c>.Stagger()</c> delays.</summary>
+    internal static readonly string[] StaggerChannels = ["Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint"];
+
+    /// <summary>The stagger delay recorded for <paramref name="child"/>, or null when no parent staggers it.</summary>
+    internal static TimeSpan? StaggerDelayOf(UIElement child)
+        => (child.GetValue(ReactorAttached.StateProperty) as ReactorState)?.StaggerDelay;
+
+    private static void SetStaggerDelayOnKeys(Visual visual, TimeSpan delay)
+    {
+        if (visual.ImplicitAnimations is not { } keys) return;
+        foreach (var key in StaggerChannels)
+            if (keys.TryGetValue(key, out var animation) && animation is CompositionAnimation composition)
+                AnimationHelper.SetDelay(composition, delay);
+    }
+
+    /// <summary>A panel with <c>.Stagger()</c> whose update is reconciling its children.</summary>
+    private sealed class UpdateStaggerScope(UIElement panel, TimeSpan delay)
+    {
+        public UIElement Panel { get; } = panel;
+        public TimeSpan Delay { get; } = delay;
+        // The panel's new children while they reconcile, so a child finds its index in this update.
+        public Element[]? Children;
+    }
+
+    private UpdateStaggerScope? _updateStagger;
+
+    /// <summary>
+    /// Gives a child its stagger delay before it writes this update's values: the delay its
+    /// parent's current <c>.Stagger()</c> sets at its new position. Without it a write in this
+    /// update would start with the previous render's delay (a changed stagger or a reordered
+    /// child), and a newly published key with none. Only the child's outermost layer is in its
+    /// parent's children, so inner layers find no position and leave the delay alone.
+    /// </summary>
+    private void RefreshStaggerDelay(UIElement control, Element newEl)
+    {
+        if (_updateStagger is not { Children: { } children } stagger) return;
+        var parent = (control as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(control);
+        if (!ReferenceEquals(parent, stagger.Panel)) return;
+        for (int i = 0; i < children.Length; i++)
+        {
+            if (!ReferenceEquals(children[i], newEl)) continue;
+            var delay = TimeSpan.FromTicks(stagger.Delay.Ticks * i);
+            GetOrCreateReactorState(control).StaggerDelay = delay;
+            if (ElementPool.IsVisualTaken(control))
+                SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(control), delay);
+            return;
         }
     }
 
@@ -6613,20 +6680,9 @@ public sealed partial class Reconciler : IDisposable
         {
             var child = panel.Children[i];
             var visual = AnimationHelper.GetElementVisual(child);
-            if (visual.ImplicitAnimations is null) continue;
-
             var delay = TimeSpan.FromTicks(config.Delay.Ticks * i);
-            foreach (var key in new[] { "Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint" })
-            {
-                try
-                {
-                    var anim = visual.ImplicitAnimations[key];
-                    if (anim is KeyFrameAnimation kfa) kfa.DelayTime = delay;
-                    else if (anim is SpringScalarNaturalMotionAnimation ssa) ssa.DelayTime = delay;
-                    else if (anim is SpringVector3NaturalMotionAnimation sva) sva.DelayTime = delay;
-                }
-                catch { /* Key not present in collection — skip */ }
-            }
+            GetOrCreateReactorState(child).StaggerDelay = delay;
+            SetStaggerDelayOnKeys(visual, delay);
         }
     }
 
@@ -6940,6 +6996,7 @@ public sealed partial class Reconciler : IDisposable
             state.KeyframeChannelOwners = null;
             state.DeferredModifierResets = default;
             state.ImplicitClaims = null;
+            state.StaggerDelay = null;
             if (state.KeyframeNames is { } names)
             {
                 foreach (var name in names) _keyframeTriggerValues.Remove((uie, name));
