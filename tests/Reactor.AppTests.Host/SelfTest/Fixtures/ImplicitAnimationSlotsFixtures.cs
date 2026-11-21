@@ -2,6 +2,8 @@ using System.Numerics;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -311,6 +313,70 @@ internal static class ImplicitAnimationSlotsFixtures
             H.Check("ImplicitSlots_AmbientMoveKeepsLayout_LayoutOffsetWins",
                 offset is KeyFrameAnimation { Duration: var d } && d == Layout, $"offset={offset?.GetType().Name}");
             H.Check("ImplicitSlots_AmbientMoveKeepsLayout_SizeKept", collection?.ContainsKey("Size") == true);
+        }
+    }
+
+    /// <summary>
+    /// A decorator that forwards its child's control without naming it as its source target
+    /// still counts as a layer: Update reaches its child one slot deeper, so Mount must too.
+    /// </summary>
+    internal sealed class OpaqueForwarderChain(Harness h) : SlotsFixture(h, "ImplicitSlots_OpaqueForwarderChain")
+    {
+        static OpaqueForwarderChain() =>
+            ControlRegistry.RegisterDecorator<SlotsForwarder>(static () => new SlotsForwarderHandler());
+
+        private static Element Button40() => Button("slots").Width(100).Height(40).HAlign(HorizontalAlignment.Left);
+
+        protected override async Task Run()
+        {
+            await Mount(new SlotsForwarder(Target().LayoutAnimation()));
+            H.Check(Name + "_Installed", Keys() == "Offset", $"keys={Keys()}");
+            await Update(new SlotsForwarder(Target()));
+            H.Check(Name + "_InnerRemoved", Keys() == "-", $"keys={Keys()}");
+
+            // The child's type changes, so the forwarder hands back a new control.
+            await Update(new SlotsForwarder(Button40().LayoutAnimation()));
+            H.Check(Name + "_ReplacedInstalled", Keys() == "Offset", $"keys={Keys()}");
+            await Update(new SlotsForwarder(Button40()));
+            H.Check(Name + "_ReplacedInnerRemoved", Keys() == "-", $"keys={Keys()}");
+        }
+    }
+
+    internal sealed record SlotsForwarder(Element Target) : Element;
+
+    private sealed class SlotsForwarderHandler : IDecoratorElementHandler<SlotsForwarder>
+    {
+        public UIElement Mount(MountContext context, SlotsForwarder element) => context.MountChild(element.Target)!;
+        public UIElement Update(UpdateContext context, SlotsForwarder oldEl, SlotsForwarder newEl, UIElement control)
+            => context.ReconcileChild(oldEl.Target, newEl.Target, control)!;
+        public V1UnmountDisposition Unmount(UnmountContext context, SlotsForwarder? element, UIElement control)
+            => V1UnmountDisposition.ContinueDefaultTraversal;
+    }
+
+    /// <summary>
+    /// Releasing a layout animation or a transition still moves a facade Translation that a setter
+    /// wrote in the same update onto the visual those features took.
+    /// </summary>
+    internal sealed class SetterTranslationMigrates(Harness h) : SlotsFixture(h, "ImplicitSlots_SetterTranslationMigrates")
+    {
+        private static BorderElement Shift(float x) => Target().Set(b => b.Translation = new Vector3(x, 0, 0));
+
+        private Vector3 VisualTranslation()
+        {
+            ElementCompositionPreview.GetElementVisual(Control).Properties.TryGetVector3("Translation", out var value);
+            return value;
+        }
+
+        protected override async Task Run()
+        {
+            await Mount(Shift(10).LayoutAnimation());
+            H.Check(Name + "_MountedOnVisual", VisualTranslation() == new Vector3(10, 0, 0), $"translation={VisualTranslation()}");
+            await Update(Shift(20));
+            H.Check(Name + "_LayoutRemoved", VisualTranslation() == new Vector3(20, 0, 0), $"translation={VisualTranslation()}");
+
+            await Update(Shift(20).Animate(Curve.Linear(30), AnimateProperty.Opacity).OpacityTransition());
+            await Update(Shift(30).OpacityTransition());
+            H.Check(Name + "_TransitionRetained", VisualTranslation() == new Vector3(30, 0, 0), $"translation={VisualTranslation()}");
         }
     }
 }

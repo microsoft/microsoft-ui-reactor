@@ -130,6 +130,42 @@ public class ImplicitAnimationClaimsTests
     }
 
     [Fact]
+    public void DeferredRelease_RemovesTheKey_UntilFlushed()
+    {
+        // An update releases .Animate() before setters run; the transition it hid must not
+        // animate those setters' writes, and comes back afterwards.
+        var sink = new RecordingSink();
+        var claims = new ImplicitAnimationClaims();
+        claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "transition");
+        claims.Add(sink, "Scale", ImplicitFeature.Animate, 0, "animate");
+
+        claims.Release(sink, "Scale", ImplicitFeature.Animate, 0, deferRestore: true);
+        Assert.False(sink.Keys.ContainsKey("Scale"));
+
+        claims.FlushDeferred(sink);
+        Assert.Equal("transition", sink.Keys["Scale"]);
+    }
+
+    [Fact]
+    public void DeferredRelease_ReclaimingTheSameValue_StillPublishes()
+    {
+        // The post-setter apply re-claims with the same transition instance, which would
+        // otherwise look like no change.
+        var sink = new RecordingSink();
+        var claims = new ImplicitAnimationClaims();
+        claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "transition");
+        claims.Add(sink, "Scale", ImplicitFeature.Animate, 0, "animate");
+        claims.Release(sink, "Scale", ImplicitFeature.Animate, 0, deferRestore: true);
+
+        claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "transition");
+
+        Assert.Equal("transition", sink.Keys["Scale"]);
+        sink.Log.Clear();
+        claims.FlushDeferred(sink);
+        Assert.Empty(sink.Log);
+    }
+
+    [Fact]
     public void ReleaseAll_ClearsOnce_AndForgetsEveryClaim()
     {
         var sink = new RecordingSink();

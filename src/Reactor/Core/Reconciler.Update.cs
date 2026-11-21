@@ -27,6 +27,31 @@ public sealed partial class Reconciler
     // The depth of the layer being updated in its control's shared-target chain, 0 for the
     // outermost (spec 066 §6.1). It names that layer's implicit animation claims.
     private int _implicitSlot;
+    // Mount frames are numbered as they start, so a frame nested in another has a higher number.
+    // A control whose claims were made by a deeper frame was forwarded to this layer by its
+    // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
+    // so those claims move one slot inward before this layer claims.
+    private int _mountFrames, _lastClaimFrame, _lastStampFrame;
+    private Element? _lastStampElement;
+
+    private void StampImplicitClaims(UIElement control, int frame, Element element)
+    {
+        if (ImplicitAnimationSlots.Claims(control) is not { } claims) return;
+        claims.MountFrame = frame;
+        if (frame > _lastClaimFrame) _lastClaimFrame = frame;
+        _lastStampFrame = frame;
+        _lastStampElement = element;
+    }
+
+    // `self` is the element a replaced control belongs to: when its own Mount made the claims,
+    // they are this layer's, not a forwarded child's.
+    private void ShiftForwardedClaims(UIElement control, int frame, Element? self = null)
+    {
+        if (_lastClaimFrame <= frame || ImplicitAnimationSlots.Claims(control) is not { } claims
+            || claims.MountFrame <= frame) return;
+        if (self is not null && claims.MountFrame == _lastStampFrame && ReferenceEquals(_lastStampElement, self)) return;
+        claims.ShiftInward();
+    }
 
     /// <summary>
     /// Diffs oldEl vs newEl and patches the existing control. Returns null if patched in-place,
@@ -35,6 +60,7 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        int mountMark = _mountFrames;
         var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
         int implicitSlot = modifierParent is null ? 0 : _implicitSlot + 1;
         var modifierTarget = newEl;
@@ -226,12 +252,17 @@ public sealed partial class Reconciler
 
         // Setters and nested targets run inside handlers, before ApplyModifiers.
         // Release outgoing implicit channels before any of them can write a value.
-        // A key another feature still claims (layout keeps Offset) stays with that feature.
+        // A key another feature still claims (layout keeps Offset) stays with that feature, and a
+        // claim that takes a released key over returns after the setters (FlushDeferred below).
+        bool releasedAnimation = false;
         if (oldEl.AnimationConfig is { } previousAnimation)
         {
             var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
             if (properties != default)
+            {
                 ClearPropertyAnimation(control, properties, implicitSlot);
+                releasedAnimation = true;
+            }
         }
 
         var keyframes = newEl.KeyframeAnimations;
@@ -433,7 +464,7 @@ public sealed partial class Reconciler
         if (replacedControl)
         {
             implicitSlot = 0;
-            if (!ownsControl) ImplicitAnimationSlots.ShiftInward(target);
+            ShiftForwardedClaims(target, mountMark, newEl);
         }
         var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
         if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
@@ -448,6 +479,8 @@ public sealed partial class Reconciler
         // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
             ApplyPropertyAnimation(target, newEl.AnimationConfig, implicitSlot);
+        if (releasedAnimation && !replacedControl)
+            ImplicitAnimationSlots.FlushDeferred(target);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)

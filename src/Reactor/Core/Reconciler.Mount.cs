@@ -48,6 +48,7 @@ public sealed partial class Reconciler
         // A direct Mount from outside is an outermost frame for render-error propagation
         // (issue #1291), like a top-level Reconcile; recursive mounts just count.
         using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Mount, element);
+        int mountFrame = ++_mountFrames;
         // Where this mount's completed roots start, while an ErrorBoundary records them.
         int boundaryRootsStart = _boundaryMountRoots?.Count ?? -1;
 
@@ -234,8 +235,8 @@ public sealed partial class Reconciler
         // A transparent layer (a keyed Memo, a flyout over its target) mounts over the control its
         // inner element just claimed implicit keys on. Those claims move one slot inward, so the
         // outermost layer is slot 0, as Update counts it (spec 066 §6.1).
-        if (control is not null && !ownsControl)
-            ImplicitAnimationSlots.ShiftInward(control);
+        if (control is not null)
+            ShiftForwardedClaims(control, mountFrame);
 
         // Apply transitions after mounting (runs after .Set() callbacks)
         if (control is not null && (element.ImplicitTransitions is not null || element.ThemeTransitions is not null))
@@ -248,6 +249,10 @@ public sealed partial class Reconciler
         // Apply compositor property animation (.Animate() modifier)
         if (control is not null && element.AnimationConfig is not null)
             ApplyPropertyAnimation(control, element.AnimationConfig);
+
+        if (control is not null && (element.ImplicitTransitions is not null || element.LayoutAnimation is not null
+            || element.AnimationConfig is not null))
+            StampImplicitClaims(control, mountFrame, element);
 
         // Apply enter transition (.Transition() modifier)
         if (control is not null && element.ElementTransition is not null)

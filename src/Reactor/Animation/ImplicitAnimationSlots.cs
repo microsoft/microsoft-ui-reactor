@@ -44,9 +44,13 @@ internal sealed class ImplicitAnimationClaims
     private readonly record struct Claim(string Key, ImplicitFeature Feature, int Slot, object Value);
 
     private readonly List<Claim> _claims = new(2);
+    private List<string>? _deferred;
 
     /// <summary>Set by the sink once a claim was written to the handed-out visual.</summary>
     internal bool PublishedToVisual;
+
+    /// <summary>The reconciler Mount frame that last claimed on this control (see Reconciler.Mount).</summary>
+    internal int MountFrame;
 
     internal int Count => _claims.Count;
 
@@ -60,20 +64,38 @@ internal sealed class ImplicitAnimationClaims
         Publish(sink, key, before);
     }
 
-    internal void Release<TSink>(TSink sink, string key, ImplicitFeature feature, int slot)
+    internal void Release<TSink>(TSink sink, string key, ImplicitFeature feature, int slot, bool deferRestore = false)
         where TSink : IImplicitAnimationSink
     {
         int i = IndexOf(key, feature, slot);
         if (i < 0) return;
         var before = Effective(key);
         _claims.RemoveAt(i);
+        if (deferRestore && Effective(key) is { } next && !ReferenceEquals(before, next))
+        {
+            // The key leaves now and its next claim returns at FlushDeferred, so writes made in
+            // between (an update's setters) don't animate with an animation that just took over.
+            sink.Remove(key);
+            (_deferred ??= []).Add(key);
+            return;
+        }
         Publish(sink, key, before);
+    }
+
+    /// <summary>Publishes the claims a deferred release held back.</summary>
+    internal void FlushDeferred<TSink>(TSink sink) where TSink : IImplicitAnimationSink
+    {
+        if (_deferred is not { Count: > 0 } deferred) return;
+        foreach (var key in deferred)
+            if (Effective(key) is { } value) sink.Insert(key, value);
+        deferred.Clear();
     }
 
     internal void ReleaseAll<TSink>(TSink sink) where TSink : IImplicitAnimationSink
     {
         if (_claims.Count == 0) return;
         _claims.Clear();
+        _deferred?.Clear();
         sink.Clear();
     }
 
@@ -109,7 +131,8 @@ internal sealed class ImplicitAnimationClaims
     private void Publish<TSink>(TSink sink, string key, object? before) where TSink : IImplicitAnimationSink
     {
         var after = Effective(key);
-        if (ReferenceEquals(before, after)) return;
+        if (ReferenceEquals(before, after) && _deferred?.Contains(key) != true) return;
+        _deferred?.Remove(key);
         if (after is null) sink.Remove(key);
         else sink.Insert(key, after);
     }
@@ -136,9 +159,15 @@ internal static class ImplicitAnimationSlots
         claims.Add(new Sink(element, claims), key, feature, slot, value);
     }
 
-    internal static void Release(UIElement element, string key, ImplicitFeature feature, int slot)
+    internal static void Release(UIElement element, string key, ImplicitFeature feature, int slot, bool deferRestore = false)
     {
-        if (Claims(element) is { } claims) claims.Release(new Sink(element, claims), key, feature, slot);
+        if (Claims(element) is { } claims) claims.Release(new Sink(element, claims), key, feature, slot, deferRestore);
+    }
+
+    /// <summary>Publishes what a <c>deferRestore</c> release held back.</summary>
+    internal static void FlushDeferred(UIElement element)
+    {
+        if (Claims(element) is { } claims) claims.FlushDeferred(new Sink(element, claims));
     }
 
     /// <summary>Drops every claim and the keys they published on the visual. XAML transitions are left alone.</summary>
@@ -153,7 +182,10 @@ internal static class ImplicitAnimationSlots
     /// <summary>A transparent layer (a keyed <c>Memo</c>, a flyout) was mounted over the control's existing layers.</summary>
     internal static void ShiftInward(UIElement element) => Claims(element)?.ShiftInward();
 
-    private static ImplicitAnimationClaims? Claims(UIElement element)
+    /// <summary>True once a claim on this control was published to its handed-out visual.</summary>
+    internal static bool PublishedToVisual(UIElement element) => Claims(element)?.PublishedToVisual == true;
+
+    internal static ImplicitAnimationClaims? Claims(UIElement element)
         => (element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims;
 
     private readonly struct Sink(UIElement element, ImplicitAnimationClaims claims) : IImplicitAnimationSink

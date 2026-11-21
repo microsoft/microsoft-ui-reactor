@@ -5709,6 +5709,10 @@ public sealed partial class Reconciler : IDisposable
     {
         if (implicitT is not null || previous is not null)
         {
+            // Once Reactor's claims live on the handed-out visual, a facade Translation that a
+            // setter wrote in this update must move to the visual, as the fallback path always did.
+            if (ImplicitAnimationSlots.PublishedToVisual(uie))
+                AnimationHelper.GetElementVisual(uie);
             // XAML while the visual hasn't been handed out, a compositor key once WinUI refuses the
             // XAML property (.Animate(), enter transitions, a previous owner via the pool).
             // ImplicitAnimationSlots picks the path and shares the keys with the other features.
@@ -5831,6 +5835,9 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearLayoutAnimation(UIElement uie, int slot = 0)
     {
+        // The layout animation took the visual. Taking it again moves a facade Translation that
+        // a setter wrote in this update onto it.
+        AnimationHelper.GetElementVisual(uie);
         ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
         ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
     }
@@ -5876,15 +5883,19 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Releases the specified <c>.Animate()</c> channels a layer claimed. A key another feature
-    /// still claims stays, with that feature's animation.
+    /// still claims stays, with that feature's animation. Update calls this before setters run, so
+    /// a claim that takes over a released key returns only at
+    /// <see cref="ImplicitAnimationSlots.FlushDeferred"/>, after the setters' writes.
     /// </summary>
     internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties, int slot = 0)
     {
-        if (properties.HasFlag(AnimateProperty.Opacity)) ImplicitAnimationSlots.Release(uie, "Opacity", ImplicitFeature.Animate, slot);
-        if (properties.HasFlag(AnimateProperty.Offset)) ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Animate, slot);
-        if (properties.HasFlag(AnimateProperty.Scale)) ImplicitAnimationSlots.Release(uie, "Scale", ImplicitFeature.Animate, slot);
-        if (properties.HasFlag(AnimateProperty.Rotation)) ImplicitAnimationSlots.Release(uie, "RotationAngle", ImplicitFeature.Animate, slot);
-        if (properties.HasFlag(AnimateProperty.CenterPoint)) ImplicitAnimationSlots.Release(uie, "CenterPoint", ImplicitFeature.Animate, slot);
+        // .Animate() took the visual; taking it again keeps the facade migration this path always ran.
+        AnimationHelper.GetElementVisual(uie);
+        if (properties.HasFlag(AnimateProperty.Opacity)) ImplicitAnimationSlots.Release(uie, "Opacity", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Offset)) ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Scale)) ImplicitAnimationSlots.Release(uie, "Scale", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Rotation)) ImplicitAnimationSlots.Release(uie, "RotationAngle", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.CenterPoint)) ImplicitAnimationSlots.Release(uie, "CenterPoint", ImplicitFeature.Animate, slot, deferRestore: true);
     }
 
     // ════════════════════════════════════════════════════════════════
