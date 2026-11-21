@@ -1072,6 +1072,7 @@ Headless preparation (no host launch or package registration):
 ```powershell
 dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
 dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+pwsh -NoProfile -File tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
 dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InputCapabilityDiagnosticsTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
 ```
 
@@ -1084,6 +1085,9 @@ prove the reason for the earlier result. `GetState()` remains a separate probe:
 `Active` does not establish that its WTS query succeeded or guarantee foreground
 ownership, and cursor readability does not prove a future input call is allowed.
 The existing failure remains Inconclusive and prevents dispatch without retry.
+CI's skipped-input gate and stress reporting recognize the stable
+`[REACTOR_E2E_INPUT_BLOCKED]` marker, independently of the precise native error
+wording, so these Inconclusive results cannot be mistaken for executed passes.
 `InputCapabilityDiagnosticsTests` checks this reporting with fake observations,
 without making native readiness calls.
 

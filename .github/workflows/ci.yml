@@ -520,6 +520,8 @@ jobs:
           # fails here with a named cause instead of as a discovery-count mismatch.
           ./tests/Reactor.AppTests/Select-E2EShard.Tests.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./tests/Reactor.AppTests/Select-E2EShard.ps1 -Shard ${{ matrix.shard }} -Shard1Classes $env:E2E_SHARD1_CLASSES
 
       - name: Test
@@ -564,15 +566,9 @@ jobs:
             throw "AppTests TRX results were not produced."
           }
 
-          $blocked = @()
-          $results = Select-Xml -Path $trx.FullName -XPath "//*[local-name()='UnitTestResult' and (@outcome='Inconclusive' or @outcome='NotExecuted' or @outcome='Skipped')]"
-          foreach ($result in $results) {
-            $messageNode = $result.Node.SelectSingleNode("*[local-name()='Output']/*[local-name()='ErrorInfo']/*[local-name()='Message']")
-            $message = if ($messageNode) { $messageNode.InnerText } else { "" }
-            if ($message -match "cannot inject synthetic input|workstation is|locked desktop|disconnected session") {
-              $blocked += $result.Node.GetAttribute("testName")
-            }
-          }
+          . .\tests\Reactor.AppTests\InputGuardClassification.ps1
+          [xml]$results = Get-Content -LiteralPath $trx.FullName -Raw
+          $blocked = @(Get-InputGuardBlockedTests $results)
 
           if ($blocked.Count -gt 0) {
             throw "Input-injection E2Es were Inconclusive instead of executed: $($blocked -join ', ')"

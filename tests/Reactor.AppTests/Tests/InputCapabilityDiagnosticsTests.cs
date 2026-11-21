@@ -64,6 +64,7 @@ public sealed class InputCapabilityDiagnosticsTests
         Assert.AreEqual(1, probes);
         Assert.AreEqual(1, contextReads);
         Assert.IsFalse(dispatched);
+        StringAssert.Contains(failure.Message, SessionInteractivityGuard.InputBlockedMarker);
         StringAssert.Contains(failure.Message, $"nativeError={error}");
         Assert.AreEqual(error == 5, failure.Message.Contains("ERROR_ACCESS_DENIED", StringComparison.Ordinal));
         if (error == 0) StringAssert.Contains(failure.Message, "no extended error code was reported");

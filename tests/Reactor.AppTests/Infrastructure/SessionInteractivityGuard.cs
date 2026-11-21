@@ -31,6 +31,7 @@ internal sealed record InputCapabilityContext(
 public static partial class SessionInteractivityGuard
 {
     public const string MarkerEnvVar = "E2E_LOCK_MARKER_PATH";
+    internal const string InputBlockedMarker = "[REACTOR_E2E_INPUT_BLOCKED]";
 
     public static SessionInteractivity GetState()
     {
@@ -297,7 +298,7 @@ public static partial class SessionInteractivityGuard
         string session = snapshot.CallerSessionId?.ToString() ?? "<unavailable>";
         string contextTime = snapshot.ContextStartedAtUtc?.ToString("O") ?? "<unavailable>";
         Assert.Inconclusive(FormattableString.Invariant(
-            $"Cannot perform '{operation}': GetCursorPos returned false; nativeError={cursor.NativeError} ({detail}). Probe completed={cursor.CompletedAtUtc:O}. Caller PID={pid}; native TID={tid}; session={session}; context started={contextTime}. {snapshot.Context} No input was dispatched by this check. Treating the input test as Inconclusive."));
+            $"{InputBlockedMarker} Cannot perform '{operation}': GetCursorPos returned false; nativeError={cursor.NativeError} ({detail}). Probe completed={cursor.CompletedAtUtc:O}. Caller PID={pid}; native TID={tid}; session={session}; context started={contextTime}. {snapshot.Context} No input was dispatched by this check. Treating the input test as Inconclusive."));
     }
 
     /// <summary>
