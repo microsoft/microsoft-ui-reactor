@@ -628,7 +628,7 @@ public sealed class ElementPool : IDisposable
 
     // Spec 066 §7.3 step 1: every animatable Visual property, since a .ScrollLinked expression can
     // target any of them and a keyed Memo's isn't stopped at unmount. Stopping a property also stops
-    // its subchannels ("Offset.Y", ElementPoolLanes_MemoScrollLinked). StopAnimation leaves the last
+    // its subchannels ("Offset.Y", ElementPoolLanes_LayoutOffset). StopAnimation leaves the last
     // animated value, so step 3 writes identity after it.
     private static readonly string[] TakenVisualChannels =
     [
@@ -647,15 +647,16 @@ public sealed class ElementPool : IDisposable
         // Translation is a property-set entry that exists only once translation was enabled;
         // stopping or writing a missing entry throws ArgumentException (#1641).
         bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
-        // Layout owns Offset and Size and writes them only when they change, so a stopped animation's
-        // last value would stay. What the getter returns before the stop is what layout last wrote.
-        var layoutOffset = visual.Offset;
-        var layoutSize = visual.Size;
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
-        if (visual.Offset != layoutOffset) visual.Offset = layoutOffset;
-        if (visual.Size != layoutSize) visual.Size = layoutSize;
+        // Layout owns Offset and Size and writes them only when they change, so a stopped animation's
+        // last value, or a direct write through the visual, would stay. Put the layout values back.
+        // Sub-pixel differences are layout rounding.
+        var layoutOffset = fe.ActualOffset;
+        if (Vector3.DistanceSquared(visual.Offset, layoutOffset) > 0.25f) visual.Offset = layoutOffset;
+        var layoutSize = fe.ActualSize;
+        if (Vector2.DistanceSquared(visual.Size, layoutSize) > 0.25f) visual.Size = layoutSize;
 
         // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
         // this drops keys no claim owns, for example ones user code installed.
