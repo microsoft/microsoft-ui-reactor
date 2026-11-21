@@ -550,6 +550,15 @@ internal static class PoolLaneFixtures
                 H.Check(p + "_HiddenBeforeLoad_Kept", opacity == 0, $"visual={opacity}");
                 lab.Root.Children.Remove(renter);
                 lab.Reconciler.UnmountChild(renter);
+
+                // Unmounted before it ever attached (a navigation cancelled first), a renter must not
+                // stay on the window's layout list.
+                await lab.Show(Target("A2").LayoutAnimation());
+                await lab.Show(null);
+                var cancelled = lab.Reconciler.Mount(Target("C").LayoutAnimation(), static () => { }) as FrameworkElement;
+                H.Check(p + "_CancelledBeforeAttach_Pending", cancelled is not null && ElementPool.IsOpacitySyncPending(cancelled));
+                if (cancelled is not null) lab.Reconciler.UnmountChild(cancelled);
+                H.Check(p + "_CancelledBeforeAttach_Released", cancelled is not null && !ElementPool.IsOpacitySyncPending(cancelled));
             }
 
             // An enter fade writes 0 to the visual and animates from there. Removed mid-fade, the

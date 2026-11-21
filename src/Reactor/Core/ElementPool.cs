@@ -733,8 +733,23 @@ public sealed class ElementPool : IDisposable
             if (IsInLiveTree(fe)) SyncRenterOpacity(fe);
         };
         state.OpacitySyncLayoutHandler = onLayout;
+        Interlocked.Increment(ref s_pendingOpacitySyncs);
         fe.LayoutUpdated += onLayout;
         fe.Loaded += OnRenterLoaded;
+    }
+
+    // Renters still waiting, so an unmount that has none to cancel pays no attached-state read.
+    private static int s_pendingOpacitySyncs;
+
+    /// <summary>
+    /// Cancels a renter's pending sync when it unmounts, whichever path removes it (a navigation
+    /// cancelled before attach, a disabled pool), so it doesn't stay on the window's layout list.
+    /// </summary>
+    internal static void CancelOpacitySync(FrameworkElement fe)
+    {
+        if (Volatile.Read(ref s_pendingOpacitySyncs) == 0) return;
+        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state)
+            StopOpacitySync(fe, state);
     }
 
     /// <summary>Whether the renter still waits for <see cref="SyncOpacityWhenLoaded"/>.</summary>
@@ -745,6 +760,7 @@ public sealed class ElementPool : IDisposable
     {
         if (state.OpacitySyncLayoutHandler is not { } onLayout) return;
         state.OpacitySyncLayoutHandler = null;
+        Interlocked.Decrement(ref s_pendingOpacitySyncs);
         fe.LayoutUpdated -= onLayout;
         fe.Loaded -= OnRenterLoaded;
     }

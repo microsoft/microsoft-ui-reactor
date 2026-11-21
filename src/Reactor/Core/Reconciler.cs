@@ -4750,6 +4750,7 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
+        ElementPool.CancelOpacitySync(control);
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.
