@@ -164,8 +164,12 @@ Additional recorded headless checks passed:
 |---|---|
 | `pwsh -NoProfile -File tests\ToolkitCompatibility\Test-ResultProtocol.ps1` | Exit 0, including malformed/incomplete result cases |
 | `pwsh -NoProfile -File tests\ToolkitCompatibility\Test-RunnerSafety.ps1` | Exit 0; mocked Appx operations and owned console processes only |
-| Each measured unpackaged output with `--list-scenarios`, `--list-camera-probe`, `--protocol-self-test` | Twelve complete exit-0 processes; inventories agreed, nine assertions per protocol self-test |
+| Separately prepared unpackaged outputs at the measured revision with `--list-scenarios`, `--list-camera-probe`, `--protocol-self-test` | Twelve complete exit-0 processes; inventories agreed, nine assertions per protocol self-test |
 | Source/package/staged-file/layout hashes and consumer import isolation | Passed at the recorded snapshots |
+
+Those headless checks preceded the runner's republishing. They do not establish
+that all three modes ran against the rebuilt live binaries; each live lane
+independently obtained and validated its own scenario inventory.
 
 Release publishing retained its warning policy. NU1900 vulnerability-feed access
 warnings and MSB3277 framework-reference conflicts were recorded, not suppressed.
