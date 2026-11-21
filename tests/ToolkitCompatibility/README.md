@@ -116,7 +116,8 @@ The existing short core strings are the measured scope. Captures require human
 review. A build or headless geometry test is **not** WinUI/runtime acceptance.
 
 Headless regression tests compile the same measurement guards without WinUI,
-WinRT initialization, or the compatibility consumer:
+WinRT initialization, or the compatibility consumer. The project is included in
+solution builds and runs in the PR CI Unit Tests job:
 
 ```powershell
 dotnet test tests\ToolkitCompatibility.HeadlessTests --filter-class "*TextScalingMeasurementsTests*"
