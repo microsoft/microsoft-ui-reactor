@@ -791,7 +791,8 @@ field reads `skip`, which matches any value, and a record run with a desktop rep
 
 `model` says whether the step agrees with the analytic composition model
 ([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs)),
-and the ledger pins every disagreement exactly. Each disagreement on `main` must be attributed
+and the ledger pins every disagreement exactly (a throw or a `screen` pose is pinned by its own field).
+Each disagreement on `main`, a throw included, must be attributed
 by exactly one rule in `transforms-ledger.known.json`, and a full run fails on a rule that no
 longer matches anything. Don't bend the model to fit `main`.
 

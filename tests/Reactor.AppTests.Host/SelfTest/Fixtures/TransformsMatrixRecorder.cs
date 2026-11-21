@@ -274,7 +274,9 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Whatever the product throws is the observation: it's recorded, and the lifecycle goes on.
+            // The model never throws, so it must be attributed like any other disagreement.
             f["threw"] = ex.GetType().Name;
+            ModelDifferences.Add((name, "threw"));
             ok = false;
         }
 
@@ -302,9 +304,9 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             Inconclusive.Add($"{name}: observing threw {ex.GetType().Name}: {ex.Message}");
         }
 
-        // A screen disagreement is attributed like any other, but it isn't in `model`: whether it can be
-        // seen depends on the desktop, and the `screen` field itself carries the change.
-        f["model"] = string.Join(",", ModelDifferences.Where(d => d.Step == name && d.Part != TransformsLedger.ScreenField).Select(d => d.Part)) is { Length: > 0 } m ? m : "ok";
+        // Screen and throw disagreements are attributed like any other, but they aren't in `model`: their
+        // own fields carry the change, and whether the screen can be seen depends on the desktop.
+        f["model"] = string.Join(",", ModelDifferences.Where(d => d.Step == name && d.Part is not (TransformsLedger.ScreenField or "threw")).Select(d => d.Part)) is { Length: > 0 } m ? m : "ok";
         f["diag"] = diagnostics.Describe();
         return ok;
     }
