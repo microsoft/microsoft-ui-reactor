@@ -114,6 +114,8 @@ public void Return(FrameworkElement element)
 
     // The lane follows the native control's marker, whichever wrapper reached it (#1643).
     var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+    // A renter returned before it loaded must not stay on the window's layout list.
+    if (state is not null) StopOpacitySync(element, state);
     if (state?.PoolExcluded == true)
     {
         if (state.ReleaseWhenExcluded)
