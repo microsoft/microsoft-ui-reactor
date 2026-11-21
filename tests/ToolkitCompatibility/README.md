@@ -11,6 +11,10 @@ Final evidence must record the exact integrated commits, mapping hash, dependenc
 versions, commands, outputs and process exit codes. Fixes for #1564, #1565 and
 #1566 are independently owned; a harness change does not establish their status.
 
+The [2026-11-19 validation report](reports/2026-11-19-validation.md) records four
+complete but blocked unpackaged lanes on a pinned revision, separately from
+later deployment preparation. It is not a compatibility verdict for current main.
+
 ## Required matrix
 
 All 25 controls below run on x64 in these six lanes, first against project
