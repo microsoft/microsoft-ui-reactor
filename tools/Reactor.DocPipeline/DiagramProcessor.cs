@@ -145,11 +145,12 @@ internal static class DiagramProcessor
         string? topic = null)
     {
         var result = new DiagramResult();
+        var selectedTopicDir = topic is null ? null : ResolveTopicDirectory(diagramsRoot, topic);
         if (!Directory.Exists(diagramsRoot)) return result;
 
-        var topics = topic is null
+        var topics = selectedTopicDir is null
             ? Directory.GetDirectories(diagramsRoot)
-            : new[] { Path.Combine(diagramsRoot, topic) }.Where(Directory.Exists).ToArray();
+            : new[] { selectedTopicDir }.Where(Directory.Exists).ToArray();
 
         foreach (var topicDir in topics)
         {
@@ -663,7 +664,7 @@ internal static class DiagramProcessor
     /// </summary>
     public static string ScaffoldDiagram(string diagramsRoot, string topic, string id)
     {
-        var topicDir = Path.Combine(diagramsRoot, topic);
+        var topicDir = ResolveTopicDirectory(diagramsRoot, topic);
         Directory.CreateDirectory(topicDir);
         var path = Path.Combine(topicDir, id + ".mmd");
         if (File.Exists(path))
@@ -672,6 +673,21 @@ internal static class DiagramProcessor
                 $"diagram already exists: {path}");
         File.WriteAllText(path, StarterTemplate);
         return path;
+    }
+
+    private static string ResolveTopicDirectory(string diagramsRoot, string topic)
+    {
+        if (Path.IsPathRooted(topic))
+            throw new DocPipelineException($"Diagram topic '{topic}' must be a relative path.");
+
+        try
+        {
+            return DocPaths.ResolveContained(diagramsRoot, topic, "Diagram topic path");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or PathTooLongException)
+        {
+            throw new DocPipelineException($"Invalid diagram topic '{topic}'. {ex.Message}");
+        }
     }
 
     private const string StarterTemplate = """

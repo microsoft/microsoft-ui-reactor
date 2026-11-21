@@ -399,6 +399,12 @@ Conventions for contributors:
   ([issue #1020](https://github.com/microsoft/microsoft-ui-reactor/issues/1020),
   [spec 064 §3.2](docs/specs/064-search-index-framework-concepts.md#32-every-clean-card-is-emitted)).
 
+- The doc pipeline's `render-diagrams` and `new-diagram` commands now reject
+  rooted topics and topics that resolve outside `docs/_pipeline/diagrams`.
+  Both commands report the error on stderr and return exit code `1`
+  ([issue #1034](https://github.com/microsoft/microsoft-ui-reactor/issues/1034),
+  [spec 041 §10.3](docs/specs/041-docs-comprehensive-uplift.md#103-image-and-diagram-pipeline-changes)).
+
 ### Security
 
 - **`PathIcon(...)` data is no longer interpolated into XAML.** It used to be spliced
