@@ -306,8 +306,18 @@ public sealed partial class Reconciler
         // runs before setters and modifier writes, so a value changed in the same reconcile moves
         // as the new declaration says, and a removed transition doesn't animate it. A replaced
         // control gets the transitions again below, as on mount.
+        bool transitionsApplied = true;
         if (oldEl.ImplicitTransitions is not null || newEl.ImplicitTransitions is not null)
-            ApplyImplicitTransitions(control, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot);
+        {
+            try { ApplyImplicitTransitions(control, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot); }
+            catch (UnauthorizedAccessException)
+            {
+                // User code blocked this control's visual. A decorator may be about to replace it,
+                // in which case the new control gets the transitions below; otherwise they apply
+                // again after the update and the error surfaces there.
+                transitionsApplied = false;
+            }
+        }
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -485,6 +495,10 @@ public sealed partial class Reconciler
             ShiftForwardedClaims(target, mountMark, self: newEl);
             if (newEl.ImplicitTransitions is not null)
                 ApplyImplicitTransitions(target, null, newEl.ImplicitTransitions, implicitSlot);
+        }
+        else if (!transitionsApplied)
+        {
+            ApplyImplicitTransitions(target, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot);
         }
         else if (TakesVisual(newEl.ImplicitTransitions) || TakesVisual(oldEl.ImplicitTransitions))
         {

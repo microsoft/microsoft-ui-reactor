@@ -521,10 +521,17 @@ internal static class CompositorTransitionFixtures
             return Flyout(target, TextBlock("content")).Animate(Animation.Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0);
         }
 
+        // The inner layer writes Translation; only the outer layer declares it.
+        private static Element InnerWrite(float x) =>
+            Flyout(Target().Animate(Animation.Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0), TextBlock("content"))
+                .Animate(Animation.Curve.Linear(3000), AnimateProperty.Offset);
+
         protected override async Task Run()
         {
             await Mount(Chain(0, inner: true));
             H.Check(Name + "_InnerDeclarationAnimates", await Animates("Translation", Chain(40, inner: true)));
+            await Mount(InnerWrite(0));
+            H.Check(Name + "_OuterDeclarationAnimatesInnerWrite", await Animates("Translation", InnerWrite(40)));
             await Mount(Chain(0, inner: false));
             H.Check(Name + "_NegativeControl_NoInnerJumps", !await Animates("Translation", Chain(40, inner: false)));
         }
@@ -575,6 +582,14 @@ internal static class CompositorTransitionFixtures
     /// </summary>
     internal sealed class Diagnostic(Harness h) : TransitionFixture(h, "CompositorTransitions_Diagnostic")
     {
+        // EventListener callbacks don't flow under NativeAOT (TESTING.md), so the warning oracle
+        // can't observe anything there.
+        private void Warns(string name, bool condition, string detail)
+        {
+            if (global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported) H.Check(name, condition, detail);
+            else H.Skip(name, "EventListener callbacks don't flow under NativeAOT");
+        }
+
         protected override async Task Run()
         {
             using var listener = new DiagnosticsListener();
@@ -584,7 +599,7 @@ internal static class CompositorTransitionFixtures
             try { await Mount(Target().Set(static b => b.RotationAxis = Vector3.UnitX).OpacityTransition()); }
             catch (Exception ex) { handoff = ex; }
             H.Check(Name + "_Handoff_Throws", handoff is UnauthorizedAccessException, handoff?.GetType().Name ?? "none");
-            H.Check(Name + "_Handoff_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.HandoffOperation, StringComparison.Ordinal), listener.Describe());
+            Warns(Name + "_Handoff_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.HandoffOperation, StringComparison.Ordinal), listener.Describe());
 
             static Element WithSetter(float rotation, bool transition)
             {
@@ -598,12 +613,23 @@ internal static class CompositorTransitionFixtures
             try { await Update(WithSetter(10, transition: true)); }
             catch (Exception ex) { setter = ex; }
             H.Check(Name + "_Setter_Throws", setter is UnauthorizedAccessException, setter?.GetType().Name ?? "none");
-            H.Check(Name + "_Setter_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.SetterOperation, StringComparison.Ordinal), listener.Describe());
+            Warns(Name + "_Setter_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.SetterOperation, StringComparison.Ordinal), listener.Describe());
 
             await Mount(WithSetter(0, transition: false));
             listener.Reset();
             await Update(WithSetter(10, transition: false));
             H.Check(Name + "_NegativeControl_PlainSetterSilent", Control.Rotation == 10 && listener.Describe() == "-", listener.Describe());
+
+            // A decorator that replaces a blocked control: the transitions go to the new control,
+            // and the departing one's blocked visual doesn't fail the update.
+            await Mount(Flyout(Target().Set(static b => b.OpacityTransition = new ScalarTransition()), TextBlock("content")));
+            var departing = Control;
+            Exception? replaced = null;
+            try { await Update(Flyout(Button("new").Width(100).Height(40), TextBlock("content")).OpacityTransition(Long)); }
+            catch (Exception ex) { replaced = ex; }
+            H.Check(Name + "_ReplacedBlockedControl_NoThrow", replaced is null, replaced?.GetType().Name ?? "");
+            H.Check(Name + "_ReplacedBlockedControl_Transitions", replaced is null && !ReferenceEquals(departing, Control)
+                && Control is Button && Keys() == "Opacity", $"keys={(replaced is null ? Keys() : "-")}");
         }
     }
 }

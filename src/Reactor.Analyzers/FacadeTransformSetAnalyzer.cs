@@ -463,7 +463,11 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 return SyntaxFactory.ArgumentList();
             if (initializer.Expressions.Count == 1
                 && initializer.Expressions[0] is AssignmentExpressionSyntax { Left: IdentifierNameSyntax { Identifier.Text: "Duration" } } duration
-                && duration.IsKind(SyntaxKind.SimpleAssignmentExpression))
+                && duration.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                // The modifier's parameter is a TimeSpan?, so a target-typed 'default' or 'null'
+                // would become no duration (the 300 ms default) instead of a zero one.
+                && !duration.Right.DescendantNodesAndSelf().Any(static node =>
+                    node.IsKind(SyntaxKind.DefaultLiteralExpression) || node.IsKind(SyntaxKind.NullLiteralExpression)))
             {
                 return SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(duration.Right.WithoutTrivia())));
@@ -478,13 +482,18 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(right.WithoutTrivia())));
     }
 
-    /// <summary>A literal <c>null</c> or <c>default</c>, with or without a <c>!</c> suppression.</summary>
+    /// <summary>A literal <c>null</c> or <c>default</c>, through any mix of parentheses and <c>!</c> suppressions.</summary>
     private static bool IsNullValue(ExpressionSyntax value)
     {
-        while (value is PostfixUnaryExpressionSyntax suppressed && suppressed.IsKind(SyntaxKind.SuppressNullableWarningExpression))
-            value = suppressed.Operand;
-        while (value is ParenthesizedExpressionSyntax parenthesized)
-            value = parenthesized.Expression;
+        while (true)
+        {
+            if (value is PostfixUnaryExpressionSyntax suppressed && suppressed.IsKind(SyntaxKind.SuppressNullableWarningExpression))
+                value = suppressed.Operand;
+            else if (value is ParenthesizedExpressionSyntax parenthesized)
+                value = parenthesized.Expression;
+            else
+                break;
+        }
         return value.IsKind(SyntaxKind.NullLiteralExpression) || value.IsKind(SyntaxKind.DefaultLiteralExpression)
             || value is DefaultExpressionSyntax;
     }

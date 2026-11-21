@@ -297,11 +297,11 @@ internal static class AnimationHelper
 
     /// <summary>
     /// Sets a scalar property on a UIElement, animating via the compositor when
-    /// <see cref="ResolvePolicy(UIElement, string, Element?)"/> finds a curve.
+    /// <see cref="ResolvePolicy(UIElement, string, Element?, Element?)"/> finds a curve.
     /// </summary>
-    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null)
+    internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null, Element? chainRoot = null)
     {
-        var curve = ResolvePolicy(element, property, source).Curve;
+        var curve = ResolvePolicy(element, property, source, chainRoot).Curve;
 
         if (curve is null)
         {
@@ -513,11 +513,11 @@ internal static class AnimationHelper
 
     /// <summary>
     /// Sets a Vector3 property on a UIElement, animating via the compositor when
-    /// <see cref="ResolvePolicy(UIElement, string, Element?)"/> finds a curve.
+    /// <see cref="ResolvePolicy(UIElement, string, Element?, Element?)"/> finds a curve.
     /// </summary>
-    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null)
+    internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null, Element? chainRoot = null)
     {
-        var (curve, components) = ResolvePolicy(element, property, source);
+        var (curve, components) = ResolvePolicy(element, property, source, chainRoot);
 
         if (curve is null)
         {
@@ -587,15 +587,21 @@ internal static class AnimationHelper
     /// mask. An implicit <c>"Translation"</c> key would never fire. Opacity, Scale and Rotation
     /// transitions are implicit keys on the visual, so a direct write starts them.
     /// </summary>
-    private static WritePolicy ResolvePolicy(UIElement element, string property, Element? source)
+    private static WritePolicy ResolvePolicy(UIElement element, string property, Element? source, Element? chainRoot = null)
     {
         var ambient = AnimationScope.HasScope ? AnimationScope.Current : null;
         var channel = PropertyFlag(property);
-        // The outermost declaration that animates this channel: one that excludes it doesn't
-        // hide an inner one that includes it.
-        var config = ambient is null
-            ? Reconciler.FindMountedElementValue(element, el => el.AnimationConfig is { } c && (c.Properties & channel) != 0 ? c : null, source)
-            : null;
+        AnimationConfig? config = null;
+        if (ambient is null)
+        {
+            // The outermost declaration that animates this channel: one that excludes it doesn't
+            // hide an inner one that includes it, and an inner layer's write still finds an outer
+            // one. The search starts at the chain root, then at the writing layer, which a
+            // decorator that names no source target hides from the root.
+            Func<Element, AnimationConfig?> declares = el => el.AnimationConfig is { } c && (c.Properties & channel) != 0 ? c : null;
+            if (chainRoot is not null) config = Reconciler.FindMountedElementValue(element, declares, chainRoot);
+            config ??= Reconciler.FindMountedElementValue(element, declares, source);
+        }
         TransitionTiming? translation = null;
         if (ambient is null && property == "Translation"
             && ImplicitAnimationSlots.TranslationTransition(element) is { } transition)
@@ -603,7 +609,7 @@ internal static class AnimationHelper
         return ResolvePolicy(ambient, config, channel, translation);
     }
 
-    /// <summary>The pure part of <see cref="ResolvePolicy(UIElement, string, Element?)"/>.</summary>
+    /// <summary>The pure part of <see cref="ResolvePolicy(UIElement, string, Element?, Element?)"/>.</summary>
     internal static WritePolicy ResolvePolicy(Curve? ambient, AnimationConfig? animate, AnimateProperty channel, TransitionTiming? translation)
     {
         if (ambient is not null) return new(ambient, AllComponents);
