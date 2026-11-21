@@ -149,9 +149,10 @@ public class TransformsMatrixTests
     [InlineData("pose", "120,150,220,190", "none", false)]
     [InlineData("pool", "recycled=1 diff=0", "recycled=0 diff=0", false)]
     [InlineData("motion", "Scale=ANIMATING", "Scale=JUMPED", false)]
-    // A run without a desktop says nothing about the recorded screen pose, but a recorded skip doesn't excuse a real one.
+    // A run without a desktop says nothing about the screen pose, whichever side it's on.
     [InlineData("screen", "220,150,320,190", "skip", true)]
-    [InlineData("screen", "skip", "220,150,320,190", false)]
+    [InlineData("screen", "skip", "220,150,320,190", true)]
+    [InlineData("screen", "220,150,320,190", "260,150,360,190", false)]
     [InlineData("pose", "220,150,320,190", "skip", false)]
     public void FieldEquals_AllowsTwoDipsOnGeometryOnly(string field, string a, string b, bool equal) =>
         Assert.Equal(equal, TransformsLedger.FieldEquals(field, a, b));
@@ -164,6 +165,19 @@ public class TransformsMatrixTests
         TransformsLedger.KeepUnchanged(committed, observed);
         Assert.Equal("120,150,220,190", observed.Steps["mount"]["pose"]);
         Assert.Equal("InvalidOperationException", observed.Steps["mount"]["threw"]);
+    }
+
+    [Fact]
+    public void KeepUnchanged_ReplacesASkippedScreenWithARealOne_AndKeepsARealOneOverASkip()
+    {
+        var withSkip = Ledger(("X", "mount", "screen", "skip")).Case("X");
+        var real = Ledger(("X", "mount", "screen", "220,150,320,190")).Case("X");
+        TransformsLedger.KeepUnchanged(withSkip, real);
+        Assert.Equal("220,150,320,190", real.Steps["mount"]["screen"]);
+
+        var skipped = Ledger(("X", "mount", "screen", "skip")).Case("X");
+        TransformsLedger.KeepUnchanged(Ledger(("X", "mount", "screen", "220,150,320,190")).Case("X"), skipped);
+        Assert.Equal("220,150,320,190", skipped.Steps["mount"]["screen"]);
     }
 
     // ── The PR gate: every base-to-head change is declared ──────────────────

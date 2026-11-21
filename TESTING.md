@@ -785,7 +785,8 @@ inconclusive verdict fails the case after its reruns, and so does a compositor t
 frames. Facade `Translation` drag cases also record `screen`, the PrintWindow pose, because
 RenderTargetBitmap reports a drag the screen doesn't show once translation is enabled (spec 066
 §12.2, Q1f). It needs an interactive desktop: without one the instrument is skipped, the field reads
-`skip`, and a `skip` never counts as a change against a recorded value.
+`skip`, which matches any value. Hosted runners have no such desktop, so the CI-recorded ledger
+reads `skip` there, and a record run on a desktop replaces it with the real pose.
 
 `model` says whether the step agrees with the analytic composition model
 ([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs)),
