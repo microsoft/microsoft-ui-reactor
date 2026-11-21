@@ -4758,7 +4758,7 @@ public sealed partial class Reconciler : IDisposable
     private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
     {
         if (element?.InteractionStates is not null)
-            ClearInteractionStates(control);
+            ClearInteractionStates(control, restoreBrushes: true);
         if (element?.KeyframeAnimations is not null)
             ClearKeyframeAnimations(control, element.KeyframeAnimations);
         if (element?.ScrollAnimation is not null)
@@ -5128,9 +5128,9 @@ public sealed partial class Reconciler : IDisposable
         // best-effort: if Composition throws we fall through to the
         // synchronous remove below.
         var ambient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
-        var ambientExit = new object();
+        object? ambientExit = null;
         if (ambient is { HasEffect: true }
-            && TryApplyAmbientExit(control, ambient.Kind, ambientExit, onComplete: () =>
+            && TryApplyAmbientExit(control, ambient.Kind, ambientExit = new object(), onComplete: () =>
             {
                 for (int i = 0; i < children.Count; i++)
                 {
@@ -6289,9 +6289,15 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Removes InteractionStates from an element, unregistering handlers and clearing state.
     /// </summary>
-    internal static void ClearInteractionStates(UIElement uie)
+    internal static void ClearInteractionStates(UIElement uie, bool restoreBrushes = false)
     {
-        if (!_interactionTrackers.Remove(uie)) return;
+        if (!_interactionTrackers.Remove(uie, out var tracker)) return;
+
+        // A control unmounted mid-hover still carries the state's brushes. Put the normal ones back,
+        // so a pooled control does not hand a hover color to its next renter. Not on an update that
+        // drops the states: ApplyModifiers has already written that update's brushes.
+        if (restoreBrushes && uie is FrameworkElement fe)
+            ApplyInteractionBrushes(fe, tracker, values: null);
 
         uie.PointerEntered -= OnInteractionPointerEntered;
         uie.PointerExited -= OnInteractionPointerExited;
@@ -6402,63 +6408,69 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
 
-        // Brush properties — direct set. When a state ends, what the property held before the
-        // state wrote over it comes back: an explicit local brush is restored, and a property
-        // with no local value is cleared, so a ThemeRef's {ThemeResource} Style setter takes over
-        // again instead of a brush captured earlier that would pin the theme it had then.
         if (uie is FrameworkElement fe)
+            ApplyInteractionBrushes(fe, tracker, values);
+    }
+
+    /// <summary>
+    /// Brush properties — direct set. When a state ends, what the property held before the
+    /// state wrote over it comes back: an explicit local brush is restored, and a property
+    /// with no local value is cleared, so a ThemeRef's {ThemeResource} Style setter takes over
+    /// again instead of a brush captured earlier that would pin the theme it had then.
+    /// <paramref name="values"/> null is the Normal state.
+    /// </summary>
+    private static void ApplyInteractionBrushes(FrameworkElement fe, InteractionStateTracker tracker, InteractionStateValues? values)
+    {
+        var backgroundProperty = fe switch
         {
-            var backgroundProperty = fe switch
-            {
-                WinUI.Panel => WinUI.Panel.BackgroundProperty,
-                WinUI.Control => WinUI.Control.BackgroundProperty,
-                WinUI.Border => WinUI.Border.BackgroundProperty,
-                _ => null,
-            };
-            if (backgroundProperty is not null)
-                ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
-                    ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
+            WinUI.Panel => WinUI.Panel.BackgroundProperty,
+            WinUI.Control => WinUI.Control.BackgroundProperty,
+            WinUI.Border => WinUI.Border.BackgroundProperty,
+            _ => null,
+        };
+        if (backgroundProperty is not null)
+            ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
+                ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
 
-            var foregroundProperty = fe switch
-            {
-                WinUI.Control => WinUI.Control.ForegroundProperty,
-                TextBlock => TextBlock.ForegroundProperty,
-                _ => null,
-            };
-            if (foregroundProperty is not null)
-                ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
-                    ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
+        var foregroundProperty = fe switch
+        {
+            WinUI.Control => WinUI.Control.ForegroundProperty,
+            TextBlock => TextBlock.ForegroundProperty,
+            _ => null,
+        };
+        if (foregroundProperty is not null)
+            ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
+                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
-            var borderProperty = fe switch
+        var borderProperty = fe switch
+        {
+            WinUI.Control => WinUI.Control.BorderBrushProperty,
+            WinUI.Border => WinUI.Border.BorderBrushProperty,
+            WinUI.Grid => WinUI.Grid.BorderBrushProperty,
+            WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
+            WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
+            _ => null,
+        };
+        if (borderProperty is not null)
+        {
+            if (values?.BorderBrush is { } borderBrush)
             {
-                WinUI.Control => WinUI.Control.BorderBrushProperty,
-                WinUI.Border => WinUI.Border.BorderBrushProperty,
-                WinUI.Grid => WinUI.Grid.BorderBrushProperty,
-                WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
-                WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
-                _ => null,
-            };
-            if (borderProperty is not null)
+                if (!tracker.BorderBrushOverrideApplied)
+                {
+                    // Capture the latest normal value before applying an override.
+                    tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
+                    tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
+                    tracker.BorderBrushOverrideApplied = true;
+                }
+                fe.SetValue(borderProperty, borderBrush);
+            }
+            else if (tracker.BorderBrushOverrideApplied)
             {
-                if (values?.BorderBrush is { } borderBrush)
-                {
-                    if (!tracker.BorderBrushOverrideApplied)
-                    {
-                        // Capture the latest normal value before applying an override.
-                        tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
-                        tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
-                        tracker.BorderBrushOverrideApplied = true;
-                    }
-                    fe.SetValue(borderProperty, borderBrush);
-                }
-                else if (tracker.BorderBrushOverrideApplied)
-                {
-                    if (tracker.NormalBorderBrushHasLocalValue)
-                        fe.SetValue(borderProperty, tracker.NormalBorderBrush);
-                    else
-                        fe.ClearValue(borderProperty);
-                    tracker.BorderBrushOverrideApplied = false;
-                }
+                if (tracker.NormalBorderBrushHasLocalValue)
+                    fe.SetValue(borderProperty, tracker.NormalBorderBrush);
+                else
+                    fe.ClearValue(borderProperty);
+                tracker.BorderBrushOverrideApplied = false;
             }
         }
     }
@@ -6888,7 +6900,7 @@ public sealed partial class Reconciler : IDisposable
                 state.KeyframeNames = null;
             }
         }
-        ClearInteractionStates(uie);
+        ClearInteractionStates(uie, restoreBrushes: true);
     }
 
     private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)

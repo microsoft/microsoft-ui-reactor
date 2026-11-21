@@ -445,20 +445,24 @@ managed wrapper, which another RCW for the same control doesn't see (the duplica
 
 Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured cost is in §11.
 
-1. `StopAnimation` for `Opacity`, `Scale`, `RotationAngle`, `RotationAngleInDegrees`, `CenterPoint`,
-   `Offset`, `Size`, `Orientation`, `AnchorPoint` and `TransformMatrix`. Stop `Translation` **only if the
+1. `StopAnimation` for every animatable `Visual` property: `Opacity`, `Scale`, `RotationAngle`,
+   `RotationAngleInDegrees`, `RotationAxis`, `CenterPoint`, `Offset`, `Size`, `Orientation`, `AnchorPoint`,
+   `TransformMatrix`, `RelativeOffsetAdjustment` and `RelativeSizeAdjustment`. A `.ScrollLinked` expression
+   can target any of them, and a keyed `Memo`'s isn't stopped at unmount. Stopping a property also stops its
+   subchannels (`Offset.Y`). Stop `Translation` **only if the
    property exists** (`Properties.TryGetVector3("Translation")`). `StopAnimation` on a property-set entry
    that was never inserted throws `ArgumentException` (measured in the perf run). Step 1 also stops a
    `.TransformOrigin` expression and looping keyframes.
 2. `ImplicitAnimationSlots.ReleaseAll` (`ImplicitAnimations = null`).
 3. Identity writes. `Opacity = 1`, `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
    `CenterPoint = Zero`, `AnchorPoint = Zero`, `Orientation = Identity`, `TransformMatrix = Identity`,
-   `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
+   zero relative adjustments, `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
    and then `UIElement.Translation = Zero` when it isn't already. That facade stays writable after the
    handoff (Q8a, P1g). §4.3 leaves it to user code when no Reactor Translation channel is declared, so
    a control mounted with `.Set(b => b.Translation = …).Scale(2)` would otherwise carry its offset to
    the next renter.
-   `Offset` and `Size` are left to layout (P2).
+   `Offset` and `Size` belong to layout (P2), which writes them only when they change. So the reset reads them
+   before step 1 and writes those values back if a stopped animation left another one.
 4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
    origin bookkeeping, and the keyframe trigger table entries for the control. The origin itself is put

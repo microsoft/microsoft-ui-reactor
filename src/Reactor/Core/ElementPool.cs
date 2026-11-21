@@ -627,16 +627,20 @@ public sealed class ElementPool : IDisposable
         }
     }
 
-    // Spec 066 §7.3 step 1. StopAnimation leaves the last animated value, so step 3 writes identity after it.
+    // Spec 066 §7.3 step 1: every animatable Visual property, since a .ScrollLinked expression can
+    // target any of them and a keyed Memo's isn't stopped at unmount. Stopping a property also stops
+    // its subchannels ("Offset.Y", ElementPoolLanes_MemoScrollLinked). StopAnimation leaves the last
+    // animated value, so step 3 writes identity after it.
     private static readonly string[] TakenVisualChannels =
     [
-        "Opacity", "Scale", "RotationAngle", "RotationAngleInDegrees", "CenterPoint",
+        "Opacity", "Scale", "RotationAngle", "RotationAngleInDegrees", "RotationAxis", "CenterPoint",
         "Offset", "Size", "Orientation", "AnchorPoint", "TransformMatrix",
+        "RelativeOffsetAdjustment", "RelativeSizeAdjustment",
     ];
 
     /// <summary>
     /// The spec 066 §7.3 reset list: makes a control whose visual was taken pixel-identical to a
-    /// fresh one. The visual itself stays taken. Offset and Size are left to layout.
+    /// fresh one. The visual itself stays taken. Offset and Size keep the values layout last wrote.
     /// </summary>
     private static void ResetTakenVisual(FrameworkElement fe)
     {
@@ -644,9 +648,15 @@ public sealed class ElementPool : IDisposable
         // Translation is a property-set entry that exists only once translation was enabled;
         // stopping or writing a missing entry throws ArgumentException (#1641).
         bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+        // Layout owns Offset and Size and writes them only when they change, so a stopped animation's
+        // last value would stay. What the getter returns before the stop is what layout last wrote.
+        var layoutOffset = visual.Offset;
+        var layoutSize = visual.Size;
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
+        if (visual.Offset != layoutOffset) visual.Offset = layoutOffset;
+        if (visual.Size != layoutSize) visual.Size = layoutSize;
 
         // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
         // this drops keys no claim owns, for example ones user code installed.
@@ -661,6 +671,10 @@ public sealed class ElementPool : IDisposable
         visual.AnchorPoint = Vector2.Zero;
         visual.Orientation = Quaternion.Identity;
         visual.TransformMatrix = Matrix4x4.Identity;
+        // Layout writes Offset and Size but never the relative adjustments, so user code or an
+        // expression may have left them.
+        if (visual.RelativeOffsetAdjustment != Vector3.Zero) visual.RelativeOffsetAdjustment = Vector3.Zero;
+        if (visual.RelativeSizeAdjustment != Vector2.Zero) visual.RelativeSizeAdjustment = Vector2.Zero;
         visual.Clip = null;
         if (hasTranslation) visual.Properties.InsertVector3("Translation", Vector3.Zero);
         ElementCompositionPreview.SetIsTranslationEnabled(fe, false);
@@ -671,8 +685,8 @@ public sealed class ElementPool : IDisposable
         // Spec 066 layer 2 clears it in both lanes.
         switch (fe)
         {
-            case WinUI.Grid grid when grid.BackgroundTransition is not null: grid.BackgroundTransition = null; break;
-            case WinUI.StackPanel stack when stack.BackgroundTransition is not null: stack.BackgroundTransition = null; break;
+            case WinUI.Panel panel when panel.BackgroundTransition is not null: panel.BackgroundTransition = null; break;
+            case WinUI.Border border when border.BackgroundTransition is not null: border.BackgroundTransition = null; break;
         }
 
         Reconciler.ForgetCompositionState(fe);
