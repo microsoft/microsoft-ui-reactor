@@ -159,6 +159,19 @@ public class TransformsMatrixTests
     public void FieldEquals_AllowsTwoDipsOnGeometryOnly(string field, string a, string b, bool equal) =>
         Assert.Equal(equal, TransformsLedger.FieldEquals(field, a, b));
 
+    [Theory]
+    [InlineData(1.0, false, "1.00")]
+    [InlineData(0.8, false, "0.80")]
+    [InlineData(1.0, true, "1.00")]
+    [InlineData(0.8, true, "0.80")]
+    public void OpacityFromGreen_TellsALostUpdateFromTheDeclaredValue_ThroughPixelNoise(double opacity, bool alt, string expected)
+    {
+        double green = CompositionModel.Green(opacity, alt);
+        Assert.Equal(expected, CompositionModel.OpacityFromGreen(green, alt));
+        Assert.Equal(expected, CompositionModel.OpacityFromGreen(Math.Max(0, green - 2), alt));
+        Assert.Equal(expected, CompositionModel.OpacityFromGreen(green + 2, alt));
+    }
+
     [Fact]
     public void KeepUnchanged_KeepsTheCommittedValueWithinTolerance()
     {
