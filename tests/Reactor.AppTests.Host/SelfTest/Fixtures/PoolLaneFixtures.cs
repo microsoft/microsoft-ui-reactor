@@ -528,6 +528,10 @@ internal static class PoolLaneFixtures
             var first = await lab.Show(moved);
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
             if (first is null) return;
+            // The reset writes ActualOffset, so it must be what layout gives a fresh visual.
+            var freshOffset = ElementCompositionPreview.GetElementVisual(first).Offset;
+            H.Check(p + "_FreshOffsetIsLayout", Vector3.Distance(freshOffset, first.ActualOffset) < 0.5f,
+                $"offset={freshOffset} layout={first.ActualOffset}");
             move?.Invoke(first);
             await Harness.Render();
             await lab.Show(null);

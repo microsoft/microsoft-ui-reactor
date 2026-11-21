@@ -441,9 +441,10 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
    handoff (Q8a, P1g). §4.3 leaves it to user code when no Reactor Translation channel is declared, so
    a control mounted with `.Set(b => b.Translation = …).Scale(2)` would otherwise carry its offset to
    the next renter.
-   `Offset` and `Size` belong to layout (P2), which writes them only when they change. A stopped animation's
-   last value, or a direct write through the visual, would stay, so the reset writes `ActualOffset` and
-   `ActualSize` back when the visual differs from them by more than half a pixel.
+   `Offset` and `Size` belong to layout (P2). Layout writes `Offset` only when the position changes, so a
+   stopped animation's last value, or a direct write through the visual, would stay. The reset writes
+   `ActualOffset` back unconditionally, because a stopped expression's last value lands after the stop. `Size`
+   is left alone, since a fresh handoff visual doesn't reliably carry `ActualSize`.
 4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
    origin bookkeeping, and the keyframe trigger table entries for the control. The origin itself is put

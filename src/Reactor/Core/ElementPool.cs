@@ -650,13 +650,12 @@ public sealed class ElementPool : IDisposable
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
-        // Layout owns Offset and Size and writes them only when they change, so a stopped animation's
-        // last value, or a direct write through the visual, would stay. Put the layout values back.
-        // Sub-pixel differences are layout rounding.
-        var layoutOffset = fe.ActualOffset;
-        if (Vector3.DistanceSquared(visual.Offset, layoutOffset) > 0.25f) visual.Offset = layoutOffset;
-        var layoutSize = fe.ActualSize;
-        if (Vector2.DistanceSquared(visual.Size, layoutSize) > 0.25f) visual.Size = layoutSize;
+        // Layout owns Offset and writes it only when the position changes, so a stopped animation's
+        // last value, or a direct write through the visual, would stay. Put the layout offset back,
+        // unconditionally: a stopped expression's last value lands after this, so the getter can't
+        // tell yet, and this write follows the stop in the same batch. Size is left alone, because a
+        // fresh handoff visual doesn't reliably carry ActualSize.
+        visual.Offset = fe.ActualOffset;
 
         // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
         // this drops keys no claim owns, for example ones user code installed.
