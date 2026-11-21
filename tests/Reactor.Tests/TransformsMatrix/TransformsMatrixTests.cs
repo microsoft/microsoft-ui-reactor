@@ -59,6 +59,7 @@ public class TransformsMatrixTests
         var sample = MatrixGenerator.Sample(Matrix);
         Assert.InRange(sample.Count, 9, 12);
         Assert.True(sample[0].IsControlGroup);
+        Assert.Equal("wrapper=Direct flow=Ltr motion=Enabled user=None variant=A", sample[0].Dims);
         Assert.Equal(LedgerCheck.ControlGroupId, sample[0].Id);
         var card = MatrixGenerator.Cardinality;
         for (int d = 0; d < card.Count; d++)
@@ -227,6 +228,69 @@ public class TransformsMatrixTests
         Assert.Single(check.BadReason);
     }
 
+    [Theory]
+    [InlineData("Scale.Scale.Animate", "change", "motion", "*", "Scale=JUMPED")]
+    [InlineData("Scale.Scale.Animate", "mount", "motion", "*", "*")]
+    [InlineData("Scale.Scale.Animate", "change", "pose", "*", "*")]
+    [InlineData("Rotation.*.Animate", "change", "motion", "*", "*")]
+    [InlineData("Scale.Scale.Animate", "change", "motion", "Scale=JUMPED", "*")]
+    public void Check_ANearMissExpectationLeavesTheChangeUndeclared(string c, string step, string field, string before, string after)
+    {
+        var check = LedgerCheck.Run(Base, Head(scale: "Scale=ANIMATING"), [new(c, step, field, before, after, "fixes #1625")]);
+        Assert.Equal("Scale.Scale.Animate", Assert.Single(check.Undeclared).Case);
+        Assert.Single(check.Stale);
+    }
+
+    [Fact]
+    public void Check_ExpectationsInheritedFromTheBaseAreIgnored_ButANewSetIsChecked()
+    {
+        LedgerExpectation landed = new("Scale.Opacity.Animate", "change", "motion", "*", "*", "fixes #1625");
+
+        // An unrelated PR after a layer merged: same ledger, same expectations. Nothing to declare.
+        var unrelated = LedgerCheck.Run(Base, Base, [landed], baseExpectations: [landed]);
+        Assert.True(unrelated.Passed, unrelated.Describe());
+
+        // The next layer changes the ledger but kept the old file: its change is undeclared.
+        var kept = LedgerCheck.Run(Base, Head(scale: "Scale=ANIMATING"), [landed], baseExpectations: [landed]);
+        Assert.Single(kept.Undeclared);
+
+        // It appended instead of replacing: the old entry is stale.
+        LedgerExpectation mine = new("Scale.Scale.Animate", "change", "motion", "*", "*", "fixes #1626");
+        var appended = LedgerCheck.Run(Base, Head(scale: "Scale=ANIMATING"), [landed, mine], baseExpectations: [landed]);
+        Assert.Equal(landed, Assert.Single(appended.Stale));
+    }
+
+    [Theory]
+    [InlineData("*.{Opacity,Scale}.Animate", "Scale.Scale.Animate", true)]
+    [InlineData("*.{Opacity,Scale}.Animate", "Scale.Rotation.Animate", false)]
+    [InlineData("{None,Identity}.*.*", "Identity.None.Stagger", true)]
+    [InlineData("{None,Identity}.*.*", "ScaleRotationCenter.None.None", false)]
+    [InlineData("Scale.Scale.Animate", "Scale.Scale.AnimateX", false)]
+    [InlineData("Scale.*", "Scale.Opacity.None", true)]
+    public void Glob_MatchesWildcardsAndAlternatives(string pattern, string value, bool expected) =>
+        Assert.Equal(expected, Glob.IsMatch(pattern, value));
+
+    [Fact]
+    public void KnownDifference_MatchesOnEveryAxis()
+    {
+        var rule = new KnownDifference("*.{Opacity,Scale}.*", "*user=None*", "change", "motion:*", "#1623", "note");
+        Assert.True(rule.Matches("Scale.Scale.Animate", "wrapper=Direct user=None variant=A", "change", "motion:Scale"));
+        Assert.False(rule.Matches("Scale.Scale.Animate", "wrapper=Direct user=SetFacade variant=A", "change", "motion:Scale"));
+        Assert.False(rule.Matches("Scale.Rotation.Animate", "wrapper=Direct user=None variant=A", "change", "motion:Scale"));
+        Assert.False(rule.Matches("Scale.Scale.Animate", "wrapper=Direct user=None variant=A", "mount", "motion:Scale"));
+        Assert.False(rule.Matches("Scale.Scale.Animate", "wrapper=Direct user=None variant=A", "change", "pose"));
+    }
+
+    [Theory]
+    [InlineData("""{ "expectations": [ { "case": "A", "field": "pose" } ] }""", "entry 0 needs a string \"reason\"")]
+    [InlineData("""{ "expectations": [ { "case": "A", "field": "pose", "reason": "fixes #1", "step": null } ] }""", "entry 0 has a null \"step\"")]
+    [InlineData("""{ "expected": [] }""", "top-level \"expectations\" array")]
+    public void Expectations_AMalformedEntryNamesTheFileAndEntry(string json, string message)
+    {
+        var ex = Assert.Throws<FormatException>(() => LedgerExpectation.ParseFile(json));
+        Assert.Contains(TransformsLedger.ExpectedFile, ex.Message, StringComparison.Ordinal);
+        Assert.Contains(message, ex.Message, StringComparison.Ordinal);
+    }
     // ── The committed files ─────────────────────────────────────────────────
 
     private static string BaselinePath(string file)
@@ -264,40 +328,57 @@ public class TransformsMatrixTests
 
     /// <summary>
     /// §12.1 C.2: diffs this branch's ledger against the one committed on the PR's base. CI's unit
-    /// test job writes the base copy to <c>REACTOR_TRANSFORMS_LEDGER_BASE</c> (<c>absent</c> when the base
-    /// has none, <c>skip</c> outside a pull request). Locally the base is the merge base with <c>origin/main</c>.
+    /// test job writes the base copies to <c>REACTOR_TRANSFORMS_LEDGER_BASE</c> and
+    /// <c>REACTOR_TRANSFORMS_EXPECTED_BASE</c> (<c>absent</c> when the base has none, <c>skip</c>
+    /// outside a pull request). Locally the base is <c>REACTOR_TRANSFORMS_BASE_REF</c> (a git ref, for
+    /// a PR stacked on another layer), else the merge base with <c>origin/main</c>.
     /// </summary>
     [Fact]
     public void Ledger_ChangesFromTheBase_AreAllDeclared()
     {
         string head = File.ReadAllText(BaselinePath(TransformsLedger.LedgerFile));
         var expectations = LedgerExpectation.ParseFile(File.ReadAllText(BaselinePath(TransformsLedger.ExpectedFile)));
-        string? baseText = BaseLedger();
-        if (baseText is null)
+        var (baseLedger, baseExpected) = BaseFiles();
+        if (baseLedger is null)
         {
             // The ledger is new on this branch (layer V), so no behaviour has changed yet.
             Assert.True(expectations.Count == 0, "The base has no ledger, so there is nothing to declare: empty transforms-ledger.expected.json.");
             return;
         }
 
-        var check = LedgerCheck.Run(TransformsLedger.Parse(baseText), TransformsLedger.Parse(head), expectations);
+        var check = LedgerCheck.Run(TransformsLedger.Parse(baseLedger), TransformsLedger.Parse(head), expectations,
+            baseExpected is null ? null : LedgerExpectation.ParseFile(baseExpected));
         Assert.True(check.Passed, check.Describe());
     }
 
-    private static string? BaseLedger()
+    /// <summary>The base commit's ledger and expectations; null when the base has none.</summary>
+    private static (string? Ledger, string? Expected) BaseFiles()
     {
-        string? env = Environment.GetEnvironmentVariable("REACTOR_TRANSFORMS_LEDGER_BASE");
-        if (env == "absent") return null;
-        if (env == "skip") Assert.Skip("Not a pull request: there is no base ledger to diff against.");
-        if (!string.IsNullOrEmpty(env)) return File.ReadAllText(env);
+        string? ledger = Environment.GetEnvironmentVariable("REACTOR_TRANSFORMS_LEDGER_BASE");
+        if (ledger == "skip") Assert.Skip("Not a pull request: there is no base ledger to diff against.");
+        if (!string.IsNullOrEmpty(ledger))
+        {
+            string? expected = Environment.GetEnvironmentVariable("REACTOR_TRANSFORMS_EXPECTED_BASE");
+            return (ledger == "absent" ? null : File.ReadAllText(ledger),
+                string.IsNullOrEmpty(expected) || expected == "absent" ? null : File.ReadAllText(expected));
+        }
 
         string root = RepoRootFinder.FindRepoRoot()!;
-        string? mergeBase = Git(root, "merge-base HEAD origin/main")?.Trim();
-        if (string.IsNullOrEmpty(mergeBase)) Assert.Skip("No origin/main to diff the transforms ledger against.");
-        // Null when the merge base has no ledger yet.
-        return Git(root, $"show {mergeBase}:{TransformsLedger.BaselineDirectory}/{TransformsLedger.LedgerFile}");
-    }
+        string? baseRef = Environment.GetEnvironmentVariable("REACTOR_TRANSFORMS_BASE_REF") is { Length: > 0 } r ? r
+            : Git(root, "merge-base HEAD origin/main")?.Trim();
+        string? baseSha = baseRef is null ? null : Git(root, $"rev-parse --verify {baseRef}^{{commit}}")?.Trim();
+        if (string.IsNullOrEmpty(baseSha)) Assert.Skip("No base to diff the transforms ledger against: set REACTOR_TRANSFORMS_BASE_REF or fetch origin/main.");
+        if (baseSha == Git(root, "rev-parse HEAD")?.Trim()) Assert.Skip("HEAD is its own base (main), so there is no change to declare.");
 
+        string? Show(string file)
+        {
+            string spec = $"{baseSha}:{TransformsLedger.BaselineDirectory}/{file}";
+            if (Git(root, $"cat-file -e {spec}") is null) return null;
+            return Git(root, $"show {spec}") ?? throw new InvalidOperationException($"git couldn't read {spec}.");
+        }
+
+        return (Show(TransformsLedger.LedgerFile), Show(TransformsLedger.ExpectedFile));
+    }
     /// <summary>Standard output of a git command, or null when it fails.</summary>
     private static string? Git(string root, string args)
     {

@@ -2,14 +2,17 @@
 # probes), checked against the behaviour ledger committed in
 # tests/Reactor.AppTests.Host/SelfTest/Baselines/transforms-ledger.json.
 #
-#   • Pull requests: only when labelled `transforms-matrix`, which every spec 066 layer PR carries.
+#   • Pull requests: only when labelled `transforms-matrix`, which spec 066 layer PRs add.
 #     Every PR's normal Selftests job already runs a fixed seeded sample of the matrix.
 #   • Nightly on main: any difference from main's own ledger is a regression or a flaky case.
-#   • Manual: `mode: record` regenerates the ledger on a hosted runner and uploads it as an
-#     artifact, for a PR author whose machine records different poses.
+#   • Recording: `mode: record` (a manual run, or a PR labelled `transforms-matrix-record`, since a
+#     manual run only exists once the workflow is on main) regenerates the ledger on a hosted runner
+#     and uploads it as an artifact, for a PR author whose machine records different poses or can't
+#     record (a locked or disconnected session renders no compositor frames, and the instrument
+#     controls then refuse to record).
 #
 # The matrix runs here, never inside the sharded selftest corpus, because it takes about
-# 15-25 minutes. See TESTING.md, "Transforms matrix and behaviour ledger".
+# 20-40 minutes. See TESTING.md, "Transforms matrix and behaviour ledger".
 name: Transforms matrix
 
 on:
@@ -29,19 +32,28 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # Adding some other label to the PR must not cancel a running matrix, so those events (which the
+  # job skips) get a group of their own.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}${{ github.event.action == 'labeled' && !startsWith(github.event.label.name, 'transforms-matrix') && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   matrix:
-    name: Transforms matrix (${{ inputs.mode || 'full' }})
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'transforms-matrix')
+    name: Transforms matrix (${{ inputs.mode || (contains(github.event.pull_request.labels.*.name, 'transforms-matrix-record') && 'record') || 'full' }})
+    if: >-
+      github.event_name != 'pull_request'
+      || ((contains(github.event.pull_request.labels.*.name, 'transforms-matrix')
+           || contains(github.event.pull_request.labels.*.name, 'transforms-matrix-record'))
+          && (github.event.action != 'labeled' || startsWith(github.event.label.name, 'transforms-matrix')))
     runs-on: windows-latest
     timeout-minutes: 90
     env:
-      REACTOR_TRANSFORMS_MATRIX: ${{ inputs.mode || 'full' }}
+      REACTOR_TRANSFORMS_MATRIX: ${{ inputs.mode || (contains(github.event.pull_request.labels.*.name, 'transforms-matrix-record') && 'record') || 'full' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The job runs the PR's code, and nothing here needs git credentials.
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -73,7 +85,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: transforms-matrix-${{ inputs.mode || 'full' }}
+          name: transforms-matrix-${{ env.REACTOR_TRANSFORMS_MATRIX }}
           path: |
             ${{ runner.temp }}/transforms-matrix.tap
             ${{ runner.temp }}/transforms-ledger.json

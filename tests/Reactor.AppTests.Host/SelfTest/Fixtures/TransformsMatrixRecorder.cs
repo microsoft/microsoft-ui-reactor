@@ -24,7 +24,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// declared values, remove the feature, add it back, remove the modifiers, unmount, rent from the
 /// pool as a plain element and as a transformed one) and records what each step did. Motion is
 /// controller-driven: the recorder pauses each new animation and seeks it, so no verdict depends
-/// on wall-clock timing, except layout <c>Offset</c>, which XAML drives.
+/// on wall-clock timing.
 /// </summary>
 internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost, DiagnosticsListener diagnostics)
 {
@@ -34,8 +34,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// <summary>
     /// Every other animation. Verdicts seek a paused controller, so the duration doesn't matter to
     /// them, but an animation can only be finished by letting it play out: resuming at progress 1
-    /// never completes, and stopping a paused one reverts to its base value. Layout <c>Offset</c>,
-    /// which XAML drives, is sampled on the wall clock against this duration.
+    /// never completes, and stopping a paused one reverts to its base value.
     /// </summary>
     public const int MotionMs = 1_200;
     private static readonly string[] Channels = ["Opacity", "Scale", "RotationAngle", "Translation", "CenterPoint", "Offset", "Size"];
@@ -94,7 +93,13 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
             await Step(record, MatrixStep.RemoveFeature, async _ => { Render(StageOf(Declare(MatrixStep.RemoveFeature))); await Settle(); }, rest: true);
             await Step(record, MatrixStep.AddFeature, async _ => { Render(StageOf(Declare(MatrixStep.AddFeature))); await Settle(); }, rest: true);
-            await Step(record, MatrixStep.RemoveModifier, async _ => { Render(StageOf(Declare(MatrixStep.RemoveModifier))); await Settle(); }, rest: true);
+            await Step(record, MatrixStep.RemoveModifier, async f =>
+            {
+                Render(StageOf(Declare(MatrixStep.RemoveModifier)));
+                await Settle();
+                // #1626: a removed transition must not stay installed, idle until the next write.
+                if (Target is { } t) f["residue"] = TransitionResidue(t);
+            }, rest: true);
             if (!await Step(record, MatrixStep.Unmount, async f =>
             {
                 Render(StageOf(null));
@@ -164,7 +169,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
     private Element TargetOf(Decl d)
     {
-        string background = d.AltBackground ? "#FFFF3030" : "#FFFF0000";
+        string background = d.AltBackground ? "#FFFF2020" : "#FFFF0000";
         bool memo = !d.Plain && _case.Wrapper == WrapperAxis.Memo;
         var inner = VStack()
             .Width(Model.Width).Height(Model.Height)
@@ -275,7 +280,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             if (rest && Target is { } t)
             {
                 await Frames(2);
-                if (await SettleRunning(t) is { } running) f["running"] = running;
+                if (await SettleRunning(t, step) is { } running) f["running"] = running;
                 var snap = await Snap.CaptureAsync(caseHost);
                 var box = snap.RedBox();
                 f["pose"] = box?.ToString() ?? "none";
@@ -353,9 +358,8 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// <summary>
     /// The change step's motion oracle (§12.1 A). For each channel the step moves: a XAML transition
     /// is <c>unobservable</c> to RenderTargetBitmap; an animation that existed before the write holds
-    /// the channel (<c>HELD</c>); a new one is paused and seeked to 50% and 100%, with every other
-    /// channel at its end; no animation means the value jumped, or never arrived. Layout
-    /// <c>Offset</c> is driven by XAML, so it's sampled on the wall clock at mid-duration instead.
+    /// the channel (<c>HELD</c>); a new one is paused and seeked to its start, 25%, 50% and 100%, with
+    /// every other channel at its end; no animation means the value jumped, or never arrived.
     /// </summary>
     private async Task ObserveMotion(OrderedDictionary<string, string> f, Action write)
     {
@@ -365,7 +369,6 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             ElementPool.IsCompositorTainted(t) || _case.Feature == FeatureAxis.Stagger ? ElementCompositionPreview.GetElementVisual(t) : null;
 
         var before = Taken(target) is { } v0 ? channels.ToDictionary(ch => ch, ch => Controller(v0, ch)) : [];
-        var clock = Stopwatch.StartNew();
         write();
         await Frames(2);
         if (!ReferenceEquals(Target, target))
@@ -377,31 +380,37 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
         var visual = Taken(target);
         var controllers = new Dictionary<string, AnimationController>();
-        foreach (var ch in channels.Where(static ch => ch != "Offset"))
+        foreach (var ch in channels)
             if (visual is not null && Controller(visual, ch) is { } ctl) controllers[ch] = ctl;
         var fresh = controllers.Where(kv => !(before.TryGetValue(kv.Key, out var b) && Equals(b, kv.Value))).ToDictionary();
         foreach (var ctl in fresh.Values) ctl.Pause();
         foreach (var ctl in fresh.Values) ctl.Progress = 1;
 
         var verdicts = new List<string>();
-        // Offset first: XAML animates it on its own clock, and every other channel's pose assumes it arrived.
-        foreach (var ch in channels.OrderBy(static ch => ch == "Offset" ? 0 : 1))
+        var curves = new List<string>();
+        foreach (var ch in channels)
         {
             string verdict;
             if (ch == "Background") verdict = target is Panel { BackgroundTransition: not null } ? "unobservable" : await BackgroundVerdict();
-            else if (ch == "Offset") verdict = await WallClockVerdict(ch, clock);
             else if (XamlTransition(target, ch)) verdict = "unobservable";
             else if (controllers.ContainsKey(ch) && !fresh.ContainsKey(ch)) verdict = Model.Held;
             else if (!Visible(ch)) verdict = fresh.ContainsKey(ch) ? "running" : "invisible";
             else if (fresh.TryGetValue(ch, out var ctl))
             {
-                ctl.Progress = 0.5f;
-                await Frames(3);
-                double mid = Progress(ch, await Snap.CaptureAsync(caseHost));
-                ctl.Progress = 1;
-                await Frames(3);
-                double end = Progress(ch, await Snap.CaptureAsync(caseHost));
-                verdict = Verdict(mid, end);
+                // Progress is measured from where this animation starts, not from the declared mount
+                // value: with user code the handoff can migrate a facade value first (§9 rows 1 and 3).
+                async Task<double> At(float progress)
+                {
+                    ctl.Progress = progress;
+                    await Frames(3);
+                    return Progress(ch, await Snap.CaptureAsync(caseHost));
+                }
+
+                double start = await At(0.02f), quarter = await At(0.25f), mid = await At(0.5f), end = await At(1);
+                double span = end - start;
+                verdict = Verdict(Math.Abs(span) < 0.05 ? end : (mid - start) / span, end);
+                if (verdict == Model.Animating && Math.Abs(span) >= 0.05)
+                    curves.Add($"{ch}={Math.Round((quarter - start) / span / 0.2) * 0.2:F1}");
             }
             else
             {
@@ -411,49 +420,36 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
             if (verdict.StartsWith("UNCLEAR", StringComparison.Ordinal))
             {
-                // With user code the animation can start from the user's facade value, which the handoff
-                // migrated (§9 rows 1 and 3), so the midpoint isn't A to B: recorded as a model
-                // disagreement. Anywhere else an inconclusive oracle fails the run (§12.1 A).
+                // §12.1 A: an inconclusive oracle is a failure, not a pass. The case reruns before it fails.
                 Console.WriteLine($"# TransformsMatrix {_case.Id}: change {ch} {verdict}");
-                if (_case.UserCode == UserCodeAxis.None) Inconclusive.Add($"change: {ch} {verdict}");
+                Inconclusive.Add($"change: {ch} {verdict}");
                 verdict = "UNCLEAR";
             }
 
             verdicts.Add($"{ch}={verdict}");
-            if (verdict == "UNCLEAR") ModelDifferences.Add(("change", "motion:" + ch));
-            else if (Array.IndexOf(Model.Unmodelled, verdict) < 0 && verdict != Model.ExpectedMotion(_case, ch))
+            if (verdict == "UNCLEAR" || (Array.IndexOf(Model.Unmodelled, verdict) < 0 && verdict != Model.ExpectedMotion(_case, ch)))
                 ModelDifferences.Add(("change", "motion:" + ch));
         }
 
         f["motion"] = string.Join(" ", verdicts);
+        // Progress at a quarter of the time, in steps of 0.2: linear reads 0.2, the Fluent (0.8,0,0.2,1)
+        // curve 0.0 and the compositor's default ease-out 0.6, so a layer that changes a curve shows here.
+        if (curves.Count > 0) f["curve"] = string.Join(" ", curves);
         foreach (var ctl in fresh.Values) { ctl.Progress = 0.5f; ctl.Resume(); }
         if (fresh.Count > 0) await Finish(visual!, fresh.Keys, MotionMs / 2);
         await Settle();
     }
 
+    /// <summary>
+    /// A seeked midpoint strictly between the ends means the value moves. Because the controller is
+    /// paused, no timing enters it, so an eased curve still reads <c>ANIMATING</c> (the layout
+    /// animation's ease-out is at 0.87, #1652); the <c>curve</c> field records the shape.
+    /// </summary>
     private static string Verdict(double mid, double end) =>
         end < 0.1 ? Model.NotApplied
-        : mid >= 0.9 ? Model.Jumped
-        : mid > 0.2 && mid < 0.8 && end > 0.9 ? Model.Animating
+        : mid >= 0.95 ? Model.Jumped
+        : mid > 0.05 && end > 0.9 ? Model.Animating
         : $"UNCLEAR(mid={mid:F2},end={end:F2})";
-
-    /// <summary>
-    /// The §12.1 A wall-clock fallback, sampled at a quarter of the duration rather than half: the
-    /// layout animation's keyframe has no easing, so the compositor's default ease-out applies and
-    /// it's already about 0.9 of the way at mid-duration (#1652).
-    /// </summary>
-    private async Task<string> WallClockVerdict(string channel, Stopwatch clock)
-    {
-        while (clock.ElapsedMilliseconds < MotionMs / 4) await Task.Delay(10);
-        double early = Progress(channel, await Snap.CaptureAsync(caseHost));
-        while (clock.ElapsedMilliseconds < MotionMs + 300) await Task.Delay(20);
-        await Frames(2);
-        double end = Progress(channel, await Snap.CaptureAsync(caseHost));
-        return end < 0.1 ? Model.NotApplied
-            : early >= 0.95 ? Model.Jumped
-            : early > 0.05 && end > 0.9 ? Model.Animating
-            : $"UNCLEAR(early={early:F2},end={end:F2})";
-    }
 
     private static bool XamlTransition(UIElement t, string channel) => channel switch
     {
@@ -468,8 +464,8 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     {
         var snap = await Snap.CaptureAsync(caseHost);
         var (x, y) = Model.Point(ExpectedPose(MatrixStep.Change), Rtl, Model.Shift(_case, MatrixStep.Change), 50, 20);
-        // #FF3030 at opacity 0.8 over white has green ≈ 89; #FF0000 has ≈ 51.
-        return snap.Green(x, y) > 70 ? Model.Jumped : Model.NotApplied;
+        // #FF2020 at opacity 0.8 over white has green ≈ 77; #FF0000 has ≈ 51.
+        return snap.Green(x, y) > 64 ? Model.Jumped : Model.NotApplied;
     }
 
     /// <summary>The change-step bounds with only <paramref name="channel"/> at fraction <paramref name="p"/> of its move.</summary>
@@ -497,7 +493,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// <summary>
     /// How far <paramref name="channel"/> has moved: the fraction whose modelled bounds best match
     /// the captured ones. A search rather than a projection, because bounds aren't linear in an
-    /// angle or a pivot. Fractions outside [−0.25, 1.25] read as the nearest end.
+    /// angle or a pivot. Fractions outside [−1, 2] read as the nearest end.
     /// </summary>
     private double Progress(string channel, Snap snap)
     {
@@ -511,7 +507,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
 
         if (snap.RedBox() is not { } box) return double.NaN;
         double best = double.NaN, bestError = double.MaxValue;
-        for (int i = -25; i <= 125; i++)
+        for (int i = -100; i <= 200; i++)
         {
             var at = At(channel, i / 100.0);
             double error = Enumerable.Range(0, 4).Max(k => Math.Abs(at[k] - box[k]));
@@ -606,8 +602,30 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         return $"taken={taken} xaml={(xaml.Count > 0 ? string.Join(",", xaml) : "-")}";
     }
 
+    /// <summary>XAML transition properties still set, and implicit keys if Reactor took the visual.</summary>
+    internal static string TransitionResidue(FrameworkElement t)
+    {
+        var xaml = new List<string>();
+        if (t.OpacityTransition is not null) xaml.Add("Opacity");
+        if (t.ScaleTransition is not null) xaml.Add("Scale");
+        if (t.RotationTransition is not null) xaml.Add("Rotation");
+        if (t.TranslationTransition is not null) xaml.Add("Translation");
+        if (t is Panel { BackgroundTransition: not null }) xaml.Add("Background");
+        string keys = "untaken";
+        if (ElementPool.IsCompositorTainted(t))
+        {
+            try
+            {
+                var implicitKeys = ElementCompositionPreview.GetElementVisual(t).ImplicitAnimations?.Select(kv => kv.Key).Order(StringComparer.Ordinal).ToArray() ?? [];
+                keys = implicitKeys.Length > 0 ? string.Join(",", implicitKeys) : "-";
+            }
+            catch (UnauthorizedAccessException) { keys = "refused"; }
+        }
+
+        return $"xaml={(xaml.Count > 0 ? string.Join(",", xaml) : "-")} keys={keys}";
+    }
     /// <summary>Implicit keys and running animations left on a transformed renter's visual.</summary>
-    private static string Residuals(FrameworkElement t)
+    internal static string Residuals(FrameworkElement t)
     {
         // Taking the visual of a control with a facade transform throws (#1613), and it would be
         // the test's own handoff anyway. An untaken control can't hold implicit keys.
@@ -639,9 +657,12 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// Returns those channels, or null when Reactor never took the visual, so there is nothing a test
     /// may safely read. A looping keyframe is left alone.
     /// </summary>
-    private async Task<string?> SettleRunning(FrameworkElement t)
+    private async Task<string?> SettleRunning(FrameworkElement t, MatrixStep step)
     {
-        if (!ElementPool.IsCompositorTainted(t) && _case.Feature != FeatureAxis.Stagger) return null;
+        // Stagger takes the visual without marking it (#1643), but only the original control has had
+        // it; a renter in the rent steps must not be touched.
+        bool staggered = _case.Feature == FeatureAxis.Stagger && step < MatrixStep.Unmount;
+        if (!ElementPool.IsCompositorTainted(t) && !staggered) return null;
         Visual visual;
         try { visual = ElementCompositionPreview.GetElementVisual(t); }
         catch (UnauthorizedAccessException) { return null; }

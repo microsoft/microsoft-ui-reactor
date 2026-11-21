@@ -173,8 +173,9 @@ internal sealed class LedgerCase
 }
 
 /// <summary>
-/// One declared behaviour change (<c>transforms-ledger.expected.json</c>). Selectors accept <c>*</c>
-/// wildcards; <c>before</c>/<c>after</c> are exact values or <c>*</c>.
+/// One declared behaviour change (<c>transforms-ledger.expected.json</c>). <c>case</c>, <c>step</c> and
+/// <c>field</c> are <see cref="Glob"/> patterns; <c>before</c> and <c>after</c> are exact values, <c>*</c>,
+/// or <c>(absent)</c> for a value only one side has. <c>step</c>, <c>before</c> and <c>after</c> default to <c>*</c>.
 /// </summary>
 internal sealed record LedgerExpectation(string Case, string Step, string Field, string Before, string After, string Reason)
 {
@@ -185,25 +186,15 @@ internal sealed record LedgerExpectation(string Case, string Step, string Field,
         Glob.IsMatch(Case, d.Case) && Glob.IsMatch(Step, d.Step) && Glob.IsMatch(Field, d.Field)
         && (Before == "*" || Before == (d.Before ?? "(absent)")) && (After == "*" || After == (d.After ?? "(absent)"));
 
-    public static List<LedgerExpectation> ParseFile(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("expectations").EnumerateArray().Select(e => new LedgerExpectation(
-            e.GetProperty("case").GetString()!,
-            e.TryGetProperty("step", out var s) ? s.GetString()! : "*",
-            e.GetProperty("field").GetString()!,
-            e.TryGetProperty("before", out var b) ? b.GetString()! : "*",
-            e.TryGetProperty("after", out var a) ? a.GetString()! : "*",
-            e.GetProperty("reason").GetString()!)).ToList();
-    }
+    public static List<LedgerExpectation> ParseFile(string json) =>
+        JsonEntries.Parse(json, "expectations", TransformsLedger.ExpectedFile, e => new LedgerExpectation(
+            e.Required("case"), e.Optional("step"), e.Required("field"), e.Optional("before"), e.Optional("after"), e.Required("reason")));
 
     public override string ToString() =>
-        $"{{ \"case\": {J(Case)}, \"step\": {J(Step)}, \"field\": {J(Field)}, \"before\": {J(Before)}, \"after\": {J(After)}, \"reason\": {J(Reason)} }}";
+        $"{{ \"case\": {Quote(Case)}, \"step\": {Quote(Step)}, \"field\": {Quote(Field)}, \"before\": {Quote(Before)}, \"after\": {Quote(After)}, \"reason\": {Quote(Reason)} }}";
 
     public static LedgerExpectation Suggest(LedgerDifference d) =>
         new(d.Case, d.Step, d.Field, d.Before ?? "(absent)", d.After ?? "(absent)", "§9 row N | fixes #NNNN");
-
-    private static string J(string s) => Quote(s);
 }
 
 /// <summary>The outcome of checking a PR's ledger against its base (§12.1 C.2 and C.3).</summary>
@@ -215,13 +206,21 @@ internal sealed record LedgerCheck(
 {
     public bool Passed => Undeclared.Count == 0 && Stale.Count == 0 && ControlGroup.Count == 0 && BadReason.Count == 0;
 
-    public static LedgerCheck Run(TransformsLedger baseLedger, TransformsLedger head, IReadOnlyList<LedgerExpectation> expectations)
+    /// <summary>
+    /// Checks the base-to-head ledger changes against the head's expectations. Expectations identical
+    /// to the base's were landed by an earlier PR, so they're ignored: an unrelated PR doesn't have to
+    /// clear them, and a PR that changes the ledger must replace them with its own (§12.1 C.2).
+    /// </summary>
+    public static LedgerCheck Run(TransformsLedger baseLedger, TransformsLedger head, IReadOnlyList<LedgerExpectation> expectations,
+        IReadOnlyList<LedgerExpectation>? baseExpectations = null)
     {
+        if (baseExpectations is not null && expectations.SequenceEqual(baseExpectations)) expectations = [];
         var diffs = TransformsLedger.Diff(baseLedger, head);
         // The control group can't be excused: only its rent-as-transformed step may change (layer 4).
         var control = diffs.Where(d => d.Case == ControlGroupId && d.Step != MatrixCase.StepName(MatrixStep.RentTransformed)).ToList();
-        var undeclared = diffs.Except(control).Where(d => !expectations.Any(e => e.Matches(d))).ToList();
-        var stale = expectations.Where(e => !diffs.Except(control).Any(e.Matches)).ToList();
+        var declarable = diffs.Except(control).ToList();
+        var undeclared = declarable.Where(d => !expectations.Any(e => e.Matches(d))).ToList();
+        var stale = expectations.Where(e => !declarable.Any(e.Matches)).ToList();
         var bad = expectations.Where(e => !LedgerExpectation.ReasonPattern.IsMatch(e.Reason)).ToList();
         return new LedgerCheck(undeclared, stale, control, bad);
     }
@@ -239,7 +238,7 @@ internal sealed record LedgerCheck(
             foreach (var d in Undeclared.Take(max)) sb.AppendLine("  " + d);
             if (Undeclared.Count > max) sb.AppendLine($"  ...and {Undeclared.Count - max} more");
             sb.AppendLine($"If a change is intended, declare it in {path}, citing the spec 066 §9 row it introduces or the");
-            sb.AppendLine("issue it fixes. Selectors take * wildcards, so one entry can cover a family of cases. For example:");
+            sb.AppendLine("issue it fixes. Selectors take * wildcards and {a,b} alternatives, so one entry can cover a family of cases. For example:");
             foreach (var d in Undeclared.Take(3)) sb.AppendLine("  " + LedgerExpectation.Suggest(d));
             sb.AppendLine("If a change is not intended, it's a regression: fix the product code, not the ledger.");
         }
@@ -253,7 +252,7 @@ internal sealed record LedgerCheck(
         if (Stale.Count > 0)
         {
             sb.AppendLine($"{Stale.Count} expectation(s) in {path} match no change between the base ledger and this PR's ledger.");
-            sb.AppendLine("Expectations are per PR: remove the ones a merged PR already landed, or fix the selector.");
+            sb.AppendLine("Remove them (the previous PR's entries are replaced, not kept), or fix the selector.");
             foreach (var e in Stale.Take(max)) sb.AppendLine("  " + e);
         }
 
@@ -269,10 +268,13 @@ internal sealed record LedgerCheck(
 }
 
 /// <summary>
-/// A known disagreement between <c>main</c> and the composition model (<c>transforms-ledger.known.json</c>).
-/// §12.1 B: when <c>main</c> disagrees with the model, the case is recorded with an issue link instead
-/// of bending the model. <see cref="Part"/> is <c>pose</c>, <c>active</c> or <c>motion:&lt;channel&gt;</c>;
-/// <see cref="Dims"/> matches the case's pairwise dimensions, for example <c>*user=SetFacade*</c>.
+/// A rule attributing disagreements between <c>main</c> and the composition model to an issue or a
+/// spec 066 §9 row (<c>transforms-ledger.known.json</c>). §12.1 B: when <c>main</c> disagrees with the
+/// model, the case is recorded with an issue link instead of bending the model. The ledger's
+/// <c>model</c> field pins every disagreement exactly; a rule only says why. Each disagreement must
+/// match exactly one rule, and in a full run every rule must match at least one.
+/// <see cref="Part"/> is <c>pose</c>, <c>active</c> or <c>motion:&lt;channel&gt;</c>; <see cref="Dims"/>
+/// matches the case's pairwise dimensions, for example <c>*user=SetFacade*</c>.
 /// </summary>
 internal sealed record KnownDifference(string Case, string Dims, string Step, string Part, string Issue, string Note)
 {
@@ -281,19 +283,33 @@ internal sealed record KnownDifference(string Case, string Dims, string Step, st
     public bool Matches(string caseId, string dims, string step, string part) =>
         Glob.IsMatch(Case, caseId) && Glob.IsMatch(Dims, dims) && Glob.IsMatch(Step, step) && Glob.IsMatch(Part, part);
 
-    public static List<KnownDifference> ParseFile(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("known").EnumerateArray().Select(e => new KnownDifference(
-            e.GetProperty("case").GetString()!,
-            e.TryGetProperty("dims", out var d) ? d.GetString()! : "*",
-            e.TryGetProperty("step", out var s) ? s.GetString()! : "*",
-            e.GetProperty("part").GetString()!,
-            e.GetProperty("issue").GetString()!,
-            e.TryGetProperty("note", out var n) ? n.GetString()! : "")).ToList();
-    }
+    public static List<KnownDifference> ParseFile(string json) =>
+        JsonEntries.Parse(json, "known", TransformsLedger.KnownFile, e => new KnownDifference(
+            e.Required("case"), e.Optional("dims"), e.Optional("step"), e.Required("part"), e.Required("issue"), e.Required("note")));
+
+    public static string Suggest(string caseId, string step, string part) =>
+        $"{{ \"case\": {Quote(caseId)}, \"step\": {Quote(step)}, \"part\": {Quote(part)}, \"issue\": \"#NNNN | §9 row N\", \"note\": \"why main disagrees\" }}";
 
     public override string ToString() => $"{Case} [{Dims}] / {Step} / {Part} ({Issue})";
+}
+
+/// <summary>Reads an array of string-valued JSON objects, naming the file and entry when one is malformed.</summary>
+internal readonly struct JsonEntries(JsonElement element, string file, int index)
+{
+    public static List<T> Parse<T>(string json, string arrayName, string file, Func<JsonEntries, T> read)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty(arrayName, out var array) || array.ValueKind != JsonValueKind.Array)
+            throw new FormatException($"{file}: expected a top-level \"{arrayName}\" array.");
+        return array.EnumerateArray().Select((e, i) => read(new JsonEntries(e, file, i))).ToList();
+    }
+
+    public string Required(string key) =>
+        element.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString()!
+        : throw new FormatException($"{file}: entry {index} needs a string \"{key}\".");
+
+    public string Optional(string key) =>
+        element.TryGetProperty(key, out var v) ? v.GetString() ?? throw new FormatException($"{file}: entry {index} has a null \"{key}\".") : "*";
 }
 
 internal static class JsonQuoting
@@ -302,9 +318,14 @@ internal static class JsonQuoting
     public static string Quote(string s) => "\"" + JsonEncodedText.Encode(s, JavaScriptEncoder.UnsafeRelaxedJsonEscaping) + "\"";
 }
 
+/// <summary>Selector patterns: <c>*</c> matches any run of characters, and <c>{a,b,c}</c> any one alternative.</summary>
 internal static class Glob
 {
     public static bool IsMatch(string pattern, string value) =>
         pattern == "*" || pattern == value
-        || (pattern.Contains('*') && Regex.IsMatch(value, "^" + Regex.Escape(pattern).Replace(@"\*", ".*") + "$", RegexOptions.CultureInvariant));
+        || (pattern.IndexOfAny(['*', '{']) >= 0 && Regex.IsMatch(value, ToRegex(pattern), RegexOptions.CultureInvariant));
+
+    private static string ToRegex(string pattern) =>
+        "^" + Regex.Replace(Regex.Escape(pattern).Replace(@"\*", ".*"), @"\\\{([^}]*)}",
+            m => "(?:" + string.Join("|", m.Groups[1].Value.Split(',')) + ")") + "$";
 }

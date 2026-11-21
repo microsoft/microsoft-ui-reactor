@@ -1,6 +1,6 @@
 # Spec 066 — Transform modifiers on the composition visual
 
-> Status: **accepted** (2026-11-20), not yet implemented. Rollout in §13. Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
+> Status: **accepted** (2026-11-20), in progress (layers E and 0 have landed). Rollout in §13. Originating issue: [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630).
 > Plans fixes for [#1623](https://github.com/microsoft/microsoft-ui-reactor/issues/1623),
 > [#1624](https://github.com/microsoft/microsoft-ui-reactor/issues/1624),
 > [#1625](https://github.com/microsoft/microsoft-ui-reactor/issues/1625),
@@ -893,38 +893,48 @@ group is unchanged. Mutation results are recorded. The soak is clean (layers 3�
 
 #### F. Layer V results
 
-Layer V landed the harness as `TransformsMatrixFixture` and the ledger in
+Layer V adds the harness as `TransformsMatrixFixture` and the ledger in
 `tests/Reactor.AppTests.Host/SelfTest/Baselines/` (how to use it: TESTING.md, "Transforms matrix and
-behaviour ledger"). The generator yields 7 × 6 × 9 = 378 triples until layer 5 adds `TransformOrigin`.
-What it measured on `main` at 28a872255, which later layers can rely on:
+behaviour ledger"). The generator yields 7 × 6 × 9 = 378 triples until layer 5 adds `TransformOrigin`,
+and the control group keeps every other dimension at its default. What it measured on `main` at
+28a872255, which later layers can rely on:
 
-- **Implicit animations expose a controller** (`TransformsMatrix_Instrument_ImplicitController`), so
-  transition cases use the controller-driven path. Two controller facts shape the harness: resuming a
-  paused animation at progress 1 never completes it, and stopping a paused one reverts to its base value,
-  so the recorder finishes an animation by resuming it from the middle. A finished animation also keeps
-  its controller, so `TryGetAnimationController` is not a "still running" test.
+- **Implicit animations expose a controller** (`TransformsMatrix_Instrument_ImplicitController`), and
+  so does a layout `Offset` animation (`TransformsMatrix_Instrument_LayoutOffset`), so every motion
+  verdict is controller-driven and none uses the wall clock. Three controller facts shape the harness:
+  resuming a paused animation at progress 1 never completes it, stopping a paused one reverts to its base
+  value, and `PlaybackRate` clamps at 16. So the recorder finishes an animation by resuming it from the
+  middle. A finished animation also keeps its controller, so `TryGetAnimationController` is not a
+  "still running" test.
 - **Layout `Offset` animations aren't linear.** `ApplyLayoutAnimation` inserts its keyframe without an
   easing function, so the compositor's ease-out applies (about 0.87 of the move at mid-duration), the
-  same defect as #1640 on a path layer E didn't touch (#1652). The wall-clock verdict samples at a quarter of the
-  duration for that reason.
+  same defect as #1640 on a path layer E didn't touch (#1652). The `curve` field records it as 0.6.
 - **§5.2 and §5.3 re-measured with seeked controllers** (`@probe` in the ledger): the two-keyframe
   `Components = X` implicit Scale animates X and jumps Y, and an explicit `Translation` animation with
   the (0.8,0,0.2,1) ease is mid-way at 50%. Both are `ANIMATING`, not `UNCLEAR`.
 - **§6.3 write-then-attach, compositor side:** a visual write made before the implicit key is attached
-  (before the element enters the tree) jumps, while attach-then-write animates. The XAML side needs a
-  screen capture with system animations on; the full run logs it as `# TransformsMatrix screen:` lines
-  when the desktop allows. If the two paths differ, it gets a §9 row before layer 2 lands.
-- **Model disagreements on `main`** are listed in `transforms-ledger.known.json`: #1623 for every case
-  with a XAML transform or opacity transition plus a compositor feature, §9 row 1 for `.Set` facade
-  writes, §9 row 3 for facade `Translation` drags, and #1651 (a declared `.Opacity()` change overrides a
-  looping keyframe entry, which the model says holds the channel).
+  (before the element enters the tree) jumps, while attach-then-write animates. **Open for layer 2:**
+  the XAML side needs a screen capture with system animations on, which the recording machine didn't
+  have. The full run logs it as `# TransformsMatrix screen:` lines when the desktop allows; if the two
+  paths differ, it gets a §9 row before layer 2 lands. The same capture is the §5.1 parity evidence.
+- **Model disagreements on `main`** are attributed in `transforms-ledger.known.json`, one rule each:
+  #1623 for a XAML transform or opacity transition plus a compositor feature, #1651 (a declared
+  `.Opacity()` change overrides a looping keyframe entry, which the model says holds the channel), §9
+  row 1 for `.Set` facade writes, §9 row 3 for a facade `Translation` drag next to `.Translation()`, and
+  #1642 for a drag lost when a handoff enables translation (§4.3 rule 1).
 - **The pool soak** finds plain renters inheriting XAML transitions (#1624, #1639) and no taken visuals
-  or leftover facades.
-- **Budget.** A case takes about 3.2 s locally (20 minutes for all 378), so the full matrix runs only in
-  the `Transforms matrix` workflow. The normal selftest corpus runs a 9-case sample (every value of every
-  dimension at least once) and a short soak in about 45 s.
-- **Not automated here:** the gallery screenshot diff in E stays a manual per-layer step.
-
+  or leftover facades. Its counts are in the ledger, so "the soak is clean" in the exit criteria means
+  the counts a layer declares. It rents only plain probes, because `main` has one lane; layer 3 adds a
+  visual-lane renter and the §7.3 checks on it.
+- **Budget.** A case takes about 3–4 s locally (about 25 minutes for all 378), so the full matrix runs
+  only in the `Transforms matrix` workflow. The normal selftest corpus runs a 9-case sample (every value
+  of every dimension at least once) and a short soak in about a minute.
+- **Narrower than A–E**, for later layers to extend where they need it: keyframes animate opacity only
+  (A one-shot, B looping), so a keyframe on a transform channel isn't in the matrix; `.LayoutAnimation`
+  is observed through `Offset`, not `Size`; the lifecycle mounts a feature together with its transition,
+  so the feature-first order that reaches today's transition fallback (#1625) is left to the §12.2
+  fixtures; there is no quarantine entry yet (C.5), because no case needed one; and the gallery
+  screenshot diff in E stays a manual per-layer step.
 ### §12.2 Fixtures per layer
 
 **Unit (`tests/Reactor.Tests`, headless).**

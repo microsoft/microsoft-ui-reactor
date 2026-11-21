@@ -99,14 +99,19 @@ internal static class MatrixGenerator
                 foreach (var feature in Enum.GetValues<FeatureAxis>())
                 {
                     int[] triple = [(int)transform, (int)transition, (int)feature];
-                    // Seeded shuffle, then greedy: take the assignment that covers the most new pairs.
-                    var order = combos.OrderBy(_ => random.Next()).ToArray();
-                    int[] best = order[0];
-                    int bestGain = -1;
-                    foreach (var combo in order)
+                    // The control group keeps every other dimension at its default too (no user code, LTR,
+                    // direct), so it stays the baseline no layer may change. Every other case: seeded
+                    // shuffle, then greedy, taking the assignment that covers the most new pairs.
+                    int[] best = new int[Cardinalities.Length - TripleDims];
+                    if (triple.Any(static v => v != 0))
                     {
-                        int gain = Pairs(Concat(triple, combo)).Count(p => !covered.Contains(p));
-                        if (gain > bestGain) { best = combo; bestGain = gain; }
+                        var order = combos.OrderBy(_ => random.Next()).ToArray();
+                        int bestGain = -1;
+                        foreach (var combo in order)
+                        {
+                            int gain = Pairs(Concat(triple, combo)).Count(p => !covered.Contains(p));
+                            if (gain > bestGain) { best = combo; bestGain = gain; }
+                        }
                     }
 
                     var row = Concat(triple, best);

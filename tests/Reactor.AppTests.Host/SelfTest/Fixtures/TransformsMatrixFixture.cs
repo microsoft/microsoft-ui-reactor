@@ -76,7 +76,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
             var recorder = new TransformsMatrixRecorder(_caseHost, _freshHost, diagnostics);
             var observed = new TransformsLedger();
-            var usedKnown = new HashSet<KnownDifference>();
+            var usedKnown = new Dictionary<KnownDifference, int>();
             var times = new List<double>();
             foreach (var c in cases)
             {
@@ -85,7 +85,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
                 times.Add(sw.Elapsed.TotalSeconds);
                 if (sw.Elapsed.TotalSeconds > 8) Console.WriteLine($"# TransformsMatrix {c.Id}: slow case, {sw.Elapsed.TotalSeconds:F1} s");
                 observed.Cases[c.Id] = record;
-                CheckModel(c, recorder, known, usedKnown, mode);
+                CheckModel(c, recorder, known, usedKnown);
             }
 
             if (times.Count > 0)
@@ -102,7 +102,8 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
             if (everything)
             {
-                var stale = known.Where(k => !usedKnown.Contains(k)).ToList();
+                foreach (var k in known) Console.WriteLine($"# TransformsMatrix known rule {k}: {usedKnown.GetValueOrDefault(k)} disagreement(s)");
+                var stale = known.Where(k => !usedKnown.ContainsKey(k)).ToList();
                 H.Check("TransformsMatrix_KnownDifferencesCurrent", stale.Count == 0,
                     $"{stale.Count} entries in {TransformsLedger.KnownFile} match no model disagreement anymore. Remove them "
                     + "(and declare the ledger change they reflect): " + string.Join("; ", stale));
@@ -123,16 +124,25 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         return record;
     }
 
-    /// <summary>Observes a case; on a ledger mismatch, reruns it up to <see cref="Retries"/> times.</summary>
+    /// <summary>
+    /// Observes a case; on a ledger mismatch or an inconclusive oracle, reruns it up to
+    /// <see cref="Retries"/> times (§12.1 C.5). Record mode reruns until two observations agree or
+    /// one matches the committed ledger, at most twice, so an intended change costs two runs, not four.
+    /// </summary>
     private async Task<LedgerCase> Compare(string id, TransformsLedger committed, Mode mode, Func<Task<LedgerCase>> observe,
         TransformsMatrixRecorder? recorder = null)
     {
         committed.Cases.TryGetValue(id, out var expected);
         var record = await observe();
         var diffs = Differences(id, expected, record);
-        for (int i = 0; i < Retries && diffs.Count > 0 && expected is not null && (recorder?.Inconclusive.Count ?? 0) == 0; i++)
+        LedgerCase? previous = null;
+        for (int run = 1; run <= (mode == Mode.Record ? 2 : Retries); run++)
         {
-            Console.WriteLine($"# TransformsMatrix {id}: {diffs.Count} difference(s) from the ledger, rerun {i + 1}/{Retries}");
+            bool inconclusive = recorder?.Inconclusive.Count > 0;
+            if (!inconclusive && (diffs.Count == 0 || expected is null)) break;
+            if (mode == Mode.Record && !inconclusive && previous is not null && Differences(id, previous, record).Count == 0) break;
+            Console.WriteLine($"# TransformsMatrix {id}: {diffs.Count} difference(s) from the ledger{(inconclusive ? ", inconclusive" : "")}, rerun {run}");
+            previous = record;
             record = await observe();
             diffs = Differences(id, expected, record);
         }
@@ -152,21 +162,22 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         return record;
     }
 
-    private void CheckModel(MatrixCase c, TransformsMatrixRecorder recorder, List<KnownDifference> known, HashSet<KnownDifference> used, Mode mode)
+    /// <summary>Each model disagreement must be attributed by exactly one rule in the known file.</summary>
+    private void CheckModel(MatrixCase c, TransformsMatrixRecorder recorder, List<KnownDifference> known, Dictionary<KnownDifference, int> used)
     {
-        var unknown = new List<string>();
+        var problems = new List<string>();
         foreach (var (step, part) in recorder.ModelDifferences)
         {
-            var match = known.FirstOrDefault(k => k.Matches(c.Id, c.Dims, step, part));
-            if (match is null) unknown.Add($"{step}/{part}");
-            else used.Add(match);
+            var matches = known.Where(k => k.Matches(c.Id, c.Dims, step, part)).ToList();
+            if (matches.Count == 1) used[matches[0]] = used.GetValueOrDefault(matches[0]) + 1;
+            else if (matches.Count == 0) problems.Add($"{step}/{part} has no rule, for example {KnownDifference.Suggest(c.Id, step, part)}");
+            else problems.Add($"{step}/{part} matches {matches.Count} rules ({string.Join("; ", matches)}); narrow them so one applies");
         }
 
-        H.Check($"TransformsMatrix_{c.Id}_Model", unknown.Count == 0,
-            $"{c.Id} ({c.Dims}) disagrees with the composition model at {string.Join(", ", unknown)}. If main is wrong, add an "
-            + $"entry with the issue to {TransformsLedger.KnownFile}; if the model is wrong, fix CompositionModel. Never bend the model to fit main.");
+        H.Check($"TransformsMatrix_{c.Id}_Model", problems.Count == 0,
+            $"{c.Id} ({c.Dims}) disagrees with the composition model: {string.Join(" | ", problems)}. If main is wrong, attribute it in "
+            + $"{TransformsLedger.KnownFile} with the issue or §9 row; if the model is wrong, fix CompositionModel. Never bend the model to fit main.");
     }
-
     private void WriteLedger(TransformsLedger committed, TransformsLedger observed, bool everything)
     {
         var output = new TransformsLedger { Seed = MatrixGenerator.DefaultSeed };
@@ -205,11 +216,14 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         return null;
     }
 
-    /// <summary>The repo copy when there is one (record mode edits it), else the embedded copy.</summary>
+    /// <summary>
+    /// The repo copy when the host runs from a checkout, so an edited or re-recorded baseline is used
+    /// without a rebuild; else the copy embedded at build time.
+    /// </summary>
     private static string ReadBaseline(string file)
     {
         if (RepoRoot() is { } root && global::System.IO.Path.Combine(root, TransformsLedger.BaselineDirectory, file) is var path
-            && global::System.IO.File.Exists(path) && CurrentMode == Mode.Record)
+            && global::System.IO.File.Exists(path))
             return global::System.IO.File.ReadAllText(path);
         using var stream = typeof(TransformsMatrixFixture).Assembly.GetManifestResourceStream("TransformsMatrix." + file)
             ?? throw new InvalidOperationException($"Embedded baseline TransformsMatrix.{file} is missing from the host.");
@@ -341,6 +355,51 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         var b2 = await Shot();
         Check("PixelDiff", a.Diff(a) == 0 && a.Diff(b2) > 200, $"self={a.Diff(a)} changed={a.Diff(b2)}");
 
+        // Curve: a quarter of the way through, linear reads 0.25 and the Fluent ease about 0.05.
+        void SeekToQuarter(CompositionEasingFunction easing)
+        {
+            var b = Rect();
+            var v = ElementCompositionPreview.GetElementVisual(b);
+            var a = v.Compositor.CreateVector3KeyFrameAnimation();
+            a.InsertKeyFrame(1, new Vector3(2, 2, 1), easing);
+            a.Duration = TimeSpan.FromMilliseconds(TransformsMatrixRecorder.LongMs);
+            v.StartAnimation("Scale", a);
+            var c = v.TryGetAnimationController("Scale")!;
+            c.Pause();
+            c.Progress = 0.25f;
+        }
+
+        SeekToQuarter(compositor.CreateLinearEasingFunction());
+        double linear = Width(await Shot());
+        SeekToQuarter(compositor.CreateCubicBezierEasingFunction(new Vector2(0.8f, 0), new Vector2(0.2f, 1)));
+        double fluent = Width(await Shot());
+        Check("Curve", Math.Abs(linear - 0.25) < 0.06 && fluent < 0.1, $"linear={linear:F2} fluent={fluent:F2}");
+
+        // Pool residue: a taken visual with an implicit key and a running animation reads as such.
+        var dirty = Rect();
+        ElementPool.MarkCompositorTainted(dirty);
+        var dv = ElementCompositionPreview.GetElementVisual(dirty);
+        var dkey = compositor.CreateScalarKeyFrameAnimation();
+        dkey.InsertExpressionKeyFrame(1, "this.FinalValue");
+        dkey.Duration = TimeSpan.FromMilliseconds(TransformsMatrixRecorder.LongMs);
+        dkey.Target = "Opacity";
+        var dkeys = compositor.CreateImplicitAnimationCollection();
+        dkeys["Opacity"] = dkey;
+        dv.ImplicitAnimations = dkeys;
+        dv.Opacity = 0.8f;
+        await TransformsMatrixRecorder.Frames(2);
+        string residueDirty = TransformsMatrixRecorder.Residuals(dirty);
+        string residueClean = TransformsMatrixRecorder.Residuals(Rect());
+        Check("PoolResidue", residueDirty == "keys=Opacity anims=Opacity" && residueClean == "keys=- anims=-",
+            $"dirty='{residueDirty}' clean='{residueClean}'");
+        dv.ImplicitAnimations = null;
+
+        // Layout Offset: a .LayoutAnimation() move exposes an Offset controller that seeks like any
+        // other channel; a plain move has none and lands at once.
+        var animatedMove = await LayoutMove(animated: true);
+        var plainMove = await LayoutMove(animated: false);
+        Check("LayoutOffset", animatedMove.Mid > 0.05 && animatedMove.Mid < 0.95 && animatedMove.End > 0.9
+            && plainMove.Mid is double.NaN && plainMove.End > 0.9, $"animated={animatedMove} plain={plainMove}");
         // Diagnostics: a warning emitted during a step is seen, and nothing is reported otherwise.
         diagnostics.Reset();
         string quiet = diagnostics.Describe();
@@ -355,8 +414,51 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         _caseHost.Child = null;
         return ok;
     }
-}
+    /// <summary>
+    /// A 20 px margin move: the move's progress with its Offset controller seeked to the middle (NaN
+    /// when there's no controller), and the progress once it has settled.
+    /// </summary>
+    private async Task<(double Mid, double End)> LayoutMove(bool animated)
+    {
+        using var reconciler = new Reconciler();
+        Element Stage(double left)
+        {
+            Element target = VStack().Width(Model.Width).Height(Model.Height).Background("#FFFF0000")
+                .HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Top).Margin(left, Model.Top, 0, 0);
+            if (animated) target = target.LayoutAnimation(TimeSpan.FromMilliseconds(TransformsMatrixRecorder.MotionMs));
+            return VStack(0, target).Width(Model.StageSize).Height(Model.StageSize).HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Top);
+        }
 
+        var first = Stage(Model.Left);
+        var stage = (Panel)reconciler.Mount(first, static () => { })!;
+        _caseHost.Child = stage;
+        try
+        {
+            await TransformsMatrixRecorder.Settle();
+            reconciler.Update(first, Stage(Model.Left + Model.LayoutShift), stage, static () => { });
+            await TransformsMatrixRecorder.Frames(2);
+            double Moved(Snap s) => s.RedBox() is { } b ? (b.X0 - Model.Left) / Model.LayoutShift : double.NaN;
+            double mid = double.NaN;
+            if (ElementCompositionPreview.GetElementVisual(stage.Children[0]).TryGetAnimationController("Offset") is { } controller)
+            {
+                controller.Pause();
+                controller.Progress = 0.5f;
+                await TransformsMatrixRecorder.Frames(3);
+                mid = Moved(await Snap.CaptureAsync(_caseHost));
+                controller.Resume();
+            }
+
+            await Task.Delay(TransformsMatrixRecorder.MotionMs + 300);
+            await TransformsMatrixRecorder.Frames(2);
+            return (mid, Moved(await Snap.CaptureAsync(_caseHost)));
+        }
+        finally
+        {
+            reconciler.UnmountChild(stage);
+            _caseHost.Child = null;
+        }
+    }
+}
 /// <summary>
 /// §12.1 E pool soak: seeded random churn of elements with random features. After every step that
 /// returned controls to the pool, plain probe elements rent them and must pass the reset invariants:

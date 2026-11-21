@@ -126,9 +126,9 @@ internal static class CompositionModel
 
     /// <summary>
     /// Expected green (BGRA byte) at the target's centre: red at opacity <paramref name="opacity"/>
-    /// over white, where the change step's alternate background has green 0x30.
+    /// over white, where the change step's alternate background has green 0x20.
     /// </summary>
-    public static double Green(double opacity, bool altBackground) => 255 * (1 - opacity) + (altBackground ? 0x30 : 0) * opacity;
+    public static double Green(double opacity, bool altBackground) => 255 * (1 - opacity) + (altBackground ? 0x20 : 0) * opacity;
 
     public static float Opacity(MatrixStep step) =>
         step is MatrixStep.Mount or MatrixStep.RentPlain or MatrixStep.RentTransformed ? OpacityA : OpacityB;
