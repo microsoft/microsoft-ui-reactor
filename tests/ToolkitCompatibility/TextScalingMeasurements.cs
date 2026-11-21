@@ -1,5 +1,14 @@
 namespace ToolkitCompatibility;
 
+internal enum TextScalingFailureKind { Trimmed, TextOverflow, AncestorOverflow }
+
+internal sealed class TextScalingFailureException(
+    string role, TextScalingFailureKind kind, string message) : InvalidOperationException(message)
+{
+    internal string Role { get; } = role;
+    internal TextScalingFailureKind Kind { get; } = kind;
+}
+
 internal static class TextScalingMeasurements
 {
     private const double LayoutTolerance = 1;
@@ -15,7 +24,8 @@ internal static class TextScalingMeasurements
     {
         Require(!string.IsNullOrWhiteSpace(text), $"{role}: text is empty.");
         Require(scaleEnabled, $"{role}: OS text scaling is disabled on the TextBlock.");
-        Require(!trimmed, $"{role}: native text is trimmed.");
+        if (trimmed)
+            throw new TextScalingFailureException(role, TextScalingFailureKind.Trimmed, $"{role}: native text is trimmed.");
     }
 
     internal static double ProbeWidth(string role, double actualWidth, double desiredWidth, double slotWidth,
@@ -35,8 +45,9 @@ internal static class TextScalingMeasurements
     {
         Require(Positive(width) && Positive(height) && Positive(requiredWidth) && Positive(requiredHeight),
             $"{role}: invalid/empty layout or full-text measurement ({width}x{height}, required {requiredWidth}x{requiredHeight}).");
-        Require(requiredWidth <= width + LayoutTolerance && requiredHeight <= height + LayoutTolerance,
-            $"{role}: full text requires {requiredWidth}x{requiredHeight}, allocated {width}x{height}.");
+        if (requiredWidth > width + LayoutTolerance || requiredHeight > height + LayoutTolerance)
+            throw new TextScalingFailureException(role, TextScalingFailureKind.TextOverflow,
+                $"{role}: full text requires {requiredWidth}x{requiredHeight}, allocated {width}x{height}.");
     }
 
     internal static void RequireContained(string role, double x, double y, double width, double height,
@@ -45,9 +56,10 @@ internal static class TextScalingMeasurements
         Require(double.IsFinite(x) && double.IsFinite(y) && Positive(width) && Positive(height) &&
             Positive(ancestorWidth) && Positive(ancestorHeight),
             $"{role}: invalid/empty ancestor geometry.");
-        Require(x >= -LayoutTolerance && y >= -LayoutTolerance &&
-            x + width <= ancestorWidth + LayoutTolerance && y + height <= ancestorHeight + LayoutTolerance,
-            $"{role}: text bounds ({x},{y},{width},{height}) exceed ancestor {ancestorWidth}x{ancestorHeight}.");
+        if (x < -LayoutTolerance || y < -LayoutTolerance ||
+            x + width > ancestorWidth + LayoutTolerance || y + height > ancestorHeight + LayoutTolerance)
+            throw new TextScalingFailureException(role, TextScalingFailureKind.AncestorOverflow,
+                $"{role}: text bounds ({x},{y},{width},{height}) exceed ancestor {ancestorWidth}x{ancestorHeight}.");
     }
 
     private static bool Positive(double value) => double.IsFinite(value) && value > 0;

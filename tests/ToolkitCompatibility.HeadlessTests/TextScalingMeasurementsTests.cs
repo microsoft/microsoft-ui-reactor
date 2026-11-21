@@ -36,7 +36,7 @@ public sealed class TextScalingMeasurementsTests
     public void Text_RejectsEmptyDisabledOrTrimmedContent(string text, bool scaling, bool trimmed)
     {
         TextScalingMeasurements.RequireText("Description", "Visible description", true, false);
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.ThrowsAny<InvalidOperationException>(() =>
             TextScalingMeasurements.RequireText("Description", text, scaling, trimmed));
     }
 
@@ -83,7 +83,7 @@ public sealed class TextScalingMeasurementsTests
     {
         TextScalingMeasurements.RequireFits("Header", 100, 40, 100, 40);
         TextScalingMeasurements.RequireFits("Header", 100, 40, 101, 41);
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.ThrowsAny<InvalidOperationException>(() =>
             TextScalingMeasurements.RequireFits("Header", width, height, requiredWidth, requiredHeight));
     }
 
@@ -107,7 +107,29 @@ public sealed class TextScalingMeasurementsTests
     {
         TextScalingMeasurements.RequireContained("Description", 10, 10, 80, 20, 100, 40);
         TextScalingMeasurements.RequireContained("Description", -1, -1, 102, 42, 100, 40);
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.ThrowsAny<InvalidOperationException>(() =>
             TextScalingMeasurements.RequireContained("Description", x, y, width, height, ancestorWidth, ancestorHeight));
+    }
+
+    [Fact]
+    public void NativeNegativeControls_DistinguishExpectedFailuresFromInvalidMeasurements()
+    {
+        var trimmed = Assert.Throws<TextScalingFailureException>(() =>
+            TextScalingMeasurements.RequireText("Description", "Visible description", true, true));
+        Assert.Equal(TextScalingFailureKind.Trimmed, trimmed.Kind);
+        Assert.Equal("Description", trimmed.Role);
+
+        var overflow = Assert.Throws<TextScalingFailureException>(() =>
+            TextScalingMeasurements.RequireFits("Header", 95, 13, 95, 26));
+        Assert.Equal(TextScalingFailureKind.TextOverflow, overflow.Kind);
+        Assert.Equal("Header", overflow.Role);
+
+        var ancestor = Assert.Throws<TextScalingFailureException>(() =>
+            TextScalingMeasurements.RequireContained("Header/ContentPresenter", 0, 0, 95, 26, 95, 13));
+        Assert.Equal(TextScalingFailureKind.AncestorOverflow, ancestor.Kind);
+        Assert.Equal("Header/ContentPresenter", ancestor.Role);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            TextScalingMeasurements.RequireFits("Header", 95, 0, 95, 26));
     }
 }

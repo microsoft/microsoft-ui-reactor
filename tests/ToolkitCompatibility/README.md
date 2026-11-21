@@ -124,6 +124,18 @@ sibling behavior, arbitrary rich text, long-content stress, or other controls.
 The existing short core strings are the measured scope. Captures require human
 review. A build or headless geometry test is **not** WinUI/runtime acceptance.
 
+After the positive checks, the same bounded scenario runs three native negative
+controls. It halves each text slot's height in turn, verifies a nonzero native
+size reduction, and requires a role-matched trimming, text-overflow or
+ancestor-overflow failure. Invalid measurements and unrelated exceptions do not
+count. It then applies a SettingsCard ancestor clip cutting through the header
+and requires the exact `not-implemented` explicit-clip outcome, not a pass.
+Each mutation restores the original dependency-property value (including unset)
+in `finally`, checks the original text/card dimensions and reruns the positive
+oracle. Both text slots are rechecked after all three rejections. The TAP log
+records the perturbations, observed reasons and restored baseline; the PNG is
+the unmodified positive capture, not a screenshot of the negative controls.
+
 Headless regression tests compile the same measurement guards without WinUI,
 WinRT initialization, or the compatibility consumer. The project is included in
 solution builds and runs in the PR CI Unit Tests job:
@@ -136,9 +148,9 @@ Later, on an explicitly approved dedicated host/VM, run the SettingsCard lane at
 100% and confirm `blocked/approval`, then at a real scale above 100% (including
 the chosen maximum acceptance scale). Verify nonzero full-text measurements,
 the exact two checked slots, ancestor bounds, stable OS scale, and the PNG.
-Use a temporary undersized description/header layout and an ancestor clip as
-negative controls; the former must fail and explicit clip geometry must block,
-never pass. Confirm an unsupported control remains `blocked/not-implemented`.
+Verify all three native negative-control reasons and the final restored positive
+baseline in that same run. Explicit clip geometry must remain blocked, never
+silently accepted. Confirm an unsupported control remains `blocked/not-implemented`.
 Repeat under each deployment/runtime being claimed. High-contrast captures still
 require real OS high contrast. Any setting changes and restoration need their
 own authorization; these instructions do not grant it.

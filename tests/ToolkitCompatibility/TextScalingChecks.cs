@@ -31,6 +31,100 @@ internal static class TextScalingChecks
         control.UpdateLayout();
         CheckText(headers[0], "Header");
         CheckText(description, "Description");
+        int rejected = CheckUndersized(card, headers[0], "Header") ? 1 : 0;
+        rejected += CheckUndersized(card, description, "Description") ? 1 : 0;
+        rejected += CheckAncestorClip(card, headers[0]) ? 1 : 0;
+        Program.Check(rejected == 3, $"Expected three native negative-control rejections, observed {rejected}.");
+        CheckText(headers[0], "Header");
+        CheckText(description, "Description");
+        Program.Results.Note("Text-scale native negative controls=3; final positive Header/Description baseline restored.");
+    }
+
+    private static bool CheckUndersized(Wct.SettingsCard card, Native.TextBlock text, string role)
+    {
+        var original = text.ReadLocalValue(FrameworkElement.HeightProperty);
+        var before = new Size(text.ActualWidth, text.ActualHeight);
+        var cardBefore = new Size(card.ActualWidth, card.ActualHeight);
+        Program.Check(before.Height > 4, $"{role}: baseline is too small to establish a nonzero undersizing control.");
+        bool rejected = false;
+        try
+        {
+            text.Height = before.Height / 2;
+            card.UpdateLayout();
+            var slot = Native.Primitives.LayoutInformation.GetLayoutSlot(text);
+            double constrainedHeight = Math.Min(text.ActualHeight, slot.Height - text.Margin.Top - text.Margin.Bottom);
+            Program.Results.Note($"Text-scale negative {role}-undersized: baseline-height={before.Height}; " +
+                $"requested-height={text.Height}; actual-height={text.ActualHeight}; slot={slot}; constrained-height={constrainedHeight}");
+            Program.Check(double.IsFinite(constrainedHeight) && constrainedHeight > 0 && constrainedHeight < before.Height - 2,
+                $"{role}: native undersizing was not established; no rejection may be claimed.");
+            try { CheckText(text, role); }
+            catch (TextScalingFailureException ex) when (
+                (ex.Role == role || ex.Role.StartsWith(role + "/", StringComparison.Ordinal)) &&
+                ex.Kind is TextScalingFailureKind.Trimmed or TextScalingFailureKind.TextOverflow or TextScalingFailureKind.AncestorOverflow)
+            {
+                rejected = true;
+                Program.Results.Note($"Text-scale negative {role}-undersized: expected text/ancestor overflow or trimming; observed={ex.Kind}; {ex.Message}");
+            }
+        }
+        finally
+        {
+            RestoreLocalValue(text, FrameworkElement.HeightProperty, original);
+            card.UpdateLayout();
+            Program.Check(Equals(text.ReadLocalValue(FrameworkElement.HeightProperty), original),
+                $"{role}: original Height value source was not restored.");
+            CheckRestored(card, text, role, before, cardBefore);
+        }
+        return rejected;
+    }
+
+    private static bool CheckAncestorClip(Wct.SettingsCard card, Native.TextBlock header)
+    {
+        var original = card.ReadLocalValue(UIElement.ClipProperty);
+        var before = new Size(header.ActualWidth, header.ActualHeight);
+        var cardBefore = new Size(card.ActualWidth, card.ActualHeight);
+        var bounds = header.TransformToVisual(card).TransformBounds(new Rect(0, 0, before.Width, before.Height));
+        var clip = new RectangleGeometry { Rect = new Rect(0, 0, card.ActualWidth, bounds.Y + bounds.Height / 2) };
+        Program.Check(clip.Rect.Height > 0 && clip.Rect.Bottom < bounds.Bottom - 1,
+            "Header: ancestor clip does not cut the measured header bounds.");
+        bool rejected = false;
+        try
+        {
+            card.Clip = clip;
+            card.UpdateLayout();
+            Program.Check(ReferenceEquals(card.Clip, clip), "Header: ancestor clip was not applied.");
+            Program.Results.Note($"Text-scale negative Header-ancestor-clip: header-bounds={bounds}; clip={clip.Rect}");
+            try { CheckText(header, "Header"); }
+            catch (ScenarioBlockedException ex) when (ex.ReasonKind == "not-implemented" &&
+                ex.Message == "Header: explicit clip geometry on SettingsCard is not covered by the rectangular layout oracle.")
+            {
+                rejected = true;
+                Program.Results.Note($"Text-scale negative Header-ancestor-clip: expected=not-implemented/explicit-clip; observed={ex.ReasonKind}; {ex.Message}");
+            }
+        }
+        finally
+        {
+            RestoreLocalValue(card, UIElement.ClipProperty, original);
+            card.UpdateLayout();
+            Program.Check(Equals(card.ReadLocalValue(UIElement.ClipProperty), original),
+                "Header: original ancestor Clip value source was not restored.");
+            CheckRestored(card, header, "Header", before, cardBefore);
+        }
+        return rejected;
+    }
+
+    private static void RestoreLocalValue(DependencyObject target, DependencyProperty property, object original)
+    {
+        if (ReferenceEquals(original, DependencyProperty.UnsetValue)) target.ClearValue(property);
+        else target.SetValue(property, original);
+    }
+
+    private static void CheckRestored(Wct.SettingsCard card, Native.TextBlock text, string role, Size before, Size cardBefore)
+    {
+        Program.Check(Math.Abs(text.ActualWidth - before.Width) < 0.01 && Math.Abs(text.ActualHeight - before.Height) < 0.01 &&
+            Math.Abs(card.ActualWidth - cardBefore.Width) < 0.01 && Math.Abs(card.ActualHeight - cardBefore.Height) < 0.01,
+            $"{role}: positive baseline dimensions were not restored after the negative control.");
+        CheckText(text, role);
+        Program.Results.Note($"Text-scale restored {role}: actual={text.ActualWidth}x{text.ActualHeight}; card={card.ActualWidth}x{card.ActualHeight}");
     }
 
     private static void CheckText(Native.TextBlock text, string role)
