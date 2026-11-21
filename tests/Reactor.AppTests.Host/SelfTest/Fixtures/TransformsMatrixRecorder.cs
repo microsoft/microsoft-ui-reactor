@@ -95,10 +95,12 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             await Step(record, MatrixStep.AddFeature, async _ => { Render(StageOf(Declare(MatrixStep.AddFeature))); await Settle(); }, rest: true);
             await Step(record, MatrixStep.RemoveModifier, async f =>
             {
+                var before = Target;
                 Render(StageOf(Declare(MatrixStep.RemoveModifier)));
                 await Settle();
-                // #1626: a removed transition must not stay installed, idle until the next write.
-                if (Target is { } t) f["residue"] = TransitionResidue(t);
+                // #1626: a removed transition must not stay installed, idle until the next write. A
+                // replaced control (a keyed Memo whose key changed) never had it, so it says nothing.
+                if (Target is { } t) f["residue"] = ReferenceEquals(t, before) ? TransitionResidue(t) : "remounted";
             }, rest: true);
             if (!await Step(record, MatrixStep.Unmount, async f =>
             {

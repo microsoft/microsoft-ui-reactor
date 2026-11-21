@@ -778,7 +778,7 @@ read it (spec 066 §5.5), and declares the ledger change. Layer 5 adds `Transfor
 holds the channel), `motion` (per changed channel: `ANIMATING`, `JUMPED`, `NOT-APPLIED`, `HELD`),
 `curve` (progress at a quarter of the time, in steps of 0.2: linear reads 0.2, the Fluent
 (0.8,0,0.2,1) ease 0.0, the compositor's default ease-out 0.6), `running` (animations still going
-when the step settled), `residue` (transitions still installed after `removeModifier`, #1626),
+when the step settled), `residue` (transitions still installed after `removeModifier`, #1626, or `remounted` when a keyed `Memo` replaced the control),
 `hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
 Motion is controller-driven, layout `Offset` included: each new animation is paused and seeked to
 its start, 25%, 50% and 100%, measured from where it actually starts, so no verdict depends on
