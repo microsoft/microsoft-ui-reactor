@@ -36,7 +36,7 @@ internal sealed class TransformsLedger
     public const string ScreenField = "screen";
 
     /// <summary>
-    /// A run without an interactive desktop can't see the screen (hosted CI runners can't), so a skip
+    /// A run without an interactive desktop (a locked or disconnected session) can't see the screen, so a skip
     /// matches any value either way, and recording replaces a recorded skip with a real value.
     /// </summary>
     public const string ScreenSkipped = "skip";

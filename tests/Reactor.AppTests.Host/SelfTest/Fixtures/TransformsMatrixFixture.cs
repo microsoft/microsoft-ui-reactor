@@ -443,9 +443,10 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         var plainMove = await LayoutMove(animated: false);
         Check("LayoutOffset", animatedMove.Mid > 0.05 && animatedMove.Mid < 0.95 && animatedMove.End > 0.9
             && plainMove.Mid is double.NaN && plainMove.End > 0.9, $"animated={animatedMove} plain={plainMove}");
-        // Screen (§12.2): with an interactive desktop, PrintWindow must see a plain facade Translation
-        // write, and must reproduce Q1f, where it doesn't show one that RenderTargetBitmap reports
-        // applied (spike log transitions-screen.txt: NOT-APPLIED on screen, JUMPED under RTB). Drag cases then record the screen pose; without a desktop they record "skip".
+        // Screen (§12.2): with an interactive desktop, PrintWindow must show a facade Translation write
+        // and then its reset. Q1f, where the screen drops a write that RenderTargetBitmap reports
+        // applied, reproduced over RDP in the spike but not on hosted runners, so it's logged as a
+        // platform fact rather than gating the oracle. Drag cases then record the screen pose; without a desktop they record "skip".
         _screen = null;
         _caseHost.Child = canvas;
         Rect();
@@ -456,6 +457,8 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             await Shot();
             r.Translation = new Vector3(100, 0, 0);
             var applied = await ReadTranslation();
+            r.Translation = Vector3.Zero;
+            var reset = await ReadTranslation();
             // Q1f as the spike ran it: visual taken, translation enabled, an implicit "Translation" key, rendered.
             r = Rect();
             await Shot();
@@ -472,8 +475,10 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             r.Translation = new Vector3(100, 0, 0);
             var q1f = await ReadTranslation(TransformsMatrixRecorder.MotionMs + 300);
             tv.ImplicitAnimations = null;
-            Check("Screen", applied.Rtb > 0.9 && applied.Screen > 0.9 && q1f.Rtb > 0.9 && q1f.Screen < 0.1,
-                $"plain rtb={applied.Rtb:F2} screen={applied.Screen:F2}, Q1f rtb={q1f.Rtb:F2} screen={q1f.Screen:F2} (expected 1/1 and 1/0)");
+            Check("Screen", applied.Rtb > 0.9 && applied.Screen > 0.9 && reset.Rtb < 0.1 && reset.Screen < 0.1,
+                $"written rtb={applied.Rtb:F2} screen={applied.Screen:F2}, reset rtb={reset.Rtb:F2} screen={reset.Screen:F2} (expected 1/1, then 0/0)");
+            Console.WriteLine($"# TransformsMatrix screen: Q1f rtb={q1f.Rtb:F2} screen={q1f.Screen:F2} "
+                + (q1f.Rtb > 0.9 && q1f.Screen < 0.1 ? "(reproduced: drag cases need the screen pose)" : "(not reproduced on this desktop)"));
             _screen = target => TransformsMatrixProbes.Screen(target, H);
         }
         else
