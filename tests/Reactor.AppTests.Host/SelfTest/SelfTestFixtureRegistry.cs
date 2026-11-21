@@ -991,6 +991,7 @@ internal static class SelfTestFixtureRegistry
         ("AnimCombo_InteractionSetup", static harness => new AnimationCombinationTests.InteractionStatesSetup(harness)),
         ("AnimCombo_KeyframesOnMount", static harness => new AnimationCombinationTests.KeyframesOnMount(harness)),
         ("AnimCombo_KeyframesTranslationChannel", static harness => new AnimationCombinationTests.KeyframesTranslationChannel(harness)),
+        ("AnimCombo_KeyframesUnmountStopsRotation", static harness => new AnimationCombinationTests.KeyframesUnmountStopsRotation(harness)),
         ("AnimCombo_StaggerOnContainer", static harness => new AnimationCombinationTests.StaggerOnContainer(harness)),
         // Animation combination tests — pairs
         ("AnimCombo_AnimatePlusLayout", static harness => new AnimationCombinationTests.AnimatePlusLayout(harness)),

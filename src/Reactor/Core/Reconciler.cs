@@ -6446,9 +6446,12 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name).
+    /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name),
+    /// and the controller of each channel the entry started, by compositor property. An
+    /// unchanged trigger skips playback, so the started channels can differ from the entry's
+    /// latest definition.
     /// </summary>
-    private static readonly Dictionary<(UIElement, string), object?> _keyframeTriggerValues = new();
+    private static readonly Dictionary<(UIElement, string), (object? Trigger, Dictionary<string, AnimationController>? Started)> _keyframeTriggerValues = new();
 
     internal readonly record struct KeyframeChannelOwner(
         KeyframeEntry[] Scope, KeyframeEntry Entry, AnimationController? DeferredController = null);
@@ -6484,8 +6487,8 @@ public sealed partial class Reconciler : IDisposable
         {
             var key = (uie, entry.Name);
             bool hasPrevious = _keyframeTriggerValues.TryGetValue(key, out var previous);
-            bool changed = KeyframeTriggerChanged(hasPrevious, previous, entry.Trigger);
-            _keyframeTriggerValues[key] = entry.Trigger;
+            bool changed = KeyframeTriggerChanged(hasPrevious, previous.Trigger, entry.Trigger);
+            _keyframeTriggerValues[key] = (entry.Trigger, previous.Started);
             if (!changed) continue;
 
             var def = entry.Definition;
@@ -6580,8 +6583,14 @@ public sealed partial class Reconciler : IDisposable
             }
 
             // Start the animation group via Visual
+            var started = previous.Started ?? new Dictionary<string, AnimationController>(4);
             foreach (CompositionAnimation anim in group)
+            {
                 visual.StartAnimation(anim.Target, anim);
+                if (visual.TryGetAnimationController(anim.Target) is { } controller)
+                    started[anim.Target] = controller;
+            }
+            _keyframeTriggerValues[key] = (entry.Trigger, started);
 
             if (properties != default && uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
                 TrackKeyframeChannelOwners(state, properties & state.CompositionModifierProperties,
@@ -6626,7 +6635,8 @@ public sealed partial class Reconciler : IDisposable
             {
                 var nameKey = owner.Entry.Name;
                 var key = (uie, nameKey);
-                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var trigger);
+                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var triggerState);
+                var trigger = triggerState.Trigger;
                 bool retained = false;
                 bool replayed = false;
                 // Playback reads and advances the trigger for every matching entry in order.
@@ -6661,24 +6671,66 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
+    // ownedOnly stops only the channels whose running animation is still the one these entries
+    // started. A retained control passes true, so removing keyframes doesn't stop an animation
+    // another feature started on that channel. Unmount passes false and stops every channel a
+    // keyframe can animate. Entries whose name is in retained stay, and their playback decides
+    // what keeps running.
+    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool ownedOnly = false,
+        KeyframeEntry[]? retained = null)
     {
+        Visual? owner = null;
+        bool noCompositor = false;
         foreach (var entry in entries)
-            _keyframeTriggerValues.Remove((uie, entry.Name));
+        {
+            if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
+            if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)
+                || !ownedOnly || noCompositor || state.Started is not { } started)
+                continue;
+            // Started controllers mean the visual was already handed out. Look it up without
+            // moving facade transforms, which the caller does after the handler's setters.
+            try { owner ??= ElementCompositionPreview.GetElementVisual(uie); }
+            catch { noCompositor = true; continue; }
+            foreach (var (property, controller) in started)
+                StopKeyframeTarget(owner, property, controller);
+        }
+        if (ownedOnly) return;
 
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
-        // We stop all four possible targets since KeyframeAnimationDef doesn't track which
-        // targets were started — StopAnimation is a no-op if no animation is running on that property.
+        // StopAnimation is a no-op on an existing property with no running animation.
+        Visual visual;
+        try { visual = AnimationHelper.GetElementVisual(uie); }
+        catch { return; /* No compositor (e.g. unit tests) */ }
+
+        // Each stop is independent, so one failure can't leave a later channel running (#1641).
+        StopKeyframeTarget(visual, "Opacity");
+        StopKeyframeTarget(visual, "Scale");
+        // Translation is a property-set entry that exists only once translation was enabled.
+        // StopAnimation on a missing entry throws ArgumentException (spec 066 §7.3 step 1).
+        if (visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
+            StopKeyframeTarget(visual, "Translation");
+        StopKeyframeTarget(visual, "RotationAngle");
+    }
+
+    private static void StopKeyframeTarget(Visual visual, string property, AnimationController? owned = null)
+    {
         try
         {
-            var visual = AnimationHelper.GetElementVisual(uie);
-            visual.StopAnimation("Opacity");
-            visual.StopAnimation("Scale");
-            visual.StopAnimation("Translation");
-            visual.StopAnimation("RotationAngle");
+            if (owned is null || Equals(visual.TryGetAnimationController(property), owned))
+                visual.StopAnimation(property);
         }
-        catch { /* No compositor (e.g. unit tests) */ }
+        catch { /* One failed stop must not skip the others. */ }
     }
+
+    private static bool HasKeyframeEntry(KeyframeEntry[] entries, string name)
+    {
+        foreach (var entry in entries)
+            if (entry.Name == name) return true;
+        return false;
+    }
+
+    private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)
+        => shared is null || ReferenceEquals(own, shared) ? own : own is null ? shared : [.. own, .. shared];
 
     // ════════════════════════════════════════════════════════════════
     //  Scroll-linked expression animation (.ScrollLinked() modifier)

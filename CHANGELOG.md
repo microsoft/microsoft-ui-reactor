@@ -146,6 +146,17 @@ Conventions for contributors:
 
 ### Fixed
 
+- Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
+  `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
+  channel inside one `try`, and stopping `Translation` throws when translation was never
+  enabled, so the rotation stop was skipped and the animation kept running on the control.
+  Each stop is now independent, and `Translation` is stopped only when the property exists.
+  When an update removes keyframes, or some of their entries, from a control that stays
+  mounted, it stops a channel only while the animation running there is still one a removed
+  entry started, and it does so before the control's handler and modifiers run. Animations
+  that other features started, including a Flyout target's own keyframes and modifier
+  animations, keep running (spec 066 §7.3, issue #1641).
+
 - **Resolving a theme resource for the theme the app is not using returns that theme's
   brush and no longer changes the brush for the whole app (issue #1534).** WinUI creates a
   theme dictionary entry the first time it is read, using the app's theme. Reactor read the
