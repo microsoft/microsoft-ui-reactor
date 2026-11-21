@@ -17,7 +17,7 @@ namespace Microsoft.UI.Reactor.Tests.HotReload;
 /// value-swap that wires the copier into a live context, gated on an active
 /// update pass.</item>
 /// </list>
-/// Real Edit-and-Continue edits a type in place (same <see cref="System.Type"/>
+/// Real Edit-and-Continue edits a type in place (same <see cref="global::System.Type"/>
 /// identity, a field added/removed), so passing the same type as "updated" is a
 /// faithful headless approximation of the migration path.
 /// </summary>

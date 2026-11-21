@@ -38,8 +38,8 @@ internal readonly record struct ModifierGateArgument(string? Slot, string Identi
 /// assertion meant to catch a mis-widened gate. Issue #1062.
 /// </para>
 /// <para>
-/// <b>Prefer the typed property.</b> <see cref="ModifierInfo.ControlGate"/> is the authority and
-/// comparing its <em>contents</em> is immune to the naming structure — that is what
+/// <b>Prefer the typed property.</b> <see cref="Analyzers.ModifierInfo.ControlGate"/> is the authority
+/// and comparing its <em>contents</em> is immune to the naming structure — that is what
 /// <see cref="ModifierTableIntegrityTests"/> does, and why those 20 facts were never exposed.
 /// Reach for this reader only when the artifact really is text, and then match with
 /// <see cref="AnchoredPattern(string, string)"/>, never a bare <c>Contains</c>.
