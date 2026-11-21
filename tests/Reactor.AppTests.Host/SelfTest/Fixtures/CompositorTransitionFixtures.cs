@@ -641,12 +641,13 @@ internal static class CompositorTransitionFixtures
             => ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is { } keys
                 && keys.TryGetValue(key, out var anim) && anim is KeyFrameAnimation keyFrame ? keyFrame.DelayTime : null;
 
-        private static BorderElement Probe(string key, double opacity, bool scale = false)
+        private static BorderElement Probe(string? key, double opacity, bool scale = false)
         {
             var child = Target().Opacity(opacity).OpacityTransition(Long);
             if (scale) child = child.Scale(0.9f).ScaleTransition(new Vector3Transition { Duration = Long });
             string probed = scale ? "Scale" : "Opacity";
-            return child.Set(b => _seen = KeyDelay(b, probed)).WithKey(key);
+            child = child.Set(b => _seen = KeyDelay(b, probed));
+            return key is null ? child : child.WithKey(key);
         }
 
         private static Element StaggeredPanel(TimeSpan step, params Element[] children) => VStack(children).Stagger(step);
@@ -682,6 +683,24 @@ internal static class CompositorTransitionFixtures
             H.Check(Name + "_OtherKeyKeepsDelay", KeyDelay(second, "RotationAxis") == TimeSpan.FromMilliseconds(300)
                 && KeyDelay(second, "Opacity") == TimeSpan.Zero,
                 $"rotationAxis={KeyDelay(second, "RotationAxis")} opacity={KeyDelay(second, "Opacity")}");
+
+            // A child wrapped in a ModifiedElement, whose opacity the wrapper declares.
+            static Element Wrapped(double opacity) => new ModifiedElement(
+                Target().OpacityTransition(Long).Set(b => _seen = KeyDelay(b, "Opacity")).WithKey("w"),
+                TextBlock("").Opacity(opacity).Modifiers!).WithKey("w");
+            await Update(StaggeredPanel(step, Target().OpacityTransition(Long).WithKey("a"), Wrapped(1)));
+            _seen = null;
+            await Update(StaggeredPanel(step * 2, Target().OpacityTransition(Long).WithKey("a"), Wrapped(0.9)));
+            H.Check(Name + "_WrappedChild", _seen == step * 2, $"seen={_seen}");
+
+            // Unkeyed siblings sharing one element record each get the delay of their own position;
+            // the second runs its setter last.
+            var shared = Probe(null, 1);
+            await Update(StaggeredPanel(step, shared, shared));
+            shared = Probe(null, 0.9);
+            _seen = null;
+            await Update(StaggeredPanel(step * 2, shared, shared));
+            H.Check(Name + "_RepeatedSibling", _seen == step * 2, $"seen={_seen}");
         }
     }
 

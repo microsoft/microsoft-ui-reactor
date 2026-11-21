@@ -4489,21 +4489,6 @@ public sealed partial class Reconciler : IDisposable
         Element[] oldChildren, Element[] newChildren,
         PanelChildCollection childCollection, Action requestRerender, UIElement? parentControl)
     {
-        if (_updateStagger is { } stagger && parentControl is not null && ReferenceEquals(stagger.Panel, parentControl))
-        {
-            var previousChildren = stagger.Children;
-            stagger.Children = newChildren;
-            try { ReconcileChildrenTracedCore(oldChildren, newChildren, childCollection, requestRerender, parentControl); }
-            finally { stagger.Children = previousChildren; }
-            return;
-        }
-        ReconcileChildrenTracedCore(oldChildren, newChildren, childCollection, requestRerender, parentControl);
-    }
-
-    private void ReconcileChildrenTracedCore(
-        Element[] oldChildren, Element[] newChildren,
-        PanelChildCollection childCollection, Action requestRerender, UIElement? parentControl)
-    {
         // Skip the try/finally and event emits when neither provider wants the span.
         bool traceSource = Diagnostics.ReactorEventSource.Log.IsEnabled(
             global::System.Diagnostics.Tracing.EventLevel.Informational,
@@ -4594,8 +4579,14 @@ public sealed partial class Reconciler : IDisposable
     /// resource refresh), so the caller doesn't unmount it twice.
     /// </summary>
     internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
-        out bool unmountedByUpdate)
-        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
+        out bool unmountedByUpdate, int childIndex = -1)
+    {
+        // The child's new position among its panel's children, for a parent .Stagger() (RefreshStaggerDelay).
+        var previousIndex = _updatingChildIndex;
+        _updatingChildIndex = childIndex;
+        try { return UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate); }
+        finally { _updatingChildIndex = previousIndex; }
+    }
 
     /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
@@ -6639,37 +6630,29 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>A panel with <c>.Stagger()</c> whose update is reconciling its children.</summary>
-    private sealed class UpdateStaggerScope(UIElement panel, TimeSpan delay)
-    {
-        public UIElement Panel { get; } = panel;
-        public TimeSpan Delay { get; } = delay;
-        // The panel's new children while they reconcile, so a child finds its index in this update.
-        public Element[]? Children;
-    }
+    private sealed record UpdateStaggerScope(UIElement Panel, TimeSpan Delay);
 
     private UpdateStaggerScope? _updateStagger;
+
+    // The new index of the panel child being updated, set by child reconciliation; -1 elsewhere.
+    private int _updatingChildIndex = -1;
 
     /// <summary>
     /// Gives a child its stagger delay before it writes this update's values: the delay its
     /// parent's current <c>.Stagger()</c> sets at its new position. Without it a write in this
     /// update would start with the previous render's delay (a changed stagger or a reordered
-    /// child), and a newly published key with none. Only the child's outermost layer is in its
-    /// parent's children, so inner layers find no position and leave the delay alone.
+    /// child), and a newly published key with none. Every layer of the child sees the same
+    /// position, so wrapped children and repeated sibling records get their own delay.
     /// </summary>
-    private void RefreshStaggerDelay(UIElement control, Element newEl)
+    private void RefreshStaggerDelay(UIElement control)
     {
-        if (_updateStagger is not { Children: { } children } stagger) return;
+        if (_updateStagger is not { } stagger || _updatingChildIndex < 0) return;
         var parent = (control as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(control);
         if (!ReferenceEquals(parent, stagger.Panel)) return;
-        for (int i = 0; i < children.Length; i++)
-        {
-            if (!ReferenceEquals(children[i], newEl)) continue;
-            var delay = TimeSpan.FromTicks(stagger.Delay.Ticks * i);
-            GetOrCreateReactorState(control).StaggerDelay = delay;
-            if (ElementPool.IsVisualTaken(control))
-                SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(control), delay);
-            return;
-        }
+        var delay = TimeSpan.FromTicks(stagger.Delay.Ticks * _updatingChildIndex);
+        GetOrCreateReactorState(control).StaggerDelay = delay;
+        if (ElementPool.IsVisualTaken(control))
+            SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(control), delay);
     }
 
     internal static void ApplyStaggerDelays(UIElement parent, StaggerConfig config)

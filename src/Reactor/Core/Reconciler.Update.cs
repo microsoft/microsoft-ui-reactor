@@ -315,7 +315,7 @@ public sealed partial class Reconciler
         if (oldEl.StaggerConfig is not null && newEl.StaggerConfig is null)
             ClearStaggerDelays(control);
         // A kept .Stagger() gives each child its delay at its new position before the child writes.
-        RefreshStaggerDelay(control, newEl);
+        RefreshStaggerDelay(control);
         if (newEl.StaggerConfig is { } stagger && !ReferenceEquals(_updateStagger?.Panel, control))
             _updateStagger = new UpdateStaggerScope(control, stagger.Delay);
         if (oldEl.ImplicitTransitions is not null || newEl.ImplicitTransitions is not null)
