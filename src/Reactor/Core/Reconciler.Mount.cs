@@ -105,22 +105,24 @@ public sealed partial class Reconciler
         // _v1Handlers on first hit so arm 1 catches it next time.
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
-            if (_rentContext.Candidate && MayUseAppHandler(element.GetType()))
-                _rentContext = _rentContext with { Candidate = false };
+            // A keyed Memo is transparent only through the built-in arm 4. A handler registered for
+            // one is app code that may write a facade on the control its child rents.
+            if ((_rentContext.Candidate && MayUseAppHandler(element.GetType())) || _rentContext.Transparent)
+                _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = v1Entry.Mount(element, requestRerender, this);
             ownsControl = v1Entry.OwnsControl(element);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
         {
-            _rentContext = _rentContext with { Candidate = false };
+            _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = reg.Mount(element, requestRerender, this);
             registeredType = true;
         }
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
-            if (_rentContext.Candidate && MayUseAppHandler(element.GetType()))
-                _rentContext = _rentContext with { Candidate = false };
+            if ((_rentContext.Candidate && MayUseAppHandler(element.GetType())) || _rentContext.Transparent)
+                _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = v1Entry.Mount(element, requestRerender, this);
             ownsControl = v1Entry.OwnsControl(element);
         }

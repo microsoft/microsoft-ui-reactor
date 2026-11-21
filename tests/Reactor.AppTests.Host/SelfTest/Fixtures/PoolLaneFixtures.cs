@@ -433,4 +433,146 @@ internal static class PoolLaneFixtures
                 && Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
         }
     }
+
+    /// <summary>
+    /// A control removed mid-hover still carries its interaction state's brush. Unmount puts the
+    /// normal brush back, so the next visual-lane renter doesn't show the hover color.
+    /// </summary>
+    internal sealed class HoverBrush(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_HoverBrush";
+            using var lab = new Lab(H);
+            var hoverBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+            var hovered = await lab.Show(TextBlock("H").InteractionStates(b => b.PointerOver(foreground: hoverBrush)));
+            H.Check(p + "_Mounted", hovered is WinUI.TextBlock);
+            if (hovered is null) return;
+            Reconciler.SimulatePointerOverForTests(hovered, isOver: true);
+            H.Check(p + "_HoverApplied", hovered.ReadLocalValue(WinUI.TextBlock.ForegroundProperty)
+                is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.R: 255, Color.G: 0 });
+            await lab.Show(null);
+
+            var renter = await lab.Show(TextBlock("R").Animate(Curve.Linear(100)));
+            H.Check(p + "_Recycled", ReferenceEquals(renter, hovered));
+            var local = renter?.ReadLocalValue(WinUI.TextBlock.ForegroundProperty);
+            H.Check(p + "_ForegroundRestored", renter is not null && local == DependencyProperty.UnsetValue, $"local={local}");
+        }
+    }
+
+    /// <summary>
+    /// Visual state no layer of Reactor tracks: relative adjustments user code wrote through the
+    /// visual, and a brush transition on any poolable panel or border. The visual reset clears both.
+    /// </summary>
+    internal sealed class ResetLeftovers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_ResetLeftovers";
+            using (var lab = new Lab(H))
+            {
+                var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
+                if (first is null) { H.Check(p + "_Mounted", false); return; }
+                var visual = ElementCompositionPreview.GetElementVisual(first);
+                visual.RelativeOffsetAdjustment = new Vector3(0.5f, 0, 0);
+                visual.RelativeSizeAdjustment = new Vector2(0.5f, 0);
+                await lab.Show(null);
+                var renter = await lab.Show(Target("R").Animate(Curve.Linear(100)));
+                H.Check(p + "_Recycled", ReferenceEquals(renter, first));
+                H.Check(p + "_RelativeAdjustmentsZero", visual.RelativeOffsetAdjustment == Vector3.Zero
+                    && visual.RelativeSizeAdjustment == Vector2.Zero,
+                    $"offset={visual.RelativeOffsetAdjustment} size={visual.RelativeSizeAdjustment}");
+            }
+
+            await BrushTransition<WinUI.Canvas>(p + "_Canvas", text => Canvas(TextBlock(text)),
+                static c => c.BackgroundTransition, static (c, t) => c.BackgroundTransition = t);
+            await BrushTransition<WinUI.Border>(p + "_Border", text => Border(TextBlock(text)),
+                static c => c.BackgroundTransition, static (c, t) => c.BackgroundTransition = t);
+        }
+
+        private async Task BrushTransition<TControl>(string p, Func<string, Element> build,
+            Func<TControl, BrushTransition?> read, Action<TControl, BrushTransition> write) where TControl : FrameworkElement
+        {
+            using var lab = new Lab(H);
+            var first = await lab.Show(build("A").OnMount(fe => write((TControl)fe, new BrushTransition())).Animate(Curve.Linear(100)));
+            H.Check(p + "_TransitionApplied", first is TControl t && read(t) is not null && ElementPool.IsVisualTaken(t));
+            await lab.Show(null);
+            var renter = await lab.Show(build("R").Animate(Curve.Linear(100)));
+            H.Check(p + "_Recycled", ReferenceEquals(renter, first));
+            H.Check(p + "_TransitionCleared", renter is TControl r && read(r) is null);
+        }
+    }
+
+    /// <summary>
+    /// A keyed <c>Memo</c>'s <c>.ScrollLinked</c> runs on the control under it, and the control's
+    /// unmount doesn't reach it. The visual reset stops the expression, so it doesn't move the renter.
+    /// </summary>
+    internal sealed class MemoScrollLinked(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_MemoScrollLinked";
+            var viewer = new WinUI.ScrollViewer();
+            using var lab = new Lab(H);
+            var first = await lab.Show(Memo("k", static () => Target("M"))
+                .ScrollLinked(viewer, static b => b.Expression("Offset.Y", "40")));
+            H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            await lab.Show(null);
+
+            var renter = Target("R").Animate(Curve.Linear(100));
+            var rentedControl = await lab.Show(renter);
+            H.Check(p + "_Recycled", ReferenceEquals(rentedControl, first));
+            var rented = await Snap.CaptureAsync(lab.Root);
+            using var fresh = new Reconciler();
+            var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;
+            H.SetContent(freshRoot);
+            for (int i = 0; i < 20 && (freshRoot.ActualWidth != lab.Root.ActualWidth
+                || freshRoot.ActualHeight != lab.Root.ActualHeight); i++)
+                await Harness.Render(16);
+            await Harness.Render();
+            int diff = rented.Diff(await Snap.CaptureAsync(freshRoot));
+            H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff}");
+            fresh.UnmountChild(freshRoot);
+            H.SetContent(lab.Root);
+        }
+    }
+
+    /// <summary>
+    /// A handler registered for <c>KeyedMemoElement</c> is app code: it may write a facade on the
+    /// control its child mounts, so that child never rents from the visual lane.
+    /// </summary>
+    internal sealed class MemoAppHandler(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed class RotatingMemoHandler : IElementHandler<KeyedMemoElement, WinUI.Border>
+        {
+            public WinUI.Border Mount(MountContext ctx, KeyedMemoElement element)
+            {
+                var border = (WinUI.Border)ctx.MountChild(element.Factory())!;
+                border.Rotation = 10;
+                return border;
+            }
+
+            public void Update(UpdateContext ctx, KeyedMemoElement oldEl, KeyedMemoElement newEl, WinUI.Border control) { }
+        }
+
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_MemoAppHandler";
+            using var lab = new Lab(H);
+            var taken = await lab.Show(Target("T").Animate(Curve.Linear(100)));
+            H.Check(p + "_FirstTakesVisual", taken is not null && ElementPool.IsVisualTaken(taken));
+            await lab.Show(null);
+
+            lab.Reconciler.RegisterHandler(new RotatingMemoHandler());
+            FrameworkElement? second;
+            try { second = await lab.Show(Memo("k", static () => Target("R")).Animate(Curve.Linear(100))); }
+            catch (Exception ex)
+            {
+                H.Check(p + "_FacadeWriteWorks", false, $"{ex.GetType().Name}: {ex.Message}");
+                return;
+            }
+            H.Check(p + "_FacadeWriteWorks", second is not null);
+            H.Check(p + "_NotFromVisualLane", !ReferenceEquals(second, taken));
+        }
+    }
 }
