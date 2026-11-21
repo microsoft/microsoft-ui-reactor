@@ -830,7 +830,8 @@ $env:REACTOR_TRANSFORMS_MATRIX_FILTER = 'Scale.*.Animate|@soak.short'
 A mismatch or an inconclusive oracle reruns the case up to three times before it fails, and
 poses compare within ±2 DIP. Record mode reruns a changed case once to confirm the change, and
 keeps a committed value that the new observation matches within tolerance, so regenerating the
-ledger only rewrites lines whose behaviour changed. Under NativeAOT the `diag` field isn't
+ledger only rewrites lines whose behaviour changed. If any check fails (an oracle, a model rule, a
+change that doesn't reproduce), it writes `transforms-ledger.rejected.json` instead of the ledger. Under NativeAOT the `diag` field isn't
 compared, because `EventListener` callbacks don't flow there.
 
 **Declaring a change (every layer after V).**

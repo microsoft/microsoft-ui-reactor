@@ -182,7 +182,7 @@ internal static class CompositionModel
         var b = Declared(c.Transform, true);
         var channels = new List<string>();
         if (a.Scale != b.Scale) channels.Add("Scale");
-        if (a.Degrees != b.Degrees) channels.Add("RotationAngle");
+        if (MathF.Abs(a.Degrees - b.Degrees) > 1e-4f) channels.Add("RotationAngle");
         if (a.Translation != b.Translation) channels.Add("Translation");
         if (a.CenterPoint != b.CenterPoint) channels.Add("CenterPoint");
         channels.Add("Opacity");

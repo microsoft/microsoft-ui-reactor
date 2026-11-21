@@ -216,6 +216,10 @@ public class TransformsMatrixTests
         Assert.Single(moved.ControlGroup);
         Assert.Single(moved.Stale);
 
+        // Byte-identical: even a one-DIP move, inside the observation tolerance, fails.
+        var nudged = LedgerCheck.Run(Base, Head(controlPose: "121,150,220,190"), []);
+        Assert.Equal("121,150,220,190", Assert.Single(nudged.ControlGroup).After);
+
         var rented = LedgerCheck.Run(Base, Head(controlRent: "taken=1"), [new(LedgerCheck.ControlGroupId, "rentTransformed", "channel", "*", "*", "§9 row 7")]);
         Assert.True(rented.Passed, rented.Describe());
     }

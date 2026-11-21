@@ -50,6 +50,15 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
     private Border _caseHost = null!, _freshHost = null!;
 
+    // False once any check fails, so record mode never overwrites the ledger with an invalid recording.
+    private bool _clean = true;
+
+    private void Check(string name, bool ok, string detail)
+    {
+        H.Check(name, ok, detail);
+        _clean &= ok;
+    }
+
     public override async Task RunAsync()
     {
         var mode = CurrentMode;
@@ -104,7 +113,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             {
                 foreach (var k in known) Console.WriteLine($"# TransformsMatrix known rule {k}: {usedKnown.GetValueOrDefault(k)} disagreement(s)");
                 var stale = known.Where(k => !usedKnown.ContainsKey(k)).ToList();
-                H.Check("TransformsMatrix_KnownDifferencesCurrent", stale.Count == 0,
+                Check("TransformsMatrix_KnownDifferencesCurrent", stale.Count == 0,
                     $"{stale.Count} entries in {TransformsLedger.KnownFile} match no model disagreement anymore. Remove them "
                     + "(and declare the ledger change they reflect): " + string.Join("; ", stale));
             }
@@ -120,7 +129,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
     private async Task<LedgerCase> ObserveCase(TransformsMatrixRecorder recorder, MatrixCase c, TransformsLedger committed, Mode mode)
     {
         var record = await Compare(c.Id, committed, mode, () => recorder.ObserveAsync(c), recorder);
-        H.Check($"TransformsMatrix_{c.Id}_Conclusive", recorder.Inconclusive.Count == 0, string.Join("; ", recorder.Inconclusive));
+        Check($"TransformsMatrix_{c.Id}_Conclusive", recorder.Inconclusive.Count == 0, string.Join("; ", recorder.Inconclusive));
         return record;
     }
 
@@ -149,12 +158,16 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
         if (mode == Mode.Record)
         {
+            // A change is recorded only once two observations agree; three different ones are noise.
+            bool confirmed = diffs.Count == 0 || expected is null || previous is null || Differences(id, previous, record).Count == 0;
+            Check($"TransformsMatrix_{id}_Stable", confirmed,
+                $"{id} differed from the ledger and between its reruns, so the recording isn't reproducible: {string.Join(" | ", diffs.Take(8))}");
             foreach (var d in diffs) Console.WriteLine($"# TransformsMatrix ledger change: {d}");
             if (expected is not null) TransformsLedger.KeepUnchanged(expected, record);
             return record;
         }
 
-        H.Check($"TransformsMatrix_{id}", diffs.Count == 0, expected is null
+        Check($"TransformsMatrix_{id}", diffs.Count == 0, expected is null
             ? $"{id} isn't in {TransformsLedger.LedgerFile}. Regenerate the ledger (see TESTING.md, \"Transforms matrix and behaviour ledger\")."
             : $"observed behaviour differs from {TransformsLedger.LedgerFile}: {string.Join(" | ", diffs.Take(8))}. "
               + "If the change is intended, regenerate the ledger with REACTOR_TRANSFORMS_MATRIX=record and declare each change "
@@ -174,10 +187,11 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             else problems.Add($"{step}/{part} matches {matches.Count} rules ({string.Join("; ", matches)}); narrow them so one applies");
         }
 
-        H.Check($"TransformsMatrix_{c.Id}_Model", problems.Count == 0,
+        Check($"TransformsMatrix_{c.Id}_Model", problems.Count == 0,
             $"{c.Id} ({c.Dims}) disagrees with the composition model: {string.Join(" | ", problems)}. If main is wrong, attribute it in "
             + $"{TransformsLedger.KnownFile} with the issue or §9 row; if the model is wrong, fix CompositionModel. Never bend the model to fit main.");
     }
+
     private void WriteLedger(TransformsLedger committed, TransformsLedger observed, bool everything)
     {
         var output = new TransformsLedger { Seed = MatrixGenerator.DefaultSeed };
@@ -193,6 +207,13 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
 
         string path = Environment.GetEnvironmentVariable("REACTOR_TRANSFORMS_LEDGER_OUT") is { Length: > 0 } p ? p
             : global::System.IO.Path.Combine(RepoRoot() ?? AppContext.BaseDirectory, TransformsLedger.BaselineDirectory, TransformsLedger.LedgerFile);
+        if (!_clean)
+        {
+            // Keep the observations for triage, but never where a commit or the workflow artifact would take them as the ledger.
+            path = global::System.IO.Path.ChangeExtension(path, ".rejected.json");
+            Console.WriteLine("# TransformsMatrix a check failed, so the ledger was not updated");
+        }
+
         global::System.IO.File.WriteAllText(path, output.Write());
         Console.WriteLine($"# TransformsMatrix wrote {output.Cases.Count} cases to {path}");
     }
@@ -520,12 +541,11 @@ internal sealed class PoolSoak(Border host)
                 // Plain probes rent whatever the pool now holds, are checked, then go back.
                 Render(Stage(live.Select(Build).Concat(Enumerable.Range(0, removed.Count).Select(i => Probe().WithKey($"probe{i}")))));
                 await TransformsMatrixRecorder.Frames(1);
-                var probes = stage.Children.OfType<StackPanel>().Where(static p => p.Width == ProbeWidth).ToList();
-                foreach (var probe in probes)
+                var probes = stage.Children.OfType<StackPanel>().Where(static p => Math.Abs(p.Width - ProbeWidth) < 0.5).ToList();
+                foreach (var probe in probes.Where(pooled.Contains))
                 {
-                    if (!pooled.Contains(probe)) continue;
                     rented++;
-                    if (probe.Scale != Vector3.One || probe.Rotation != 0 || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
+                    if (probe.Scale != Vector3.One || Math.Abs(probe.Rotation) > 1e-4f || probe.Translation != Vector3.Zero || probe.CenterPoint != Vector3.Zero)
                         violations["facade"]++;
                     if (probe.OpacityTransition is not null || probe.BackgroundTransition is not null || probe.ChildrenTransitions is { Count: > 0 })
                         violations["xaml"]++;
@@ -538,7 +558,7 @@ internal sealed class PoolSoak(Border host)
                 pooled.UnionWith(probes);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             threw = $"{ex.GetType().Name}@{step}";
         }

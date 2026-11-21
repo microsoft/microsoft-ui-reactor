@@ -106,8 +106,8 @@ internal sealed class TransformsLedger
         return true;
     }
 
-    /// <summary>Every field that differs between two records of the same case.</summary>
-    public static IEnumerable<LedgerDifference> CompareCase(string id, LedgerCase? before, LedgerCase? after)
+    /// <summary>Every field that differs between two records of the same case; <paramref name="exact"/> drops the geometric tolerance.</summary>
+    public static IEnumerable<LedgerDifference> CompareCase(string id, LedgerCase? before, LedgerCase? after, bool exact = false)
     {
         if (before?.Dims != after?.Dims) yield return new LedgerDifference(id, "dims", "dims", before?.Dims, after?.Dims);
         var steps = (before?.Steps.Keys ?? Enumerable.Empty<string>()).Concat(after?.Steps.Keys ?? Enumerable.Empty<string>()).Distinct(StringComparer.Ordinal);
@@ -122,7 +122,7 @@ internal sealed class TransformsLedger
                 string? bv = null, av = null;
                 b?.TryGetValue(field, out bv);
                 a?.TryGetValue(field, out av);
-                if (!FieldEquals(field, bv, av)) yield return new LedgerDifference(id, step, field, bv, av);
+                if (exact ? bv != av : !FieldEquals(field, bv, av)) yield return new LedgerDifference(id, step, field, bv, av);
             }
         }
     }
@@ -149,8 +149,8 @@ internal sealed class TransformsLedger
         foreach (var (step, fields) in observed.Steps)
         {
             if (!committed.Steps.TryGetValue(step, out var old)) continue;
-            foreach (var key in fields.Keys.ToArray())
-                if (old.TryGetValue(key, out var v) && FieldEquals(key, v, fields[key])) fields[key] = v;
+            var unchanged = fields.Keys.Where(key => old.TryGetValue(key, out var v) && FieldEquals(key, v, fields[key])).ToArray();
+            foreach (var key in unchanged) fields[key] = old[key];
         }
     }
 
@@ -215,10 +215,14 @@ internal sealed record LedgerCheck(
         IReadOnlyList<LedgerExpectation>? baseExpectations = null)
     {
         if (baseExpectations is not null && expectations.SequenceEqual(baseExpectations)) expectations = [];
+        string rent = MatrixCase.StepName(MatrixStep.RentTransformed);
         var diffs = TransformsLedger.Diff(baseLedger, head);
-        // The control group can't be excused: only its rent-as-transformed step may change (layer 4).
-        var control = diffs.Where(d => d.Case == ControlGroupId && d.Step != MatrixCase.StepName(MatrixStep.RentTransformed)).ToList();
-        var declarable = diffs.Except(control).ToList();
+        // The control group stays byte-identical (§12.1 C.3), so it's compared without the geometric
+        // tolerance, and no expectation can excuse it. Only its rent-as-transformed step may change (layer 4).
+        baseLedger.Cases.TryGetValue(ControlGroupId, out var baseControl);
+        head.Cases.TryGetValue(ControlGroupId, out var headControl);
+        var control = TransformsLedger.CompareCase(ControlGroupId, baseControl, headControl, exact: true).Where(d => d.Step != rent).ToList();
+        var declarable = diffs.Where(d => d.Case != ControlGroupId || d.Step == rent).ToList();
         var undeclared = declarable.Where(d => !expectations.Any(e => e.Matches(d))).ToList();
         var stale = expectations.Where(e => !declarable.Any(e.Matches)).ToList();
         var bad = expectations.Where(e => !LedgerExpectation.ReasonPattern.IsMatch(e.Reason)).ToList();

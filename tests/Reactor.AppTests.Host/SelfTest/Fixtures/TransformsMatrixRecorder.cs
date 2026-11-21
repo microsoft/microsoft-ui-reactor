@@ -379,9 +379,8 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         }
 
         var visual = Taken(target);
-        var controllers = new Dictionary<string, AnimationController>();
-        foreach (var ch in channels)
-            if (visual is not null && Controller(visual, ch) is { } ctl) controllers[ch] = ctl;
+        var controllers = visual is null ? []
+            : channels.Select(ch => (ch, ctl: Controller(visual, ch))).Where(static x => x.ctl is not null).ToDictionary(static x => x.ch, static x => x.ctl!);
         var fresh = controllers.Where(kv => !(before.TryGetValue(kv.Key, out var b) && Equals(b, kv.Value))).ToDictionary();
         foreach (var ctl in fresh.Values) ctl.Pause();
         foreach (var ctl in fresh.Values) ctl.Progress = 1;
@@ -545,7 +544,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         static string Join(IEnumerable<string> xs) => string.Join(",", xs) is { Length: > 0 } s ? s : "-";
         var facade = new List<string>();
         if (t.Scale != Vector3.One) facade.Add("S");
-        if (t.Rotation != 0) facade.Add("R");
+        if (NonZero(t.Rotation)) facade.Add("R");
         if (t.Translation != Vector3.Zero) facade.Add("T");
         if (t.CenterPoint != Vector3.Zero) facade.Add("C");
         if (!ElementPool.IsCompositorTainted(t)) return $"taken=0 facade={Join(facade)}";
@@ -554,7 +553,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         catch (UnauthorizedAccessException) { return $"taken=refused facade={Join(facade)}"; }
         var visual = new List<string>();
         if (v.Scale != Vector3.One) visual.Add("S");
-        if (v.RotationAngle != 0) visual.Add("R");
+        if (NonZero(v.RotationAngle)) visual.Add("R");
         if (v.Properties.TryGetVector3("Translation", out var tr) == CompositionGetValueStatus.Succeeded && tr != Vector3.Zero) visual.Add("T");
         if (v.CenterPoint != Vector3.Zero) visual.Add("C");
         return $"taken=1 facade={Join(facade)} visual={Join(visual)}";
@@ -629,7 +628,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     {
         // Taking the visual of a control with a facade transform throws (#1613), and it would be
         // the test's own handoff anyway. An untaken control can't hold implicit keys.
-        if (!ElementPool.IsCompositorTainted(t) && (t.Scale != Vector3.One || t.Rotation != 0 || t.CenterPoint != Vector3.Zero))
+        if (!ElementPool.IsCompositorTainted(t) && (t.Scale != Vector3.One || NonZero(t.Rotation) || t.CenterPoint != Vector3.Zero))
             return "keys=untaken anims=untaken";
         var v = ElementCompositionPreview.GetElementVisual(t);
         var keys = v.ImplicitAnimations?.Select(kv => kv.Key).Order(StringComparer.Ordinal).ToArray() ?? [];
@@ -673,6 +672,8 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         if (running.Count > 0) await Finish(visual, running, MotionMs);
         return running.Count > 0 ? string.Join(",", running) : "-";
     }
+    private static bool NonZero(float value) => MathF.Abs(value) > 1e-4f;
+
     /// <summary><c>TryGetAnimationController</c> throws for a property the visual doesn't have yet (Translation, #1641).</summary>
     internal static AnimationController? Controller(Visual v, string channel)
     {
