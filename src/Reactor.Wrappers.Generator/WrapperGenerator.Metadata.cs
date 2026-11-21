@@ -14,6 +14,8 @@ public sealed partial class WrapperGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private const string FrameworkCoreProvider = "Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider";
+
     private static (string? TypeName, bool Unsupported) FindMetadataProvider(
         IAssemblySymbol assembly, Compilation compilation)
     {
@@ -26,6 +28,16 @@ public sealed partial class WrapperGenerator
                 !IsApplication(t))
             .ToArray();
         if (providers.Length == 0) return default;
+
+        // The WinUI framework assembly is not a custom library: on the experimental channel it
+        // carries per-feature providers (Charts, Tabular) next to its core one, and Reactor's own
+        // generated provider already chains to all of them. Its core provider is the one the
+        // single-provider (stable) assembly yields, so keep selecting exactly that.
+        if (providers.Length > 1 && assembly.Identity.Name == "Microsoft.WinUI")
+        {
+            var core = providers.Where(p => p.ToDisplayString() == FrameworkCoreProvider).ToArray();
+            if (core.Length == 1) providers = core;
+        }
 
         // Do not guess between custom providers or pick one merely because the others
         // are inaccessible. The explicit instance overload remains the escape hatch.

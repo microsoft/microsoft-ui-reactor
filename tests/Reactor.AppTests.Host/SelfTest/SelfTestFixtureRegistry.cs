@@ -540,6 +540,18 @@ internal static class SelfTestFixtureRegistry
         ("Win2D_AnimatedCanvas_InitialPausedResumes", static harness => new Win2DCanvasFixtures.AnimatedCanvasInitialPausedResumes(harness)),
         ("Win2D_Canvas_SameRedrawKeyNoExtraDraws", static harness => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness)),
         ("Win2D_AnimatedCanvas_SharedDeviceResourceDraws", static harness => new Win2DCanvasFixtures.AnimatedCanvasSharedDeviceResourceDraws(harness)),
+        // Reactor.Advanced TableView / Chart (Windows App SDK experimental controls).
+        ("TableView_MountsRowsAndColumns", static harness => new TableViewFixtures.MountsRowsAndColumns(harness)),
+        ("TableView_UpdatesColumnsInPlace", static harness => new TableViewFixtures.UpdatesColumnsInPlace(harness)),
+        ("TableView_SkipsFinalizedCellShell", static harness => new TableViewFixtures.SkipsFinalizedCellShell(harness)),
+        ("TableView_ControlledSelection", static harness => new TableViewFixtures.ControlledSelection(harness)),
+        ("TableView_FilterGroupAndEmpty", static harness => new TableViewFixtures.FilterGroupAndEmpty(harness)),
+        ("TableView_ImmutableSnapshotsDiffInPlace", static harness => new TableViewFixtures.ImmutableSnapshotsDiffInPlace(harness)),
+        ("TableView_TextColumnEditViaAutomation", static harness => new TableViewFixtures.TextColumnEditViaAutomation(harness)),
+        ("TableView_UnmountTearsDownCells", static harness => new TableViewFixtures.UnmountTearsDownCells(harness)),
+        ("Chart_MountsSeriesAndAxes", static harness => new ChartFixtures.MountsSeriesAndAxes(harness)),
+        ("Chart_UpdatesInPlace", static harness => new ChartFixtures.UpdatesInPlace(harness)),
+        ("Chart_AxisSharingAndTypeChange", static harness => new ChartFixtures.AxisSharingAndTypeChange(harness)),
         // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
         // sync, and ItemsRepeater unmount cleanup.
         ("EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking", static harness => new ElementFactoryRecyclingFixtures.Factory_ReplacementOnRootTypeChange_DropsOldControlTracking(harness)),
@@ -1104,6 +1116,7 @@ internal static class SelfTestFixtureRegistry
         ("LT_OnMountUnmountBalanced", static harness => new LT_OnMountUnmountBalanced(harness)),
         ("LT_EffectCleanupBalanced", static harness => new LT_EffectCleanupBalanced(harness)),
         ("LT_NavSwapNoLeak", static harness => new LT_NavSwapNoLeak(harness)),
+        ("LT_OnUnmountSurvivesWrapperCollection", static harness => new LT_OnUnmountSurvivesWrapperCollection(harness)),
         ("CoreCov2_ComponentTypedProps", static harness => new CoreCoverageFixtures2.ComponentTypedProps(harness)),
         ("CoreCov2_ColorSchemeHookExercise", static harness => new CoreCoverageFixtures2.ColorSchemeHookExercise(harness)),
         ("CoreCov2_ContextScopeExercise", static harness => new CoreCoverageFixtures2.ContextScopeExercise(harness)),
