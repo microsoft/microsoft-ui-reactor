@@ -236,12 +236,20 @@ public sealed partial class Reconciler
         // Release removed declarations before setters. A shared target can change a
         // retained name's trigger before the decorator reaches its own playback.
         if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
+        {
+            // Stop removed entries before the handler and modifiers run, so the cleanup cannot
+            // cancel an animation a shared target or a changed modifier starts in this update
+            // (#1641). It runs first because the release below forgets removed names. A
+            // decorator sharing this control shares its (control, name) slots, so a name the
+            // decorator still declares is retained.
+            var retainedKeyframes = keyframes;
+            if (modifierParent is not null)
+                retainedKeyframes = WithSharedKeyframes(WithSharedKeyframes(retainedKeyframes,
+                    modifierParent.KeyframeAnimations), ModifierUpdate.Root?.KeyframeAnimations);
+            ClearKeyframeAnimations(control, oldKeyframes, ownedOnly: true, retained: retainedKeyframes);
             ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
                 ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
-        // Stop removed keyframes before the handler and modifiers run, so the cleanup cannot
-        // cancel an animation a shared target or a changed modifier starts in this update (#1641).
-        if (keyframes is null && oldEl.KeyframeAnimations is not null)
-            ClearKeyframeAnimations(control, oldEl.KeyframeAnimations, ownedOnly: true);
+        }
 
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);

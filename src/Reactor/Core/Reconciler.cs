@@ -6674,13 +6674,16 @@ public sealed partial class Reconciler : IDisposable
     // ownedOnly stops only the channels whose running animation is still the one these entries
     // started. A retained control passes true, so removing keyframes doesn't stop an animation
     // another feature started on that channel. Unmount passes false and stops every channel a
-    // keyframe can animate.
-    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool ownedOnly = false)
+    // keyframe can animate. Entries whose name is in retained stay, and their playback decides
+    // what keeps running.
+    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool ownedOnly = false,
+        KeyframeEntry[]? retained = null)
     {
         Visual? owner = null;
         bool noCompositor = false;
         foreach (var entry in entries)
         {
+            if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
             if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)
                 || !ownedOnly || noCompositor || state.Started is not { } started)
                 continue;
@@ -6716,6 +6719,16 @@ public sealed partial class Reconciler : IDisposable
         }
         catch { /* One failed stop must not skip the others. */ }
     }
+
+    private static bool HasKeyframeEntry(KeyframeEntry[] entries, string name)
+    {
+        foreach (var entry in entries)
+            if (entry.Name == name) return true;
+        return false;
+    }
+
+    private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)
+        => shared is null || ReferenceEquals(own, shared) ? own : own is null ? shared : [.. own, .. shared];
 
     // ════════════════════════════════════════════════════════════════
     //  Scroll-linked expression animation (.ScrollLinked() modifier)

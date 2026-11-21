@@ -794,6 +794,44 @@ internal static class AnimationCombinationTests
             await RunFlyoutTargetCase("KFRemoveKeepsTargetKeyframes");
             await RunSkippedPlaybackCase("KFRemoveStopsStartedChannel");
             await RunReplacedChannelCase("KFRemoveKeepsReplacedChannel");
+            await RunDroppedEntryCase("KFDropStopsEntry");
+        }
+
+        // Dropping entry "a" while "b" stays stops a's loop and leaves b's running. Removing b
+        // afterwards then stops b, so no loop outlives its declaration.
+        async Task RunDroppedEntryCase(string name)
+        {
+            var plain = Border(TextBlock(name));
+            static Element Fade(Element element) => element.Keyframes("b", 1, kf => kf
+                .Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            var both = Fade(plain.Keyframes("a", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, scale: Vector3.One).At(1f, scale: new Vector3(1.5f, 1.5f, 1f))));
+            var onlyB = Fade(plain);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(both, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                H.Check(name + "_BothLoopsRunning", visual.TryGetAnimationController("Scale") is not null
+                    && visual.TryGetAnimationController("Opacity") is not null);
+
+                reconciler.Update(both, onlyB, target, () => { });
+                H.Check(name + "_DroppedLoopStopped", visual.TryGetAnimationController("Scale") is null);
+                H.Check(name + "_RetainedLoopRunning", visual.TryGetAnimationController("Opacity") is not null);
+
+                reconciler.Update(onlyB, plain, target, () => { });
+                H.Check(name + "_RemovedLoopStopped", visual.TryGetAnimationController("Opacity") is null);
+            }
+            finally
+            {
+                visual?.StopAnimation("Scale");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
         }
 
         // Rotation keyframes switch to opacity under an unchanged trigger, so their rotation loop
