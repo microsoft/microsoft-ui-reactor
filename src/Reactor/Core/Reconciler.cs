@@ -6564,6 +6564,23 @@ public sealed partial class Reconciler : IDisposable
     /// Applies stagger delays to an element's Visual's implicit animations.
     /// Called after layout/property animations are set up on children.
     /// </summary>
+    /// <summary>
+    /// Removes the delays <see cref="ApplyStaggerDelays"/> set on a panel's children. Update runs
+    /// it before the children update when the parent drops <c>.Stagger()</c>, so their writes in
+    /// that update start at once.
+    /// </summary>
+    internal static void ClearStaggerDelays(UIElement parent)
+    {
+        if (parent is not WinUI.Panel panel) return;
+        foreach (var child in panel.Children)
+        {
+            if (!ElementPool.IsVisualTaken(child)) continue;
+            if (ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is not { } keys) continue;
+            foreach (var entry in keys)
+                if (entry.Value is CompositionAnimation animation) AnimationHelper.SetDelay(animation, TimeSpan.Zero);
+        }
+    }
+
     internal static void ApplyStaggerDelays(UIElement parent, StaggerConfig config)
     {
         if (parent is not WinUI.Panel panel) return;

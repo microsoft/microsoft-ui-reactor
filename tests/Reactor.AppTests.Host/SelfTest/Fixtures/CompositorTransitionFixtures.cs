@@ -555,9 +555,9 @@ internal static class CompositorTransitionFixtures
     }
 
     /// <summary>
-    /// The transition-animation cache doesn't keep a removed <c>.Stagger()</c> delay: after the
-    /// parent drops it, the child's Opacity key has no delay. While the stagger stays, the
-    /// second child's key keeps its delay (the positive control).
+    /// A child's transition key keeps its <c>.Stagger()</c> delay while the stagger stays, so a write
+    /// in an update starts staggered, and dropping the stagger clears the delay before the children
+    /// write that update's values.
     /// </summary>
     internal sealed class StaggerRemoved(Harness h) : TransitionFixture(h, "CompositorTransitions_StaggerRemoved")
     {
@@ -569,19 +569,24 @@ internal static class CompositorTransitionFixtures
             return stagger ? panel.Stagger(Step) : panel;
         }
 
-        private TimeSpan? SecondDelay()
+        private KeyFrameAnimation? SecondKey()
         {
             var child = ((Panel)Control).Children[1];
             return ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is { } keys
-                && keys.TryGetValue("Opacity", out var anim) && anim is KeyFrameAnimation kfa ? kfa.DelayTime : null;
+                && keys.TryGetValue("Opacity", out var anim) ? anim as KeyFrameAnimation : null;
         }
+
+        private TimeSpan? SecondDelay() => SecondKey()?.DelayTime;
 
         protected override async Task Run()
         {
             await Mount(Staggered(1, stagger: true));
+            // The key that a write under an active stagger fires is the delayed one: it is kept
+            // across the update, not rebuilt without the delay before the write.
+            var before = SecondKey();
             await Update(Staggered(0.9, stagger: true));
-            H.Check(Name + "_PositiveControl_KeptWhileStaggered", SecondDelay() == Step, $"delay={SecondDelay()}");
-            await Update(Staggered(0.9, stagger: false));
+            H.Check(Name + "_WriteUnderStaggerUsesDelayedKey", before is not null && ReferenceEquals(before, SecondKey())
+                && SecondDelay() == Step, $"same={ReferenceEquals(before, SecondKey())} delay={SecondDelay()}");
             await Update(Staggered(0.8, stagger: false));
             H.Check(Name + "_DelayDroppedWithStagger", SecondDelay() == TimeSpan.Zero, $"delay={SecondDelay()}");
         }

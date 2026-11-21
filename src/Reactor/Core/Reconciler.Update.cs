@@ -307,6 +307,10 @@ public sealed partial class Reconciler
         // as the new declaration says, and a removed transition doesn't animate it. A replaced
         // control gets the transitions again below, as on mount.
         bool transitionsApplied = true;
+        // The children's transition keys keep a stagger's delays across renders, so a dropped
+        // .Stagger() releases them before the children write this update's values.
+        if (oldEl.StaggerConfig is not null && newEl.StaggerConfig is null)
+            ClearStaggerDelays(control);
         if (oldEl.ImplicitTransitions is not null || newEl.ImplicitTransitions is not null)
         {
             try { ApplyImplicitTransitions(control, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot); }
