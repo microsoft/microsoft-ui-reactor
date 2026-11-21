@@ -4757,7 +4757,7 @@ public sealed partial class Reconciler : IDisposable
     private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
     {
         if (element?.InteractionStates is not null)
-            ClearInteractionStates(control);
+            ClearInteractionStates(control, restoreBrushes: true);
         if (element?.KeyframeAnimations is not null)
             ClearKeyframeAnimations(control, element.KeyframeAnimations);
         if (element?.ScrollAnimation is not null)
@@ -6252,13 +6252,14 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Removes InteractionStates from an element, unregistering handlers and clearing state.
     /// </summary>
-    internal static void ClearInteractionStates(UIElement uie)
+    internal static void ClearInteractionStates(UIElement uie, bool restoreBrushes = false)
     {
         if (!_interactionTrackers.Remove(uie, out var tracker)) return;
 
-        // A control removed mid-hover still carries the state's brushes. Put the normal ones back,
-        // so a pooled control does not hand a hover color to its next renter.
-        if (uie is FrameworkElement fe)
+        // A control unmounted mid-hover still carries the state's brushes. Put the normal ones back,
+        // so a pooled control does not hand a hover color to its next renter. Not on an update that
+        // drops the states: ApplyModifiers has already written that update's brushes.
+        if (restoreBrushes && uie is FrameworkElement fe)
             ApplyInteractionBrushes(fe, tracker, values: null);
 
         uie.PointerEntered -= OnInteractionPointerEntered;
@@ -6862,7 +6863,7 @@ public sealed partial class Reconciler : IDisposable
                 state.KeyframeNames = null;
             }
         }
-        ClearInteractionStates(uie);
+        ClearInteractionStates(uie, restoreBrushes: true);
     }
 
     private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)

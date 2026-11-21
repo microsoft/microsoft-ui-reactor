@@ -522,6 +522,11 @@ internal static class PoolLaneFixtures
             var renter = Target("R").Animate(Curve.Linear(100));
             var rentedControl = await lab.Show(renter);
             H.Check(p + "_Recycled", ReferenceEquals(rentedControl, first));
+            if (rentedControl is null) return;
+            // Layout doesn't rewrite an unchanged position, so only the reset puts the offset back.
+            var offset = ElementCompositionPreview.GetElementVisual(rentedControl).Offset;
+            H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f,
+                $"visual={offset} layout={rentedControl.ActualOffset}");
             var rented = await Snap.CaptureAsync(lab.Root);
             using var fresh = new Reconciler();
             var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;

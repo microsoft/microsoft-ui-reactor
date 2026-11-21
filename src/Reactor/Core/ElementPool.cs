@@ -639,7 +639,7 @@ public sealed class ElementPool : IDisposable
 
     /// <summary>
     /// The spec 066 §7.3 reset list: makes a control whose visual was taken pixel-identical to a
-    /// fresh one. The visual itself stays taken. Offset and Size are left to layout.
+    /// fresh one. The visual itself stays taken. Offset and Size keep the values layout last wrote.
     /// </summary>
     private static void ResetTakenVisual(FrameworkElement fe)
     {
@@ -647,9 +647,15 @@ public sealed class ElementPool : IDisposable
         // Translation is a property-set entry that exists only once translation was enabled;
         // stopping or writing a missing entry throws ArgumentException (#1641).
         bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+        // Layout owns Offset and Size and writes them only when they change, so a stopped animation's
+        // last value would stay. What the getter returns before the stop is what layout last wrote.
+        var layoutOffset = visual.Offset;
+        var layoutSize = visual.Size;
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
+        if (visual.Offset != layoutOffset) visual.Offset = layoutOffset;
+        if (visual.Size != layoutSize) visual.Size = layoutSize;
 
         // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
         // this drops keys no claim owns, for example ones user code installed.
