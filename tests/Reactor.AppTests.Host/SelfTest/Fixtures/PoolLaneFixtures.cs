@@ -517,8 +517,11 @@ internal static class PoolLaneFixtures
             await Case("Memo", Memo("k", static () => Target("M"))
                 .ScrollLinked(viewer, static b => b.Expression("Offset.Y", "40")), null);
             await Case("Direct", Target("D").ScrollLinked(viewer, static b => b.Expression("Offset.Y", "40")), null);
-            await Case("VisualWrite", Target("W").Animate(Curve.Linear(100)),
-                static fe => ElementCompositionPreview.GetElementVisual(fe).Offset = new Vector3(0, 40, 0));
+            await Case("VisualWrite", Target("W").Animate(Curve.Linear(100)), static fe =>
+            {
+                var visual = ElementCompositionPreview.GetElementVisual(fe);
+                visual.Offset = new Vector3(0, 40, 0);
+            });
         }
 
         private async Task Case(string name, Element moved, Action<FrameworkElement>? move)
@@ -594,6 +597,51 @@ internal static class PoolLaneFixtures
             }
             H.Check(p + "_FacadeWriteWorks", second is not null);
             H.Check(p + "_NotFromVisualLane", !ReferenceEquals(second, taken));
+        }
+    }
+
+    /// <summary>
+    /// A connected-animation source stays out of the pool, so WinUI can snapshot it on the next
+    /// frame. Its return still drops the element it hosted, and it keeps its hover brush.
+    /// </summary>
+    internal sealed class ConnectedSource(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_ConnectedSource";
+            using var lab = new Lab(H);
+            var hoverBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+            var source = await lab.Show(TextBox("t", static _ => { }).InteractionStates(b => b.PointerOver(foreground: hoverBrush)));
+            H.Check(p + "_Mounted", source is WinUI.TextBox);
+            if (source is null) return;
+            Reconciler.SimulatePointerOverForTests(source, isOver: true);
+            // What PrepareConnectedAnimationSource does once WinUI accepts the source.
+            ElementPool.ExcludeFromPool(source, releaseOnReturn: true);
+            await lab.Show(null);
+
+            var state = source.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+            H.Check(p + "_ElementReleased", state is { Element: null });
+            H.Check(p + "_HoverBrushKept", source.ReadLocalValue(WinUI.Control.ForegroundProperty)
+                is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.R: 255, Color.G: 0 });
+            var renter = await lab.Show(TextBox("r", static _ => { }));
+            H.Check(p + "_NotRented", !ReferenceEquals(renter, source));
+        }
+    }
+
+    /// <summary>A control whose keyframe names change records only the names it still holds.</summary>
+    internal sealed class KeyframeNames(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static KeyframeBuilder Pulse(KeyframeBuilder k) => k.Duration(60000).At(0f, opacity: 0.5f).At(1f, opacity: 1f);
+
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_KeyframeNames";
+            using var lab = new Lab(H);
+            FrameworkElement? control = null;
+            foreach (var name in new[] { "a", "b", "c" })
+                control = await lab.Show(Target("K").Keyframes(name, 1, Pulse));
+            var names = (control?.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.KeyframeNames;
+            H.Check(p + "_OnlyCurrent", names is not null && names.SetEquals(["c"]), names is null ? "null" : string.Join(",", names));
         }
     }
 }

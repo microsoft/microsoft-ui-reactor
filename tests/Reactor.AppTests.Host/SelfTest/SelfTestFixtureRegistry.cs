@@ -2268,6 +2268,8 @@ internal static class SelfTestFixtureRegistry
         ("ElementPoolLanes_HoverBrush", static harness => new PoolLaneFixtures.HoverBrush(harness)),
         ("ElementPoolLanes_ResetLeftovers", static harness => new PoolLaneFixtures.ResetLeftovers(harness)),
         ("ElementPoolLanes_LayoutOffset", static harness => new PoolLaneFixtures.LayoutOffset(harness)),
+        ("ElementPoolLanes_ConnectedSource", static harness => new PoolLaneFixtures.ConnectedSource(harness)),
+        ("ElementPoolLanes_KeyframeNames", static harness => new PoolLaneFixtures.KeyframeNames(harness)),
         ("ElementPoolLanes_MemoAppHandler", static harness => new PoolLaneFixtures.MemoAppHandler(harness)),
         ("ControlledOptionalCustomerRepro", static harness => new ControlledOptionalCustomerRepro.Execution(harness)),
         ("ControlledOptionalSelectionFamily", static harness => new ControlledOptionalSelectionFamilyFixture.Execution(harness)),
