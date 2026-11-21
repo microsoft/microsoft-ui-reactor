@@ -107,10 +107,14 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             {
                 if (CaseFilter is { } f && !Matches(f, id)) continue;
                 observed.Cases[id] = await Compare(id, committed, mode, () => new PoolSoak(_caseHost).RunAsync(steps));
+                CheckConclusive(id, observed.Cases[id]);
             }
 
             if (mode != Mode.Sample && (CaseFilter is null || Matches(CaseFilter, "@probe")))
+            {
                 observed.Cases["@probe"] = await Compare("@probe", committed, mode, () => TransformsMatrixProbes.RunAsync(_caseHost, H));
+                CheckConclusive("@probe", observed.Cases["@probe"]);
+            }
 
             if (everything)
             {
@@ -155,7 +159,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         LedgerCase? previous = null;
         for (int run = 1; run <= (mode == Mode.Record ? 2 : Retries); run++)
         {
-            bool inconclusive = recorder?.Inconclusive.Count > 0;
+            bool inconclusive = recorder?.Inconclusive.Count > 0 || Unclear(record);
             if (!inconclusive && expected is not null && diffs.Count == 0) break;
             if (mode != Mode.Record && !inconclusive && expected is null) break;
             if (mode == Mode.Record && !inconclusive && previous is not null && Differences(id, previous, record).Count == 0) break;
@@ -184,6 +188,14 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
               + $"in {TransformsLedger.ExpectedFile} with its §9 row or issue (TESTING.md, \"Transforms matrix and behaviour ledger\").");
         return record;
     }
+
+    /// <summary>An <c>UNCLEAR</c> verdict means an oracle couldn't decide, so the observation can't become a baseline.</summary>
+    private static bool Unclear(LedgerCase record) =>
+        record.Steps.Values.Any(static s => s.Values.Any(static v => v.Contains("UNCLEAR", StringComparison.Ordinal)));
+
+    private void CheckConclusive(string id, LedgerCase record) =>
+        Check($"TransformsMatrix_{id}_Conclusive", !Unclear(record), $"{id} has a verdict no oracle could decide after its reruns: "
+            + string.Join("; ", record.Steps.SelectMany(s => s.Value.Where(static f => f.Value.Contains("UNCLEAR", StringComparison.Ordinal)).Select(f => $"{s.Key}.{f.Key}={f.Value}"))));
 
     /// <summary>Each model disagreement must be attributed by exactly one rule in the known file.</summary>
     private void CheckModel(MatrixCase c, TransformsMatrixRecorder recorder, List<KnownDifference> known, Dictionary<KnownDifference, int> used)
@@ -435,6 +447,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         // write, and must reproduce Q1f, where it doesn't show one that RenderTargetBitmap reports
         // applied. Drag cases then record the screen pose; without a desktop they record "skip".
         _screen = null;
+        _caseHost.Child = canvas;
         Rect();
         await Shot();
         if (TransformsMatrixProbes.Screen(_caseHost, H).RedBox() is { } seen && seen.Near(identity, 3))
