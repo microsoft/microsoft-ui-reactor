@@ -679,7 +679,8 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
     /// Waits out whatever still animates a transform or opacity channel when a step settles, so the
     /// rest pose is the end state (<c>.Animate()</c> animates mount values in, for example).
     /// Returns those channels, or null when Reactor never took the visual, so there is nothing a test
-    /// may safely read. A looping keyframe is left alone.
+    /// may safely read. A looping keyframe is left alone while it's declared; at any other step its
+    /// controller is a leftover, so it's reported like any other.
     /// </summary>
     private async Task<string?> SettleRunning(FrameworkElement t, MatrixStep step)
     {
@@ -690,8 +691,9 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         Visual visual;
         try { visual = ElementCompositionPreview.GetElementVisual(t); }
         catch (UnauthorizedAccessException) { return null; }
+        bool loopDeclared = _case.Feature == FeatureAxis.Keyframes && _case.Variant == VariantAxis.B && Declare(step).Feature;
         var running = new[] { "Scale", "RotationAngle", "Translation", "CenterPoint", "Opacity" }
-            .Where(ch => !(ch == "Opacity" && _case.Feature == FeatureAxis.Keyframes && _case.Variant == VariantAxis.B))
+            .Where(ch => !(ch == "Opacity" && loopDeclared))
             .Where(ch => Controller(visual, ch) is not null)
             .ToList();
         if (running.Count > 0) await Finish(visual, running, MotionMs);
