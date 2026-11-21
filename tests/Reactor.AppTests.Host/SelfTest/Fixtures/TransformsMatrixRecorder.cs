@@ -396,8 +396,10 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         await Frames(2);
         if (!ReferenceEquals(Target, target))
         {
-            // A keyed Memo whose key changed replaced the control, so there is no motion to observe.
+            // The control was replaced, so there is no motion to observe. The model never remounts on a
+            // change (no case does on main), so it's a disagreement rather than a silent pass.
             f["motion"] = "remounted";
+            ModelDifferences.Add(("change", "motion:remounted"));
             return;
         }
 
