@@ -442,6 +442,31 @@ internal static class ImplicitAnimationSlotsFixtures
             await Update(Nested(Button40(), 750, null, null));
             H.Check(Name + "_NestedInnerRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(750) && Claims() == 1,
                 $"duration={KeyDuration("Offset")} claims={Claims()}");
+
+            // Featureless forwarders around a leaf whose control is replaced: the leaf's claim
+            // must still be released when its layout animation goes.
+            static Element Bare(Element leaf) => new SlotsForwarder(new SlotsForwarder(leaf));
+            await Update(Bare(Target().LayoutAnimation()));
+            await Update(Bare(Button40().LayoutAnimation()));
+            H.Check(Name + "_BareReplacedInstalled", Keys() == "Offset", $"keys={Keys()}");
+            await Update(Bare(Button40()));
+            H.Check(Name + "_BareReplacedRemoved", Keys() == "-" && Claims() == 0, $"keys={Keys()} claims={Claims()}");
+            await Update(Bare(Target().LayoutAnimation()));
+            await Update(Bare(Target()));
+            H.Check(Name + "_BareMountedRemoved", Keys() == "-" && Claims() == 0, $"keys={Keys()} claims={Claims()}");
+
+            // The middle forwarder claims in Update on a replaced control its featureless leaf
+            // mounted; the outer forwarder must still number it one slot inward.
+            static Element Mixed(Element leaf, bool middle) =>
+                new SlotsForwarder(middle ? new SlotsForwarder(leaf).LayoutAnimation(TimeSpan.FromMilliseconds(800)) : new SlotsForwarder(leaf))
+                    .Animate(Curve.Linear(900), AnimateProperty.Offset);
+            await Update(Mixed(Target(), middle: true));
+            await Update(Mixed(Button40(), middle: true));
+            H.Check(Name + "_MixedReplacedLayoutWins", KeyDuration("Offset") == TimeSpan.FromMilliseconds(800) && Claims() == 2,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+            await Update(Mixed(Button40(), middle: false));
+            H.Check(Name + "_MixedMiddleRemoved", KeyDuration("Offset") == TimeSpan.FromMilliseconds(900) && Claims() == 1,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
         }
     }
 
