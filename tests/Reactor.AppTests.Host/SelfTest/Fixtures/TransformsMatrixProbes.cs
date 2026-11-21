@@ -63,7 +63,7 @@ internal static class TransformsMatrixProbes
     private static CompositionEasingFunction Fluent(Compositor c) => c.CreateCubicBezierEasingFunction(new Vector2(0.8f, 0), new Vector2(0.2f, 1));
 
     private static string Verdict(double mid, double end) =>
-        end < 0.1 ? Model.NotApplied : mid >= 0.9 ? Model.Jumped : mid > 0.2 && mid < 0.8 && end > 0.9 ? Model.Animating : $"UNCLEAR({mid:F2},{end:F2})";
+        end < 0.1 ? Model.NotApplied : mid >= 0.9 ? Model.Jumped : mid > 0.2 && mid < 0.8 && end > 0.9 ? Model.Animating : string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"UNCLEAR({mid:F2},{end:F2})");
 
     private static async Task<string> ComponentsX(Border host, Canvas canvas)
     {
@@ -223,15 +223,27 @@ internal static class TransformsMatrixProbes
         int offX = org.X - wr.Left, offY = org.Y - wr.Top, w = wr.Right - wr.Left, hgt = wr.Bottom - wr.Top;
         double scale = target.XamlRoot.RasterizationScale;
         var origin = target.TransformToVisual(null).TransformPoint(new Point(0, 0));
-        var screenDc = GetDC(IntPtr.Zero);
-        var memDc = CreateCompatibleDC(screenDc);
-        var bmi = new BITMAPINFO { biSize = 40, biWidth = w, biHeight = -hgt, biPlanes = 1, biBitCount = 32 };
-        var dib = CreateDIBSection(memDc, ref bmi, 0, out var bits, IntPtr.Zero, 0);
-        var old = SelectObject(memDc, dib);
-        PrintWindow(hwnd, memDc, 2);
         var all = new byte[w * hgt * 4];
-        Marshal.Copy(bits, all, 0, all.Length);
-        SelectObject(memDc, old); DeleteObject(dib); DeleteDC(memDc); ReleaseDC(IntPtr.Zero, screenDc);
+        IntPtr screenDc = GetDC(IntPtr.Zero), memDc = IntPtr.Zero, dib = IntPtr.Zero, old = IntPtr.Zero;
+        try
+        {
+            memDc = screenDc == IntPtr.Zero ? IntPtr.Zero : CreateCompatibleDC(screenDc);
+            var bmi = new BITMAPINFO { biSize = 40, biWidth = w, biHeight = -hgt, biPlanes = 1, biBitCount = 32 };
+            IntPtr bits = IntPtr.Zero;
+            if (memDc != IntPtr.Zero) dib = CreateDIBSection(memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
+            if (dib == IntPtr.Zero || bits == IntPtr.Zero) throw new InvalidOperationException($"couldn't create a {w}x{hgt} capture bitmap");
+            old = SelectObject(memDc, dib);
+            // A failed PrintWindow leaves the bitmap blank, which the oracle reads as no target, not as a pose.
+            if (PrintWindow(hwnd, memDc, 2)) Marshal.Copy(bits, all, 0, all.Length);
+        }
+        finally
+        {
+            if (old != IntPtr.Zero) SelectObject(memDc, old);
+            if (dib != IntPtr.Zero) DeleteObject(dib);
+            if (memDc != IntPtr.Zero) DeleteDC(memDc);
+            if (screenDc != IntPtr.Zero) ReleaseDC(IntPtr.Zero, screenDc);
+        }
+
         int pw = (int)Math.Round(target.ActualWidth * scale), ph = (int)Math.Round(target.ActualHeight * scale);
         int x0 = offX + (int)Math.Round(origin.X * scale), y0 = offY + (int)Math.Round(origin.Y * scale);
         var px = new byte[pw * ph * 4];

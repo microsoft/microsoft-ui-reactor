@@ -109,7 +109,9 @@ internal sealed class TransformsLedger
             bool na = double.TryParse(ta[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var da);
             bool nb = double.TryParse(tb[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var db);
             if (na != nb) return false;
-            if (na ? Math.Abs(da - db) > Tolerance : ta[i] != tb[i]) return false;
+            // NaN or infinity never sits within the tolerance of anything: it must match exactly.
+            bool finite = na && double.IsFinite(da) && double.IsFinite(db);
+            if (finite ? Math.Abs(da - db) > Tolerance : ta[i] != tb[i]) return false;
         }
 
         return true;

@@ -302,7 +302,9 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             Inconclusive.Add($"{name}: observing threw {ex.GetType().Name}: {ex.Message}");
         }
 
-        f["model"] = string.Join(",", ModelDifferences.Where(d => d.Step == name).Select(d => d.Part)) is { Length: > 0 } m ? m : "ok";
+        // A screen disagreement is attributed like any other, but it isn't in `model`: whether it can be
+        // seen depends on the desktop, and the `screen` field itself carries the change.
+        f["model"] = string.Join(",", ModelDifferences.Where(d => d.Step == name && d.Part != TransformsLedger.ScreenField).Select(d => d.Part)) is { Length: > 0 } m ? m : "ok";
         f["diag"] = diagnostics.Describe();
         return ok;
     }
@@ -428,12 +430,12 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
                 double span = end - start;
                 verdict = Verdict(Math.Abs(span) < 0.05 ? end : (mid - start) / span, end);
                 if (verdict == Model.Animating && Math.Abs(span) >= 0.05)
-                    curves.Add($"{ch}={Math.Round((quarter - start) / span / 0.2) * 0.2:F1}");
+                    curves.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"{ch}={Math.Round((quarter - start) / span / 0.2) * 0.2:F1}"));
             }
             else
             {
                 double now = Progress(ch, await Snap.CaptureAsync(caseHost));
-                verdict = now >= 0.9 ? Model.Jumped : now <= 0.1 ? Model.NotApplied : $"UNCLEAR(now={now:F2})";
+                verdict = now >= 0.9 ? Model.Jumped : now <= 0.1 ? Model.NotApplied : string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"UNCLEAR(now={now:F2})");
             }
 
             if (verdict.StartsWith("UNCLEAR", StringComparison.Ordinal))
@@ -467,7 +469,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
         end < 0.1 ? Model.NotApplied
         : mid >= 0.95 ? Model.Jumped
         : mid > 0.05 && end > 0.9 ? Model.Animating
-        : $"UNCLEAR(mid={mid:F2},end={end:F2})";
+        : string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $"UNCLEAR(mid={mid:F2},end={end:F2})");
 
     private static bool XamlTransition(UIElement t, string channel) => channel switch
     {
