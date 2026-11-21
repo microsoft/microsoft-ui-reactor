@@ -25,9 +25,9 @@ internal FrameworkElement? TryRent(Type type, bool visualLane)
 {
     if (!Enabled) return null;
     if (!PoolableTypes.Contains(type)) return null;
-    if (visualLane && _visualPools.TryGetValue(type, out var taken) && taken.Count > 0) return taken.Pop();
+    if (visualLane && _visualPools.TryGetValue(type, out var taken) && taken.Count > 0) return Rented(taken.Pop());
     if (!_pools.TryGetValue(type, out var stack) || stack.Count == 0) return null;
-    return stack.Pop();
+    return Rented(stack.Pop());
 }
 ```
 
@@ -108,6 +108,9 @@ public void Return(FrameworkElement element)
     if (!Enabled) return;
     var type = element.GetType();
     if (!PoolableTypes.Contains(type)) return;
+    // A handler may return its control through UnmountContext.ReturnControl and the engine
+    // return it again. Pushing it twice would hand one control to two renters.
+    if (_pooled.Contains(element)) return;
 
     // The lane follows the native control's marker, whichever wrapper reached it (#1643).
     var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
