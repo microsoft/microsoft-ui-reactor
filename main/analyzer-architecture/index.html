@@ -4086,6 +4086,12 @@ sibling <code>src/Reactor.Analyzers.Internal/</code> project instead; see
 <td><code>AnimationScopeAsyncAnalyzer.cs</code></td>
 </tr>
 <tr>
+<td><code>REACTOR_ANIM_004</code></td>
+<td>Warning</td>
+<td><code>.Set</code> writes a <code>UIElement</code> transform facade (<code>Rotation</code>, <code>Scale</code>, <code>CenterPoint</code>, <code>RotationAxis</code>, <code>TransformMatrix</code>, the <code>*Transition</code> properties) or calls <code>StartAnimation</code> on an element whose chain uses a modifier that takes the composition visual (<code>ModifierTable.VisualOwningModifiers</code>), so WinUI rejects the write; also flags a <code>.Set</code> <code>Translation</code> write that conflicts with <code>.Translation(...)</code> (#1642). Ships a fix to <code>.Rotation</code>/<code>.Scale</code>/<code>.CenterPoint</code> (spec 066 §9.1)</td>
+<td><code>FacadeTransformSetAnalyzer.cs</code></td>
+</tr>
+<tr>
 <td><code>REACTOR_LIFECYCLE_002</code></td>
 <td>Warning</td>
 <td>UseEffect(Action) allocates a timer/subscription/event with no returned cleanup</td>
