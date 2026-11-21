@@ -86,8 +86,8 @@ internal static class TransitionEngine
         }
 
         // Reset stale compositor properties from previous animations
-        inVisual.Offset = Vector3.Zero;
-        inVisual.Scale = Vector3.One;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = Vector3.Zero);
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = Vector3.One);
 
         HitTestSuppression? outgoingSuppression = null;
         HitTestSuppression? incomingSuppression = null;
@@ -501,7 +501,7 @@ internal static class TransitionEngine
         outVisual.StartAnimation("Opacity", outFade);
 
         // Incoming: slide in + fade in
-        inVisual.Offset = inStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = inStart);
 
         var inOffset = compositor.CreateVector3KeyFrameAnimation();
         inOffset.InsertKeyFrame(0f, inStart);
@@ -576,7 +576,7 @@ internal static class TransitionEngine
         outOffset.Duration = HorizontalSlideExitDuration;
         outVisual.StartAnimation("Offset", outOffset);
 
-        inVisual.Offset = plan.InStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = plan.InStart);
         var inOffset = compositor.CreateVector3KeyFrameAnimation();
         inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
         inOffset.Duration = HorizontalSlideEntranceDuration;
@@ -607,7 +607,7 @@ internal static class TransitionEngine
         }
         else
         {
-            inVisual.Offset = offset;
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = offset);
             var inOffset = compositor.CreateVector3KeyFrameAnimation();
             inOffset.InsertKeyFrame(
                 (float)(VerticalSlideHandoffTime.TotalMilliseconds / VerticalSlideDuration.TotalMilliseconds),
@@ -686,7 +686,7 @@ internal static class TransitionEngine
             outFade.Duration = EntranceExitDuration;
             outVisual.StartAnimation("Opacity", outFade);
 
-            inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0);
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0));
             var inOffset = compositor.CreateVector3KeyFrameAnimation();
             inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
             inOffset.Duration = EntranceDuration;
@@ -812,7 +812,7 @@ internal static class TransitionEngine
         outFade.Duration = plan.OutOpacityDuration;
         outVisual.StartAnimation("Opacity", outFade);
 
-        inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f);
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f));
 
         var inScale = compositor.CreateVector3KeyFrameAnimation();
         inScale.InsertKeyFrame(1f, Vector3.One, inScaleEasing);
@@ -868,7 +868,7 @@ internal static class TransitionEngine
         else
         {
             // Forward: incoming scales up from 0.85 + fades in, outgoing fades out
-            inVisual.Scale = new Vector3(0.85f, 0.85f, 1f);
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = new Vector3(0.85f, 0.85f, 1f));
 
             var inScale = compositor.CreateVector3KeyFrameAnimation();
             inScale.InsertKeyFrame(0f, new Vector3(0.85f, 0.85f, 1f));
@@ -919,7 +919,7 @@ internal static class TransitionEngine
         outVisual.StartAnimation("Opacity", outFade);
 
         // Incoming: spring offset + fade
-        inVisual.Offset = inStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = inStart);
 
         var inSpring = compositor.CreateSpringVector3Animation();
         inSpring.DampingRatio = spring.DampingRatio;
