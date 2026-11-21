@@ -957,6 +957,10 @@ motion, but **not** for facade `Translation` after `SetIsTranslationEnabled`. Q1
 RTB and at 0.00 on screen, with animations off in both runs. Cases that write facade `Translation`
 (§4.3, §9 row 3, #1642) therefore use PrintWindow with an interactive-desktop guard (`H.Skip` without
 one), and its positive control must reproduce Q1f's `NOT-APPLIED`.
+*Layer V finding:* Q1f doesn't reproduce on hosted runners. With the spike's exact setup, PrintWindow
+reads 1.00 there, like RTB (runs 44888861991 and 44889937488), so it seems specific to the spike's RDP
+session. The screen oracle's control is therefore a facade write and its reset, which it must both
+show, and the Q1f outcome is logged as a platform fact rather than gating the oracle.
 - `VisualOwningModifiers` parity: for each modifier in `ModifierTable`, mount a fresh `Border` with a
   non-identity value, **run the feature's acquisition lifecycle**, and only then read the `VisualTaken`
   flag. Some features take the visual lazily. `InteractionStates` takes it in `TransitionToState`

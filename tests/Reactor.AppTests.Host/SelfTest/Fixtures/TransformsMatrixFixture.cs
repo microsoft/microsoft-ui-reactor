@@ -107,10 +107,14 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             {
                 if (CaseFilter is { } f && !Matches(f, id)) continue;
                 observed.Cases[id] = await Compare(id, committed, mode, () => new PoolSoak(_caseHost).RunAsync(steps));
+                CheckConclusive(id, observed.Cases[id]);
             }
 
             if (mode != Mode.Sample && (CaseFilter is null || Matches(CaseFilter, "@probe")))
+            {
                 observed.Cases["@probe"] = await Compare("@probe", committed, mode, () => TransformsMatrixProbes.RunAsync(_caseHost, H));
+                CheckConclusive("@probe", observed.Cases["@probe"]);
+            }
 
             if (everything)
             {
@@ -155,7 +159,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         LedgerCase? previous = null;
         for (int run = 1; run <= (mode == Mode.Record ? 2 : Retries); run++)
         {
-            bool inconclusive = recorder?.Inconclusive.Count > 0;
+            bool inconclusive = recorder?.Inconclusive.Count > 0 || Unclear(record);
             if (!inconclusive && expected is not null && diffs.Count == 0) break;
             if (mode != Mode.Record && !inconclusive && expected is null) break;
             if (mode == Mode.Record && !inconclusive && previous is not null && Differences(id, previous, record).Count == 0) break;
@@ -184,6 +188,14 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
               + $"in {TransformsLedger.ExpectedFile} with its §9 row or issue (TESTING.md, \"Transforms matrix and behaviour ledger\").");
         return record;
     }
+
+    /// <summary>An <c>UNCLEAR</c> verdict means an oracle couldn't decide, so the observation can't become a baseline.</summary>
+    private static bool Unclear(LedgerCase record) =>
+        record.Steps.Values.Any(static s => s.Values.Any(static v => v.Contains("UNCLEAR", StringComparison.Ordinal)));
+
+    private void CheckConclusive(string id, LedgerCase record) =>
+        Check($"TransformsMatrix_{id}_Conclusive", !Unclear(record), $"{id} has a verdict no oracle could decide after its reruns: "
+            + string.Join("; ", record.Steps.SelectMany(s => s.Value.Where(static f => f.Value.Contains("UNCLEAR", StringComparison.Ordinal)).Select(f => $"{s.Key}.{f.Key}={f.Value}"))));
 
     /// <summary>Each model disagreement must be attributed by exactly one rule in the known file.</summary>
     private void CheckModel(MatrixCase c, TransformsMatrixRecorder recorder, List<KnownDifference> known, Dictionary<KnownDifference, int> used)
@@ -431,10 +443,12 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         var plainMove = await LayoutMove(animated: false);
         Check("LayoutOffset", animatedMove.Mid > 0.05 && animatedMove.Mid < 0.95 && animatedMove.End > 0.9
             && plainMove.Mid is double.NaN && plainMove.End > 0.9, $"animated={animatedMove} plain={plainMove}");
-        // Screen (§12.2): with an interactive desktop, PrintWindow must see a plain facade Translation
-        // write, and must reproduce Q1f, where it doesn't show one that RenderTargetBitmap reports
-        // applied. Drag cases then record the screen pose; without a desktop they record "skip".
+        // Screen (§12.2): with an interactive desktop, PrintWindow must show a facade Translation write
+        // and then its reset. Q1f, where the screen drops a write that RenderTargetBitmap reports
+        // applied, reproduced over RDP in the spike but not on hosted runners, so it's logged as a
+        // platform fact rather than gating the oracle. Drag cases then record the screen pose; without a desktop they record "skip".
         _screen = null;
+        _caseHost.Child = canvas;
         Rect();
         await Shot();
         if (TransformsMatrixProbes.Screen(_caseHost, H).RedBox() is { } seen && seen.Near(identity, 3))
@@ -443,14 +457,28 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             await Shot();
             r.Translation = new Vector3(100, 0, 0);
             var applied = await ReadTranslation();
+            r.Translation = Vector3.Zero;
+            var reset = await ReadTranslation();
+            // Q1f as the spike ran it: visual taken, translation enabled, an implicit "Translation" key, rendered.
             r = Rect();
             await Shot();
+            var tv = ElementCompositionPreview.GetElementVisual(r);
             ElementCompositionPreview.SetIsTranslationEnabled(r, true);
+            var tkey = compositor.CreateVector3KeyFrameAnimation();
+            tkey.InsertExpressionKeyFrame(1, "this.FinalValue");
+            tkey.Duration = TimeSpan.FromMilliseconds(TransformsMatrixRecorder.MotionMs);
+            tkey.Target = "Translation";
+            var tkeys = compositor.CreateImplicitAnimationCollection();
+            tkeys["Translation"] = tkey;
+            tv.ImplicitAnimations = tkeys;
             await Shot();
             r.Translation = new Vector3(100, 0, 0);
-            var q1f = await ReadTranslation();
-            Check("Screen", applied.Rtb > 0.9 && applied.Screen > 0.9 && q1f.Rtb > 0.9 && q1f.Screen < 0.1,
-                $"plain rtb={applied.Rtb:F2} screen={applied.Screen:F2}, Q1f rtb={q1f.Rtb:F2} screen={q1f.Screen:F2} (expected 1/1 and 1/0)");
+            var q1f = await ReadTranslation(TransformsMatrixRecorder.MotionMs + 300);
+            tv.ImplicitAnimations = null;
+            Check("Screen", applied.Rtb > 0.9 && applied.Screen > 0.9 && reset.Rtb < 0.1 && reset.Screen < 0.1,
+                $"written rtb={applied.Rtb:F2} screen={applied.Screen:F2}, reset rtb={reset.Rtb:F2} screen={reset.Screen:F2} (expected 1/1, then 0/0)");
+            Console.WriteLine($"# TransformsMatrix screen: Q1f rtb={q1f.Rtb:F2} screen={q1f.Screen:F2} "
+                + (q1f.Rtb > 0.9 && q1f.Screen < 0.1 ? "(reproduced: drag cases need the screen pose)" : "(not reproduced on this desktop)"));
             _screen = target => TransformsMatrixProbes.Screen(target, H);
         }
         else
@@ -458,9 +486,9 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
             H.Skip("TransformsMatrix_Instrument_Screen", "PrintWindow can't see the window (no interactive desktop), so drag cases record screen=skip");
         }
 
-        async Task<(double Rtb, double Screen)> ReadTranslation()
+        async Task<(double Rtb, double Screen)> ReadTranslation(int ms = 300)
         {
-            await TransformsMatrixRecorder.Settle(300);
+            await TransformsMatrixRecorder.Settle(ms);
             static double X(Snap s) => s.RedBox() is { } b ? (b.X0 - Model.Left) / 100 : double.NaN;
             return (X(await Snap.CaptureAsync(_caseHost)), X(TransformsMatrixProbes.Screen(_caseHost, H)));
         }

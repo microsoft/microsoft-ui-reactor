@@ -147,6 +147,8 @@ public class TransformsMatrixTests
     [InlineData("pose", "120,150,220,190", "123,150,220,190", false)]
     [InlineData("ttv", "1,2;3,4", "2,2;3,5", true)]
     [InlineData("pose", "120,150,220,190", "none", false)]
+    [InlineData("pose", "120,150,220,190", "NaN,NaN,NaN,NaN", false)]
+    [InlineData("pose", "NaN,150,220,190", "NaN,150,220,190", true)]
     [InlineData("pool", "recycled=1 diff=0", "recycled=0 diff=0", false)]
     [InlineData("motion", "Scale=ANIMATING", "Scale=JUMPED", false)]
     // A run without a desktop says nothing about the screen pose, whichever side it's on.

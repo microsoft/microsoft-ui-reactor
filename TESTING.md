@@ -784,13 +784,15 @@ guessed: a XAML transition in flight (`unobservable`) and a lone `CenterPoint` (
 inconclusive verdict fails the case after its reruns, and so does a compositor that stops producing
 frames. Facade `Translation` drag cases also record `screen`, the PrintWindow pose, because
 RenderTargetBitmap reports a drag the screen doesn't show once translation is enabled (spec 066
-§12.2, Q1f). It needs an interactive desktop: without one the instrument is skipped, the field reads
-`skip`, which matches any value. Hosted runners have no such desktop, so the CI-recorded ledger
-reads `skip` there, and a record run on a desktop replaces it with the real pose.
+§12.2, Q1f; it reproduced over RDP in the spike, not on hosted runners, and each run logs which). It
+needs an interactive desktop (hosted runners have one): without one the instrument is skipped, the
+field reads `skip`, which matches any value, and a record run with a desktop replaces a recorded
+`skip` with the real pose.
 
 `model` says whether the step agrees with the analytic composition model
 ([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs)),
-and the ledger pins every disagreement exactly. Each disagreement on `main` must be attributed
+and the ledger pins every disagreement exactly (a throw or a `screen` pose is pinned by its own field).
+Each disagreement on `main`, a throw included, must be attributed
 by exactly one rule in `transforms-ledger.known.json`, and a full run fails on a rule that no
 longer matches anything. Don't bend the model to fit `main`.
 
