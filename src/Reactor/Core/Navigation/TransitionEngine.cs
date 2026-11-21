@@ -204,8 +204,8 @@ internal static class TransitionEngine
                 break;
             default:
                 // Shared-element-only navigation still swaps the surrounding pages.
-                outVisual.Opacity = 0;
-                inVisual.Opacity = 1;
+                Core.Reconciler.WithoutImplicitAnimations(outVisual, () => outVisual.Opacity = 0);
+                Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Opacity = 1);
                 break;
         }
     }
@@ -329,14 +329,28 @@ internal static class TransitionEngine
     }
 
     /// <summary>
-    /// Stops the animations this engine starts and returns the visual to its resting state.
+    /// Stops the animations this engine starts and returns the visual to its resting state. The
+    /// reset doesn't fire the page's implicit keys (an <c>.OpacityTransition()</c> on its root).
     /// </summary>
     internal static void NormalizeVisual(Visual visual)
     {
         ReleaseAnimatedProperties(visual);
-        visual.Opacity = 1;
-        visual.Offset = Vector3.Zero;
-        visual.Scale = Vector3.One;
+        Core.Reconciler.WithoutImplicitAnimations(visual, () =>
+        {
+            visual.Opacity = 1;
+            visual.Offset = Vector3.Zero;
+            visual.Scale = Vector3.One;
+        });
+    }
+
+    /// <summary>
+    /// Hides a page at once, without fading it through an implicit Opacity key the page declares
+    /// (spec 066 §5: <c>.OpacityTransition()</c> is a key on the visual).
+    /// </summary>
+    internal static void SetOpacityNow(UIElement page, float opacity)
+    {
+        var visual = Animation.AnimationHelper.GetElementVisual(page);
+        Core.Reconciler.WithoutImplicitAnimations(visual, () => visual.Opacity = opacity);
     }
 
     /// <summary>

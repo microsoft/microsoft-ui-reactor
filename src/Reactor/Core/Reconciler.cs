@@ -6094,7 +6094,8 @@ public sealed partial class Reconciler : IDisposable
         batch.End();
     }
 
-    private static void WithoutImplicitAnimations(Visual visual, Action write)
+    /// <summary>Runs visual writes that must not fire the visual's implicit animation keys.</summary>
+    internal static void WithoutImplicitAnimations(Visual visual, Action write)
     {
         var implicitAnimations = visual.ImplicitAnimations;
         if (implicitAnimations is null) { write(); return; }

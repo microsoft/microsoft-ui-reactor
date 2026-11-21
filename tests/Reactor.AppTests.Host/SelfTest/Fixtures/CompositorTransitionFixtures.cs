@@ -704,6 +704,37 @@ internal static class CompositorTransitionFixtures
         }
     }
 
+    /// <summary>
+    /// A navigation's visual writes (hiding the incoming page for a connected animation, the reset
+    /// after one) take effect at once on a page whose root declares <c>.OpacityTransition()</c>,
+    /// instead of fading through the page's implicit Opacity key. A direct write is the positive
+    /// control: it does fade.
+    /// </summary>
+    internal sealed class NavigationWrites(Harness h) : TransitionFixture(h, "CompositorTransitions_NavigationWrites")
+    {
+        private static bool Running(Microsoft.UI.Composition.Visual v)
+        {
+            try { return v.TryGetAnimationController("Opacity") is not null; }
+            catch (ArgumentException) { return false; }
+        }
+
+        protected override async Task Run()
+        {
+            using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
+            await Mount(Target().OpacityTransition(Long));
+            var visual = Visual;
+            visual.Opacity = 0.5f;
+            H.Check(Name + "_DirectWriteFades", Running(visual), "the positive control: a direct write fires the key");
+            visual.StopAnimation("Opacity");
+
+            TransitionEngine.SetOpacityNow(Control, 0);
+            H.Check(Name + "_HideIsImmediate", !Running(visual) && visual.Opacity == 0, $"running={Running(visual)} opacity={visual.Opacity}");
+            TransitionEngine.NormalizeVisual(visual);
+            H.Check(Name + "_ResetIsImmediate", !Running(visual) && visual.Opacity == 1, $"running={Running(visual)} opacity={visual.Opacity}");
+            H.Check(Name + "_KeyKept", visual.ImplicitAnimations?.ContainsKey("Opacity") == true);
+        }
+    }
+
     /// <summary>#1626, Background arm: dropping <c>.BackgroundTransition()</c> clears the XAML property.</summary>
     internal sealed class BackgroundRemoved(Harness h) : TransitionFixture(h, "CompositorTransitions_BackgroundRemoved")
     {

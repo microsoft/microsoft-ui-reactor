@@ -898,6 +898,7 @@ internal static class SelfTestFixtureRegistry
         ("CompositorTransitions_BackgroundRemoved", static harness => new CompositorTransitionFixtures.BackgroundRemoved(harness)),
         ("CompositorTransitions_StaggerRemoved", static harness => new CompositorTransitionFixtures.StaggerRemoved(harness)),
         ("CompositorTransitions_StaggerUpdated", static harness => new CompositorTransitionFixtures.StaggerUpdated(harness)),
+        ("CompositorTransitions_NavigationWrites", static harness => new CompositorTransitionFixtures.NavigationWrites(harness)),
         ("CompositorTransitions_EnterWithTransition", static harness => new CompositorTransitionFixtures.EnterWithTransition(harness)),
         ("CompositorTransitions_Diagnostic", static harness => new CompositorTransitionFixtures.Diagnostic(harness)),
         ("ImplicitSlots_DeferredRestoreSurvivesThrow", static harness => new ImplicitAnimationSlotsFixtures.DeferredRestoreSurvivesThrow(harness)),
