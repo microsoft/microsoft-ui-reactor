@@ -32,7 +32,8 @@ public sealed partial class Reconciler
     // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
     // so those claims move one slot inward before this layer claims.
     private int _mountFrames, _lastClaimFrame, _lastStampFrame;
-    private Element? _lastStampElement;
+    // Weak so the marker never keeps an element graph alive after its render.
+    private WeakReference<Element>? _lastStampElement;
 
     private void StampImplicitClaims(UIElement control, int frame, Element element)
     {
@@ -40,7 +41,8 @@ public sealed partial class Reconciler
         claims.MountFrame = frame;
         if (frame > _lastClaimFrame) _lastClaimFrame = frame;
         _lastStampFrame = frame;
-        _lastStampElement = element;
+        if (_lastStampElement is null) _lastStampElement = new(element);
+        else _lastStampElement.SetTarget(element);
     }
 
     // `self` is the element a replaced control belongs to: when its own Mount made the claims,
@@ -49,7 +51,8 @@ public sealed partial class Reconciler
     {
         if (_lastClaimFrame <= frame || ImplicitAnimationSlots.Claims(control) is not { } claims
             || claims.MountFrame <= frame) return;
-        if (self is not null && claims.MountFrame == _lastStampFrame && ReferenceEquals(_lastStampElement, self)) return;
+        if (self is not null && claims.MountFrame == _lastStampFrame
+            && _lastStampElement?.TryGetTarget(out var stamped) == true && ReferenceEquals(stamped, self)) return;
         claims.ShiftInward();
     }
 
