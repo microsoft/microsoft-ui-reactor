@@ -267,6 +267,8 @@ internal static class PoolLaneFixtures
     {
         public override async Task RunAsync()
         {
+            // Transitions honour the system's animation setting (spec 066 §5.5); this checks their keys.
+            using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             const string p = "ElementPoolLanes_ImplicitTransitions";
             using (var lab = new Lab(H))
             {

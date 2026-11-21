@@ -894,6 +894,7 @@ internal static class SelfTestFixtureRegistry
         ("CompositorTransitions_ReducedMotion", static harness => new CompositorTransitionFixtures.ReducedMotion(harness)),
         ("CompositorTransitions_SameReconcile", static harness => new CompositorTransitionFixtures.SameReconcile(harness)),
         ("CompositorTransitions_Readback", static harness => new CompositorTransitionFixtures.Readback(harness)),
+        ("CompositorTransitions_AnimateChannelLookup", static harness => new CompositorTransitionFixtures.AnimateChannelLookup(harness)),
         ("CompositorTransitions_BackgroundRemoved", static harness => new CompositorTransitionFixtures.BackgroundRemoved(harness)),
         ("CompositorTransitions_Diagnostic", static harness => new CompositorTransitionFixtures.Diagnostic(harness)),
         ("ConnectedAnimation_MountUnmount", static harness => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness)),

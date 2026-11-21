@@ -414,6 +414,19 @@ internal static class ImplicitAnimationSlotsFixtures
             await Update(Nested(Button40(), 750, null, null));
             H.Check(Name + "_NestedInnerRestored", KeyDuration("Offset") == TimeSpan.FromMilliseconds(750) && Claims() == 1,
                 $"duration={KeyDuration("Offset")} claims={Claims()}");
+
+            // Transitions on the outer layer follow a replaced control (spec 066 §5 on the
+            // replaced-control path of Update): the child's type changes under them.
+            var outerOpacity = TimeSpan.FromMilliseconds(640);
+            static Element Outer(Element child, TimeSpan opacity) => new SlotsForwarder(child)
+                .OpacityTransition(opacity).TranslationTransition(new Vector3Transition { Duration = opacity });
+            await Update(Outer(Target(), outerOpacity));
+            var before = Control;
+            await Update(Outer(Button40(), outerOpacity));
+            H.Check(Name + "_TransitionsReplaced", !ReferenceEquals(before, Control) && ElementPool.IsVisualTaken(Control)
+                && KeyDuration("Opacity") == outerOpacity && ImplicitAnimationSlots.TranslationTransition(Control) is not null,
+                $"replaced={!ReferenceEquals(before, Control)} keys={Keys()} duration={KeyDuration("Opacity")}");
+            H.Check(Name + "_TransitionsReplacedAnimate", await Animates("Opacity", Outer(Button40().Opacity(0.5), outerOpacity)));
         }
     }
 
@@ -452,6 +465,10 @@ internal static class ImplicitAnimationSlotsFixtures
             await Update(Shift(20).Animate(Curve.Linear(30), AnimateProperty.Opacity).OpacityTransition());
             await Update(Shift(30).OpacityTransition());
             H.Check(Name + "_TransitionRetained", VisualTranslation() == new Vector3(30, 0, 0), $"translation={VisualTranslation()}");
+
+            // Dropping the last transition still moves the setter's value: the visual stays taken.
+            await Update(Shift(40));
+            H.Check(Name + "_TransitionRemoved", VisualTranslation() == new Vector3(40, 0, 0), $"translation={VisualTranslation()}");
         }
     }
 }

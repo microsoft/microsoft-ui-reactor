@@ -5850,11 +5850,6 @@ public sealed partial class Reconciler : IDisposable
             // with the setting off no key is installed and Translation writes jump (§5.5).
             if (!global::Microsoft.UI.Reactor.Navigation.TransitionEngine.AnimationsEnabled) current = null;
         }
-        else if (ImplicitAnimationSlots.PublishedToVisual(uie))
-        {
-            // Taking it again keeps the migration of a facade Translation a setter wrote.
-            AnimationHelper.GetElementVisual(uie);
-        }
 
         ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, current?.Opacity, slot);
         ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, current?.Rotation, slot);

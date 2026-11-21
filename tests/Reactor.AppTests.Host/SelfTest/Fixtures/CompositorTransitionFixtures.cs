@@ -366,7 +366,35 @@ internal static class CompositorTransitionFixtures
             await Update(Target().Margin(Left + 100, Top, 0, 0).LayoutAnimation(Long), settle: false);
             await TransformsMatrixRecorder.Frames(2);
             H.Check(Name + "_PositiveControl_LayoutMoveAnimates", TransformsMatrixRecorder.Controller(Visual, "Offset") is not null);
+            // The implicit-key form of the mask (§5.2): a Components = X Scale key starts Y and Z at
+            // their final value, which takes a second keyframe. The full-mask control has one.
+            await Mount(Target().ScaleTransition(Vector(Long, Vector3TransitionComponents.X)));
+            uint masked = ScaleKeyFrames();
+            await Mount(Target().ScaleTransition(Vector(Long)));
+            uint full = ScaleKeyFrames();
+            H.Check(Name + "_ScaleMaskKeyFrames", masked == 2 && full == 1, $"masked={masked} full={full}");
+
             if (!await SeekedMotionVisible()) return;
+
+            // Seeked: width eases while height has already jumped.
+            await Mount(Target().Scale(1).ScaleTransition(Vector(Duration, Vector3TransitionComponents.X)));
+            await Update(Target().Scale(2).ScaleTransition(Vector(Duration, Vector3TransitionComponents.X)), settle: false);
+            await TransformsMatrixRecorder.Frames(2);
+            var scaleVisual = Visual;
+            if (TransformsMatrixRecorder.Controller(scaleVisual, "Scale") is { } scaleController)
+            {
+                scaleController.Pause();
+                scaleController.Progress = 0.5f;
+                await TransformsMatrixRecorder.Settle();
+                var box = await Box();
+                double w = box is { } wb ? (wb.X1 - wb.X0 - 100) / 100 : double.NaN, hgt = box is { } hb ? (hb.Y1 - hb.Y0 - 40) / 40 : double.NaN;
+                scaleController.Progress = 0.5f;
+                scaleController.Resume();
+                scaleVisual.StopAnimation("Scale");
+                H.Check(Name + "_ScaleMaskX_WidthEases_HeightJumps", Math.Abs(w - 0.5) < 0.1 && Math.Abs(hgt - 1) < 0.06, $"w={w:F3} h={hgt:F3}");
+            }
+            else H.Check(Name + "_ScaleMaskX_WidthEases_HeightJumps", false, "no controller");
+
             // Mask: X animates, Y jumps. The positive control animates both.
             var (maskX, maskY) = await Midpoint(Vector(Duration, Vector3TransitionComponents.X), ambient: null);
             H.Check(Name + "_MaskX_XAnimates", Math.Abs(maskX - 0.5) < 0.1, $"x={maskX:F3}");
@@ -380,6 +408,10 @@ internal static class CompositorTransitionFixtures
             H.Check(Name + "_WithAnimationWins", Math.Abs(ambX - 0.25) < 0.06 && Math.Abs(ambY - 0.25) < 0.06, $"x={ambX:F3} y={ambY:F3}");
 
         }
+
+        private uint ScaleKeyFrames() =>
+            Visual.ImplicitAnimations is { } keys && keys.TryGetValue("Scale", out var anim) && anim is KeyFrameAnimation kfa
+                ? (uint)kfa.KeyFrameCount : 0;
 
         /// <summary>Progress of X (0→100) and Y (0→40) with the Translation animation seeked to <paramref name="at"/>.</summary>
         private async Task<(double X, double Y)> Midpoint(Vector3Transition transition, Animation.Curve? ambient, float at = 0.5f)
@@ -475,6 +507,28 @@ internal static class CompositorTransitionFixtures
     }
 
     // ── Readback and Background (§9 row 2, §5.6) ─────────────────────────────
+
+    /// <summary>
+    /// §5.3: <c>.Animate()</c> resolves per channel across the decorator chain. An outer declaration
+    /// that excludes Translation doesn't hide an inner one that includes it. The control has no
+    /// inner declaration, so the same write jumps.
+    /// </summary>
+    internal sealed class AnimateChannelLookup(Harness h) : TransitionFixture(h, "CompositorTransitions_AnimateChannelLookup")
+    {
+        private static Element Chain(float x, bool inner)
+        {
+            var target = inner ? Target().Animate(Animation.Curve.Linear(3000), AnimateProperty.Offset) : Target();
+            return Flyout(target, TextBlock("content")).Animate(Animation.Curve.Linear(1000), AnimateProperty.Opacity).Translation(x, 0, 0);
+        }
+
+        protected override async Task Run()
+        {
+            await Mount(Chain(0, inner: true));
+            H.Check(Name + "_InnerDeclarationAnimates", await Animates("Translation", Chain(40, inner: true)));
+            await Mount(Chain(0, inner: false));
+            H.Check(Name + "_NegativeControl_NoInnerJumps", !await Animates("Translation", Chain(40, inner: false)));
+        }
+    }
 
     /// <summary>
     /// §9 row 2: an element with a transition keeps its transforms on the visual, so the facade getters

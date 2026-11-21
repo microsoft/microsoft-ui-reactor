@@ -620,6 +620,8 @@ internal static class AnimationCombinationTests
     {
         public override async Task RunAsync()
         {
+            // Transitions honour the system's animation setting (spec 066 §5.5); this checks their keys.
+            using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             var host = H.CreateHost();
             var useAnim = true;
 

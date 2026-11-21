@@ -590,12 +590,17 @@ internal static class AnimationHelper
     private static WritePolicy ResolvePolicy(UIElement element, string property, Element? source)
     {
         var ambient = AnimationScope.HasScope ? AnimationScope.Current : null;
-        var config = ambient is null ? Reconciler.FindMountedElementValue(element, static el => el.AnimationConfig, source) : null;
+        var channel = PropertyFlag(property);
+        // The outermost declaration that animates this channel: one that excludes it doesn't
+        // hide an inner one that includes it.
+        var config = ambient is null
+            ? Reconciler.FindMountedElementValue(element, el => el.AnimationConfig is { } c && (c.Properties & channel) != 0 ? c : null, source)
+            : null;
         TransitionTiming? translation = null;
         if (ambient is null && property == "Translation"
             && ImplicitAnimationSlots.TranslationTransition(element) is { } transition)
             translation = TransitionTiming.Of(transition);
-        return ResolvePolicy(ambient, config, PropertyFlag(property), translation);
+        return ResolvePolicy(ambient, config, channel, translation);
     }
 
     /// <summary>The pure part of <see cref="ResolvePolicy(UIElement, string, Element?)"/>.</summary>

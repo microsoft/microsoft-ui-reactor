@@ -218,7 +218,8 @@ class C
     public async Task Transition_Values_That_Do_Not_Map_Onto_The_Modifier_Do_Not_Fix()
     {
         // A null removes the transition, which the modifier can't express, and the scalar
-        // modifiers take a duration rather than a transition object.
+        // modifiers take a duration rather than a transition object. A Vector3 value that may be
+        // null would turn into a default transition, so it isn't moved either.
         var source = @"
 class C
 {
@@ -226,8 +227,20 @@ class C
     Element B(ScalarTransition existing) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.RotationTransition = existing|});
     Element C2() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = null|});
     Element D() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = default|});
+    Element E(bool on) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = on ? new Vector3Transition() : null|});
+    Element F(Vector3Transition? maybe) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = maybe|});
+    Element G() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = null!|});
 }";
         await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
+    public async Task Clearing_A_Transition_Is_Advised_To_Be_Removed()
+    {
+        await VerifyAsync(
+            @"class C { Element M() => Border().LayoutAnimation().Set(fe => {|#0:fe.ScaleTransition = null|}); }",
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.ScaleTransition', but '.LayoutAnimation(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove it: an element without '.ScaleTransition(...)' has no such transition, so there is nothing to clear."));
     }
 
     [Fact]

@@ -486,9 +486,10 @@ public sealed partial class Reconciler
             if (newEl.ImplicitTransitions is not null)
                 ApplyImplicitTransitions(target, null, newEl.ImplicitTransitions, implicitSlot);
         }
-        else if (TakesVisual(newEl.ImplicitTransitions))
+        else if (TakesVisual(newEl.ImplicitTransitions) || TakesVisual(oldEl.ImplicitTransitions))
         {
-            // Move a facade Translation a setter wrote in this update onto the visual.
+            // Move a facade Translation a setter wrote in this update onto the visual, also when this
+            // update dropped the last transition: the visual stays taken (as ClearLayoutAnimation does).
             AnimationHelper.GetElementVisual(target);
         }
         if (newEl.ThemeTransitions is not null)

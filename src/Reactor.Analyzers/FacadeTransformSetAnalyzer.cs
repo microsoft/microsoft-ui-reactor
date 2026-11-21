@@ -252,7 +252,10 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 (name == StartAnimationName ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
                 owningModifier,
                 name == StartAnimationName ? "call" : "write",
-                info.Advice));
+                info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
+                    && assignment is not null && IsNullValue(assignment.Right)
+                    ? "Remove it: an element without '." + transitionModifier + "(...)' has no such transition, so there is nothing to clear"
+                    : info.Advice));
         }
     }
     /// <summary>
@@ -370,6 +373,12 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             return false;
         if (IsScalarTransitionModifier(modifier) && !IsXamlType(model.GetTypeInfo(assignment.Right, ct).Type, "ScalarTransition"))
             return false;
+        // The Vector3 modifiers turn a null argument into a default transition, where the write
+        // meant none. Only a value the compiler proves non-null moves.
+        if (modifier is "ScaleTransition" or "TranslationTransition"
+            && assignment.Right is not BaseObjectCreationExpressionSyntax
+            && model.GetTypeInfo(assignment.Right, ct).Nullability.FlowState != NullableFlowState.NotNull)
+            return false;
         var moved = arguments.Arguments.Select(static argument => argument.Expression).ToList();
 
         // A setter runs while the reconciler applies the element; a modifier argument is evaluated
@@ -461,13 +470,22 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             }
             return null;
         }
-        if (modifier is "ScaleTransition" or "TranslationTransition"
-            && (right.IsKind(SyntaxKind.NullLiteralExpression) || right.IsKind(SyntaxKind.DefaultLiteralExpression)
-                || right is DefaultExpressionSyntax))
+        if (modifier is "ScaleTransition" or "TranslationTransition" && IsNullValue(right))
         {
             return null;
         }
         return SyntaxFactory.ArgumentList(
             SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(right.WithoutTrivia())));
+    }
+
+    /// <summary>A literal <c>null</c> or <c>default</c>, with or without a <c>!</c> suppression.</summary>
+    private static bool IsNullValue(ExpressionSyntax value)
+    {
+        while (value is PostfixUnaryExpressionSyntax suppressed && suppressed.IsKind(SyntaxKind.SuppressNullableWarningExpression))
+            value = suppressed.Operand;
+        while (value is ParenthesizedExpressionSyntax parenthesized)
+            value = parenthesized.Expression;
+        return value.IsKind(SyntaxKind.NullLiteralExpression) || value.IsKind(SyntaxKind.DefaultLiteralExpression)
+            || value is DefaultExpressionSyntax;
     }
 }
