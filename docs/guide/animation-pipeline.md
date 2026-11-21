@@ -145,18 +145,19 @@ When two features claim the same key, one wins:
 
 | Key | Winner, highest first |
 |---|---|
-| `Offset`, `Size` | `.LayoutAnimation()`, then `.Animate(...)`, then `.TranslationTransition()` (`Offset` only) |
+| `Offset` | `.LayoutAnimation()`, then `.Animate(...)`, then `.TranslationTransition()`, then an ambient reorder move |
+| `Size` | `.LayoutAnimation()` |
 | `Opacity`, `Scale`, `RotationAngle` | `.Animate(...)`, then the matching transition |
 | `CenterPoint` | `.Animate(...)` |
 
-Removing the winner brings the next claim back. For example,
-`.Animate(Curve.Spring(), AnimateProperty.Opacity).OpacityTransition()`
-fades with the spring, and dropping `.Animate(...)` on a later render
-returns the element to the transition's fade. When a keyed `Memo` and
-the element inside it both declare the same feature, the outer
-declaration wins, and removing it restores the inner one. A reorder
-animated by an ambient `Animations.Animate(...)` scope claims `Offset`
-below all of them.
+Removing the winner brings the next claim back. For example, an
+element with `.LayoutAnimation()` that later adds `.Animate(Curve.Spring(),
+AnimateProperty.Opacity)` and `.OpacityTransition()` fades with the
+spring, and dropping `.Animate(...)` on a later render returns it to the
+transition's fade. When a keyed `Memo` or a flyout and the element
+inside it both declare the same feature, the outer declaration wins, and
+removing it restores the inner one. A reorder animated by an ambient
+`Animations.Animate(...)` scope claims `Offset` below all of them.
 
 Removing a transition modifier removes its transition, so a later
 change of that property jumps instead of animating. While the visual
@@ -164,6 +165,14 @@ hasn't been handed out, the transitions are WinUI's own XAML
 transitions (`UIElement.OpacityTransition` and its siblings). Once a
 compositor feature has taken the visual, WinUI refuses those properties,
 and the same transitions are installed as implicit keys instead.
+
+> **Caveat:** The reverse order still fails: a XAML transition blocks the handoff, so
+> declaring `.OpacityTransition()`, `.ScaleTransition()`,
+> `.RotationTransition()` or `.TranslationTransition()` on an element
+> that mounts with `.LayoutAnimation()` or `.Animate(...)` in the same
+> render throws (issue #1623). Add the transition on a later render, or
+> wait for spec 066 layer 2, which moves every transition to the
+> compositor.
 
 ## Keyframe authoring
 

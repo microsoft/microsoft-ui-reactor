@@ -878,6 +878,8 @@ internal static class SelfTestFixtureRegistry
         ("ImplicitSlots_RemovedFallbackTransitionClears", static harness => new ImplicitAnimationSlotsFixtures.RemovedFallbackTransitionClears(harness)),
         ("ImplicitSlots_LoserRestored", static harness => new ImplicitAnimationSlotsFixtures.LoserRestored(harness)),
         ("ImplicitSlots_ChainClaimIdentity", static harness => new ImplicitAnimationSlotsFixtures.ChainClaimIdentity(harness)),
+        ("ImplicitSlots_FlyoutChainClaimIdentity", static harness => new ImplicitAnimationSlotsFixtures.FlyoutChainClaimIdentity(harness)),
+        ("ImplicitSlots_AmbientMoveKeepsLayout", static harness => new ImplicitAnimationSlotsFixtures.AmbientMoveKeepsLayout(harness)),
         ("ConnectedAnimation_MountUnmount", static harness => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness)),
         ("ConnectedAnimation_StartsAcrossReplace", static harness => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness)),
         ("ConnectedAnimation_NoSourceDoesNotStart", static harness => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness)),

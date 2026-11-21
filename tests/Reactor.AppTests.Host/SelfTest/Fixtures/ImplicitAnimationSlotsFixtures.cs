@@ -233,4 +233,84 @@ internal static class ImplicitAnimationSlotsFixtures
             H.Check(Name + "_OneClaimLeft", claims == 1, $"claims={claims}");
         }
     }
+
+    /// <summary>
+    /// §6.1 claim identity through a flyout, whose target updates on every render: each layer
+    /// keeps its own slot across updates, including after the target's control is replaced.
+    /// </summary>
+    internal sealed class FlyoutChainClaimIdentity(Harness h) : SlotsFixture(h, "ImplicitSlots_FlyoutChainClaimIdentity")
+    {
+        private static TimeSpan Ms(int ms) => TimeSpan.FromMilliseconds(ms);
+
+        private static Element Chain(Element target, int inner, int? outer)
+        {
+            var flyout = Flyout(target.LayoutAnimation(Ms(inner)), TextBlock("slots"));
+            return outer is { } ms ? flyout.LayoutAnimation(Ms(ms)) : flyout;
+        }
+
+        private int Claims() =>
+            (Control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ImplicitClaims?.Count ?? 0;
+
+        protected override async Task Run()
+        {
+            await Mount(Chain(Target(), 700, 900));
+            H.Check(Name + "_OuterWins", KeyDuration("Offset") == Ms(900), $"duration={KeyDuration("Offset")}");
+
+            await Update(Chain(Target(), 710, 910));
+            H.Check(Name + "_OuterWinsAfterUpdate", KeyDuration("Offset") == Ms(910) && Claims() == 2,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+
+            await Update(Chain(Target(), 720, null));
+            H.Check(Name + "_LatestInnerRestored", KeyDuration("Offset") == Ms(720) && Claims() == 1,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+
+            // A target of another type replaces the control under the flyout.
+            var replaced = Control;
+            await Update(Chain(Button("slots").Width(100).Height(40).HAlign(HorizontalAlignment.Left), 730, 930));
+            H.Check(Name + "_Replaced", !ReferenceEquals(replaced, Control));
+            H.Check(Name + "_ReplacedOuterWins", KeyDuration("Offset") == Ms(930) && Claims() == 2,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+
+            await Update(Chain(Button("slots").Width(100).Height(40).HAlign(HorizontalAlignment.Left), 740, null));
+            H.Check(Name + "_ReplacedInnerRestored", KeyDuration("Offset") == Ms(740) && Claims() == 1,
+                $"duration={KeyDuration("Offset")} claims={Claims()}");
+        }
+    }
+
+    /// <summary>
+    /// An ambient reorder move claims Offset below a declared layout animation, and leaves the
+    /// element's other keys alone (spec 066 §6, spec 042 §6).
+    /// </summary>
+    internal sealed class AmbientMoveKeepsLayout(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static readonly TimeSpan Layout = TimeSpan.FromMilliseconds(777);
+
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var keys = phase == 0 ? new[] { "a", "b", "c" } : new[] { "a", "c", "b" };
+                return VStack(
+                    Button("SlotsSwap", () => Animations.Animate(AnimationKind.Spring, () => setPhase(1))),
+                    FlexColumn(keys.Select(k =>
+                        Border(TextBlock(k).AutomationId($"slots_row_{k}"))
+                            .LayoutAnimation(new LayoutAnimationConfig { Duration = Layout, AnimateSize = true })
+                            .WithKey(k)).Cast<Element>().ToArray()));
+            });
+            await Harness.Render();
+
+            H.ClickButton("SlotsSwap");
+            await Harness.Render();
+
+            var tb = H.FindControl<TextBlock>(t =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "slots_row_c");
+            var collection = tb?.Parent is Border row ? ElementCompositionPreview.GetElementVisual(row).ImplicitAnimations : null;
+            var offset = collection is not null && collection.TryGetValue("Offset", out var anim) ? anim : null;
+            H.Check("ImplicitSlots_AmbientMoveKeepsLayout_LayoutOffsetWins",
+                offset is KeyFrameAnimation { Duration: var d } && d == Layout, $"offset={offset?.GetType().Name}");
+            H.Check("ImplicitSlots_AmbientMoveKeepsLayout_SizeKept", collection?.ContainsKey("Size") == true);
+        }
+    }
 }
