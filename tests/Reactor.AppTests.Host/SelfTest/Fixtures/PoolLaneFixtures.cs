@@ -552,6 +552,25 @@ internal static class PoolLaneFixtures
                 H.Check(p + "_StyledOpacity_Recycled", renter is not null && ReferenceEquals(renter, first));
                 var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
                 H.Check(p + "_StyledOpacity_Kept", Math.Abs(opacity - 0.65f) < 0.01f, $"visual={opacity} element={renter?.Opacity}");
+                // The renter's .Animate() key must not fade to the style's value.
+                H.Check(p + "_StyledOpacity_NoFade", renter is not null && !Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
+            }
+
+            // A visual written before the renter loads (navigation hiding a page) keeps that value.
+            using (var lab = new Lab(H))
+            {
+                var hiddenStyle = new Style(typeof(WinUI.Border));
+                hiddenStyle.Setters.Add(new Setter(UIElement.OpacityProperty, 0.65));
+                lab.Root.Resources[typeof(WinUI.Border)] = hiddenStyle;
+                var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
+                await lab.Show(null);
+                lab.Set(Target("R").Animate(Curve.Linear(100)));
+                var renter = lab.Child;
+                H.Check(p + "_HiddenBeforeLoad_Recycled", renter is not null && ReferenceEquals(renter, first));
+                if (renter is not null) ElementCompositionPreview.GetElementVisual(renter).Opacity = 0;
+                await Harness.Render();
+                var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
+                H.Check(p + "_HiddenBeforeLoad_Kept", opacity == 0, $"visual={opacity}");
             }
 
             // An enter fade writes 0 to the visual and animates from there. Removed mid-fade, the

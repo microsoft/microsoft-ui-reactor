@@ -721,11 +721,24 @@ public sealed class ElementPool : IDisposable
         var fe = (FrameworkElement)sender;
         fe.Loaded -= OnRenterLoaded;
         if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-            && (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0)
+            && (state.PoolExcluded || (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0))
             return;
         var visual = ElementCompositionPreview.GetElementVisual(fe);
-        if (visual.TryGetAnimationController("Opacity") is not null) return;
-        visual.Opacity = (float)fe.Opacity;
+        // Something wrote the visual since the reset (navigation hiding a page, user code), or
+        // animates it now, and owns it.
+        if (visual.Opacity != 1f || visual.TryGetAnimationController("Opacity") is not null) return;
+        float opacity = (float)fe.Opacity;
+        if (opacity == 1f) return;
+        // XAML would have shown this value without a transition, so a renter's implicit Opacity key
+        // (.Animate()) must not fade to it. The same animation goes back, so its claim holds.
+        ICompositionAnimationBase? implicitOpacity = null;
+        if (visual.ImplicitAnimations is { } implicits && implicits.TryGetValue("Opacity", out var key))
+        {
+            implicitOpacity = key;
+            implicits.Remove("Opacity");
+        }
+        visual.Opacity = opacity;
+        if (implicitOpacity is not null) visual.ImplicitAnimations!["Opacity"] = implicitOpacity;
     }
 
     public void Dispose()

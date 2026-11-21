@@ -456,7 +456,8 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
 2. `ImplicitAnimationSlots.ReleaseAll` (`ImplicitAnimations = null`).
 3. Identity writes. `Opacity = 1`. XAML pushes `UIElement.Opacity` to the visual only when it changes, so when a
    visual-lane renter loads, the visual gets its `UIElement.Opacity` unless a Reactor feature owns the visual's
-   opacity by then. Otherwise a style or modifier opacity equal to the previous renter's would never reach it.
+   opacity by then, or something wrote the visual first (navigation hiding a page). The renter's implicit `Opacity`
+   key is held back for that write, so the value shows without a fade. Otherwise a style or modifier opacity equal to the previous renter's would never reach it.
    Then `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
    `CenterPoint = Zero`, `AnchorPoint = Zero`, `Orientation = Identity`, `TransformMatrix = Identity`,
    zero relative adjustments, `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
