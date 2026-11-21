@@ -119,7 +119,7 @@ internal static class SetLambdaHelpers
     /// The expression body or block body of a lambda, or <c>null</c> when the node is not a
     /// lambda at all.
     /// </summary>
-    private static SyntaxNode? GetLambdaBody(ExpressionSyntax lambdaExpr) =>
+    internal static SyntaxNode? GetLambdaBody(ExpressionSyntax lambdaExpr) =>
         lambdaExpr switch
         {
             SimpleLambdaExpressionSyntax simple => (SyntaxNode?)simple.ExpressionBody ?? simple.Block,
@@ -451,7 +451,7 @@ internal static class SetLambdaHelpers
     /// purpose: a shadowing declaration that happens to reuse the name only costs a declined
     /// fix, whereas missing a real reference emits broken code.
     /// </remarks>
-    private static bool ReferencesIdentifier(SyntaxNode expression, string identifier)
+    internal static bool ReferencesIdentifier(SyntaxNode expression, string identifier)
         => expression.DescendantNodesAndSelf()
             .OfType<IdentifierNameSyntax>()
             .Any(name => string.Equals(name.Identifier.Text, identifier, StringComparison.Ordinal));
