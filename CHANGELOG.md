@@ -146,6 +146,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
+  block's default text brush and updates it when the block's effective theme
+  changes (issue #1002).
+
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
   channel inside one `try`, and stopping `Translation` throws when translation was never

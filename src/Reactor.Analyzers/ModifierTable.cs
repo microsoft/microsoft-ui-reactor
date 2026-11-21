@@ -13,13 +13,15 @@ internal sealed class ModifierInfo
         bool poolReset = false,
         string[]? controlGate = null,
         string[]? elementTypes = null,
-        string[]? poolResetGate = null)
+        string[]? poolResetGate = null,
+        string[]? themeControlGate = null)
     {
         Modifier = modifier;
         PoolReset = poolReset;
         ControlGate = controlGate;
         ElementTypes = elementTypes;
         PoolResetGate = poolResetGate;
+        ThemeControlGate = themeControlGate;
     }
 
     /// <summary>Name of the fluent modifier method to suggest.</summary>
@@ -47,6 +49,12 @@ internal sealed class ModifierInfo
     /// </para>
     /// </summary>
     public string[]? ControlGate { get; }
+
+    /// <summary>
+    /// WinUI types supported by the generic <c>ThemeRef</c> overload when its theme-binding
+    /// path differs from <see cref="ControlGate"/>. The analyzer otherwise uses the common gate.
+    /// </summary>
+    public string[]? ThemeControlGate { get; }
 
     /// <summary>
     /// Reactor element types that declare a type-specific overload of this modifier, or
@@ -293,6 +301,8 @@ internal static class ModifierTable
     private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
     private static readonly string[] PanelControlBorder = { "Panel", "Control", "Border" };
     private static readonly string[] ControlOrTextBlock = { "Control", "TextBlock" };
+    private static readonly string[] ForegroundThemeControlGate =
+        [..ControlOrTextBlock, "RichTextBlock"];
     private static readonly string[] RichTextBlockOnly = { "RichTextBlockElement" };
     private static readonly string[] TextOrRichTextBlock = { "TextBlockElement", "RichTextBlockElement" };
 
@@ -482,7 +492,8 @@ internal static class ModifierTable
             { "FontFamily", new ModifierInfo("FontFamily", controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontSize",   new ModifierInfo("FontSize",   controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontWeight", new ModifierInfo("FontWeight", controlGate: ControlOrTextBlock, elementTypes: RichTextBlockOnly) },
-            { "Foreground", new ModifierInfo("Foreground", controlGate: ControlOrTextBlock, elementTypes: RichTextBlockOnly) },
+            { "Foreground", new ModifierInfo("Foreground", controlGate: ControlOrTextBlock,
+                elementTypes: RichTextBlockOnly, themeControlGate: ForegroundThemeControlGate) },
 
             // ── Type-specific modifiers (REACTOR_MOD_002, Info) ──────────────────────
             // No generic overload exists, so the rewrite only compiles on these element
