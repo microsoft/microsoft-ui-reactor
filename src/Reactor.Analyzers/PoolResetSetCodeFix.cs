@@ -228,7 +228,7 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
         return perStatement;
     }
 
-    private static bool IsComment(SyntaxTrivia trivia)
+    internal static bool IsComment(SyntaxTrivia trivia)
         => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
             || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia)
             || trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
