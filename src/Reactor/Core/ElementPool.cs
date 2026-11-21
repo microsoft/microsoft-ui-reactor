@@ -663,10 +663,6 @@ public sealed class ElementPool : IDisposable
         // Translation is a property-set entry that exists only once translation was enabled;
         // stopping or writing a missing entry throws ArgumentException (#1641).
         bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
-        // XAML pushes UIElement.Opacity to the visual only when it differs from what it pushed
-        // last, and that is the static value until a stop lands. Restore exactly it, so the next
-        // renter's opacity (a style's, a modifier's or the default) still reaches the visual.
-        float xamlOpacity = visual.Opacity;
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
@@ -682,7 +678,8 @@ public sealed class ElementPool : IDisposable
         // fresh handoff visual doesn't reliably carry ActualSize.
         visual.Offset = fe.ActualOffset;
 
-        visual.Opacity = xamlOpacity;
+        // XAML's own opacity comes back when the renter loads (SyncOpacityWhenLoaded).
+        visual.Opacity = 1;
         visual.IsVisible = true;
         visual.Scale = Vector3.One;
         visual.RotationAngle = 0;
@@ -710,6 +707,31 @@ public sealed class ElementPool : IDisposable
         }
 
         Reconciler.ForgetCompositionState(fe);
+    }
+
+    /// <summary>
+    /// XAML pushes <c>UIElement.Opacity</c> to the visual only when it differs from its last push,
+    /// so after the reset's identity write a renter whose opacity (a style's, a modifier's or the
+    /// default) equals the previous renter's would never see it. Once the renter is in the tree
+    /// with its styles, the visual gets XAML's value, unless a Reactor feature owns the visual's
+    /// opacity by then.
+    /// </summary>
+    internal static void SyncOpacityWhenLoaded(FrameworkElement fe)
+    {
+        fe.Loaded -= OnRenterLoaded;
+        fe.Loaded += OnRenterLoaded;
+    }
+
+    private static void OnRenterLoaded(object sender, RoutedEventArgs e)
+    {
+        var fe = (FrameworkElement)sender;
+        fe.Loaded -= OnRenterLoaded;
+        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
+            && (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0)
+            return;
+        var visual = ElementCompositionPreview.GetElementVisual(fe);
+        if (visual.TryGetAnimationController("Opacity") is not null) return;
+        visual.Opacity = (float)fe.Opacity;
     }
 
     public void Dispose()
