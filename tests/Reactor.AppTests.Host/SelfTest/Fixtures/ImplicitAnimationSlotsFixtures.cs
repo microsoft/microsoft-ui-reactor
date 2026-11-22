@@ -419,6 +419,21 @@ internal static class ImplicitAnimationSlotsFixtures
             H.Check(Name + "_NoKeyDuringSetter", !keyDuringSetter);
             H.Check(Name + "_SetterWriteJumped", visual.TryGetAnimationController("Offset") is null);
             H.Check(Name + "_Released", Keys() == "-", $"keys={Keys()}");
+
+            // A retained layout animation that turns its Offset channel off releases it early too.
+            await Update(Target().Animate(Curve.Linear(3000), AnimateProperty.Offset)
+                .LayoutAnimation(TimeSpan.FromSeconds(5)));
+            visual.StopAnimation("Offset");
+            keyDuringSetter = true;
+            await Update(Target().LayoutAnimation(new LayoutAnimationConfig { AnimateOffset = false, AnimateSize = true })
+                .Set(c =>
+                {
+                    keyDuringSetter = visual.ImplicitAnimations?.ContainsKey("Offset") == true;
+                    visual.Offset = visual.Offset + new Vector3(5, 0, 0);
+                }));
+            H.Check(Name + "_ChannelOffNoKeyDuringSetter", !keyDuringSetter);
+            H.Check(Name + "_ChannelOffWriteJumped", visual.TryGetAnimationController("Offset") is null);
+            H.Check(Name + "_ChannelOffKeepsSize", Keys() == "Size", $"keys={Keys()}");
         }
     }
 
