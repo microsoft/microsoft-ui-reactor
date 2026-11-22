@@ -681,6 +681,7 @@ public sealed class ElementPool : IDisposable
         // once it is laid out (SyncOpacityWhenLoaded). Size is left alone, because a fresh handoff
         // visual doesn't reliably carry ActualSize.
         visual.Offset = fe.ActualOffset;
+        Reconciler.GetOrCreateReactorState(fe).PoolResetOffset = fe.ActualOffset;
 
         // XAML's own opacity comes back when the renter loads (SyncOpacityWhenLoaded).
         visual.Opacity = 1;
@@ -793,9 +794,16 @@ public sealed class ElementPool : IDisposable
         // writes Offset only when the position changes. A renter at the previous renter's non-zero
         // position would otherwise draw at its parent's origin. Placing it isn't a move, so a
         // renter's implicit Offset key (.LayoutAnimation()) must not animate it.
+        // Only while the visual still holds what the reset wrote: anything else is a write since
+        // then (the renter's own, or XAML's for a new position) and stands.
         var layoutOffset = fe.ActualOffset;
-        if (visual.Offset != layoutOffset && visual.TryGetAnimationController("Offset") is null)
+        if (state.PoolResetOffset is { } resetOffset && visual.Offset == resetOffset && resetOffset != layoutOffset
+            && visual.TryGetAnimationController("Offset") is null)
+        {
             WriteWithoutImplicitKey(visual, "Offset", () => visual.Offset = layoutOffset);
+            OffsetSyncWritesForTests++;
+        }
+        state.PoolResetOffset = null;
 
         if ((state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0) return;
         // Something wrote the visual since the reset (navigation hiding a page, user code), or
@@ -829,6 +837,9 @@ public sealed class ElementPool : IDisposable
     // sync made. XAML may push a styled opacity itself when a control re-enters the tree, so the
     // visual's final value can't tell whether the sync wrote.
     internal static int OpacitySyncWritesForTests;
+
+    // Test-only seam, same visibility: counts the layout-offset writes the sync made.
+    internal static int OffsetSyncWritesForTests;
 
     public void Dispose()
     {

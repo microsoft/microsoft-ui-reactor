@@ -84,6 +84,9 @@ public sealed partial class Reconciler
         var prevReconcilingElement = _reconcilingElement;
         var outerRent = _rentContext;
         _rentContext = ForMount(element, modifiers, outerRent);
+        var outerVisualLaneRental = _visualLaneRental;
+        _visualLaneRental = null;
+        FrameworkElement? visualLaneRental = null;
         try
         {
         // The innermost element being mounted owns any virtualized-host context capture
@@ -295,6 +298,8 @@ public sealed partial class Reconciler
         {
             _reconcilingElement = prevReconcilingElement;
             _rentContext = outerRent;
+            visualLaneRental = _visualLaneRental;
+            _visualLaneRental = outerVisualLaneRental;
             if (pushedStagger)
                 PopStaggerScope();
             if (ctxCount > 0)
@@ -303,6 +308,7 @@ public sealed partial class Reconciler
         }
 
         NoteMountCompleted(boundaryRootsStart, control);
+        if (visualLaneRental is not null) ElementPool.SyncOpacityWhenLoaded(visualLaneRental);
         if (control is not null && _modifierMountParent is not null
             && ReferenceEquals(prevReconcilingElement, _modifierMountParent))
             (_modifierMounts ??= []).Add((control, modifierTarget));
