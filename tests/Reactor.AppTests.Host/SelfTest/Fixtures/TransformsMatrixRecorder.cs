@@ -466,10 +466,13 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
                     {
                         await Frames(2);
                         double now = Progress(ch, await Snap.CaptureAsync(caseHost));
-                        if (Math.Abs(now - last) < 0.01) break;
+                        if (Math.Abs(now - last) < 0.01) return now;
                         last = now;
                     }
 
+                    // Still drifting after five tries, so no reading here can be trusted.
+                    Inconclusive.Add(string.Create(global::System.Globalization.CultureInfo.InvariantCulture,
+                        $"change: {ch} never settled at {progress:F2} (last {last:F2})"));
                     return last;
                 }
 
