@@ -133,6 +133,9 @@ jobs:
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj -p:Platform=x64
 
+      - name: Restore (ToolkitCompatibility.HeadlessTests)
+        run: dotnet restore tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj
+
       - name: Extract the base transforms ledger
         # Spec 066 §12.1 C.2: TransformsMatrixTests checks that every change between the behaviour
         # ledger on the PR's base commit and this PR's ledger is declared, ignoring expectations the
@@ -189,6 +192,10 @@ jobs:
         # Same !cancelled() rationale as the step above.
         if: ${{ !cancelled() }}
         run: dotnet test tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj --no-restore -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
+
+      - name: Test (ToolkitCompatibility.HeadlessTests)
+        if: ${{ !cancelled() }}
+        run: dotnet test tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj --no-restore
 
   audit-ledger:
     name: Audit ledger gate
