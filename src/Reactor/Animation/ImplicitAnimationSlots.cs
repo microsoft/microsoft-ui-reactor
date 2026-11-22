@@ -116,14 +116,16 @@ internal sealed class ImplicitAnimationClaims
 
     internal object? Effective(string key)
     {
-        Claim? best = null;
-        foreach (var claim in _claims)
+        int best = -1;
+        for (int i = 0; i < _claims.Count; i++)
         {
+            var claim = _claims[i];
             if (claim.Key != key) continue;
-            if (best is not { } b || claim.Feature > b.Feature || (claim.Feature == b.Feature && claim.Slot < b.Slot))
-                best = claim;
+            if (best < 0 || claim.Feature > _claims[best].Feature
+                || (claim.Feature == _claims[best].Feature && claim.Slot < _claims[best].Slot))
+                best = i;
         }
-        return best?.Value;
+        return best < 0 ? null : _claims[best].Value;
     }
 
     private int IndexOf(string key, ImplicitFeature feature, int slot)
