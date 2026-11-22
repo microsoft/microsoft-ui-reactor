@@ -37,18 +37,27 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
         return global::System.IO.Path.Join(dir!.FullName, "src", "Reactor", "build", "Reactor.targets");
     }
 
-    private (int ExitCode, string Output) Build(string assemblyName)
+    private const string References = """
+        <ReferencePath Include="C:\nuget\microsoft.ui.reactor\lib\net10.0-windows10.0.22621.0\Reactor.dll" />
+        <ReferencePath Include="C:\nuget\other\lib\net10.0\Other.Library.dll" />
+        """;
+
+    private (int ExitCode, string Output) Build(string assemblyName, string extraProperties = "")
     {
         var project = $"""
             <Project>
-              <PropertyGroup><AssemblyName>{assemblyName}</AssemblyName></PropertyGroup>
+              <PropertyGroup><AssemblyName>{assemblyName}</AssemblyName>{extraProperties}</PropertyGroup>
               <ItemGroup>
-                <ReferencePath Include="C:\nuget\microsoft.ui.reactor\lib\net10.0-windows10.0.22621.0\Reactor.dll" />
-                <ReferencePath Include="C:\nuget\other\lib\net10.0\Other.Library.dll" />
+                {References}
               </ItemGroup>
               <Import Project="{TargetsPath()}" />
             </Project>
             """;
+        return Run(project, "_ReactorCheckAssemblyNameCollision");
+    }
+
+    private (int ExitCode, string Output) Run(string project, string target)
+    {
         var path = global::System.IO.Path.Join(_dir, $"p{Guid.NewGuid():N}.proj");
         global::System.IO.File.WriteAllText(path, project);
 
@@ -62,7 +71,7 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
         psi.ArgumentList.Add("msbuild");
         psi.ArgumentList.Add(path);
         psi.ArgumentList.Add("-nologo");
-        psi.ArgumentList.Add("-t:_ReactorCheckAssemblyNameCollision");
+        psi.ArgumentList.Add($"-t:{target}");
 
         using var process = Process.Start(psi)!;
         var stdout = process.StandardOutput.ReadToEnd();
@@ -101,4 +110,57 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
         Assert.True(exitCode == 0, output);
         Assert.DoesNotContain("REACTOR_BUILD_001", output, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void OptOutProperty_SkipsTheCheck()
+    {
+        var (exitCode, output) = Build("reactor", "<ReactorSkipAssemblyNameCollisionCheck>true</ReactorSkipAssemblyNameCollisionCheck>");
+        Assert.True(exitCode == 0, output);
+        Assert.DoesNotContain("REACTOR_BUILD_001", output, StringComparison.Ordinal);
+    }
+
+    // Builds the normal compile entry point, not the check target, so this fails if the target
+    // loses its hook into the build (AfterTargets/BeforeTargets).
+    [Fact]
+    public void CompileOfCollidingApp_RunsTheCheckBeforeCoreCompile()
+    {
+        var project = $"""
+            <Project>
+              <PropertyGroup><AssemblyName>reactor</AssemblyName></PropertyGroup>
+              <Target Name="ResolveAssemblyReferences">
+                <ItemGroup>
+                  {References}
+                </ItemGroup>
+              </Target>
+              <Target Name="CoreCompile" DependsOnTargets="ResolveAssemblyReferences">
+                <Message Importance="high" Text="CORE_COMPILE_RAN" />
+              </Target>
+              <Import Project="{TargetsPath()}" />
+            </Project>
+            """;
+
+        var (exitCode, output) = Run(project, "CoreCompile");
+        Assert.NotEqual(0, exitCode);
+        Assert.Contains("REACTOR_BUILD_001", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("CORE_COMPILE_RAN", output, StringComparison.Ordinal);
+    }
+}
+
+public sealed class ProjectNameRulesTests
+{
+    [Theory]
+    [InlineData("Reactor")]
+    [InlineData("reactor")]
+    [InlineData("REACTOR.ADVANCED")]
+    [InlineData("Reactor.Wrappers.Abstractions")]
+    [InlineData("microsoft.ui.reactor")]
+    public void ReactorAssemblyOrPackageName_IsRejected(string name) =>
+        Assert.True(Microsoft.UI.Reactor.Cli.ProjectNameRules.CollidesWithReactorAssembly(name));
+
+    [Theory]
+    [InlineData("MyApp")]
+    [InlineData("ReactorApp")]
+    [InlineData("Reactor.Sample")]
+    public void OtherName_IsAllowed(string name) =>
+        Assert.False(Microsoft.UI.Reactor.Cli.ProjectNameRules.CollidesWithReactorAssembly(name));
 }
