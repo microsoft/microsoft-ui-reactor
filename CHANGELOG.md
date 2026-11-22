@@ -535,7 +535,9 @@ Conventions for contributors:
   `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
   the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
   only reads the dictionaries itself when WinUI cannot find the key for that theme, never
-  reading WinUI's own `XamlControlsResources` that way.
+  reading WinUI's own `XamlControlsResources` that way. The lookup uses
+  `FrameworkElement.SetThemeResourceBinding` too, so a key with both quote characters, a tab
+  or a line break resolves through WinUI instead of only through the dictionaries (issue #1634).
 
 - `ThemeRef` modifiers that go through the synthesized `{ThemeResource}` Style, ported from
   the `SetThemeResourceBinding` work in PR #1618 so they don't wait for a new Windows App SDK

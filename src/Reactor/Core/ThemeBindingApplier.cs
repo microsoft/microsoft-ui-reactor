@@ -465,54 +465,6 @@ internal static partial class ThemeBindingApplier
         return null;
     }
 
-    /// <summary>
-    /// The value of a <c>{ThemeResource}</c> setter for <paramref name="resourceKey"/>, escaped
-    /// for an XML attribute, or null when the key cannot be written in a markup extension: it
-    /// is empty, contains both quote characters, or contains characters an XML attribute does
-    /// not keep as they are (tab, carriage return, line feed, or characters XML does not allow).
-    /// </summary>
-    /// <remarks>
-    /// The key is quoted, so commas, braces, '=' and spaces survive markup-extension parsing.
-    /// Inside the quotes a backslash escapes the next character, so it is doubled. A backslash
-    /// does not escape the quote character itself, so a key containing ' is quoted with ".
-    /// Used by the ThemeRef probe (<see cref="ThemeResourceProbe"/>). Theme modifiers no longer
-    /// write markup: <see cref="FrameworkElement.SetThemeResourceBinding"/> takes the key as is.
-    /// </remarks>
-    internal static string? FormatThemeResourceReference(string? resourceKey)
-    {
-        if (string.IsNullOrEmpty(resourceKey) || !IsWritableAsAttribute(resourceKey)) return null;
-
-        bool hasSingle = resourceKey.Contains('\'');
-        if (hasSingle && resourceKey.Contains('"')) return null;
-        char quote = hasSingle ? '"' : '\'';
-        var reference = "{ThemeResource " + quote + resourceKey.Replace("\\", "\\\\") + quote + "}";
-        return global::System.Security.SecurityElement.Escape(reference);
-    }
-
-    // XML 1.0 characters, minus tab, CR and LF, which an attribute value would turn into spaces.
-    // Checked by hand rather than with XmlConvert, which would root System.Xml in every app that
-    // uses a ThemeRef.
-    private static bool IsWritableAsAttribute(string value)
-    {
-        for (int i = 0; i < value.Length; i++)
-        {
-            char c = value[i];
-            if (c < '\u0020' || c is '\uFFFE' or '\uFFFF')
-                return false;
-            if (char.IsHighSurrogate(c))
-            {
-                if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
-                    return false;
-                i++;
-            }
-            else if (char.IsLowSurrogate(c))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
     // ── Lightweight Styling: per-control resource overrides ────────────────
 
     /// <summary>
