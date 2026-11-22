@@ -462,7 +462,7 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         _caseHost.Child = canvas;
         Rect();
         await Shot();
-        if (TransformsMatrixProbes.Screen(_caseHost, H).RedBox() is { } seen && seen.Near(identity, 3))
+        if (TransformsMatrixProbes.TryScreen(_caseHost, H)?.RedBox() is { } seen && seen.Near(identity, 3))
         {
             r = Rect();
             await Shot();
@@ -501,7 +501,8 @@ internal sealed class TransformsMatrixFixture(Harness h) : SelfTestFixtureBase(h
         {
             await TransformsMatrixRecorder.Settle(ms);
             static double X(Snap s) => s.RedBox() is { } b ? (b.X0 - Model.Left) / 100 : double.NaN;
-            return (X(await Snap.CaptureAsync(_caseHost)), X(TransformsMatrixProbes.Screen(_caseHost, H)));
+            var screen = TransformsMatrixProbes.TryScreen(_caseHost, H);
+            return (X(await Snap.CaptureAsync(_caseHost)), screen is null ? double.NaN : X(screen));
         }
 
         // Diagnostics: a warning emitted during a step is seen, and nothing is reported otherwise.
