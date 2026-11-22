@@ -64,8 +64,10 @@ internal static class AnimationHelper
     /// to the visual, since the two would otherwise add up until the next render.
     /// </summary>
     internal static void EnableTranslation(UIElement element, Visual visual)
+        => EnableTranslation(element, Reconciler.GetOrCreateReactorState(element), visual);
+
+    private static void EnableTranslation(UIElement element, Reconciler.ReactorState state, Visual visual)
     {
-        var state = Reconciler.GetOrCreateReactorState(element);
         if (state.TranslationEnabled) return;
         ElementCompositionPreview.SetIsTranslationEnabled(element, true);
         state.TranslationEnabled = true;
@@ -73,28 +75,29 @@ internal static class AnimationHelper
         if (facade == Vector3.Zero) return;
         element.Translation = Vector3.Zero;
         visual.Properties.InsertVector3("Translation", facade);
+        // A hover-out returns here, not to zero; a modifier write replaces it.
+        (state.TransformRest ??= new()).Translation = facade;
     }
 
     /// <summary>Whether Reactor enabled translation on the element's visual (<see cref="EnableTranslation"/>).</summary>
     internal static bool TranslationEnabled(UIElement element)
         => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { TranslationEnabled: true };
 
-    private static void MarkCompositionWrite(UIElement element, string property, float value)
+    private static void MarkCompositionWrite(Reconciler.ReactorState state, string property, float value)
     {
-        var state = MarkCompositionWrite(element, property);
+        MarkCompositionWrite(state, property);
         if (property == "Rotation") (state.TransformRest ??= new()).RotationDegrees = value;
     }
 
-    private static void MarkCompositionWrite(UIElement element, string property, Vector3 value)
+    private static void MarkCompositionWrite(Reconciler.ReactorState state, string property, Vector3 value)
     {
-        var state = MarkCompositionWrite(element, property);
+        MarkCompositionWrite(state, property);
         if (property == "Scale") (state.TransformRest ??= new()).Scale = value;
         else if (property == "Translation") (state.TransformRest ??= new()).Translation = value;
     }
 
-    private static Reconciler.ReactorState MarkCompositionWrite(UIElement element, string property)
+    private static Reconciler.ReactorState MarkCompositionWrite(Reconciler.ReactorState state, string property)
     {
-        var state = Reconciler.GetOrCreateReactorState(element);
         var flag = PropertyFlag(property);
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
@@ -102,7 +105,7 @@ internal static class AnimationHelper
         return state;
     }
 
-    private static Visual GetAnimationVisual(UIElement element) => GetElementVisual(element);
+    private static Visual GetAnimationVisual(UIElement element, out Reconciler.ReactorState state) => GetElementVisual(element, out state);
 
     // The diagnostic is a filter that never catches, so the exception keeps its stack (spec 066 §9 row 1).
     private static Visual TakeVisual(UIElement element)
@@ -210,10 +213,18 @@ internal static class AnimationHelper
     /// so it stays where user code put it: it moves only when a Translation channel is declared,
     /// through <see cref="EnableTranslation"/> (§4.3, #1642).
     /// </remarks>
-    internal static Visual GetElementVisual(UIElement element)
+    internal static Visual GetElementVisual(UIElement element) => GetElementVisual(element, out _);
+
+    /// <inheritdoc cref="GetElementVisual(UIElement)"/>
+    /// <param name="element">The element whose visual to take.</param>
+    /// <param name="state">The element's attached state, read once for the caller's bookkeeping.</param>
+    internal static Visual GetElementVisual(UIElement element, out Reconciler.ReactorState state)
     {
-        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { HandedOutVisual: { } handedOut })
+        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { HandedOutVisual: { } handedOut } known)
+        {
+            state = known;
             return handedOut;
+        }
         var scale = element.Scale;
         var rotation = element.Rotation;
         var center = element.CenterPoint;
@@ -221,7 +232,7 @@ internal static class AnimationHelper
         if (!(moveScale || moveRotation || moveCenter))
         {
             var taken = TakeVisual(element);
-            MarkHandedOut(element, taken);
+            state = MarkHandedOut(element, taken);
             return taken;
         }
 
@@ -242,23 +253,24 @@ internal static class AnimationHelper
             if (moveCenter) element.CenterPoint = center;
             throw;
         }
-        MarkHandedOut(element, visual);
+        state = MarkHandedOut(element, visual);
 
         // Facade Rotation is in degrees; RotationAngle is in radians.
         if (moveScale) visual.Scale = scale;
         if (moveRotation) visual.RotationAngle = rotation * MathF.PI / 180f;
         if (moveCenter) visual.CenterPoint = center;
-        if (moveScale) MarkCompositionWrite(element, "Scale", scale);
-        if (moveRotation) MarkCompositionWrite(element, "Rotation", rotation);
-        if (moveCenter) MarkCompositionWrite(element, "CenterPoint");
+        if (moveScale) MarkCompositionWrite(state, "Scale", scale);
+        if (moveRotation) MarkCompositionWrite(state, "Rotation", rotation);
+        if (moveCenter) MarkCompositionWrite(state, "CenterPoint");
         return visual;
     }
 
-    private static void MarkHandedOut(UIElement element, Visual visual)
+    private static Reconciler.ReactorState MarkHandedOut(UIElement element, Visual visual)
     {
         var state = Reconciler.GetOrCreateReactorState(element);
         state.VisualTaken = true;
         state.HandedOutVisual = visual;
+        return state;
     }
 
     /// <summary>
@@ -281,7 +293,7 @@ internal static class AnimationHelper
             }
         }
         if (state is null || (state.CompositionModifierProperties & flag) == 0) return;
-        var visual = GetAnimationVisual(element);
+        var visual = GetElementVisual(element);
         // A shared target can replace the deferred animation before its decorator plays.
         if (expectedController is not null && !Equals(expectedController, visual.TryGetAnimationController(CompositorPropertyName(property))))
         {
@@ -340,7 +352,7 @@ internal static class AnimationHelper
             return;
         }
 
-        var visual = GetAnimationVisual(element);
+        var visual = GetAnimationVisual(element, out var state);
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
         // Rotation is degrees, but its compositor channel is RotationAngle (radians).
@@ -380,7 +392,7 @@ internal static class AnimationHelper
                 SetScalarDirect(element, property, value);
                 return;
         }
-        MarkCompositionWrite(element, property, value);
+        MarkCompositionWrite(state, property, value);
     }
 
     /// <summary>
@@ -557,8 +569,8 @@ internal static class AnimationHelper
             return;
         }
 
-        var visual = GetAnimationVisual(element);
-        if (property == "Translation") EnableTranslation(element, visual);
+        var visual = GetAnimationVisual(element, out var state);
+        if (property == "Translation") EnableTranslation(element, state, visual);
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
 
@@ -602,7 +614,7 @@ internal static class AnimationHelper
                 SetVector3Direct(element, property, value);
                 return;
         }
-        MarkCompositionWrite(element, property, value);
+        MarkCompositionWrite(state, property, value);
     }
 
     /// <summary>How a modifier write moves: a curve, and for Translation the axes it animates.</summary>
@@ -669,32 +681,32 @@ internal static class AnimationHelper
                 element.Opacity = value;
                 return;
             }
-            var opacityVisual = GetAnimationVisual(element);
+            var opacityVisual = GetAnimationVisual(element, out var opacityState);
             element.Opacity = value;
             opacityVisual.Opacity = value;
-            MarkCompositionWrite(element, property, value);
+            MarkCompositionWrite(opacityState, property, value);
             return;
         }
         // Write the RotationAngle channel, not RotationAngleInDegrees: implicit animations
         // (.Animate(), the RotationTransition key) are keyed on "RotationAngle" and only
         // trigger on a write to that exact property.
-        GetAnimationVisual(element).RotationAngle = float.DegreesToRadians(value);
-        MarkCompositionWrite(element, property, value);
+        GetAnimationVisual(element, out var state).RotationAngle = float.DegreesToRadians(value);
+        MarkCompositionWrite(state, property, value);
     }
 
     private static void SetVector3Direct(UIElement element, string property, Vector3 value)
     {
-        var visual = GetAnimationVisual(element);
+        var visual = GetAnimationVisual(element, out var state);
         switch (property)
         {
             case "Scale": visual.Scale = value; break;
             case "Translation":
-                EnableTranslation(element, visual);
+                EnableTranslation(element, state, visual);
                 visual.Properties.InsertVector3("Translation", value);
                 break;
             case "CenterPoint": visual.CenterPoint = value; break;
         }
-        MarkCompositionWrite(element, property, value);
+        MarkCompositionWrite(state, property, value);
     }
 }
 

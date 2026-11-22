@@ -72,6 +72,13 @@ internal static class TransformsOnVisualFixtures
 
                 await Mount(value(Target()));
                 H.Check(p + "_PositiveControl_ValueTakesVisual", ElementPool.IsVisualTaken(Control));
+
+                // Added and removed on update: the write path runs and still takes nothing.
+                await Mount(Target());
+                await Update(identity(Target()));
+                H.Check(p + "_AddedOnUpdate_KeepsFacades", !ElementPool.IsVisualTaken(Control));
+                await Update(Target());
+                H.Check(p + "_RemovedOnUpdate_KeepsFacades", !ElementPool.IsVisualTaken(Control));
             }
 
             // .InteractionStates() marks the control for the pool before its first state change,
@@ -159,6 +166,8 @@ internal static class TransformsOnVisualFixtures
             H.Check(Name + "_Press_TranslationNotEnabled", !HasTranslation(Visual), $"visual={VisualTranslation(Visual)}");
             Control.Translation = new Vector3(60, 0, 0);
             await TransformsMatrixRecorder.Settle();
+            // Corroboration only: RenderTargetBitmap can show a facade Translation the screen ignores
+            // once translation is enabled (spec 066 §12.2, Q1f), so _Press_TranslationNotEnabled is the gate.
             var box = await Box();
             H.Check(Name + "_Press_DragApplies", box is { } b && Near(b.X0, Left + 60) && Near(b.X1 - b.X0, 97), $"box={box}");
 
@@ -180,6 +189,20 @@ internal static class TransformsOnVisualFixtures
                 && VisualTranslation(Visual) == new Vector3(10, 0, 0), $"facade={Control.Translation} visual={VisualTranslation(Visual)}");
             var declared = await Box();
             H.Check(Name + "_Declared_ModifierOwns", declared is { } d && Near(d.X0, Left + 10), $"box={declared}");
+
+            // A state that moves translation is a declared channel: hover takes it over, and
+            // hover-out returns to the offset user code had left on the facade, not to zero.
+            await Mount(Target().InteractionStates(static b => b.PointerOver(translation: new Vector3(0, -10, 0)), Curve.Linear(1)));
+            Control.Translation = new Vector3(7, 0, 0);
+            await TransformsMatrixRecorder.Settle();
+            Reconciler.SimulatePointerOverForTests(Control, isOver: true);
+            await TransformsMatrixRecorder.Settle(200);
+            var hovered = await Box();
+            H.Check(Name + "_HoverTranslation_PositiveControl_Moves", hovered is { } hv && Near(hv.X0, Left) && Near(hv.Y0, Top - 10), $"box={hovered}");
+            Reconciler.SimulatePointerOverForTests(Control, isOver: false);
+            await TransformsMatrixRecorder.Settle(200);
+            var rested = await Box();
+            H.Check(Name + "_HoverTranslation_ReturnsToFacadeOffset", rested is { } rs && Near(rs.X0, Left + 7) && Near(rs.Y0, Top), $"box={rested}");
         }
     }
 

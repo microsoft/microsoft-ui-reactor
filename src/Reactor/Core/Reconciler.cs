@@ -6019,9 +6019,6 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearLayoutAnimation(UIElement uie, int slot = 0)
     {
-        // The layout animation took the visual. Taking it again moves a facade Translation that
-        // a setter wrote in this update onto it.
-        AnimationHelper.GetElementVisual(uie);
         ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
         ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
     }

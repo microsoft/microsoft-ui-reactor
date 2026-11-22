@@ -529,9 +529,15 @@ class C
     [Fact]
     public async Task Later_Same_Modifier_Blocks_The_Fix()
     {
-        // The rewrite would put a dead '.Rotation(45)' before the '.Rotation(30)' that wins.
+        // The rewrite would put a dead '.Rotation(45)' before the '.Rotation(30)' that wins, so the
+        // advice is to remove the write instead.
         var source = @"class C { Element M() => Border().Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}).Rotation(30); }";
         await VerifyFixAsync(source, source);
+        await VerifyAsync(
+            @"class C { Element M() => Border().Set(fe => {|#0:fe.Rotation = 45|}).Rotation(30); }",
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning)
+                .WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.Rotation', but '.Rotation(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove the write or merge the value into the existing '.Rotation(...)' call."));
     }
 
     [Fact]

@@ -178,8 +178,15 @@ class PanGestureExample : Component
                     .Width(120).Height(120)
                     .Background(Theme.Accent)
                     .CornerRadius(8)
-                    .Translation(offset.X, offset.Y, 0)
-                    .OnMount(fe => cardRef.Current = fe)
+                    // No .Translation(offset...) here: the card's position is written to
+                    // fe.Translation directly, and a declared .Translation() would own
+                    // translation on the composition visual, after which WinUI ignores
+                    // fe.Translation writes. Restore the committed position on mount instead.
+                    .OnMount(fe =>
+                    {
+                        cardRef.Current = fe;
+                        fe.Translation = new System.Numerics.Vector3(committedRef.Current.X, committedRef.Current.Y, 0);
+                    })
                     .OnPan(
                         onChanged: g =>
                         {
@@ -196,6 +203,7 @@ class PanGestureExample : Component
                         withInertia: true)
             ).Height(260).Background(Theme.CardBackground).CornerRadius(8).Padding(16),
 
+            TextBlock($"Committed: ({offset.X:F0}, {offset.Y:F0})"),
             Button("Reset position", Reset)
         );
     }

@@ -246,9 +246,13 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 continue;
 
             var info = FacadeMembers[name];
+            // The chain already has the modifier, so it owns the channel and the write is dead.
+            var existingModifier = info.Modifier is { } own
+                && FindChainModifier(invocation, model, ct, n => n == own) is not null;
             var properties = ImmutableDictionary<string, string?>.Empty;
             if (assignment is not null
                 && info.Modifier is { } modifier
+                && !existingModifier
                 && IsFixable(invocation, setAccess, lambda, paramName, assignment, modifier, model, ct))
             {
                 properties = properties.Add(FixModifierKey, modifier);
@@ -261,7 +265,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 (name == StartAnimationName ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
                 owningModifier,
                 name == StartAnimationName ? "call" : "write",
-                info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
+                existingModifier
+                    ? "Remove the write or merge the value into the existing '." + info.Modifier + "(...)' call"
+                    : info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
                     && assignment is not null && IsNullValue(assignment.Right)
                     ? "Remove it: an element without '." + transitionModifier + "(...)' has no such transition, so there is nothing to clear"
                     : info.Advice));

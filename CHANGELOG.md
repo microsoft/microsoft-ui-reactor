@@ -73,7 +73,9 @@ Conventions for contributors:
   the run-time `DiagnosticLog` warning that names the modifier also covers `.OnMount(...)`. A
   `.Set` write on mount still works for `Rotation`, `Scale` and `CenterPoint` (the value moves to the
   visual), but not on a later render. Transformed controls are pooled in the visual lane, and the
-  first handoff costs about 0.1 ms per element.
+  first handoff costs about 0.1 ms per element. `REACTOR_ANIM_004` checks `.Set` only, so a facade write
+  in `.OnMount(...)` surfaces at run time. `ReactorDiagnostics.GetAppliedProperties` reports the four
+  modifiers as `Visual.Scale`, `Visual.RotationAngle`, `Visual.Translation` and `Visual.CenterPoint`.
 
 - **An element with `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` or
   `.TranslationTransition()` keeps its transforms on the composition visual (spec 066 §9 rows 1
@@ -187,7 +189,9 @@ Conventions for contributors:
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after
   which WinUI ignored every later `fe.Translation` write, so a drag card that wrote `fe.Translation`
-  from a handler stopped moving once it gained `.Scale(pressed ? 0.97f : 1)` or a hover state.
+  from a handler stopped moving once it gained a hover state, a transition, `.Animate(...)` or an
+  animated scale, and with transforms on the visual a plain `.Scale(pressed ? 0.97f : 1)` would have
+  done the same.
   Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
   `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
   write `fe.Translation` on an element that declares one of those.

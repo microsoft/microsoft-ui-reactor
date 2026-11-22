@@ -677,9 +677,12 @@ internal static class PoolLaneFixtures
             });
             // A layout offset that isn't zero, so the reset can't pass by writing zero.
             await Case("Margin", Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)), null, margin: true);
+            // A renter's own implicit Offset key must not animate the restored layout offset.
+            await Case("MarginLayoutAnimation", Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)), null, margin: true,
+                renter: Target("R").Margin(30, 20, 0, 0).LayoutAnimation());
         }
 
-        private async Task Case(string name, Element moved, Action<FrameworkElement>? move, bool margin = false)
+        private async Task Case(string name, Element moved, Action<FrameworkElement>? move, bool margin = false, Element? renter = null)
         {
             string p = "ElementPoolLanes_LayoutOffset_" + name;
             using var lab = new Lab(H);
@@ -695,7 +698,7 @@ internal static class PoolLaneFixtures
             await Harness.Render();
             await lab.Show(null);
 
-            var renter = margin ? Target("R").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)) : Target("R").Animate(Curve.Linear(100));
+            renter ??= margin ? Target("R").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)) : Target("R").Animate(Curve.Linear(100));
             var rentedControl = await lab.Show(renter);
             H.Check(p + "_Recycled", ReferenceEquals(rentedControl, first));
             if (rentedControl is null) return;
@@ -703,8 +706,31 @@ internal static class PoolLaneFixtures
             H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f
                 && Math.Abs(offset.X - rentedControl.ActualOffset.X) < 0.5f,
                 $"visual={offset} layout={rentedControl.ActualOffset}");
+            H.Check(p + "_OffsetNotAnimated", !Running(ElementCompositionPreview.GetElementVisual(rentedControl), "Offset"));
             var (diff, sizes) = await DiffFromFresh(H, lab, renter);
             H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
+        }
+    }
+
+    /// <summary>
+    /// A visual-lane renter that declares <c>.Translation()</c> gets translation enabled again: the
+    /// visual reset disables it and forgets that Reactor enabled it (spec 066 §4.3 and §7.3).
+    /// </summary>
+    internal sealed class TranslationRenter(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_TranslationRenter";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Target("T").Translation(10, 0, 0));
+            H.Check(p + "_Mounted", first is not null && ElementPool.IsVisualTaken(first));
+            await lab.Show(null);
+            var rented = await lab.Show(Target("R").Translation(20, 0, 0));
+            H.Check(p + "_Recycled", rented is not null && ReferenceEquals(rented, first));
+            if (rented is null) return;
+            await Harness.Render();
+            var box = (await Snap.CaptureAsync(lab.Root)).RedBox();
+            H.Check(p + "_Applied", box is { } b && Math.Abs(b.X0 - 20) <= 2, $"box={box}");
         }
     }
 
