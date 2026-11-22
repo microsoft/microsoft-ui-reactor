@@ -226,8 +226,15 @@ class PanGestureExample : Component
                     .Width(120).Height(120)
                     .Background(Theme.Accent)
                     .CornerRadius(8)
-                    .Translation(offset.X, offset.Y, 0)
-                    .OnMount(fe => cardRef.Current = fe)
+                    // No .Translation(offset...) here: the card's position is written to
+                    // fe.Translation directly, and a declared .Translation() would own
+                    // translation on the composition visual, after which WinUI ignores
+                    // fe.Translation writes. Restore the committed position on mount instead.
+                    .OnMount(fe =>
+                    {
+                        cardRef.Current = fe;
+                        fe.Translation = new System.Numerics.Vector3(committedRef.Current.X, committedRef.Current.Y, 0);
+                    })
                     .OnPan(
                         onChanged: g =>
                         {
@@ -244,6 +251,7 @@ class PanGestureExample : Component
                         withInertia: true)
             ).Height(260).Background(Theme.CardBackground).CornerRadius(8).Padding(16),
 
+            TextBlock($"Committed: ({offset.X:F0}, {offset.Y:F0})"),
             Button("Reset position", Reset)
         );
     }
@@ -680,10 +688,13 @@ see [recipes/drag-reorder](recipes/drag-reorder.md).
 
 ### Pinch-to-zoom on an image
 
-Combine `.OnPinch` with the element's `Scale` compositor property driven from
-state. Scale is cumulative since `Began` — apply it directly in `onChanged` for 60 Hz
-behavior (same pattern as pan above), then commit to `UseState` in
-`onEnded`. The reconciler unions `ManipulationModes` so adding
+Combine `.OnPinch` with `.Scale(...)` driven from state. Scale is cumulative
+since `Began`. For 60 Hz behavior, write the scale to the element's composition
+visual in `onChanged` (`ElementCompositionPreview.GetElementVisual(fe).Scale`)
+and commit to `UseState` in `onEnded`, so `.Scale(state)` takes over at rest.
+Don't write the `fe.Scale` facade on an element that declares `.Scale()`:
+the modifier takes the composition visual, after which WinUI throws on facade
+writes. The reconciler unions `ManipulationModes` so adding
 `.OnRotate` on the same element is free.
 
 ### Trap focus inside a modal
@@ -751,7 +762,9 @@ raw event (preview, capture, multi-touch coordination).
 during pan drops frames — Reactor's render loop priorities lose to
 the manipulation event stream. Grab a ref to the mounted element
 and write `Translation` inside `onChanged`; commit to state once on
-`onEnded`. The pan snippet above is the canonical shape.
+`onEnded`. The pan snippet above is the canonical shape. Don't also
+declare `.Translation(...)` on that element: it enables translation on the
+composition visual, and WinUI then ignores the `Translation` writes.
 
 **Long-press needs `enableMouseEmulation: true` for mouse users.**
 WinUI's `Holding` event doesn't fire for mouse pointers by design.
