@@ -152,6 +152,13 @@ template's pins differ from the block above — it targets a newer Windows SDK
 (`windows10.0.26100.0`) and lets the `Microsoft.Windows.SDK.BuildTools.WinApp`
 version float (`@*`) — and both headers work.
 
+Don't name the file `reactor.cs` (or `Reactor.Advanced.cs`, or after any other
+assembly the app references). The file name becomes the assembly name, and
+assembly names are case-insensitive, so an app called `reactor` loads in place
+of Reactor's own `Reactor.dll` and dies at startup with a `TypeLoadException`.
+The build stops this with `REACTOR_BUILD_001`. Rename the file, or keep it and
+add `#:property AssemblyName=MyApp`.
+
 ### Running it unpackaged
 
 `WindowsPackageType` decides whether the app runs packaged, and `dotnet run` and
