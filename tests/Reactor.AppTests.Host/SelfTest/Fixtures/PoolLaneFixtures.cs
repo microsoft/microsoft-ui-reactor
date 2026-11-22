@@ -73,6 +73,40 @@ internal static class PoolLaneFixtures
         }
     }
 
+    /// <summary>
+    /// Pixel difference between the lab's stage and a fresh stage mounting <paramref name="renter"/>.
+    /// A capture taken before its stage settles has a different bitmap size, so both are captured
+    /// again until the sizes match, and the sizes are reported with the result.
+    /// </summary>
+    private static async Task<(int Diff, string Sizes)> DiffFromFresh(Harness h, Lab lab, Element renter)
+    {
+        using var fresh = new Reconciler();
+        var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;
+        Snap rented = await Snap.CaptureAsync(lab.Root), clean = rented;
+        try
+        {
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                h.SetContent(freshRoot);
+                for (int i = 0; i < 20 && (freshRoot.ActualWidth != lab.Root.ActualWidth
+                    || freshRoot.ActualHeight != lab.Root.ActualHeight); i++)
+                    await Harness.Render(16);
+                await Harness.Render();
+                clean = await Snap.CaptureAsync(freshRoot);
+                if (clean.Width == rented.Width && clean.Height == rented.Height) break;
+                h.SetContent(lab.Root);
+                await Harness.Render(16);
+                rented = await Snap.CaptureAsync(lab.Root);
+            }
+        }
+        finally
+        {
+            fresh.UnmountChild(freshRoot);
+            h.SetContent(lab.Root);
+        }
+        return (rented.Diff(clean), $"rented={rented.Width}x{rented.Height} fresh={clean.Width}x{clean.Height}");
+    }
+
     private static bool Running(Visual v, string channel)
     {
         try { return v.TryGetAnimationController(channel) is not null; }
@@ -144,21 +178,8 @@ internal static class PoolLaneFixtures
                 var keys = visual.ImplicitAnimations?.Select(kv => kv.Key).ToArray() ?? [];
                 H.Check(p + "_OnlyRenterKeys", keys.SequenceEqual(["Offset"]), string.Join(",", keys));
 
-                var rented = await Snap.CaptureAsync(lab.Root);
-                using (var fresh = new Reconciler())
-                {
-                    var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;
-                    H.SetContent(freshRoot);
-                    // Capture only once the fresh stage has the same layout size as the rented one.
-                    for (int i = 0; i < 20 && (freshRoot.ActualWidth != lab.Root.ActualWidth
-                        || freshRoot.ActualHeight != lab.Root.ActualHeight); i++)
-                        await Harness.Render(16);
-                    await Harness.Render();
-                    int diff = rented.Diff(await Snap.CaptureAsync(freshRoot));
-                    H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff}");
-                    fresh.UnmountChild(freshRoot);
-                    H.SetContent(lab.Root);
-                }
+                var (diff, sizes) = await DiffFromFresh(H, lab, renter);
+                H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
 
                 // The stray key is gone, so a write lands without animating.
                 await lab.Show(renter.Opacity(0.5));
@@ -548,29 +569,53 @@ internal static class PoolLaneFixtures
                 lab.Root.Resources[typeof(WinUI.Border)] = style;
                 var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
                 await lab.Show(null);
+                int writes = ElementPool.OpacitySyncWritesForTests;
                 var renter = await lab.Show(Target("R").Animate(Curve.Linear(100)));
                 H.Check(p + "_StyledOpacity_Recycled", renter is not null && ReferenceEquals(renter, first));
+                H.Check(p + "_StyledOpacity_Synced", await OpacitySynced(renter));
                 var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
                 H.Check(p + "_StyledOpacity_Kept", Math.Abs(opacity - 0.65f) < 0.01f, $"visual={opacity} element={renter?.Opacity}");
-                // The renter's .Animate() key must not fade to the style's value.
-                H.Check(p + "_StyledOpacity_NoFade", renter is not null && !Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
+                // The renter's .Animate() key must not fade to the style's value. Only the sync's own write
+                // is judged: XAML may push the style itself on re-entry, which starts the key too.
+                int syncWrites = ElementPool.OpacitySyncWritesForTests - writes;
+                H.Check(p + "_StyledOpacity_NoFade", renter is not null && (syncWrites == 0 || !Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity")),
+                    $"syncWrites={syncWrites}");
             }
 
-            // A visual written before the renter loads (navigation hiding a page) keeps that value.
+            // A visual written before the renter loads (navigation hiding a .LayoutAnimation() page)
+            // keeps that value.
             using (var lab = new Lab(H))
             {
                 var hiddenStyle = new Style(typeof(WinUI.Border));
                 hiddenStyle.Setters.Add(new Setter(UIElement.OpacityProperty, 0.65));
                 lab.Root.Resources[typeof(WinUI.Border)] = hiddenStyle;
-                var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
+                var first = await lab.Show(Target("A").LayoutAnimation());
                 await lab.Show(null);
-                lab.Set(Target("R").Animate(Curve.Linear(100)));
-                var renter = lab.Child;
+                // Navigation's order: mount the page, hide it, then attach it.
+                var renter = lab.Reconciler.Mount(Target("R").LayoutAnimation(), static () => { }) as FrameworkElement;
                 H.Check(p + "_HiddenBeforeLoad_Recycled", renter is not null && ReferenceEquals(renter, first));
-                if (renter is not null) ElementCompositionPreview.GetElementVisual(renter).Opacity = 0;
-                await Harness.Render();
-                var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
-                H.Check(p + "_HiddenBeforeLoad_Kept", opacity == 0, $"visual={opacity}");
+                if (renter is null) return;
+                H.Check(p + "_HiddenBeforeLoad_PendingBeforeAttach", ElementPool.IsOpacitySyncPending(renter));
+                ElementCompositionPreview.GetElementVisual(renter).Opacity = 0;
+                int writes = ElementPool.OpacitySyncWritesForTests;
+                lab.Root.Children.Add(renter);
+                // The sync ran after the write, so not writing isn't just a sync that hasn't run.
+                H.Check(p + "_HiddenBeforeLoad_Synced", await OpacitySynced(renter));
+                // XAML may push the style's opacity itself on re-entry, so the oracle is the sync's own
+                // write, not the visual's final value.
+                H.Check(p + "_HiddenBeforeLoad_Kept", ElementPool.OpacitySyncWritesForTests == writes,
+                    $"syncWrites={ElementPool.OpacitySyncWritesForTests - writes} visual={ElementCompositionPreview.GetElementVisual(renter).Opacity}");
+                lab.Root.Children.Remove(renter);
+                lab.Reconciler.UnmountChild(renter);
+
+                // Unmounted before it ever attached (a navigation cancelled first), a renter must not
+                // stay on the window's layout list.
+                await lab.Show(Target("A2").LayoutAnimation());
+                await lab.Show(null);
+                var cancelled = lab.Reconciler.Mount(Target("C").LayoutAnimation(), static () => { }) as FrameworkElement;
+                H.Check(p + "_CancelledBeforeAttach_Pending", cancelled is not null && ElementPool.IsOpacitySyncPending(cancelled));
+                if (cancelled is not null) lab.Reconciler.UnmountChild(cancelled);
+                H.Check(p + "_CancelledBeforeAttach_Released", cancelled is not null && !ElementPool.IsOpacitySyncPending(cancelled));
             }
 
             // An enter fade writes 0 to the visual and animates from there. Removed mid-fade, the
@@ -584,6 +629,15 @@ internal static class PoolLaneFixtures
                 var opacity = renter is null ? -1 : ElementCompositionPreview.GetElementVisual(renter).Opacity;
                 H.Check(p + "_InterruptedFade_Visible", Math.Abs(opacity - 1f) < 0.01f, $"visual={opacity}");
             }
+        }
+
+        /// <summary>Waits for the renter's load-time opacity sync to run, on the signal itself.</summary>
+        private static async Task<bool> OpacitySynced(FrameworkElement? renter)
+        {
+            if (renter is null) return false;
+            for (int i = 0; i < 60 && ElementPool.IsOpacitySyncPending(renter); i++)
+                await Harness.Render(16);
+            return !ElementPool.IsOpacitySyncPending(renter);
         }
 
         private async Task BrushTransition<TControl>(string p, Func<string, Element> build,
@@ -642,18 +696,8 @@ internal static class PoolLaneFixtures
             var offset = ElementCompositionPreview.GetElementVisual(rentedControl).Offset;
             H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f,
                 $"visual={offset} layout={rentedControl.ActualOffset}");
-            var rented = await Snap.CaptureAsync(lab.Root);
-            using var fresh = new Reconciler();
-            var freshRoot = (FrameworkElement)fresh.Mount(Stage(renter), static () => { })!;
-            H.SetContent(freshRoot);
-            for (int i = 0; i < 20 && (freshRoot.ActualWidth != lab.Root.ActualWidth
-                || freshRoot.ActualHeight != lab.Root.ActualHeight); i++)
-                await Harness.Render(16);
-            await Harness.Render();
-            int diff = rented.Diff(await Snap.CaptureAsync(freshRoot));
-            H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff}");
-            fresh.UnmountChild(freshRoot);
-            H.SetContent(lab.Root);
+            var (diff, sizes) = await DiffFromFresh(H, lab, renter);
+            H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
         }
     }
 
