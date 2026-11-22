@@ -632,7 +632,7 @@ internal static class PoolLaneFixtures
         }
 
         /// <summary>Waits for the renter's load-time opacity sync to run, on the signal itself.</summary>
-        private static async Task<bool> OpacitySynced(FrameworkElement? renter)
+        internal static async Task<bool> OpacitySynced(FrameworkElement? renter)
         {
             if (renter is null) return false;
             for (int i = 0; i < 60 && ElementPool.IsOpacitySyncPending(renter); i++)
@@ -677,6 +677,53 @@ internal static class PoolLaneFixtures
             // A renter's own implicit Offset key must not animate the restored layout offset.
             await Case("MarginLayoutAnimation", Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)), null, margin: true,
                 renter: Target("R").Margin(30, 20, 0, 0).LayoutAnimation());
+            await PreAttachWrite();
+            await ThrowingMount();
+        }
+
+        /// <summary>
+        /// An offset written to the renter's visual before its sync runs stands. The renter has no
+        /// implicit Offset key, so the write doesn't start an animation that would hide the case.
+        /// </summary>
+        private async Task PreAttachWrite()
+        {
+            const string p = "ElementPoolLanes_LayoutOffset_PreSyncWrite";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)));
+            await lab.Show(null);
+            lab.Set(Target("R").Margin(30, 20, 0, 0).Keyframes("pulse", 1,
+                static k => k.Duration(60000).At(0f, opacity: 0.5f).At(1f, opacity: 1f)));
+            var renter = lab.Child;
+            H.Check(p + "_Recycled", renter is not null && ReferenceEquals(renter, first));
+            if (renter is null) return;
+            H.Check(p + "_PendingBeforeLayout", ElementPool.IsOpacitySyncPending(renter));
+            ElementCompositionPreview.GetElementVisual(renter).Offset = new Vector3(0, 40, 0);
+            int writes = ElementPool.OffsetSyncWritesForTests;
+            H.Check(p + "_Synced", await ResetLeftovers.OpacitySynced(renter));
+            // XAML may push the layout offset itself, so the oracle is the sync's own write.
+            H.Check(p + "_Kept", ElementPool.OffsetSyncWritesForTests == writes,
+                $"syncWrites={ElementPool.OffsetSyncWritesForTests - writes} visual={ElementCompositionPreview.GetElementVisual(renter).Offset}");
+        }
+
+        /// <summary>
+        /// A visual-lane renter whose mount throws (a child failing under an ErrorBoundary) is never
+        /// unmounted, so it must not be left subscribed to the window's layout passes.
+        /// </summary>
+        private async Task ThrowingMount()
+        {
+            const string p = "ElementPoolLanes_LayoutOffset_ThrowingMount";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Target("A").Animate(Curve.Linear(100)));
+            await lab.Show(null);
+            H.Check(p + "_Pooled", first is not null && !ElementPool.IsOpacitySyncPending(first));
+            await lab.Show(ErrorBoundary(
+                Border(RenderEachTime(static _ => throw new InvalidOperationException("boom"))).Width(100).Height(40)
+                    .Animate(Curve.Linear(100)),
+                static _ => TextBlock("caught")));
+            var next = await lab.Show(Target("N").Animate(Curve.Linear(100)));
+            // The failed mount took the pooled control, so the next renter gets a new one.
+            H.Check(p + "_Rented", next is not null && !ReferenceEquals(next, first));
+            H.Check(p + "_NotPending", first is not null && !ElementPool.IsOpacitySyncPending(first));
         }
 
         private async Task Case(string name, Element moved, Action<FrameworkElement>? move, bool margin = false, Element? renter = null)
