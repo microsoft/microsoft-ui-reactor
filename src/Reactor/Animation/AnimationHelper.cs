@@ -38,7 +38,10 @@ internal static class AnimationHelper
     /// </summary>
     private static bool SkipsHandoff(UIElement element, string property, bool identity)
     {
-        if (!identity || ElementPool.IsVisualTaken(element)) return false;
+        // The actual handoff, not VisualTaken: .InteractionStates() sets that before its first
+        // state change, while the facades are still writable.
+        if (!identity || element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { HandedOutVisual: not null })
+            return false;
         return property switch
         {
             "Scale" => element.Scale == Vector3.One,
@@ -209,6 +212,8 @@ internal static class AnimationHelper
     /// </remarks>
     internal static Visual GetElementVisual(UIElement element)
     {
+        if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { HandedOutVisual: { } handedOut })
+            return handedOut;
         var scale = element.Scale;
         var rotation = element.Rotation;
         var center = element.CenterPoint;
@@ -216,7 +221,7 @@ internal static class AnimationHelper
         if (!(moveScale || moveRotation || moveCenter))
         {
             var taken = TakeVisual(element);
-            ElementPool.MarkVisualTaken(element);
+            MarkHandedOut(element, taken);
             return taken;
         }
 
@@ -237,7 +242,7 @@ internal static class AnimationHelper
             if (moveCenter) element.CenterPoint = center;
             throw;
         }
-        ElementPool.MarkVisualTaken(element);
+        MarkHandedOut(element, visual);
 
         // Facade Rotation is in degrees; RotationAngle is in radians.
         if (moveScale) visual.Scale = scale;
@@ -247,6 +252,13 @@ internal static class AnimationHelper
         if (moveRotation) MarkCompositionWrite(element, "Rotation", rotation);
         if (moveCenter) MarkCompositionWrite(element, "CenterPoint");
         return visual;
+    }
+
+    private static void MarkHandedOut(UIElement element, Visual visual)
+    {
+        var state = Reconciler.GetOrCreateReactorState(element);
+        state.VisualTaken = true;
+        state.HandedOutVisual = visual;
     }
 
     /// <summary>

@@ -1707,6 +1707,11 @@ public sealed partial class Reconciler : IDisposable
         // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
         // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
         internal bool VisualTaken;
+        // Set by AnimationHelper.GetElementVisual once the handoff succeeded, unlike VisualTaken,
+        // which some features set ahead of it. WinUI then rejects facade writes, so the facades
+        // read identity and a later handoff returns this visual (the same instance for the
+        // control's lifetime) without asking WinUI again.
+        internal Microsoft.UI.Composition.Visual? HandedOutVisual;
         // Reactor enabled translation on the handed-out visual for a declared Translation channel
         // (spec 066 §4.3). The pool's visual reset disables it again and clears this.
         internal bool TranslationEnabled;

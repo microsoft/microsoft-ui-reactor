@@ -73,6 +73,15 @@ internal static class TransformsOnVisualFixtures
                 await Mount(value(Target()));
                 H.Check(p + "_PositiveControl_ValueTakesVisual", ElementPool.IsVisualTaken(Control));
             }
+
+            // .InteractionStates() marks the control for the pool before its first state change,
+            // while the facades are still writable; an identity transform next to it mustn't take
+            // the visual early.
+            await Mount(Target().InteractionStates(static b => b.PointerOver(scale: 1.1f)).Rotation(0));
+            Exception? early = null;
+            try { Control.Scale = new Vector3(1.5f, 1.5f, 1); }
+            catch (Exception ex) { early = ex; }
+            H.Check(Name + "_InteractionStates_IdentityKeepsFacades", early is null, early?.GetType().Name ?? "");
         }
     }
 
