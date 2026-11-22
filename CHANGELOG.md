@@ -54,6 +54,22 @@ Conventions for contributors:
 
 ### Changed
 
+- **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
+  visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
+  the first time it is written, so the transforms use one channel whether or not a compositor
+  feature is present. An identity value (`.Scale(1)`, `.Rotation(0)`) on a control whose visual
+  wasn't taken writes nothing. On a transformed element `fe.Scale`, `fe.Rotation` and
+  `fe.CenterPoint` read back identity (read `ElementCompositionPreview.GetElementVisual(fe)`
+  instead), and WinUI rejects a `.Set(...)` or `.OnMount(...)` that writes `Rotation`, `Scale`,
+  `CenterPoint`, `RotationAxis`, `TransformMatrix` or a XAML `*Transition` property after the
+  visual was taken. **Migration:** move the write into the modifier. `REACTOR_ANIM_004` now treats
+  the four transform modifiers as taking the visual, flags such a `.Set` at build time and rewrites
+  a single assignment (`.Set(fe => fe.Rotation = 45).Scale(2)` becomes `.Rotation(45).Scale(2)`), and
+  the run-time `DiagnosticLog` warning that names the modifier also covers `.OnMount(...)`. A
+  `.Set` write on mount still works for `Rotation`, `Scale` and `CenterPoint` (the value moves to the
+  visual), but not on a later render. Transformed controls are pooled in the visual lane, and the
+  first handoff costs about 0.1 ms per element.
+
 - **An element with `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` or
   `.TranslationTransition()` keeps its transforms on the composition visual (spec 066 §9 rows 1
   and 2).** The transitions take the element's visual, so on such an element `fe.Scale`,
@@ -161,6 +177,15 @@ Conventions for contributors:
   package targets now follows the restored package instead of a hardcoded version.
 
 ### Fixed
+
+- **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
+  transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
+  composition visual moved a facade `Translation` to the visual and enabled translation there, after
+  which WinUI ignored every later `fe.Translation` write, so a drag card that wrote `fe.Translation`
+  from a handler stopped moving once it gained `.Scale(pressed ? 0.97f : 1)` or a hover state.
+  Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
+  `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
+  write `fe.Translation` on an element that declares one of those.
 
 - **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
   animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625

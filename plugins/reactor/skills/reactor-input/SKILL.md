@@ -217,6 +217,17 @@ return Border(child)
         });
 ```
 
+**Don't mix `el.Translation` with `.Translation(...)`.** Pick one per element.
+Reactor enables translation on the composition visual only when the element
+declares `.Translation(...)`, a `translation:` keyframe or an
+`.InteractionStates(...)` translation, and once it is enabled WinUI silently
+ignores `el.Translation` writes. So the ref pattern above keeps working next to
+`.Scale(...)`, `.Rotation(...)` or `.Animate(...)` (a pressed-card
+`.Scale(pressed ? 0.97f : 1)` is fine), but not next to `.Translation(...)`,
+and `REACTOR_ANIM_004` flags `.Set(fe => fe.Translation = ...)` on a chain that
+declares it. The same goes for reading back: `el.Scale` and `el.Rotation` read
+identity once a transform modifier has taken the visual.
+
 ### Pinch and Rotate
 
 Both gestures carry an absolute value and a per-event delta as flat doubles —

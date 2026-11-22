@@ -23,10 +23,58 @@ internal static class AnimationHelper
         _ => default,
     };
 
-    // Both the handoff marker and property ownership follow native identity.
-    private static bool ShouldWriteToVisual(UIElement element, string property)
+    // UIElement.Opacity stays the opacity channel (spec 066 §3 invariant 4). The visual's copy is
+    // written as well once the visual was taken or Reactor wrote it there, because a UIElement
+    // write that doesn't change the value commits nothing to the visual.
+    private static bool WritesVisualOpacity(UIElement element)
         => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-            && (state.VisualTaken || (state.CompositionModifierProperties & PropertyFlag(property)) != 0);
+            && (state.VisualTaken || (state.CompositionModifierProperties & AnimateProperty.Opacity) != 0);
+
+    /// <summary>
+    /// Spec 066 §3 invariant 2 and §4: a transform write that leaves the effective value at
+    /// identity doesn't take the visual. That holds when the visual hasn't been taken, the value is
+    /// the identity, and the matching facade still reads identity. A setter that left the facade
+    /// non-identity makes the write take the visual, so the modifier overrides the setter.
+    /// </summary>
+    private static bool SkipsHandoff(UIElement element, string property, bool identity)
+    {
+        if (!identity || ElementPool.IsVisualTaken(element)) return false;
+        return property switch
+        {
+            "Scale" => element.Scale == Vector3.One,
+            "Rotation" => element.Rotation == 0,
+            "Translation" => element.Translation == Vector3.Zero,
+            "CenterPoint" => element.CenterPoint == Vector3.Zero,
+            _ => false,
+        };
+    }
+
+    private static bool IsIdentity(string property, Vector3 value)
+        => property == "Scale" ? value == Vector3.One : value == Vector3.Zero;
+
+    /// <summary>
+    /// Spec 066 §4.3: enables translation on the visual for a declared Translation channel
+    /// (<c>.Translation()</c>, a <c>translation:</c> keyframe, an <c>.InteractionStates</c>
+    /// translation). Nothing else enables it, because once it is enabled and the element has
+    /// rendered, WinUI ignores <see cref="UIElement.Translation"/> writes, which would break a drag
+    /// that writes the facade (#1642). The first time, a value user code left on the facade moves
+    /// to the visual, since the two would otherwise add up until the next render.
+    /// </summary>
+    internal static void EnableTranslation(UIElement element, Visual visual)
+    {
+        var state = Reconciler.GetOrCreateReactorState(element);
+        if (state.TranslationEnabled) return;
+        ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+        state.TranslationEnabled = true;
+        var facade = element.Translation;
+        if (facade == Vector3.Zero) return;
+        element.Translation = Vector3.Zero;
+        visual.Properties.InsertVector3("Translation", facade);
+    }
+
+    /// <summary>Whether Reactor enabled translation on the element's visual (<see cref="EnableTranslation"/>).</summary>
+    internal static bool TranslationEnabled(UIElement element)
+        => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { TranslationEnabled: true };
 
     private static void MarkCompositionWrite(UIElement element, string property, float value)
     {
@@ -150,23 +198,22 @@ internal static class AnimationHelper
     /// <remarks>
     /// WinUI refuses <c>GetElementVisual</c> while <see cref="UIElement.Scale"/>,
     /// <see cref="UIElement.Rotation"/> or <see cref="UIElement.CenterPoint"/> holds a non-identity
-    /// value, and refuses facade writes after the handoff (#1613). This therefore resets any such
-    /// facade value to identity, takes the visual, writes the same value to it, and marks it as a
-    /// composition write so later modifier updates and unsets follow it to the visual.
-    /// <see cref="UIElement.Translation"/> does not block the handoff and stays writable after it,
-    /// but it moves too, so that the visual's Translation is the only one and features that
-    /// animate it start from the right value. The facade is read on every call rather than
-    /// cached so that a Translation written to the facade later is moved as well.
+    /// value, and refuses facade writes after the handoff (#1613). Reactor never writes those
+    /// facades (spec 066 §3 invariant 1), so such a value was written by user code, a
+    /// <c>.Set(...)</c> setter that runs before the modifiers. This resets it to identity, takes
+    /// the visual, writes the same value to it, and marks it as a composition write so later
+    /// modifier updates and unsets follow it to the visual.
+    /// <see cref="UIElement.Translation"/> doesn't block the handoff and stays writable after it,
+    /// so it stays where user code put it: it moves only when a Translation channel is declared,
+    /// through <see cref="EnableTranslation"/> (§4.3, #1642).
     /// </remarks>
     internal static Visual GetElementVisual(UIElement element)
     {
         var scale = element.Scale;
         var rotation = element.Rotation;
-        var translation = element.Translation;
         var center = element.CenterPoint;
-        bool moveScale = scale != Vector3.One, moveRotation = rotation != 0;
-        bool moveTranslation = translation != Vector3.Zero, moveCenter = center != Vector3.Zero;
-        if (!(moveScale || moveRotation || moveTranslation || moveCenter))
+        bool moveScale = scale != Vector3.One, moveRotation = rotation != 0, moveCenter = center != Vector3.Zero;
+        if (!(moveScale || moveRotation || moveCenter))
         {
             var taken = TakeVisual(element);
             ElementPool.MarkVisualTaken(element);
@@ -175,7 +222,6 @@ internal static class AnimationHelper
 
         if (moveScale) element.Scale = Vector3.One;
         if (moveRotation) element.Rotation = 0;
-        if (moveTranslation) element.Translation = Vector3.Zero;
         if (moveCenter) element.CenterPoint = Vector3.Zero;
 
         Visual visual;
@@ -188,7 +234,6 @@ internal static class AnimationHelper
             // Something else still blocks the handoff; leave the element as it was.
             if (moveScale) element.Scale = scale;
             if (moveRotation) element.Rotation = rotation;
-            if (moveTranslation) element.Translation = translation;
             if (moveCenter) element.CenterPoint = center;
             throw;
         }
@@ -197,23 +242,18 @@ internal static class AnimationHelper
         // Facade Rotation is in degrees; RotationAngle is in radians.
         if (moveScale) visual.Scale = scale;
         if (moveRotation) visual.RotationAngle = rotation * MathF.PI / 180f;
-        if (moveTranslation)
-        {
-            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
-            visual.Properties.InsertVector3("Translation", translation);
-        }
         if (moveCenter) visual.CenterPoint = center;
         if (moveScale) MarkCompositionWrite(element, "Scale", scale);
         if (moveRotation) MarkCompositionWrite(element, "Rotation", rotation);
-        if (moveTranslation) MarkCompositionWrite(element, "Translation", translation);
         if (moveCenter) MarkCompositionWrite(element, "CenterPoint");
         return visual;
     }
 
     /// <summary>
-    /// Releases a modifier's facade or compositor write.
-    /// Ordinary facade writes must not call GetElementVisual: handing out the visual
-    /// permanently disables XAML implicit transitions and moves the element to the pool's visual lane.
+    /// Releases a modifier's compositor write. A modifier that never wrote the visual (an
+    /// identity value on a control whose visual wasn't taken) wrote nothing, so there is nothing
+    /// to release, and this must not call GetElementVisual: handing out the visual moves the
+    /// element to the pool's visual lane and locks its facades.
     /// </summary>
     internal static void ResetCompositionModifier(UIElement element, string property, AnimationController? expectedController = null)
     {
@@ -228,28 +268,7 @@ internal static class AnimationHelper
                 case "Translation": rest.Translation = Vector3.Zero; break;
             }
         }
-        if (state is null || (state.CompositionModifierProperties & flag) == 0)
-        {
-            if (property == "Opacity") return;
-            try
-            {
-                switch (property)
-                {
-                    case "Scale": element.Scale = Vector3.One; break;
-                    case "Rotation": element.Rotation = 0; break;
-                    case "Translation": element.Translation = Vector3.Zero; break;
-                    case "CenterPoint": element.CenterPoint = Vector3.Zero; break;
-                }
-                return;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // A different feature handed out the Visual. It already released the
-                // facade and owns its visual value; do not overwrite that value.
-                ElementPool.MarkVisualTaken(element);
-                return;
-            }
-        }
+        if (state is null || (state.CompositionModifierProperties & flag) == 0) return;
         var visual = GetAnimationVisual(element);
         // A shared target can replace the deferred animation before its decorator plays.
         if (expectedController is not null && !Equals(expectedController, visual.TryGetAnimationController(CompositorPropertyName(property))))
@@ -278,7 +297,6 @@ internal static class AnimationHelper
                 case "Scale": visual.Scale = Vector3.One; break;
                 case "Rotation": visual.RotationAngle = 0; break;
                 case "Translation":
-                    element.Translation = Vector3.Zero;
                     visual.Properties.InsertVector3("Translation", Vector3.Zero);
                     break;
                 case "CenterPoint": visual.CenterPoint = Vector3.Zero; break;
@@ -301,6 +319,7 @@ internal static class AnimationHelper
     /// </summary>
     internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null, Func<UIElement, AnimateProperty, AnimationConfig?>? chainLookup = null)
     {
+        if (property == "Rotation" && SkipsHandoff(element, property, value == 0)) return;
         var curve = ResolvePolicy(element, property, source, chainLookup).Curve;
 
         if (curve is null)
@@ -517,6 +536,7 @@ internal static class AnimationHelper
     /// </summary>
     internal static void SetOrAnimateVector3(UIElement element, string property, Vector3 value, Element? source = null, Func<UIElement, AnimateProperty, AnimationConfig?>? chainLookup = null)
     {
+        if (SkipsHandoff(element, property, IsIdentity(property, value))) return;
         var (curve, components) = ResolvePolicy(element, property, source, chainLookup);
 
         if (curve is null)
@@ -526,11 +546,7 @@ internal static class AnimationHelper
         }
 
         var visual = GetAnimationVisual(element);
-        if (property == "Translation")
-        {
-            element.Translation = Vector3.Zero;
-            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
-        }
+        if (property == "Translation") EnableTranslation(element, visual);
         var compositor = visual.Compositor;
         var target = CompositorPropertyName(property);
 
@@ -634,55 +650,34 @@ internal static class AnimationHelper
 
     private static void SetScalarDirect(UIElement element, string property, float value)
     {
-        if (!ShouldWriteToVisual(element, property))
+        if (property == "Opacity")
         {
-            try
+            if (!WritesVisualOpacity(element))
             {
-                switch (property)
-                {
-                    case "Opacity": element.Opacity = value; break;
-                    case "Rotation": element.Rotation = value; break;
-                }
+                element.Opacity = value;
                 return;
             }
-            catch (UnauthorizedAccessException) { }
-        }
-        var visual = GetAnimationVisual(element);
-        // Write the RotationAngle channel, not RotationAngleInDegrees: implicit animations
-        // (.Animate(), the RotationTransition fallback) are keyed on "RotationAngle" and only
-        // trigger on a write to that exact property.
-        if (property == "Rotation") visual.RotationAngle = float.DegreesToRadians(value);
-        else if (property == "Opacity")
-        {
+            var opacityVisual = GetAnimationVisual(element);
             element.Opacity = value;
-            visual.Opacity = value;
+            opacityVisual.Opacity = value;
+            MarkCompositionWrite(element, property, value);
+            return;
         }
+        // Write the RotationAngle channel, not RotationAngleInDegrees: implicit animations
+        // (.Animate(), the RotationTransition key) are keyed on "RotationAngle" and only
+        // trigger on a write to that exact property.
+        GetAnimationVisual(element).RotationAngle = float.DegreesToRadians(value);
         MarkCompositionWrite(element, property, value);
     }
 
     private static void SetVector3Direct(UIElement element, string property, Vector3 value)
     {
-        if (!ShouldWriteToVisual(element, property))
-        {
-            try
-            {
-                switch (property)
-                {
-                    case "Scale": element.Scale = value; break;
-                    case "Translation": element.Translation = value; break;
-                    case "CenterPoint": element.CenterPoint = value; break;
-                }
-                return;
-            }
-            catch (UnauthorizedAccessException) { }
-        }
         var visual = GetAnimationVisual(element);
         switch (property)
         {
             case "Scale": visual.Scale = value; break;
             case "Translation":
-                element.Translation = Vector3.Zero;
-                ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+                EnableTranslation(element, visual);
                 visual.Properties.InsertVector3("Translation", value);
                 break;
             case "CenterPoint": visual.CenterPoint = value; break;

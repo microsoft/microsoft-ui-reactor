@@ -676,11 +676,13 @@ public sealed class ElementPool : IDisposable
         // Layout owns Offset and writes it only when the position changes, so a stopped animation's
         // last value, or a direct write through the visual, would stay. Put the layout offset back,
         // unconditionally: a stopped expression's last value lands after this, so the getter can't
-        // tell yet, and this write follows the stop in the same batch. Size is left alone, because a
+        // tell yet, and this write follows the stop in the same batch. The control has usually left
+        // the tree by now, where ActualOffset reads zero, so the renter gets its own layout offset
+        // when it loads (SyncWhenLoaded). Size is left alone, because a
         // fresh handoff visual doesn't reliably carry ActualSize.
         visual.Offset = fe.ActualOffset;
 
-        // XAML's own opacity comes back when the renter loads (SyncOpacityWhenLoaded).
+        // XAML's own opacity comes back when the renter loads (SyncWhenLoaded).
         visual.Opacity = 1;
         visual.IsVisible = true;
         visual.Scale = Vector3.One;
@@ -704,13 +706,19 @@ public sealed class ElementPool : IDisposable
     }
 
     /// <summary>
-    /// XAML pushes <c>UIElement.Opacity</c> to the visual only when it differs from its last push,
-    /// so after the reset's identity write a renter whose opacity (a style's, a modifier's or the
-    /// default) equals the previous renter's would never see it. Once the renter is in the tree
-    /// with its styles, the visual gets XAML's value, unless a Reactor feature owns the visual's
-    /// opacity by then.
+    /// Finishes a visual-lane renter's reset once it is in the tree and laid out.
+    /// <list type="bullet">
+    /// <item>The reset runs after the control left the tree, where <c>ActualOffset</c> reads zero,
+    /// and layout writes the visual's <c>Offset</c> only when the position changes, so a renter at
+    /// the previous renter's non-zero position would draw at its parent's origin. The visual gets
+    /// the layout offset back, unless a feature animates <c>Offset</c> by then.</item>
+    /// <item>XAML pushes <c>UIElement.Opacity</c> to the visual only when it differs from its last
+    /// push, so after the reset's identity write a renter whose opacity (a style's, a modifier's or
+    /// the default) equals the previous renter's would never see it. The visual gets XAML's value,
+    /// unless a Reactor feature owns the visual's opacity by then.</item>
+    /// </list>
     /// </summary>
-    internal static void SyncOpacityWhenLoaded(FrameworkElement fe)
+    internal static void SyncWhenLoaded(FrameworkElement fe)
     {
         fe.Loaded -= OnRenterLoaded;
         fe.Loaded += OnRenterLoaded;
@@ -720,10 +728,15 @@ public sealed class ElementPool : IDisposable
     {
         var fe = (FrameworkElement)sender;
         fe.Loaded -= OnRenterLoaded;
-        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-            && (state.PoolExcluded || (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0))
-            return;
+        var state = fe.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+        if (state?.PoolExcluded == true) return;
         var visual = ElementCompositionPreview.GetElementVisual(fe);
+        var layoutOffset = fe.ActualOffset;
+        if (visual.Offset != layoutOffset && visual.TryGetAnimationController("Offset") is null)
+            Reconciler.WithoutImplicitAnimations(visual, () => visual.Offset = layoutOffset);
+
+        if (state is not null && (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0)
+            return;
         // Something wrote the visual since the reset (navigation hiding a page, user code), or
         // animates it now, and owns it.
         if (visual.Opacity != 1f || visual.TryGetAnimationController("Opacity") is not null) return;

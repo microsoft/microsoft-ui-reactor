@@ -39,6 +39,11 @@ public class ElementPoolLaneTests
         "ScaleTransition" => e with { ImplicitTransitions = new() { Scale = Sentinel<Vector3Transition>() } },
         "RotationTransition" => e with { ImplicitTransitions = new() { Rotation = Sentinel<ScalarTransition>() } },
         "TranslationTransition" => e with { ImplicitTransitions = new() { Translation = Sentinel<Vector3Transition>() } },
+        // Spec 066 layer 4: a non-identity transform takes the visual at mount.
+        "Scale" => e.Scale(2f),
+        "Rotation" => e.Rotation(30),
+        "Translation" => e.Translation(10, 0, 0),
+        "CenterPoint" => e.CenterPoint(new global::System.Numerics.Vector3(10, 5, 0)),
         // Takes the visual on the first state change, or needs a live ScrollViewer: see below.
         "InteractionStates" or "ScrollLinked" => null,
         _ => throw new Xunit.Sdk.XunitException(
@@ -70,8 +75,16 @@ public class ElementPoolLaneTests
     public void No_feature_means_no_demand()
     {
         Assert.False(For(Target()).VisualLane);
-        // Transforms don't take the visual before spec 066 layer 4.
-        Assert.False(For(Target().Scale(2f).Rotation(30)).VisualLane);
+    }
+
+    [Fact]
+    public void Identity_transforms_are_not_demand()
+    {
+        // An identity value never takes the visual (spec 066 §3 invariant 2), so a facade write
+        // through a ref must keep working on the rented control.
+        Assert.False(For(Target().Scale(1f).Rotation(0).Translation(0, 0, 0)
+            .CenterPoint(global::System.Numerics.Vector3.Zero)).VisualLane);
+        Assert.True(For(Target().Scale(1f).Rotation(0.5f)).VisualLane);
     }
 
     [Fact]

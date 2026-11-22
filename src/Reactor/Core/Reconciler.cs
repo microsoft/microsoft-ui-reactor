@@ -1707,6 +1707,9 @@ public sealed partial class Reconciler : IDisposable
         // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
         // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
         internal bool VisualTaken;
+        // Reactor enabled translation on the handed-out visual for a declared Translation channel
+        // (spec 066 §4.3). The pool's visual reset disables it again and clears this.
+        internal bool TranslationEnabled;
         // A navigation transition's completion can still reach the control after it leaves the tree.
         internal bool PoolExcluded;
         // A connected-animation source: an excluded return still drops the element it hosted.
@@ -2778,7 +2781,7 @@ public sealed partial class Reconciler : IDisposable
             var rented = _pool.TryRent(typeof(T), visualLane);
             if (rented is T t)
             {
-                if (visualLane && ElementPool.IsVisualTaken(rented)) ElementPool.SyncOpacityWhenLoaded(rented);
+                if (visualLane && ElementPool.IsVisualTaken(rented)) ElementPool.SyncWhenLoaded(rented);
                 return t;
             }
         }
@@ -2832,12 +2835,21 @@ public sealed partial class Reconciler : IDisposable
         bool demand = element.AnimationConfig is not null || element.ElementTransition?.GetEnterTransition() is not null
             || element.KeyframeAnimations is not null
             || element.LayoutAnimation is not null || element.ScrollAnimation?.ScrollViewer is not null
-            || TakesVisual(element.ImplicitTransitions)
+            || TakesVisual(element.ImplicitTransitions) || DeclaresTransform(modifiers)
             || (outer.Armed && outer.Transparent && outer.Demand);
         bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
             || (outer.Armed && outer.Blocked);
         return new(Armed: true, Transparent: element is KeyedMemoElement, demand, blocked, candidate);
     }
+
+    // Spec 066 layer 4: a transform modifier takes the visual at mount unless its value is the
+    // identity (§3 invariant 2). A rented control's facades read identity, and setters block the
+    // lane anyway, so the declared value decides.
+    private static bool DeclaresTransform(ElementModifiers? m)
+        => m is not null
+            && ((m.Scale is { } scale && scale != Vector3.One) || (m.Rotation is { } rotation && rotation != 0)
+                || (m.Translation is { } translation && translation != Vector3.Zero)
+                || (m.CenterPoint is { } center && center != Vector3.Zero));
 
     // The built-in element types whose handler rents a poolable control. Exact types: a record
     // derived from one may come with its own handler.
@@ -6425,11 +6437,15 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("Scale", scaleAnim);
         }
 
-        if (values?.Translation.HasValue == true || newState == InteractionState.Normal)
+        // Translation only for a declared Translation channel (spec 066 §4.3): a state that moves it,
+        // or Normal after something enabled it. Enabling it otherwise would make WinUI ignore a
+        // facade Translation drag on the element (#1642).
+        if (values?.Translation.HasValue == true
+            || (newState == InteractionState.Normal && AnimationHelper.TranslationEnabled(uie)))
         {
             // Animate Translation, not Offset: on a XAML element's handoff visual, Offset is the
             // layout position, so animating it to zero pulls the element to its parent's origin.
-            ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+            AnimationHelper.EnableTranslation(uie, visual);
             var targetTranslation = values?.Translation ?? rest.Translation;
             var translationAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetTranslation, curve);
             visual.StartAnimation("Translation", translationAnim);
@@ -6773,7 +6789,7 @@ public sealed partial class Reconciler : IDisposable
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
                 // Translation, not Offset: Offset is the layout position on a XAML handoff visual (#1432)
-                ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+                AnimationHelper.EnableTranslation(uie, visual);
                 anim.Target = "Translation";
                 if (def.Loop) anim.IterationBehavior = AnimationIterationBehavior.Forever;
                 foreach (var kf in def.Keyframes)
@@ -6981,6 +6997,7 @@ public sealed partial class Reconciler : IDisposable
             state.DeferredModifierResets = default;
             state.ImplicitClaims = null;
             state.StaggerDelay = null;
+            state.TranslationEnabled = false;
             if (state.KeyframeNames is { } names)
             {
                 foreach (var name in names) _keyframeTriggerValues.Remove((uie, name));
@@ -7865,9 +7882,14 @@ public sealed partial class Reconciler : IDisposable
         // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
         ApplyDragDropHandlers(fe, oldM, m);
 
-        // OnMountAction — only run on initial mount (oldM is null)
+        // OnMountAction — only run on initial mount (oldM is null). Spec 066 §9 row 1: name the
+        // modifier when WinUI rejects a facade write the callback makes after the handoff; the
+        // filter returns false, so the exception is unchanged.
         if (m.OnMountAction is not null && oldM is null)
-            m.OnMountAction(fe);
+        {
+            try { m.OnMountAction(fe); }
+            catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(fe, "'.OnMount(...)' callback")) { throw; }
+        }
 
         // OnUpdateAction — the update-time counterpart, run on every in-place
         // update (oldM is not null) but never at mount. Runs after child

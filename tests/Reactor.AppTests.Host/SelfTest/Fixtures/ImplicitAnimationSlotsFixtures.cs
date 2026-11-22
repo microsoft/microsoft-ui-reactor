@@ -530,33 +530,37 @@ internal static class ImplicitAnimationSlotsFixtures
     }
 
     /// <summary>
-    /// Releasing a layout animation or a transition still moves a facade Translation that a setter
-    /// wrote in the same update onto the visual those features took.
+    /// A facade Translation that a setter writes next to a layout animation or a transition stays on
+    /// the facade, through the features' release in the same update: without a Translation channel
+    /// Reactor neither moves it nor enables translation, so the write keeps applying (spec 066 §4.3,
+    /// #1642).
     /// </summary>
-    internal sealed class SetterTranslationMigrates(Harness h) : SlotsFixture(h, "ImplicitSlots_SetterTranslationMigrates")
+    internal sealed class SetterTranslationStays(Harness h) : SlotsFixture(h, "ImplicitSlots_SetterTranslationStays")
     {
         private static BorderElement Shift(float x) => Target().Set(b => b.Translation = new Vector3(x, 0, 0));
 
-        private Vector3 VisualTranslation()
+        private string Where()
         {
-            ElementCompositionPreview.GetElementVisual(Control).Properties.TryGetVector3("Translation", out var value);
-            return value;
+            bool enabled = ElementCompositionPreview.GetElementVisual(Control).Properties
+                .TryGetVector3("Translation", out var value) == Microsoft.UI.Composition.CompositionGetValueStatus.Succeeded;
+            return $"facade={Control.Translation} visual={(enabled ? value.ToString() : "disabled")}";
         }
+
+        private bool OnFacade(float x) => Control.Translation == new Vector3(x, 0, 0) && Where().EndsWith("disabled", StringComparison.Ordinal);
 
         protected override async Task Run()
         {
             await Mount(Shift(10).LayoutAnimation());
-            H.Check(Name + "_MountedOnVisual", VisualTranslation() == new Vector3(10, 0, 0), $"translation={VisualTranslation()}");
+            H.Check(Name + "_Mounted", OnFacade(10), Where());
             await Update(Shift(20));
-            H.Check(Name + "_LayoutRemoved", VisualTranslation() == new Vector3(20, 0, 0), $"translation={VisualTranslation()}");
+            H.Check(Name + "_LayoutRemoved", OnFacade(20), Where());
 
             await Update(Shift(20).Animate(Curve.Linear(30), AnimateProperty.Opacity).OpacityTransition());
             await Update(Shift(30).OpacityTransition());
-            H.Check(Name + "_TransitionRetained", VisualTranslation() == new Vector3(30, 0, 0), $"translation={VisualTranslation()}");
+            H.Check(Name + "_TransitionRetained", OnFacade(30), Where());
 
-            // Dropping the last transition still moves the setter's value: the visual stays taken.
             await Update(Shift(40));
-            H.Check(Name + "_TransitionRemoved", VisualTranslation() == new Vector3(40, 0, 0), $"translation={VisualTranslation()}");
+            H.Check(Name + "_TransitionRemoved", OnFacade(40), Where());
         }
     }
 }

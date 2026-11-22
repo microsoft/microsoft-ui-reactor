@@ -90,12 +90,30 @@ style. Render a themed `Button` with `.Padding(24)` and then without
 
 <!-- ai:caveat -->
 The transform modifiers `.Scale()`, `.Rotation()`, `.Translation()` and
-`.CenterPoint()` use XAML facade properties without public dependency-property
-identifiers. Dropping the last declaration restores its identity value: `Vector3.One` for scale,
+`.CenterPoint()` write the element's composition visual
+(`ElementCompositionPreview.GetElementVisual`), not the XAML facade properties. A
+non-identity value takes the visual the first time it's written. An identity value
+(`.Scale(1)`, `.Rotation(0)`) on a control whose visual hasn't been taken writes nothing, so
+`.Rotation(isOpen ? 90 : 0)` costs nothing until it first turns. Once the visual is taken, it
+stays taken for the control's lifetime, which has two consequences for code that touches the
+facades directly:
+
+- `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read identity. Read the values back from the
+  visual instead (`ElementCompositionPreview.GetElementVisual(fe).Scale`).
+- WinUI throws `UnauthorizedAccessException` on a later write to `fe.Scale`, `fe.Rotation`,
+  `fe.CenterPoint`, `fe.RotationAxis` or `fe.TransformMatrix`, so a `.Set(...)` or `.OnMount(...)`
+  that writes one on the same element fails. Use the modifier instead. `REACTOR_ANIM_004` flags
+  the `.Set` form at build time, and a `DiagnosticLog` warning names the modifier at run time.
+
+`fe.Translation` stays writable, and Reactor enables translation on the visual only when the
+element declares `.Translation()`, a `translation:` keyframe or an `.InteractionStates` translation.
+Don't write `fe.Translation` on an element that does, because WinUI ignores the write once
+translation is enabled.
+
+Dropping the last declaration restores its identity value on the visual: `Vector3.One` for scale,
 and zero for rotation, translation and center point. If the modifier previously
-started a composition animation, Reactor also stops that animation and resets
-its visual value. Dropping `.Opacity()` releases its dependency property and
-any composition animation started by the modifier.
+started a composition animation, Reactor also stops that animation. Dropping `.Opacity()` releases
+its dependency property and any composition animation started by the modifier.
 When decorators share a native target, a declaration that remains on another
 layer keeps its value and animation configuration; removing one layer does not
 reset the whole control. Restoring that value respects the configuration's

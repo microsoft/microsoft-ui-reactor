@@ -64,7 +64,8 @@ Taking a control's composition visual (`ElementCompositionPreview.GetElementVisu
 is permanent. Reactor takes it for `.Animate()`, `.Transition()`,
 `.InteractionStates()`, `.Keyframes()`, `.LayoutAnimation()`,
 `.ScrollLinked()`, the implicit transitions (`.OpacityTransition()`,
-`.ScaleTransition()`, `.RotationTransition()`, `.TranslationTransition()`)
+`.ScaleTransition()`, `.RotationTransition()`, `.TranslationTransition()`),
+a non-identity `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`,
 and the children of a `.Stagger()` panel. After that
 WinUI refuses every write to the control's `Rotation`, `Scale`,
 `CenterPoint`, `RotationAxis` and `TransformMatrix` facades and to its
@@ -74,7 +75,7 @@ identity write. So each type has two lanes:
 | Lane | Holds | Who rents from it |
 |---|---|---|
 | Plain | Controls whose visual was never taken | Everyone, as before |
-| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual at mount (`.Animate()`, an enter `.Transition()`, `.Keyframes()`, `.LayoutAnimation()`, `.ScrollLinked()`, an implicit transition other than `.BackgroundTransition()`) and carries no `.Set` setters or `.OnMount` callbacks |
+| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual at mount (`.Animate()`, an enter `.Transition()`, `.Keyframes()`, `.LayoutAnimation()`, `.ScrollLinked()`, an implicit transition other than `.BackgroundTransition()`, a non-identity transform modifier) and carries no `.Set` setters or `.OnMount` callbacks |
 
 An eligible element takes from the visual lane first and falls back to
 the plain lane. Every other element only takes from the plain lane, so
@@ -83,7 +84,8 @@ user code never meets a control it couldn't have met fresh: a
 whose rotation facade would throw. `.InteractionStates()` and an
 exit-only `.Transition()` don't make an element eligible, because a
 fresh control keeps writable facades until the first hover or the
-removal.
+removal. Neither does an identity transform such as `.Scale(1)`, which never takes the
+visual, so `Border().Scale(1).Ref(r)` can still write `r.Current.Rotation`.
 
 `Return` picks the lane from a `VisualTaken` marker that every handoff
 sets on the native control's attached state, so it holds whichever
@@ -92,8 +94,9 @@ pushed, `CleanElement` stops every compositor animation on it, drops
 its implicit animations, writes identity to the visual (opacity, scale,
 rotation, center point, anchor point, orientation, transform matrix,
 clip and translation), disables translation, zeroes the `Translation`
-facade and forgets Reactor's composition bookkeeping. `Offset` and
-`Size` are left to layout. Navigation pages are never pooled, because a
+facade and forgets Reactor's composition bookkeeping. `Size` is left to layout, and
+the renter gets its layout `Offset` back once it loads, because the reset runs after the
+control left the tree. Navigation pages are never pooled, because a
 navigation transition's completion can still reach them after they
 leave the tree.
 

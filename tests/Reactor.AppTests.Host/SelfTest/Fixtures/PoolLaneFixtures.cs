@@ -201,6 +201,9 @@ internal static class PoolLaneFixtures
                 // Since spec 066 layer 2 every .XxxTransition() but Background takes the visual at mount.
                 ("TranslationTransitionOnly", Target("R").TranslationTransition(), true, null),
                 ("OpacityTransitionOnly", Target("R").OpacityTransition(), true, null),
+                // Since spec 066 layer 4 a non-identity transform takes the visual at mount.
+                ("TransformOnly", Target("R").Scale(2), true, null),
+                ("TransformWithSetter", Target("R").Set(static b => b.Rotation = 10).Scale(2), false, null),
                 ("IdentityTransformRef", Target("R").Scale(1).Rotation(0).Ref(probe), false, _ =>
                 {
                     try { probe.Current!.Rotation = 10; return null; }
@@ -618,9 +621,11 @@ internal static class PoolLaneFixtures
                 var visual = ElementCompositionPreview.GetElementVisual(fe);
                 visual.Offset = new Vector3(0, 40, 0);
             });
+            // A layout offset that isn't zero, so the reset can't pass by writing zero.
+            await Case("Margin", Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)), null, margin: true);
         }
 
-        private async Task Case(string name, Element moved, Action<FrameworkElement>? move)
+        private async Task Case(string name, Element moved, Action<FrameworkElement>? move, bool margin = false)
         {
             string p = "ElementPoolLanes_LayoutOffset_" + name;
             using var lab = new Lab(H);
@@ -628,6 +633,7 @@ internal static class PoolLaneFixtures
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
             if (first is null) return;
             // The reset writes ActualOffset, so it must be what layout gives a fresh visual.
+            await Harness.Render();
             var freshOffset = ElementCompositionPreview.GetElementVisual(first).Offset;
             H.Check(p + "_FreshOffsetIsLayout", Vector3.Distance(freshOffset, first.ActualOffset) < 0.5f,
                 $"offset={freshOffset} layout={first.ActualOffset}");
@@ -635,12 +641,13 @@ internal static class PoolLaneFixtures
             await Harness.Render();
             await lab.Show(null);
 
-            var renter = Target("R").Animate(Curve.Linear(100));
+            var renter = margin ? Target("R").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)) : Target("R").Animate(Curve.Linear(100));
             var rentedControl = await lab.Show(renter);
             H.Check(p + "_Recycled", ReferenceEquals(rentedControl, first));
             if (rentedControl is null) return;
             var offset = ElementCompositionPreview.GetElementVisual(rentedControl).Offset;
-            H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f,
+            H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f
+                && Math.Abs(offset.X - rentedControl.ActualOffset.X) < 0.5f,
                 $"visual={offset} layout={rentedControl.ActualOffset}");
             var rented = await Snap.CaptureAsync(lab.Root);
             using var fresh = new Reconciler();
