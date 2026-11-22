@@ -243,6 +243,27 @@
     </ItemGroup>
   </Target>
 
+  <!--
+    Issue #1664. Simple assembly names are case-insensitive, so an app whose assembly is
+    named like one of its references (a file-based app saved as `reactor.cs` is the
+    `reactor` assembly, and Reactor ships as Reactor.dll) shadows that reference at run
+    time: every type ref into it binds to the app instead, and the app dies in its module
+    initializer with a TypeLoadException. Fail the build with the cause instead.
+    MSBuild condition string comparison is case-insensitive, which is the loader's rule.
+  -->
+  <Target Name="_ReactorCheckAssemblyNameCollision"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="CoreCompile"
+          Condition="'$(AssemblyName)' != ''">
+    <ItemGroup>
+      <_ReactorAssemblyNameCollision Include="@(ReferencePath)"
+                                     Condition="'%(ReferencePath.Filename)' == '$(AssemblyName)'" />
+    </ItemGroup>
+    <Error Condition="'@(_ReactorAssemblyNameCollision)' != ''"
+           Code="REACTOR_BUILD_001"
+           Text="The assembly name '$(AssemblyName)' collides with the referenced assembly '%(_ReactorAssemblyNameCollision.Filename)%(_ReactorAssemblyNameCollision.Extension)'. Assembly names are case-insensitive, so the app would load in place of that reference and crash at startup with a TypeLoadException. Rename the project (or, for a file-based app, the .cs file), or set a different AssemblyName (for a file-based app: #:property AssemblyName=MyApp)." />
+  </Target>
+
   <Target Name="_RestoreReactorDevtoolsSupportRuntimeKnob"
           AfterTargets="PrepareForILLink"
           BeforeTargets="WriteIlcRspFileForCompilation"

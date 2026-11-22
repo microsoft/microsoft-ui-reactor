@@ -238,6 +238,15 @@ int CreateProject(string name)
         return 1;
     }
 
+    // Issue #1664: an app assembly named like a Reactor assembly (case-insensitive) shadows it
+    // at run time and crashes on startup. The build rejects it too (REACTOR_BUILD_001).
+    string[] reservedNames = ["Reactor", "Reactor.Advanced", "Reactor.Interop.WinForms", "Microsoft.UI.Reactor", "Microsoft.UI.Reactor.Devtools"];
+    if (reservedNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+    {
+        Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Choose a different name, for example '{name}App'.");
+        return 1;
+    }
+
     var dir = Path.Combine(Directory.GetCurrentDirectory(), name);
 
     if (Directory.Exists(dir))
