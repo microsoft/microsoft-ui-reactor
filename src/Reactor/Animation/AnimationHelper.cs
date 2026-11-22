@@ -79,7 +79,7 @@ internal static class AnimationHelper
         (state.TransformRest ??= new()).Translation = facade;
     }
 
-    /// <summary>Whether Reactor enabled translation on the element's visual (<see cref="EnableTranslation"/>).</summary>
+    /// <summary>Whether Reactor enabled translation on the element's visual (<see cref="EnableTranslation(UIElement, Visual)"/>).</summary>
     internal static bool TranslationEnabled(UIElement element)
         => element.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { TranslationEnabled: true };
 
@@ -211,7 +211,7 @@ internal static class AnimationHelper
     /// modifier updates and unsets follow it to the visual.
     /// <see cref="UIElement.Translation"/> doesn't block the handoff and stays writable after it,
     /// so it stays where user code put it: it moves only when a Translation channel is declared,
-    /// through <see cref="EnableTranslation"/> (§4.3, #1642).
+    /// through <see cref="EnableTranslation(UIElement, Visual)"/> (§4.3, #1642).
     /// </remarks>
     internal static Visual GetElementVisual(UIElement element) => GetElementVisual(element, out _);
 
