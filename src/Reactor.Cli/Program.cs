@@ -238,10 +238,14 @@ int CreateProject(string name)
         return 1;
     }
 
-    if (Microsoft.UI.Reactor.Cli.ProjectNameRules.CollidesWithReactorAssembly(name))
+    switch (Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name))
     {
-        Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly or package name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
-        return 1;
+        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName:
+            Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
+            return 1;
+        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.PackageId:
+            Console.Error.WriteLine($"Error: Project name '{name}' matches a Reactor package id, so the project could not reference that package. Choose a different name, for example '{name}App'.");
+            return 1;
     }
 
     var dir = Path.Combine(Directory.GetCurrentDirectory(), name);

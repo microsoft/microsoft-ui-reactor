@@ -5,19 +5,28 @@ namespace Microsoft.UI.Reactor.Cli;
 // too (REACTOR_BUILD_001); `mur --create` refuses the name before scaffolding anything.
 internal static class ProjectNameRules
 {
-    // Assemblies the Microsoft.UI.Reactor* packages put on an app's reference path, plus the
-    // package ids themselves (a project named after a package id is confusing to restore).
-    internal static readonly string[] ReservedNames =
+    internal enum Collision { None, AssemblyName, PackageId }
+
+    // Assemblies the Microsoft.UI.Reactor* packages put on an app's reference path.
+    internal static readonly string[] ReservedAssemblyNames =
     [
         "Reactor",
         "Reactor.Advanced",
         "Reactor.Interop.WinForms",
         "Reactor.Wrappers.Abstractions",
-        "Microsoft.UI.Reactor",
-        "Microsoft.UI.Reactor.Advanced",
         "Microsoft.UI.Reactor.Devtools",
     ];
 
-    internal static bool CollidesWithReactorAssembly(string name) =>
-        Array.Exists(ReservedNames, n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+    // Package ids that aren't also assembly names. A project named after one doesn't crash,
+    // but restore treats it as the package itself and fails with a dependency cycle (NU1108).
+    internal static readonly string[] ReservedPackageIds =
+    [
+        "Microsoft.UI.Reactor",
+        "Microsoft.UI.Reactor.Advanced",
+    ];
+
+    internal static Collision Check(string name) =>
+        Array.Exists(ReservedAssemblyNames, n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) ? Collision.AssemblyName
+        : Array.Exists(ReservedPackageIds, n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) ? Collision.PackageId
+        : Collision.None;
 }

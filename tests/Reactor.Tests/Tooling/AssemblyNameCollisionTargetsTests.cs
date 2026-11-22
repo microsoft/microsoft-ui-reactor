@@ -153,15 +153,20 @@ public sealed class ProjectNameRulesTests
     [InlineData("reactor")]
     [InlineData("REACTOR.ADVANCED")]
     [InlineData("Reactor.Wrappers.Abstractions")]
+    [InlineData("Microsoft.UI.Reactor.Devtools")]
+    public void ReactorAssemblyName_IsAnAssemblyCollision(string name) =>
+        Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
+
+    [Theory]
     [InlineData("microsoft.ui.reactor")]
     [InlineData("Microsoft.UI.Reactor.Advanced")]
-    public void ReactorAssemblyOrPackageName_IsRejected(string name) =>
-        Assert.True(Microsoft.UI.Reactor.Cli.ProjectNameRules.CollidesWithReactorAssembly(name));
+    public void ReactorPackageId_IsAPackageCollision(string name) =>
+        Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.PackageId, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
 
     [Theory]
     [InlineData("MyApp")]
     [InlineData("ReactorApp")]
     [InlineData("Reactor.Sample")]
     public void OtherName_IsAllowed(string name) =>
-        Assert.False(Microsoft.UI.Reactor.Cli.ProjectNameRules.CollidesWithReactorAssembly(name));
+        Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.None, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
 }
