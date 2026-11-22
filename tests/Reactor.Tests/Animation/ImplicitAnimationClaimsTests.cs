@@ -140,7 +140,7 @@ public class ImplicitAnimationClaimsTests
         claims.Add(sink, "Scale", ImplicitFeature.Animate, 0, "animate");
 
         claims.Release(sink, "Scale", ImplicitFeature.Animate, 0, deferRestore: true);
-        Assert.False(sink.Keys.ContainsKey("Scale"));
+        Assert.DoesNotContain("Scale", sink.Keys);
 
         claims.FlushDeferred(sink);
         Assert.Equal("transition", sink.Keys["Scale"]);
@@ -158,7 +158,7 @@ public class ImplicitAnimationClaimsTests
         claims.Release(sink, "Scale", ImplicitFeature.Animate, 0, deferRestore: true);
 
         claims.Add(sink, "Scale", ImplicitFeature.Transition, 0, "transition");
-        Assert.False(sink.Keys.ContainsKey("Scale"));
+        Assert.DoesNotContain("Scale", sink.Keys);
 
         claims.FlushDeferred(sink);
         Assert.Equal("transition", sink.Keys["Scale"]);
