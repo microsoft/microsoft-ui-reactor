@@ -278,6 +278,14 @@ public sealed partial class Reconciler
                 _implicitDeferred = true;
             }
         }
+        // A departing layout animation goes before setters too, or a setter's Offset write would
+        // still animate with it (the release after setters below then finds nothing).
+        if (oldEl.LayoutAnimation is not null && newEl.LayoutAnimation is null)
+        {
+            ImplicitAnimationSlots.Release(control, "Offset", ImplicitFeature.Layout, implicitSlot, deferRestore: true);
+            ImplicitAnimationSlots.Release(control, "Size", ImplicitFeature.Layout, implicitSlot, deferRestore: true);
+            _implicitDeferred = true;
+        }
 
         var keyframes = newEl.KeyframeAnimations;
         bool targetCanAdvanceTrigger = keyframes is not null
