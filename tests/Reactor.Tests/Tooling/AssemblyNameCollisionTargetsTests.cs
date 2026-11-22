@@ -154,6 +154,7 @@ public sealed class ProjectNameRulesTests
     [InlineData("REACTOR.ADVANCED")]
     [InlineData("Reactor.Wrappers.Abstractions")]
     [InlineData("microsoft.ui.reactor")]
+    [InlineData("Microsoft.UI.Reactor.Advanced")]
     public void ReactorAssemblyOrPackageName_IsRejected(string name) =>
         Assert.True(Microsoft.UI.Reactor.Cli.ProjectNameRules.CollidesWithReactorAssembly(name));
 

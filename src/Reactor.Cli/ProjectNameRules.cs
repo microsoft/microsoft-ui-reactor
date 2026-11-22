@@ -14,6 +14,7 @@ internal static class ProjectNameRules
         "Reactor.Interop.WinForms",
         "Reactor.Wrappers.Abstractions",
         "Microsoft.UI.Reactor",
+        "Microsoft.UI.Reactor.Advanced",
         "Microsoft.UI.Reactor.Devtools",
     ];
 
