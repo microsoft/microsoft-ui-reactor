@@ -672,9 +672,14 @@ internal static class PoolLaneFixtures
                 var visual = ElementCompositionPreview.GetElementVisual(fe);
                 visual.Offset = new Vector3(0, 40, 0);
             });
+            // A layout offset that isn't zero, so the reset can't pass by writing zero.
+            await Case("Margin", Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)), null, margin: true);
+            // A renter's own implicit Offset key must not animate the restored layout offset.
+            await Case("MarginLayoutAnimation", Target("G").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)), null, margin: true,
+                renter: Target("R").Margin(30, 20, 0, 0).LayoutAnimation());
         }
 
-        private async Task Case(string name, Element moved, Action<FrameworkElement>? move)
+        private async Task Case(string name, Element moved, Action<FrameworkElement>? move, bool margin = false, Element? renter = null)
         {
             string p = "ElementPoolLanes_LayoutOffset_" + name;
             using var lab = new Lab(H);
@@ -682,6 +687,7 @@ internal static class PoolLaneFixtures
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
             if (first is null) return;
             // The reset writes ActualOffset, so it must be what layout gives a fresh visual.
+            await Harness.Render();
             var freshOffset = ElementCompositionPreview.GetElementVisual(first).Offset;
             H.Check(p + "_FreshOffsetIsLayout", Vector3.Distance(freshOffset, first.ActualOffset) < 0.5f,
                 $"offset={freshOffset} layout={first.ActualOffset}");
@@ -689,13 +695,15 @@ internal static class PoolLaneFixtures
             await Harness.Render();
             await lab.Show(null);
 
-            var renter = Target("R").Animate(Curve.Linear(100));
+            renter ??= margin ? Target("R").Margin(30, 20, 0, 0).Animate(Curve.Linear(100)) : Target("R").Animate(Curve.Linear(100));
             var rentedControl = await lab.Show(renter);
             H.Check(p + "_Recycled", ReferenceEquals(rentedControl, first));
             if (rentedControl is null) return;
             var offset = ElementCompositionPreview.GetElementVisual(rentedControl).Offset;
-            H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f,
+            H.Check(p + "_OffsetIsLayout", Math.Abs(offset.Y - rentedControl.ActualOffset.Y) < 0.5f
+                && Math.Abs(offset.X - rentedControl.ActualOffset.X) < 0.5f,
                 $"visual={offset} layout={rentedControl.ActualOffset}");
+            H.Check(p + "_OffsetNotAnimated", !Running(ElementCompositionPreview.GetElementVisual(rentedControl), "Offset"));
             var (diff, sizes) = await DiffFromFresh(H, lab, renter);
             H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
         }

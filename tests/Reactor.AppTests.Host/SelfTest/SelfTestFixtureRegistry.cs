@@ -902,6 +902,7 @@ internal static class SelfTestFixtureRegistry
         ("CompositorTransitions_EnterWithTransition", static harness => new CompositorTransitionFixtures.EnterWithTransition(harness)),
         ("CompositorTransitions_Diagnostic", static harness => new CompositorTransitionFixtures.Diagnostic(harness)),
         ("ImplicitSlots_DeferredRestoreSurvivesThrow", static harness => new ImplicitAnimationSlotsFixtures.DeferredRestoreSurvivesThrow(harness)),
+        ("ImplicitSlots_DepartingLayoutReleasedBeforeSetters", static harness => new ImplicitAnimationSlotsFixtures.DepartingLayoutReleasedBeforeSetters(harness)),
         ("ConnectedAnimation_MountUnmount", static harness => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness)),
         ("ConnectedAnimation_StartsAcrossReplace", static harness => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness)),
         ("ConnectedAnimation_NoSourceDoesNotStart", static harness => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness)),

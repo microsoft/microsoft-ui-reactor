@@ -468,7 +468,9 @@ Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured
    the next renter.
    `Offset` and `Size` belong to layout (P2). Layout writes `Offset` only when the position changes, so a
    stopped animation's last value, or a direct write through the visual, would stay. The reset writes
-   `ActualOffset` back unconditionally, because a stopped expression's last value lands after the stop. `Size`
+   `ActualOffset` back unconditionally, because a stopped expression's last value lands after the stop. The control has
+   usually left the tree by then, where `ActualOffset` reads zero, so the renter's load-time sync (below) also writes its own
+   layout offset, with its implicit `Offset` key held back. `Size`
    is left alone, since a fresh handoff visual doesn't reliably carry `ActualSize`.
 4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the

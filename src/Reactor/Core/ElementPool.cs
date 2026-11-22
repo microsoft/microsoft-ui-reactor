@@ -678,8 +678,10 @@ public sealed class ElementPool : IDisposable
         // Layout owns Offset and writes it only when the position changes, so a stopped animation's
         // last value, or a direct write through the visual, would stay. Put the layout offset back,
         // unconditionally: a stopped expression's last value lands after this, so the getter can't
-        // tell yet, and this write follows the stop in the same batch. Size is left alone, because a
-        // fresh handoff visual doesn't reliably carry ActualSize.
+        // tell yet, and this write follows the stop in the same batch. The control has usually left
+        // the tree by now, where ActualOffset reads zero, so the renter gets its own layout offset
+        // once it is laid out (SyncOpacityWhenLoaded). Size is left alone, because a fresh handoff
+        // visual doesn't reliably carry ActualSize.
         visual.Offset = fe.ActualOffset;
 
         // XAML's own opacity comes back when the renter loads (SyncOpacityWhenLoaded).
@@ -706,11 +708,17 @@ public sealed class ElementPool : IDisposable
     }
 
     /// <summary>
-    /// XAML pushes <c>UIElement.Opacity</c> to the visual only when it differs from its last push,
-    /// so after the reset's identity write a renter whose opacity (a style's, a modifier's or the
-    /// default) equals the previous renter's would never see it. Once the renter is in the tree
-    /// with its styles, the visual gets XAML's value, unless a Reactor feature owns the visual's
-    /// opacity by then.
+    /// Finishes a visual-lane renter's reset once it is in the tree and laid out.
+    /// <list type="bullet">
+    /// <item>The reset runs after the control left the tree, where <c>ActualOffset</c> reads zero,
+    /// and layout writes the visual's <c>Offset</c> only when the position changes, so a renter at
+    /// the previous renter's non-zero position would draw at its parent's origin. The visual gets
+    /// the layout offset back, unless a feature animates <c>Offset</c> by then.</item>
+    /// <item>XAML pushes <c>UIElement.Opacity</c> to the visual only when it differs from its last
+    /// push, so after the reset's identity write a renter whose opacity (a style's, a modifier's or
+    /// the default) equals the previous renter's would never see it. The visual gets XAML's value,
+    /// unless a Reactor feature owns the visual's opacity by then.</item>
+    /// </list>
     /// </summary>
     /// <remarks>
     /// The first layout pass that finds the renter in the live tree runs it, before the frame that
@@ -773,25 +781,42 @@ public sealed class ElementPool : IDisposable
     {
         if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state) return;
         StopOpacitySync(fe, state);
-        if (state.PoolExcluded || (state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0)
-            return;
+        if (state.PoolExcluded) return;
         var visual = ElementCompositionPreview.GetElementVisual(fe);
+        // The reset ran after the control left the tree, where ActualOffset reads zero, and layout
+        // writes Offset only when the position changes. A renter at the previous renter's non-zero
+        // position would otherwise draw at its parent's origin. Placing it isn't a move, so a
+        // renter's implicit Offset key (.LayoutAnimation()) must not animate it.
+        var layoutOffset = fe.ActualOffset;
+        if (visual.Offset != layoutOffset && visual.TryGetAnimationController("Offset") is null)
+            WriteWithoutImplicitKey(visual, "Offset", () => visual.Offset = layoutOffset);
+
+        if ((state.CompositionModifierProperties & Animation.AnimateProperty.Opacity) != 0) return;
         // Something wrote the visual since the reset (navigation hiding a page, user code), or
         // animates it now, and owns it.
         if (visual.Opacity != 1f || visual.TryGetAnimationController("Opacity") is not null) return;
         float opacity = (float)fe.Opacity;
         if (opacity == 1f) return;
         // XAML would have shown this value without a transition, so a renter's implicit Opacity key
-        // (.Animate()) must not fade to it. The same animation goes back, so its claim holds.
-        ICompositionAnimationBase? implicitOpacity = null;
-        if (visual.ImplicitAnimations is { } implicits && implicits.TryGetValue("Opacity", out var key))
-        {
-            implicitOpacity = key;
-            implicits.Remove("Opacity");
-        }
-        visual.Opacity = opacity;
-        if (implicitOpacity is not null) visual.ImplicitAnimations!["Opacity"] = implicitOpacity;
+        // (.Animate()) must not fade to it.
+        WriteWithoutImplicitKey(visual, "Opacity", () => visual.Opacity = opacity);
         OpacitySyncWritesForTests++;
+    }
+
+    /// <summary>
+    /// Runs a visual write with the implicit animation for <paramref name="key"/> held back. The same
+    /// animation goes back afterwards, so its claim (spec 066 §6) holds.
+    /// </summary>
+    private static void WriteWithoutImplicitKey(Visual visual, string key, Action write)
+    {
+        ICompositionAnimationBase? held = null;
+        if (visual.ImplicitAnimations is { } implicits && implicits.TryGetValue(key, out var animation))
+        {
+            held = animation;
+            implicits.Remove(key);
+        }
+        try { write(); }
+        finally { if (held is not null) visual.ImplicitAnimations![key] = held; }
     }
 
     // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts the opacity writes the

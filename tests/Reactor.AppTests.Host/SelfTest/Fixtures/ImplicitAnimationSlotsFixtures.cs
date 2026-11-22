@@ -401,6 +401,47 @@ internal static class ImplicitAnimationSlotsFixtures
     }
 
     /// <summary>
+    /// Dropping <c>.Animate(Offset)</c> and <c>.LayoutAnimation()</c> together releases both
+    /// before setters run, so a setter's Offset write in that update doesn't animate.
+    /// </summary>
+    internal sealed class DepartingLayoutReleasedBeforeSetters(Harness h) : SlotsFixture(h, "ImplicitSlots_DepartingLayoutReleasedBeforeSetters")
+    {
+        protected override async Task Run()
+        {
+            await Mount(Target().Animate(Curve.Linear(3000), AnimateProperty.Offset)
+                .LayoutAnimation(TimeSpan.FromSeconds(5)));
+            H.Check(Name + "_Installed", Keys() == "Offset", $"keys={Keys()}");
+
+            var visual = ElementCompositionPreview.GetElementVisual(Control);
+            visual.StopAnimation("Offset");
+            bool keyDuringSetter = true;
+            await Update(Target().Set(c =>
+            {
+                keyDuringSetter = visual.ImplicitAnimations?.ContainsKey("Offset") == true;
+                visual.Offset = visual.Offset + new Vector3(5, 0, 0);
+            }));
+            H.Check(Name + "_NoKeyDuringSetter", !keyDuringSetter);
+            H.Check(Name + "_SetterWriteJumped", visual.TryGetAnimationController("Offset") is null);
+            H.Check(Name + "_Released", Keys() == "-", $"keys={Keys()}");
+
+            // A retained layout animation that turns its Offset channel off releases it early too.
+            await Update(Target().Animate(Curve.Linear(3000), AnimateProperty.Offset)
+                .LayoutAnimation(TimeSpan.FromSeconds(5)));
+            visual.StopAnimation("Offset");
+            keyDuringSetter = true;
+            await Update(Target().LayoutAnimation(new LayoutAnimationConfig { AnimateOffset = false, AnimateSize = true })
+                .Set(c =>
+                {
+                    keyDuringSetter = visual.ImplicitAnimations?.ContainsKey("Offset") == true;
+                    visual.Offset = visual.Offset + new Vector3(5, 0, 0);
+                }));
+            H.Check(Name + "_ChannelOffNoKeyDuringSetter", !keyDuringSetter);
+            H.Check(Name + "_ChannelOffWriteJumped", visual.TryGetAnimationController("Offset") is null);
+            H.Check(Name + "_ChannelOffKeepsSize", Keys() == "Size", $"keys={Keys()}");
+        }
+    }
+
+    /// <summary>
     /// A decorator that forwards its child's control without naming it as its source target
     /// still counts as a layer: Update reaches its child one slot deeper, so Mount must too.
     /// </summary>
