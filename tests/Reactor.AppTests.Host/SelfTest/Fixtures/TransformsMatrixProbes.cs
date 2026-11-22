@@ -152,7 +152,7 @@ internal static class TransformsMatrixProbes
 
         Rect(canvas);
         await TransformsMatrixRecorder.Settle();
-        if (Screen(host, h).RedBox() is not { } seen || !seen.Near(Model.Bounds(Pose.Identity, false), 3))
+        if (TryScreen(host, h)?.RedBox() is not { } seen || !seen.Near(Model.Bounds(Pose.Identity, false), 3))
         {
             Log("skipped: PrintWindow can't see the window (no interactive desktop)");
             return;
@@ -173,7 +173,7 @@ internal static class TransformsMatrixProbes
             {
                 while (sw.Elapsed.TotalSeconds < t * 3) await Task.Delay(10);
                 double at = sw.Elapsed.TotalSeconds / 3;
-                double p = Screen(host, h).RedBox() is { } r ? (r.X1 - r.X0 - W) / W : double.NaN;
+                double p = TryScreen(host, h)?.RedBox() is { } r ? (r.X1 - r.X0 - W) / W : double.NaN;
                 samples.Add($"t={at:F2} p={p:F2} bezier={Bezier(at):F2}");
             }
 
@@ -214,6 +214,13 @@ internal static class TransformsMatrixProbes
     }
 
     /// <summary>PrintWindow(PW_RENDERFULLCONTENT) of the host's window region, which sees compositor-side XAML transitions.</summary>
+    /// <summary>The screen capture, or null when PrintWindow can't produce one.</summary>
+    internal static Snap? TryScreen(FrameworkElement target, Harness h)
+    {
+        try { return Screen(target, h); }
+        catch (InvalidOperationException) { return null; }
+    }
+
     internal static Snap Screen(FrameworkElement target, Harness h)
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(h.Window);
@@ -233,8 +240,9 @@ internal static class TransformsMatrixProbes
             if (memDc != IntPtr.Zero) dib = CreateDIBSection(memDc, ref bmi, 0, out bits, IntPtr.Zero, 0);
             if (dib == IntPtr.Zero || bits == IntPtr.Zero) throw new InvalidOperationException($"couldn't create a {w}x{hgt} capture bitmap");
             old = SelectObject(memDc, dib);
-            // A failed PrintWindow leaves the bitmap blank, which the oracle reads as no target, not as a pose.
-            if (PrintWindow(hwnd, memDc, 2)) Marshal.Copy(bits, all, 0, all.Length);
+            // A blank capture would read as "no target", so a failed PrintWindow is an error, not an observation.
+            if (!PrintWindow(hwnd, memDc, 2)) throw new InvalidOperationException("PrintWindow failed");
+            Marshal.Copy(bits, all, 0, all.Length);
         }
         finally
         {

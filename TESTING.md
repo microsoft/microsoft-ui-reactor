@@ -777,7 +777,8 @@ read it (spec 066 §5.5), and declares the ledger change. Layer 5 adds `Transfor
 `pose` (the RenderTargetBitmap bounding box), `active` (the pose while hover, an enter or an exit
 holds the channel), `motion` (per changed channel: `ANIMATING`, `JUMPED`, `NOT-APPLIED`, `HELD`),
 `curve` (progress at a quarter of the time, in steps of 0.2: linear reads 0.2, the Fluent
-(0.8,0,0.2,1) ease 0.0, the compositor's default ease-out 0.6), `running` (animations still going
+(0.8,0,0.2,1) ease 0.0, the compositor's default ease-out 0.6), except under a facade `Translation` drag,
+where the handoff migrates the drag at a varying moment, so `curve` is recorded but never compared, `running` (animations still going
 when the step settled), `residue` (transitions still installed after `removeModifier`, #1626, or `remounted` when a keyed `Memo` replaced the control),
 `opacity` (the settled opacity at the target's centre, in steps of 0.05, so a lost update reads 1.00
 instead of 0.80), `hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).

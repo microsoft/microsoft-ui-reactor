@@ -173,6 +173,26 @@ public class TransformsMatrixTests
     }
 
     [Fact]
+    public void Curve_IsNotComparedUnderADrag_AndRecordingKeepsTheCommittedValue()
+    {
+        TransformsLedger Case(string dims, string curve)
+        {
+            var l = Ledger(("X", "change", "curve", curve), ("X", "change", "motion", "Translation=ANIMATING"));
+            l.Case("X").Dims = dims;
+            return l;
+        }
+
+        const string drag = "wrapper=Direct flow=Ltr motion=Enabled user=TranslationDrag variant=A";
+        const string none = "wrapper=Direct flow=Ltr motion=Enabled user=None variant=A";
+        Assert.Empty(TransformsLedger.Diff(Case(drag, "Translation=0.2"), Case(drag, "Translation=0.0")));
+        Assert.Equal("curve", Assert.Single(TransformsLedger.Diff(Case(none, "Translation=0.2"), Case(none, "Translation=0.0"))).Field);
+
+        var observed = Case(drag, "Translation=0.0").Case("X");
+        TransformsLedger.KeepUnchanged(Case(drag, "Translation=0.2").Case("X"), observed);
+        Assert.Equal("Translation=0.2", observed.Steps["change"]["curve"]);
+    }
+
+    [Fact]
     public void KeepUnchanged_KeepsTheCommittedValueWithinTolerance()
     {
         var committed = Ledger(("X", "mount", "pose", "120,150,220,190"), ("X", "mount", "threw", "-")).Case("X");

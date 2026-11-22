@@ -1714,6 +1714,8 @@ public sealed partial class Reconciler : IDisposable
         internal bool PoolExcluded;
         // A connected-animation source: an excluded return still drops the element it hosted.
         internal bool ReleaseWhenExcluded;
+        // Set while a visual-lane renter waits to get its XAML opacity on the visual (ElementPool).
+        internal EventHandler<object>? OpacitySyncLayoutHandler;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -2781,7 +2783,7 @@ public sealed partial class Reconciler : IDisposable
             var rented = _pool.TryRent(typeof(T), visualLane);
             if (rented is T t)
             {
-                if (visualLane && ElementPool.IsVisualTaken(rented)) ElementPool.SyncWhenLoaded(rented);
+                if (visualLane && ElementPool.IsVisualTaken(rented)) ElementPool.SyncOpacityWhenLoaded(rented);
                 return t;
             }
         }
@@ -4770,6 +4772,7 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
+        ElementPool.CancelOpacitySync(control);
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.

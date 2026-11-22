@@ -133,6 +133,7 @@ internal sealed class TransformsLedger
                 string? bv = null, av = null;
                 b?.TryGetValue(field, out bv);
                 a?.TryGetValue(field, out av);
+                if (!exact && (Unstable(before, field) || Unstable(after, field))) continue;
                 if (exact ? bv != av : !FieldEquals(field, bv, av)) yield return new LedgerDifference(id, step, field, bv, av);
             }
         }
@@ -162,8 +163,22 @@ internal sealed class TransformsLedger
             if (!committed.Steps.TryGetValue(step, out var old)) continue;
             var unchanged = fields.Keys.Where(key => old.TryGetValue(key, out var v) && v != ScreenSkipped && FieldEquals(key, v, fields[key])).ToArray();
             foreach (var key in unchanged) fields[key] = old[key];
+            if (!Unstable(committed, CurveField)) continue;
+            if (old.TryGetValue(CurveField, out var curve)) fields[CurveField] = curve;
+            else fields.Remove(CurveField);
         }
     }
+
+    public const string CurveField = "curve";
+
+    /// <summary>
+    /// A field no comparison can rely on. Under a facade Translation drag the handoff migrates the
+    /// drag at a moment that varies from run to run, so the curve is measured from a different start
+    /// and its bucket flips (0.2 or 0.0, 0.4 or 0.0). The motion verdict is still compared. Recording
+    /// keeps the committed value, so the ledger doesn't churn.
+    /// </summary>
+    public static bool Unstable(LedgerCase? c, string field) =>
+        field == CurveField && c?.Dims is { } dims && dims.Contains("user=TranslationDrag", StringComparison.Ordinal);
 
     internal static string[] Tokens(string s) => Regex.Split(s, @"[,;= ]+").Where(t => t.Length > 0).ToArray();
 
