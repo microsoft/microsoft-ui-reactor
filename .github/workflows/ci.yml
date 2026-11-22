@@ -136,6 +136,31 @@ jobs:
       - name: Restore (ToolkitCompatibility.HeadlessTests)
         run: dotnet restore tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj
 
+      - name: Extract the base transforms ledger
+        # Spec 066 §12.1 C.2: TransformsMatrixTests checks that every change between the behaviour
+        # ledger on the PR's base commit and this PR's ledger is declared, ignoring expectations the
+        # base already had. The base copies are fetched here because the checkout is shallow. Outside
+        # a pull request there is no base to diff.
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $dir = 'tests/Reactor.AppTests.Host/SelfTest/Baselines'
+          if (-not $env:BASE_SHA) { "REACTOR_TRANSFORMS_LEDGER_BASE=skip" >> $env:GITHUB_ENV; exit 0 }
+          git fetch --no-tags --depth=1 origin $env:BASE_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't fetch the base commit $env:BASE_SHA." }
+          foreach ($pair in @(@('transforms-ledger.json', 'REACTOR_TRANSFORMS_LEDGER_BASE'), @('transforms-ledger.expected.json', 'REACTOR_TRANSFORMS_EXPECTED_BASE'))) {
+            $spec = "$($env:BASE_SHA):$dir/$($pair[0])"
+            git cat-file -e $spec 2>$null
+            if ($LASTEXITCODE -ne 0) { "$($pair[1])=absent" >> $env:GITHUB_ENV; continue }
+            $out = Join-Path $env:RUNNER_TEMP "base-$($pair[0])"
+            # cmd's redirect keeps git's bytes; a PowerShell pipe would re-decode them (the reasons hold "§").
+            cmd /c "git show $spec > `"$out`""
+            if ($LASTEXITCODE -ne 0) { throw "Couldn't read $spec." }
+            "$($pair[1])=$out" >> $env:GITHUB_ENV
+          }
+          $global:LASTEXITCODE = 0
+
       - name: Test (Reactor.Tests)
         # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
         # skills/reactor.api.txt. Without them, building Reactor.Tests regenerates the
