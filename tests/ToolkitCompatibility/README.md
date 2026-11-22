@@ -92,6 +92,69 @@ nonempty output, not pixel-perfect parity or physical keyboard navigation.
 OS high contrast and alternate OS text scaling require the real setting, not a
 font-size substitute. No shared desktop setting is changed.
 
+### Bounded OS text-scale check (#1602)
+
+`SettingsCard/os-text-scaling` now captures and checks the current core scenario's
+string header and `TextBlock` description when the observed real OS
+`UISettings.TextScaleFactor` is greater than 1. At 100% it remains
+`blocked/approval`; other controls remain `blocked/not-implemented` even on a
+scaled host. Rich headers, non-TextBlock descriptions and explicit clip geometries
+are also unimplemented, not native limitations or passes. High-contrast behavior
+is unchanged.
+
+The check requires exactly one realized header outside the content/icon/description
+slots, nonempty attached text with OS scaling enabled, and no native trimming.
+A separate native TextBlock measures the full text with matching typography and
+the current OS scale, without trimming, fixed height or a line cap. For wrapped
+text, its width preserves the native measured content width within the arranged
+slot, accounting for margins and never shrinking below the actual text extent.
+This avoids rewrapping a single line when its fractional `ActualWidth` is slightly
+smaller than its rounded layout width. The probe retains native layout rounding.
+Required and
+allocated dimensions must be finite, positive and fit within one DIP of layout
+rounding. Each text box must also fit within every ancestor's rectangular bounds
+through the window content, with no collapsed or fully transparent ancestor.
+This is deliberately conservative, including ancestors that do not clip.
+The TAP log records text, typography, wrapping, dimensions, ancestor bounds,
+theme, rasterization scale, and OS scale before/after. The PNG is captured before
+the assertions so a failed fit can still be inspected.
+
+This does not prove scale-to-scale growth, pixel-perfect visibility, overlapping
+sibling behavior, arbitrary rich text, long-content stress, or other controls.
+The existing short core strings are the measured scope. Captures require human
+review. A build or headless geometry test is **not** WinUI/runtime acceptance.
+
+After the positive checks, the same bounded scenario runs three native negative
+controls. It halves each text slot's height in turn, verifies a nonzero native
+size reduction, and requires a role-matched trimming, text-overflow or
+ancestor-overflow failure. Invalid measurements and unrelated exceptions do not
+count. It then applies a SettingsCard ancestor clip cutting through the header
+and requires the exact `not-implemented` explicit-clip outcome, not a pass.
+Each mutation restores the original dependency-property value (including unset)
+in `finally`, checks the original text/card dimensions and reruns the positive
+oracle. Both text slots are rechecked after all three rejections. The TAP log
+records the perturbations, observed reasons and restored baseline; the PNG is
+the unmodified positive capture, not a screenshot of the negative controls.
+
+Headless regression tests compile the same measurement guards without WinUI,
+WinRT initialization, or the compatibility consumer. The project is included in
+solution builds and runs in the PR CI Unit Tests job:
+
+```powershell
+dotnet test tests\ToolkitCompatibility.HeadlessTests --filter-class "*TextScalingMeasurementsTests*"
+```
+
+Later, on an explicitly approved dedicated host/VM, run the SettingsCard lane at
+100% and confirm `blocked/approval`, then at a real scale above 100% (including
+the chosen maximum acceptance scale). Verify nonzero full-text measurements,
+the exact two checked slots, ancestor bounds, stable OS scale, and the PNG.
+Verify all three native negative-control reasons and the final restored positive
+baseline in that same run. Explicit clip geometry must remain blocked, never
+silently accepted. Confirm an unsupported control remains `blocked/not-implemented`.
+Repeat under each deployment/runtime being claimed. High-contrast captures still
+require real OS high contrast. Any setting changes and restoration need their
+own authorization; these instructions do not grant it.
+
 Mounts require actual visual-tree attachment and nonzero layout rather than
 `IsLoaded` alone. Removal checks detachment and exactly one public `OnUnmount`
 notification. `GetElementTag` is diagnostic association, not a guarantee of
