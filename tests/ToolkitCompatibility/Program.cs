@@ -302,6 +302,10 @@ internal sealed class CompatibilityRoot : Component
                         await results.RunAsync(name, operation, () => LocalEvidenceChecks.RtlAsync(CurrentSubject, name));
                     else if (operation == "high-contrast-render-capture")
                         await results.RunAsync(name, operation, () => LocalEvidenceChecks.HighContrastAsync(CurrentSubject, name));
+                    else if (operation == "high-contrast-appearance-review")
+                        results.Block(name, operation,
+                            "Actual-host high-contrast appearance needs operator-owned window evidence and review. A subject-only PNG, nonzero alpha or diagnostic matte does not establish readability.",
+                            "not-implemented");
                     else if (operation == "os-text-scaling")
                         await results.RunAsync(name, operation, () => LocalEvidenceChecks.TextScalingAsync(CurrentSubject, name));
                     else if (name == "ImageCropper" && operation == "crop-export-dimensions-pixels")

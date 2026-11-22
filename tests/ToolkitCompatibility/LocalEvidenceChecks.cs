@@ -209,30 +209,49 @@ internal static class LocalEvidenceChecks
 
     internal static async Task HighContrastAsync(FrameworkElement control, string name)
     {
-        bool active = new AccessibilitySettings().HighContrast;
-        Program.Results.Note($"OS HighContrast={active}");
-        if (!active)
+        var profile = ReadAccessibilityProfile("before high-contrast capture");
+        if (!profile.HighContrast)
             throw new ScenarioBlockedException("OS high contrast is off; changing the shared desktop setting is not authorized.", "approval");
         await CaptureAsync(control, $"{name}-HighContrast");
+        profile.RequireStable(ReadAccessibilityProfile("after high-contrast capture"));
+        Program.Results.Note("High-contrast capture completed at a stable OS profile; actual-host appearance review is a separate blocked scenario.");
     }
 
     internal static async Task TextScalingAsync(FrameworkElement control, string name)
     {
-        double scale = new UISettings().TextScaleFactor;
-        Program.Results.Note($"OS TextScaleFactor={scale}");
+        var profile = ReadAccessibilityProfile("before text-scale capture/check");
+        double scale = profile.TextScaleFactor;
         string? blocker = TextScalingMeasurements.BlockReason(name, scale);
         if (blocker is not null)
             throw new ScenarioBlockedException(blocker == "approval"
                 ? $"Observed OS text scale {scale}; this check requires a real setting above 100% on an approved host. No setting was changed."
-                : $"No text-scaling oracle is implemented for {name}; only SettingsCard string headers and TextBlock descriptions are covered.",
+                : $"No bounded text-scaling oracle is implemented for {name}; editable/rich/composition text and textless-part context remain separate coverage.",
                 blocker);
 
         await CaptureAsync(control, $"{name}-TextScale-{scale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}");
-        TextScalingChecks.Check(control);
-        double finalScale = new UISettings().TextScaleFactor;
-        Program.Results.Note($"OS TextScaleFactor after capture/check={finalScale}");
-        Program.Check(finalScale == scale, "OS text scale changed during the scenario; measurements are not a stable-scale result.");
-        Program.Results.Note("SettingsCard header/description fit checks passed at the observed OS scale. Capture requires visual review; other text, long-content stress and scale-to-scale growth are not established.");
+        try
+        {
+            if (name == "SettingsCard") TextScalingChecks.Check(control);
+            else TextScalingChecks.CheckBoundedTargets(control, name);
+        }
+        catch (UnsupportedTextShapeException ex)
+        {
+            throw new ScenarioBlockedException(ex.Message);
+        }
+        profile.RequireStable(ReadAccessibilityProfile("after text-scale capture/check"));
+        Program.Results.Note("Declared text targets fit at the stable observed OS profile. Capture requires visual review; other text, long-content stress and scale-to-scale growth are not established.");
+    }
+
+    private static AccessibilityProfile ReadAccessibilityProfile(string phase)
+    {
+        var settings = new AccessibilitySettings();
+        bool highContrast = settings.HighContrast;
+        var profile = new AccessibilityProfile(highContrast, highContrast ? settings.HighContrastScheme : "",
+            new UISettings().TextScaleFactor);
+        profile.RequireValid();
+        Program.Results.Note($"OS profile {phase}: HighContrast={profile.HighContrast}; " +
+            $"HighContrastScheme='{profile.HighContrastScheme}'; TextScaleFactor={profile.TextScaleFactor}");
+        return profile;
     }
 
     private static async Task CaptureAsync(FrameworkElement control, string name)
@@ -259,6 +278,7 @@ internal static class LocalEvidenceChecks
         string path = Path.Combine(Path.GetDirectoryName(Program.Options.Output)!, name + ".png");
         using (var file = File.Create(path))
             await output.AsStreamForRead().CopyToAsync(file);
-        Program.Results.Note($"capture={path}; pixels={bitmap.PixelWidth}x{bitmap.PixelHeight}; nontransparent={visible}; pixel-sha256={Convert.ToHexString(SHA256.HashData(pixels))}");
+        Program.Results.Note($"capture={path}; pixels={bitmap.PixelWidth}x{bitmap.PixelHeight}; nontransparent={visible}; pixel-sha256={Convert.ToHexString(SHA256.HashData(pixels))}; " +
+            "capture-complete=true; scope=subject-only; alpha=premultiplied; appearance-review=pending");
     }
 }

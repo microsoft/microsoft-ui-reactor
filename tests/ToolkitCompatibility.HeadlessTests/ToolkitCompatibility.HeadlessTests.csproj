@@ -10,5 +10,7 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <Compile Include="..\ToolkitCompatibility\TextScalingMeasurements.cs" Link="TextScalingMeasurements.cs" />
+    <Compile Include="..\ToolkitCompatibility\TextScalingTargets.cs" Link="TextScalingTargets.cs" />
+    <Compile Include="..\ToolkitCompatibility\AccessibilityProfile.cs" Link="AccessibilityProfile.cs" />
   </ItemGroup>
 </Project>

@@ -56,6 +56,7 @@ internal static class Scenarios
         yield return "light-dark-render-capture";
         yield return "rtl-render-capture";
         yield return "high-contrast-render-capture";
+        yield return "high-contrast-appearance-review";
         yield return "os-text-scaling";
         yield return name switch
         {

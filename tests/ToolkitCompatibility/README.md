@@ -145,15 +145,27 @@ rules using bounded synthetic runs, including passing and rejected counterpart
 cases. It does not launch the consumer, exercise native controls or establish
 new native coverage.
 
+### OS profile capture boundaries
+
+High-contrast capture and text-scale checks record the actual OS high-contrast
+flag, active scheme and text-scale factor before and after successful capture/checks.
+Any change invalidates that result. `high-contrast-render-capture` still measures
+capture completion, not readability. The separate
+`high-contrast-appearance-review` row stays `blocked/not-implemented`: this harness
+has no operator-owned actual-window evidence/review ingestion. PNG notes explicitly
+record `scope=subject-only`, premultiplied alpha and `appearance-review=pending`.
+The subject PNG omits ancestor/sibling backgrounds; a diagnostic matte is not
+evidence of the actual host surface, even when it reveals otherwise pale glyphs.
+
 ### Bounded OS text-scale check (#1602)
 
 `SettingsCard/os-text-scaling` now captures and checks the current core scenario's
 string header and `TextBlock` description when the observed real OS
 `UISettings.TextScaleFactor` is greater than 1. At 100% it remains
-`blocked/approval`; other controls remain `blocked/not-implemented` even on a
-scaled host. Rich headers, non-TextBlock descriptions and explicit clip geometries
-are also unimplemented, not native limitations or passes. High-contrast behavior
-is unchanged.
+`blocked/approval`. The additional initial-specimen selectors below use the same
+plain-text measurement and ancestor checks. They also require a real scale above
+100%. Rich headers, non-TextBlock descriptions and explicit clip geometries
+remain unimplemented, not native limitations or passes.
 
 The check requires exactly one realized header outside the content/icon/description
 slots, nonempty attached text with OS scaling enabled, and no native trimming.
@@ -173,11 +185,12 @@ theme, rasterization scale, and OS scale before/after. The PNG is captured befor
 the assertions so a failed fit can still be inspected.
 
 This does not prove scale-to-scale growth, pixel-perfect visibility, overlapping
-sibling behavior, arbitrary rich text, long-content stress, or other controls.
-The existing short core strings are the measured scope. Captures require human
-review. A build or headless geometry test is **not** WinUI/runtime acceptance.
+sibling behavior, arbitrary rich text or long-content stress. The existing short
+core strings and declared selectors are the measured scope. Captures require
+human review. A build or headless geometry/selector test is **not** WinUI/runtime
+acceptance.
 
-After the positive checks, the same bounded scenario runs three native negative
+After the positive checks, the SettingsCard scenario runs three native negative
 controls. It halves each text slot's height in turn, verifies a nonzero native
 size reduction, and requires a role-matched trimming, text-overflow or
 ancestor-overflow failure. Invalid measurements and unrelated exceptions do not
@@ -189,12 +202,53 @@ oracle. Both text slots are rechecked after all three rejections. The TAP log
 records the perturbations, observed reasons and restored baseline; the PNG is
 the unmodified positive capture, not a screenshot of the negative controls.
 
+#### Additional bounded plain-text targets
+
+These selectors check only the initial specimen restored before the appearance
+operations. They do not add control states or repeat the SettingsCard experiment.
+They require exact owned text matches, target counts and, for keyed panels,
+initial child keys/order. A missing or ambiguous target fails, rather than
+substituting a same-text sibling or passing an empty enumeration.
+
+| Control | Declared targets |
+|---|---|
+| SettingsExpander | String header excluding other slots; header of its one expanded child card |
+| Segmented | List, Grid and Details, each in its own realized item container |
+| HeaderedContentControl | String header excluding Content; the Content label |
+| HeaderedItemsControl | String header excluding Items; its one initial item label |
+| HeaderedTreeView | String header excluding realized nodes; the two initial node labels |
+| LayoutTransformControl | Its initial, unrotated child label only |
+| ConstrainedBox | The label in its native Content subtree |
+| UniformGrid, WrapPanel, StaggeredPanel | Each label inside the six individually keyed initial tiles |
+| DockPanel | Each label inside the edge, bottom and last child |
+
+The plain-text path accepts no inline collection or one equivalent Run with the
+TextBlock's text and effective typography (including WinUI's implicit Run for a
+string). Other inline/rich typography stays `blocked/not-implemented`; it is not
+flattened into a misleading plain-text measurement. Editable text, composition
+labels, MetadataControl, SwitchPresenter cases and TabbedCommandBar are not
+implemented by this slice. Native selector realization has to be exercised on an
+approved host before any runtime acceptance is claimed.
+
+Text-only N/A is limited to a genuinely textless configured part, not its
+surrounding UI or the entire control's accessibility. The current GridSplitter,
+ContentSizer and PropertySizer subjects contain no authored text; GridSplitter's
+Left/Right pane labels and PropertySizer's Bound target label are **siblings**
+outside the subject capture. The current RangeSelector and ImageCropper cores
+also declare no persistent text, but native template labels/tooltips must not be
+assumed absent. These five `os-text-scaling` rows remain blocked, not automatically
+inapplicable or passed, until their actual text inventory/context has a bounded
+oracle. CameraPreview remains consent-blocked before construction because its
+mapped mount starts capture. No camera or surrounding text is silently excluded
+from an all-control acceptance claim.
+
 Headless regression tests compile the same measurement guards without WinUI,
-WinRT initialization, or the compatibility consumer. The project is included in
-solution builds and runs in the PR CI Unit Tests job:
+WinRT initialization, or the compatibility consumer, and exercise exact-match
+selection/exclusion, count/shape rejection and OS-profile validation. The project
+is included in solution builds and runs in the PR CI Unit Tests job:
 
 ```powershell
-dotnet test tests\ToolkitCompatibility.HeadlessTests --filter-class "*TextScalingMeasurementsTests*"
+dotnet test tests\ToolkitCompatibility.HeadlessTests
 ```
 
 Later, on an explicitly approved dedicated host/VM, run the SettingsCard lane at
