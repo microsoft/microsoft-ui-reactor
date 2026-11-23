@@ -241,6 +241,7 @@ return Border(child)
     .OnPinch(
         onChanged: (e) => setScale(scale * (float)e.ScaleDelta),
         onEnded: (e) => { })
+    .TransformOrigin(0.5f, 0.5f) // zoom about the centre, not the top-left corner
     .Scale(scale);
 
 // Rotation:
@@ -250,6 +251,7 @@ return Border(child)
     .OnRotate(
         onChanged: (e) => setAngle(angle + (float)e.AngleDelta),
         onEnded: (e) => { })
+    .TransformOrigin(0.5f, 0.5f) // turn about the centre
     .Rotation(angle);
 ```
 

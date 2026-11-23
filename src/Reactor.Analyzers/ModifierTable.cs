@@ -732,6 +732,8 @@ internal static class ModifierTable
             ["Rotation"] = "AnimationHelper.SetOrAnimate writes Visual.RotationAngle, taking the visual unless the value is 0.",
             ["Translation"] = "AnimationHelper.SetOrAnimateVector3 enables translation and writes the visual's Translation, taking the visual unless the value is zero.",
             ["CenterPoint"] = "AnimationHelper.SetOrAnimateVector3 writes Visual.CenterPoint, taking the visual unless the value is zero.",
+            // Spec 066 layer 5: an origin other than (0, 0) starts its pivot expression on the visual at mount.
+            ["TransformOrigin"] = "TransformOriginBinding.Apply starts the pivot expression on Visual.CenterPoint, taking the visual unless the origin is (0, 0).",
         };
 
     // ── Attached properties ──────────────────────────────────────────────────

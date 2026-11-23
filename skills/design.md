@@ -1107,6 +1107,7 @@ VStack(children)
 // Scale bounce
 Border(child)
     .ScaleTransition()
+    .TransformOrigin(0.5f, 0.5f) // shrink toward the centre
     .Scale(isPressed ? 0.95f : 1.0f)
 ```
 

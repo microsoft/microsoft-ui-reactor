@@ -113,6 +113,7 @@ namespace Microsoft.UI.Reactor
         public static T Scale<T>(this T el, Vector3 scale) where T : Element => el;
         public static T Scale<T>(this T el, float uniform) where T : Element => el;
         public static T CenterPoint<T>(this T el, Vector3 center) where T : Element => el;
+        public static T TransformOrigin<T>(this T el, float x, float y) where T : Element => el;
         public static T Opacity<T>(this T el, double opacity) where T : Element => el;
         public static T OpacityTransition<T>(this T el, TimeSpan? duration = null) where T : Element => el;
         public static T RotationTransition<T>(this T el, TimeSpan? duration = null) where T : Element => el;
@@ -483,6 +484,7 @@ class C
     [InlineData("Border().CenterPoint(Vector3.Zero)", "fe.Rotation = 5")]
     [InlineData("Border().Translation(0, 0f, 0.0f)", "fe.Rotation = 5")]
     [InlineData("Border().Rotation(0)", "fe.Scale = new Vector3(2, 2, 1)")]
+    [InlineData("Border().TransformOrigin(0, 0f)", "fe.Rotation = 5")]
     public async Task Identity_Transform_Does_Not_Take_The_Visual(string chain, string write)
     {
         await VerifyAsync(@"class C { Element M() => " + chain + ".Set(fe => " + write + "); }");
@@ -495,6 +497,7 @@ class C
     [InlineData("Rotation(30)")]
     [InlineData("Translation(10, 0, 0)")]
     [InlineData("CenterPoint(new Vector3(10, 5, 0))")]
+    [InlineData("TransformOrigin(0.5f, 0.5f)")]
     public async Task A_Transform_Modifier_Takes_The_Visual_And_Fixes(string trigger)
     {
         // Rotation as the trigger is the one with a write it can't also be: use Scale there.
@@ -504,6 +507,20 @@ class C
         await VerifyFixAsync(
             "class C { Element M() => Border()." + trigger + ".Set(fe => {|REACTOR_ANIM_004:" + write + "|}); }",
             "class C { Element M() => Border()." + trigger + "." + fixedCall + "; }");
+    }
+
+    [Fact]
+    public async Task CenterPoint_Write_Under_A_TransformOrigin_Has_No_Fix()
+    {
+        // Spec 066 §8.1: next to an origin, .CenterPoint() is an offset added to it, so the
+        // absolute pivot the .Set writes can't move into it unchanged.
+        const string code = "class C { Element M() => Border().TransformOrigin(0.5f, 0.5f).Set(fe => {|REACTOR_ANIM_004:fe.CenterPoint = new Vector3(50, 20, 0)|}); }";
+        await VerifyFixAsync(code, code);
+        await VerifyAsync(
+            "class C { Element M() => Border().TransformOrigin(0.5f, 0.5f).Set(fe => {|#0:fe.CenterPoint = new Vector3(50, 20, 0)|}); }",
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning)
+                .WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.CenterPoint', but '.TransformOrigin(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove the write: '.TransformOrigin(...)' owns the pivot, and '.CenterPoint(...)' next to it is a pixel offset added to that origin."));
     }
 
     [Fact]

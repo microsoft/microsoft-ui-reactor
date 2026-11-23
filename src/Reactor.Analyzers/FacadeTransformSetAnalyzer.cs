@@ -249,10 +249,16 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             // The chain already has the modifier, so it owns the channel and the write is dead.
             var existingModifier = info.Modifier is { } own
                 && FindChainModifier(invocation, model, ct, n => n == own) is not null;
+            // Under a .TransformOrigin, .CenterPoint() is a pixel offset added to the size-relative
+            // pivot (spec 066 §8.1), so rewriting an absolute pivot to it would move the pivot.
+            var originOwnsPivot = name == "CenterPoint"
+                && FindChainModifier(invocation, model, ct, static n => n == "TransformOrigin",
+                    skip: link => IsIdentityTransform(link, "TransformOrigin", model, ct)) is not null;
             var properties = ImmutableDictionary<string, string?>.Empty;
             if (assignment is not null
                 && info.Modifier is { } modifier
                 && !existingModifier
+                && !originOwnsPivot
                 && IsFixable(invocation, setAccess, lambda, paramName, assignment, modifier, model, ct))
             {
                 properties = properties.Add(FixModifierKey, modifier);
@@ -267,6 +273,8 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 name == StartAnimationName ? "call" : "write",
                 existingModifier
                     ? "Remove the write or merge the value into the existing '." + info.Modifier + "(...)' call"
+                    : originOwnsPivot
+                    ? "Remove the write: '.TransformOrigin(...)' owns the pivot, and '.CenterPoint(...)' next to it is a pixel offset added to that origin"
                     : info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
                     && assignment is not null && IsNullValue(assignment.Right)
                     ? "Remove it: an element without '." + transitionModifier + "(...)' has no such transition, so there is nothing to clear"
@@ -326,9 +334,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// True when <paramref name="link"/> is <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> or
-    /// <c>.CenterPoint</c> with only constant identity arguments: every number 1 for <c>.Scale</c>
-    /// and 0 for the others, or <c>Vector3.One</c> / <c>Vector3.Zero</c>.
+    /// True when <paramref name="link"/> is <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c>,
+    /// <c>.CenterPoint</c> or <c>.TransformOrigin</c> with only constant identity arguments: every
+    /// number 1 for <c>.Scale</c> and 0 for the others, or <c>Vector3.One</c> / <c>Vector3.Zero</c>.
     /// </summary>
     private static bool IsIdentityTransform(InvocationExpressionSyntax link, string name, SemanticModel model, CancellationToken ct)
     {
@@ -337,7 +345,7 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         switch (name)
         {
             case "Scale": identity = 1; vector = "One"; break;
-            case "Rotation" or TranslationName or "CenterPoint": identity = 0; vector = "Zero"; break;
+            case "Rotation" or TranslationName or "CenterPoint" or "TransformOrigin": identity = 0; vector = "Zero"; break;
             default: return false;
         }
         var arguments = link.ArgumentList.Arguments;

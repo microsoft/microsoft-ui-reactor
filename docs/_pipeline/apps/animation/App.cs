@@ -44,6 +44,7 @@ class ScaleDemo : Component
             ).Padding(12)
              .CornerRadius(8)
              .Background(Theme.CardBackground)
+             .TransformOrigin(0.5f, 0.5f)
              .Scale(enlarged ? 1.5f : 1.0f)
              .ScaleTransition()
         ).Padding(24);
@@ -251,6 +252,7 @@ class InteractionStatesDemo : Component
                     TextBlock("Hover me").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
                 ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.SystemSuccess)
+                 .TransformOrigin(0.5f, 0.5f)
                  .InteractionStates(s => s
                     .PointerOver(opacity: 0.85f, scale: 1.05f)
                     .Pressed(scale: 0.95f, opacity: 0.7f)),
@@ -258,6 +260,7 @@ class InteractionStatesDemo : Component
                     TextBlock("Press me").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
                 ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.AccentSecondary)
+                 .TransformOrigin(0.5f, 0.5f)
                  .InteractionStates(s => s
                     .PointerOver(scale: 1.03f)
                     .Pressed(scale: 0.97f, opacity: 0.8f),
@@ -328,6 +331,7 @@ class KeyframeDemo : Component
                 TextBlock("Pulse target").FontSize(16).Bold()
                     .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
             ).Padding(12).CornerRadius(8).Size(200, 60).Background(Theme.AccentSecondary)
+             .TransformOrigin(0.5f, 0.5f)
              .Keyframes("pulse", count, kf => kf
                 .Duration(600)
                 .At(0.0f, scale: global::System.Numerics.Vector3.One)

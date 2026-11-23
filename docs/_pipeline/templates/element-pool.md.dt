@@ -72,7 +72,7 @@ is permanent. Reactor takes it for `.Animate()`, `.Transition()`,
 `.ScrollLinked()`, the implicit transitions (`.OpacityTransition()`,
 `.ScaleTransition()`, `.RotationTransition()`, `.TranslationTransition()`),
 a non-identity `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`,
-and the children of a `.Stagger()` panel. After that
+a `.TransformOrigin()` other than `(0, 0)`, and the children of a `.Stagger()` panel. After that
 WinUI refuses every write to the control's `Rotation`, `Scale`,
 `CenterPoint`, `RotationAxis` and `TransformMatrix` facades and to its
 XAML implicit transitions (`OpacityTransition` and friends), even an
