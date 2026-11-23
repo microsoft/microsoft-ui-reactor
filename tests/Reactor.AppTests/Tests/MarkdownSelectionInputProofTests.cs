@@ -13,6 +13,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private const int SampleIntervalMs = 150;
     private const int PollIntervalMs = 100;
     private const int WaitSeconds = 8;
+    private const double ScrollPercentTolerance = .01;
     private const uint MouseMove = 0x0001, MouseMoveNoCoalesce = 0x2000, MouseVirtualDesk = 0x4000, MouseAbsolute = 0x8000;
     private readonly HashSet<ushort> _heldKeys = [];
     [ClassInitialize]
@@ -373,6 +374,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Mouse(4); mouseHeld = false;
             Thread.Sleep(SampleIntervalMs);
             double releasedScroll = scroll.Current.VerticalScrollPercent;
+            Assert.IsTrue(releasedScroll > ScrollPercentTolerance && releasedScroll < 100 - ScrollPercentTolerance,
+                $"Release stop baseline must not be clamped: scrollPercent={releasedScroll}");
             var releasedRange = longText.GetSelection().Single().Clone();
             for (int sample = 0; sample < 3; sample++)
             {
@@ -566,6 +569,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             }
             void Stable(double before, string operation)
             {
+                Assert.IsTrue(before > ScrollPercentTolerance && before < 100 - ScrollPercentTolerance,
+                    $"{operation}: baseline must not be clamped; scrollPercent={before}");
                 Assert.IsTrue(GetCursorPos(out var stationary));
                 for (int sample = 0; sample < 3; sample++)
                 {
@@ -574,7 +579,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                     Assert.IsTrue(GetCursorPos(out var current));
                     Assert.AreEqual(stationary.X, current.X, "Stationary pointer X unchanged");
                     Assert.AreEqual(stationary.Y, current.Y, "Stationary pointer Y unchanged");
-                    Assert.AreEqual(before, scroll.Current.VerticalScrollPercent, .01, operation);
+                    Assert.AreEqual(before, scroll.Current.VerticalScrollPercent, ScrollPercentTolerance, operation);
                 }
                 Console.WriteLine($"{fixture}: {operation}; scrollPercent={before}");
             }
@@ -628,7 +633,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         {
             try
             {
-                if (mouseHeld) Mouse(4);
+                if (mouseHeld) Send(new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 4 } } });
             }
             finally
             {
