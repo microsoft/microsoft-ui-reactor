@@ -4070,7 +4070,7 @@ sibling <code>src/Reactor.Analyzers.Internal/</code> project instead; see
 <tr>
 <td><code>REACTOR_MOD_003</code></td>
 <td>Warning</td>
-<td>Common modifier applied to an element whose mounted control is outside the types <code>ApplyModifiers</code> writes it to, so the value is silently dropped (e.g. <code>.Background(...)</code> on a Rectangle renders an invisible shape); ships a did-you-mean fix to <code>.Fill</code>/<code>.Stroke</code> for shapes</td>
+<td>The selected generic modifier overload compiles, but the reconciler discards its value on the mounted control. For example, <code>.Background(...)</code> on a <code>Rectangle</code> has no effect. The rule offers a fix to <code>.Fill(...)</code> or <code>.Stroke(...)</code> for shapes.</td>
 <td><code>NoOpModifierAnalyzer.cs</code></td>
 </tr>
 <tr>
@@ -4151,6 +4151,11 @@ sibling <code>src/Reactor.Analyzers.Internal/</code> project instead; see
 (variable hook counts across early returns, async boundaries inside <code>UseEffect</code>);
 they now ship — <code>_002</code> flags a hook after a single-guard early return, <code>_003</code>
 flags an <code>async</code>-void <code>UseEffect</code> body (spec 060 §4.1).</p>
+<p><code>REACTOR_MOD_003</code> checks <code>ModifierInfo.ControlGate</code> for writes through
+<code>ApplyModifiers</code>. When a <code>ThemeRef</code> overload has a separate receiver list,
+the rule uses <code>ThemeControlGate</code>. For example, the generic brush overload of
+<code>Foreground</code> reaches <code>Control</code> and <code>TextBlock</code>, and the <code>ThemeRef</code> overload
+also reaches <code>RichTextBlock</code>.</p>
 <h2 id="combined-sizing-without-extra-copies">Combined sizing without extra copies<a class="headerlink" href="#combined-sizing-without-extra-copies" title="Permanent link">&para;</a></h2>
 <p><code>REACTOR_PERF_001</code> is allocation guidance, not a correctness warning or an FPS claim.
 For example, <code>Button("Save").Width(120).Height(32)</code> becomes

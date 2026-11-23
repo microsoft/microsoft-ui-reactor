@@ -3553,6 +3553,10 @@ because you build the <code>Paragraph[]</code> from data per render.</p>
 <code>.TextTrimming</code>, <code>.CharacterSpacing</code> — match <code>TextBlock</code>. Inline runs do
 not get the fast-path renderer, so prefer plain <code>TextBlock</code> for static
 text.</p>
+<p>Use <code>RichTextBlock("Hello").Foreground(Theme.PrimaryText)</code> to set the block's
+default text brush. WinUI resolves the <a href="../theming-tokens/">theme token</a> for the
+block's effective theme and updates the brush when that theme changes. An
+inline run can still supply its own foreground.</p>
 <blockquote>
 <p><strong>Caveat:</strong> Embedding live controls with <code>InlineUI(...)</code> and then mutating a <code>Run</code> in
 the same paragraph used to scroll the surrounding <code>ScrollViewer</code>/<code>ScrollView</code>
