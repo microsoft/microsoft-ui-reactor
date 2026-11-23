@@ -119,6 +119,7 @@ internal sealed record MarkdownSelectionElement(Element Content, SelectionRole R
 
 internal sealed partial class MarkdownSelectionMarker : UserControl
 {
+    private MarkdownSelectionHost? _owner;
     internal MarkdownSelectionElement Metadata { get; set; } = null!;
     internal UIElement? Child { get => Content; set => Content = value; }
     internal bool HasSelectionScope
@@ -137,13 +138,20 @@ internal sealed partial class MarkdownSelectionMarker : UserControl
         SizeChanged += (_, _) => InvalidateEnclosingScope();
         Loaded += (_, _) =>
         {
-            InvalidateEnclosingScope();
+            for (DependencyObject? parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(this);
+                parent is not null; parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+                if (parent is MarkdownSelectionHost owner) { _owner = owner; break; }
+            _owner?.InvalidateDocument();
             if (Metadata.Role == SelectionRole.Surface && !HasSelectionScope)
                 DiagnosticLog.Warning(LogCategory.Markdown, "TextSelection",
                     "A selectable Markdown surface has no enclosing MarkdownTextSelection.Scope. " +
                     "Wrap the complete message in Scope; TextSelection alone does not provide selection.");
         };
-        Unloaded += (_, _) => InvalidateEnclosingScope();
+        Unloaded += (_, _) =>
+        {
+            _owner?.InvalidateDocument();
+            _owner = null;
+        };
     }
 
     internal void InvalidateEnclosingScope()
@@ -182,7 +190,7 @@ internal sealed class MarkdownSelectionHandler : IDecoratorElementHandler<Markdo
         }
         if (control is MarkdownSelectionHost host)
         {
-            if (!ReferenceEquals(host.Options, newEl.Options)) host.Options = newEl.Options!;
+            if (host.Options != newEl.Options) host.Options = newEl.Options!;
             host.SetContent(ctx.ReconcileChild(oldEl.Content, newEl.Content, host.Body));
         }
         else

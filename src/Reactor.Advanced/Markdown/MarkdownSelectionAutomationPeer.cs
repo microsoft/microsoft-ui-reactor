@@ -212,12 +212,12 @@ internal sealed partial class MarkdownSelectionRange(
         if (unit == TextUnit.Line) return host.VisualLineBoundaries();
         return host.Document.WordBoundaries;
     }
-    public void Select() { Normalize(); host.Select(_start, _end); }
+    public void Select() { Normalize(); host.SelectRefreshed(_start, _end); }
     public void AddToSelection() => Select();
     public void RemoveFromSelection()
     {
         Normalize();
-        if (host.Document.Start == _start && host.Document.End == _end) host.Select(_end, _end);
+        if (host.Document.Start == _start && host.Document.End == _end) host.SelectRefreshed(_end, _end);
     }
     public void ScrollIntoView(bool alignToTop)
     {
