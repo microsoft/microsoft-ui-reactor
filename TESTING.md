@@ -102,7 +102,7 @@ Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is saf
 host does inherit it — child processes inherit the environment — but it is never parsed as
 an MTP option, which is what the rejection above turns on.
 
-So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Reactor.dll`
+So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Microsoft.UI.Reactor.dll`
 race — see [`AGENTS.md`](AGENTS.md) field notes), split the command in two:
 
 ```bash
@@ -1414,10 +1414,10 @@ dotnet build tests/Reactor.AppTests.Host      -c Debug -p:Optimize=false -p:Debu
 # Step 2: Instrument the product DLLs statically
 #         (dynamic instrumentation skips referenced assemblies)
 dotnet-coverage instrument \
-  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.dll" \
+  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.dll" \
   -s coverage.settings.xml
 dotnet-coverage instrument \
-  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.Advanced.dll" \
+  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.Advanced.dll" \
   -s coverage.settings.xml
 
 # Step 3: Collect
@@ -1428,7 +1428,7 @@ dotnet-coverage collect -s coverage.settings.xml \
 # --- Merge ---
 # The exact union of covered lines. Not `dotnet-coverage merge`: it drops covered lines
 # from these reports (tests/coverage/ci/README.md explains why). It refuses reports that
-# do not list the same lines, such as a selftest report whose Reactor.Advanced.dll was
+# do not list the same lines, such as a selftest report whose Microsoft.UI.Reactor.Advanced.dll was
 # not instrumented in Step 2.
 pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml \
   unit.cobertura.xml selftest.cobertura.xml

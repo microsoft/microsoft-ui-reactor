@@ -59,6 +59,17 @@ Conventions for contributors:
 
 ### Changed
 
+- **Breaking: the shipped assemblies are named after their packages (issue #1664).** `Reactor.dll`
+  is now `Microsoft.UI.Reactor.dll` and `Reactor.Advanced.dll` is now
+  `Microsoft.UI.Reactor.Advanced.dll`, matching the `Microsoft.UI.Reactor` and
+  `Microsoft.UI.Reactor.Advanced` package ids (`Microsoft.UI.Reactor.Devtools.dll` already
+  matched). Namespaces and package ids don't change, so a normal package or project reference
+  needs no edits. Update anything that names the files or the assembly, such as assembly-qualified
+  type names (`"…, Reactor"`), `InternalsVisibleTo`, `TrimmerRootAssembly`, signing or coverage
+  filters, and `ms-appx:///Reactor/…` paths, which are now `ms-appx:///Microsoft.UI.Reactor/…`. The
+  short `Reactor` name was what a file-based app saved as `reactor.cs` collided with, so that name
+  is safe again. `mur --create` no longer reserves `Reactor` and `Reactor.Advanced`.
+
 - Opt-in Markdown text selection supports double-click to select a word and
   triple-click to select a text surface, including drag extension by either unit.
   Selection drags from inline links and release-mode custom link buttons do not

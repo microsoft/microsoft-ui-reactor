@@ -48,7 +48,7 @@ public sealed class SourceMapTransparentGeneratorTests
                 // a compile error.
                 //
                 // Built with a CONSTRUCTOR, not `Factories.TextBlock`, to stay faithful to
-                // the real thing: `Element.cs`'s operator lives in Reactor.dll, a different
+                // the real thing: `Element.cs`'s operator lives in Microsoft.UI.Reactor.dll, a different
                 // compilation, so its body is never intercepted and the converted element
                 // arrives unstamped. Calling a factory here would put an extra
                 // interceptable call site inside this compilation and inflate every

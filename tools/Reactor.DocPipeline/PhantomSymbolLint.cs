@@ -71,7 +71,7 @@ internal sealed record PhantomSymbol(
 ///   (compiles green forever — the file is valid C#, the string is not checked),</item>
 /// <item>gallery <c>SourceCode</c> strings in <c>samples/ReactorGallery/**</c>,</item>
 /// <item><c>///</c> XML doc comments in <c>src/**</c> — never validated, yet
-///   shipped in <c>Reactor.xml</c> as the IntelliSense every NuGet consumer sees.</item>
+///   shipped in <c>Microsoft.UI.Reactor.xml</c> as the IntelliSense every NuGet consumer sees.</item>
 /// </list>
 ///
 /// <para>Surface 4 is the propagation source: guide templates have been observed

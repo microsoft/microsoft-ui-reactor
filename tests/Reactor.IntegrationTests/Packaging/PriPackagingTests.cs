@@ -38,8 +38,8 @@ public sealed class PriPackagingTests : IDisposable
     {
         var entries = ReadPackageEntries("Microsoft.UI.Reactor");
 
-        Assert.Contains(entries, e => e.EndsWith("Reactor/Hosting/ReactorApplication.xbf", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(entries, e => e.EndsWith("Reactor/Hosting/ReactorApplication.xaml", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entries, e => e.EndsWith("/Microsoft.UI.Reactor/Hosting/ReactorApplication.xbf", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entries, e => e.EndsWith("/Microsoft.UI.Reactor/Hosting/ReactorApplication.xaml", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

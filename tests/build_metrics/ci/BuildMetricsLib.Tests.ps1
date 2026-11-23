@@ -143,12 +143,12 @@ Assert-Equal 0   (ConvertTo-MeasurementMap -Measurements $null).Keys.Count 'null
 # ── Format-BuildMetricsComment ───────────────────────────────────────────────
 $base = @(
     [pscustomobject]@{ Key = 'nupkg.Reactor'; Label = 'Microsoft.UI.Reactor.nupkg'; Group = 'Packages (compressed .nupkg)'; Bytes = 1200000 }
-    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll'; Label = 'Reactor.dll';       Group = 'Assemblies in Microsoft.UI.Reactor'; Bytes = 900000 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll'; Label = 'Microsoft.UI.Reactor.dll';       Group = 'Assemblies in Microsoft.UI.Reactor'; Bytes = 900000 }
     [pscustomobject]@{ Key = 'nupkg.Legacy';  Label = 'Legacy.nupkg';               Group = 'Packages (compressed .nupkg)'; Bytes = 4000 }
 )
 $head = @(
     [pscustomobject]@{ Key = 'nupkg.Reactor'; Label = 'Microsoft.UI.Reactor.nupkg'; Group = 'Packages (compressed .nupkg)'; Bytes = 1260000 }
-    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll'; Label = 'Reactor.dll';       Group = 'Assemblies in Microsoft.UI.Reactor'; Bytes = 900010 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll'; Label = 'Microsoft.UI.Reactor.dll';       Group = 'Assemblies in Microsoft.UI.Reactor'; Bytes = 900010 }
     [pscustomobject]@{ Key = 'nupkg.New';     Label = 'Brand.New.nupkg';            Group = 'Packages (compressed .nupkg)'; Bytes = 7000 }
 )
 $comment = Format-BuildMetricsComment -BaseMeasurements $base -HeadMeasurements $head -HeadSha 'abcdef1234567' -BaseSha '1234567890abc' -RunUrl 'https://example/run/1'
@@ -165,7 +165,7 @@ Assert-Match $comment 'workflow run'                   'footer links the run'
 Assert-Match    $comment 'vs the base branch'          'header uses base-branch wording, not hard-coded main'
 Assert-Match    $comment 'base | PR'                   'table column header says base'
 Assert-NotMatch $comment 'main | PR'                   'table column header is not the hard-coded main'
-# The tiny Reactor.dll delta (10 bytes) must read as unchanged, not a regression.
+# The tiny Microsoft.UI.Reactor.dll delta (10 bytes) must read as unchanged, not a regression.
 Assert-Match $comment "$([char]0x2248)"                'within-noise glyph present for tiny delta'
 
 # All-unchanged rendering: the "no change" note appears, no grew/shrank rows.
@@ -200,11 +200,11 @@ Assert-Equal 'Assemblies in Microsoft.UI.Reactor' ($spec | Where-Object { $_.Pkg
 # preserved. nupkg rows come first (spec order), then per-DLL rows sorted by name.
 $raw = @(
     [pscustomobject]@{ Key = 'nupkg.Reactor';                       Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 2034863 }
-    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll';             Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 3384320 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll';             Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 3384320 }
     [pscustomobject]@{ Key = 'asm|Reactor|Reactor.Analyzers.dll';   Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 303104 }
     [pscustomobject]@{ Key = 'asm|Reactor|Reactor.Wrappers.Abstractions.dll'; Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 10240 }
     [pscustomobject]@{ Key = 'nupkg.Advanced';                      Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 33792 }
-    [pscustomobject]@{ Key = 'asm|Advanced|Reactor.Advanced.dll';   Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 33792 }
+    [pscustomobject]@{ Key = 'asm|Advanced|Microsoft.UI.Reactor.Advanced.dll';   Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 33792 }
     [pscustomobject]@{ Key = 'nupkg.Devtools';                      Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 442368 }
     [pscustomobject]@{ Key = 'asm|Devtools|Microsoft.UI.Reactor.Devtools.dll'; Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 442368 }
 )
@@ -223,11 +223,11 @@ $reactorDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI
 Assert-Equal 3 $reactorDlls.Count 'all three Reactor DLL rows mapped to the framework assembly group'
 Assert-Equal 'Reactor.Analyzers.dll' $reactorDlls[0].Label 'DLL rows sorted deterministically by filename (Analyzers first)'
 Assert-Equal 'Reactor.Wrappers.Abstractions.dll' $reactorDlls[2].Label 'DLL rows sorted deterministically by filename (Wrappers last)'
-Assert-Equal 3384320 ($reactorDlls | Where-Object { $_.Label -eq 'Reactor.dll' }).Bytes 'per-DLL bytes preserved'
+Assert-Equal 3384320 ($reactorDlls | Where-Object { $_.Label -eq 'Microsoft.UI.Reactor.dll' }).Bytes 'per-DLL bytes preserved'
 Assert-Equal 'Reactor.Analyzers.dll' ($reactorDlls[0].Label) 'analyzer DLL displayed with its own filename'
 $advancedDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor.Advanced' })
 Assert-Equal 1 $advancedDlls.Count 'Advanced package contributes its single DLL'
-Assert-Equal 'Reactor.Advanced.dll' $advancedDlls[0].Label 'Advanced DLL uses its filename'
+Assert-Equal 'Microsoft.UI.Reactor.Advanced.dll' $advancedDlls[0].Label 'Advanced DLL uses its filename'
 $devtoolsDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor.Devtools' })
 Assert-Equal 1 $devtoolsDlls.Count 'Devtools package contributes its single DLL'
 Assert-Equal 'Microsoft.UI.Reactor.Devtools.dll' $devtoolsDlls[0].Label 'Devtools DLL uses its filename'
@@ -236,7 +236,7 @@ Assert-Equal 'Microsoft.UI.Reactor.Devtools.dll' $devtoolsDlls[0].Label 'Devtool
 # the trusted labels/groups are used instead.
 $evil = @(
     [pscustomobject]@{ Key = 'nupkg.Reactor';           Label = '<img src=x onerror=alert(1)>'; Group = '[!WARNING] pwned'; Bytes = 100 }
-    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll'; Label = '<script>evil</script>';        Group = '| pipes | here';  Bytes = 200 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll'; Label = '<script>evil</script>';        Group = '| pipes | here';  Bytes = 200 }
 )
 $safeEvil = ConvertTo-SafeMeasurements -RawMeasurements $evil
 Assert-Equal 'Microsoft.UI.Reactor.nupkg' $safeEvil[0].Label 'injected package label is dropped for the trusted label'
@@ -279,16 +279,16 @@ Assert-True     (-not $safeBadJoined.Contains([string]([char]0x212A))) 'Unicode 
 # bytes become null.
 $junk = @(
     [pscustomobject]@{ Key = 'nupkg.Evil';                Label = 'x'; Group = 'y'; Bytes = 5 }   # unknown key -> dropped
-    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll';   Label = 'x'; Group = 'y'; Bytes = 'not-a-number' }
+    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll';   Label = 'x'; Group = 'y'; Bytes = 'not-a-number' }
     [pscustomobject]@{ Key = 'nupkg.Advanced';            Label = 'x'; Group = 'y'; Bytes = -50 }
-    [pscustomobject]@{ Key = 'asm|Advanced|Reactor.Advanced.dll'; Label = 'x'; Group = 'y'; Bytes = '1e9' }
+    [pscustomobject]@{ Key = 'asm|Advanced|Microsoft.UI.Reactor.Advanced.dll'; Label = 'x'; Group = 'y'; Bytes = '1e9' }
     [pscustomobject]@{ Key = 'asm|Devtools|Microsoft.UI.Reactor.Devtools.dll'; Label = 'x'; Group = 'y'; Bytes = '1.5' }
 )
 $safeJunk = ConvertTo-SafeMeasurements -RawMeasurements $junk
 Assert-True ((@($safeJunk | Where-Object { $_.Key -eq 'nupkg.Evil' })).Count -eq 0) 'unknown package key dropped'
-Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Reactor|Reactor.dll' }).Bytes   'non-numeric DLL bytes -> null'
+Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Reactor|Microsoft.UI.Reactor.dll' }).Bytes   'non-numeric DLL bytes -> null'
 Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'nupkg.Advanced' }).Bytes 'negative nupkg bytes -> null'
-Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Advanced|Reactor.Advanced.dll' }).Bytes 'scientific-notation bytes -> null'
+Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Advanced|Microsoft.UI.Reactor.Advanced.dll' }).Bytes 'scientific-notation bytes -> null'
 Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Devtools|Microsoft.UI.Reactor.Devtools.dll' }).Bytes 'decimal bytes -> null'
 
 # Defense-in-depth: a malicious PR that emits an unbounded number of validly-shaped
@@ -317,7 +317,7 @@ Assert-Match    $safeComment '### Packages (compressed .nupkg)'  'sanitized rend
 Assert-Match    $safeComment '### Assemblies in Microsoft.UI.Reactor' 'sanitized render has the per-package assembly section'
 Assert-Match    $safeComment 'Reactor.Analyzers.dll'             'sanitized render lists the analyzer DLL'
 Assert-Match    $safeComment 'Reactor.Wrappers.Abstractions.dll' 'sanitized render lists the abstractions DLL'
-Assert-Match    $safeComment 'Reactor.Advanced.dll'              'sanitized render lists the Advanced DLL'
+Assert-Match    $safeComment 'Microsoft.UI.Reactor.Advanced.dll'              'sanitized render lists the Advanced DLL'
 Assert-Match    $safeComment '### Assemblies in Microsoft.UI.Reactor.Devtools' 'sanitized render has the Devtools assembly section'
 Assert-Match    $safeComment 'Microsoft.UI.Reactor.Devtools.dll' 'sanitized render lists the Devtools DLL'
 Assert-NotMatch $safeComment 'IGNORED'                           'sanitized render drops artifact-supplied labels'

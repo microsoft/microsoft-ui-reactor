@@ -1002,15 +1002,15 @@ jobs:
       - name: Build Reactor framework
         run: dotnet build src\Reactor\Reactor.csproj -p:Platform=x64 -c Release --nologo
 
-      - name: Verify Reactor.dll has no devtools implementation IL
+      - name: Verify Microsoft.UI.Reactor.dll has no devtools implementation IL
         shell: pwsh
         run: |
-          $reactorDll = Get-ChildItem src\Reactor\bin -Recurse -Filter Reactor.dll |
+          $reactorDll = Get-ChildItem src\Reactor\bin -Recurse -Filter Microsoft.UI.Reactor.dll |
             Where-Object { $_.FullName -like '*\Release\*' } |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
           if (-not $reactorDll) {
-            Write-Error "No built Reactor.dll found."
+            Write-Error "No built Microsoft.UI.Reactor.dll found."
             exit 1
           }
           dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release -- reactor-il $reactorDll.FullName
@@ -1292,7 +1292,7 @@ jobs:
       # isn't implemented. Any *other* skipped phase silently narrows this gate,
       # so it fails here instead.
       #
-      # The other class — Phase 5.7 bailing on a missing Reactor.xml or
+      # The other class — Phase 5.7 bailing on a missing Microsoft.UI.Reactor.xml or
       # reference-map.yaml and leaving ~117 reference pages unwritten — used to
       # be checked here too, by grepping stdout for those two "not found"
       # strings. That was the wrong owner and the wrong direction of failure: a

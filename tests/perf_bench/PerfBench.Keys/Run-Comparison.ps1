@@ -43,7 +43,7 @@ try {
         $rid = if ($Platform -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
         $bin = Join-Path $project "bin\$Platform\Release\net10.0-windows10.0.22621.0\$rid"
         $assemblies[$side] = Join-Path $bin 'PerfBench.Keys.dll'
-        $hashes[$side] = (Get-FileHash (Join-Path $bin 'Reactor.dll')).Hash
+        $hashes[$side] = (Get-FileHash (Join-Path $bin 'Microsoft.UI.Reactor.dll')).Hash
     }
 
     $env:DOTNET_TieredCompilation = '0'

@@ -236,7 +236,7 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   treat the markup errors as a likely cascade: fix the earlier error first, then confirm
   they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
-  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
+  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Microsoft.UI.Reactor.dll' ... used by another process`. If it still races under
   parallel WinUI builds, prebuild `src/Reactor` alone first, then escalate **on the build
   command only** — `-m:1 -nodereuse:false` (or `$env:MSBUILDDISABLENODEREUSE='1'`) — and run
   the suite separately with `--no-build`. (`-p:CI=true` also skips SignaturesGen.)

@@ -18,7 +18,7 @@ New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 $hashes = @{}
 foreach ($side in 'baseline', 'candidate') {
     $hashes[$side] = @{
-        reactor = (Get-FileHash (Join-Path $bins[$side] 'Reactor.dll')).Hash
+        reactor = (Get-FileHash (Join-Path $bins[$side] 'Microsoft.UI.Reactor.dll')).Hash
         benchmark = (Get-FileHash (Join-Path $bins[$side] 'PerfBench.MixedKeys.dll')).Hash
     }
 }

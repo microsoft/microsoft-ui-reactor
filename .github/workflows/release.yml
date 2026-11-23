@@ -266,7 +266,7 @@ jobs:
           Write-Host "All $($checked.Count) packed assemblies are AnyCPU:"
           $checked | ForEach-Object { Write-Host "  $_" }
 
-      # One lib/ folder per package, with ReactorApplication.xbf beside Reactor.dll. A file packed
+      # One lib/ folder per package, with ReactorApplication.xbf beside Microsoft.UI.Reactor.dll. A file packed
       # to a literal lib\$(TargetFramework)\ path lands in a second folder (…22621.0 vs NuGet's
       # …22621). Checked here because only a pack of an already-built tree, like this one, shows it.
       - name: Check package lib/ layout
@@ -282,8 +282,8 @@ jobs:
             $libs = @($entries | Where-Object { $_ -like 'lib/*/*' } | ForEach-Object { $_.Split('/')[1] } | Sort-Object -Unique)
             if ($libs.Count -ne 1) {
               $problems.Add("$($nupkg.Name) has $($libs.Count) lib/ folders: $($libs -join ', ')")
-            } elseif ($entries -contains "lib/$($libs[0])/Reactor.dll" -and $entries -notcontains "lib/$($libs[0])/Reactor/Hosting/ReactorApplication.xbf") {
-              $problems.Add("$($nupkg.Name) has no lib/$($libs[0])/Reactor/Hosting/ReactorApplication.xbf beside Reactor.dll")
+            } elseif ($entries -contains "lib/$($libs[0])/Microsoft.UI.Reactor.dll" -and $entries -notcontains "lib/$($libs[0])/Microsoft.UI.Reactor/Hosting/ReactorApplication.xbf") {
+              $problems.Add("$($nupkg.Name) has no lib/$($libs[0])/Microsoft.UI.Reactor/Hosting/ReactorApplication.xbf beside Microsoft.UI.Reactor.dll")
             }
           }
           if ($problems.Count -gt 0) { throw "Package layout problems:`n$($problems -join "`n")" }

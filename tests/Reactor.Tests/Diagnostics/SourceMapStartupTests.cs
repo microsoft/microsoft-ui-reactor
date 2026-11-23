@@ -11,7 +11,7 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 /// diagnostics launch opt-in has to apply when the gate initializes, not when a host does.
 ///
 /// <para>The default load context initialized the gate long ago, so each case loads a fresh
-/// copy of Reactor.dll into a collectible <see cref="AssemblyLoadContext"/>: its static
+/// copy of Microsoft.UI.Reactor.dll into a collectible <see cref="AssemblyLoadContext"/>: its static
 /// initializers run again, under the environment the case sets. A fresh load also reads the
 /// live <c>Reactor.DevtoolsSupport</c> AppContext switch, which other tests flip, so the case
 /// sets it to the configured value for the load, and runs in the same collection as those
@@ -20,14 +20,14 @@ namespace Microsoft.UI.Reactor.Tests.Diagnostics;
 [Collection("ConsoleTests")]
 public sealed class SourceMapStartupTests
 {
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: loads a second copy of Reactor.dll into a collectible load context so its static initializers run again, then reads one known public property. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: loads a second copy of Microsoft.UI.Reactor.dll into a collectible load context so its static initializers run again, then reads one known public property. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the known public Enabled property on the freshly loaded copy of a type this assembly references directly. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     private static bool EnabledInAFreshLoad(string? sourceMap, string? diagnostics, bool devtoolsSupport = true)
         => InAFreshLoad(sourceMap, diagnostics, devtoolsSupport, static assembly =>
             (bool)assembly.GetType(typeof(ReactorSourceMap).FullName!, throwOnError: true)!
                 .GetProperty(nameof(ReactorSourceMap.Enabled))!.GetValue(null)!);
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: loads a second copy of Reactor.dll into a collectible load context so its static initializers run again. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: loads a second copy of Microsoft.UI.Reactor.dll into a collectible load context so its static initializers run again. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     private static T InAFreshLoad<T>(string? sourceMap, string? diagnostics, bool devtoolsSupport, Func<global::System.Reflection.Assembly, T> probe)
     {
         var previousMap = global::System.Environment.GetEnvironmentVariable("REACTOR_SOURCEMAP");
@@ -72,7 +72,7 @@ public sealed class SourceMapStartupTests
     {
         // SourceLocation.DeclaredName reads the static tables in any source-mapped build, so a
         // hot-reload update must invalidate them with Reactor.DevtoolsSupport off too. The
-        // switch is cached at startup, so each case runs on a fresh copy of Reactor.dll.
+        // switch is cached at startup, so each case runs on a fresh copy of Microsoft.UI.Reactor.dll.
         static (bool Before, bool After) Probe(global::System.Reflection.Assembly assembly)
         {
             const global::System.Reflection.BindingFlags Any =

@@ -6,7 +6,7 @@ namespace Reactor.External.TestControl;
 /// <summary>
 /// Spec 047 §14 Phase 1 (1.16) — external V1 handler authored against the
 /// public Reactor surface only. The very fact that this file compiles
-/// (with no <c>InternalsVisibleTo</c> from Reactor.dll into this assembly)
+/// (with no <c>InternalsVisibleTo</c> from Microsoft.UI.Reactor.dll into this assembly)
 /// is the Phase 1 exit gate item 2 proof.
 ///
 /// <para>The handler exercises every author-facing primitive an external

@@ -27,7 +27,7 @@ release artifacts. See https://github.com/Metalnem/sharpfuzz for the typical
 flow:
 
 ```pwsh
-sharpfuzz <publish>\Reactor.dll
+sharpfuzz <publish>\Microsoft.UI.Reactor.dll
 libfuzzer-dotnet --target_path=<publish>\Reactor.Fuzz.exe --target_arg=markdown corpus\markdown
 ```
 

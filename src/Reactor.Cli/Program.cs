@@ -128,7 +128,7 @@ void ShowHelp()
     Console.WriteLine("  --version, -v    Show version information");
     Console.WriteLine("  --skill          Print the SKILL.md AI reference to stdout");
     Console.WriteLine("  --api            Print the reactor.api.txt signatures index to stdout");
-    Console.WriteLine("  --regen-api      Regenerate both API indexes from the built Reactor.dll and Reactor.Advanced.dll");
+    Console.WriteLine("  --regen-api      Regenerate both API indexes from the built Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll");
     Console.WriteLine("  --create <name>  Scaffold a new Reactor project");
     Console.WriteLine();
     Console.WriteLine("Commands:");
@@ -238,14 +238,10 @@ int CreateProject(string name)
         return 1;
     }
 
-    switch (Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name))
+    if (Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name) == Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName)
     {
-        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName:
-            Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
-            return 1;
-        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.PackageId:
-            Console.Error.WriteLine($"Error: Project name '{name}' matches a Reactor package id, so the project could not reference that package. Choose a different name, for example '{name}App'.");
-            return 1;
+        Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
+        return 1;
     }
 
     var dir = Path.Combine(Directory.GetCurrentDirectory(), name);

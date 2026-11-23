@@ -4,10 +4,11 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests.Tooling;
 
 /// <summary>
-/// Issue #1664. A file-based app saved as <c>reactor.cs</c> is the <c>reactor</c> assembly, which
-/// shadows <c>Reactor.dll</c> at run time (simple names are case-insensitive) and crashes in its
-/// module initializer. <c>build/Reactor.targets</c> turns that into a build error. Evaluates the
-/// real targets file in a throwaway project with a synthetic <c>ReferencePath</c>.
+/// Issue #1664. An app whose assembly name matches a reference (a file-based app saved as
+/// <c>microsoft.ui.reactor.cs</c> is the <c>microsoft.ui.reactor</c> assembly) shadows that
+/// reference at run time (simple names are case-insensitive) and crashes in its module
+/// initializer. <c>build/Reactor.targets</c> turns that into a build error. Evaluates the real
+/// targets file in a throwaway project with a synthetic <c>ReferencePath</c>.
 /// </summary>
 public sealed class AssemblyNameCollisionTargetsTests : IDisposable
 {
@@ -38,7 +39,7 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
     }
 
     private const string References = """
-        <ReferencePath Include="C:\nuget\microsoft.ui.reactor\lib\net10.0-windows10.0.22621.0\Reactor.dll" />
+        <ReferencePath Include="C:\nuget\microsoft.ui.reactor\lib\net10.0-windows10.0.22621.0\Microsoft.UI.Reactor.dll" />
         <ReferencePath Include="C:\nuget\other\lib\net10.0\Other.Library.dll" />
         """;
 
@@ -81,15 +82,15 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("reactor")]
-    [InlineData("Reactor")]
-    [InlineData("REACTOR")]
+    [InlineData("microsoft.ui.reactor")]
+    [InlineData("Microsoft.UI.Reactor")]
+    [InlineData("MICROSOFT.UI.REACTOR")]
     public void AppNamedLikeReactorDll_FailsWithReactorBuild001(string assemblyName)
     {
         var (exitCode, output) = Build(assemblyName);
         Assert.NotEqual(0, exitCode);
         Assert.Contains("REACTOR_BUILD_001", output, StringComparison.Ordinal);
-        Assert.Contains("'Reactor.dll'", output, StringComparison.Ordinal);
+        Assert.Contains("'Microsoft.UI.Reactor.dll'", output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -100,9 +101,11 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
         Assert.Contains("'Other.Library.dll'", output, StringComparison.Ordinal);
     }
 
+    // "reactor" is the #1664 name. It collided with the pre-rename Microsoft.UI.Reactor.dll and is safe now.
     [Theory]
     [InlineData("MyApp")]
-    [InlineData("ReactorApp")]
+    [InlineData("reactor")]
+    [InlineData("Microsoft.UI")]
     [InlineData("Reactor.Sample")]
     public void NonCollidingName_Builds(string assemblyName)
     {
@@ -114,7 +117,7 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
     [Fact]
     public void OptOutProperty_SkipsTheCheck()
     {
-        var (exitCode, output) = Build("reactor", "<ReactorSkipAssemblyNameCollisionCheck>true</ReactorSkipAssemblyNameCollisionCheck>");
+        var (exitCode, output) = Build("microsoft.ui.reactor", "<ReactorSkipAssemblyNameCollisionCheck>true</ReactorSkipAssemblyNameCollisionCheck>");
         Assert.True(exitCode == 0, output);
         Assert.DoesNotContain("REACTOR_BUILD_001", output, StringComparison.Ordinal);
     }
@@ -126,7 +129,7 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
     {
         var project = $"""
             <Project>
-              <PropertyGroup><AssemblyName>reactor</AssemblyName></PropertyGroup>
+              <PropertyGroup><AssemblyName>microsoft.ui.reactor</AssemblyName></PropertyGroup>
               <Target Name="ResolveAssemblyReferences">
                 <ItemGroup>
                   {References}
@@ -149,24 +152,21 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
 public sealed class ProjectNameRulesTests
 {
     [Theory]
-    [InlineData("Reactor")]
-    [InlineData("reactor")]
-    [InlineData("REACTOR.ADVANCED")]
+    [InlineData("Microsoft.UI.Reactor")]
+    [InlineData("microsoft.ui.reactor")]
+    [InlineData("MICROSOFT.UI.REACTOR.ADVANCED")]
     [InlineData("Reactor.Wrappers.Abstractions")]
     [InlineData("Microsoft.UI.Reactor.Devtools")]
     public void ReactorAssemblyName_IsAnAssemblyCollision(string name) =>
         Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
 
-    [Theory]
-    [InlineData("microsoft.ui.reactor")]
-    [InlineData("Microsoft.UI.Reactor.Advanced")]
-    public void ReactorPackageId_IsAPackageCollision(string name) =>
-        Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.PackageId, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
-
+    // Reactor and Reactor.Advanced were the assembly names before they matched the package ids.
     [Theory]
     [InlineData("MyApp")]
     [InlineData("ReactorApp")]
     [InlineData("Reactor.Sample")]
+    [InlineData("Reactor")]
+    [InlineData("Reactor.Advanced")]
     public void OtherName_IsAllowed(string name) =>
         Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.None, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
 }

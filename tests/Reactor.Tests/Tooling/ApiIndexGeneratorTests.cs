@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Tooling;
 
-// Drives the api-index generator IN-PROCESS (the test host loads Reactor.dll fine
+// Drives the api-index generator IN-PROCESS (the test host loads Microsoft.UI.Reactor.dll fine
 // on ARM64, where the SignaturesGen apphost crashes). The UPDATE_API_INDEX=1 arm is
 // the ARM64-safe way to regenerate the two committed reactor.api.txt copies.
 [Collection("ConsoleTests")]
@@ -39,7 +39,7 @@ public sealed class ApiIndexGeneratorTests
     public void AdvancedSections_SurfaceFactoriesModifiersHooksAndEnums()
     {
         var output = Generate();
-        Assert.Contains("# Source of truth: Reactor.dll and Reactor.Advanced.dll public surfaces.", output);
+        Assert.Contains("# Source of truth: Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll public surfaces.", output);
 
         var factories = SectionLines(output, "## Advanced factories", "## Advanced modifiers").ToList();
         Assert.Contains("# All in `Microsoft.UI.Reactor.Advanced.Factories` — `using static Microsoft.UI.Reactor.Advanced.Factories;`", factories);

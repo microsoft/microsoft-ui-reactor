@@ -1435,10 +1435,10 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
     private IXamlMetadataProvider ReactorProvider => _reactorProvider ??= CreateReactorProvider();
 
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors,
-        "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider", "Reactor")]
+        "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider", "Microsoft.UI.Reactor")]
     private static IXamlMetadataProvider CreateReactorProvider()
     {
-        var t = global::System.Type.GetType("Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider, Reactor", throwOnError: false);
+        var t = global::System.Type.GetType("Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider, Microsoft.UI.Reactor", throwOnError: false);
         return t is null
             ? new Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider()
             : (IXamlMetadataProvider)global::System.Activator.CreateInstance(t)!;

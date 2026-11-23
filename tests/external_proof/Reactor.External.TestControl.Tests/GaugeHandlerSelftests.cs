@@ -14,7 +14,7 @@ namespace Reactor.External.TestControl.Tests;
 /// <c>Spec047ExternalProofFixtures.GaugeWriteSuppressedEcho</c>.
 ///
 /// <para>The very fact that this file compiles — with no
-/// <c>InternalsVisibleTo</c> from Reactor.dll into this assembly — is the
+/// <c>InternalsVisibleTo</c> from Microsoft.UI.Reactor.dll into this assembly — is the
 /// proof that <see cref="ReactorBinding{TElement}.WriteSuppressed"/> and the
 /// rest of the value-control surface are sufficient from outside the
 /// framework.</para>

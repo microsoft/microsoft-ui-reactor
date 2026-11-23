@@ -228,7 +228,7 @@ internal static class AgentKitDocCorpus
     /// </summary>
     /// <remarks>
     /// NuGet accepts either separator, and this very project uses backslashes elsewhere
-    /// (<c>Reactor.csproj</c> packs <c>lib\$(TargetFramework)\Reactor\Hosting\</c>). An agentkit
+    /// (<c>Reactor.csproj</c> packs <c>lib\$(TargetFramework)\Microsoft.UI.Reactor\Hosting\</c>). An agentkit
     /// item written that way would ship and simply never enter this corpus — and because the entry
     /// is dropped whole, the unmatched-glob guard could not see the gap either. Normalising is what
     /// keeps "packed" and "inspected" the same set.

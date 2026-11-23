@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor.Tests.Architecture;
 /// chart / use docking, leaking their code (~7.8 KB for charting) into every
 /// retail binary.
 ///
-/// This test reads the compiled <c>Reactor.dll</c> metadata and decodes the IL
+/// This test reads the compiled <c>Microsoft.UI.Reactor.dll</c> metadata and decodes the IL
 /// of every method defined on a Core/Hosting type, plus every field / method
 /// signature, asserting none references a type whose namespace lives under the
 /// forbidden subsystems. It is the regression pin for the decoupling: if a
@@ -69,7 +69,7 @@ public class CoreControlFamilyBoundaryTests
     /// forbid above; the data grid can't, because its types share the
     /// <c>Microsoft.UI.Reactor.Controls</c> namespace with controls that
     /// legitimately remain in core. So this pins the stronger invariant that makes
-    /// the whole family regression impossible: core (<c>Reactor.dll</c>) must carry
+    /// the whole family regression impossible: core (<c>Microsoft.UI.Reactor.dll</c>) must carry
     /// <b>zero</b> assembly reference to <c>Reactor.Advanced</c>. The dependency is
     /// one-way (Advanced → core), so any core → Advanced reference — an
     /// eagerly-registered data-grid <c>ResizeGrip</c> (the coupling B3 removed), a
@@ -78,25 +78,25 @@ public class CoreControlFamilyBoundaryTests
     /// failure. Future-proof: it needs no per-type or per-subsystem list.
     /// </summary>
     [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Reactor.dll's on-disk Location to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Microsoft.UI.Reactor.dll's on-disk Location to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
     public void Core_HasNoAssemblyReferenceToReactorAdvanced()
     {
         var assemblyPath = typeof(Element).Assembly.Location;
-        Assert.False(string.IsNullOrEmpty(assemblyPath), "Could not locate Reactor.dll on disk.");
+        Assert.False(string.IsNullOrEmpty(assemblyPath), "Could not locate Microsoft.UI.Reactor.dll on disk.");
 
         using var stream = global::System.IO.File.OpenRead(assemblyPath);
         using var pe = new PEReader(stream);
         var reader = pe.GetMetadataReader();
 
         // Guard against a vacuous pass (wrong / empty assembly): the real
-        // Reactor.dll references many framework assemblies.
+        // Microsoft.UI.Reactor.dll references many framework assemblies.
         Assert.True(reader.AssemblyReferences.Count > 5,
             $"Only {reader.AssemblyReferences.Count} assembly references found — likely scanning the wrong assembly.");
 
         var advancedRefs = reader.AssemblyReferences
             .Select(reader.GetAssemblyReference)
             .Select(a => reader.GetString(a.Name))
-            .Where(n => string.Equals(n, "Reactor.Advanced", StringComparison.Ordinal))
+            .Where(n => string.Equals(n, "Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal))
             .ToArray();
 
         Assert.True(advancedRefs.Length == 0,
@@ -142,7 +142,7 @@ public class CoreControlFamilyBoundaryTests
         Assert.Contains(violations, v => v.Contains("(IL generic)", StringComparison.Ordinal));
     }
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Reactor.dll's on-disk Location to feed the IL/metadata scanner (PEReader) — the assertion below already fails loudly on an empty path. IL3000 only affects single-file publish; this metadata-scanning test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Microsoft.UI.Reactor.dll's on-disk Location to feed the IL/metadata scanner (PEReader) — the assertion below already fails loudly on an empty path. IL3000 only affects single-file publish; this metadata-scanning test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
     private (SortedSet<string> Violations, int ScannedTypes) Scan(
         string[] forbiddenPrefixes, string? assemblyPath = null, string[]? sourcePrefixes = null)
     {
