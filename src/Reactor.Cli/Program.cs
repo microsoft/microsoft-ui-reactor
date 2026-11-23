@@ -238,10 +238,14 @@ int CreateProject(string name)
         return 1;
     }
 
-    if (Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name) == Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName)
+    switch (Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name))
     {
-        Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
-        return 1;
+        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName:
+            Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
+            return 1;
+        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.SolutionProject:
+            Console.Error.WriteLine($"Error: Project name '{name}' matches the Reactor project in the generated solution, and a solution can't hold two projects with the same name. Choose a different name, for example '{name}App'.");
+            return 1;
     }
 
     var dir = Path.Combine(Directory.GetCurrentDirectory(), name);
@@ -402,7 +406,7 @@ string GenerateSln(string name, string appGuid, string patchGuid)
         "MinimumVisualStudioVersion = 10.0.40219.1",
         $"Project(\"{csharpGuid}\") = \"{name}\", \"{name}.csproj\", \"{ag}\"",
         "EndProject",
-        $"Project(\"{csharpGuid}\") = \"Reactor\", \"..\\src\\Reactor\\Reactor.csproj\", \"{pg}\"",
+        $"Project(\"{csharpGuid}\") = \"{Microsoft.UI.Reactor.Cli.ProjectNameRules.GeneratedSolutionReactorProject}\", \"..\\src\\Reactor\\Reactor.csproj\", \"{pg}\"",
         "EndProject",
         "Global",
         // x64 is listed first so `dotnet build` with no -p:Platform picks x64,

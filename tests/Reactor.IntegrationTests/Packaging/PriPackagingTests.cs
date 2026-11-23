@@ -40,6 +40,7 @@ public sealed class PriPackagingTests : IDisposable
 
         Assert.Contains(entries, e => e.EndsWith("/Microsoft.UI.Reactor/Hosting/ReactorApplication.xbf", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(entries, e => e.EndsWith("/Microsoft.UI.Reactor/Hosting/ReactorApplication.xaml", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(entries, e => e.EndsWith("/Microsoft.UI.Reactor.pri", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -62,6 +63,13 @@ public sealed class PriPackagingTests : IDisposable
             File.Exists(Path.Join(withFloor, "Consumer.pri")),
             $"The app's own .pri is missing from the publish output (WindowsAppSDK#6394). " +
             $"The consumer resolved {ResolvedBuildToolsMsix(withFloorDir)}.");
+
+        // Reactor.targets copies these out of the package; InitializeComponent loads them from
+        // ms-appx:///Microsoft.UI.Reactor/ at startup.
+        Assert.True(File.Exists(Path.Join(withFloor, "Microsoft.UI.Reactor.pri")), "Microsoft.UI.Reactor.pri is missing from the publish output.");
+        Assert.True(
+            File.Exists(Path.Join(withFloor, "Microsoft.UI.Reactor", "Hosting", "ReactorApplication.xbf")),
+            "Microsoft.UI.Reactor/Hosting/ReactorApplication.xbf is missing from the publish output.");
 
         var pinned = Publish(pinnedDir);
         Assert.False(

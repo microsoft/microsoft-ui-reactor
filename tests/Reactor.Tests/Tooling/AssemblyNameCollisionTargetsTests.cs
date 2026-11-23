@@ -101,7 +101,7 @@ public sealed class AssemblyNameCollisionTargetsTests : IDisposable
         Assert.Contains("'Other.Library.dll'", output, StringComparison.Ordinal);
     }
 
-    // "reactor" is the #1664 name. It collided with the pre-rename Microsoft.UI.Reactor.dll and is safe now.
+    // "reactor" is the #1664 name. It collided with the pre-rename Reactor.dll and is safe now.
     [Theory]
     [InlineData("MyApp")]
     [InlineData("reactor")]
@@ -160,12 +160,36 @@ public sealed class ProjectNameRulesTests
     public void ReactorAssemblyName_IsAnAssemblyCollision(string name) =>
         Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
 
-    // Reactor and Reactor.Advanced were the assembly names before they matched the package ids.
+    // The shipped csprojs are the source of truth; the reserved list must keep up with them.
+    [Theory]
+    [InlineData("Reactor", "Reactor.csproj")]
+    [InlineData("Reactor.Advanced", "Reactor.Advanced.csproj")]
+    [InlineData("Reactor.Devtools", "Reactor.Devtools.csproj")]
+    [InlineData("Reactor.Wrappers.Abstractions", "Reactor.Wrappers.Abstractions.csproj")]
+    public void ShippedAssemblyName_IsReserved(string projectDir, string projectFile)
+    {
+        var dir = new global::System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        var csproj = global::System.Xml.Linq.XDocument.Load(global::System.IO.Path.Join(dir!.FullName, "src", projectDir, projectFile));
+        var assemblyName = csproj.Descendants("AssemblyName").Select(e => e.Value.Trim()).First(v => v.Length > 0);
+
+        Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(assemblyName));
+    }
+
+    // The generated .sln already lists ..\src\Reactor\Reactor.csproj as project "Reactor".
+    [Theory]
+    [InlineData("Reactor")]
+    [InlineData("reactor")]
+    public void GeneratedSolutionProjectName_IsASolutionCollision(string name) =>
+        Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.SolutionProject, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));
+
+    // Reactor.Advanced was an assembly name before the shipped names matched the package ids.
     [Theory]
     [InlineData("MyApp")]
     [InlineData("ReactorApp")]
     [InlineData("Reactor.Sample")]
-    [InlineData("Reactor")]
     [InlineData("Reactor.Advanced")]
     public void OtherName_IsAllowed(string name) =>
         Assert.Equal(Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.None, Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name));

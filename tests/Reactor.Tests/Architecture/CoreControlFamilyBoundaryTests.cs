@@ -96,7 +96,7 @@ public class CoreControlFamilyBoundaryTests
         var advancedRefs = reader.AssemblyReferences
             .Select(reader.GetAssemblyReference)
             .Select(a => reader.GetString(a.Name))
-            .Where(n => string.Equals(n, "Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal))
+            .Where(n => string.Equals(n, typeof(global::Microsoft.UI.Reactor.Advanced.Factories).Assembly.GetName().Name, StringComparison.Ordinal))
             .ToArray();
 
         Assert.True(advancedRefs.Length == 0,

@@ -59,16 +59,19 @@ Conventions for contributors:
 
 ### Changed
 
-- **Breaking: the shipped assemblies are named after their packages (issue #1664).** `Reactor.dll`
-  is now `Microsoft.UI.Reactor.dll` and `Reactor.Advanced.dll` is now
+- **Breaking: each package's main assembly is now named after the package (issue #1664).**
+  `Reactor.dll` is now `Microsoft.UI.Reactor.dll` and `Reactor.Advanced.dll` is now
   `Microsoft.UI.Reactor.Advanced.dll`, matching the `Microsoft.UI.Reactor` and
   `Microsoft.UI.Reactor.Advanced` package ids (`Microsoft.UI.Reactor.Devtools.dll` already
-  matched). Namespaces and package ids don't change, so a normal package or project reference
-  needs no edits. Update anything that names the files or the assembly, such as assembly-qualified
-  type names (`"…, Reactor"`), `InternalsVisibleTo`, `TrimmerRootAssembly`, signing or coverage
-  filters, and `ms-appx:///Reactor/…` paths, which are now `ms-appx:///Microsoft.UI.Reactor/…`. The
-  short `Reactor` name was what a file-based app saved as `reactor.cs` collided with, so that name
-  is safe again. `mur --create` no longer reserves `Reactor` and `Reactor.Advanced`.
+  matched). The bundled helper `Reactor.Wrappers.Abstractions.dll` keeps its name. Namespaces and
+  package ids don't change, but upgrade `Microsoft.UI.Reactor`, `Microsoft.UI.Reactor.Advanced` and
+  `Microsoft.UI.Reactor.Devtools` together: an older Advanced or Devtools package references the
+  `Reactor` assembly and fails to load next to the new core. Also update anything that names the
+  files or the assembly, such as assembly-qualified type names (`"…, Reactor"`),
+  `InternalsVisibleTo`, `TrimmerRootAssembly`, signing or coverage filters, and
+  `ms-appx:///Reactor/…` paths, which are now `ms-appx:///Microsoft.UI.Reactor/…`. A file-based app
+  saved as `reactor.cs` no longer collides with Reactor. `mur --create` still refuses `Reactor`,
+  because its generated solution already has a project with that name.
 
 - Opt-in Markdown text selection supports double-click to select a word and
   triple-click to select a text surface, including drag extension by either unit.
@@ -163,11 +166,11 @@ Conventions for contributors:
 ### Fixed
 
 - An app whose assembly name matches one of its references, such as a file-based app saved as
-  `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
+  `microsoft.ui.reactor.cs` next to Reactor's own `Microsoft.UI.Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
   instead of crashing at startup with a `TypeLoadException` for
   `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
   the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
-  rejects project names that collide with Reactor's assemblies or package ids (issue #1664).
+  rejects project names that collide with Reactor's assemblies (issue #1664).
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
   channel inside one `try`, and stopping `Translation` throws when translation was never

@@ -5,7 +5,7 @@ namespace Microsoft.UI.Reactor.Cli;
 // too (REACTOR_BUILD_001); `mur --create` refuses the name before scaffolding anything.
 internal static class ProjectNameRules
 {
-    internal enum Collision { None, AssemblyName }
+    internal enum Collision { None, AssemblyName, SolutionProject }
 
     // Assemblies the Microsoft.UI.Reactor* packages put on an app's reference path. The shipped
     // assemblies are named after their package ids, so a project with one of these names would
@@ -21,7 +21,12 @@ internal static class ProjectNameRules
         "Reactor.Wrappers.Abstractions",
     ];
 
+    // The .sln `mur --create` writes also lists ..\src\Reactor\Reactor.csproj as project "Reactor",
+    // and a solution can't hold two projects with the same name (MSB5004).
+    internal const string GeneratedSolutionReactorProject = "Reactor";
+
     internal static Collision Check(string name) =>
         Array.Exists(ReservedAssemblyNames, n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) ? Collision.AssemblyName
+        : string.Equals(name, GeneratedSolutionReactorProject, StringComparison.OrdinalIgnoreCase) ? Collision.SolutionProject
         : Collision.None;
 }

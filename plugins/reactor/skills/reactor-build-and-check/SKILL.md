@@ -22,7 +22,8 @@ the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`. No
 [Getting Started guide](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project)
 documents the packaged header.
 
-Don't name the file after a Reactor assembly (`microsoft.ui.reactor.cs`, `Microsoft.UI.Reactor.Advanced.cs`). The file
+Don't name the file after a Reactor assembly (`microsoft.ui.reactor.cs`, `Microsoft.UI.Reactor.Advanced.cs`; on
+packages that still ship `Reactor.dll`, also `reactor.cs` and `Reactor.Advanced.cs`). The file
 name becomes the assembly name, and assembly names are case-insensitive, so the app would load
 in place of `Microsoft.UI.Reactor.dll`. The build stops with `REACTOR_BUILD_001`.
 
