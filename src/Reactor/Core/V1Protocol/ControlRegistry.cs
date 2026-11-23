@@ -152,7 +152,22 @@ public static class ControlRegistry
             s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
             global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
         }
+        else
+        {
+            s_contested.TryAdd(typeof(TElement), 0);
+        }
     }
+
+    // Element types registered more than once. A built-in registers its element type from the
+    // type's static constructor, which runs before the first instance exists, so an app override
+    // of a built-in always makes one of the two registrations lose here.
+    private static readonly ConcurrentDictionary<Type, byte> s_contested = new();
+
+    /// <summary>
+    /// Whether <paramref name="elementType"/> was registered more than once, so its handler may
+    /// be an app override of a built-in. Spec 066 §7.2 keeps such mounts off the pool's visual lane.
+    /// </summary>
+    internal static bool IsContested(Type elementType) => s_contested.ContainsKey(elementType);
 
     /// <summary>
     /// Spec 048 §3.4 — decorator sibling of <see cref="Register{TElement,TControl}"/>
@@ -231,6 +246,10 @@ public static class ControlRegistry
             s_sourceTargetResolvers.TryRemove(typeof(TElement), out _);
             global::System.Threading.Interlocked.Increment(ref s_registryGeneration);
             s_hasDecoratorRegistrations = true;
+        }
+        else
+        {
+            s_contested.TryAdd(typeof(TElement), 0);
         }
     }
 

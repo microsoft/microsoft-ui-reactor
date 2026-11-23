@@ -53,8 +53,8 @@ internal sealed class ConnectedNavigationOperation : IDisposable
         _key = key;
         _complete = complete;
         _generation = TransitionEngine.ClaimForTransition(outgoing, incoming);
-        Core.ElementPool.MarkCompositorTainted(outgoing);
-        Core.ElementPool.MarkCompositorTainted(incoming);
+        Core.ElementPool.ExcludeFromPool(outgoing);
+        Core.ElementPool.ExcludeFromPool(incoming);
         // A previous slide/drill-in may still own compositor properties or
         // hit-test suppression on a page now reused by this navigation.
         TransitionEngine.NormalizeVisual(global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(outgoing));
@@ -100,7 +100,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
             // Materialize and retain composition nodes before preparing. These
             // controls must not return to the pool after direct compositor access.
             global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(source);
-            Core.ElementPool.MarkCompositorTainted(source);
+            Core.ElementPool.ExcludeFromPool(source);
             _animation = ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(nativeKey, source);
             NativeAnimationKey = nativeKey;
             _animation.Configuration = mode == NavigationMode.Pop
@@ -189,7 +189,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
                 && _animation is { } animation)
             {
                 global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(destination);
-                Core.ElementPool.MarkCompositorTainted(destination);
+                Core.ElementPool.ExcludeFromPool(destination);
                 if (!animation.TryStart(destination))
                 {
                     if (--_framesRemaining == 0) Finish(fallback: true);

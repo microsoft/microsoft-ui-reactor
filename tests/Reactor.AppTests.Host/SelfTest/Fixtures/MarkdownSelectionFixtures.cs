@@ -97,6 +97,151 @@ internal static partial class MarkdownSelectionFixtures
             throw new InvalidOperationException("A Markdown selection scope never loaded its document.");
     }
 
+    internal class IdleLayoutCost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var options = new MarkdownTextSelectionOptions();
+            var host = H.CreateHost();
+            Element Timeline(int revision) => VStack(
+                TextBox("composer").AutomationId("SelectionCostComposer"),
+                Border(null).Height(1).AutomationId("SelectionCostLayoutProbe"),
+                VStack(Enumerable.Range(0, 24).Select(i =>
+                    MarkdownTextSelection.Scope(new MarkdownTextSelectionOptions(),
+                        Md($"message {i}\n\n**second block{(i == 23 && revision > 0 ? $" revision {revision}" : "")}**",
+                            new MarkdownOptions { TextSelection = options })))
+                    .ToArray()));
+            host.Mount(_ => Timeline(0));
+            await Harness.Render();
+            await WaitForLoadedScopes(H);
+            var composer = H.FindControl<TextBox>(_ => true)!;
+            composer.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            var scopes = H.FindAllControls<MarkdownSelectionHost>(_ => true);
+            var probe = H.FindControl<Border>(element =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(element) == "SelectionCostLayoutProbe")!;
+            int layouts = 0;
+            void OnLayout(object? sender, object args) => layouts++;
+            probe.LayoutUpdated += OnLayout;
+            (int Layouts, int Membership, int Segments, int Transforms) Work() =>
+                (scopes.Sum(s => s.LayoutPassCount), scopes.Sum(s => s.MembershipCheckCount),
+                 scopes.Sum(s => s.SegmentReadCount), scopes.Sum(s => s.TransformCount));
+            var before = Work();
+            try
+            {
+                for (int i = 0; i < 12; i++)
+                {
+                    probe.Height = i + 2;
+                    composer.Text = $"typing {i}";
+                    await Harness.Render();
+                }
+            }
+            finally { probe.LayoutUpdated -= OnLayout; }
+            var after = Work();
+            Console.WriteLine($"# MdSelection idle: hosts={scopes.Count}; unrelatedLayouts={layouts}; " +
+                $"hostLayouts={after.Layouts - before.Layouts}; membership={after.Membership - before.Membership}; " +
+                $"segments={after.Segments - before.Segments}; transforms={after.Transforms - before.Transforms}");
+            H.Check("MdSelection_IdleProbeActuallyLaidOut", scopes.Count == 24 && layouts >= 12);
+            H.Check("MdSelection_IdleLayoutDoesNoWork", after == before);
+
+            host.Mount(_ => Timeline(1));
+            await Harness.Render();
+            H.Check("MdSelection_IdleReconcileDoesNoNativeWork",
+                Work() == before && scopes.SequenceEqual(H.FindAllControls<MarkdownSelectionHost>(_ => true)));
+            var streamed = scopes[^1];
+            streamed.HandleKey(global::Windows.System.VirtualKey.A, false, true);
+            H.Check("MdSelection_IdleSelectAllUsesLatestText",
+                streamed.Document.SelectedText == "message 23\nsecond block revision 1");
+            string copied = "";
+            streamed.CopySelection(value => copied = value);
+            H.Check("MdSelection_IdleInputCopiesLatestText",
+                copied == "message 23\nsecond block revision 1");
+            streamed.Select(0, 0);
+            var provider = (ITextProvider)FrameworkElementAutomationPeer.CreatePeerForElement(streamed)
+                .GetPattern(PatternInterface.Text);
+            H.Check("MdSelection_IdleAutomationReadsLatestText",
+                provider.DocumentRange.GetText(-1) == "message 23\nsecond block revision 1");
+
+            var cachedScope = scopes[1];
+            cachedScope.Refresh();
+            int cachedBefore = cachedScope.CachedCharacterCount;
+            int transformsBefore = cachedScope.TransformCount;
+            for (int i = 0; i < 9; i++) _ = cachedScope.CharacterBounds(i);
+            H.Check("MdSelection_CharacterTransformsAreBatchedByOwner",
+                cachedScope.CachedCharacterCount >= cachedBefore + 9
+                && cachedScope.TransformCount - transformsBefore <= 1
+                && cachedScope.CharacterBounds(0).Height > 0);
+
+            var selected = scopes[0];
+            selected.Select(0, 7);
+            int activeBefore = selected.LayoutPassCount;
+            probe.Height++;
+            await Harness.Render();
+            H.Check("MdSelection_ActiveSelectionTracksLayout",
+                selected.LayoutPassCount > activeBefore && selected.Document.SelectedText == "message");
+            streamed.Select(0, 7);
+            host.Mount(_ => Timeline(2));
+            await Harness.Render();
+            H.Check("MdSelection_ActiveStreamingRemapsWithoutReadingProvider",
+                streamed.Document.Text == "message 23\nsecond block revision 2"
+                && streamed.Document.SelectedText == "message");
+            streamed.Select(7, 7);
+            selected.Select(7, 7);
+            await Harness.Render();
+            before = Work();
+            probe.Height++;
+            await Harness.Render();
+            H.Check("MdSelection_ClearedSelectionReturnsToIdle", Work() == before);
+
+            var native = MarkdownSelectionHost.Descendants(cachedScope).OfType<RichTextBlock>().First();
+            var oldBounds = cachedScope.CharacterBounds(0);
+            native.FontSize *= 2;
+            before = Work();
+            await Harness.Render();
+            H.Check("MdSelection_IdleNativeGeometryRemainsLazy", Work() == before);
+            cachedScope.HandleKey(global::Windows.System.VirtualKey.A, false, true);
+            H.Check("MdSelection_InteractionRefreshesIdleNativeGeometry",
+                cachedScope.CharacterBounds(0).Height > oldBounds.Height * 1.5);
+            cachedScope.Select(0, 0);
+
+            selected.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            activeBefore = selected.LayoutPassCount;
+            probe.Height++;
+            await Harness.Render();
+            H.Check("MdSelection_FocusedCaretTracksLayout", selected.LayoutPassCount > activeBefore);
+            composer.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            before = Work();
+            probe.Height++;
+            await Harness.Render();
+            H.Check("MdSelection_BlurredCaretReturnsToIdle", Work() == before);
+
+            var linkContent = Button("label").Width(200);
+            Element LinkMessage(bool isLink) => MarkdownTextSelection.Scope(options,
+                ((MarkdownSelectionElement)MarkdownTextSelection.Surface("label", linkContent))
+                    with { IsLink = isLink });
+            host.Mount(_ => LinkMessage(false));
+            await Harness.Render();
+            await WaitForLoadedScopes(H);
+            var linkScope = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            linkScope.Refresh();
+            bool cleanBeforeLink = !linkScope.IsDocumentDirty;
+            var beforeLink = linkScope.CharacterBounds(2);
+            host.Mount(_ => LinkMessage(true));
+            await Harness.Render();
+            bool dirtyAfterLink = linkScope.IsDocumentDirty;
+            linkScope.Refresh();
+            var linkButton = H.FindControl<Microsoft.UI.Xaml.Controls.Button>(_ => true)!;
+            var buttonBounds = linkScope.Bounds(linkButton);
+            var afterLink = linkScope.CharacterBounds(2);
+            H.Check("MdSelection_IsLinkChangeRefreshesGeometry",
+                cleanBeforeLink && dirtyAfterLink
+                && Math.Abs(afterLink.X - (buttonBounds.X + buttonBounds.Width * 2 / 5)) < 1
+                && Math.Abs(afterLink.X - beforeLink.X) > 1);
+        }
+    }
+
     internal class SemanticMessage(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -272,9 +417,11 @@ internal static partial class MarkdownSelectionFixtures
             var membershipHost = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             toggle(true);
             await Harness.Render();
+            membershipHost.Refresh();
             H.Check("MdSelection_ChildMountUpdatesMembership", membershipHost.Document.Text == "intro\ndetails");
             toggle(false);
             await Harness.Render();
+            membershipHost.Refresh();
             H.Check("MdSelection_ChildUnmountUpdatesMembership", membershipHost.Document.Text == "intro");
             toggle(true);
             await Harness.Render();
@@ -282,9 +429,11 @@ internal static partial class MarkdownSelectionFixtures
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(border) == "MembershipAncestor")!;
             ancestor.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             await Harness.Render();
+            membershipHost.Refresh();
             H.Check("MdSelection_NativeCollapseUpdatesMembership", membershipHost.Document.Text == "intro");
             ancestor.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
             await Harness.Render();
+            membershipHost.Refresh();
             H.Check("MdSelection_NativeVisibleRestoresMembership", membershipHost.Document.Text == "intro\ndetails");
 
             var equalOptions = new EqualOptionsProbe();
