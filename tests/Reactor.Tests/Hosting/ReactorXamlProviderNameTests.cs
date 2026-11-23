@@ -15,7 +15,7 @@ public sealed class ReactorXamlProviderNameTests
     [Fact]
     public void GeneratedProviderName_ResolvesInTheCoreAssembly()
     {
-        Assert.Equal(typeof(Element).Assembly.GetName().Name, ReactorApplication.ReactorProviderAssemblyName);
+        Assert.Equal(ReactorApplication.ReactorProviderAssemblyName, typeof(Element).Assembly.GetName().Name);
 
         var type = global::System.Type.GetType(
             ReactorApplication.ReactorProviderTypeName + ", " + ReactorApplication.ReactorProviderAssemblyName,
