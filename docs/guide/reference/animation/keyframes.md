@@ -64,6 +64,8 @@ public KeyframeBuilder()
 
 #### `At`
 
+Adds a keyframe at `progress` (0 to 1). `rotation` is in degrees, clockwise, like `.Rotation()`.
+
 ```csharp
 public KeyframeBuilder At(float progress, float? opacity = null, Vector3? scale = null, Vector3? translation = null, float? rotation = null, Easing? easing = null)
 ```
@@ -150,6 +152,8 @@ public float Progress  // get, init
 ```
 
 #### `Rotation`
+
+Rotation in degrees, clockwise, like `.Rotation()`.
 
 ```csharp
 public float? Rotation  // get, init

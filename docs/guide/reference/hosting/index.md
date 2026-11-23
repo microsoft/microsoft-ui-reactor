@@ -4,7 +4,7 @@ Start the app, open windows and integrate with the Windows shell.
 
 `ReactorApp` starts the app and opens its first window. The other types here describe windows, the tray icon, the taskbar and the ways to host Reactor inside an existing WinUI app.
 
-**Learn more:** [Windows](../../windows.md), [Advanced Windowing](../../windowing-advanced.md), [Desktop integration](../../desktop-integration.md)
+**Learn more:** [Windows](../../windows.md), [Advanced Windowing](../../windowing-advanced.md)
 
 ## Types
 

@@ -4,7 +4,7 @@ The Set modifier, which changes the real WinUI control directly.
 
 Modifiers are extension methods that return a changed copy of the element, so you can chain them.
 
-**Learn more:** [Modifier System](../../modifier-system.md), [Coming from XAML](../../xaml-developers.md)
+**Learn more:** [Modifier System](../../modifier-system.md), [Reactor for XAML Developers](../../xaml-developers.md)
 
 ## `Set`
 

@@ -4,7 +4,7 @@ Modifiers that only the controls in the Interop area have.
 
 Modifiers are extension methods that return a changed copy of the element, so you can chain them.
 
-**Learn more:** [Coming from XAML](../../xaml-developers.md)
+**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
 
 ## `CoreWebView2Initialized`
 
