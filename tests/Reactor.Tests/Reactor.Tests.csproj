@@ -9,6 +9,8 @@
     <RootNamespace>Microsoft.UI.Reactor.Tests</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <!-- AOT-honest (issue #70): the IL2*/IL3* analyzer is ENABLED (IsAotCompatible) even
          though this headless unit-test host is never trimmed/AOT-published in the normal
          `dotnet test` path. Several suites (CoreControlFamilyBoundaryTests IL scan,

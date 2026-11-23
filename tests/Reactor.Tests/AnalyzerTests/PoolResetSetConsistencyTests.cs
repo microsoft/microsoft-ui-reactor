@@ -344,8 +344,8 @@ class C
     /// <remarks>
     /// <para>
     /// The two tables answer different questions and a key in both is wrong in <em>either</em>
-    /// direction, which is why owner membership — not <see cref="IsAttachedReset"/> — is the
-    /// predicate. If the property has a static <c>Owner.SetPROP</c>, the probe calls it attached,
+    /// direction, which is why owner membership — not <see cref="CleanElementScan.IsAttachedReset(string, string)"/>
+    /// — is the predicate. If the property has a static <c>Owner.SetPROP</c>, the probe calls it attached,
     /// <c>REACTOR_POOL_001</c> can match a <c>.Set(...)</c> write to it, and it belongs in
     /// <c>AttachedProperties</c> where the analyzer will use it. If it has none, the probe calls it
     /// an instance DP, it never reaches the attached scan at all, and the row suppresses nothing.
