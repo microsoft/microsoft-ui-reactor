@@ -3762,6 +3762,11 @@ clipping, bring-into-view and drag autoscroll. Offsets are UTF-16; horizontal
 caret movement follows grapheme boundaries. Streaming updates preserve
 selection endpoints against surviving surface identities where possible.
 The scope exposes UIA TextPattern with range-scoped embedded-control children.</p>
+<p>Idle scopes do not poll window-wide layout updates. Text, membership and
+geometry refresh on selection input, copy or automation access; only an active
+selection, drag or focused caret tracks layout continuously. This keeps unrelated
+composer typing independent of the number of idle message scopes. Keep using one
+scope per message, including in an <code>ItemsView</code>; no shared controller is required.</p>
 <p><code>OnCopyResult</code> is an optional <code>Action&lt;string, bool&gt;</code> <strong>notification</strong>, not a
 copy delegate. Reactor calls it after its single clipboard-write attempt.
 Recognized clipboard-access failures report <code>false</code>; unexpected exceptions
