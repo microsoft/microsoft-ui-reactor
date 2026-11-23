@@ -1387,7 +1387,7 @@ public static partial class ElementExtensions
     public static T Background<T>(this T el, ThemeRef theme) where T : Element =>
         ModifyTheme(el, "Background", theme);
 
-    // ── Foreground (Control, TextBlock) ──────────────────────────
+    // ── Foreground ──────────────────────────────────────────────
 
     /// <summary>
     /// Sets the foreground from a color string (named color or #RRGGBB / #AARRGGBB).
@@ -1403,9 +1403,10 @@ public static partial class ElementExtensions
         ModifyVisual(el, new VisualModifiers { Foreground = brush });
 
     /// <summary>
-    /// Sets the foreground from a WinUI theme resource. Resolves at render time
-    /// and adapts when the theme changes (Light ↔ Dark).
-    /// Usage: <c>TextBlock("Hello").Foreground(Theme.PrimaryText)</c>
+    /// Sets the foreground from a WinUI theme resource on <see cref="WinUI.Control"/>,
+    /// <see cref="WinUI.TextBlock"/>, or <see cref="WinUI.RichTextBlock"/>.
+    /// WinUI updates the brush when the element's effective theme changes.
+    /// For example, <c>RichTextBlock("Hello").Foreground(Theme.PrimaryText)</c>.
     /// </summary>
     public static T Foreground<T>(this T el, ThemeRef theme) where T : Element =>
         ModifyTheme(el, "Foreground", theme);

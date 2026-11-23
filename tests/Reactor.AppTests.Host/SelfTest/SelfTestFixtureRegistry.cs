@@ -114,6 +114,7 @@ internal static class SelfTestFixtureRegistry
         ("ConditionalRendering_Toggle", static harness => new DynamicFixtures.ConditionalToggle(harness)),
         ("Markdown_HeadingsAndFormatting", static harness => new MarkdownFixtures.HeadingsAndFormatting(harness)),
         ("Markdown_Selection_SemanticMessage", static harness => new MarkdownSelectionFixtures.SemanticMessage(harness)),
+        ("Markdown_Selection_IdleLayoutCost", static harness => new MarkdownSelectionFixtures.IdleLayoutCost(harness)),
         ("Markdown_Selection_LifecycleAndStreaming", static harness => new MarkdownSelectionFixtures.LifecycleAndStreaming(harness)),
         ("Markdown_Selection_RangeChildren", static harness => new MarkdownSelectionFixtures.RangeChildren(harness)),
         ("Markdown_Selection_ItemsViewClippedNavigation", static harness => new MarkdownSelectionFixtures.ItemsViewClippedNavigation(harness)),
@@ -351,6 +352,7 @@ internal static class SelfTestFixtureRegistry
         ("Issue522_ThemeRef_CycleAcrossDifferentKeys", static harness => new Issue522TextBlockStyleResetFixture.ThemeRef_CycleAcrossDifferentKeys(harness)),
         // ThemeRef through the synthesized {ThemeResource} Style: SplitView pane background,
         // InteractionStates restore, an app's own Style kept as BasedOn, quoted keys.
+        ("ThemeRefStyle_RichTextBlockForeground", static harness => new ThemeRefStyleFixtures.RichTextBlockForeground(harness)),
         ("ThemeRefStyle_SplitViewPaneBackground", static harness => new ThemeRefStyleFixtures.SplitViewPaneBackground(harness)),
         ("ThemeRefStyle_InteractionStatesRestoreKeepsThemeLive", static harness => new ThemeRefStyleFixtures.InteractionStatesRestoreKeepsThemeLive(harness)),
         ("ThemeRefStyle_InteractionStatesOpacityOnlyDoesNotPin", static harness => new ThemeRefStyleFixtures.InteractionStatesOpacityOnlyDoesNotPin(harness)),

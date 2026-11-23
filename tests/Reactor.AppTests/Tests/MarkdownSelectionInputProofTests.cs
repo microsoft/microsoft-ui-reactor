@@ -163,7 +163,19 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             double customDragY = customDragGlyph[1] + customDragGlyph[3] / 2;
             Console.WriteLine($"Custom link drag screen positions: ({customX},{customY}) to ({customDragX},{customDragY})");
             Assert.IsTrue(Math.Abs(customDragX - customX) > 4, "Custom link glyphs must be farther apart than the drag threshold");
-            Click(customX, customY);
+            string routingBeforeClick = outer.Current.HelpText;
+            Point(customX, customY);
+            Mouse(2); mouseHeld = true;
+            Wait(() => outer.Current.HelpText != routingBeforeClick &&
+                outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal),
+                "custom button click press delivered");
+            Assert.IsTrue(outer.Current.HelpText.Split(" | ")[^1]
+                .Contains("nativePending=True tracking=True", StringComparison.Ordinal),
+                "A pending native click must keep selection layout tracking active");
+            Mouse(4); mouseHeld = false;
+            Wait(() => outer.Current.HelpText.Split(" | ")[^1].StartsWith("release ", StringComparison.Ordinal) &&
+                outer.Current.HelpText.Split(" | ")[^1].Contains("nativePending=False", StringComparison.Ordinal),
+                "custom button release clears the pending native press");
             Wait(() => customButton.Current.HelpText == "Custom clicks 1", "custom link button click");
             Thread.Sleep((int)GetDoubleClickTime() + 1);
             Point(customX, customY);
@@ -173,6 +185,9 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal) &&
                 outerText.GetSelection().Single().GetText(-1) == "",
                 "custom button press was routed without selecting a word");
+            string customPress = outer.Current.HelpText.Split(" | ")[^1];
+            Assert.IsTrue(customPress.Contains("nativePending=True tracking=True", StringComparison.Ordinal),
+                "A pending native press must keep selection layout tracking active");
             Point(customDragX, customDragY);
             Assert.IsTrue(GetCursorPos(out var customDragCursor));
             Assert.IsTrue(Math.Abs(customDragCursor.X - customDragX) <= 1 &&
@@ -247,6 +262,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
             Wait(() => innerText.DocumentRange.GetText(-1) == "new inner text" &&
                 receivedText.Contains("new inner text"), "streaming exact text-change event");
+            Assert.AreEqual("text", innerText.GetSelection().Single().GetText(-1),
+                "layout during a held double-click must preserve the whole word");
             innerGlyph = Glyph(innerText.DocumentRange, 5);
             innerX = innerGlyph[0] + innerGlyph[2] / 2;
             innerY = innerGlyph[1] + innerGlyph[3] / 2;
@@ -347,6 +364,46 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Click(composerBounds.Left + composerBounds.Width / 2, composerBounds.Top + composerBounds.Height / 2);
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "" && composer.Current.HasKeyboardFocus,
                 "composer click dismisses selection and receives keyboard focus");
+            var membership = Find("SelectionMembership");
+            var membershipText = (TextPattern)membership.GetCurrentPattern(TextPattern.Pattern);
+            Assert.AreEqual("first\nsecond", membershipText.DocumentRange.GetText(-1));
+            var membershipEvents = new global::System.Collections.Concurrent.ConcurrentQueue<string>();
+            AutomationEventHandler membershipHandler = (_, _) =>
+            {
+                try { membershipEvents.Enqueue(membershipText.DocumentRange.GetText(-1)); }
+                catch (Exception ex) { eventFailures.Enqueue(ex); }
+            };
+            Automation.AddAutomationEventHandler(TextPattern.TextChangedEvent, membership, TreeScope.Element, membershipHandler);
+            try
+            {
+                var add = Find("SelectionAddMember");
+                add.SetFocus();
+                Wait(() => add.Current.HasKeyboardFocus, "membership scope is idle");
+                void Invoke(string id) => ((InvokePattern)Find(id).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+                Invoke("SelectionAddMember");
+                Wait(() => membershipEvents.Contains("first\nsecond\nthird"), "idle child mount TextChanged");
+                Invoke("SelectionAddMember");
+                Wait(() => membershipEvents.Contains("first\nsecond"), "idle child unmount TextChanged");
+                Invoke("SelectionToggleMemberVisibility");
+                Wait(() => membershipEvents.Contains("first"), "idle native collapse TextChanged");
+                Invoke("SelectionToggleMemberVisibility");
+                Wait(() => membershipEvents.Count(value => value == "first\nsecond") >= 2,
+                    "idle native expansion TextChanged");
+                Invoke("SelectionAddMember");
+                Wait(() => membershipEvents.Count(value => value == "first\nsecond\nthird") >= 2,
+                    "idle remount TextChanged");
+                Invoke("SelectionReverseMembers");
+                Wait(() => membershipEvents.Contains("third\nsecond\nfirst"), "idle keyed reorder TextChanged");
+                Invoke("SelectionGateFirstMember");
+                Wait(() => membershipEvents.Contains("third\nsecond"), "idle semantic-only gate TextChanged");
+                Invoke("SelectionIdleProbe");
+                Wait(() => membership.Current.HelpText.StartsWith("idle layouts=", StringComparison.Ordinal),
+                    "idle layout probe completed");
+                var idleProbe = membership.Current.HelpText;
+                Assert.IsTrue(idleProbe.EndsWith("unchanged=True", StringComparison.Ordinal) &&
+                    !idleProbe.Contains("layouts=0 ", StringComparison.Ordinal), idleProbe);
+            }
+            finally { Automation.RemoveAutomationEventHandler(TextPattern.TextChangedEvent, membership, membershipHandler); }
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
             Console.WriteLine($"Received TextChanged={string.Join("|", receivedText)}; TextSelectionChanged={string.Join("|", receivedSelection)}");
             Console.WriteLine($"External input checks passed; textEvents={textEvents}, selectionEvents={selectionEvents}, PID={TestSession.HostPid}");
