@@ -301,6 +301,10 @@ In Reactor, the same resources come from `Theme`:
   defines.
 - `.Resources(...)` overrides resource keys for one control and its children,
   like `Button.Resources` in XAML.
+- A token modifier such as `.Background(Theme.Accent)` sets the property
+  through a `{ThemeResource}` reference, so WinUI picks the brush for the
+  control's own theme. A dark subtree in a light app gets the dark brush, as in
+  XAML.
 
 When the user switches between light and dark, Reactor clears its cache of
 resolved brushes and renders again. Every token picks up the new theme, and you
