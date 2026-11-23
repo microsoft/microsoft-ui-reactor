@@ -53,17 +53,19 @@ public class DiagramTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_images, "arch", "overview.svg")));
     }
 
-    [Fact]
-    public void Selected_topic_copies_only_its_own_diagrams()
+    [Theory]
+    [InlineData("arch")]
+    [InlineData("arch/")]
+    public void Selected_topic_copies_only_its_own_diagrams(string topic)
     {
-        WriteSvg("recipes/login", "overview", "<svg/>");
+        WriteSvg("arch", "overview", "<svg/>");
         WriteSvg("other", "unrelated", "<svg/>");
 
         var result = DiagramProcessor.Process(
-            _diagrams, _images, new FakeMermaid(available: true), topic: "recipes/login");
+            _diagrams, _images, new FakeMermaid(available: true), topic);
 
         Assert.Equal(new[] { "overview.svg" }, result.CopiedSvgs.ToArray());
-        Assert.True(File.Exists(Path.Combine(_images, "login", "overview.svg")));
+        Assert.True(File.Exists(Path.Combine(_images, "arch", "overview.svg")));
     }
 
     [Fact]

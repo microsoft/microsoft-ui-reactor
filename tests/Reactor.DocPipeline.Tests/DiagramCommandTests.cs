@@ -24,6 +24,7 @@ public sealed class DiagramCommandTests : IDisposable
         var rejected = await RunAsync("render-diagrams", "--topic", rootedTopic);
 
         Assert.Equal(1, rejected.ExitCode);
+        Assert.StartsWith("Error: Diagram topic", rejected.Stderr, StringComparison.Ordinal);
         Assert.Contains("must be a relative path", rejected.Stderr, StringComparison.Ordinal);
         Assert.Empty(Directory.EnumerateFileSystemEntries(images.FullName));
 
@@ -41,9 +42,29 @@ public sealed class DiagramCommandTests : IDisposable
         var result = await RunAsync("new-diagram", outsideTopic, "overview");
 
         Assert.Equal(1, result.ExitCode);
+        Assert.StartsWith("Error: Diagram topic", result.Stderr, StringComparison.Ordinal);
         Assert.Contains("must be a relative path", result.Stderr, StringComparison.Ordinal);
         Assert.False(Directory.Exists(outsideTopic));
         Assert.False(Directory.Exists(Path.Join(_root, "docs", "_pipeline", "diagrams")));
+    }
+
+    [Theory]
+    [InlineData(false, "would escape")]
+    [InlineData(true, "must be a relative path")]
+    public async Task New_diagram_rejects_outside_id_before_creating_topic(bool rooted, string diagnostic)
+    {
+        var diagrams = Path.Join(_root, "docs", "_pipeline", "diagrams");
+        var topicDirectory = Path.Join(diagrams, "arch");
+        var outsideId = Path.Join(rooted ? _root : diagrams, "outside");
+        var id = rooted ? outsideId : Path.GetRelativePath(topicDirectory, outsideId);
+
+        var result = await RunAsync("new-diagram", "arch", id);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.StartsWith("Error: Diagram id", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains(diagnostic, result.Stderr, StringComparison.Ordinal);
+        Assert.False(File.Exists(outsideId + ".mmd"));
+        Assert.False(Directory.Exists(topicDirectory));
     }
 
     private async Task<(int ExitCode, string Stderr)> RunAsync(params string[] args)

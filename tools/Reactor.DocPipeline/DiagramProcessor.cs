@@ -154,7 +154,7 @@ internal static class DiagramProcessor
 
         foreach (var topicDir in topics)
         {
-            var topicId = Path.GetFileName(topicDir);
+            var topicId = Path.GetFileName(Path.TrimEndingDirectorySeparator(topicDir));
             var outDir = Path.Combine(outputImagesRoot, topicId);
             Directory.CreateDirectory(outDir);
 
@@ -665,8 +665,8 @@ internal static class DiagramProcessor
     public static string ScaffoldDiagram(string diagramsRoot, string topic, string id)
     {
         var topicDir = ResolveTopicDirectory(diagramsRoot, topic);
+        var path = ResolveDiagramPath(topicDir, id + ".mmd", $"Diagram id '{id}'");
         Directory.CreateDirectory(topicDir);
-        var path = Path.Combine(topicDir, id + ".mmd");
         if (File.Exists(path))
             throw new DocPipelineException(
                 "REACTOR_DOC_DIAGRAM_002",
@@ -675,18 +675,21 @@ internal static class DiagramProcessor
         return path;
     }
 
-    private static string ResolveTopicDirectory(string diagramsRoot, string topic)
+    private static string ResolveTopicDirectory(string diagramsRoot, string topic) =>
+        ResolveDiagramPath(diagramsRoot, topic, $"Diagram topic '{topic}'");
+
+    private static string ResolveDiagramPath(string root, string path, string description)
     {
-        if (Path.IsPathRooted(topic))
-            throw new DocPipelineException($"Diagram topic '{topic}' must be a relative path.");
+        if (Path.IsPathRooted(path))
+            throw new DocPipelineException($"{description} must be a relative path.");
 
         try
         {
-            return DocPaths.ResolveContained(diagramsRoot, topic, "Diagram topic path");
+            return DocPaths.ResolveContained(root, path, "Path");
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or PathTooLongException)
         {
-            throw new DocPipelineException($"Invalid diagram topic '{topic}'. {ex.Message}");
+            throw new DocPipelineException($"{description} is invalid. {ex.Message}");
         }
     }
 

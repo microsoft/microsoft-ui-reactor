@@ -401,7 +401,10 @@ Conventions for contributors:
 
 - The doc pipeline's `render-diagrams` and `new-diagram` commands now reject
   rooted topics and topics that resolve outside `docs/_pipeline/diagrams`.
-  Both commands report the error on stderr and return exit code `1`
+  Rendering a topic with a trailing directory separator keeps its SVGs under
+  that topic's image directory. `new-diagram` also rejects IDs that are rooted
+  or would place the `.mmd` outside the topic directory. Both commands report
+  path errors on stderr and return exit code `1`
   ([issue #1034](https://github.com/microsoft/microsoft-ui-reactor/issues/1034),
   [spec 041 §10.3](docs/specs/041-docs-comprehensive-uplift.md#103-image-and-diagram-pipeline-changes)).
 
