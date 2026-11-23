@@ -17,6 +17,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
     private readonly MarkdownTextSelectionOptions _longOptions = new();
     private readonly MarkdownTextSelectionOptions _membershipOptions = new();
     private Border? _membershipBorder;
+    private Border? _layoutProbe;
+    private MarkdownSelectionHost? _membershipHost;
     private int _clicks;
     private int _blankClicks;
     private int _customClicks;
@@ -97,8 +99,31 @@ internal sealed class MarkdownSelectionInputFixture : Component
             }).AutomationId("SelectionToggleMemberVisibility"),
             Button("Reverse members", () => setReversed(true)).AutomationId("SelectionReverseMembers"),
             Button("Gate first member", () => setFirstGated(!firstGated)).AutomationId("SelectionGateFirstMember"),
+            Button("Probe idle", ProbeIdle).AutomationId("SelectionIdleProbe"),
             MarkdownTextSelection.Scope(_membershipOptions, VStack(members.ToArray()))
-                .AutomationId("SelectionMembership")).Width(450);
+                .AutomationId("SelectionMembership")
+                .OnMountAdd(fe => _membershipHost = (MarkdownSelectionHost)fe),
+            Border(null).Height(1).OnMountAdd(fe => _layoutProbe = (Border)fe)).Width(450);
+    }
+
+    private void ProbeIdle()
+    {
+        var host = _membershipHost ?? throw new InvalidOperationException("Missing membership scope.");
+        var probe = _layoutProbe ?? throw new InvalidOperationException("Missing layout probe.");
+        var before = (host.LayoutPassCount, host.MembershipCheckCount, host.SegmentReadCount, host.TransformCount);
+        int layouts = 0;
+        void OnLayout(object? sender, object args) => layouts++;
+        probe.LayoutUpdated += OnLayout;
+        probe.Height++;
+        var timer = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            probe.LayoutUpdated -= OnLayout;
+            var after = (host.LayoutPassCount, host.MembershipCheckCount, host.SegmentReadCount, host.TransformCount);
+            AutomationProperties.SetHelpText(host, $"idle layouts={layouts} unchanged={before == after}");
+        };
+        timer.Start();
     }
 
     private void OnBlankTapped(object sender, TappedRoutedEventArgs args)

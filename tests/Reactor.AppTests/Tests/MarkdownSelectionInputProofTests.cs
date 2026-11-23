@@ -396,6 +396,12 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Wait(() => membershipEvents.Contains("third\nsecond\nfirst"), "idle keyed reorder TextChanged");
                 Invoke("SelectionGateFirstMember");
                 Wait(() => membershipEvents.Contains("third\nsecond"), "idle semantic-only gate TextChanged");
+                Invoke("SelectionIdleProbe");
+                Wait(() => membership.Current.HelpText.StartsWith("idle layouts=", StringComparison.Ordinal),
+                    "idle layout probe completed");
+                var idleProbe = membership.Current.HelpText;
+                Assert.IsTrue(idleProbe.EndsWith("unchanged=True", StringComparison.Ordinal) &&
+                    !idleProbe.Contains("layouts=0 ", StringComparison.Ordinal), idleProbe);
             }
             finally { Automation.RemoveAutomationEventHandler(TextPattern.TextChangedEvent, membership, membershipHandler); }
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
