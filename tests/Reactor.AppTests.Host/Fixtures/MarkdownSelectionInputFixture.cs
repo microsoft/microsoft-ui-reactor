@@ -67,7 +67,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
                 .AutomationId("SelectionOuter"),
             ItemsView(new[] { "message" }, row => row, (_, _) =>
                 ItemContainer(MarkdownTextSelection.Scope(_longOptions,
-                    Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
+                    VStack(Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
+                        .Set(TracePointerRouting))
                     .AutomationId("SelectionLong")))
                     .Height(180).AutomationId("SelectionTimeline"),
             Border(TextBlock("\u00A0").AutomationId("SelectionBlank").AutomationName("Blank chat"))

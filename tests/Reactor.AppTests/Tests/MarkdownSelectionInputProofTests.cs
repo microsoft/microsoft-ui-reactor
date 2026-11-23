@@ -263,10 +263,21 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 new PropertyCondition(AutomationElement.IsScrollPatternAvailableProperty, true));
             Assert.IsNotNull(scrollElement);
             var scroll = (ScrollPattern)scrollElement.GetCurrentPattern(ScrollPattern.Pattern);
-            foreach (int clickCount in new[] { 2, 3 })
+            void ResetLongScroll()
             {
                 scroll.SetScrollPercent(ScrollPattern.NoScroll, 0);
-                Wait(() => scroll.Current.VerticalScrollPercent == 0, "reset before granular edge drag");
+                try
+                {
+                    Wait(() => scroll.Current.VerticalScrollPercent == 0, "reset before edge drag");
+                }
+                finally
+                {
+                    Console.WriteLine($"Edge drag reset: scroll={scroll.Current.VerticalScrollPercent}; routing={longElement.Current.HelpText}");
+                }
+            }
+            foreach (int clickCount in new[] { 2, 3 })
+            {
+                ResetLongScroll();
                 Thread.Sleep((int)GetDoubleClickTime() + 1);
                 var anchorGlyph = Glyph(longText.DocumentRange, 7);
                 double anchorX = anchorGlyph[0] + anchorGlyph[2] / 2;
@@ -308,10 +319,13 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                     lastLength = selected.Length;
                 }
                 Mouse(4); mouseHeld = false;
+                Wait(() => longElement.Current.HelpText.Split(" | ")[^1] is var latest &&
+                    latest.StartsWith("release ", StringComparison.Ordinal) &&
+                    latest.Contains("captures=0", StringComparison.Ordinal),
+                    $"click count {clickCount} drag release delivered before resetting the scroller");
                 Console.WriteLine($"Granular stationary edge drag passed: clicks={clickCount}; scroll={lastScroll}; selectedLength={lastLength}");
             }
-            scroll.SetScrollPercent(ScrollPattern.NoScroll, 0);
-            Wait(() => scroll.Current.VerticalScrollPercent == 0, "reset before character edge drag");
+            ResetLongScroll();
             var firstGlyph = Glyph(longText.DocumentRange, 1);
             Point(firstGlyph[0] + firstGlyph[2] / 2, firstGlyph[1] + firstGlyph[3] / 2);
             Mouse(2); mouseHeld = true;
