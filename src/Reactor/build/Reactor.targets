@@ -261,7 +261,6 @@
     </ItemGroup>
     <Error Condition="'@(_ReactorAssemblyNameCollision)' != ''"
            Code="REACTOR_BUILD_001"
-           HelpLink="https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project"
            Text="The assembly name '$(AssemblyName)' collides with the referenced assembly '%(_ReactorAssemblyNameCollision.Filename)%(_ReactorAssemblyNameCollision.Extension)'. Assembly names are case-insensitive, so the app would load in place of that reference and crash at startup with a TypeLoadException. Rename the project (or, for a file-based app, the .cs file), or set a different AssemblyName (for a file-based app: #:property AssemblyName=MyApp)." />
   </Target>
 
