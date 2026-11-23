@@ -15,10 +15,21 @@ $bins = @{
 if ($bins.baseline -eq $bins.candidate) { throw 'Use separately preserved binaries.' }
 $OutDir = [IO.Path]::GetFullPath($OutDir)
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+function Resolve-ReactorRuntimeDll([string]$bin) {
+    # Builds from before the assembly rename ship Reactor.dll; later ones ship Microsoft.UI.Reactor.dll.
+    $found = @('Microsoft.UI.Reactor.dll', 'Reactor.dll' | ForEach-Object { Join-Path $bin $_ } | Where-Object { Test-Path $_ })
+    if ($found.Count -ne 1) { throw "Expected exactly one of Microsoft.UI.Reactor.dll or Reactor.dll in $bin, found $($found.Count)." }
+    $found[0]
+}
+# The benchmark binary is copied across sides, and it binds to the Reactor assembly name it was
+# built against, so both sides must ship the same name.
+if ((Split-Path -Leaf (Resolve-ReactorRuntimeDll $bins.baseline)) -ne (Split-Path -Leaf (Resolve-ReactorRuntimeDll $bins.candidate))) {
+    throw 'Baseline and candidate ship differently named Reactor assemblies (Reactor.dll vs Microsoft.UI.Reactor.dll). The shared benchmark binary cannot load against both; pick a baseline from the same side of the assembly rename.'
+}
 $hashes = @{}
 foreach ($side in 'baseline', 'candidate') {
     $hashes[$side] = @{
-        reactor = (Get-FileHash (Join-Path $bins[$side] 'Microsoft.UI.Reactor.dll')).Hash
+        reactor = (Get-FileHash (Resolve-ReactorRuntimeDll $bins[$side])).Hash
         benchmark = (Get-FileHash (Join-Path $bins[$side] 'PerfBench.MixedKeys.dll')).Hash
     }
 }

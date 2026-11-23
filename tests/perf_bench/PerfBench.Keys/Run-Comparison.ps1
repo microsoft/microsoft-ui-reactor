@@ -31,6 +31,13 @@ try {
         }
     }
 
+    function Resolve-ReactorRuntimeDll([string]$bin) {
+        # Builds from before the assembly rename ship Reactor.dll; later ones ship Microsoft.UI.Reactor.dll.
+        $found = @('Microsoft.UI.Reactor.dll', 'Reactor.dll' | ForEach-Object { Join-Path $bin $_ } | Where-Object { Test-Path $_ })
+        if ($found.Count -ne 1) { throw "Expected exactly one of Microsoft.UI.Reactor.dll or Reactor.dll in $bin, found $($found.Count)." }
+        $found[0]
+    }
+
     $trees = @{ baseline = $BaselineRoot; prototype = $root }
     $assemblies = @{}
     $hashes = @{}
@@ -43,7 +50,7 @@ try {
         $rid = if ($Platform -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
         $bin = Join-Path $project "bin\$Platform\Release\net10.0-windows10.0.22621.0\$rid"
         $assemblies[$side] = Join-Path $bin 'PerfBench.Keys.dll'
-        $hashes[$side] = (Get-FileHash (Join-Path $bin 'Microsoft.UI.Reactor.dll')).Hash
+        $hashes[$side] = (Get-FileHash (Resolve-ReactorRuntimeDll $bin)).Hash
     }
 
     $env:DOTNET_TieredCompilation = '0'
