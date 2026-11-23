@@ -7623,20 +7623,22 @@ public sealed partial class Reconciler : IDisposable
             if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
                 AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
-        if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
-            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
-        else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
-        {
-            if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
-        }
-        // After CenterPoint, so an origin that starts here takes the new offset in one write.
+        // Before CenterPoint (spec 066 §8.2): an origin that starts here takes the current offset,
+        // and a CenterPoint change in the same render then writes or animates that offset, so a
+        // curve isn't cancelled by the expression starting after it.
         if (m.TransformOrigin.HasValue && m.TransformOrigin != oldM?.TransformOrigin)
             TransformOriginBinding.Apply(fe, m.TransformOrigin.Value);
         else if (!m.TransformOrigin.HasValue && oldM?.TransformOrigin.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is { } owner)
                 TransformOriginBinding.Apply(fe, owner.Modifiers.TransformOrigin!.Value);
+        }
+        if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
+            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
+        else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
+        {
+            if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;

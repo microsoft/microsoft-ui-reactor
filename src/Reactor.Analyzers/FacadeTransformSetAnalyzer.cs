@@ -213,11 +213,13 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
 
         // A transform modifier with a constant identity value doesn't take the visual (spec 066 §3
         // invariant 2), unless this .Set writes the same facade: the identity write then still
-        // takes it, to override the setter's value.
+        // takes it, to override the setter's value. A transform a later call of the same modifier
+        // replaces doesn't count either: only the last one applies.
         var written = new HashSet<string>(candidates.Select(static c => c.Name), System.StringComparer.Ordinal);
         var owningModifier = FindChainModifier(invocation, model, ct, ModifierTable.VisualOwningModifiers.ContainsKey,
             skip: link => DuplicateAtomicModifierAnalyzer.GetFluentMethodName(link) is { } name
-                && !written.Contains(name) && IsIdentityTransform(link, name, model, ct));
+                && ((IsTransformName(name) && IsOverridden(link, name, model, ct))
+                    || (!written.Contains(name) && IsIdentityTransform(link, name, model, ct))));
         var hasTranslationModifier = FindChainModifier(invocation, model, ct, static n => n == TranslationName) is not null;
         if (owningModifier is null && !hasTranslationModifier)
             return;
@@ -253,7 +255,8 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             // pivot (spec 066 §8.1), so rewriting an absolute pivot to it would move the pivot.
             var originOwnsPivot = name == "CenterPoint"
                 && FindChainModifier(invocation, model, ct, static n => n == "TransformOrigin",
-                    skip: link => IsIdentityTransform(link, "TransformOrigin", model, ct)) is not null;
+                    skip: link => IsOverridden(link, "TransformOrigin", model, ct)
+                        || IsIdentityTransform(link, "TransformOrigin", model, ct)) is not null;
             var properties = ImmutableDictionary<string, string?>.Empty;
             if (assignment is not null
                 && info.Modifier is { } modifier
@@ -370,6 +373,29 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             return false;
         }
         return true;
+    }
+
+    private static bool IsTransformName(string name) =>
+        name is "Scale" or "Rotation" or TranslationName or "CenterPoint" or "TransformOrigin";
+
+    /// <summary>
+    /// True when a later call of the same modifier on <paramref name="link"/>'s own element replaces
+    /// it, so only that later value applies (the fluent "later call wins" rule).
+    /// </summary>
+    private static bool IsOverridden(InvocationExpressionSyntax link, string name, SemanticModel model, CancellationToken ct)
+    {
+        var elementType = model.GetTypeInfo(link, ct).Type;
+        SyntaxNode current = link;
+        while (current.Parent is MemberAccessExpressionSyntax access
+               && access.Expression == current
+               && access.Parent is InvocationExpressionSyntax outer
+               && SymbolEqualityComparer.Default.Equals(model.GetTypeInfo(outer, ct).Type, elementType))
+        {
+            if (DuplicateAtomicModifierAnalyzer.GetFluentMethodName(outer) == name)
+                return true;
+            current = outer;
+        }
+        return false;
     }
 
     private static bool IsReactorExtension(ISymbol? symbol)

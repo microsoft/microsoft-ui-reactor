@@ -196,7 +196,9 @@ internal static class AppliedModifierMap
             // replaces every inner contributor, while an inline-edge overlay builds on it.
             foreach (var m in levelRows)
             {
-                bool wholeValue = !IsEdgeOverlay(m.Modifier);
+                // CenterPoint and TransformOrigin both feed Visual.CenterPoint (pivot = size × origin +
+                // offset, spec 066 §8.1), so neither replaces the other's contribution.
+                bool wholeValue = !IsEdgeOverlay(m.Modifier) && m.Modifier is not ("CenterPoint" or "TransformOrigin");
                 merged.RemoveAll(prior => prior.Modifier == m.Modifier
                     || (wholeValue && string.Equals(prior.Property, m.Property, StringComparison.Ordinal)));
             }

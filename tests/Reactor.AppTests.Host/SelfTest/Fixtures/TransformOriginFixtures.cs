@@ -81,7 +81,7 @@ internal sealed class TransformOriginFixture(Harness h, string scenario) : SelfT
         // Hit-testing honours the expression pivot: inside only the centred pose, then only the top-left one.
         H.Check(P + "_Centre_HitsCentredPoint", Hits(lab, scaled!, 80, 140));
         H.Check(P + "_Centre_MissesTopLeftOnlyPoint", !Hits(lab, scaled!, 300, 220));
-        H.Check(P + "_Centre_FacadeIdentity", scaled!.CenterPoint == Vector3.Zero && scaled.Scale == Vector3.One);
+        H.Check(P + "_Centre_FacadeIdentity", scaled is not null && scaled.CenterPoint == Vector3.Zero && scaled.Scale == Vector3.One);
 
         await lab.Show(Target().TransformOrigin(0.5f, 0.5f).Rotation(90));
         await CheckPose(P + "_Centre_Rotation", lab, Expect(50, 20, degrees: 90));
@@ -219,6 +219,34 @@ internal sealed class TransformOriginFixture(Harness h, string scenario) : SelfT
             controller.Progress = 0.5f;
             // The static pivot isn't size-relative: 50 → 90 passes 70 at y = 0.
             await CheckPose(name + "_Control_SeeksMidway", control, Expect(70, 0, s));
+        }
+
+        // The origin and an animated offset arrive in the same render: on an update, and on mount.
+        using (var together = new Lab(H))
+        {
+            var t = await together.Show(Declared(0, origin: false));
+            Change(together, Declared(40, origin: true));
+            await Harness.Render();
+            await SeekOffset(name + "_AddedTogether", together, ElementCompositionPreview.GetElementVisual(t!));
+        }
+        // On mount only .Animate(CenterPoint) isolates the channel: WithAnimation would animate the scale in too.
+        if (animate)
+        using (var mount = new Lab(H))
+        {
+            Change(mount, Declared(40, origin: true));
+            await Harness.Render();
+            var mounted = mount.Root.Children.Count > 0 ? (FrameworkElement)mount.Root.Children[0] : null;
+            H.Check(name + "_Mount_Mounted", mounted is not null);
+            if (mounted is not null) await SeekOffset(name + "_Mount", mount, ElementCompositionPreview.GetElementVisual(mounted));
+        }
+        async Task SeekOffset(string check, Lab l, Visual visual)
+        {
+            var c = visual.Properties.TryGetAnimationController(TransformOriginBinding.OffsetProperty);
+            H.Check(check + "_AnimatesOffset", c is not null);
+            if (c is null) return;
+            c.Pause();
+            c.Progress = 0.5f;
+            await CheckPose(check + "_Mid", l, Expect(70, 20, s));
         }
 
         using var lab = new Lab(H);

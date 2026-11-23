@@ -485,6 +485,9 @@ class C
     [InlineData("Border().Translation(0, 0f, 0.0f)", "fe.Rotation = 5")]
     [InlineData("Border().Rotation(0)", "fe.Scale = new Vector3(2, 2, 1)")]
     [InlineData("Border().TransformOrigin(0, 0f)", "fe.Rotation = 5")]
+    // A later call replaces the earlier one, so the effective value is the identity.
+    [InlineData("Border().TransformOrigin(0.5f, 0.5f).TransformOrigin(0, 0)", "fe.Rotation = 5")]
+    [InlineData("Border().Scale(2f).Scale(1)", "fe.Rotation = 5")]
     public async Task Identity_Transform_Does_Not_Take_The_Visual(string chain, string write)
     {
         await VerifyAsync(@"class C { Element M() => " + chain + ".Set(fe => " + write + "); }");
@@ -498,6 +501,7 @@ class C
     [InlineData("Translation(10, 0, 0)")]
     [InlineData("CenterPoint(new Vector3(10, 5, 0))")]
     [InlineData("TransformOrigin(0.5f, 0.5f)")]
+    [InlineData("TransformOrigin(0, 0).TransformOrigin(0.5f, 0.5f)")]
     public async Task A_Transform_Modifier_Takes_The_Visual_And_Fixes(string trigger)
     {
         // Rotation as the trigger is the one with a write it can't also be: use Scale there.
