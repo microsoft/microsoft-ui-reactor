@@ -51,8 +51,8 @@ internal static class TransformOriginBinding
         properties.InsertVector2(OriginProperty, origin);
         if (rest.Origin is null)
         {
-            // The static .CenterPoint() value becomes the offset; an animation on it ended with the
-            // static channel's own animation, which Start stops.
+            // The static .CenterPoint() value becomes the offset; an animation on the static channel
+            // is replaced when Start takes it over.
             properties.InsertVector3(OffsetProperty, rest.CenterPoint);
             if (!state.OriginExpressionRunning) Start(visual, state);
         }
@@ -130,7 +130,9 @@ internal static class TransformOriginBinding
 
     private static void Start(Visual visual, Reconciler.ReactorState state)
     {
-        visual.StopAnimation("CenterPoint");
+        // StartAnimation replaces whatever animates CenterPoint. A StopAnimation first, in the same
+        // commit, also stopped the new expression on a hosted runner when an animation was running,
+        // which left the previous animation's last value.
         var pivot = visual.Compositor.CreateExpressionAnimation(PivotExpression);
         pivot.SetReferenceParameter("t", visual);
         visual.StartAnimation("CenterPoint", pivot);
