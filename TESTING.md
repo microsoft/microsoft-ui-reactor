@@ -196,9 +196,6 @@ including the CI solution build, fail on malformed XML (`CS1570`) or unresolved
 remaining documentation diagnostics. Missing member documentation (`CS1591`)
 is permitted. See [issue #1053](https://github.com/microsoft/microsoft-ui-reactor/issues/1053).
 
-Use `-p:CopilotSkipCliDownload=true` only for compile-only checks. A local build
-used to run `mur loc translate` needs the native Copilot CLI binary.
-
 ### Console-mutating tests need collection isolation
 
 Tests that write to `Console.Out`/`Console.Error` must be grouped with `[Collection("ConsoleTests")]` to prevent cross-test interference.
