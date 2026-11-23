@@ -5,8 +5,8 @@ namespace Microsoft.UI.Reactor.Tests.Core;
 
 /// <summary>
 /// Race / contention coverage for <see cref="QueryCache"/>. All tests here use real
-/// threads (<see cref="Task.Run"/> + <see cref="Barrier"/>) and complete within a
-/// bounded timeout — slow individually, important collectively.
+/// threads (<see cref="Task.Run(Action, CancellationToken)"/> + <see cref="Barrier"/>)
+/// and complete within a bounded timeout — slow individually, important collectively.
 /// </summary>
 [Trait("Category", "Threading")]
 public class QueryCacheThreadingTests

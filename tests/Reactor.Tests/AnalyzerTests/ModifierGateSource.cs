@@ -112,6 +112,7 @@ internal static class ModifierGateSource
     /// <see cref="ControlGate"/>, <see cref="PoolResetGate"/>, or <see cref="AnySlot"/>. Spliced
     /// into the pattern unescaped, because <see cref="AnySlot"/> is itself a regex alternation.
     /// </param>
+    /// <param name="identifier">The literal gate identifier to match.</param>
     public static string AnchoredPattern(string slot, string identifier) =>
         slot + @":\s*" + Regex.Escape(identifier) + @"\s*[,)]";
 

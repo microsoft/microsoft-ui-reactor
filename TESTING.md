@@ -190,37 +190,14 @@ dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 
 ### Checking XML documentation in `Reactor.Tests`
 
-Normal `Reactor.Tests` builds leave XML documentation generation off. With
-`GenerateDocumentationFile=true`, malformed XML such as an unescaped `&`
-produces `CS1570`. Release promotes it to an error, which can stop the
-compiler before it resolves `cref` references elsewhere in the same compilation.
-Resolve `CS1570` first when checking for unresolved references
-(`CS1574`). See [issue #1053](https://github.com/microsoft/microsoft-ui-reactor/issues/1053).
+`Reactor.Tests` generates XML documentation by default. Release builds,
+including the CI solution build, fail on malformed XML (`CS1570`) or unresolved
+`cref` references (`CS1574`). Fix `CS1570` first so the compiler can report the
+remaining documentation diagnostics. Missing member documentation (`CS1591`)
+is permitted. See [issue #1053](https://github.com/microsoft/microsoft-ui-reactor/issues/1053).
 
-Run from the repository root in PowerShell. Build the Release x64 dependencies
-first so the final command can generate XML docs for the test project alone.
-
-```powershell
-$project = 'tests/Reactor.Tests/Reactor.Tests.csproj'
-dotnet restore $project -p:Platform=x64
-dotnet build $project -c Release -p:Platform=x64 -p:SkipSignaturesGen=true `
-  -p:CopilotSkipCliDownload=true --no-restore -m:1 -nodereuse:false
-dotnet build $project -c Release -p:Platform=x64 -p:SkipSignaturesGen=true `
-  -p:CopilotSkipCliDownload=true --no-restore --no-dependencies -m:1 -nodereuse:false `
-  -p:GenerateDocumentationFile=true -p:NoWarn=CS1591 `
-  '-p:WarningsNotAsErrors=CS0419%3BCS1573%3BCS1734'
-```
-
-The final command skips missing member documentation (`CS1591`) and keeps
-`CS0419`, `CS1573`, and `CS1734` visible as warnings. `CS1570` and `CS1574`
-remain errors. A successful build emits `Reactor.Tests.xml` in the Release
-output directory.
-
-To verify the command detects a broken reference, temporarily put
-`<see cref="MissingCrefPositiveControl"/>` in a valid XML comment on a
-declaration compiled by the test project. The final command should fail with
-`CS1574` for that name. Remove the probe and rerun the same command to verify
-the clean build.
+Use `-p:CopilotSkipCliDownload=true` only for compile-only checks. A local build
+used to run `mur loc translate` needs the native Copilot CLI binary.
 
 ### Console-mutating tests need collection isolation
 
