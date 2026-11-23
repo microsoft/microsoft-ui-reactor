@@ -155,11 +155,382 @@
       ]
     },
     {
-      "dir": "reference/hooks",
-      "title": "Hooks API",
+      "dir": "reference",
+      "title": "API reference",
+      "pages": [{ "file": "reference/index.md", "label": "Overview" }]
+    },
+    {
+      "dir": "reference/01-hooks",
+      "title": "Hooks",
       "pages": [{ "file": "reference/hooks/index.md", "label": "Overview" }]
     },
-    { "dir": "reference/hooks/01-(hooks)", "title": "Hooks", "glob": "reference/hooks/Use*.md" },
-    { "dir": "reference/hooks/02-(types)", "title": "Types and options", "glob": "reference/hooks/*.md" }
+    {
+      "dir": "reference/01-hooks/01-(state)",
+      "title": "State",
+      "pages": [
+        { "file": "reference/hooks/UseCollection.md", "label": "UseCollection" },
+        { "file": "reference/hooks/UseExternalStore.md", "label": "UseExternalStore" },
+        { "file": "reference/hooks/UseObservable.md", "label": "UseObservable" },
+        { "file": "reference/hooks/UseObservableProperty.md", "label": "UseObservableProperty" },
+        { "file": "reference/hooks/UseObservableTree.md", "label": "UseObservableTree" },
+        { "file": "reference/hooks/UsePersisted.md", "label": "UsePersisted" },
+        { "file": "reference/hooks/UseReducer.md", "label": "UseReducer" },
+        { "file": "reference/hooks/UseRef.md", "label": "UseRef" },
+        { "file": "reference/hooks/UseState.md", "label": "UseState" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/02-(effects-and-memo)",
+      "title": "Effects and memoization",
+      "pages": [
+        { "file": "reference/hooks/UseCallback.md", "label": "UseCallback" },
+        { "file": "reference/hooks/UseEffect.md", "label": "UseEffect" },
+        { "file": "reference/hooks/UseMemo.md", "label": "UseMemo" },
+        { "file": "reference/hooks/UseMemoCells.md", "label": "UseMemoCells" },
+        { "file": "reference/hooks/UseMemoCellsByIndex.md", "label": "UseMemoCellsByIndex" },
+        { "file": "reference/hooks/UseMemoCellsByKey.md", "label": "UseMemoCellsByKey" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/03-(context)",
+      "title": "Context",
+      "pages": [
+        { "file": "reference/hooks/UseContext.md", "label": "UseContext" },
+        { "file": "reference/hooks/UseIntl.md", "label": "UseIntl" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/04-(data)",
+      "title": "Data and commands",
+      "pages": [
+        { "file": "reference/hooks/UseCommand.md", "label": "UseCommand" },
+        { "file": "reference/hooks/UseDataSource.md", "label": "UseDataSource" },
+        { "file": "reference/hooks/UseInfiniteResource.md", "label": "UseInfiniteResource" },
+        { "file": "reference/hooks/UseMutation.md", "label": "UseMutation" },
+        { "file": "reference/hooks/UseResource.md", "label": "UseResource" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/05-(forms)",
+      "title": "Forms and validation",
+      "pages": [
+        { "file": "reference/hooks/UseChildValidationContext.md", "label": "UseChildValidationContext" },
+        { "file": "reference/hooks/UseValidationContext.md", "label": "UseValidationContext" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/06-(windows)",
+      "title": "Windows and display",
+      "pages": [
+        { "file": "reference/hooks/UseBreakpoint.md", "label": "UseBreakpoint" },
+        { "file": "reference/hooks/UseClosingGuard.md", "label": "UseClosingGuard" },
+        { "file": "reference/hooks/UseDisplays.md", "label": "UseDisplays" },
+        { "file": "reference/hooks/UseDpi.md", "label": "UseDpi" },
+        { "file": "reference/hooks/UseIsActive.md", "label": "UseIsActive" },
+        { "file": "reference/hooks/UseIsCovered.md", "label": "UseIsCovered" },
+        { "file": "reference/hooks/UseOpenWindow.md", "label": "UseOpenWindow" },
+        { "file": "reference/hooks/UseTrayIcon.md", "label": "UseTrayIcon" },
+        { "file": "reference/hooks/UseWindow.md", "label": "UseWindow" },
+        { "file": "reference/hooks/UseWindowAspectRatio.md", "label": "UseWindowAspectRatio" },
+        { "file": "reference/hooks/UseWindowDragMove.md", "label": "UseWindowDragMove" },
+        { "file": "reference/hooks/UseWindowPosition.md", "label": "UseWindowPosition" },
+        { "file": "reference/hooks/UseWindowSize.md", "label": "UseWindowSize" },
+        { "file": "reference/hooks/UseWindowState.md", "label": "UseWindowState" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/07-(theme-and-accessibility)",
+      "title": "Theme and accessibility",
+      "pages": [
+        { "file": "reference/hooks/UseAnnounce.md", "label": "UseAnnounce" },
+        { "file": "reference/hooks/UseColorScheme.md", "label": "UseColorScheme" },
+        { "file": "reference/hooks/UseHighContrast.md", "label": "UseHighContrast" },
+        { "file": "reference/hooks/UseHighContrastScheme.md", "label": "UseHighContrastScheme" },
+        { "file": "reference/hooks/UseIsDarkTheme.md", "label": "UseIsDarkTheme" },
+        { "file": "reference/hooks/UseReducedMotion.md", "label": "UseReducedMotion" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/08-(focus)",
+      "title": "Focus and element refs",
+      "pages": [
+        { "file": "reference/hooks/UseElementFocus.md", "label": "UseElementFocus" },
+        { "file": "reference/hooks/UseElementRef.md", "label": "UseElementRef" },
+        { "file": "reference/hooks/UseFocus.md", "label": "UseFocus" },
+        { "file": "reference/hooks/UseFocusTrap.md", "label": "UseFocusTrap" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/09-(navigation)",
+      "title": "Navigation",
+      "pages": [
+        { "file": "reference/hooks/UseNavigation.md", "label": "UseNavigation" },
+        { "file": "reference/hooks/UseNavigationLifecycle.md", "label": "UseNavigationLifecycle" },
+        { "file": "reference/hooks/UseSystemBackButton.md", "label": "UseSystemBackButton" }
+      ]
+    },
+    {
+      "dir": "reference/01-hooks/10-(tools)",
+      "title": "Developer tools",
+      "pages": [{ "file": "reference/hooks/UseDevtools.md", "label": "UseDevtools" }]
+    },
+    {
+      "dir": "reference/01-hooks/11-(types)",
+      "title": "Types and options",
+      "pages": [
+        { "file": "reference/hooks/focus-helpers.md", "label": "Focus helpers" },
+        { "file": "reference/hooks/hook-types.md", "label": "Hook results and options" },
+        { "file": "reference/hooks/pending.md", "label": "Pending" }
+      ],
+      "glob": "reference/hooks/*.md"
+    },
+    {
+      "dir": "reference/02-components",
+      "title": "Components",
+      "pages": [
+        { "file": "reference/components/index.md", "label": "Overview" },
+        { "file": "reference/components/render-errors.md", "label": "Render errors" },
+        { "file": "reference/components/Component-1.md", "label": "Component<TProps>" }
+      ],
+      "glob": "reference/components/*.md"
+    },
+    {
+      "dir": "reference/03-elements",
+      "title": "Elements",
+      "pages": [
+        { "file": "reference/elements/index.md", "label": "Overview" },
+        { "file": "reference/elements/layout.md", "label": "Layout" },
+        { "file": "reference/elements/text.md", "label": "Text" },
+        { "file": "reference/elements/buttons.md", "label": "Buttons" },
+        { "file": "reference/elements/input.md", "label": "Input" },
+        { "file": "reference/elements/collections.md", "label": "Collections" },
+        { "file": "reference/elements/navigation.md", "label": "Navigation" },
+        { "file": "reference/elements/menus-and-commands.md", "label": "Menus and commands" },
+        { "file": "reference/elements/dialogs-and-flyouts.md", "label": "Dialogs and flyouts" },
+        { "file": "reference/elements/media.md", "label": "Media and icons" },
+        { "file": "reference/elements/shapes.md", "label": "Shapes" },
+        { "file": "reference/elements/status-and-info.md", "label": "Status and info" },
+        { "file": "reference/elements/forms.md", "label": "Forms" },
+        { "file": "reference/elements/composition.md", "label": "Composition" },
+        { "file": "reference/elements/interop.md", "label": "Interop" }
+      ]
+    },
+    { "dir": "reference/03-elements/01-(types)", "title": "Types", "glob": "reference/elements/*.md" },
+    {
+      "dir": "reference/04-factories",
+      "title": "Factories",
+      "pages": [
+        { "file": "reference/factories/index.md", "label": "Overview" },
+        { "file": "reference/factories/layout.md", "label": "Layout" },
+        { "file": "reference/factories/text.md", "label": "Text" },
+        { "file": "reference/factories/buttons.md", "label": "Buttons" },
+        { "file": "reference/factories/input.md", "label": "Input" },
+        { "file": "reference/factories/collections.md", "label": "Collections" },
+        { "file": "reference/factories/navigation.md", "label": "Navigation" },
+        { "file": "reference/factories/menus-and-commands.md", "label": "Menus and commands" },
+        { "file": "reference/factories/dialogs-and-flyouts.md", "label": "Dialogs and flyouts" },
+        { "file": "reference/factories/media.md", "label": "Media and icons" },
+        { "file": "reference/factories/shapes.md", "label": "Shapes" },
+        { "file": "reference/factories/status-and-info.md", "label": "Status and info" },
+        { "file": "reference/factories/forms.md", "label": "Forms" },
+        { "file": "reference/factories/composition.md", "label": "Composition" },
+        { "file": "reference/factories/interop.md", "label": "Interop" }
+      ],
+      "glob": "reference/factories/*.md"
+    },
+    {
+      "dir": "reference/05-modifiers",
+      "title": "Modifiers",
+      "pages": [{ "file": "reference/modifiers/index.md", "label": "Overview" }]
+    },
+    {
+      "dir": "reference/05-modifiers/01-(common)",
+      "title": "Common modifiers",
+      "pages": [
+        { "file": "reference/modifiers/layout-and-spacing.md", "label": "Layout and spacing" },
+        { "file": "reference/modifiers/appearance.md", "label": "Appearance" },
+        { "file": "reference/modifiers/typography.md", "label": "Typography" },
+        { "file": "reference/modifiers/accessibility.md", "label": "Accessibility" },
+        { "file": "reference/modifiers/focus-and-keyboard.md", "label": "Focus and keyboard" },
+        { "file": "reference/modifiers/input-and-events.md", "label": "Input and events" },
+        { "file": "reference/modifiers/lifecycle.md", "label": "Lifecycle and identity" },
+        { "file": "reference/modifiers/animation.md", "label": "Animation" },
+        { "file": "reference/modifiers/tooltips-and-flyouts.md", "label": "Tooltips and flyouts" },
+        { "file": "reference/modifiers/validation.md", "label": "Validation" },
+        { "file": "reference/modifiers/native-properties.md", "label": "Native properties" }
+      ]
+    },
+    {
+      "dir": "reference/05-modifiers/02-(controls)",
+      "title": "Control modifiers",
+      "pages": [
+        { "file": "reference/modifiers/shared-controls.md", "label": "Shared controls" },
+        { "file": "reference/modifiers/layout.md", "label": "Layout" },
+        { "file": "reference/modifiers/buttons.md", "label": "Buttons" },
+        { "file": "reference/modifiers/input.md", "label": "Input" },
+        { "file": "reference/modifiers/collections.md", "label": "Collections" },
+        { "file": "reference/modifiers/navigation.md", "label": "Navigation" },
+        { "file": "reference/modifiers/dialogs-and-flyouts.md", "label": "Dialogs and flyouts" },
+        { "file": "reference/modifiers/media.md", "label": "Media and icons" },
+        { "file": "reference/modifiers/shapes.md", "label": "Shapes" },
+        { "file": "reference/modifiers/status-and-info.md", "label": "Status and info" },
+        { "file": "reference/modifiers/forms.md", "label": "Forms" },
+        { "file": "reference/modifiers/interop.md", "label": "Interop" }
+      ]
+    },
+    { "dir": "reference/05-modifiers/03-(types)", "title": "Types", "glob": "reference/modifiers/*.md" },
+    {
+      "dir": "reference/06-hosting",
+      "title": "Hosting and windows",
+      "pages": [
+        { "file": "reference/hosting/index.md", "label": "Overview" },
+        { "file": "reference/hosting/displays.md", "label": "Displays" },
+        { "file": "reference/hosting/file-pickers.md", "label": "File pickers" },
+        { "file": "reference/hosting/launch.md", "label": "Launch and activation" },
+        { "file": "reference/hosting/persistence.md", "label": "Persistence" },
+        { "file": "reference/hosting/taskbar.md", "label": "Taskbar and jump lists" },
+        { "file": "reference/hosting/tray-icon.md", "label": "Tray icon" },
+        { "file": "reference/hosting/window-events.md", "label": "Window events" },
+        { "file": "reference/hosting/window-options.md", "label": "Window options" },
+        { "file": "reference/hosting/xaml-interop.md", "label": "XAML interop" }
+      ],
+      "glob": "reference/hosting/*.md"
+    },
+    {
+      "dir": "reference/07-theming",
+      "title": "Theming",
+      "pages": [
+        { "file": "reference/theming/index.md", "label": "Overview" },
+        { "file": "reference/theming/enums.md", "label": "Enums" }
+      ],
+      "glob": "reference/theming/*.md"
+    },
+    {
+      "dir": "reference/08-layout",
+      "title": "Layout",
+      "pages": [
+        { "file": "reference/layout/index.md", "label": "Overview" },
+        { "file": "reference/layout/attached.md", "label": "Attached layout properties" },
+        { "file": "reference/layout/flex-enums.md", "label": "Flex enums" }
+      ],
+      "glob": "reference/layout/*.md"
+    },
+    {
+      "dir": "reference/09-input",
+      "title": "Input and commands",
+      "pages": [
+        { "file": "reference/input/index.md", "label": "Overview" },
+        { "file": "reference/input/drag-and-drop.md", "label": "Drag and drop" },
+        { "file": "reference/input/element-refs.md", "label": "Element refs" },
+        { "file": "reference/input/gestures.md", "label": "Gestures" },
+        { "file": "reference/input/Command-1.md", "label": "Command<T>" }
+      ],
+      "glob": "reference/input/*.md"
+    },
+    {
+      "dir": "reference/10-data",
+      "title": "Data",
+      "pages": [
+        { "file": "reference/data/index.md", "label": "Overview" },
+        { "file": "reference/data/async-values.md", "label": "Async values" },
+        { "file": "reference/data/column-attributes.md", "label": "Column attributes" },
+        { "file": "reference/data/enums.md", "label": "Enums" },
+        { "file": "reference/data/paging.md", "label": "Paging" },
+        { "file": "reference/data/query-cache.md", "label": "Query cache" },
+        { "file": "reference/data/descriptors.md", "label": "Sort and filter descriptors" }
+      ],
+      "glob": "reference/data/*.md"
+    },
+    {
+      "dir": "reference/11-navigation",
+      "title": "Navigation",
+      "pages": [
+        { "file": "reference/navigation/index.md", "label": "Overview" },
+        { "file": "reference/navigation/enums.md", "label": "Enums" },
+        { "file": "reference/navigation/diagnostics.md", "label": "Navigation diagnostics" },
+        { "file": "reference/navigation/lifecycle.md", "label": "Navigation lifecycle" },
+        { "file": "reference/navigation/transitions.md", "label": "Navigation transitions" }
+      ],
+      "glob": "reference/navigation/*.md"
+    },
+    {
+      "dir": "reference/12-animation",
+      "title": "Animation",
+      "pages": [
+        { "file": "reference/animation/index.md", "label": "Overview" },
+        { "file": "reference/animation/curves.md", "label": "Curves and easing" },
+        { "file": "reference/animation/enums.md", "label": "Enums" },
+        { "file": "reference/animation/implicit.md", "label": "Implicit and theme transitions" },
+        { "file": "reference/animation/interaction-states.md", "label": "Interaction states" },
+        { "file": "reference/animation/keyframes.md", "label": "Keyframes" },
+        { "file": "reference/animation/scroll.md", "label": "Scroll-linked animation" },
+        { "file": "reference/animation/transitions.md", "label": "Transitions" }
+      ],
+      "glob": "reference/animation/*.md"
+    },
+    {
+      "dir": "reference/13-accessibility",
+      "title": "Accessibility",
+      "pages": [{ "file": "reference/accessibility/index.md", "label": "Overview" }],
+      "glob": "reference/accessibility/*.md"
+    },
+    {
+      "dir": "reference/14-localization",
+      "title": "Localization",
+      "pages": [
+        { "file": "reference/localization/index.md", "label": "Overview" },
+        { "file": "reference/localization/enums.md", "label": "Enums" }
+      ],
+      "glob": "reference/localization/*.md"
+    },
+    {
+      "dir": "reference/15-controls",
+      "title": "Controls",
+      "pages": [
+        { "file": "reference/controls/index.md", "label": "Overview" },
+        { "file": "reference/controls/collection-items.md", "label": "Collection items" },
+        { "file": "reference/controls/icons.md", "label": "Icon data" },
+        { "file": "reference/controls/masked-input.md", "label": "Masked input" },
+        { "file": "reference/controls/menu-items.md", "label": "Menu and command bar items" },
+        { "file": "reference/controls/navigation-items.md", "label": "Navigation items" },
+        { "file": "reference/controls/property-grid-attributes.md", "label": "Property grid attributes" },
+        { "file": "reference/controls/property-grid-templates.md", "label": "Property grid templates" },
+        { "file": "reference/controls/rich-text.md", "label": "Rich text" },
+        { "file": "reference/controls/virtual-list.md", "label": "Virtual list" }
+      ],
+      "glob": "reference/controls/*.md"
+    },
+    {
+      "dir": "reference/16-validation",
+      "title": "Validation",
+      "pages": [
+        { "file": "reference/validation/index.md", "label": "Overview" },
+        { "file": "reference/validation/attached.md", "label": "Attached validation state" },
+        { "file": "reference/validation/enums.md", "label": "Enums" }
+      ],
+      "glob": "reference/validation/*.md"
+    },
+    {
+      "dir": "reference/17-diagnostics",
+      "title": "Diagnostics",
+      "pages": [
+        { "file": "reference/diagnostics/index.md", "label": "Overview" },
+        { "file": "reference/diagnostics/devtools.md", "label": "Developer tools hosting" },
+        { "file": "reference/diagnostics/snapshots.md", "label": "Diagnostic snapshots" }
+      ],
+      "glob": "reference/diagnostics/*.md"
+    },
+    {
+      "dir": "reference/18-extensibility",
+      "title": "Extensibility",
+      "pages": [
+        { "file": "reference/extensibility/index.md", "label": "Overview" },
+        { "file": "reference/extensibility/children-strategies.md", "label": "Children strategies" },
+        { "file": "reference/extensibility/descriptor-delegates.md", "label": "Descriptor callbacks" },
+        { "file": "reference/extensibility/lifecycle-contexts.md", "label": "Handler contexts" },
+        { "file": "reference/extensibility/ReactorBinding-1.md", "label": "ReactorBinding<TElement>" }
+      ],
+      "glob": "reference/extensibility/*.md"
+    }
   ]
 }
