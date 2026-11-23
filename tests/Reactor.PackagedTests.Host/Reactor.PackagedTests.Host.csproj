@@ -62,6 +62,9 @@
     <Compile Include="..\_shared\FinalPath.cs" Link="FinalPath.cs" />
     <Compile Include="..\_shared\WorktreeIdentity.cs" Link="WorktreeIdentity.cs" />
     <Compile Include="..\_shared\SelfTestShard.cs" Link="SelfTestShard.cs" />
+    <!-- Spec 066 §12.1: the TransformsMatrix selftest reads its ledger from embedded resources. -->
+    <EmbeddedResource Include="..\Reactor.AppTests.Host\SelfTest\Baselines\transforms-ledger*.json"
+                      LogicalName="TransformsMatrix.%(Filename)%(Extension)" />
     <Page Include="..\Reactor.AppTests.Host\Themes\Generic.xaml" Link="Themes\Generic.xaml" />
     <!-- Code-behind is linked by the Compile glob above; its InitializeComponent needs the page. -->
     <Page Include="..\Reactor.AppTests.Host\SelfTest\Fixtures\XamlDeclaredHostPanel.xaml"
@@ -98,5 +101,7 @@
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Reactor.Wrappers.Abstractions\Reactor.Wrappers.Abstractions.csproj" />
   </ItemGroup>
+
+  <Import Project="..\Reactor.AppTests.Host\ToolkitInputSamples.props" />
 
 </Project>

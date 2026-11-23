@@ -15,11 +15,17 @@ internal sealed class MarkdownSelectionInputFixture : Component
     private readonly MarkdownTextSelectionOptions _outerOptions = new();
     private readonly MarkdownTextSelectionOptions _innerOptions = new();
     private readonly MarkdownTextSelectionOptions _longOptions = new();
+    private readonly MarkdownTextSelectionOptions _membershipOptions = new();
+    private Border? _membershipBorder;
     private int _clicks;
+    private int _blankClicks;
+    private int _customClicks;
 
     public override Element Render()
     {
         var (streamed, setStreamed) = UseState(false);
+        var (memberAdded, setMemberAdded) = UseState(false);
+        var (reversed, setReversed) = UseState(false);
         Element Md(string text, MarkdownTextSelectionOptions options) =>
             Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, new MarkdownOptions { TextSelection = options });
         var link = RichTextBlock("").Set(control =>
@@ -32,6 +38,22 @@ internal sealed class MarkdownSelectionInputFixture : Component
             paragraph.Inlines.Add(hyperlink);
             control.Blocks.Add(paragraph);
         });
+        var customLink = Microsoft.UI.Reactor.Advanced.Factories.Markdown(
+            "custom start [button link](https://example.com/custom) after",
+            new MarkdownOptions
+            {
+                TextSelection = _outerOptions,
+                LinkBuilder = link => Button(link.Text).AutomationId("SelectionCustomLink")
+                    .OnMountAdd(fe => ((Button)fe).Click += OnCustomLinkClick)
+                    .OnUnmountAdd(fe => ((Button)fe).Click -= OnCustomLinkClick),
+            });
+        var first = MarkdownTextSelection.Surface("first", TextBlock("first")).WithKey("first");
+        var second = Border(MarkdownTextSelection.Surface("second", TextBlock("second")))
+            .WithKey("second").OnMountAdd(fe => _membershipBorder = (Border)fe);
+        var third = MarkdownTextSelection.Surface("third", TextBlock("third")).WithKey("third");
+        var members = new List<Element> { first, second };
+        if (memberAdded) members.Add(third);
+        if (reversed) members.Reverse();
         return VStack(
             TextBlock("Clicks 0").AutomationId("SelectionClicks").Set(text =>
             {
@@ -48,15 +70,43 @@ internal sealed class MarkdownSelectionInputFixture : Component
             Button("Stream", () => setStreamed(true)).AutomationId("SelectionStream"),
             MarkdownTextSelection.Scope(_outerOptions, VStack(
                 Md("outer text", _outerOptions),
-                MarkdownTextSelection.Scope(_innerOptions, Md(streamed ? "inner text streamed" : "inner text", _innerOptions))
+                MarkdownTextSelection.Scope(_innerOptions,
+                    VStack(Md(streamed ? "new inner text" : "inner text", _innerOptions)).Set(TracePointerRouting))
                     .AutomationId("SelectionInner"),
+                customLink,
                 MarkdownTextSelection.Surface("native link", link)).Set(TracePointerRouting))
                 .AutomationId("SelectionOuter"),
             ItemsView(new[] { "message" }, row => row, (_, _) =>
                 ItemContainer(MarkdownTextSelection.Scope(_longOptions,
                     Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
                     .AutomationId("SelectionLong")))
-                .Height(180).AutomationId("SelectionTimeline")).Width(450);
+                    .Height(180).AutomationId("SelectionTimeline"),
+            Border(TextBlock("\u00A0").AutomationId("SelectionBlank").AutomationName("Blank chat"))
+                    .Height(48).Background("#00000000")
+                    .OnMountAdd(fe => ((Border)fe).Tapped += OnBlankTapped)
+                    .OnUnmountAdd(fe => ((Border)fe).Tapped -= OnBlankTapped),
+            TextBox().Width(420).AutomationId("SelectionComposer"),
+            Button("Toggle member", () => setMemberAdded(!memberAdded)).AutomationId("SelectionAddMember"),
+            Button("Toggle member visibility", () =>
+            {
+                if (_membershipBorder is { } border)
+                    border.Visibility = border.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            }).AutomationId("SelectionToggleMemberVisibility"),
+            Button("Reverse members", () => setReversed(true)).AutomationId("SelectionReverseMembers"),
+            MarkdownTextSelection.Scope(_membershipOptions, VStack(members.ToArray()))
+                .AutomationId("SelectionMembership")).Width(450);
+    }
+
+    private void OnBlankTapped(object sender, TappedRoutedEventArgs args)
+    {
+        if (sender is Border { Child: TextBlock blank })
+            AutomationProperties.SetHelpText(blank, $"Blank clicks {++_blankClicks}");
+    }
+
+    private void OnCustomLinkClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button button)
+            AutomationProperties.SetHelpText(button, $"Custom clicks {++_customClicks}");
     }
 
     private static void TracePointerRouting(StackPanel panel)

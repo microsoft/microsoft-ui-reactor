@@ -1,6 +1,5 @@
 using System;
 using Microsoft.UI.Reactor.Core.V1Protocol;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
@@ -44,10 +43,7 @@ public partial record IconElement
                 bitmapIcon.ShowAsMonochrome = bi.ShowAsMonochrome;
                 return true;
             case PathIconData pi when icon is WinUI.PathIcon pathIcon:
-                if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
-                    $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
-                    is Geometry geo)
-                    pathIcon.Data = geo;
+                pathIcon.Data = PathMarkup.Convert(pi.Data);
                 return true;
             case ImageIconData ii when icon is WinUI.ImageIcon imageIcon:
                 imageIcon.Source = new BitmapImage(ii.Source);

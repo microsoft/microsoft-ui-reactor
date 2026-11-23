@@ -915,7 +915,7 @@ public class DocImageIntegrityTests
     [Fact]
     public void Committed_screenshot_corpus_has_no_blank_images()
     {
-        var imagesDir = global::System.IO.Path.Join(FindRepoRoot(), "docs", "guide", "images");
+        var imagesDir = global::System.IO.Path.Join(TestRepo.Root, "docs", "guide", "images");
         Assert.True(global::System.IO.Directory.Exists(imagesDir), $"images dir not found: {imagesDir}");
 
         var files = global::System.IO.Directory
@@ -983,8 +983,8 @@ public class DocImageIntegrityTests
     [Fact]
     public void Committed_corpus_passes_the_gate_end_to_end()
     {
-        var imagesDir = global::System.IO.Path.Join(FindRepoRoot(), "docs", "guide", "images");
-        var guideDir = global::System.IO.Path.Join(FindRepoRoot(), "docs", "guide");
+        var imagesDir = global::System.IO.Path.Join(TestRepo.Root, "docs", "guide", "images");
+        var guideDir = global::System.IO.Path.Join(TestRepo.Root, "docs", "guide");
 
         var files = global::System.IO.Directory
             .GetFiles(imagesDir, "*.png", global::System.IO.SearchOption.AllDirectories);
@@ -1056,20 +1056,6 @@ public class DocImageIntegrityTests
         using var ms = new MemoryStream();
         bmp.Save(ms, ImageFormat.Png);
         return ms.ToArray();
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new global::System.IO.DirectoryInfo(global::System.AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new global::System.InvalidOperationException(
-            "Could not locate repo root (Reactor.slnx) from test base dir.");
     }
 
     /// <summary>

@@ -160,8 +160,17 @@ public void ReconcileStop(int elementsDiffed, int elementsSkipped, int uiElement
 `ReconcileStop` is the most-consumed event in the catalog — every
 [reconcile pass](reconciliation.md) emits exactly one of these, and
 the four counters (elements diffed, elements skipped, UI elements
-created, UI elements modified) are the per-pass cost summary that
-the `perf` CLI verbs read. Pairing `ReconcileStart` (event id 1) with
+created, UI elements modified) are the per-pass cost summary. A
+`dotnet-trace` or PerfView capture of `Microsoft-UI-Reactor` reads
+them off the payload, and so does an in-process
+`ReactorTrace.Subscribe` callback. The same reconciler counters also
+surface without a trace as `LastDiffed`, `LastSkipped`, `LastCreated`
+and `LastModified` on `ReactorHost.Stats` and `ReactorHostControl.Stats`
+(`RenderStats`), sampled about once a second from the latest pass. The raw
+`Microsoft-UI-Reactor-Perf` provider that `winapp perf` records does
+not carry them; its reconcile span counts child edits instead (see
+[Recording without elevation](#recording-without-elevation)).
+Pairing `ReconcileStart` (event id 1) with
 `ReconcileStop` (event id 2) over `Task = Tasks.Reconcile` with
 `Start` / `Stop` opcodes is what makes the pair show up as a
 duration band in PerfView's timeline view instead of as two
@@ -208,7 +217,14 @@ host render pass, a `ComponentRender` span per component render
 naming the component whose setter ran. At the default level each pass
 also names the component whose request scheduled it, each component
 span carries the C# line that created the component (when source
-mapping is on), and each reconcile counts its child edits. Function and
+mapping is on), and each reconcile counts its child edits. Each
+component span also says whether the render was worth it: whether a
+memo gate let it through (`memoMiss`), how many controls it changed
+(`changes`, `0` for a render that changed nothing on screen), and how
+many state writes its render and effects made (`ownStateSets`, spec 023's
+setState fan-out check). A memo component its parent re-rendered but
+whose props held writes a `ComponentSkip` instead, so a tool can show a
+memo hit rate per component. Function and
 memo components are named by their render function, as DevTools names
 them. Its events are TraceLogging, so
 WPA and any TDH-based decoder read them without a manifest, and they

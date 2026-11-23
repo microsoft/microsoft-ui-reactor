@@ -27,7 +27,7 @@ public sealed class SiteRootRedirectTests
     [Fact]
     public async Task Site_root_404_redirect_cases_pass()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var testScript = Path.Join(repoRoot, "docs", "_site-root", "404.redirect.test.js");
 
         Assert.True(
@@ -64,17 +64,5 @@ public sealed class SiteRootRedirectTests
         Assert.True(
             process.ExitCode == 0,
             $"docs/_site-root/404.redirect.test.js failed (exit {process.ExitCode}):{Environment.NewLine}{output}");
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("Reactor repo root not found from test cwd.");
     }
 }

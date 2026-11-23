@@ -104,7 +104,8 @@ public sealed partial class Reconciler
         // be skipped (e.g. ShallowEquals false) never pay for the subtree traversal,
         // and HasActiveContextValues short-circuits it away entirely when no provider
         // is on the stack.
-        if (Element.ShallowEquals(oldEl, newEl)
+        bool shallowEqual = Element.ShallowEquals(oldEl, newEl);
+        if (shallowEqual
             && Element.ModifiersEqual(oldModifiers, modifiers)
             && oldEl.HasCallbacks == newEl.HasCallbacks
             && !ForceRenderThroughWrapper(newEl)
@@ -235,8 +236,20 @@ public sealed partial class Reconciler
         // Release removed declarations before setters. A shared target can change a
         // retained name's trigger before the decorator reaches its own playback.
         if (oldEl.KeyframeAnimations is { } oldKeyframes && !ReferenceEquals(oldKeyframes, keyframes))
+        {
+            // Stop removed entries before the handler and modifiers run, so the cleanup cannot
+            // cancel an animation a shared target or a changed modifier starts in this update
+            // (#1641). It runs first because the release below forgets removed names. A
+            // decorator sharing this control shares its (control, name) slots, so a name the
+            // decorator still declares is retained.
+            var retainedKeyframes = keyframes;
+            if (modifierParent is not null)
+                retainedKeyframes = WithSharedKeyframes(WithSharedKeyframes(retainedKeyframes,
+                    modifierParent.KeyframeAnimations), ModifierUpdate.Root?.KeyframeAnimations);
+            ClearKeyframeAnimations(control, oldKeyframes, ownedOnly: true, retained: retainedKeyframes);
             ReleaseRemovedKeyframeChannels(control, oldKeyframes, keyframes, targetCanAdvanceTrigger
                 ? KeyframeReleaseStage.BeforeSharedTarget : KeyframeReleaseStage.BeforeHandler);
+        }
 
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
@@ -341,6 +354,11 @@ public sealed partial class Reconciler
             && _highlightModified is not null
             && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
+        // The same rule feeds the perf ComponentRender spans' `changes` (a replacement was
+        // counted by its Mount, and the control it replaces by its unmount).
+        if (result is null && Diagnostics.ReactorPerfTrace.ComponentEnabled
+            && PerfUpdateChanged(oldEl, newEl, oldModifiers, modifiers, shallowEqual))
+            Diagnostics.ComponentPerfTally.AddChanges(1);
         if (target is WinUI.TitleBar preModCtl)
         {
             // Setters have already run (inside the descriptor handler) but modifiers have
@@ -430,8 +448,12 @@ public sealed partial class Reconciler
             ApplyKeyframeAnimations(target, keyframes);
         }
         else if (oldEl.KeyframeAnimations is not null)
-            ClearKeyframeAnimations(target, oldEl.KeyframeAnimations);
-
+        {
+            // The keyframes took the visual, so facade transforms the setters wrote in this
+            // update must move to it, as the cleanup that used to run here did (#1641).
+            try { AnimationHelper.GetElementVisual(target); }
+            catch { /* No compositor (e.g. unit tests) */ }
+        }
         // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
         if (newEl.ScrollAnimation is not null)
             ApplyScrollAnimation(target, newEl.ScrollAnimation);
@@ -1660,7 +1682,7 @@ public sealed partial class Reconciler
     /// </summary>
     private static void StartMoveOffsetAnimation(UIElement container, Curve curve)
     {
-        var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+        var visual = AnimationHelper.GetElementVisual(container);
         var compositor = visual.Compositor;
         var anim = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
         // Implicit animations fire automatically when WinUI assigns the

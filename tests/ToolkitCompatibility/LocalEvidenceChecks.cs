@@ -61,6 +61,11 @@ internal static class LocalEvidenceChecks
                 Program.Results.Note($"UIA gauge Value={range.Value}; Minimum={range.Minimum}; Maximum={range.Maximum}");
                 break;
             case Wct.Segmented segmented:
+                // Diagnostic parity with the standalone native probe does not clear this scenario.
+                using (var diagnostic = new StreamWriter(
+                    Path.Combine(Path.GetDirectoryName(Program.Options.Output)!, "segmented-uia.txt")) { AutoFlush = true })
+                    await SegmentedUiaDiagnostics.CaptureAsync(segmented, "sample-mappings",
+                        message => { Program.Results.Note(message); diagnostic.WriteLine(message); }, CompatibilityRoot.WaitAsync);
                 // The root peer can be a named container without a Selection pattern, so selection
                 // identity is read from each item's SelectionItem provider.
                 var selection = peer?.GetPattern(PatternInterface.Selection) as ISelectionProvider;
@@ -211,12 +216,23 @@ internal static class LocalEvidenceChecks
         await CaptureAsync(control, $"{name}-HighContrast");
     }
 
-    internal static Task TextScalingAsync()
+    internal static async Task TextScalingAsync(FrameworkElement control, string name)
     {
         double scale = new UISettings().TextScaleFactor;
         Program.Results.Note($"OS TextScaleFactor={scale}");
-        throw new ScenarioBlockedException(
-            $"Observed OS text scale {scale}; alternate global settings were not authorized or exercised.", "approval");
+        string? blocker = TextScalingMeasurements.BlockReason(name, scale);
+        if (blocker is not null)
+            throw new ScenarioBlockedException(blocker == "approval"
+                ? $"Observed OS text scale {scale}; this check requires a real setting above 100% on an approved host. No setting was changed."
+                : $"No text-scaling oracle is implemented for {name}; only SettingsCard string headers and TextBlock descriptions are covered.",
+                blocker);
+
+        await CaptureAsync(control, $"{name}-TextScale-{scale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}");
+        TextScalingChecks.Check(control);
+        double finalScale = new UISettings().TextScaleFactor;
+        Program.Results.Note($"OS TextScaleFactor after capture/check={finalScale}");
+        Program.Check(finalScale == scale, "OS text scale changed during the scenario; measurements are not a stable-scale result.");
+        Program.Results.Note("SettingsCard header/description fit checks passed at the observed OS scale. Capture requires visual review; other text, long-content stress and scale-to-scale growth are not established.");
     }
 
     private static async Task CaptureAsync(FrameworkElement control, string name)

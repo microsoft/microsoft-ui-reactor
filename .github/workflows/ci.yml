@@ -133,6 +133,34 @@ jobs:
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj -p:Platform=x64
 
+      - name: Restore (ToolkitCompatibility.HeadlessTests)
+        run: dotnet restore tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj
+
+      - name: Extract the base transforms ledger
+        # Spec 066 §12.1 C.2: TransformsMatrixTests checks that every change between the behaviour
+        # ledger on the PR's base commit and this PR's ledger is declared, ignoring expectations the
+        # base already had. The base copies are fetched here because the checkout is shallow. Outside
+        # a pull request there is no base to diff.
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $dir = 'tests/Reactor.AppTests.Host/SelfTest/Baselines'
+          if (-not $env:BASE_SHA) { "REACTOR_TRANSFORMS_LEDGER_BASE=skip" >> $env:GITHUB_ENV; exit 0 }
+          git fetch --no-tags --depth=1 origin $env:BASE_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't fetch the base commit $env:BASE_SHA." }
+          foreach ($pair in @(@('transforms-ledger.json', 'REACTOR_TRANSFORMS_LEDGER_BASE'), @('transforms-ledger.expected.json', 'REACTOR_TRANSFORMS_EXPECTED_BASE'))) {
+            $spec = "$($env:BASE_SHA):$dir/$($pair[0])"
+            git cat-file -e $spec 2>$null
+            if ($LASTEXITCODE -ne 0) { "$($pair[1])=absent" >> $env:GITHUB_ENV; continue }
+            $out = Join-Path $env:RUNNER_TEMP "base-$($pair[0])"
+            # cmd's redirect keeps git's bytes; a PowerShell pipe would re-decode them (the reasons hold "§").
+            cmd /c "git show $spec > `"$out`""
+            if ($LASTEXITCODE -ne 0) { throw "Couldn't read $spec." }
+            "$($pair[1])=$out" >> $env:GITHUB_ENV
+          }
+          $global:LASTEXITCODE = 0
+
       - name: Test (Reactor.Tests)
         # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
         # skills/reactor.api.txt. Without them, building Reactor.Tests regenerates the
@@ -164,6 +192,10 @@ jobs:
         # Same !cancelled() rationale as the step above.
         if: ${{ !cancelled() }}
         run: dotnet test tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj --no-restore -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
+
+      - name: Test (ToolkitCompatibility.HeadlessTests)
+        if: ${{ !cancelled() }}
+        run: dotnet test tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj --no-restore
 
   audit-ledger:
     name: Audit ledger gate
@@ -520,6 +552,8 @@ jobs:
           # fails here with a named cause instead of as a discovery-count mismatch.
           ./tests/Reactor.AppTests/Select-E2EShard.Tests.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./tests/Reactor.AppTests/Select-E2EShard.ps1 -Shard ${{ matrix.shard }} -Shard1Classes $env:E2E_SHARD1_CLASSES
 
       - name: Test
@@ -564,15 +598,9 @@ jobs:
             throw "AppTests TRX results were not produced."
           }
 
-          $blocked = @()
-          $results = Select-Xml -Path $trx.FullName -XPath "//*[local-name()='UnitTestResult' and (@outcome='Inconclusive' or @outcome='NotExecuted' or @outcome='Skipped')]"
-          foreach ($result in $results) {
-            $messageNode = $result.Node.SelectSingleNode("*[local-name()='Output']/*[local-name()='ErrorInfo']/*[local-name()='Message']")
-            $message = if ($messageNode) { $messageNode.InnerText } else { "" }
-            if ($message -match "cannot inject synthetic input|workstation is|locked desktop|disconnected session") {
-              $blocked += $result.Node.GetAttribute("testName")
-            }
-          }
+          . .\tests\Reactor.AppTests\InputGuardClassification.ps1
+          [xml]$results = Get-Content -LiteralPath $trx.FullName -Raw
+          $blocked = @(Get-InputGuardBlockedTests $results)
 
           if ($blocked.Count -gt 0) {
             throw "Input-injection E2Es were Inconclusive instead of executed: $($blocked -join ', ')"
@@ -679,7 +707,7 @@ jobs:
             10.0.x
             11.0.x
 
-      # Fuzz-free pass: walk the seed corpus once through both harness bodies.
+      # Fuzz-free pass: walk the seed corpus once through the markdown harness body.
       # Guards against harness rot (parser API drift, broken seed inputs) without
       # needing the libfuzzer-dotnet driver or SharpFuzz instrumentation tool in
       # the CI image. Using `dotnet run` keeps the invocation independent of the
