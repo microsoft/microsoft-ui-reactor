@@ -2,10 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "blume";
+import { script } from "blume/analytics";
+
+import { DEFAULT_SITE_BASE, LATEST_ALIAS, MAIN_VERSION } from "./scripts/publish.mjs";
 
 // One build per published version. scripts/publish.mjs sets these; a local
-// `npm run dev` sets none and gets a plain site at the root with no version
-// switcher or banner.
+// `npm run dev` sets none and gets a plain site at the root, whose version
+// menu links to the published docs, and no banner.
 //
 //   DOCS_SITE           origin the site is served from
 //   DOCS_BASE           path the build is served under, e.g. /microsoft-ui-reactor/main
@@ -19,7 +22,7 @@ const version = env.DOCS_VERSION || undefined;
 const alias = env.DOCS_ALIAS || undefined;
 
 // The site root: the folder that holds every version, and redirects to latest/.
-const siteRoot = base && version ? base.slice(0, base.lastIndexOf("/") + 1) : "/";
+const siteRoot = base && version ? base.slice(0, base.lastIndexOf("/") + 1) : `${DEFAULT_SITE_BASE}/`;
 const latestUrl = `${site}${siteRoot}`;
 const versionUrl = (id: string) => `${site}${siteRoot}${id}/`;
 
@@ -33,15 +36,29 @@ const readJson = <T>(file: string | undefined, fallback: T): T =>
   file && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as T) : fallback;
 
 const published = readJson<PublishedVersion[]>(env.DOCS_VERSIONS_FILE, []);
-const releases = published.map((entry) => entry.version).filter((id) => id !== "main");
 
-// Older builds keep the list they were built with, so the first two entries
-// are the ones that never go stale: they follow the alias, not a number.
-const versionItems = [
-  { label: "Latest release", path: alias === "latest" ? "/" : versionUrl("latest") },
-  { label: "Development (main)", path: version === "main" ? "/" : versionUrl("main") },
-  ...releases.map((id) => ({ label: id, path: alias !== "latest" && version === id ? "/" : versionUrl(id) })),
-];
+// The version menu, in versions.json order like mike's: main, then releases
+// newest first, with the release that holds "latest" linking to /latest/.
+// This list is the one the build was made with; public/js/version-menu.js
+// rebuilds it from the live versions.json, so older builds list newer
+// releases too, and opens the same page in the version you pick.
+const isLatest = (entry: PublishedVersion) => entry.aliases?.includes(LATEST_ALIAS) ?? false;
+const versionTag = (entry: PublishedVersion) =>
+  isLatest(entry) ? LATEST_ALIAS : entry.version === MAIN_VERSION ? "unreleased" : undefined;
+const entries = version && !published.some((entry) => entry.version === version)
+  ? [{ version, aliases: alias ? [alias] : [] }, ...published]
+  : published;
+const versionItems = version
+  ? entries.map((entry) => ({
+      label: entry.version,
+      tag: versionTag(entry),
+      path: entry.version === version ? "/" : versionUrl(isLatest(entry) ? LATEST_ALIAS : entry.version),
+    }))
+  : [
+      { label: "Local", tag: "this build", path: "/" },
+      { label: "Latest release", tag: LATEST_ALIAS, path: versionUrl(LATEST_ALIAS) },
+      { label: MAIN_VERSION, tag: "unreleased", path: versionUrl(MAIN_VERSION) },
+    ];
 
 let banner: { content: string; link: { href: string; text: string } } | undefined;
 if (version && alias !== "latest") {
@@ -75,6 +92,17 @@ export default defineConfig({
   },
   banner,
   redirects,
+  // Not analytics: script() is Blume's hook for a site script on every page.
+  // It loads in production builds only, which is every published version.
+  analytics: version
+    ? [
+        script({
+          src: "/js/version-menu.js",
+          strategy: "defer",
+          attributes: { "data-root": siteRoot, "data-version": version },
+        }),
+      ]
+    : [],
   navigation: {
     tabs: [
       { label: "Home", path: "/" },
@@ -85,7 +113,7 @@ export default defineConfig({
       { label: "API reference", path: "/reference" },
       { label: "How it works", path: "/how-it-works" },
     ],
-    selectors: version ? [{ kind: "version", label: "Version", items: versionItems }] : [],
+    selectors: [{ kind: "version", label: "Version", items: versionItems }],
   },
   footer: {
     copyright: "© Microsoft Corporation. Released under the MIT License.",
