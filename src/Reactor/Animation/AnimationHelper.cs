@@ -257,7 +257,7 @@ internal static class AnimationHelper
             case LinearCurve linear:
             {
                 var anim = compositor.CreateScalarKeyFrameAnimation();
-                anim.InsertKeyFrame(1.0f, compositorValue);
+                anim.InsertKeyFrame(1.0f, compositorValue, compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
                 visual.StartAnimation(target, anim);
                 break;
@@ -299,7 +299,7 @@ internal static class AnimationHelper
             {
                 var linear = curve as LinearCurve ?? new LinearCurve(TimeSpan.FromMilliseconds(300));
                 var anim = compositor.CreateScalarKeyFrameAnimation();
-                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
+                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue", compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
                 anim.Target = target;
                 return anim;
@@ -337,7 +337,7 @@ internal static class AnimationHelper
             {
                 var linear = curve as LinearCurve ?? new LinearCurve(TimeSpan.FromMilliseconds(300));
                 var anim = compositor.CreateVector3KeyFrameAnimation();
-                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
+                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue", compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
                 anim.Target = target;
                 return anim;
@@ -375,7 +375,7 @@ internal static class AnimationHelper
             {
                 var linear = curve as LinearCurve ?? new LinearCurve(TimeSpan.FromMilliseconds(300));
                 var anim = compositor.CreateScalarKeyFrameAnimation();
-                anim.InsertKeyFrame(1.0f, targetValue);
+                anim.InsertKeyFrame(1.0f, targetValue, compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
                 return anim;
             }
@@ -412,7 +412,7 @@ internal static class AnimationHelper
             {
                 var linear = curve as LinearCurve ?? new LinearCurve(TimeSpan.FromMilliseconds(300));
                 var anim = compositor.CreateVector3KeyFrameAnimation();
-                anim.InsertKeyFrame(1.0f, targetValue);
+                anim.InsertKeyFrame(1.0f, targetValue, compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
                 return anim;
             }
@@ -480,7 +480,7 @@ internal static class AnimationHelper
             case LinearCurve linear:
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
-                anim.InsertKeyFrame(1.0f, value);
+                anim.InsertKeyFrame(1.0f, value, compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
                 visual.StartAnimation(target, anim);
                 break;

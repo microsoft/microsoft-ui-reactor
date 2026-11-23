@@ -93,11 +93,11 @@ that already exercises the path.
   for fully-qualified `System` refs (the `Microsoft.UI.System` namespace shadows).
 - **Selftest fixture:** file under `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`,
   subclass `SelfTestFixtureBase`, use `H.CreateHost()`, `host.Mount(...)`,
-  `Harness.Render()` / `WaitFor(...)`, `H.FindControl<T>()`, `H.Check(...)`. **Register in
-  BOTH** `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs` `AllFixtures`
-  **and** its `Create()` switch.
-- **E2E fixture:** register in BOTH `AllFixtures` and the `Build` switch of
-  `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Use `Component<T>()` fixtures for
+  `Harness.Render()` / `WaitFor(...)`, `H.FindControl<T>()`, `H.Check(...)`. Add one
+  name-and-factory entry to the ordered `Registrations` table in
+  `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`.
+- **E2E fixture:** add one name-and-factory entry to the ordered `Registrations`
+  table in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Use `Component<T>()` fixtures for
   stateful UI — raw `ctx.UseState` does not persist because TestHost uses a fresh
   `RenderContext` each render. Add `[E2eRetry(3)]`, drive real input through the native
   winapp verbs (`App.Click`, `App.SendKeys(..., viaSendInput: true)`, `App.Drag`), which

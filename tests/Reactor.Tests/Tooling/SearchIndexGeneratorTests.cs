@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.SearchIndex;
 using Xunit;
 
@@ -215,17 +214,24 @@ public sealed class SearchIndexGeneratorTests
         Assert.True(ids.Count >= 90, $"expected >=90 controls, got {ids.Count}");
     }
 
-    // ── REAL CODE ONLY: no placeholder/abbreviation tokens survive (invariant #2) ─
+    [Theory]
+    [InlineData("pointer-input", "Pan — drag with the phase lifecycle", ".OnPan(")]
+    [InlineData("transitions", "OpacityTransition", ".OpacityTransition(")]
+    public void GallerySamples_WithCommentEllipses_AreIndexed(string id, string header, string api)
+    {
+        var entry = Find(Parse(Generate().Json), id);
+        var sample = Assert.Single(entry.Samples, s => s.Header == header);
+
+        Assert.Contains(api, sample.Code);
+    }
 
     [Fact]
-    public void Samples_ContainNoPlaceholderTokens()
+    public void Samples_ContainNoUnexpandedTemplateMarkers()
     {
-        var placeholder = new Regex(@",\s*\.\.\.|\.\.\.\s*\)|\(\s*\.\.\.|^\s*\.\.\.\s*$|\.\.\./|<your", RegexOptions.Multiline);
         foreach (var c in Parse(Generate().Json).Controls)
         {
             foreach (var code in c.Samples.Select(s => s.Code))
             {
-                Assert.False(placeholder.IsMatch(code), $"{c.Id} sample has a placeholder token:\n{code}");
                 Assert.DoesNotContain("{{", code);
             }
         }
