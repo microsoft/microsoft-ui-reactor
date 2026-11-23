@@ -72,6 +72,55 @@ internal static class ThemeRefStyleFixtures
         return await Harness.WaitFor(isDark);
     }
 
+    internal sealed class RichTextBlockForeground(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => WithThemeKey(H, "TrsRichTextForeground", async host =>
+        {
+            var brush = new SolidColorBrush(ExplicitColor);
+            Action<int>? setPhase = null;
+            host.Mount(ctx =>
+            {
+                var (phase, setter) = ctx.UseState(0);
+                setPhase = setter;
+                var text = RichTextBlock("themed rich text");
+                return VStack(phase switch
+                {
+                    0 or 2 => text.Foreground(Theme.Ref("TrsRichTextForeground")),
+                    1 => text.Foreground(brush),
+                    _ => text,
+                }).RequestedTheme(ElementTheme.Light);
+            });
+            await Harness.Render();
+
+            var text = H.FindControl<WinUI.RichTextBlock>(_ => true);
+            H.Check("ThemeRefStyle_RichText_ForegroundMounted", ColorOf(text?.Foreground) == LightColor,
+                $"foreground={ColorOf(text?.Foreground)}");
+            if (text is null) return;
+
+            H.Check("ThemeRefStyle_RichText_FollowsTheme",
+                await FlipToDark(text, () => ColorOf(text.Foreground) == DarkColor),
+                $"foreground={ColorOf(text.Foreground)}");
+
+            setPhase!(1);
+            await Harness.Render();
+            H.Check("ThemeRefStyle_RichText_ExplicitBrush", ReferenceEquals(text.Foreground, brush));
+
+            setPhase!(2);
+            await Harness.Render();
+            var expected = text.ActualTheme == ElementTheme.Dark ? DarkColor : LightColor;
+            H.Check("ThemeRefStyle_RichText_ExplicitToThemed", ColorOf(text.Foreground) == expected,
+                $"foreground={ColorOf(text.Foreground)}");
+
+            setPhase!(3);
+            await Harness.Render();
+            H.Check("ThemeRefStyle_RichText_BindingRemoved",
+                ColorOf(text.Foreground) != LightColor && ColorOf(text.Foreground) != DarkColor,
+                $"foreground={ColorOf(text.Foreground)}");
+            H.Check("ThemeRefStyle_RichText_SameControl",
+                ReferenceEquals(H.FindControl<WinUI.RichTextBlock>(_ => true), text));
+        });
+    }
+
     /// <summary>
     /// <c>SplitView.PaneBackground(ThemeRef)</c> themes the pane background (it had no Style
     /// mapping and silently did nothing), including when it replaces an explicit
