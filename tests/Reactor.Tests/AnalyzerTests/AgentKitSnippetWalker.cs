@@ -366,6 +366,7 @@ internal sealed class ReactorSurface
     /// The <c>T</c> of <c>default(T)</c> as written, or <see langword="null"/> for a bare
     /// <c>default</c>.
     /// </param>
+    /// <param name="parameterName">The argument name used to narrow the overload set, if specified.</param>
     /// <remarks>
     /// <para>
     /// <c>default</c> is target-typed, so syntax alone says nothing: <c>default(Brush)</c> is null,
@@ -554,10 +555,16 @@ internal enum AgentKitFindingKind
 }
 
 /// <summary>One accusation against one line of one shipped document.</summary>
+/// <param name="Kind">The rule that produced the finding.</param>
+/// <param name="Path">Repository-relative path of the document.</param>
 /// <param name="Line">Line of the offending modifier itself — where a reader looks.</param>
 /// <param name="ChainStartLine">Line the fluent chain starts on. A multi-line chain puts its
 /// <c>// Wrong:</c> marker above the <em>head</em>, not above the modifier three lines down, so
 /// counterexample detection anchors here while the message points at <paramref name="Line"/>.</param>
+/// <param name="Modifier">Name of the modifier that triggered the finding.</param>
+/// <param name="ElementName">Name of the element the finding concerns.</param>
+/// <param name="Replacement">Suggested modifier to use on that element, if available.</param>
+/// <param name="Detail">Explanation shown with the finding.</param>
 internal sealed record AgentKitFinding(
     AgentKitFindingKind Kind,
     string Path,
