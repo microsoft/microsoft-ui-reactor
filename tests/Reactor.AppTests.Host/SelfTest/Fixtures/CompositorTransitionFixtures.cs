@@ -59,7 +59,6 @@ internal static class CompositorTransitionFixtures
             using var motion = TransitionEngine.OverrideAnimationsEnabled(true);
             try { await Run(); }
             catch (FrameTimeoutException ex) { H.Skip(Name, ex.Message); }
-            catch (Exception ex) { H.Check(Name + "_NoThrow", false, $"{ex.GetType().Name}: {ex.Message}"); }
             finally { await Reset(); }
         }
 
@@ -637,13 +636,13 @@ internal static class CompositorTransitionFixtures
     /// </summary>
     internal sealed class StaggerUpdated(Harness h) : TransitionFixture(h, "CompositorTransitions_StaggerUpdated")
     {
-        private static TimeSpan? _seen;
+        private TimeSpan? _seen;
 
         private static TimeSpan? KeyDelay(UIElement child, string key)
             => ElementCompositionPreview.GetElementVisual(child).ImplicitAnimations is { } keys
                 && keys.TryGetValue(key, out var anim) && anim is KeyFrameAnimation keyFrame ? keyFrame.DelayTime : null;
 
-        private static BorderElement Probe(string? key, double opacity, bool scale = false)
+        private BorderElement Probe(string? key, double opacity, bool scale = false)
         {
             var child = Target().Opacity(opacity).OpacityTransition(Long);
             if (scale) child = child.Scale(0.9f).ScaleTransition(new Vector3Transition { Duration = Long });
@@ -687,7 +686,7 @@ internal static class CompositorTransitionFixtures
                 $"rotationAxis={KeyDelay(second, "RotationAxis")} opacity={KeyDelay(second, "Opacity")}");
 
             // A child wrapped in a ModifiedElement, whose opacity the wrapper declares.
-            static Element Wrapped(double opacity) => new ModifiedElement(
+            Element Wrapped(double opacity) => new ModifiedElement(
                 Target().OpacityTransition(Long).Set(b => _seen = KeyDelay(b, "Opacity")).WithKey("w"),
                 TextBlock("").Opacity(opacity).Modifiers!).WithKey("w");
             await Update(StaggeredPanel(step, Target().OpacityTransition(Long).WithKey("a"), Wrapped(1)));
@@ -780,7 +779,7 @@ internal static class CompositorTransitionFixtures
             listener.Reset();
             Exception? handoff = null;
             try { await Mount(Target().Set(static b => b.RotationAxis = Vector3.UnitX).OpacityTransition()); }
-            catch (Exception ex) { handoff = ex; }
+            catch (UnauthorizedAccessException ex) { handoff = ex; }
             H.Check(Name + "_Handoff_Throws", handoff is UnauthorizedAccessException, handoff?.GetType().Name ?? "none");
             Warns(Name + "_Handoff_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.HandoffOperation, StringComparison.Ordinal), listener.Describe());
 
@@ -794,7 +793,7 @@ internal static class CompositorTransitionFixtures
             listener.Reset();
             Exception? setter = null;
             try { await Update(WithSetter(10, transition: true)); }
-            catch (Exception ex) { setter = ex; }
+            catch (UnauthorizedAccessException ex) { setter = ex; }
             H.Check(Name + "_Setter_Throws", setter is UnauthorizedAccessException, setter?.GetType().Name ?? "none");
             Warns(Name + "_Setter_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.SetterOperation, StringComparison.Ordinal), listener.Describe());
 
@@ -807,12 +806,10 @@ internal static class CompositorTransitionFixtures
             // and the departing one's blocked visual doesn't fail the update.
             await Mount(Flyout(Target().Set(static b => b.OpacityTransition = new ScalarTransition()), TextBlock("content")));
             var departing = Control;
-            Exception? replaced = null;
-            try { await Update(Flyout(Button("new").Width(100).Height(40), TextBlock("content")).OpacityTransition(Long)); }
-            catch (Exception ex) { replaced = ex; }
-            H.Check(Name + "_ReplacedBlockedControl_NoThrow", replaced is null, replaced?.GetType().Name ?? "");
-            H.Check(Name + "_ReplacedBlockedControl_Transitions", replaced is null && !ReferenceEquals(departing, Control)
-                && Control is Button && Keys() == "Opacity", $"keys={(replaced is null ? Keys() : "-")}");
+            // A throw here fails the fixture (the runner reports it as a crash).
+            await Update(Flyout(Button("new").Width(100).Height(40), TextBlock("content")).OpacityTransition(Long));
+            H.Check(Name + "_ReplacedBlockedControl_Transitions", !ReferenceEquals(departing, Control)
+                && Control is Button && Keys() == "Opacity", $"keys={Keys()}");
         }
     }
 }
