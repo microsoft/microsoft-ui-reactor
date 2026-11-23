@@ -537,7 +537,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
                 Document.Select(0, Document.Text.Length);
                 break;
             case VirtualKey.C when ctrl:
-                CopySelection();
+                CopySelectionCore();
                 break;
             case VirtualKey.Left:
                 Document.Move(-1, extend);
@@ -570,6 +570,11 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal void CopySelection(Action<string>? write = null)
     {
         Refresh();
+        CopySelectionCore(write);
+    }
+
+    private void CopySelectionCore(Action<string>? write = null)
+    {
         string text = Document.SelectedText;
         if (text.Length == 0) return;
         MarkdownSelectionCopy.Write(text, write ?? (static value =>
@@ -951,6 +956,11 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal void Select(int start, int end)
     {
         Refresh();
+        SelectRefreshed(start, end);
+    }
+
+    internal void SelectRefreshed(int start, int end)
+    {
         Document.Select(start, end);
         DrawSelection();
     }

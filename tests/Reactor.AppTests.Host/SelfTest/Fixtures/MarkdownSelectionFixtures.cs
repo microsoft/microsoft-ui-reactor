@@ -149,6 +149,14 @@ internal static partial class MarkdownSelectionFixtures
             H.Check("MdSelection_IdleReconcileDoesNoNativeWork",
                 Work() == before && scopes.SequenceEqual(H.FindAllControls<MarkdownSelectionHost>(_ => true)));
             var streamed = scopes[^1];
+            streamed.HandleKey(global::Windows.System.VirtualKey.A, false, true);
+            H.Check("MdSelection_IdleSelectAllUsesLatestText",
+                streamed.Document.SelectedText == "message 23\nsecond block revision 1");
+            string copied = "";
+            streamed.CopySelection(value => copied = value);
+            H.Check("MdSelection_IdleInputCopiesLatestText",
+                copied == "message 23\nsecond block revision 1");
+            streamed.Select(0, 0);
             var provider = (ITextProvider)FrameworkElementAutomationPeer.CreatePeerForElement(streamed)
                 .GetPattern(PatternInterface.Text);
             H.Check("MdSelection_IdleAutomationReadsLatestText",
@@ -191,9 +199,10 @@ internal static partial class MarkdownSelectionFixtures
             before = Work();
             await Harness.Render();
             H.Check("MdSelection_IdleNativeGeometryRemainsLazy", Work() == before);
-            cachedScope.Refresh();
+            cachedScope.HandleKey(global::Windows.System.VirtualKey.A, false, true);
             H.Check("MdSelection_InteractionRefreshesIdleNativeGeometry",
                 cachedScope.CharacterBounds(0).Height > oldBounds.Height * 1.5);
+            cachedScope.Select(0, 0);
 
             selected.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
             await Harness.Render();
