@@ -4,7 +4,7 @@ Hosted XAML content, web views and maps.
 
 Each factory method returns an element record. Call them through `using static Microsoft.UI.Reactor.Factories;`.
 
-**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
+**Learn more:** [Coming from XAML](../../xaml-developers.md)
 
 ## `MapControl`
 

@@ -2,7 +2,7 @@
 
 Tracing, source maps, component snapshots and developer tools hosting.
 
-**Learn more:** [Diagnostics](../../diagnostics.md)
+**Learn more:** [Diagnostics](../../diagnostics.md), [Devtools](../../devtools.md)
 
 ## Types
 

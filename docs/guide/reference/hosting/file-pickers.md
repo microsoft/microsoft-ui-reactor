@@ -2,6 +2,8 @@
 
 Options for the open file, save file and folder pickers.
 
+**Learn more:** [Desktop integration](../../desktop-integration.md)
+
 ## `FilePickerOptions`
 
 Options for [`RenderContext.PickFileAsync`](../components/RenderContext.md#pickfileasync) and [`RenderContext.PickMultipleFilesAsync`](../components/RenderContext.md#pickmultiplefilesasync).

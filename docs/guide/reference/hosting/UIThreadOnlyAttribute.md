@@ -8,7 +8,7 @@ public sealed class UIThreadOnlyAttribute : Attribute
 
 Namespace: `Microsoft.UI.Reactor.Hosting`. Inherits from [`Attribute`](https://learn.microsoft.com/dotnet/api/system.attribute).
 
-**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
+**Learn more:** [Coming from XAML](../../xaml-developers.md)
 
 ## Remarks
 
