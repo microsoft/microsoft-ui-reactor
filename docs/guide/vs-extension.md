@@ -50,30 +50,41 @@ inspect the accessibility tree, because it is the real WinUI window.
 
 Pick one of these:
 
-- **From a release.** Download `Reactor.VsExtension.vsix` from
-  [GitHub Releases](https://github.com/microsoft/microsoft-ui-reactor/releases),
-  close Visual Studio, and double-click the file. It installs for your user
-  account. The file may be unsigned, so Visual Studio can show a warning.
-- **With `bootstrap.ps1`.** In a source checkout, `bootstrap.ps1` builds the
-  VSIX and installs it into the newest Visual Studio 2026 that has the
-  **Visual Studio extension development** workload. If no such instance
-  exists, it skips this step. Pass `-SkipVsExtension` to skip it on purpose.
-  Later, `mur upgrade` refreshes the extension; see [mur CLI](mur-cli.md).
-- **Build it yourself.** This also needs the **Visual Studio extension
-  development** workload:
+<!-- tabs -->
 
-  ```powershell
-  # Build the VSIX
-  pwsh -File src\vs-reactor\Build-Vsix.ps1
-  # The file is src\vs-reactor\Reactor.VsExtension\bin\Debug\Reactor.VsExtension.vsix
+#### From a release
 
-  # Or build and install it in one step (close Visual Studio first)
-  pwsh -File src\vs-reactor\Reinstall-Vsix.ps1
-  ```
+Download `Reactor.VsExtension.vsix` from
+[GitHub Releases](https://github.com/microsoft/microsoft-ui-reactor/releases),
+close Visual Studio, and double-click the file. It installs for your user
+account. The file may be unsigned, so Visual Studio can show a warning.
 
-  If the restore cannot reach nuget.org, pass `-NuGetSource <url>` or
-  `-NuGetConfig <path>` to either script. A plain `dotnet build` of the
-  extension project makes a VSIX for CI checks only. It cannot be installed.
+#### With bootstrap.ps1
+
+In a source checkout, `bootstrap.ps1` builds the VSIX and installs it into the
+newest Visual Studio 2026 that has the **Visual Studio extension development**
+workload. If no such instance exists, it skips this step. Pass
+`-SkipVsExtension` to skip it on purpose. Later, `mur upgrade` refreshes the
+extension; see [mur CLI](mur-cli.md).
+
+#### Build it yourself
+
+This also needs the **Visual Studio extension development** workload:
+
+```powershell
+# Build the VSIX
+pwsh -File src\vs-reactor\Build-Vsix.ps1
+# The file is src\vs-reactor\Reactor.VsExtension\bin\Debug\Reactor.VsExtension.vsix
+
+# Or build and install it in one step (close Visual Studio first)
+pwsh -File src\vs-reactor\Reinstall-Vsix.ps1
+```
+
+If the restore cannot reach nuget.org, pass `-NuGetSource <url>` or
+`-NuGetConfig <path>` to either script. A plain `dotnet build` of the
+extension project makes a VSIX for CI checks only. It cannot be installed.
+
+<!-- /tabs -->
 
 To work on the extension itself, open `src\vs-reactor` in Visual Studio, set
 `Reactor.VsExtension` as the startup project, and press F5. Visual Studio starts
@@ -81,11 +92,16 @@ a separate Experimental instance (`/RootSuffix Exp`) with the extension loaded.
 
 ### Open the preview
 
-1. Open a solution that contains a Reactor app, and wait until it has loaded.
-2. Open a `.cs` file that contains a component (a class that derives from
-   `Component`).
-3. Choose **View > Other Windows > Reactor Preview**. The command is also on
-   the **Tools** menu.
+<!-- steps -->
+
+1. **Load the solution.** Open a solution that contains a Reactor app, and
+   wait until it has loaded.
+2. **Open a component.** Open a `.cs` file that contains a component (a class
+   that derives from `Component`).
+3. **Show the tool window.** Choose **View > Other Windows > Reactor Preview**.
+   The command is also on the **Tools** menu.
+
+<!-- /steps -->
 
 If the active file belongs to a loaded project, the preview starts right away.
 If not, the tool window opens empty. Open a component file, then select
@@ -150,17 +166,22 @@ updates them while the app runs. It is not on the Visual Studio Marketplace.
 
 You need Node.js with npm, and the .NET SDK on `PATH`.
 
-1. Open the `src/vscode-reactor` folder of a source checkout in VS Code.
-2. Install the build dependencies:
+<!-- steps -->
+
+1. **Open the extension folder.** Open the `src/vscode-reactor` folder of a
+   source checkout in VS Code.
+2. **Install the build dependencies.**
 
    ```powershell
    npm install
    ```
 
-3. Press F5 and pick **Run Extension**. VS Code compiles the extension and
-   opens a second window, the Extension Development Host, with the extension
-   loaded.
-4. In that window, open your Reactor app folder.
+3. **Start the extension.** Press F5 and pick **Run Extension**. VS Code
+   compiles the extension and opens a second window, the Extension
+   Development Host, with the extension loaded.
+4. **Open your app.** In that window, open your Reactor app folder.
+
+<!-- /steps -->
 
 ### Commands
 

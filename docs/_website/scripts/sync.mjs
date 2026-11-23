@@ -413,9 +413,175 @@ const NOT_PROSE = /^\s*([|#>!<\-*+]|\d+[.)]|```|~~~|\[[^\]]+\]:)/;
 // text to `seo.description`, which feeds the <head>, social cards and llms.txt.
 const hasLink = (paragraph) => /\]\(|\]\[|<https?:/.test(paragraph.replace(/(`+)[\s\S]*?[^`]\1(?!`)/g, ""));
 
+// ---------------------------------------------------------------------------
+// Components. A guide page asks for Blume's Tabs, Steps and Prompt with HTML
+// comments, so it still reads well on GitHub:
+//
+//   <!-- tabs -->      each heading at the block's first heading level is a tab
+//   <!-- /tabs -->
+//   <!-- steps -->     an ordered list; `1. **Title.** Text` gives a step title
+//   <!-- /steps -->
+//   <!-- prompt -->    the fenced block after it becomes a prompt with a copy button
+//
+// Blume runs components only in `.mdx` pages, so a page that uses one is
+// written as `.mdx` and made safe for MDX's stricter parser.
+
+const MARKER = /^[ \t]*<!--[ \t]*(\/?)(tabs|steps|prompt)[ \t]*-->[ \t]*$/;
+const ITEM = /^(\d{1,9}[.)])( {1,4})(?! )(.*)$/;
+const STEP_TITLE = /^\*\*(.+?)\*\*[.:]?(?:[ \t]+(.*))?$/;
+const COMPONENT_TAG = /^<\/?(Tabs|Tab|Steps|Step|Prompt)\b/;
+
+/** True when the page asks for a component, so it must be written as `.mdx`. */
+export function usesComponents(source) {
+  const lines = source.replace(/\r\n?/g, "\n").split("\n");
+  const mask = fenceMask(lines);
+  return lines.some((line, i) => !mask[i] && MARKER.test(line));
+}
+
+const attr = (value) => `{${JSON.stringify(value)}}`;
+const indentOf = (line) => /^ */.exec(line)[0].length;
+const dedent = (line, width) => line.slice(Math.min(width, indentOf(line)));
+
+/**
+ * Turns the component markers into Blume components. `out` holds each source
+ * line's converted text, indexed like `lines`; entries are replaced in place,
+ * and may become several lines or null (dropped).
+ */
+function expandComponents(lines, mask, ids, out, file) {
+  const fail = (i, message) => {
+    throw new Error(`docs/guide/${file}:${i + 1}: ${message}`);
+  };
+  const stack = [];
+  for (let i = 0; i < lines.length; i++) {
+    const top = stack.at(-1);
+    const marker = mask[i] ? null : MARKER.exec(lines[i]);
+    if (marker) {
+      const [, closing, kind] = marker;
+      if (closing) {
+        if (kind === "prompt" || top?.kind !== kind) fail(i, `<!-- /${kind} --> closes nothing.`);
+        if (!top.open) fail(i, `the ${kind} block is empty.`);
+        const child = kind === "tabs" ? "Tab" : "Step";
+        out[i] = `\n</${child}>\n\n</${kind === "tabs" ? "Tabs" : "Steps"}>\n`;
+        stack.pop();
+      } else if (kind === "prompt") {
+        i = expandPrompt(lines, mask, out, i, fail);
+      } else {
+        if (top?.kind === "steps") fail(i, `a ${kind} block can't sit inside a step.`);
+        stack.push({ kind, line: i, open: false, level: null, width: 0 });
+        out[i] = kind === "tabs" ? "\n<Tabs>\n" : "\n<Steps>\n";
+      }
+      continue;
+    }
+
+    if (top?.kind === "tabs") {
+      const heading = mask[i] ? null : ids.get(i);
+      if (heading && (top.level === null || heading.level <= top.level)) {
+        if (top.level !== null && heading.level < top.level) fail(i, "a heading above the tab level ends the tabs too early.");
+        top.level = heading.level;
+        const open = `<Tab title=${attr(plainText(heading.text))} id=${attr(heading.id)}>\n`;
+        out[i] = (top.open ? "\n</Tab>\n\n" : "\n") + open;
+        top.open = true;
+      } else if (!top.open && !blank(lines[i])) {
+        fail(i, "a tabs block must start with the heading of its first tab.");
+      }
+    } else if (top?.kind === "steps") {
+      const item = mask[i] ? null : ITEM.exec(lines[i]);
+      if (item) {
+        top.width = item[1].length + item[2].length;
+        const text = out[i].slice(top.width);
+        const titled = STEP_TITLE.exec(text);
+        const title = titled ? plainText(titled[1]).replace(/[.:]$/, "") : null;
+        const rest = titled ? titled[2] ?? "" : text;
+        const open = [title ? `<Step title=${attr(title)}>` : "<Step>", ""];
+        if (rest) open.push(rest);
+        out[i] = (top.open ? "\n</Step>\n\n" : "\n") + open.join("\n");
+        top.open = true;
+      } else if (blank(lines[i])) {
+        out[i] = "";
+      } else if (!top.open) {
+        fail(i, "a steps block must start with an ordered list.");
+      } else if (mask[i] || indentOf(lines[i]) >= top.width || !blank(lines[i - 1])) {
+        // Indented continuation, code, or a lazy continuation line of the paragraph above.
+        out[i] = dedent(out[i], top.width);
+      } else {
+        fail(i, "only an ordered list can sit inside a steps block.");
+      }
+    }
+  }
+  if (stack.length) fail(stack.at(-1).line, `<!-- ${stack.at(-1).kind} --> is never closed.`);
+}
+
+/** Replaces `<!-- prompt -->` and the fence after it; returns the fence's last line. */
+function expandPrompt(lines, mask, out, at, fail) {
+  let start = at + 1;
+  while (start < lines.length && blank(lines[start])) start++;
+  const fence = FENCE.exec(lines[start] ?? "");
+  if (!fence || !mask[start]) fail(at, "<!-- prompt --> must come right before a fenced block.");
+  const closing = new RegExp(`^ {0,3}\\${fence[1][0]}{${fence[1].length},}[ \\t]*$`);
+  let end = start + 1;
+  while (end < lines.length && mask[end] && !closing.test(lines[end])) end++;
+  if (end >= lines.length || !mask[end]) fail(at, "the prompt's fenced block is never closed.");
+
+  // The fence's text, as paragraphs: the copy button reads the rendered body back as Markdown.
+  const indent = indentOf(lines[start]);
+  const text = lines.slice(start + 1, end).map((line) => dedent(line, indent).trimEnd());
+  const description = text.join(" ").split(/\s+/).filter(Boolean).join(" ");
+  if (!description) fail(at, "the prompt is empty.");
+  out[at] = `\n<Prompt description=${attr(description)}>`;
+  for (let i = at + 1; i <= end; i++) out[i] = null;
+  out[start] = ["", ...text, "", "</Prompt>", ""].join("\n");
+  return end;
+}
+
+const MDX_TAGS = new Set(["a", "b", "br", "code", "details", "div", "em", "i", "img", "kbd", "p", "span", "strong", "sub", "summary", "sup"]);
+
+/**
+ * Makes Markdown prose safe for MDX, which reads `{`, `<` and HTML comments as
+ * code. Fenced code, inline code and component tags are left alone.
+ */
+export function mdxSafe(text) {
+  const lines = text.split("\n");
+  const mask = fenceMask(lines);
+  let inComment = false;
+  const out = [];
+  lines.forEach((line, i) => {
+    if (mask[i] || COMPONENT_TAG.test(line)) {
+      out.push(line);
+      return;
+    }
+    let rest = line;
+    if (inComment) {
+      const close = rest.indexOf("-->");
+      if (close === -1) return;
+      rest = rest.slice(close + 3);
+      inComment = false;
+      if (!rest.trim()) return;
+    }
+    const safe = outsideCode(rest, (prose) => {
+      let s = prose.replace(/<!--[\s\S]*?-->/g, "");
+      const open = s.indexOf("<!--");
+      if (open !== -1) {
+        inComment = true;
+        s = s.slice(0, open);
+      }
+      return s
+        .replace(/[{}]/g, (brace) => `\\${brace}`)
+        .replace(/<((?:https?|mailto):[^\s<>]+)>/gi, (_, url) => `[${url}](${url})`)
+        .replace(/<(br|img)\b([^>]*?)\s*\/?>/gi, (_, tag, attrs) => `<${tag}${attrs} />`)
+        .replace(/<(\/?)([a-z][a-z0-9]*)?/gi, (match, slash, name) =>
+          name && MDX_TAGS.has(name.toLowerCase()) ? match : `\\<${slash}${name ?? ""}`
+        );
+    });
+    // Expanding components leaves runs of blank lines; one is enough outside code.
+    if (safe.trim() || (!line.trim() && out.at(-1)?.trim())) out.push(safe);
+  });
+  return out.join("\n");
+}
+
 /**
  * Converts one guide page: the H1 becomes the title, the opening paragraph the
- * description, headings get their MkDocs ids pinned, and links are rewritten.
+ * description, headings get their MkDocs ids pinned, links are rewritten, and
+ * component markers become Blume components.
  */
 export function convertPage(source, { file, label, context }) {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
@@ -425,22 +591,26 @@ export function convertPage(source, { file, label, context }) {
   const rewritten = rewriteBody(lines, mask, ids, pageDir, context);
 
   let title = null;
-  let titleAt = null;
-  const body = [];
-  lines.forEach((line, i) => {
-    if (mask[i]) {
-      body.push(line);
-      return;
-    }
+  let titleLine = null;
+  const out = lines.map((line, i) => {
+    if (mask[i]) return line;
     const heading = ids.get(i);
     if (heading && heading.level === 1 && title === null) {
       title = plainText(heading.text);
-      titleAt = body.length;
-      return;
+      titleLine = i;
+      return null;
     }
-    let out = rewritten[i];
-    if (heading && heading.level > 1) out = `${out.replace(/[ \t]+#+[ \t]*$/, "").trimEnd()} [#${heading.id}]`;
-    body.push(out);
+    if (heading && heading.level > 1) return `${rewritten[i].replace(/[ \t]+#+[ \t]*$/, "").trimEnd()} [#${heading.id}]`;
+    return rewritten[i];
+  });
+  const mdx = usesComponents(source);
+  if (mdx) expandComponents(lines, mask, ids, out, file);
+
+  let titleAt = null;
+  const body = [];
+  out.forEach((entry, i) => {
+    if (i === titleLine) titleAt = body.length;
+    if (entry !== null) body.push(...entry.split("\n"));
   });
 
   let description = null;
@@ -481,7 +651,8 @@ export function convertPage(source, { file, label, context }) {
   if (label && label !== title) frontMatter.push("sidebar:", `  label: ${JSON.stringify(label)}`);
   frontMatter.push("---");
 
-  const text = body.join("\n").replace(/^\n+|\n+$/g, "");
+  let text = body.join("\n").replace(/^\n+|\n+$/g, "");
+  if (mdx) text = mdxSafe(text);
   return `${frontMatter.join("\n")}\n\n${text}\n`;
 }
 
@@ -662,8 +833,17 @@ export function sync({ lenient, ref, guide, out }) {
 
   for (const [file, { dest, label }] of placements) {
     context.page = file;
-    const page = convertPage(sources.get(file), { file, label, context });
-    const target = path.join(docs, ...dest.split("/"));
+    const source = sources.get(file);
+    let page;
+    try {
+      page = convertPage(source, { file, label, context });
+    } catch (error) {
+      errors.push(error.message);
+      continue;
+    }
+    // Blume runs components only in MDX pages.
+    const written = usesComponents(source) ? dest.replace(/\.md$/, ".mdx") : dest;
+    const target = path.join(docs, ...written.split("/"));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, page);
     for (const miss of context.unresolved.splice(0)) {

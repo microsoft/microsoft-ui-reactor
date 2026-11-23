@@ -35,33 +35,90 @@ install. NuGet restore brings in the Windows App SDK packages and build tools.
 
 ## Create a project
 
-The fastest way is the Windows App SDK CLI, `winapp`:
+Use the `winapp` CLI, plain `dotnet new`, or a coding agent. Each way gives you
+the same project.
 
-```powershell
-winget install Microsoft.WinAppCli
-winapp new -t reactor -n MyApp
-cd MyApp
-dotnet run
+<!-- tabs -->
+
+### winapp
+
+The fastest way is the Windows App SDK CLI, `winapp`.
+
+<!-- steps -->
+
+1. **Install winapp.**
+
+   ```powershell
+   winget install Microsoft.WinAppCli
+   ```
+
+2. **Create the project.**
+
+   ```powershell
+   winapp new -t reactor -n MyApp
+   ```
+
+   `winapp new` installs the template pack the first time you use it, and
+   offers to update a stale one. There is no separate install step and no
+   version to pin. `winapp new --list` prints all templates. If you leave out
+   `-t`, it asks you to pick one.
+
+3. **Run it.**
+
+   ```powershell
+   cd MyApp
+   dotnet run
+   ```
+
+<!-- /steps -->
+
+### dotnet new
+
+If you prefer plain .NET tooling, install the template pack yourself.
+
+<!-- steps -->
+
+1. **Install the template pack.**
+
+   ```powershell
+   dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
+   ```
+
+   The pack is prerelease-only today. `dotnet new install` picks only stable
+   versions unless you pin one, so the `::<version>` part is required. This is
+   the step that `winapp new` does for you.
+
+2. **Create the project.**
+
+   ```powershell
+   dotnet new reactor -n MyApp
+   ```
+
+3. **Run it.**
+
+   ```powershell
+   cd MyApp
+   dotnet run
+   ```
+
+<!-- /steps -->
+
+### With an agent
+
+Give this prompt to GitHub Copilot, Claude Code, or another coding agent. It
+points the agent at these docs first, so it uses the real API. To give the
+agent the Reactor skills too, see [Build with AI](build-with-ai.md).
+
+<!-- prompt -->
+```text
+Read https://microsoft.github.io/microsoft-ui-reactor/latest/llms.txt first.
+Then create a Reactor app named MyApp: install the winapp CLI with
+`winget install Microsoft.WinAppCli` if it is missing, run
+`winapp new -t reactor -n MyApp`, and start the app with `dotnet run` from the
+MyApp folder. Fix any build errors before you stop.
 ```
 
-`winapp new` installs the template pack the first time you use it, and offers
-to update a stale one. There is no separate install step and no version to
-pin. `winapp new --list` prints all templates. If you leave out `-t`, it asks
-you to pick one.
-
-If you prefer plain .NET tooling, install the pack yourself, then create the
-project with `dotnet new`:
-
-```powershell
-dotnet new install Microsoft.WindowsAppSDK.WinUI.CSharp.Templates::<version>
-dotnet new reactor -n MyApp
-cd MyApp
-dotnet run
-```
-
-The pack is prerelease-only today. `dotnet new install` picks only stable
-versions unless you pin one, so the `::<version>` part is required. This is the
-step that `winapp new` does for you.
+<!-- /tabs -->
 
 ### Templates
 

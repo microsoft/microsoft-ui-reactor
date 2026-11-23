@@ -190,8 +190,9 @@ Conventions for contributors:
   moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
   project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
   Old page URLs redirect to their new location and every heading keeps its anchor, so
-  existing links keep working. Versions published before the move stay as they were, and
-  their version selector still lists newer versions. `docs/_website/scripts/publish.mjs`
+  existing links keep working. Versions published before the move stay MkDocs sites until
+  they are backfilled with `Publish docs`; a backfill rebuilds them with Blume, the new version
+  menu and a banner that links to the latest release. `docs/_website/scripts/publish.mjs`
   replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
   the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
 
@@ -243,6 +244,13 @@ Conventions for contributors:
   `CHANGELOG.md`, plus an RSS feed at `/changelog/rss.xml`. The site build generates it, so
   links to guide pages become site links and `#1234` references link to GitHub. The header
   and the footer link to it.
+
+- **Guide pages can use tabs, steps and copyable prompts.** Templates mark them with
+  `<!-- tabs -->`, `<!-- steps -->` and `<!-- prompt -->` comments, so `docs/guide` still reads
+  as plain Markdown on GitHub, and the site turns them into Blume's Tabs, Steps and Prompt
+  components. Installation, Build with AI, the Visual Studio extension and Hot reload use them,
+  for example one tab each for `winapp`, `dotnet new` and a coding agent. The markers are
+  described in `docs/_pipeline/ai-author-skill.md`.
 
 ### Deprecated
 

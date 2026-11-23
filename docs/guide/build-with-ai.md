@@ -57,6 +57,10 @@ Code (`.claude-plugin/plugin.json`). It contains:
 | `reactor-wrapping` | Wrapping any WinUI control with `[GenerateReactorWrapper]`. |
 | `reactor-advanced` | The Win2D canvases in `Microsoft.UI.Reactor.Advanced`. |
 
+Install the plugin in your agent:
+
+<!-- tabs -->
+
 ### GitHub Copilot CLI
 
 Copilot CLI can install a plugin from a folder in a GitHub repository:
@@ -99,6 +103,8 @@ After a restore, it is in the NuGet cache:
 Pass that folder to `--plugin-dir`. The plugin then matches the Reactor
 version your app uses.
 
+<!-- /tabs -->
+
 ### Other agents
 
 The repository has no install steps for other agents. Point the agent at the
@@ -114,19 +120,25 @@ The skill kit is for agents that can't load plugins. It contains:
   plus `reactor.api.txt`, the index of every public signature;
 - `mur` builds for x64 and Arm64.
 
-Download `reactor-skill-kit-<version>.zip` from the
-[releases page](https://github.com/microsoft/microsoft-ui-reactor/releases).
-Extract it, then run the install script from the extracted folder:
+<!-- steps -->
 
-```powershell
-cd reactor
-.\install-skill-kit.ps1
-```
+1. **Download the kit.** Get `reactor-skill-kit-<version>.zip` from the
+   [releases page](https://github.com/microsoft/microsoft-ui-reactor/releases)
+   and extract it.
 
-The script copies the kit to `~/.claude/skills/reactor` and adds the matching
-`bin\<arch>` folder to your user `PATH`. Pass `-Path <folder>` to install
-somewhere else, or `-SkipPath` to leave `PATH` alone. `mur` needs the .NET 10
-runtime. The script warns you if it is missing.
+2. **Run the install script.** Run it from the extracted folder:
+
+   ```powershell
+   cd reactor
+   .\install-skill-kit.ps1
+   ```
+
+   The script copies the kit to `~/.claude/skills/reactor` and adds the
+   matching `bin\<arch>` folder to your user `PATH`. Pass `-Path <folder>` to
+   install somewhere else, or `-SkipPath` to leave `PATH` alone. `mur` needs
+   the .NET 10 runtime. The script warns you if it is missing.
+
+<!-- /steps -->
 
 The same files ship in the `Microsoft.UI.Reactor` package under `agentkit/`.
 If `mur` is on your `PATH`, these commands print them:
@@ -212,12 +224,14 @@ results:
 - **Name the feature.** Words like "form validation", "navigation", or
   "docking" match a topic skill, so the agent loads the right one.
 
+<!-- prompt -->
 ```text
 Create a Reactor app named Notes with `dotnet new reactor`. Show a list of
 notes and a form to add one, with validation. Run `mur check` after each batch
 of edits and fix every REACTOR_* warning.
 ```
 
+<!-- prompt -->
 ```text
 The Save button is cut off. Start the app with `mur devtools`, take a
 screenshot, read the visual tree, and fix the layout.

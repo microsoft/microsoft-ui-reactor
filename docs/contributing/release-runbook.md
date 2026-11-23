@@ -192,8 +192,10 @@ notes land on the site without any extra step. `[Unreleased]` stays off the site
 guide pages from `CHANGELOG.md` with repo paths (`docs/guide/…`); sync turns them into site
 routes, and `npm run validate` catches a link whose page or anchor has moved.
 
-Versions published before the move to Blume are still the MkDocs sites they were. They are
-never rebuilt, and `versions.json` keeps the format their version selector reads, so they
+Versions published before the move to Blume stay the MkDocs sites they were until they are
+backfilled. Backfill them once (see [Publishing a version retroactively](#publishing-a-version-retroactively))
+so they get the new theme and version menu, plus a banner that links to the latest release.
+Until then, `versions.json` keeps the format their MkDocs version selector reads, so they
 keep listing every newer version.
 
 Nothing about this is manual on the happy path. `.github/workflows/docs.yml` handles it:

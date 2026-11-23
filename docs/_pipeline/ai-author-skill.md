@@ -145,6 +145,43 @@ if the dep array is missing.
 Comprehensive pages must include at least one `<!-- ai:caveat -->` block.
 A missing close tag fails compile with `REACTOR_DOC_CAVEAT_001`.
 
+**Tabs, steps and prompts** — the docs site turns these markers into its
+Tabs, Steps and Prompt components. They are HTML comments, so the page in
+`docs/guide` still reads as plain Markdown on GitHub:
+
+````markdown
+<!-- tabs -->
+### winapp
+Text and code for the first tab.
+
+### dotnet new
+Each heading at the level of the first heading starts a new tab.
+<!-- /tabs -->
+
+<!-- steps -->
+1. **Install winapp.** Each item in the ordered list is one step. A bold
+   lead-in becomes the step title, without its trailing period.
+
+   ```powershell
+   winget install Microsoft.WinAppCli
+   ```
+2. **Run it.** Indent code and extra paragraphs under their item.
+<!-- /steps -->
+
+<!-- prompt -->
+```text
+The fenced block right after the marker becomes a prompt with a Copy button.
+```
+````
+
+Use tabs for different ways to do the same thing (tools, agents, OS
+versions), steps for an order the reader must follow, and a prompt for text
+the reader pastes into a coding agent. Each tab heading keeps its anchor, and
+a link to that anchor opens the tab. A steps block can't hold tabs or another
+steps block. `docs/_website/scripts/sync.mjs` writes a page that uses a marker
+as `.mdx`, and fails the sync with the file and line of a marker that is not
+closed or not followed by the right content.
+
 **Reference-page link marker** — link to an auto-generated reference page
 (Section 10 of the index) from a guide page:
 

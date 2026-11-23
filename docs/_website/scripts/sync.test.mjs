@@ -22,6 +22,7 @@ import {
   sync,
   titleId,
   uniqueId,
+  usesComponents,
 } from "./sync.mjs";
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reactor-docs-sync-"));
@@ -350,6 +351,149 @@ describe("page conversion", () => {
   });
 });
 
+describe("components", () => {
+  const context = () => ({ routes: new Map(), titleIds: new Map(), repoRoot: scratch, ref: "main", unresolved: [] });
+  const convert = (lines) => convertPage(["# T", "", ...lines, ""].join("\n"), { file: "t.md", context: context() });
+  const body = (page) => page.replace(/^---[\s\S]*?---\n\n/, "");
+
+  test("a page without markers is left as Markdown", () => {
+    assert.equal(usesComponents("# T\n\n```md\n<!-- tabs -->\n```\n"), false);
+    assert.equal(usesComponents("# T\n\n  <!-- steps -->\n"), true);
+    assert.match(convert(["- Use {x} here."]), /- Use \{x\} here\./);
+  });
+
+  test("each heading at the first tab level becomes a tab that keeps its MkDocs id", () => {
+    const page = body(
+      convert(["<!-- tabs -->", "", "### Copilot `CLI`", "", "Run it.", "", "#### Detail", "", "### Claude", "", "Also.", "", "<!-- /tabs -->"])
+    );
+    assert.equal(
+      page,
+      [
+        "<Tabs>",
+        "",
+        '<Tab title={"Copilot CLI"} id={"copilot-cli"}>',
+        "",
+        "Run it.",
+        "",
+        "#### Detail [#detail]",
+        "",
+        "</Tab>",
+        "",
+        '<Tab title={"Claude"} id={"claude"}>',
+        "",
+        "Also.",
+        "",
+        "</Tab>",
+        "",
+        "</Tabs>",
+        "",
+      ].join("\n")
+    );
+  });
+
+  test("an ordered list becomes steps, with bold lead-ins as titles and the body dedented", () => {
+    const page = body(
+      convert([
+        "<!-- steps -->",
+        "",
+        "1. **Install winapp.**",
+        "",
+        "   ```powershell",
+        "   winget install {x}",
+        "   ```",
+        "",
+        "2. **Create it:** with `new`",
+        "and a lazy line.",
+        "3. Run it.",
+        "",
+        "<!-- /steps -->",
+      ])
+    );
+    assert.equal(
+      page,
+      [
+        "<Steps>",
+        "",
+        '<Step title={"Install winapp"}>',
+        "",
+        "```powershell",
+        "winget install {x}",
+        "```",
+        "",
+        "</Step>",
+        "",
+        '<Step title={"Create it"}>',
+        "",
+        "with `new`",
+        "and a lazy line.",
+        "",
+        "</Step>",
+        "",
+        "<Step>",
+        "",
+        "Run it.",
+        "",
+        "</Step>",
+        "",
+        "</Steps>",
+        "",
+      ].join("\n")
+    );
+  });
+
+  test("a prompt copies the fenced text as paragraphs and shows it as the description", () => {
+    const page = body(convert(["<!-- prompt -->", "", "```text", "Build a counter", "with {state}.", "", "Then run it.", "```"]));
+    assert.equal(
+      page,
+      [
+        '<Prompt description={"Build a counter with {state}. Then run it."}>',
+        "",
+        "Build a counter",
+        "with \\{state\\}.",
+        "",
+        "Then run it.",
+        "",
+        "</Prompt>",
+        "",
+      ].join("\n")
+    );
+  });
+
+  test("steps and prompts nest inside a tab", () => {
+    const page = convert([
+      "<!-- tabs -->",
+      "### A",
+      "<!-- steps -->",
+      "1. One.",
+      "",
+      "   <!-- prompt -->",
+      "   ```text",
+      "   Do it.",
+      "   ```",
+      "<!-- /steps -->",
+      "<!-- /tabs -->",
+    ]);
+    assert.match(page, /<Tab title=\{"A"\} id=\{"a"\}>\n\n<Steps>\n\n<Step>\n\nOne\.\n\n<Prompt description=\{"Do it\."\}>\n\nDo it\.\n\n<\/Prompt>\n\n<\/Step>\n\n<\/Steps>\n\n<\/Tab>\n\n<\/Tabs>/);
+  });
+
+  test("prose that MDX would read as code is escaped, and code is not", () => {
+    const page = body(
+      convert(["<!-- steps -->", "1. Go.", "<!-- /steps -->", "", "Pass <name> to {x}, see <https://a.b/c>, then<br>stop `<T>{}`.", "<!-- note", "hidden -->", "<kbd>F5</kbd>"])
+    );
+    assert.match(page, /Pass \\<name> to \\\{x\\\}, see \[https:\/\/a\.b\/c\]\(https:\/\/a\.b\/c\), then<br \/>stop `<T>\{\}`\.\n<kbd>F5<\/kbd>/);
+    assert.doesNotMatch(page, /hidden/);
+  });
+
+  test("authoring mistakes name the file and line", () => {
+    assert.throws(() => convert(["<!-- tabs -->", "Intro.", "### A", "<!-- /tabs -->"]), /t\.md:4: a tabs block must start with the heading/);
+    assert.throws(() => convert(["<!-- tabs -->", "### A", "## Out", "<!-- /tabs -->"]), /t\.md:5: a heading above the tab level/);
+    assert.throws(() => convert(["<!-- steps -->", "1. A.", "", "Loose.", "<!-- /steps -->"]), /t\.md:6: only an ordered list/);
+    assert.throws(() => convert(["<!-- steps -->", "1. A."]), /t\.md:3: <!-- steps --> is never closed/);
+    assert.throws(() => convert(["<!-- prompt -->", "", "Not a fence."]), /t\.md:3: <!-- prompt --> must come right before a fenced block/);
+    assert.throws(() => convert(["<!-- /tabs -->"]), /t\.md:3: <!-- \/tabs --> closes nothing/);
+  });
+});
+
 describe("sync", () => {
   test("writes pages, groups, images and redirects, and clears everything else", () => {
     const repo = makeRepo(
@@ -405,6 +549,18 @@ describe("sync", () => {
     assert.match(result.warnings.join(), /still lives there\. Skipped\./);
     const redirects = JSON.parse(fs.readFileSync(path.join(lenient.website, REDIRECTS_FILE), "utf8"));
     assert.equal(redirects.some((r) => r.from === "/g/old"), false);
+  });
+
+  test("writes a page that uses components as .mdx and reports marker mistakes as errors", () => {
+    const repo = makeRepo(
+      "components",
+      { "a.md": "# A\n\n<!-- steps -->\n1. Go.\n<!-- /steps -->\n", "b.md": "# B\n", "c.md": "# C\n\n<!-- tabs -->\n" },
+      { groups: [{ dir: "g", title: "G", pages: [{ file: "a.md" }, { file: "b.md" }, { file: "c.md" }] }] }
+    );
+    const result = sync({ lenient: false, ref: "main", guide: repo.guide, out: repo.website });
+    assert.match(result.errors.join("\n"), /docs\/guide\/c\.md:3: <!-- tabs --> is never closed/);
+    const dir = path.join(repo.website, "docs", "g");
+    assert.deepEqual(fs.readdirSync(dir).sort(), ["a.mdx", "b.md", "meta.ts"]);
   });
 
   test("writes one changelog entry per release from the repo's CHANGELOG.md", () => {

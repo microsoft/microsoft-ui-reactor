@@ -76,10 +76,14 @@ add a new element, and save. The window updates, and the click count stays.
 
 ## The edit loop
 
-1. Run `dotnet watch run` in a terminal.
-2. Edit a component in your editor.
-3. Save the file. `dotnet watch` compiles the change and applies it.
-4. See the new UI in the running window.
+<!-- steps -->
+
+1. **Start the app.** Run `dotnet watch run` in a terminal.
+2. **Edit a component.** Change it in your editor.
+3. **Save the file.** `dotnet watch` compiles the change and applies it.
+4. **See the result.** The running window shows the new UI.
+
+<!-- /steps -->
 
 You don't start a build yourself. The app keeps running, and the window stays
 where you left it.
