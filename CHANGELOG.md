@@ -177,6 +177,12 @@ Conventions for contributors:
   plain renter, where a `.Set(b => b.Rotation = …)` threw `UnauthorizedAccessException` (#1643). Both
   lanes clear `ChildrenTransitions`, `ChildTransitions` and `ContentTransitions`, so a pooled panel,
   border or button no longer plays the previous renter's `.WithTransitions(...)` (#1639).
+- An app whose assembly name matches one of its references, such as a file-based app saved as
+  `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
+  instead of crashing at startup with a `TypeLoadException` for
+  `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
+  the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
+  rejects project names that collide with Reactor's assemblies or package ids (issue #1664).
 
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
