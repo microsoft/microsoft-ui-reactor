@@ -151,12 +151,26 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
+  animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625
+  and #1626).** They all install implicit animations on the element's composition visual, and now
+  claim and release them per property through one owner. Applying or removing `.LayoutAnimation()`
+  replaced the whole collection, so a `.OpacityTransition()`, `.ScaleTransition()` or
+  `.RotationTransition()` installed on the compositor (after another feature took the visual)
+  stopped animating. Dropping `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()`
+  or `.TranslationTransition()` on a later render now clears it, on WinUI's XAML transition and on
+  the compositor, so the property jumps again. When two features animate the same property, the
+  winner keeps the rule it had (`.LayoutAnimation()` over `.Animate()` over a transition), and
+  removing the winner brings the other back instead of leaving no animation. A removed
+  `.BackgroundTransition()` stays in place until spec 066 layer 2.
+
 - An app whose assembly name matches one of its references, such as a file-based app saved as
   `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
   instead of crashing at startup with a `TypeLoadException` for
   `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
   the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
   rejects project names that collide with Reactor's assemblies or package ids (issue #1664).
+
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
   channel inside one `try`, and stopping `Translation` throws when translation was never
