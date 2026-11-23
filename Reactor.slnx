@@ -413,6 +413,7 @@
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj" />
   </Folder>
   <Folder Name="/tests/aot_trim_proof/">
     <Project Path="tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced/Reactor.AotHelloWorld.Advanced.csproj">
