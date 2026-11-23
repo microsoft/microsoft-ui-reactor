@@ -485,6 +485,119 @@ export function convertPage(source, { file, label, context }) {
   return `${frontMatter.join("\n")}\n\n${text}\n`;
 }
 
+// ---------------------------------------------------------------------------
+// Changelog: one Blume `type: changelog` entry per released version in the
+// repository's CHANGELOG.md, so the site gets a /changelog timeline and feed.
+
+export const CHANGELOG_DIR = "changelog";
+const RELEASE_HEADING = /^## \[([^\]]+)\](?:\([^)]*\))?\s*[-–—]\s*(\d{4}-\d{2}-\d{2})\s*$/;
+const BUCKET_WORDS = {
+  added: ["added", "added"],
+  changed: ["changed", "changed"],
+  deprecated: ["deprecated", "deprecated"],
+  removed: ["removed", "removed"],
+  fixed: ["fixed", "fixed"],
+  security: ["security fix", "security fixes"],
+};
+
+/**
+ * The released versions in a Keep-a-Changelog file, newest first as written.
+ * `## [Unreleased]` has no date and is left out. Each bucket (`### Added`, ...)
+ * keeps its lines; a bucket with nothing in it is dropped.
+ */
+export function parseChangelog(source) {
+  const lines = source.replace(/\r\n?/g, "\n").split("\n");
+  const mask = fenceMask(lines);
+  const releases = [];
+  let release = null;
+  let bucket = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!mask[i] && /^## /.test(line)) {
+      const m = RELEASE_HEADING.exec(line);
+      release = m ? { version: m[1], date: m[2], intro: [], buckets: [] } : null;
+      if (release) releases.push(release);
+      bucket = null;
+    } else if (release && !mask[i] && /^### /.test(line)) {
+      bucket = { title: line.slice(4).trim(), lines: [] };
+      release.buckets.push(bucket);
+    } else if (release) {
+      (bucket ? bucket.lines : release.intro).push(line);
+    }
+  }
+  for (const r of releases) r.buckets = r.buckets.filter((b) => b.lines.some((line) => !blank(line)));
+  return releases;
+}
+
+/**
+ * `0.1.0-preview.18` → `v0-1-0-preview-18`, the entry's file name and URL. The
+ * `v` keeps Blume from reading the leading `0-` as a sidebar ordering prefix.
+ */
+export const changelogSlug = (version) =>
+  `v${version.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+/** "12 added, 4 changed and 9 fixed." from the top-level bullets of each bucket. */
+function changelogSummary(buckets) {
+  const parts = [];
+  for (const { title, lines } of buckets) {
+    const words = BUCKET_WORDS[title.toLowerCase()];
+    const count = lines.filter((line) => /^[-*+] /.test(line)).length;
+    if (words && count) parts.push(`${count} ${words[count === 1 ? 0 : 1]}`);
+  }
+  if (!parts.length) return null;
+  const last = parts.pop();
+  return `${parts.length ? `${parts.join(", ")} and ${last}` : last}.`;
+}
+
+const ISSUE_REF = /(^|[^\w/&#[`])#(\d{2,6})\b/g;
+
+/** Links bare `#1234` references to GitHub, leaving code and existing links alone. */
+export function linkIssues(text) {
+  return outsideCode(text, (prose) => {
+    const links = [];
+    const masked = prose.replace(LINK, (link) => {
+      links.push(link);
+      return `\u0001${links.length - 1}\u0001`;
+    });
+    return masked
+      .replace(ISSUE_REF, (_, before, n) => `${before}[#${n}](${REPO_URL}/issues/${n})`)
+      .replace(/\u0001(\d+)\u0001/g, (_, i) => links[Number(i)]);
+  });
+}
+
+/** One release as a Blume changelog page. CHANGELOG.md sits at the repo root, two levels above the guide. */
+export function changelogEntry(release, context) {
+  const lines = [...release.intro];
+  for (const { title, lines: body } of release.buckets) lines.push(`## ${title}`, ...body);
+  const mask = fenceMask(lines);
+  const rewritten = rewriteBody(lines, mask, headingIds(lines, mask), "../..", context);
+  const out = rewritten.slice();
+  for (let i = 0; i < out.length; ) {
+    if (mask[i] || blank(out[i])) {
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < out.length && !mask[end] && !blank(out[end])) end++;
+    out.splice(i, end - i, ...linkIssues(out.slice(i, end).join("\n")).split("\n"));
+    i = end;
+  }
+  const body = out.join("\n").replace(/^\n+|\n+$/g, "");
+
+  const frontMatter = [
+    "---",
+    `title: ${JSON.stringify(release.version)}`,
+    "type: changelog",
+    `date: ${release.date}`,
+    "changelog:",
+    `  version: ${JSON.stringify(release.version)}`,
+  ];
+  const summary = changelogSummary(release.buckets);
+  if (summary) frontMatter.push(`description: ${JSON.stringify(summary)}`);
+  frontMatter.push("---");
+  return `${frontMatter.join("\n")}\n\n${body}\n`;
+}
+
 export function metaFile(group) {
   const lines = ['import { defineMeta } from "blume";', "", "export default defineMeta({"];
   lines.push(`  title: ${JSON.stringify(group.title)},`);
@@ -525,7 +638,16 @@ export function sync({ lenient, ref, guide, out }) {
   const nav = JSON.parse(fs.readFileSync(path.join(out, "nav.json"), "utf8"));
   const files = listMarkdown(guide).filter((file) => !file.startsWith("images/"));
   const { placements, groups, errors, warnings } = planPlacement(nav, files, { lenient });
-  const extraRedirects = nav.redirects ?? [];
+  let extraRedirects = nav.redirects ?? [];
+  if (lenient) {
+    // An old tag can predate a hand-written redirect: the page it retires may
+    // still be there, or the page it points to may not exist yet.
+    extraRedirects = extraRedirects.filter((redirect) => {
+      const problems = checkRedirects([redirect], placements);
+      warnings.push(...problems.map((problem) => `${problem} Skipped.`));
+      return !problems.length;
+    });
+  }
   errors.push(...checkRedirects(extraRedirects, placements));
   if (errors.length) return { errors, warnings };
 
@@ -556,6 +678,23 @@ export function sync({ lenient, ref, guide, out }) {
     fs.writeFileSync(path.join(dir, "meta.ts"), metaFile(group));
   }
 
+  let releases = 0;
+  const changelog = path.join(repoRoot, "CHANGELOG.md");
+  if (fs.existsSync(changelog)) {
+    context.page = null;
+    const dir = path.join(docs, CHANGELOG_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "meta.ts"), metaFile({ title: "Changelog", pages: [] }));
+    for (const release of parseChangelog(fs.readFileSync(changelog, "utf8"))) {
+      fs.writeFileSync(path.join(dir, `${changelogSlug(release.version)}.md`), changelogEntry(release, context));
+      for (const miss of context.unresolved.splice(0)) {
+        const message = `CHANGELOG.md [${release.version}]: link ${miss.target} ${miss.reason}.`;
+        (miss.inGuide && !lenient ? errors : warnings).push(message);
+      }
+      releases++;
+    }
+  }
+
   const images = path.join(out, "public", "images");
   fs.rmSync(images, { recursive: true, force: true });
   if (fs.existsSync(path.join(guide, "images"))) fs.cpSync(path.join(guide, "images"), images, { recursive: true });
@@ -563,7 +702,7 @@ export function sync({ lenient, ref, guide, out }) {
   const redirects = redirectsFor(placements, extraRedirects);
   fs.writeFileSync(path.join(out, REDIRECTS_FILE), `${JSON.stringify(redirects, null, 2)}\n`);
 
-  return { errors, warnings, pages: placements.size, groups: groups.length, redirects: redirects.length };
+  return { errors, warnings, pages: placements.size, groups: groups.length, releases, redirects: redirects.length };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -571,5 +710,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   for (const warning of result.warnings) console.warn(`warning: ${warning}`);
   for (const error of result.errors) console.error(`error: ${error}`);
   if (result.errors.length) process.exit(1);
-  console.log(`Synced ${result.pages} pages in ${result.groups} groups, ${result.redirects} redirects.`);
+  console.log(
+    `Synced ${result.pages} pages in ${result.groups} groups, ${result.releases} changelog entries, ${result.redirects} redirects.`
+  );
 }

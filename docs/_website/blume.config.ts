@@ -92,6 +92,10 @@ export default defineConfig({
   },
   banner,
   redirects,
+  changelog: {
+    title: "Changelog",
+    description: "What changed in each Reactor release.",
+  },
   // Not analytics: script() is Blume's hook for a site script on every page.
   // It loads in production builds only, which is every published version.
   analytics: version
@@ -113,6 +117,7 @@ export default defineConfig({
       { label: "API reference", path: "/reference" },
       { label: "How it works", path: "/how-it-works" },
     ],
+    actions: [{ label: "Changelog", href: "/changelog" }],
     selectors: [{ kind: "version", label: "Version", items: versionItems }],
   },
   footer: {
@@ -124,7 +129,7 @@ export default defineConfig({
         href: "https://devblogs.microsoft.com/ifdef-windows/microsoft-ui-reactor-a-c-first-way-to-build-winui-apps/",
       },
       { label: "Samples", href: "https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples" },
-      { label: "Changelog", href: "https://github.com/microsoft/microsoft-ui-reactor/blob/main/CHANGELOG.md" },
+      { label: "Changelog", href: "/changelog" },
     ],
   },
 });

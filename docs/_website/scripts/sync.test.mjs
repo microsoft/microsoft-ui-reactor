@@ -4,11 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 import {
+  REDIRECTS_FILE,
   REPO_URL,
+  changelogEntry,
+  changelogSlug,
   convertPage,
   headingIds,
+  linkIssues,
   mkdocsRoute,
   mkdocsSlug,
+  parseChangelog,
   planPlacement,
   redirectsFor,
   checkRedirects,
@@ -107,6 +112,74 @@ describe("routes and redirects", () => {
     assert.match(checkRedirects([{ from: "/controls/charting", to: "/controls/charting" }], placements)[0], /still lives there/);
     assert.match(checkRedirects([{ from: "/old", to: "/nowhere" }], placements)[0], /no page lives at/);
     assert.match(checkRedirects([{ from: "old", to: "/controls/charting" }], placements)[0], /start with \//);
+  });
+});
+
+describe("changelog", () => {
+  const source = [
+    "# Changelog",
+    "",
+    "## [Unreleased]",
+    "",
+    "### Added",
+    "",
+    "- Not out yet.",
+    "",
+    "## [0.2.0] — 2026-12-01",
+    "",
+    "### Added",
+    "",
+    "- `UseThing` (issue #1482, [#77](https://example.com/77), `#888`).",
+    "- A wrapped [link to",
+    "  #99](https://example.com/99) and the [layout guide](docs/guide/layout.md#sizing).",
+    "",
+    "### Changed",
+    "",
+    "### Fixed",
+    "",
+    "- Something, see [TESTING.md](TESTING.md).",
+    "",
+    "## [0.2.0-preview.1] - 2026-11-01",
+    "",
+    "### Security",
+    "",
+    "- Patched.",
+    "",
+  ].join("\n");
+
+  test("keeps dated releases, drops Unreleased and empty buckets", () => {
+    const releases = parseChangelog(source);
+    assert.deepEqual(
+      releases.map((r) => [r.version, r.date, r.buckets.map((b) => b.title)]),
+      [
+        ["0.2.0", "2026-12-01", ["Added", "Fixed"]],
+        ["0.2.0-preview.1", "2026-11-01", ["Security"]],
+      ]
+    );
+    assert.equal(changelogSlug("0.2.0-preview.1"), "v0-2-0-preview-1");
+  });
+
+  test("links bare issue refs, but not inside code or existing links", () => {
+    assert.equal(
+      linkIssues("issue #12, [#77](x), [a\n#99](y), `#888`, a#55, &#123;"),
+      `issue [#12](${REPO_URL}/issues/12), [#77](x), [a\n#99](y), \`#888\`, a#55, &#123;`
+    );
+  });
+
+  test("an entry lifts buckets to h2, rewrites links from the repo root, and sums up the bullets", () => {
+    const routes = new Map([["layout.md", "/guides/layout"]]);
+    const context = { routes, titleIds: new Map(), repoRoot: scratch, ref: "v0.2.0", unresolved: [] };
+    fs.writeFileSync(path.join(scratch, "TESTING.md"), "x");
+    const [release, preview] = parseChangelog(source);
+    const page = changelogEntry(release, context);
+    assert.deepEqual(context.unresolved, []);
+    assert.match(page, /^---\ntitle: "0\.2\.0"\ntype: changelog\ndate: 2026-12-01\nchangelog:\n {2}version: "0\.2\.0"\ndescription: "2 added and 1 fixed\."\n---\n/);
+    assert.match(page, /\n## Added\n/);
+    assert.match(page, /\[layout guide\]\(\/guides\/layout#sizing\)/);
+    assert.match(page, new RegExp(`\\[TESTING\\.md\\]\\(${REPO_URL}/blob/v0\\.2\\.0/TESTING\\.md\\)`));
+    assert.match(page, /\(issue \[#1482\]/);
+    const previewPage = changelogEntry(preview, context);
+    assert.match(previewPage, /description: "1 security fix\."/);
   });
 });
 
@@ -316,5 +389,32 @@ describe("sync", () => {
     const result = sync({ lenient: true, ref: "main", guide: lenient.guide, out: lenient.website });
     assert.deepEqual(result.errors, []);
     assert.match(result.warnings.join(), /gone\.md/);
+  });
+
+  test("lenient mode skips a hand-written redirect an old tag predates", () => {
+    const nav = {
+      groups: [{ dir: "g", title: "G", pages: [{ file: "a.md" }, { file: "old.md" }] }],
+      redirects: [{ from: "/g/old", to: "/g/a" }],
+    };
+    const pages = { "a.md": "# A\n", "old.md": "# Old\n" };
+    const strict = makeRepo("redirect-strict", pages, nav);
+    assert.match(sync({ lenient: false, ref: "main", guide: strict.guide, out: strict.website }).errors.join(), /still lives there/);
+    const lenient = makeRepo("redirect-lenient", pages, nav);
+    const result = sync({ lenient: true, ref: "v1", guide: lenient.guide, out: lenient.website });
+    assert.deepEqual(result.errors, []);
+    assert.match(result.warnings.join(), /still lives there\. Skipped\./);
+    const redirects = JSON.parse(fs.readFileSync(path.join(lenient.website, REDIRECTS_FILE), "utf8"));
+    assert.equal(redirects.some((r) => r.from === "/g/old"), false);
+  });
+
+  test("writes one changelog entry per release from the repo's CHANGELOG.md", () => {
+    const repo = makeRepo("changelog", { "a.md": "# A\n" }, { groups: [{ dir: "g", title: "G", pages: [{ file: "a.md" }] }] });
+    fs.writeFileSync(path.join(repo.root, "CHANGELOG.md"), "## [1.0.0] — 2026-01-02\n\n### Added\n\n- [A](docs/guide/a.md).\n");
+    const result = sync({ lenient: false, ref: "main", guide: repo.guide, out: repo.website });
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.releases, 1);
+    const entry = fs.readFileSync(path.join(repo.website, "docs", "changelog", "v1-0-0.md"), "utf8");
+    assert.match(entry, /type: changelog/);
+    assert.match(entry, /\[A\]\(\/g\/a\)/);
   });
 });

@@ -186,6 +186,12 @@ version's pages stay byte-identical after it ships. `docs/_website/scripts/publi
 writes each version and keeps the `versions.json` at the site root up to date; the version
 switcher in the site header lists what it held when that version was built.
 
+Each version also has a `/changelog` page. `docs/_website/scripts/sync.mjs` builds it from
+the root `CHANGELOG.md` of the ref it syncs, one entry per dated release, so a release's
+notes land on the site without any extra step. `[Unreleased]` stays off the site. Link to
+guide pages from `CHANGELOG.md` with repo paths (`docs/guide/…`); sync turns them into site
+routes, and `npm run validate` catches a link whose page or anchor has moved.
+
 Versions published before the move to Blume are still the MkDocs sites they were. They are
 never rebuilt, and `versions.json` keeps the format their version selector reads, so they
 keep listing every newer version.
@@ -405,9 +411,9 @@ halfway through — and each tag is then checked out and built in turn.
 Each tag's `docs/guide` is built with the publish script and site config of the ref you
 dispatch from, since tags cut before the move to Blume have no `docs/_website`. These builds
 are lenient: a page in `nav.json` that the tag lacks is skipped with a warning, a page the tag
-has but `nav.json` does not know lands in a "More" group, and broken links do not fail the
-build, because the tag's links were checked when it shipped. Backfilling the newest tag also
-rebuilds `latest/`.
+has but `nav.json` does not know lands in a "More" group, a `nav.json` redirect away from a
+page the tag still has is skipped, and broken links do not fail the build, because the tag's
+links were checked when it shipped. Backfilling the newest tag also rebuilds `latest/`.
 
 ## If a release tag is wrong
 

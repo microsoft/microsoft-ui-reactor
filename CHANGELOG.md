@@ -238,6 +238,12 @@ Conventions for contributors:
   `compile --reference-only` to regenerate only the reference, and add
   `--reference-nav-out <path>` to also write its `nav.json` groups.
 
+- **The docs site has a Changelog page.** `/changelog` lists every release with its date,
+  and each release has its own page with the Added, Changed and Fixed notes from
+  `CHANGELOG.md`, plus an RSS feed at `/changelog/rss.xml`. The site build generates it, so
+  links to guide pages become site links and `#1234` references link to GitHub. The header
+  and the footer link to it.
+
 ### Deprecated
 
 ### Removed
@@ -1355,7 +1361,7 @@ Conventions for contributors:
   Shell link activation, property stores and removal queries no longer depend on
   built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
   release transaction-owned interfaces deterministically. See the
-  [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
+  [Jump list guide](docs/guide/desktop-integration.md#jump-list) (spec 036 §11.3).
 
 - **`.InteractionStates()` and `.Keyframes()` translations no longer move an element to its
   parent's origin** (issue #1432). Both animated the handoff visual's `Offset`, and on a
