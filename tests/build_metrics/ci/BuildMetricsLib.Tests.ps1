@@ -200,7 +200,7 @@ Assert-Equal 'Assemblies in Microsoft.UI.Reactor' ($spec | Where-Object { $_.Pkg
 # preserved. nupkg rows come first (spec order), then per-DLL rows sorted by name.
 $raw = @(
     [pscustomobject]@{ Key = 'nupkg.Reactor';                       Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 2034863 }
-    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll';             Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 3384320 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Microsoft.UI.Reactor.dll'; Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 3384320 }
     [pscustomobject]@{ Key = 'asm|Reactor|Reactor.Analyzers.dll';   Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 303104 }
     [pscustomobject]@{ Key = 'asm|Reactor|Reactor.Wrappers.Abstractions.dll'; Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 10240 }
     [pscustomobject]@{ Key = 'nupkg.Advanced';                      Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 33792 }
@@ -221,10 +221,10 @@ Assert-Equal 2034863 $safe[0].Bytes 'valid integer nupkg bytes preserved'
 # Per-DLL rows: validated filename is the label, package assembly group is the group.
 $reactorDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor' })
 Assert-Equal 3 $reactorDlls.Count 'all three Reactor DLL rows mapped to the framework assembly group'
-Assert-Equal 'Reactor.Analyzers.dll' $reactorDlls[0].Label 'DLL rows sorted deterministically by filename (Analyzers first)'
+Assert-Equal 'Microsoft.UI.Reactor.dll' $reactorDlls[0].Label 'DLL rows sorted deterministically by filename (framework DLL first)'
 Assert-Equal 'Reactor.Wrappers.Abstractions.dll' $reactorDlls[2].Label 'DLL rows sorted deterministically by filename (Wrappers last)'
 Assert-Equal 3384320 ($reactorDlls | Where-Object { $_.Label -eq 'Microsoft.UI.Reactor.dll' }).Bytes 'per-DLL bytes preserved'
-Assert-Equal 'Reactor.Analyzers.dll' ($reactorDlls[0].Label) 'analyzer DLL displayed with its own filename'
+Assert-Equal 'Reactor.Analyzers.dll' ($reactorDlls[1].Label) 'analyzer DLL displayed with its own filename'
 $advancedDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor.Advanced' })
 Assert-Equal 1 $advancedDlls.Count 'Advanced package contributes its single DLL'
 Assert-Equal 'Microsoft.UI.Reactor.Advanced.dll' $advancedDlls[0].Label 'Advanced DLL uses its filename'
