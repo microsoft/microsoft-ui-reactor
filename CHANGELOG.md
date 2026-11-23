@@ -151,10 +151,9 @@ Conventions for contributors:
 
 ### Fixed
 
-- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
-  not individual message boundaries. Dragging above or below a message while still
-  inside the chat no longer scrolls the timeline (openclaw/openclaw-windows-node#1844).
-
+- `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
+  block's default text brush and updates it when the block's effective theme
+  changes (issue #1002).
 - **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
   animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625
   and #1626).** They all install implicit animations on the element's composition visual, and now
@@ -252,6 +251,10 @@ Conventions for contributors:
 - Tight Markdown list items keep their leading text before child lists, headings,
   blockquotes, and code blocks. Ordered numbering is preserved across nesting
   levels, including in cross-block text selection (PR #1628).
+
+- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
+  not individual message boundaries. Dragging above or below a message while still
+  inside the chat no longer scrolls the timeline (openclaw/openclaw-windows-node#1844).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
