@@ -757,8 +757,9 @@ public class ModifierTableIntegrityTests
     /// <summary>
     /// <c>GetDependencyPropertyName</c> decides which properties a <c>ThemeRef</c> binding may emit
     /// a <c>&lt;Setter&gt;</c> for. Its allow-list matches <c>ApplyModifiers</c> by default.
-    /// A separate <see cref="ModifierInfo.ThemeControlGate"/> describes overloads such as
-    /// <c>Foreground(ThemeRef)</c>, which also reaches <c>RichTextBlock</c>.
+    /// A separate <see cref="ModifierInfo.ThemeControlGate"/> can add receivers while preserving
+    /// those supported by <c>ApplyModifiers</c>. For example, <c>Foreground(ThemeRef)</c> also
+    /// reaches <c>RichTextBlock</c>.
     /// </summary>
     [Fact]
     public void GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table()
@@ -788,9 +789,6 @@ public class ModifierTableIntegrityTests
                     $"but the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}].");
             }
 
-            if (info?.ThemeControlGate is not null)
-                continue;
-
             if (!applyGates.TryGetValue(prop, out var applyGate))
             {
                 problems.Add(
@@ -800,7 +798,17 @@ public class ModifierTableIntegrityTests
                 continue;
             }
 
-            if (!themeGate.SetEquals(applyGate))
+            if (info?.ThemeControlGate is not null)
+            {
+                if (!themeGate.IsSupersetOf(applyGate))
+                {
+                    var missingReceivers = applyGate.Except(themeGate).OrderBy(t => t, StringComparer.Ordinal);
+                    problems.Add(
+                        $"{prop}: the ThemeRef path is missing ApplyModifiers receivers " +
+                        $"[{string.Join("|", missingReceivers)}].");
+                }
+            }
+            else if (!themeGate.SetEquals(applyGate))
             {
                 problems.Add(
                     $"{prop}: the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}] " +
