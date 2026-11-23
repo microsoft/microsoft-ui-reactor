@@ -1696,6 +1696,8 @@ public sealed partial class Reconciler : IDisposable
         // removing one named animation can release its deferred reset.
         internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
         internal AnimateProperty DeferredModifierResets;
+        // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
+        internal Animation.ImplicitAnimationClaims? ImplicitClaims;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -2325,6 +2327,7 @@ public sealed partial class Reconciler : IDisposable
             state.Element = null;
             state.DecoratorElement = null;
             state.ModifierTargets = null;
+            if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
         ClearPublishedSource(fe);
     }
@@ -2411,6 +2414,7 @@ public sealed partial class Reconciler : IDisposable
         state.Element = null;
         state.DecoratorElement = null;
         state.ModifierTargets = null;
+        if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
         state.Modifiers?.ClearCurrentHandlers();
@@ -5694,30 +5698,29 @@ public sealed partial class Reconciler : IDisposable
     private static string? ContentCaption(Element? content, string? fallback)
         => content is null ? fallback : ExtractElementCaption(content);
 
-    internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? implicitT, ThemeTransitions? themeT)
+    /// <summary>
+    /// Applies the implicit and theme transitions a layer declares. <paramref name="previous"/> is
+    /// what the same layer declared on the last render; a channel it had and
+    /// <paramref name="implicitT"/> lacks is released (#1626). <paramref name="slot"/> is the
+    /// layer's depth in the shared-target chain (spec 066 §6.1).
+    /// </summary>
+    internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT,
+        ThemeTransitions? themeT, int slot = 0)
     {
-        if (implicitT is not null)
+        if (implicitT is not null || previous is not null)
         {
-            try
-            {
-                if (implicitT.Opacity is not null)
-                    uie.OpacityTransition = implicitT.Opacity;
-                if (implicitT.Rotation is not null)
-                    uie.RotationTransition = implicitT.Rotation;
-                if (implicitT.Scale is not null)
-                    uie.ScaleTransition = implicitT.Scale;
-                if (implicitT.Translation is not null)
-                    uie.TranslationTransition = implicitT.Translation;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // WinUI blocks XAML implicit transition APIs once GetElementVisual()
-                // has been called on the element (e.g., from .Animate(), enter transitions,
-                // or a previous owner via the pool). Fall back to compositor implicit
-                // animations which always work.
-                ApplyTransitionsViaCompositor(uie, implicitT);
-            }
-            if (implicitT.Background is not null)
+            // Once Reactor's claims live on the handed-out visual, a facade Translation that a
+            // setter wrote in this update must move to the visual, as the fallback path always did.
+            if (ImplicitAnimationSlots.PublishedToVisual(uie))
+                AnimationHelper.GetElementVisual(uie);
+            // XAML while the visual hasn't been handed out, a compositor key once WinUI refuses the
+            // XAML property (.Animate(), enter transitions, a previous owner via the pool).
+            // ImplicitAnimationSlots picks the path and shares the keys with the other features.
+            ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, implicitT?.Opacity, slot);
+            ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, implicitT?.Rotation, slot);
+            ApplyTransitionChannel(uie, "Scale", previous?.Scale, implicitT?.Scale, slot);
+            ApplyTransitionChannel(uie, "Offset", previous?.Translation, implicitT?.Translation, slot);
+            if (implicitT?.Background is not null)
             {
                 switch (uie)
                 {
@@ -5752,67 +5755,37 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    /// <summary>
-    /// Fallback: applies XAML-style implicit transitions via compositor ImplicitAnimationCollection
-    /// when the XAML API is blocked by a prior GetElementVisual() call.
-    /// </summary>
-    private static void ApplyTransitionsViaCompositor(UIElement uie, ImplicitTransitions implicitT)
+    private static void ApplyTransitionChannel(UIElement uie, string key, object? previous, object? current, int slot)
     {
-        ElementPool.MarkCompositorTainted(uie);
-        var visual = AnimationHelper.GetElementVisual(uie);
-        var compositor = visual.Compositor;
-        var implicitAnimations = visual.ImplicitAnimations ?? compositor.CreateImplicitAnimationCollection();
-
-        if (implicitT.Opacity is not null)
-        {
-            var dur = implicitT.Opacity.Duration;
-            implicitAnimations["Opacity"] = AnimationHelper.CreateScalarImplicitAnimation(
-                compositor, "Opacity", new Animation.LinearCurve(dur));
-        }
-        if (implicitT.Rotation is not null)
-        {
-            var dur = implicitT.Rotation.Duration;
-            implicitAnimations["RotationAngle"] = AnimationHelper.CreateScalarImplicitAnimation(
-                compositor, "RotationAngle", new Animation.LinearCurve(dur));
-        }
-        if (implicitT.Scale is not null)
-        {
-            var dur = implicitT.Scale.Duration;
-            implicitAnimations["Scale"] = AnimationHelper.CreateVector3ImplicitAnimation(
-                compositor, "Scale", new Animation.LinearCurve(dur));
-        }
-        if (implicitT.Translation is not null)
-        {
-            var dur = implicitT.Translation.Duration;
-            implicitAnimations["Offset"] = AnimationHelper.CreateVector3ImplicitAnimation(
-                compositor, "Offset", new Animation.LinearCurve(dur));
-        }
-
-        visual.ImplicitAnimations = implicitAnimations;
+        if (current is not null)
+            ImplicitAnimationSlots.Claim(uie, key, ImplicitFeature.Transition, slot, current);
+        else if (previous is not null)
+            ImplicitAnimationSlots.Release(uie, key, ImplicitFeature.Transition, slot);
     }
 
     /// <summary>
     /// Sets up Composition-layer implicit animations on the element's Visual so that
     /// layout-driven Offset (and optionally Size) changes animate smoothly.
     /// Runs entirely on the Composition thread — zero managed-code callbacks during animation.
+    /// The keys are claimed through <see cref="ImplicitAnimationSlots"/>, so the element's
+    /// transitions and <c>.Animate()</c> keys survive (#1625).
     /// </summary>
-    internal static void ApplyLayoutAnimation(UIElement uie, LayoutAnimationConfig config)
+    internal static void ApplyLayoutAnimation(UIElement uie, LayoutAnimationConfig config, int slot = 0)
     {
         ElementPool.MarkCompositorTainted(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
-        var implicitAnimations = compositor.CreateImplicitAnimationCollection();
-
         if (config.AnimateOffset)
         {
+            CompositionAnimation offset;
             if (config.UseSpring)
             {
                 var spring = compositor.CreateSpringVector3Animation();
                 spring.DampingRatio = config.DampingRatio;
                 spring.Period = TimeSpan.FromSeconds(config.Period);
                 spring.Target = "Offset";
-                implicitAnimations["Offset"] = spring;
+                offset = spring;
             }
             else
             {
@@ -5820,19 +5793,25 @@ public sealed partial class Reconciler : IDisposable
                 anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
                 anim.Duration = config.Duration;
                 anim.Target = "Offset";
-                implicitAnimations["Offset"] = anim;
+                offset = anim;
             }
+            ImplicitAnimationSlots.Claim(uie, "Offset", ImplicitFeature.Layout, slot, offset);
+        }
+        else
+        {
+            ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
         }
 
         if (config.AnimateSize)
         {
+            CompositionAnimation size;
             if (config.UseSpring)
             {
                 var spring = compositor.CreateSpringVector2Animation();
                 spring.DampingRatio = config.DampingRatio;
                 spring.Period = TimeSpan.FromSeconds(config.Period);
                 spring.Target = "Size";
-                implicitAnimations["Size"] = spring;
+                size = spring;
             }
             else
             {
@@ -5840,22 +5819,27 @@ public sealed partial class Reconciler : IDisposable
                 anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
                 anim.Duration = config.Duration;
                 anim.Target = "Size";
-                implicitAnimations["Size"] = anim;
+                size = anim;
             }
+            ImplicitAnimationSlots.Claim(uie, "Size", ImplicitFeature.Layout, slot, size);
         }
-
-        visual.ImplicitAnimations = implicitAnimations;
+        else
+        {
+            ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
+        }
     }
 
     /// <summary>
-    /// Clears Composition-layer implicit animations from an element's Visual.
-    /// Called when an element previously had LayoutAnimation but no longer does
-    /// (e.g., after a state change removes the modifier, or a pooled control is reused).
+    /// Releases the layout animation keys a layer claimed. Called when an element previously
+    /// had LayoutAnimation but no longer does. Keys other features claim stay (#1625).
     /// </summary>
-    internal static void ClearLayoutAnimation(UIElement uie)
+    internal static void ClearLayoutAnimation(UIElement uie, int slot = 0)
     {
-        var visual = AnimationHelper.GetElementVisual(uie);
-        visual.ImplicitAnimations = null;
+        // The layout animation took the visual. Taking it again moves a facade Translation that
+        // a setter wrote in this update onto it.
+        AnimationHelper.GetElementVisual(uie);
+        ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
+        ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -5863,58 +5847,55 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Creates ImplicitAnimationCollection entries on the element's composition Visual
-    /// for the targeted properties using the specified Curve. Merges with existing
-    /// layout animation entries (Offset/Size) to avoid overwriting each other.
+    /// Claims implicit animation keys on the element's composition Visual for the targeted
+    /// properties using the specified Curve. A layout animation keeps Offset while it's declared,
+    /// and <c>.Animate()</c> wins Opacity, Scale and RotationAngle over a transition (spec 066 §6.1).
     /// </summary>
-    internal static void ApplyPropertyAnimation(UIElement uie, AnimationConfig config, LayoutAnimationConfig? layoutConfig)
+    internal static void ApplyPropertyAnimation(UIElement uie, AnimationConfig config, int slot = 0)
     {
         ElementPool.MarkCompositorTainted(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
-        // Start from existing implicit animations (layout may have set Offset/Size)
-        // or create a new collection
-        var implicitAnimations = visual.ImplicitAnimations ?? compositor.CreateImplicitAnimationCollection();
-
         var props = config.Properties;
         var curve = config.Curve;
 
         if (props.HasFlag(AnimateProperty.Opacity))
-            implicitAnimations["Opacity"] = AnimationHelper.CreateScalarImplicitAnimation(compositor, "Opacity", curve);
+            ImplicitAnimationSlots.Claim(uie, "Opacity", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateScalarImplicitAnimation(compositor, "Opacity", curve));
 
         if (props.HasFlag(AnimateProperty.Offset))
-        {
-            // Only add Offset if layout animation hasn't already claimed it
-            if (layoutConfig is null || !layoutConfig.AnimateOffset)
-                implicitAnimations["Offset"] = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
-        }
+            ImplicitAnimationSlots.Claim(uie, "Offset", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve));
 
         if (props.HasFlag(AnimateProperty.Scale))
-            implicitAnimations["Scale"] = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Scale", curve);
+            ImplicitAnimationSlots.Claim(uie, "Scale", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Scale", curve));
 
         if (props.HasFlag(AnimateProperty.Rotation))
-            implicitAnimations["RotationAngle"] = AnimationHelper.CreateScalarImplicitAnimation(compositor, "RotationAngle", curve);
+            ImplicitAnimationSlots.Claim(uie, "RotationAngle", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateScalarImplicitAnimation(compositor, "RotationAngle", curve));
 
         if (props.HasFlag(AnimateProperty.CenterPoint))
-            implicitAnimations["CenterPoint"] = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "CenterPoint", curve);
-
-        visual.ImplicitAnimations = implicitAnimations;
+            ImplicitAnimationSlots.Claim(uie, "CenterPoint", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateVector3ImplicitAnimation(compositor, "CenterPoint", curve));
     }
 
     /// <summary>
-    /// Removes the specified implicit property animation channels.
+    /// Releases the specified <c>.Animate()</c> channels a layer claimed. A key another feature
+    /// still claims stays, with that feature's animation. Update calls this before setters run, so
+    /// a claim that takes over a released key returns only at
+    /// <see cref="ImplicitAnimationSlots.FlushDeferred"/>, after the setters' writes.
     /// </summary>
-    internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties)
+    internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties, int slot = 0)
     {
-        var visual = AnimationHelper.GetElementVisual(uie);
-        if (visual.ImplicitAnimations is not { } animations) return;
-        if (properties.HasFlag(AnimateProperty.Opacity)) animations.Remove("Opacity");
-        if (properties.HasFlag(AnimateProperty.Offset)) animations.Remove("Offset");
-        if (properties.HasFlag(AnimateProperty.Scale)) animations.Remove("Scale");
-        if (properties.HasFlag(AnimateProperty.Rotation)) animations.Remove("RotationAngle");
-        if (properties.HasFlag(AnimateProperty.CenterPoint)) animations.Remove("CenterPoint");
-        visual.ImplicitAnimations = animations.Count == 0 ? null : animations;
+        // .Animate() took the visual; taking it again keeps the facade migration this path always ran.
+        AnimationHelper.GetElementVisual(uie);
+        if (properties.HasFlag(AnimateProperty.Opacity)) ImplicitAnimationSlots.Release(uie, "Opacity", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Offset)) ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Scale)) ImplicitAnimationSlots.Release(uie, "Scale", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Rotation)) ImplicitAnimationSlots.Release(uie, "RotationAngle", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.CenterPoint)) ImplicitAnimationSlots.Release(uie, "CenterPoint", ImplicitFeature.Animate, slot, deferRestore: true);
     }
 
     // ════════════════════════════════════════════════════════════════

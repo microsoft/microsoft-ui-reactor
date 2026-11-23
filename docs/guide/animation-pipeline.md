@@ -129,6 +129,51 @@ suppression": passing `null` as the curve marks the scope active but
 disables animation, useful for one-off explicit writes inside an outer
 animated scope.
 
+## Shared implicit keys
+
+`.LayoutAnimation()`, `.Animate(...)` and the implicit transitions
+(`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()`,
+`.TranslationTransition()`) all work by installing implicit animations on
+the element's composition visual, keyed by the property they animate
+(`Offset`, `Size`, `Opacity`, `Scale`, `RotationAngle`, `CenterPoint`).
+One element can declare several of them, so Reactor keeps a record of
+which feature claims each key instead of letting each feature replace the
+visual's whole collection. Adding or removing one feature never drops
+another feature's key.
+
+When two features claim the same key, one wins:
+
+| Key | Winner, highest first |
+|---|---|
+| `Offset` | `.LayoutAnimation()`, then `.Animate(...)`, then `.TranslationTransition()`, then an ambient reorder move |
+| `Size` | `.LayoutAnimation()` |
+| `Opacity`, `Scale`, `RotationAngle` | `.Animate(...)`, then the matching transition |
+| `CenterPoint` | `.Animate(...)` |
+
+Removing the winner brings the next claim back. For example, an
+element with `.LayoutAnimation()` that later adds `.Animate(Curve.Spring(),
+AnimateProperty.Opacity)` and `.OpacityTransition()` fades with the
+spring, and dropping `.Animate(...)` on a later render returns it to the
+transition's fade. When a keyed `Memo` or a flyout and the element
+inside it both declare the same feature, the outer declaration wins, and
+removing it restores the inner one. A reorder animated by an ambient
+`Animations.Animate(...)` scope claims `Offset` below all of them.
+
+Removing a transition modifier removes its transition, so a later
+change of that property jumps instead of animating. While the visual
+hasn't been handed out, the transitions are WinUI's own XAML
+transitions (`UIElement.OpacityTransition` and its siblings). Once a
+compositor feature has taken the visual, WinUI refuses those properties,
+and the same transitions are installed as implicit keys instead.
+
+> **Caveat:** The reverse order still fails: a XAML transition blocks the handoff, so
+> declaring `.OpacityTransition()`, `.ScaleTransition()`,
+> `.RotationTransition()` or `.TranslationTransition()` on an element
+> that mounts with `.LayoutAnimation()` or `.Animate(...)` in the same
+> render throws (issue #1623). Add the transition on a later render, or
+> wait for spec 066 layer 2, which moves every transition to the
+> compositor.
+
 ## Keyframe authoring
 
 ```csharp
