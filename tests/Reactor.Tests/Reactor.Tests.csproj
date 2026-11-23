@@ -61,6 +61,9 @@
     <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
     <Compile Include="..\_shared\EtwPrivateCapture.cs" Link="EtwPrivateCapture.cs" />
     <Compile Include="..\..\samples\apps\wct-controls\CameraPreviewLifetime.cs" Link="Samples\CameraPreviewLifetime.cs" />
+    <!-- Spec 066 §12.1: the transforms matrix generator, composition model and ledger are pure
+         managed code shared with the selftest host, so they are tested here headless. -->
+    <Compile Include="..\Reactor.AppTests.Host\SelfTest\TransformsMatrix\*.cs" Link="TransformsMatrix\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!--

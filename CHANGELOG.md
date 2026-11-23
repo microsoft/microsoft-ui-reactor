@@ -41,6 +41,11 @@ Conventions for contributors:
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
+- The Toolkit compatibility harness can capture and measure SettingsCard header
+  and description fit at an already-active OS text scale above 100%. Other
+  controls retain explicit unimplemented outcomes; no desktop settings are
+  changed, and runtime acceptance still requires an approved host (issue #1602).
+
 - **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
   the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
   `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix` or one of the `*Transition` properties,
@@ -149,7 +154,12 @@ Conventions for contributors:
 - `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
   block's default text brush and updates it when the block's effective theme
   changes (issue #1002).
-
+- An app whose assembly name matches one of its references, such as a file-based app saved as
+  `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
+  instead of crashing at startup with a `TypeLoadException` for
+  `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
+  the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
+  rejects project names that collide with Reactor's assemblies or package ids (issue #1664).
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
   channel inside one `try`, and stopping `Translation` throws when translation was never

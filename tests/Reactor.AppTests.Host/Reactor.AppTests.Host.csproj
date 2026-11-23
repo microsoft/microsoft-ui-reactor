@@ -47,6 +47,12 @@
     <Compile Include="..\_shared\SelfTestShard.cs" Link="SelfTestShard.cs" />
   </ItemGroup>
 
+  <!-- Spec 066 §12.1: the transforms behaviour ledger the TransformsMatrix selftest compares
+       against. Embedded so the packaged host, which links this project's sources, reads it too. -->
+  <ItemGroup>
+    <EmbeddedResource Include="SelfTest\Baselines\transforms-ledger*.json" LogicalName="TransformsMatrix.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!--
     Spec 010 — source mapping. ReactorSourceMap defaults to true in Debug via
     build/Reactor.targets, which also supplies the required InterceptorsNamespaces

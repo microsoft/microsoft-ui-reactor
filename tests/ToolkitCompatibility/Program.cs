@@ -303,7 +303,7 @@ internal sealed class CompatibilityRoot : Component
                     else if (operation == "high-contrast-render-capture")
                         await results.RunAsync(name, operation, () => LocalEvidenceChecks.HighContrastAsync(CurrentSubject, name));
                     else if (operation == "os-text-scaling")
-                        await results.RunAsync(name, operation, LocalEvidenceChecks.TextScalingAsync);
+                        await results.RunAsync(name, operation, () => LocalEvidenceChecks.TextScalingAsync(CurrentSubject, name));
                     else if (name == "ImageCropper" && operation == "crop-export-dimensions-pixels")
                         await results.RunAsync(name, operation, () => ImageCropperSampleChecks.RunAsync(this));
                     else if (name == "CameraPreview" && operation == "actual-frames-stop-reentry")
