@@ -3074,6 +3074,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#shared-implicit-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared implicit keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#keyframe-authoring" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3363,6 +3374,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#shared-implicit-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared implicit keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#keyframe-authoring" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3620,6 +3642,66 @@ leaving element is read-only.</p>
 suppression": passing <code>null</code> as the curve marks the scope active but
 disables animation, useful for one-off explicit writes inside an outer
 animated scope.</p>
+<h2 id="shared-implicit-keys">Shared implicit keys<a class="headerlink" href="#shared-implicit-keys" title="Permanent link">&para;</a></h2>
+<p><code>.LayoutAnimation()</code>, <code>.Animate(...)</code> and the implicit transitions
+(<code>.OpacityTransition()</code>, <code>.ScaleTransition()</code>, <code>.RotationTransition()</code>,
+<code>.TranslationTransition()</code>) all work by installing implicit animations on
+the element's composition visual, keyed by the property they animate
+(<code>Offset</code>, <code>Size</code>, <code>Opacity</code>, <code>Scale</code>, <code>RotationAngle</code>, <code>CenterPoint</code>).
+One element can declare several of them, so Reactor keeps a record of
+which feature claims each key instead of letting each feature replace the
+visual's whole collection. Adding or removing one feature never drops
+another feature's key.</p>
+<p>When two features claim the same key, one wins:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Winner, highest first</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Offset</code></td>
+<td><code>.LayoutAnimation()</code>, then <code>.Animate(...)</code>, then <code>.TranslationTransition()</code>, then an ambient reorder move</td>
+</tr>
+<tr>
+<td><code>Size</code></td>
+<td><code>.LayoutAnimation()</code></td>
+</tr>
+<tr>
+<td><code>Opacity</code>, <code>Scale</code>, <code>RotationAngle</code></td>
+<td><code>.Animate(...)</code>, then the matching transition</td>
+</tr>
+<tr>
+<td><code>CenterPoint</code></td>
+<td><code>.Animate(...)</code></td>
+</tr>
+</tbody>
+</table>
+<p>Removing the winner brings the next claim back. For example, an
+element with <code>.LayoutAnimation()</code> that later adds <code>.Animate(Curve.Spring(),
+AnimateProperty.Opacity)</code> and <code>.OpacityTransition()</code> fades with the
+spring, and dropping <code>.Animate(...)</code> on a later render returns it to the
+transition's fade. When a keyed <code>Memo</code> or a flyout and the element
+inside it both declare the same feature, the outer declaration wins, and
+removing it restores the inner one. A reorder animated by an ambient
+<code>Animations.Animate(...)</code> scope claims <code>Offset</code> below all of them.</p>
+<p>Removing a transition modifier removes its transition, so a later
+change of that property jumps instead of animating. While the visual
+hasn't been handed out, the transitions are WinUI's own XAML
+transitions (<code>UIElement.OpacityTransition</code> and its siblings). Once a
+compositor feature has taken the visual, WinUI refuses those properties,
+and the same transitions are installed as implicit keys instead.</p>
+<blockquote>
+<p><strong>Caveat:</strong> The reverse order still fails: a XAML transition blocks the handoff, so
+declaring <code>.OpacityTransition()</code>, <code>.ScaleTransition()</code>,
+<code>.RotationTransition()</code> or <code>.TranslationTransition()</code> on an element
+that mounts with <code>.LayoutAnimation()</code> or <code>.Animate(...)</code> in the same
+render throws (issue #1623). Add the transition on a later render, or
+wait for spec 066 layer 2, which moves every transition to the
+compositor.</p>
+</blockquote>
 <h2 id="keyframe-authoring">Keyframe authoring<a class="headerlink" href="#keyframe-authoring" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">public</span><span class="w"> </span><span class="n">KeyframeBuilder</span><span class="w"> </span><span class="nf">At</span><span class="p">(</span><span class="kt">float</span><span class="w"> </span><span class="n">progress</span><span class="p">,</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="kt">float?</span><span class="w"> </span><span class="n">opacity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w"> </span><span class="n">Vector3</span><span class="o">?</span><span class="w"> </span><span class="n">scale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span>
