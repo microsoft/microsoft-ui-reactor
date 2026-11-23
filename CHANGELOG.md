@@ -156,6 +156,9 @@ Conventions for contributors:
   stale documents lazily; active selections retain layout tracking and streaming
   endpoint remapping. One scope per message remains supported (PR #1475).
 
+- `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
+  block's default text brush and updates it when the block's effective theme
+  changes (issue #1002).
 - **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
   animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625
   and #1626).** They all install implicit animations on the element's composition visual, and now

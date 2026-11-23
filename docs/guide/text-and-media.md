@@ -176,6 +176,11 @@ Modifiers — `.MaxLines`, `.LineHeight`, `.TextAlignment`,
 not get the fast-path renderer, so prefer plain `TextBlock` for static
 text.
 
+Use `RichTextBlock("Hello").Foreground(Theme.PrimaryText)` to set the block's
+default text brush. WinUI resolves the [theme token](theming-tokens.md) for the
+block's effective theme and updates the brush when that theme changes. An
+inline run can still supply its own foreground.
+
 > **Caveat:** Embedding live controls with `InlineUI(...)` and then mutating a `Run` in
 > the same paragraph used to scroll the surrounding `ScrollViewer`/`ScrollView`
 > to the top: WinUI's text engine re-measures the paragraph from scratch and

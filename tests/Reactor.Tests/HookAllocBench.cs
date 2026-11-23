@@ -34,7 +34,7 @@ public class HookAllocBench
     /// <summary>
     /// Runs <paramref name="renderOnce"/> for <see cref="Iterations"/> steady-state
     /// passes (after a warmup that allocates the hook cells once) and reports
-    /// bytes/render. The <paramref name="ctx"/> is reused so hook cells persist
+    /// bytes/render. The <c>ctx</c> is reused so hook cells persist
     /// across passes — exactly the per-render steady state we care about.
     /// </summary>
     private void Measure(string name, Action<RenderContext> renderOnce)

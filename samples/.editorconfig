@@ -47,18 +47,15 @@
 ;
 ; REACTOR_MOD_003 is NOT in the list below. It is a correctness rule — a modifier the
 ; reconciler silently drops is an invisible control, not a style preference — so it stays
-; at `warning` across the sample tree, and a new one anywhere breaks the build. Its 19
-; remaining pre-existing hits are exempted by PATH instead, in the scoped section at the
-; bottom of this file, exactly as the REACTOR_HOOKS_* debt is.
+; at `warning` across the sample tree, and a new one anywhere breaks the build.
+; Pre-existing diagnostics are exempted by path in the scoped section at the bottom of
+; this file, as with the REACTOR_HOOKS_* debt.
 ;
-; The rule originally reported 90 hits. #961 fixed the 5 that were genuinely wrong in the
-; samples, leaving 84 — every one of them a FRAMEWORK gap (#950), not bad sample code. The
-; #950 branch then widened the ApplyModifiers Padding gate to TextBlock, which cleared the
-; 58 `.Padding(...) on TextBlockElement` hits without a single sample edit, exactly as this
-; comment previously predicted it would: the samples were always asking for padding that
-; WinUI supports, and the reconciler was the thing in the wrong.
+; The rule originally reported 90 hits. #961 fixed 5 sample call sites. #950 then widened
+; the ApplyModifiers Padding gate to TextBlock, clearing 58 `.Padding(...)` diagnostics
+; on TextBlockElement without any sample edits.
 ;
-; Re-measured after widening the Grid/StackPanel/RelativePanel gates with
+; Before #1002, a sweep after widening the Grid/StackPanel/RelativePanel gates used
 ; `dotnet build Reactor.slnx -c Debug` and the scoped
 ; severity at the bottom of this file temporarily flipped back to `warning`, deduplicated
 ; on file:line:col (MSBuild prints each diagnostic once per referencing project, and mixes
@@ -66,14 +63,12 @@
 ;
 ;   18  .Padding(...)      on FlexElement          FlexPanel has Yoga padding semantics
 ;                                                  (11 carry a `.FlexPadding(...)` auto-fix)
-;    1  .Foreground(...)   on RichTextBlockElement missing ThemeRef overload
-;   ──  19 sites across 9 files, every one of them #950
+;    1  .Foreground(...)   on RichTextBlockElement theme binding skipped the control
+;   19 sites across 9 files at the time
 ;
-; None of these is a sample bug. FlexPanel has distinct Yoga padding semantics, so these
-; calls need the framework-level FlexPadding migration tracked by #950. The RichTextBlock
-; one is the same shape one level up: the sample correctly passes a theme token, and
-; ElementExtensions has string and Brush overloads but no ThemeRef one, so the call falls
-; through to the gated generic modifier.
+; #950 recorded those FlexPanel diagnostics and noted their Yoga padding semantics.
+; #1002 enabled theme binding for RichTextBlock's Foreground through the existing generic
+; `Foreground(ThemeRef)` overload and cleared the diagnostic in StepCard.cs.
 ;
 ; The now-cleared Grid and StackPanel rows were originally filed as sample bugs in #961, on
 ; the premise that WinUI does not declare those properties. It does: Microsoft.WinUI.xml (from
@@ -118,17 +113,16 @@ dotnet_diagnostic.REACTOR_HOOKS_011.severity = suggestion
 dotnet_diagnostic.REACTOR_HOOKS_013.severity = suggestion
 
 
-; REACTOR_MOD_003 debt, scoped to the 9 files that still carry it. Deliberately a file
+; REACTOR_MOD_003 debt, scoped to the 8 files that still carry it. Deliberately a file
 ; list and not a `**/*.cs` glob, matching the REACTOR_HOOKS_* treatment above: this is a
 ; correctness rule, so a silent modifier drop in any other sample — or in a new one — must
 ; still break the build. Delete a path once its file is clean; delete the whole section once
 ; the list is empty.
 ;
-; Every path below is now owned by #950 alone (see the triage above): all 19 remaining hits
-; are a reconciler/DSL gate gap that will clear WITHOUT editing any sample. It is scheduled
-; work, not a standing exemption.
+; The paths below retain exemptions for the FlexPanel padding noted in #950. #1002 cleared
+; the StepCard.cs diagnostic and removed its exemption.
 ;
-; Pruned four times. PR #941 rewrote CanvasPage.cs's Rectangle().Background(...) calls to
+; PR #941 rewrote CanvasPage.cs's Rectangle().Background(...) calls to
 ; .Fill(...), and ParallaxViewPage.cs came clean with it. Then #961 fixed the 5 genuine
 ; sample bugs and four more files went clean with them: command-palette-window/Program.cs,
 ; ReactorCharting.Gallery/Samples/WeeklyForecast.cs, GridViewPage.cs and SpacingPage.cs.
@@ -139,9 +133,9 @@ dotnet_diagnostic.REACTOR_HOOKS_013.severity = suggestion
 ; Program.cs, MultiLineChart.cs, RefreshContainerPage.cs, SemanticZoomPage.cs, FlyoutPage.cs,
 ; BorderPage.cs, GridPage.cs, RelativePanelPage.cs, ScrollViewPage.cs, NavigationViewPage.cs,
 ; PivotPage.cs, TabViewPage.cs and AcrylicPage.cs all went clean. Re-run the sweep after any
-; sample fix and drop whatever has gone clean, and measure rather than trusting a note. This
-; branch widened the Grid/StackPanel/RelativePanel gates, clearing 7 hits and removing
+; sample fix and drop whatever has gone clean, and measure rather than trusting a note.
+; Widening the Grid/StackPanel/RelativePanel gates cleared 7 hits and removed
 ; StatusPanel.cs, ValueList.cs, CommandingDemo/App.cs, TransitionsDemo.cs and
 ; StylingGallery/App.cs.
-[{apps/animated-list-demo/App.cs,apps/chat/Chat.UI/InputBar.cs,apps/chat/Chat.UI/Sidebar.cs,apps/demo-script-tool/App/Components/StepCard.cs,apps/demo-script-tool/App/DemoScriptShell.cs,apps/headtrax/HeadTrax/Components/EmployeeGrid.cs,apps/monaco-editor/App.cs,apps/widget-creator/WidgetCreatorShell.cs,TodoApp/Program.cs}]
+[{apps/animated-list-demo/App.cs,apps/chat/Chat.UI/InputBar.cs,apps/chat/Chat.UI/Sidebar.cs,apps/demo-script-tool/App/DemoScriptShell.cs,apps/headtrax/HeadTrax/Components/EmployeeGrid.cs,apps/monaco-editor/App.cs,apps/widget-creator/WidgetCreatorShell.cs,TodoApp/Program.cs}]
 dotnet_diagnostic.REACTOR_MOD_003.severity = suggestion

@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 /// <para>The Reconciler no longer eagerly registers built-in handlers; each
 /// handler installs itself in the global <see cref="ControlRegistry"/> on
 /// first factory touch (per-control <c>Reg&lt;&gt;</c> / <c>RegDecorator&lt;&gt;</c>
-/// cctor latch), or on explicit <see cref="ControlRegistry.Register{TElement, TControl}(System.Func{IElementHandler{TElement, TControl}})"/>.
+/// cctor latch), or on explicit <see cref="ControlRegistry.Register{TElement, TControl}(global::System.Func{IElementHandler{TElement, TControl}})"/>.
 /// In the test environment, <c>tests/_shared/BuiltInHandlerBootstrap.cs</c>
 /// runs as a <c>[ModuleInitializer]</c> and touches every built-in shim
 /// before any test runs.</para>
