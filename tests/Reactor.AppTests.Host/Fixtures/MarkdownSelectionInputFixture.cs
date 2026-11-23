@@ -26,6 +26,7 @@ internal sealed class MarkdownSelectionInputFixture : Component
         var (streamed, setStreamed) = UseState(false);
         var (memberAdded, setMemberAdded) = UseState(false);
         var (reversed, setReversed) = UseState(false);
+        var (firstGated, setFirstGated) = UseState(false);
         Element Md(string text, MarkdownTextSelectionOptions options) =>
             Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, new MarkdownOptions { TextSelection = options });
         var link = RichTextBlock("").Set(control =>
@@ -47,7 +48,9 @@ internal sealed class MarkdownSelectionInputFixture : Component
                     .OnMountAdd(fe => ((Button)fe).Click += OnCustomLinkClick)
                     .OnUnmountAdd(fe => ((Button)fe).Click -= OnCustomLinkClick),
             });
-        var first = MarkdownTextSelection.Surface("first", TextBlock("first")).WithKey("first");
+        // The Visibility gate changes selection membership without changing rendering.
+        var first = MarkdownTextSelection.Visibility(!firstGated,
+            MarkdownTextSelection.Surface("first", TextBlock("first"))).WithKey("first");
         var second = Border(MarkdownTextSelection.Surface("second", TextBlock("second")))
             .WithKey("second").OnMountAdd(fe => _membershipBorder = (Border)fe);
         var third = MarkdownTextSelection.Surface("third", TextBlock("third")).WithKey("third");
@@ -93,6 +96,7 @@ internal sealed class MarkdownSelectionInputFixture : Component
                     border.Visibility = border.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             }).AutomationId("SelectionToggleMemberVisibility"),
             Button("Reverse members", () => setReversed(true)).AutomationId("SelectionReverseMembers"),
+            Button("Gate first member", () => setFirstGated(!firstGated)).AutomationId("SelectionGateFirstMember"),
             MarkdownTextSelection.Scope(_membershipOptions, VStack(members.ToArray()))
                 .AutomationId("SelectionMembership")).Width(450);
     }

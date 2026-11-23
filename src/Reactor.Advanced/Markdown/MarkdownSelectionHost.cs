@@ -113,6 +113,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         {
             _refreshPending = true;
             UpdateLayoutTracking();
+            // LayoutUpdated only fires after a layout pass. Semantic-only changes
+            // (a Visibility gate, surface text or separator) don't schedule one.
+            InvalidateArrange();
         }
     }
 

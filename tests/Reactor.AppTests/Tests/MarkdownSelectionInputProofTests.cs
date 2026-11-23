@@ -394,6 +394,8 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                     "idle remount TextChanged");
                 Invoke("SelectionReverseMembers");
                 Wait(() => membershipEvents.Contains("third\nsecond\nfirst"), "idle keyed reorder TextChanged");
+                Invoke("SelectionGateFirstMember");
+                Wait(() => membershipEvents.Contains("third\nsecond"), "idle semantic-only gate TextChanged");
             }
             finally { Automation.RemoveAutomationEventHandler(TextPattern.TextChangedEvent, membership, membershipHandler); }
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
