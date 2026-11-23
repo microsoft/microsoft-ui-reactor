@@ -163,7 +163,19 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             double customDragY = customDragGlyph[1] + customDragGlyph[3] / 2;
             Console.WriteLine($"Custom link drag screen positions: ({customX},{customY}) to ({customDragX},{customDragY})");
             Assert.IsTrue(Math.Abs(customDragX - customX) > 4, "Custom link glyphs must be farther apart than the drag threshold");
-            Click(customX, customY);
+            string routingBeforeClick = outer.Current.HelpText;
+            Point(customX, customY);
+            Mouse(2); mouseHeld = true;
+            Wait(() => outer.Current.HelpText != routingBeforeClick &&
+                outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal),
+                "custom button click press delivered");
+            Assert.IsTrue(outer.Current.HelpText.Split(" | ")[^1]
+                .Contains("nativePending=True tracking=True", StringComparison.Ordinal),
+                "A pending native click must keep selection layout tracking active");
+            Mouse(4); mouseHeld = false;
+            Wait(() => outer.Current.HelpText.Split(" | ")[^1].StartsWith("release ", StringComparison.Ordinal) &&
+                outer.Current.HelpText.Split(" | ")[^1].Contains("nativePending=False", StringComparison.Ordinal),
+                "custom button release clears the pending native press");
             Wait(() => customButton.Current.HelpText == "Custom clicks 1", "custom link button click");
             Thread.Sleep((int)GetDoubleClickTime() + 1);
             Point(customX, customY);
@@ -173,6 +185,9 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal) &&
                 outerText.GetSelection().Single().GetText(-1) == "",
                 "custom button press was routed without selecting a word");
+            string customPress = outer.Current.HelpText.Split(" | ")[^1];
+            Assert.IsTrue(customPress.Contains("nativePending=True tracking=True", StringComparison.Ordinal),
+                "A pending native press must keep selection layout tracking active");
             Point(customDragX, customDragY);
             Assert.IsTrue(GetCursorPos(out var customDragCursor));
             Assert.IsTrue(Math.Abs(customDragCursor.X - customDragX) <= 1 &&

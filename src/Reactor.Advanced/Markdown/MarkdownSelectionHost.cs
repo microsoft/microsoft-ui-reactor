@@ -67,6 +67,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal MarkdownTextSelectionOptions Options { get; set; } = null!;
     internal UIElement? Body { get; private set; }
     internal MarkdownSelectionDocument Document { get; } = new();
+    internal bool IsDocumentDirty => _documentDirty;
+    internal bool IsTrackingLayout => _trackingLayout;
+    internal bool HasPendingNativePress => _nativePressOwner is not null;
     internal int CachedCharacterCount => _characterRects.Count;
     internal int LayoutPassCount { get; private set; }
     internal int MembershipCheckCount { get; private set; }

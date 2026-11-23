@@ -216,6 +216,29 @@ internal static partial class MarkdownSelectionFixtures
             probe.Height++;
             await Harness.Render();
             H.Check("MdSelection_BlurredCaretReturnsToIdle", Work() == before);
+
+            var linkContent = Button("label").Width(200);
+            Element LinkMessage(bool isLink) => MarkdownTextSelection.Scope(options,
+                ((MarkdownSelectionElement)MarkdownTextSelection.Surface("label", linkContent))
+                    with { IsLink = isLink });
+            host.Mount(_ => LinkMessage(false));
+            await Harness.Render();
+            await WaitForLoadedScopes(H);
+            var linkScope = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+            linkScope.Refresh();
+            bool cleanBeforeLink = !linkScope.IsDocumentDirty;
+            var beforeLink = linkScope.CharacterBounds(2);
+            host.Mount(_ => LinkMessage(true));
+            await Harness.Render();
+            bool dirtyAfterLink = linkScope.IsDocumentDirty;
+            linkScope.Refresh();
+            var linkButton = H.FindControl<Microsoft.UI.Xaml.Controls.Button>(_ => true)!;
+            var buttonBounds = linkScope.Bounds(linkButton);
+            var afterLink = linkScope.CharacterBounds(2);
+            H.Check("MdSelection_IsLinkChangeRefreshesGeometry",
+                cleanBeforeLink && dirtyAfterLink
+                && Math.Abs(afterLink.X - (buttonBounds.X + buttonBounds.Width * 2 / 5)) < 1
+                && Math.Abs(afterLink.X - beforeLink.X) > 1);
         }
     }
 

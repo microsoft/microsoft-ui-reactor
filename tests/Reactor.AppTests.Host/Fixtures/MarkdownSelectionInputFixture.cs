@@ -122,7 +122,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
             history.Enqueue($"{kind} pressCount={pressCount} source={args.OriginalSource.GetType().Name} id={args.Pointer.PointerId} " +
                 $"left={point.Properties.IsLeftButtonPressed} modifiers={args.KeyModifiers} xy={point.Position.X:F1},{point.Position.Y:F1} " +
                 $"handled={args.Handled} captures={scope.PointerCaptures?.Count ?? 0} " +
-                $"selection={scope.Document.Start}..{scope.Document.End}");
+                $"selection={scope.Document.Start}..{scope.Document.End} " +
+                $"nativePending={scope.HasPendingNativePress} tracking={scope.IsTrackingLayout}");
             while (history.Count > 20) history.Dequeue();
             AutomationProperties.SetHelpText(scope, string.Join(" | ", history));
         }
