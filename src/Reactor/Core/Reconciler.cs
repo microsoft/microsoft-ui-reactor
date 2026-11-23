@@ -9189,7 +9189,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (property == "Background" && (fe is WinUI.Panel || fe is WinUI.Control || fe is WinUI.Border))
             return "Background";
-        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock))
+        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock || fe is WinUI.RichTextBlock))
             return "Foreground";
         if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
             || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
