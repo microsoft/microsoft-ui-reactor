@@ -6,7 +6,7 @@ Animations that follow pointer over, pressed and focus states.
 
 ## `InteractionStateValues`
 
-Values for a single interaction state (PointerOver, Pressed, Focused). Only visual/brush properties — no layout properties (Width, Margin, etc.). The record IS the boundary: adding a field is a deliberate API decision.
+Values for a single interaction state (PointerOver, Pressed, Focused). Only visual/brush properties — no layout properties (Width, Margin, etc.). The record IS the boundary: adding a field is a deliberate API decision. `Rotation` is in degrees, clockwise, like `.Rotation()`.
 
 ```csharp
 public record InteractionStateValues(float? Opacity = null, float? Scale = null, Vector3? ScaleV = null, Vector3? Translation = null, float? Rotation = null, Brush? Background = null, Brush? Foreground = null, Brush? BorderBrush = null)
@@ -18,7 +18,7 @@ Namespace: `Microsoft.UI.Reactor.Animation`.
 
 #### `InteractionStateValues`
 
-Values for a single interaction state (PointerOver, Pressed, Focused). Only visual/brush properties — no layout properties (Width, Margin, etc.). The record IS the boundary: adding a field is a deliberate API decision.
+Values for a single interaction state (PointerOver, Pressed, Focused). Only visual/brush properties — no layout properties (Width, Margin, etc.). The record IS the boundary: adding a field is a deliberate API decision. `Rotation` is in degrees, clockwise, like `.Rotation()`.
 
 ```csharp
 public InteractionStateValues(float? Opacity = null, float? Scale = null, Vector3? ScaleV = null, Vector3? Translation = null, float? Rotation = null, Brush? Background = null, Brush? Foreground = null, Brush? BorderBrush = null)
@@ -109,6 +109,8 @@ public InteractionStatesBuilder()
 
 #### `Focused`
 
+Values while the element has focus. `rotation` is in degrees.
+
 ```csharp
 public InteractionStatesBuilder Focused(float? opacity = null, float? scale = null, Vector3? scaleV = null, Vector3? translation = null, float? rotation = null, Brush? background = null, Brush? foreground = null, Brush? borderBrush = null)
 ```
@@ -128,6 +130,8 @@ public InteractionStatesBuilder Focused(float? opacity = null, float? scale = nu
 
 #### `PointerOver`
 
+Values while the pointer is over the element. `rotation` is in degrees.
+
 ```csharp
 public InteractionStatesBuilder PointerOver(float? opacity = null, float? scale = null, Vector3? scaleV = null, Vector3? translation = null, float? rotation = null, Brush? background = null, Brush? foreground = null, Brush? borderBrush = null)
 ```
@@ -146,6 +150,8 @@ public InteractionStatesBuilder PointerOver(float? opacity = null, float? scale 
 | `borderBrush` | `Brush?` | `null` |  |
 
 #### `Pressed`
+
+Values while the element is pressed; unset values inherit from [`InteractionStatesBuilder.PointerOver`](#pointerover). `rotation` is in degrees.
 
 ```csharp
 public InteractionStatesBuilder Pressed(float? opacity = null, float? scale = null, Vector3? scaleV = null, Vector3? translation = null, float? rotation = null, Brush? background = null, Brush? foreground = null, Brush? borderBrush = null)

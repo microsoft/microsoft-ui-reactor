@@ -74,7 +74,7 @@ Namespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Element`](Element.md).
 | `Data` | `Geometry?` | Pre-parsed WinUI Geometry. When null, the reconciler resolves from [`PathElement.PathDataString`](#pathelement). Callers that construct PathElement directly (not via D3Path) can set this for non-SVG geometries. |
 | `Fill` | `Brush?` |  |
 | `FillRule` | `FillRule` | How interior regions are determined for fills. Defaults to `EvenOdd`. |
-| `PathDataString` | `string?` | The original SVG path data string. When set, geometry is parsed lazily by the reconciler — only when mounting or when the string changes between renders. This avoids expensive PathDataParser.Parse + COM Geometry creation on every tree build. |
+| `PathDataString` | `string?` | The path markup string (SVG / XAML path syntax). When set, geometry is converted lazily by the reconciler with WinUI's native path-markup converter — only when mounting or when the string changes between renders — so no COM Geometry is created on every tree build. Markup the platform rejects (for example a NaN coordinate) falls back to [`PathElement.Data`](#pathelement), or draws nothing. |
 | `RenderTransform` | `Transform?` |  |
 | `Stroke` | `Brush?` |  |
 | `StrokeDashArray` | `DoubleCollection?` |  |

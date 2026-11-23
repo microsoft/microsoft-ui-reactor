@@ -10,7 +10,7 @@ public readonly struct RenderStats
 
 Namespace: `Microsoft.UI.Reactor.Hosting`.
 
-**Learn more:** [Coming from XAML](../../xaml-developers.md)
+**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
 
 ## Properties
 

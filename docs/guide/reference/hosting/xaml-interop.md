@@ -2,7 +2,7 @@
 
 Helpers for hosting Reactor inside an existing XAML app.
 
-**Learn more:** [Coming from XAML](../../xaml-developers.md)
+**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
 
 ## `PageHelper`
 

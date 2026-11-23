@@ -2,8 +2,6 @@
 
 Types for the taskbar button, its progress, overlay, thumbnail buttons and jump list.
 
-**Learn more:** [Desktop integration](../../desktop-integration.md)
-
 ## `JumpList`
 
 Process-scoped jump list — the right-click flyout that appears on the app's taskbar button or Start tile. Driven through `Windows.UI.StartScreen.JumpList` for packaged apps and Win32 `ICustomDestinationList` for unpackaged. (spec 036 §11.3)

@@ -652,7 +652,7 @@ Namespace: `Microsoft.UI.Reactor.Controls`. Inherits from [`Element`](Element.md
 | `GetItemKey` | `Func<int, string>?` | Optional key function for stable identity across re-renders. When provided, the reconciler uses this to match items across reorderings. When omitted, identity is positional: an unchanged item count preserves row identities without projecting all keys again. Realized content still refreshes. |
 | `ItemCount` | `int` | Total number of items (drives the virtualizer's extent). |
 | `ItemHeight` | `double?` | Fixed item height in pixels. When set, enables the fixed-height fast path with O(1) offset calculation — no per-item measurement needed. When null, variable-height mode is used with EstimatedItemHeight. |
-| `OnVisibleRangeChanged` | `Action<int, int>?` | Callback fired when the visible range changes (viewport tracking). Receives the first and last visible item indices. |
+| `OnVisibleRangeChanged` | `Action<int, int>?` | Callback fired when the visible range changes (viewport tracking). Receives the first and last visible item indices. Native view changes use the current callback, item height (or estimate), and spacing. Setting this to null stops notifications without remounting. |
 | `Ref` | `Action<VirtualListRef>?` | Callback ref for scroll operations. When set, receives a VirtualListRef that exposes ScrollToIndex and scroll position save/restore. |
 | `RenderItem` | `Func<int, Element>` | Render callback: given an index, return the Element for that row. Called only for visible items (virtualized). |
 | `Spacing` | `double` | Spacing between items in pixels (default 0). |

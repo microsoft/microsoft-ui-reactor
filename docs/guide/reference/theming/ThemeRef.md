@@ -50,3 +50,7 @@ public static Brush? Resolve(string resourceKey, bool isDark)
 | --- | --- | --- |
 | `resourceKey` | `string` |  |
 | `isDark` | `bool` |  |
+
+**Remarks**
+
+The brush is the one a `{ThemeResource}` reference gets on an element in that theme, so either theme can be resolved whatever theme the app uses. WinUI does the lookup, so its rules apply, including the `Default` fallback. For a key WinUI cannot resolve for that theme (one an app dictionary defines only for some themes), Reactor reads the app's Light, Dark and Default theme dictionaries, then does a plain lookup, which uses the app's theme: a key defined only for the app's theme therefore resolves to that brush for the other theme too, and a key defined only for the other theme resolves to null for the app's theme. Returns null when the key is not found or is not a [`Brush`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.media.brush). Call it on the UI thread.

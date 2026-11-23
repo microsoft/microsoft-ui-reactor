@@ -2,7 +2,7 @@
 
 How the app was started, and requests to embed it.
 
-**Learn more:** [Advanced Windowing](../../windowing-advanced.md), [Desktop integration](../../desktop-integration.md)
+**Learn more:** [Advanced Windowing](../../windowing-advanced.md)
 
 ## `EmbedRequest`
 

@@ -2,7 +2,7 @@
 
 Types for an icon in the notification area.
 
-**Learn more:** [Windows](../../windows.md), [Desktop integration](../../desktop-integration.md)
+**Learn more:** [Windows](../../windows.md)
 
 ## `ReactorTrayIcon`
 

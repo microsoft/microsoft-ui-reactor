@@ -4,7 +4,7 @@ Hosted XAML content, web views and maps.
 
 Element records are immutable descriptions of a control. You usually create them with a factory method and change them with modifiers.
 
-**Learn more:** [Coming from XAML](../../xaml-developers.md)
+**Learn more:** [Reactor for XAML Developers](../../xaml-developers.md)
 
 ## `MapControlElement`
 

@@ -240,7 +240,7 @@ public ControlDescriptor<TElement, TControl> Immediate<TPayload>(Func<TElement, 
 
 ### `Imperative`
 
-§14 Phase 3 finish — Engine (4). Escape hatch entry that receives `mount`+(`update` with BOTH old and new TElement, so the entry can express a diff the per-value get/set lambdas of [`ControlDescriptor.OneWayConditional`](#onewayconditional) can't: comparing one element field while writing a derived value elsewhere, or multi-source error context like `Path.PathDataString`'s XamlReader/PathDataParser branches.
+§14 Phase 3 finish — Engine (4). Escape hatch entry that receives `mount`+(`update` with BOTH old and new TElement, so the entry can express a diff the per-value get/set lambdas of [`ControlDescriptor.OneWayConditional`](#onewayconditional) can't: comparing one element field while writing a derived value elsewhere, or multi-source error context like `Path.PathDataString`'s path-markup converter/pre-built Geometry branches.
 
 **When to reach for it:** only when the standard entries can't express the diff or the write. Imperative entries skip the engine's value-comparer fast-path, so a misused Imperative entry re-runs on every render. The other entry shapes (`OneWay`, [`ControlDescriptor.OneWayConditional`](#onewayconditional), [`ControlDescriptor.CoercingOneWay`](#coercingoneway), [`ControlDescriptor.HandCodedControlled`](#handcodedcontrolled)) still cover the 95% case.
 
