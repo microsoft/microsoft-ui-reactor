@@ -151,6 +151,11 @@ Conventions for contributors:
 
 ### Fixed
 
+- Idle Markdown text-selection scopes no longer enumerate native text or compute
+  transforms on unrelated window layout passes. Input and automation access refresh
+  stale documents lazily; active selections retain layout tracking and streaming
+  endpoint remapping. One scope per message remains supported (PR #1475).
+
 - `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
   block's default text brush and updates it when the block's effective theme
   changes (issue #1002).

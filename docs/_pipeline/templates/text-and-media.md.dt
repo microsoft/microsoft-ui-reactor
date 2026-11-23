@@ -300,6 +300,12 @@ caret movement follows grapheme boundaries. Streaming updates preserve
 selection endpoints against surviving surface identities where possible.
 The scope exposes UIA TextPattern with range-scoped embedded-control children.
 
+Idle scopes do not poll window-wide layout updates. Text, membership and
+geometry refresh on selection input, copy or automation access; only an active
+selection, drag or focused caret tracks layout continuously. This keeps unrelated
+composer typing independent of the number of idle message scopes. Keep using one
+scope per message, including in an `ItemsView`; no shared controller is required.
+
 `OnCopyResult` is an optional `Action<string, bool>` **notification**, not a
 copy delegate. Reactor calls it after its single clipboard-write attempt.
 Recognized clipboard-access failures report `false`; unexpected exceptions
