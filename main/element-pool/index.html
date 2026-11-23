@@ -2856,6 +2856,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#two-lanes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two lanes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#returning-on-unmount" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3274,6 +3285,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#two-lanes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two lanes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#returning-on-unmount" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3346,11 +3368,12 @@
 <p>The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI controls so a scroll-heavy
 list or fast-mounting subtree doesn't allocate a fresh <code>TextBlock</code> /
 <code>Button</code> / <code>Border</code> on every render. Each WinUI type gets its own
-fixed-size stack (cap 32) inside <code>ElementPool</code>; the
-<a href="../reconciliation/">reconciler</a> calls <code>TryRent(typeof(T))</code> on mount
-and <code>Return(element)</code> on unmount. This page documents the rental
-contract, the cleanup pass that resets a returned element, and the
-exclusions that keep pooling safe — composition-tainted visuals,
+fixed-size stacks (cap 32 per lane) inside <code>ElementPool</code>; the
+<a href="../reconciliation/">reconciler</a> rents on mount and calls
+<code>Return(element)</code> on unmount. This page documents the rental
+contract, the two lanes that keep a control whose composition visual
+was taken away from code that can't use it, the cleanup pass that
+resets a returned element, and the exclusions that keep pooling safe —
 transform-transition locks, non-poolable types, and parent-state
 corner cases.</p>
 <h2 id="renting-on-mount">Renting on mount<a class="headerlink" href="#renting-on-mount" title="Permanent link">&para;</a></h2>
@@ -3358,18 +3381,18 @@ corner cases.</p>
 shape: try the pool first, allocate fresh on miss. Composition-primitive
 handlers in <code>Reconciler.Mount.cs</code> allocate their structural wrappers
 directly.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">public</span><span class="w"> </span><span class="n">FrameworkElement</span><span class="o">?</span><span class="w"> </span><span class="n">TryRent</span><span class="p">(</span><span class="n">Type</span><span class="w"> </span><span class="n">type</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">internal</span><span class="w"> </span><span class="n">FrameworkElement</span><span class="o">?</span><span class="w"> </span><span class="n">TryRent</span><span class="p">(</span><span class="n">Type</span><span class="w"> </span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">visualLane</span><span class="p">)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="p">{</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">Enabled</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">PoolableTypes</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="n">type</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">_pools</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">item</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">.</span><span class="n">Pop</span><span class="p">();</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">item</span><span class="p">;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">visualLane</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">_visualPools</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">taken</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">taken</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="n">Rented</span><span class="p">(</span><span class="n">taken</span><span class="p">.</span><span class="n">Pop</span><span class="p">());</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">_pools</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">null</span><span class="p">;</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nf">Rented</span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Pop</span><span class="p">());</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">}</span>
 </code></pre></div>
-<p><img alt="Element-pool state machine: a control starts unpooled, transitions to Rented on Mount, to Returning on Unmount, and back to Pooled after ForceDetach + CleanElement — unless the per-type cap is exceeded or the control became compositor-tainted, in which case it falls out of pooling." src="../images/element-pool/rental-states.svg" /></p>
+<p><img alt="Element-pool state machine: a control starts unpooled, transitions to Rented on Mount, to Returning on Unmount, and back to Pooled after ForceDetach + CleanElement — unless the lane's cap is exceeded or WinUI refused the reset, in which case it falls out of pooling." src="../images/element-pool/rental-states.svg" /></p>
 <p><code>TryRent</code> is three checks and a pop: pool enabled, type in the
-poolable set, stack non-empty. Anything that fails returns <code>null</code> and
+poolable set, a non-empty lane. Anything that fails returns <code>null</code> and
 the caller falls through to <code>new TextBlock()</code> / <code>new WinUI.Button()</code>.
 The exclusions are deliberate — the live-previewer can flip
 <code>Pool.Enabled = false</code> when recycled controls with stale property
@@ -3423,6 +3446,55 @@ the cleanup pass has to know how to reset every property a Reactor
 modifier or <code>.Set</code> callback might have written, and adding a type to
 <code>PoolableTypes</code> without a matching <code>CleanElement</code> case would leak
 property state into the next reader's mount.</p>
+<h2 id="two-lanes">Two lanes<a class="headerlink" href="#two-lanes" title="Permanent link">&para;</a></h2>
+<p>Taking a control's composition visual (<code>ElementCompositionPreview.GetElementVisual</code>)
+is permanent. Reactor takes it for <code>.Animate()</code>, <code>.Transition()</code>,
+<code>.InteractionStates()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>,
+<code>.ScrollLinked()</code> and the children of a <code>.Stagger()</code> panel. After that
+WinUI refuses every write to the control's <code>Rotation</code>, <code>Scale</code>,
+<code>CenterPoint</code>, <code>RotationAxis</code> and <code>TransformMatrix</code> facades and to its
+XAML implicit transitions (<code>OpacityTransition</code> and friends), even an
+identity write. So each type has two lanes:</p>
+<table>
+<thead>
+<tr>
+<th>Lane</th>
+<th>Holds</th>
+<th>Who rents from it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Plain</td>
+<td>Controls whose visual was never taken</td>
+<td>Everyone, as before</td>
+</tr>
+<tr>
+<td>Visual</td>
+<td>Controls whose visual was taken, reset to a fresh control's pixels</td>
+<td>Only a built-in element whose chain, including a keyed <code>Memo</code> over it, takes the visual at mount (<code>.Animate()</code>, an enter <code>.Transition()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>, <code>.ScrollLinked()</code>) and carries no <code>.Set</code> setters or <code>.OnMount</code> callbacks</td>
+</tr>
+</tbody>
+</table>
+<p>An eligible element takes from the visual lane first and falls back to
+the plain lane. Every other element only takes from the plain lane, so
+user code never meets a control it couldn't have met fresh: a
+<code>Border().Set(b =&gt; b.Rotation = 10)</code> gets a plain control, never one
+whose rotation facade would throw. <code>.InteractionStates()</code> and an
+exit-only <code>.Transition()</code> don't make an element eligible, because a
+fresh control keeps writable facades until the first hover or the
+removal.</p>
+<p><code>Return</code> picks the lane from a <code>VisualTaken</code> marker that every handoff
+sets on the native control's attached state, so it holds whichever
+managed wrapper reaches the control. Before a visual-lane control is
+pushed, <code>CleanElement</code> stops every compositor animation on it, drops
+its implicit animations, writes identity to the visual (opacity, scale,
+rotation, center point, anchor point, orientation, transform matrix,
+clip and translation), disables translation, zeroes the <code>Translation</code>
+facade and forgets Reactor's composition bookkeeping. <code>Offset</code> and
+<code>Size</code> are left to layout. Navigation pages are never pooled, because a
+navigation transition's completion can still reach them after they
+leave the tree.</p>
 <h2 id="returning-on-unmount">Returning on unmount<a class="headerlink" href="#returning-on-unmount" title="Permanent link">&para;</a></h2>
 <p><code>Return</code> is the more interesting half. A control coming back to the
 pool may carry hundreds of WinUI property values, a parent reference,
@@ -3433,36 +3505,54 @@ trampoline state that drives Reactor's event dispatch:</p>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">Enabled</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">GetType</span><span class="p">();</span>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">PoolableTypes</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="n">type</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="c1">// Don&#39;t pool elements that had GetElementVisual() called — they permanently</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="c1">// lose XAML implicit transition API access (OpacityTransition, etc.).</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">IsCompositorTainted</span><span class="p">(</span><span class="n">element</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="c1">// Issue #1614: attaching an implicit transform transition permanently locks</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="c1">// RenderTransform (nulling the transition does not release it), so such a control is</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="c1">// no longer interchangeable with a fresh one. Same reasoning as the taint check above.</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="c1">// This is the fast path; the catch around CleanElement below is the backstop for a</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="c1">// control whose transition was attached and later removed.</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">element</span><span class="p">.</span><span class="n">ScaleTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">RotationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">        </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">TranslationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">_pools</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">))</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">        </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Stack</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">        </span><span class="n">_pools</span><span class="p">[</span><span class="n">type</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">;</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="c1">// A handler may return its control through UnmountContext.ReturnControl and the engine</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="c1">// return it again. Pushing it twice would hand one control to two renters.</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_pooled</span><span class="p">.</span><span class="n">Contains</span><span class="p">(</span><span class="n">element</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="c1">// The lane follows the native control&#39;s marker, whichever wrapper reached it (#1643).</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">GetValue</span><span class="p">(</span><span class="n">Reconciler</span><span class="p">.</span><span class="n">ReactorAttached</span><span class="p">.</span><span class="n">StateProperty</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">Reconciler</span><span class="p">.</span><span class="n">ReactorState</span><span class="p">;</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="c1">// A renter returned before it loaded must not stay on the window&#39;s layout list.</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">state</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="n">StopOpacitySync</span><span class="p">(</span><span class="n">element</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p">);</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">state</span><span class="o">?.</span><span class="n">PoolExcluded</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="k">true</span><span class="p">)</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">state</span><span class="p">.</span><span class="n">ReleaseWhenExcluded</span><span class="p">)</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">            </span><span class="n">Reconciler</span><span class="p">.</span><span class="n">ClearElementTag</span><span class="p">(</span><span class="n">element</span><span class="p">);</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">            </span><span class="n">Reconciler</span><span class="p">.</span><span class="n">ClearCurrentEventHandlers</span><span class="p">(</span><span class="n">element</span><span class="p">);</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">        </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">lanes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">state</span><span class="o">?.</span><span class="n">VisualTaken</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="k">true</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">_visualPools</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">_pools</span><span class="p">;</span>
 <a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MaxPerType</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="c1">// Issue #1614: attaching an implicit transform transition permanently locks</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">    </span><span class="c1">// RenderTransform (nulling the transition does not release it), so such a control is</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">    </span><span class="c1">// no longer interchangeable with a fresh one. This is the fast path; the catch around</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">    </span><span class="c1">// CleanElement below is the backstop for a control whose transition was attached and</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">    </span><span class="c1">// later removed.</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">element</span><span class="p">.</span><span class="n">ScaleTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">RotationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">        </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">TranslationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">lanes</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">))</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="w">        </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Stack</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a><span class="w">        </span><span class="n">lanes</span><span class="p">[</span><span class="n">type</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">;</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MaxPerType</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
 </code></pre></div>
-<p>The path runs in six steps after the type check: composition-taint
-check (a visual that has had <code>GetElementVisual()</code> called permanently
-loses access to XAML implicit transitions like <code>OpacityTransition</code>,
-so it must not be pooled), transform-transition check (see the tips
-below), per-type stack lookup, per-type cap check (stop accepting at
-32 instances), then — past the snippet boundary — the
-detach-from-parent dance and <code>CleanElement(...)</code> reset before the
-control finally pushes onto the stack. If WinUI refuses a transform
-reset during <code>CleanElement</code>, the control is dropped instead. The scratch-panel round-trip
+<p>The path runs in six steps after the type check: lane choice from the
+<code>VisualTaken</code> marker (a navigation page is dropped here),
+transform-transition check, per-lane stack lookup, per-lane cap check
+(stop accepting at 32 instances), then — past the snippet boundary —
+the detach-from-parent dance and <code>CleanElement(...)</code> reset before the
+control finally pushes onto its lane. The transform-transition check
+exists because attaching <code>.ScaleTransition()</code>, <code>.RotationTransition()</code>
+or <code>.TranslationTransition()</code> locks the control's <code>RenderTransform</code>
+for good, even if the transition is later removed. If WinUI refuses a
+reset during <code>CleanElement</code> (a user <code>.Set</code> write can leave such a lock
+behind), the control is dropped instead. <code>CleanElement</code> also clears the
+theme transitions <code>.WithTransitions(...)</code> writes (<code>ChildrenTransitions</code>,
+<code>ChildTransitions</code>, <code>ContentTransitions</code>) in both lanes. The scratch-panel round-trip
 in <code>ForceDetach</code> is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws <code>COMException</code> when the
 control is later re-parented, and <code>_scratchPanel.Children.Add</code> +
@@ -3524,20 +3614,13 @@ previous component's captured closure into the next mount.</p>
 means adding it to <code>ElementPool.PoolableTypes</code> <em>and</em> extending
 <code>CleanElement</code> with a switch arm that resets every property the
 control might have carried. Skipping the second step leaks state.</p>
-<p><strong><code>GetElementVisual()</code> is one-way.</strong> Once a control's composition
-visual has been requested (typically for an <code>.Animate()</code> modifier),
-the control can no longer use XAML implicit transitions and is
-permanently un-poolable. <code>ElementPool.MarkCompositorTainted</code> records
-this; the next <code>Return</code> for that instance silently drops it. Reach for
-<code>.OpacityTransition()</code> and friends before <code>.Animate()</code> when both
-work.</p>
-<p><strong>Transform transitions are one-way too.</strong> Attaching <code>.ScaleTransition()</code>,
-<code>.RotationTransition()</code> or <code>.TranslationTransition()</code> locks the control's
-<code>RenderTransform</code> for good, even if the transition is later removed, so
-<code>Return</code> drops the control. The facade transforms themselves
-(<code>.Rotation()</code>, <code>.Scale()</code>, <code>.Translation()</code>, <code>.CenterPoint()</code>) are reset
-to identity on return and don't affect pooling.</p>
-<p><strong>The cap is 32 per type.</strong> A burst of 100 list items mounts 32 from
+<p><strong>Compositor features pool too.</strong> A list item with <code>.Animate()</code>,
+<code>.Transition()</code> or <code>.LayoutAnimation()</code> returns to the visual lane and
+the next such item reuses it, so it pays the visual reset instead of a
+fresh control plus a new handoff. Keep <code>.Set(...)</code> and <code>.OnMount(...)</code>
+off those chains where you can: a chain with either only rents from
+the plain lane.</p>
+<p><strong>The cap is 32 per type and lane.</strong> A burst of 100 list items mounts 32 from
 the pool and 68 fresh; the next render returns 32 to the pool and
 drops 36. That's fine for steady-state scrolling — the working set
 stabilizes around the visible window — but doesn't scale to giant
