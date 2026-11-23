@@ -514,6 +514,15 @@ class C
     }
 
     [Fact]
+    public async Task A_Same_Named_App_Helper_Does_Not_Override_The_Origin()
+    {
+        // Only Reactor's .TransformOrigin replaces an earlier one; an app helper of the same name
+        // leaves the (0.5, 0.5) origin, which takes the visual, in effect.
+        await VerifyAsync(@"
+static class AppHelpers { public static T TransformOrigin<T>(this T el, string label) where T : Element => el; }
+class C { Element M() => Border().TransformOrigin(0.5f, 0.5f).TransformOrigin(""label"").Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 5|}); }");
+    }
+    [Fact]
     public async Task CenterPoint_Write_Under_A_TransformOrigin_Has_No_Fix()
     {
         // Spec 066 §8.1: next to an origin, .CenterPoint() is an offset added to it, so the

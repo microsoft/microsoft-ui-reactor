@@ -391,7 +391,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                && access.Parent is InvocationExpressionSyntax outer
                && SymbolEqualityComparer.Default.Equals(model.GetTypeInfo(outer, ct).Type, elementType))
         {
-            if (DuplicateAtomicModifierAnalyzer.GetFluentMethodName(outer) == name)
+            // Only Reactor's own modifier replaces it, not an app helper that shares the name.
+            if (DuplicateAtomicModifierAnalyzer.GetFluentMethodName(outer) == name
+                && IsReactorExtension(model.GetSymbolInfo(outer, ct).Symbol))
                 return true;
             current = outer;
         }
