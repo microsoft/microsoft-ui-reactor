@@ -22,6 +22,10 @@ the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`. No
 [Getting Started guide](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#one-file-no-project)
 documents the packaged header.
 
+Don't name the file after a Reactor assembly (`reactor.cs`, `Reactor.Advanced.cs`). The file
+name becomes the assembly name, and assembly names are case-insensitive, so the app would load
+in place of `Reactor.dll`. The build stops with `REACTOR_BUILD_001`.
+
 Single-file builds **do not load analyzers**. You'll catch CS errors but not the Reactor-specific `REACTOR_*` warnings.
 
 ### `.csproj` (multi-file, analyzer coverage)
@@ -151,6 +155,7 @@ Additional flags:
 | `CS1955` | error | "Non-invocable member 'Element.Margin' cannot be used like a method" | Missing `using Microsoft.UI.Reactor;`. The element records expose same-named *properties* (`Element.Margin`, `Element.Padding`, plus `CornerRadius`/`BorderThickness` on derived records), and C# only falls back to extension methods when none is in scope — so an absent import reports the property as non-invocable rather than saying the fluent modifier isn't imported. It reads like the API doesn't exist; it does. Add the `using`. (Distinct from `REACTOR_DYM_001` above, which is a genuine property invoked with parens, e.g. `GridSize.Auto()`.) |
 | `MSB4025` | error | "The project file could not be loaded" | Self-contained (`WindowsAppSDKSelfContained=true`) single-file `.cs` build attempted without an architecture. Add `-p:Platform=ARM64` (or x64), or `-r win-arm64` / `-r win-x64`. |
 | `NETSDK1136` | error | "platform required" | Same fix — pass `-p:Platform=ARM64` or `x64`. |
+| `REACTOR_BUILD_001` | error | The app's assembly name matches a referenced assembly (for example a single-file app saved as `reactor.cs` vs `Reactor.dll`) | Rename the project or `.cs` file, or set `#:property AssemblyName=MyApp`. Without the check the app crashes at startup with a `TypeLoadException`. |
 | — | error | "One or more referenced Windows App SDK components are newer than the versions expected by the Microsoft.WindowsAppSDK.Runtime package" | A newer `Microsoft.WindowsAppSDK.WinUI` (or another Windows App SDK component) was referenced on its own, leaving `Microsoft.WindowsAppSDK.Runtime` at Reactor's version. Reference the full `Microsoft.WindowsAppSDK` package at the version you want instead; it moves Runtime with the components. Don't switch to `WindowsAppSDKSelfContained=true` just to silence it. |
 
 If a `REACTOR_*` ID isn't in this table, the bundled analyzer DLL has more docs. The descriptions ship in the warnings themselves.

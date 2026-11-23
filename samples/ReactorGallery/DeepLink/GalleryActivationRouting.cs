@@ -8,7 +8,7 @@ namespace WinUIGalleryReactor;
 /// page a launch should open.
 /// </summary>
 /// <remarks>
-/// Kept apart from <see cref="GalleryActivation"/> — and free of any WinRT dependency —
+/// Kept apart from <c>GalleryActivation</c> — and free of any WinRT dependency —
 /// so the priority rules can be unit-tested headlessly. <c>GalleryActivation</c> keeps
 /// the part that genuinely needs the platform: pulling these strings back out of an
 /// <c>AppActivationArguments</c>.
