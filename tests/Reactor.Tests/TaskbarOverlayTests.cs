@@ -6,7 +6,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests;
 
 /// <summary>
-/// Spec 036 §11.2 — <see cref="TaskbarOverlay"/> setter & dispose-guard
+/// Spec 036 §11.2 — <see cref="TaskbarOverlay"/> setter &amp; dispose-guard
 /// pins. Full Apply() exercises ITaskbarList3 COM which requires a real
 /// shell context; here we test:
 ///   (a) constructor + getter/setter round-trips;

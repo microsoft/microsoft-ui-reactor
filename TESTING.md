@@ -188,6 +188,14 @@ dotnet test tests/Reactor.Tests
 dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 ```
 
+### Checking XML documentation in `Reactor.Tests`
+
+`Reactor.Tests` generates XML documentation by default. Release builds,
+including the CI solution build, fail on malformed XML (`CS1570`) or unresolved
+`cref` references (`CS1574`). Fix `CS1570` first so the compiler can report the
+remaining documentation diagnostics. Missing member documentation (`CS1591`)
+is permitted. See [issue #1053](https://github.com/microsoft/microsoft-ui-reactor/issues/1053).
+
 ### Console-mutating tests need collection isolation
 
 Tests that write to `Console.Out`/`Console.Error` must be grouped with `[Collection("ConsoleTests")]` to prevent cross-test interference.
