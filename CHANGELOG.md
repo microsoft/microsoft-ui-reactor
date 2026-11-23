@@ -172,6 +172,19 @@ Conventions for contributors:
   removing the winner brings the other back instead of leaving no animation. A removed
   `.BackgroundTransition()` stays in place until spec 066 layer 2.
 
+- **Controls whose composition visual Reactor took are pooled again, and the pool no longer hands a
+  renter the previous renter's theme transitions or a taken visual (spec 066 §7, issues #1624,
+  #1639 and #1643).** `.Animate()`, `.Transition()`, `.InteractionStates()`, `.Keyframes()`,
+  `.LayoutAnimation()` and `.ScrollLinked()` take the element's visual for good, which made the
+  control unpoolable, so every remove and remount built a new control and took its visual again.
+  The pool now keeps those controls in a second lane, reset to a fresh control's pixels (animations
+  stopped, implicit animations dropped, identity transforms), and hands them only to an element that
+  takes the visual at mount and has no `.Set` setter or `.OnMount` callback, so user code never meets a
+  control whose `Rotation` or `Scale` write would throw. The marker that picks the lane now lives on
+  the native control and is set on every handoff, so a staggered panel's children no longer reach a
+  plain renter, where a `.Set(b => b.Rotation = …)` threw `UnauthorizedAccessException` (#1643). Both
+  lanes clear `ChildrenTransitions`, `ChildTransitions` and `ContentTransitions`, so a pooled panel,
+  border or button no longer plays the previous renter's `.WithTransitions(...)` (#1639).
 - An app whose assembly name matches one of its references, such as a file-based app saved as
   `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
   instead of crashing at startup with a `TypeLoadException` for

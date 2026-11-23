@@ -121,7 +121,7 @@ internal static class PooledFacadeTransformFixtures
             if (expect.Facade) H.Check(prefix + "_FacadeEngaged", !IsIdentity(first), Describe(first));
             if (expect.LocalRenderTransform)
                 H.Check(prefix + "_RenderTransformSet", first.ReadLocalValue(UIElement.RenderTransformProperty) is RotateTransform);
-            H.Check(prefix + "_NotTainted", !ElementPool.IsCompositorTainted(first));
+            H.Check(prefix + "_NotTainted", !ElementPool.IsVisualTaken(first));
 
             // Removal is the pool return. Before the fix CleanElement threw here and the host
             // replaced its whole content with the error fallback, taking the button with it.

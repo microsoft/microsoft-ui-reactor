@@ -1,8 +1,11 @@
 {
   "expectations": [
-    { "case": "*.Opacity.*", "step": "removeModifier", "field": "residue", "before": "xaml=Opacity keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .OpacityTransition() clears the XAML transition" },
-    { "case": "*.Scale.*", "step": "removeModifier", "field": "residue", "before": "xaml=Scale keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .ScaleTransition() clears the XAML transition" },
-    { "case": "*.Rotation.*", "step": "removeModifier", "field": "residue", "before": "xaml=Rotation keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .RotationTransition() clears the XAML transition" },
-    { "case": "*.Translation.*", "step": "removeModifier", "field": "residue", "before": "xaml=Translation keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .TranslationTransition() clears the XAML transition" }
+    { "case": "*.*.Stagger", "step": "mount", "field": "channel", "before": "taken=0 facade=T", "after": "taken=1 facade=T visual=-", "reason": "fixes #1643: the stagger handoff now marks the child's visual as taken on the native control" },
+    { "case": "*.*.Stagger", "step": "{mount,change}", "field": "channel", "before": "taken=0 facade=-", "after": "taken=1 facade=- visual=-", "reason": "fixes #1643: the stagger handoff now marks the child's visual as taken on the native control" },
+    { "case": "*.*.Stagger", "step": "rentPlain", "field": "pool", "before": "recycled=0 diff=0 taken=1 xaml=-", "after": "recycled=0 diff=0 taken=0 xaml=-", "reason": "fixes #1643: a staggered child goes to the visual lane, so a plain renter never gets a taken visual" },
+    { "case": "*.*.Stagger", "step": "rentTransformed", "field": "{running,pool}", "reason": "fixes #1643: a transformed renter is a plain-lane control, no longer the staggered child's taken visual" },
+    { "case": "@soak.*", "step": "run", "field": "{rented,visualRented}", "reason": "fixes #1643: visual-lane probes rent the controls whose visual was taken (spec 066 §7.2), and plain probes rent more plain controls" },
+    { "case": "@soak.short", "step": "run", "field": "violations", "before": "facade=0 taken=0 xaml=9", "after": "anims=0 facade=0 keys=0 taken=0 visual=0 xaml=14", "reason": "fixes #1643: the visual-lane renters pass every §7.3 reset check, and xaml counts the OpacityTransition and BackgroundTransition leaks (layer 2, #1624) on the extra plain rents" },
+    { "case": "@soak.full", "step": "run", "field": "violations", "before": "facade=0 taken=0 xaml=69", "after": "anims=0 facade=0 keys=0 taken=0 visual=0 xaml=87", "reason": "fixes #1643: the visual-lane renters pass every §7.3 reset check, and xaml counts the OpacityTransition and BackgroundTransition leaks (layer 2, #1624) on the extra plain rents" }
   ]
 }
