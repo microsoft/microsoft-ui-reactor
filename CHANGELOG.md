@@ -250,6 +250,12 @@ Conventions for contributors:
   plain renter, where a `.Set(b => b.Rotation = …)` threw `UnauthorizedAccessException` (#1643). Both
   lanes clear `ChildrenTransitions`, `ChildTransitions` and `ContentTransitions`, so a pooled panel,
   border or button no longer plays the previous renter's `.WithTransitions(...)` (#1639).
+- An app whose assembly name matches one of its references, such as a file-based app saved as
+  `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
+  instead of crashing at startup with a `TypeLoadException` for
+  `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
+  the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
+  rejects project names that collide with Reactor's assemblies or package ids (issue #1664).
 
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
@@ -503,6 +509,15 @@ Conventions for contributors:
   cards even after index regeneration
   ([issue #1020](https://github.com/microsoft/microsoft-ui-reactor/issues/1020),
   [spec 064 §3.2](docs/specs/064-search-index-framework-concepts.md#32-every-clean-card-is-emitted)).
+
+- The doc pipeline's `render-diagrams` and `new-diagram` commands now reject
+  rooted topics and topics that resolve outside `docs/_pipeline/diagrams`.
+  Rendering a topic with a trailing directory separator keeps its SVGs under
+  that topic's image directory. `new-diagram` also rejects IDs that are rooted
+  or would place the `.mmd` outside the topic directory. Both commands report
+  path errors on stderr and return exit code `1`
+  ([issue #1034](https://github.com/microsoft/microsoft-ui-reactor/issues/1034),
+  [spec 041 §10.3](docs/specs/041-docs-comprehensive-uplift.md#103-image-and-diagram-pipeline-changes)).
 
 ### Security
 

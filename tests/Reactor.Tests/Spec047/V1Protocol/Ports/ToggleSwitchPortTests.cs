@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 /// Here we exercise the registration contract: spec 048 §3.4 makes the
 /// built-ins lazy-globally-registered — touching the factory (or the
 /// test-only <c>BuiltInHandlerBootstrap</c> module initializer) installs the
-/// handler in the process-wide <see cref="V1Protocol.ControlRegistry"/>.</para>
+/// handler in the process-wide <see cref="global::Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry"/>.</para>
 /// </summary>
 public class ToggleSwitchPortTests
 {

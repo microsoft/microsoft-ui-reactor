@@ -405,9 +405,10 @@ dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overv
 ```
 
 This emits a starter `.mmd` with a placeholder graph. Iterate with
-`dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic architecture-overview` (no full
-compile required). Pass `--skip-diagrams` to `dotnet run --project tools/Reactor.DocPipeline -- compile` for
-fast inner-loop runs when you are only editing prose.
+`dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic architecture-overview`
+without a full compile. Use the name of a top-level directory under
+`docs/_pipeline/diagrams` as the topic for both commands. Pass `--skip-diagrams` to
+`dotnet run --project tools/Reactor.DocPipeline -- compile` when editing prose only.
 
 A minimal Mermaid example for an Under-the-hood page:
 
