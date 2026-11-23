@@ -30,6 +30,7 @@ internal sealed record AgentKitPackEntry(string Pattern, string PackagePath, IRe
 /// <param name="StartLine">1-based line in <paramref name="Path"/> that
 /// <paramref name="Text"/> starts on, so a syntax offset can be turned back into a real
 /// line number.</param>
+/// <param name="Text">The C# source extracted from the document.</param>
 internal sealed record AgentKitSnippet(string Path, int StartLine, string Text);
 
 /// <summary>
@@ -329,9 +330,13 @@ internal static class AgentKitDocCorpus
     /// <summary>
     /// One fenced block found in a markdown document, C# or not.
     /// </summary>
+    /// <param name="OpenLine">1-based line of the opening fence.</param>
     /// <param name="BodyStartLine">1-based first line of the body.</param>
     /// <param name="BodyEndLine">1-based last line of the body; less than
     /// <paramref name="BodyStartLine"/> for an empty block.</param>
+    /// <param name="Language">The language token from the opening fence's info string.</param>
+    /// <param name="Indent">The opening fence's visual column, used to de-indent the body.</param>
+    /// <param name="BlockquoteDepth">Number of blockquote markers enclosing the opening fence.</param>
     internal readonly record struct FenceRegion(int OpenLine, int BodyStartLine, int BodyEndLine, string Language, int Indent, int BlockquoteDepth);
 
     /// <summary>

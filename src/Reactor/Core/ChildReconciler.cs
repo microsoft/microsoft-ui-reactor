@@ -1368,11 +1368,10 @@ internal static class ChildReconciler
         try
         {
             var visual = Animation.AnimationHelper.GetElementVisual(ctrl);
-            var compositor = visual.Compositor;
-            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
-            var coll = compositor.CreateImplicitAnimationCollection();
-            coll["Offset"] = anim;
-            visual.ImplicitAnimations = coll;
+            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(visual.Compositor, "Offset", curve);
+            // A declared layout, .Animate() or transition Offset key wins over the ambient move,
+            // and the element's other keys stay (spec 066 §6).
+            Animation.ImplicitAnimationSlots.Claim(ctrl, "Offset", Animation.ImplicitFeature.Move, 0, anim);
         }
         catch
         {
