@@ -80,37 +80,6 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             textRegistered = true;
             Automation.AddAutomationEventHandler(TextPattern.TextSelectionChangedEvent, inner, TreeScope.Element, selectionHandler);
             selectionRegistered = true;
-            Input MoveInput(double x, double y)
-            {
-                GuardForeground();
-                int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
-                int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
-                Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
-                Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
-                    "Pointer target is inside the virtual desktop");
-                return new Input
-                {
-                    Union = new InputUnion
-                    {
-                        Mouse = new MouseInput
-                        {
-                            X = (int)Math.Clamp(Math.Floor((Math.Round(x) - left + .5) * 65536 / width), 0, 65535),
-                            Y = (int)Math.Clamp(Math.Floor((Math.Round(y) - top + .5) * 65536 / height), 0, 65535),
-                            Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
-                        }
-                    }
-                };
-            }
-            void Point(double x, double y)
-            {
-                Send(MoveInput(x, y));
-                Thread.Sleep(PointerSettleMs);
-            }
-            void Mouse(uint flags)
-            {
-                GuardForeground();
-                Send(new Input { Type = 0, Union = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
-            }
             void Click(double x, double y)
             {
                 Point(x, y);
@@ -120,16 +89,6 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             void MultiClick(double x, double y, int count)
             {
                 for (int i = 0; i < count; i++) Click(x, y);
-            }
-            static double[] Glyph(TextPatternRange document, int start)
-            {
-                var range = document.Clone();
-                range.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, start);
-                range.MoveEndpointByRange(TextPatternRangeEndpoint.End, range, TextPatternRangeEndpoint.Start);
-                range.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 1);
-                var bounds = range.GetBoundingRectangles();
-                Assert.IsTrue(bounds.Length > 0 && bounds[0].Width > 0 && bounds[0].Height > 0);
-                return [bounds[0].X, bounds[0].Y, bounds[0].Width, bounds[0].Height];
             }
             var link = outerText.DocumentRange.FindText("native link", false, false);
             Assert.IsNotNull(link);
@@ -372,6 +331,10 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Console.WriteLine($"Stationary drag sample {sample}: pointer={stationary.X},{stationary.Y}; scrollPercent={previousScroll}; selectedLength={previousLength}");
             }
             Mouse(4); mouseHeld = false;
+            Wait(() => longElement.Current.HelpText.Split(" | ")[^1] is var release &&
+                release.StartsWith("release ", StringComparison.Ordinal) &&
+                release.Contains("captures=0", StringComparison.Ordinal),
+                "character drag release delivered before sampling the stopped scroller");
             Thread.Sleep(SampleIntervalMs);
             double releasedScroll = scroll.Current.VerticalScrollPercent;
             Assert.IsTrue(releasedScroll > ScrollPercentTolerance && releasedScroll < 100 - ScrollPercentTolerance,
@@ -642,7 +605,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         }
     }
 
-    private static void Point(double x, double y)
+    private static Input MoveInput(double x, double y)
     {
         GuardForeground();
         int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
@@ -650,7 +613,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
         Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
         Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
             "Pointer target is inside the virtual desktop");
-        Send(new Input
+        return new Input
         {
             Union = new InputUnion
             {
@@ -661,7 +624,12 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                     Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
                 }
             }
-        });
+        };
+    }
+
+    private static void Point(double x, double y)
+    {
+        Send(MoveInput(x, y));
         Thread.Sleep(PointerSettleMs);
     }
 

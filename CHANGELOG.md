@@ -272,7 +272,8 @@ Conventions for contributors:
 
 - Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
   not individual message boundaries. Dragging above or below a message while still
-  inside the chat no longer scrolls the timeline (openclaw/openclaw-windows-node#1844).
+  inside the enclosing `ScrollView`/`ScrollViewer` no longer causes autoscroll
+  (PR #1631, openclaw/openclaw-windows-node#1844).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition

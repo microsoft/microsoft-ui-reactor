@@ -785,7 +785,7 @@ internal static partial class MarkdownSelectionFixtures
                     selection.ScrollDrag(selection.RootPoint(new Point(30, -12)));
                     await Harness.Render();
                 }
-                H.Check($"MdSelection_{kind}_ReturningInsideViewportStopsScroll", Math.Abs(Offset() - before) < .5,
+                H.Check($"MdSelection_{kind}_InteriorScrollDragCallsLeaveOffsetUnchanged", Math.Abs(Offset() - before) < .5,
                     $"before={before}; after={Offset()}");
             }
         }
