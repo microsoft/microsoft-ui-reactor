@@ -53,6 +53,34 @@ public class DiagramTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_images, "arch", "overview.svg")));
     }
 
+    [Theory]
+    [InlineData("arch")]
+    [InlineData("arch/")]
+    public void Selected_topic_copies_only_its_own_diagrams(string topic)
+    {
+        WriteSvg("arch", "overview", "<svg/>");
+        WriteSvg("other", "unrelated", "<svg/>");
+
+        var result = DiagramProcessor.Process(
+            _diagrams, _images, new FakeMermaid(available: true), topic);
+
+        Assert.Equal(new[] { "overview.svg" }, result.CopiedSvgs.ToArray());
+        Assert.True(File.Exists(Path.Combine(_images, "arch", "overview.svg")));
+    }
+
+    [Fact]
+    public void Render_rejects_escaping_relative_topic_without_copying_files()
+    {
+        var outside = Path.Combine(_root, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "overview.svg"), "<svg/>");
+        var topic = Path.GetRelativePath(_diagrams, outside);
+
+        Assert.Throws<DocPipelineException>(() =>
+            DiagramProcessor.Process(_diagrams, _images, new FakeMermaid(available: true), topic));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_images));
+    }
+
     [Fact]
     public void Svg_identical_content_is_skipped()
     {

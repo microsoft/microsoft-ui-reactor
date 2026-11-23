@@ -24,6 +24,46 @@ namespace Microsoft.UI.Reactor.Core;
 
 public sealed partial class Reconciler
 {
+    // The depth of the layer being updated in its control's shared-target chain, 0 for the
+    // outermost (spec 066 §6.1). It names that layer's implicit animation claims.
+    private int _implicitSlot;
+    // Set when a layer of the control being updated deferred an implicit key's restore.
+    private bool _implicitDeferred;
+    // Mount frames are numbered as they start, so a frame nested in another has a higher number.
+    // A control whose claims were made by a deeper frame was forwarded to this layer by its
+    // handler (a keyed Memo, a flyout, any decorator, even one that reports it owns the control),
+    // so those claims move one slot inward before this layer claims. Each Mount that handles the
+    // claims then records itself as their outermost owner.
+    private int _mountFrames, _lastClaimFrame;
+
+    private void StampImplicitClaims(UIElement control, int frame, Element element)
+    {
+        if (ImplicitAnimationSlots.Claims(control) is not { } claims) return;
+        Stamp(claims, frame, element);
+    }
+
+    private void Stamp(ImplicitAnimationClaims claims, int frame, Element element)
+    {
+        claims.MountFrame = frame;
+        if (claims.MountOwner is null) claims.MountOwner = new(element);
+        else claims.MountOwner.SetTarget(element);
+        if (frame > _lastClaimFrame) _lastClaimFrame = frame;
+    }
+
+    // In Mount, `layer` is the element being mounted: it shifts and becomes the owner. In
+    // Update's replaced-control path, `self` is the updating element: when its own Mount is
+    // the outermost owner, that Mount already numbered the claims. `stampFrame` is the frame the
+    // layer records as the claims' owner (Mount's own frame, or a fresh one for a replacement).
+    private void ShiftForwardedClaims(UIElement control, int frame, Element? layer = null, Element? self = null,
+        int stampFrame = 0)
+    {
+        if (_lastClaimFrame <= frame || ImplicitAnimationSlots.Claims(control) is not { } claims
+            || claims.MountFrame <= frame) return;
+        if (self is not null && claims.MountOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, self)) return;
+        claims.ShiftInward();
+        if (layer is not null) Stamp(claims, stampFrame > 0 ? stampFrame : frame, layer);
+    }
+
     /// <summary>
     /// Diffs oldEl vs newEl and patches the existing control. Returns null if patched in-place,
     /// or a replacement UIElement if the control type changed at runtime.
@@ -31,7 +71,9 @@ public sealed partial class Reconciler
     internal UIElement? Update(Element oldEl, Element newEl, UIElement control, Action requestRerender)
     {
         DebugElementsDiffed++;
+        int mountMark = _mountFrames;
         var modifierParent = ReferenceEquals(ModifierUpdate.Control, control) ? _reconcilingElement : null;
+        int implicitSlot = modifierParent is null ? 0 : _implicitSlot + 1;
         var modifierTarget = newEl;
         var mountedModifierTarget = modifierParent is null ? null : RecordModifierTarget(control, modifierParent, modifierTarget);
         // Unwrap all layers of ModifiedElement, accumulating modifiers.
@@ -203,6 +245,11 @@ public sealed partial class Reconciler
         var previousModifierUpdate = ModifierUpdate;
         if (!ReferenceEquals(ModifierUpdate.Control, control))
             ModifierUpdate = (control, newEl, modifiers);
+        var previousImplicitSlot = _implicitSlot;
+        _implicitSlot = implicitSlot;
+        // Each control's outermost layer scopes the deferred releases of its whole chain.
+        var previousImplicitDeferred = _implicitDeferred;
+        if (modifierParent is null) _implicitDeferred = false;
 
         UIElement? result;
         bool registeredType = false;
@@ -219,14 +266,28 @@ public sealed partial class Reconciler
 
         // Setters and nested targets run inside handlers, before ApplyModifiers.
         // Release outgoing implicit channels before any of them can write a value.
+        // A key another feature still claims (layout keeps Offset) stays with that feature, and a
+        // claim that takes a released key over returns once the outermost layer sharing this
+        // control has written its values (FlushDeferred below).
         if (oldEl.AnimationConfig is { } previousAnimation)
         {
             var properties = previousAnimation.Properties & ~(newEl.AnimationConfig?.Properties ?? default);
-            // Offset belongs to layout when both renders retain that declaration.
-            if (oldEl.LayoutAnimation?.AnimateOffset == true && newEl.LayoutAnimation?.AnimateOffset == true)
-                properties &= ~AnimateProperty.Offset;
             if (properties != default)
-                ClearPropertyAnimation(control, properties);
+            {
+                ClearPropertyAnimation(control, properties, implicitSlot);
+                _implicitDeferred = true;
+            }
+        }
+        // A departing layout channel goes before setters too, or a setter's Offset write would
+        // still animate with it (the release after setters below then finds nothing). That covers
+        // removing the layout animation and turning one of its channels off.
+        bool offsetDeparts = oldEl.LayoutAnimation?.AnimateOffset == true && newEl.LayoutAnimation?.AnimateOffset != true;
+        bool sizeDeparts = oldEl.LayoutAnimation?.AnimateSize == true && newEl.LayoutAnimation?.AnimateSize != true;
+        if (offsetDeparts || sizeDeparts)
+        {
+            if (offsetDeparts) ImplicitAnimationSlots.Release(control, "Offset", ImplicitFeature.Layout, implicitSlot, deferRestore: true);
+            if (sizeDeparts) ImplicitAnimationSlots.Release(control, "Size", ImplicitFeature.Layout, implicitSlot, deferRestore: true);
+            _implicitDeferred = true;
         }
 
         var keyframes = newEl.KeyframeAnimations;
@@ -420,19 +481,38 @@ public sealed partial class Reconciler
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
             ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
 
-        // Apply transitions after update (re-applies when transition config changes)
-        if (newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
-            ApplyTransitions(target, newEl.ImplicitTransitions, newEl.ThemeTransitions);
+        // Apply transitions after update (re-applies when transition config changes). A
+        // transition the old element had is released here too, so the gate includes it (#1626).
+        // A replaced control is new to this layer: its inner layers just mounted it, so this layer
+        // claims as Mount does, at slot 0 above their claims (spec 066 §6.1).
+        bool replacedControl = result is not null && !ReferenceEquals(result, control);
+        // A layer on a replaced control numbers its claims as a Mount layer does, under a frame
+        // newer than every outer layer's mark, so the layers above shift them in turn.
+        int replacedFrame = 0;
+        if (replacedControl)
+        {
+            implicitSlot = 0;
+            replacedFrame = ++_mountFrames;
+            ShiftForwardedClaims(target, mountMark, layer: newEl, self: newEl, stampFrame: replacedFrame);
+        }
+        var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
+        if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
+            ApplyTransitions(target, previousTransitions, newEl.ImplicitTransitions, newEl.ThemeTransitions, implicitSlot);
 
         // Apply or clear Composition-layer layout animation
         if (newEl.LayoutAnimation is not null)
-            ApplyLayoutAnimation(target, newEl.LayoutAnimation);
-        else if (oldEl.LayoutAnimation is not null)
-            ClearLayoutAnimation(target);
+            ApplyLayoutAnimation(target, newEl.LayoutAnimation, implicitSlot);
+        else if (oldEl.LayoutAnimation is not null && !replacedControl)
+            ClearLayoutAnimation(target, implicitSlot);
 
         // Apply compositor property animation (.Animate() modifier)
         if (newEl.AnimationConfig is not null)
-            ApplyPropertyAnimation(target, newEl.AnimationConfig, newEl.LayoutAnimation);
+            ApplyPropertyAnimation(target, newEl.AnimationConfig, implicitSlot);
+        if (replacedControl && (newEl.ImplicitTransitions is not null || newEl.LayoutAnimation is not null
+            || newEl.AnimationConfig is not null))
+            StampImplicitClaims(target, replacedFrame, newEl);
+        if (modifierParent is null && _implicitDeferred && !replacedControl)
+            ImplicitAnimationSlots.FlushDeferred(target);
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
@@ -468,6 +548,18 @@ public sealed partial class Reconciler
         finally
         {
             ModifierUpdate = previousModifierUpdate;
+            _implicitSlot = previousImplicitSlot;
+            if (modifierParent is null)
+            {
+                // An update that threw after a deferred release still restores the keys it held
+                // back, or a later claim on them would wait for a flush that never comes.
+                if (_implicitDeferred)
+                {
+                    try { ImplicitAnimationSlots.FlushDeferred(control); }
+                    catch { /* Don't mask the exception that ended the update. */ }
+                }
+                _implicitDeferred = previousImplicitDeferred;
+            }
             _reconcilingElement = prevReconcilingElement;
             if (themeChanged)
                 ExitThemeChange();
@@ -1691,9 +1783,7 @@ public sealed partial class Reconciler
         // Offset — letting the implicit animation observe WinUI's own
         // assignment is what makes the move read correctly without us
         // racing the layout pass.
-        var coll = compositor.CreateImplicitAnimationCollection();
-        coll["Offset"] = anim;
-        visual.ImplicitAnimations = coll;
+        ImplicitAnimationSlots.Claim(container, "Offset", ImplicitFeature.Move, 0, anim);
     }
 
 

@@ -1,3 +1,8 @@
 {
-  "expectations": []
+  "expectations": [
+    { "case": "*.Opacity.*", "step": "removeModifier", "field": "residue", "before": "xaml=Opacity keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .OpacityTransition() clears the XAML transition" },
+    { "case": "*.Scale.*", "step": "removeModifier", "field": "residue", "before": "xaml=Scale keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .ScaleTransition() clears the XAML transition" },
+    { "case": "*.Rotation.*", "step": "removeModifier", "field": "residue", "before": "xaml=Rotation keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .RotationTransition() clears the XAML transition" },
+    { "case": "*.Translation.*", "step": "removeModifier", "field": "residue", "before": "xaml=Translation keys=untaken", "after": "xaml=- keys=untaken", "reason": "fixes #1626: removing .TranslationTransition() clears the XAML transition" }
+  ]
 }
