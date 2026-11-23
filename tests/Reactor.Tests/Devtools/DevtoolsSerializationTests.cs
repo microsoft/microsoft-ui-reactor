@@ -10,7 +10,7 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// Wire-shape regression tests for the source-generated devtools result / error
 /// records. These serialize through <see cref="DevtoolsMcpServer.JsonOpts"/> — the
 /// exact options the MCP server uses — so a missing registration (which would throw
-/// <see cref="System.NotSupportedException"/> now that the reflection fallback is
+/// <see cref="global::System.NotSupportedException"/> now that the reflection fallback is
 /// gone) or a camelCase/field-name drift surfaces here rather than on the wire.
 /// </summary>
 [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP payload objects (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]

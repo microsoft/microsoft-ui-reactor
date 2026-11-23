@@ -26,6 +26,8 @@ internal static class CompositorTransitionFixtures
     private static readonly TimeSpan Long = TimeSpan.FromSeconds(3);
     private const double Left = 50, Top = 50;
 
+    private static bool Near(float actual, float expected) => global::System.MathF.Abs(actual - expected) < 1e-4f;
+
     private static BorderElement Target() => Border(TextBlock(" "))
         .Width(100).Height(40)
         .Background(new SolidColorBrush(Microsoft.UI.Colors.Red))
@@ -547,15 +549,15 @@ internal static class CompositorTransitionFixtures
         protected override async Task Run()
         {
             await Mount(Target().Scale(2).Rotation(30).OpacityTransition());
-            H.Check(Name + "_FacadeIdentity", Control.Scale == Vector3.One && Control.Rotation == 0, $"scale={Control.Scale} rotation={Control.Rotation}");
+            H.Check(Name + "_FacadeIdentity", Control.Scale == Vector3.One && Near(Control.Rotation, 0), $"scale={Control.Scale} rotation={Control.Rotation}");
             H.Check(Name + "_VisualHoldsValue", Visual.Scale == new Vector3(2, 2, 1) && Math.Abs(Visual.RotationAngleInDegrees - 30) < 0.01f,
                 $"scale={Visual.Scale} rotation={Visual.RotationAngleInDegrees}");
             await Mount(Target().Scale(2).Rotation(30));
-            H.Check(Name + "_TransformOnly_FacadeIdentity", Control.Scale == Vector3.One && Control.Rotation == 0,
+            H.Check(Name + "_TransformOnly_FacadeIdentity", Control.Scale == Vector3.One && Near(Control.Rotation, 0),
                 $"scale={Control.Scale} rotation={Control.Rotation}");
             // Positive control: the oracle sees a facade value that user code wrote.
             await Mount(Target().Set(static b => b.Scale = new Vector3(2, 2, 1)));
-            H.Check(Name + "_PositiveControl_SetterReadsFacade", Control.Scale == new Vector3(2, 2, 1));
+            H.Check(Name + "_PositiveControl_SetterReadsFacade", Control.Scale == new Vector3(2, 2, 1), $"scale={Control.Scale}");
         }
     }
 
@@ -733,9 +735,9 @@ internal static class CompositorTransitionFixtures
             visual.StopAnimation("Opacity");
 
             TransitionEngine.SetOpacityNow(Control, 0);
-            H.Check(Name + "_HideIsImmediate", !Running(visual) && visual.Opacity == 0, $"running={Running(visual)} opacity={visual.Opacity}");
+            H.Check(Name + "_HideIsImmediate", !Running(visual) && Near(visual.Opacity, 0), $"running={Running(visual)} opacity={visual.Opacity}");
             TransitionEngine.NormalizeVisual(visual);
-            H.Check(Name + "_ResetIsImmediate", !Running(visual) && visual.Opacity == 1, $"running={Running(visual)} opacity={visual.Opacity}");
+            H.Check(Name + "_ResetIsImmediate", !Running(visual) && Near(visual.Opacity, 1), $"running={Running(visual)} opacity={visual.Opacity}");
             H.Check(Name + "_KeyKept", visual.ImplicitAnimations?.ContainsKey("Opacity") == true);
         }
     }
@@ -804,7 +806,7 @@ internal static class CompositorTransitionFixtures
             await Mount(WithSetter(0, transition: false));
             listener.Reset();
             await Update(WithSetter(10, transition: false));
-            H.Check(Name + "_NegativeControl_PlainSetterSilent", Control.Rotation == 10 && listener.Describe() == "-", listener.Describe());
+            H.Check(Name + "_NegativeControl_PlainSetterSilent", Near(Control.Rotation, 10) && listener.Describe() == "-", listener.Describe());
 
             // A decorator that replaces a blocked control: the transitions go to the new control,
             // and the departing one's blocked visual doesn't fail the update.

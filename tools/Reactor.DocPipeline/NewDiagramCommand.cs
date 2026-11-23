@@ -33,7 +33,7 @@ internal static class NewDiagramCommand
         }
         catch (DocPipelineException ex)
         {
-            Console.Error.WriteLine($"{ex.Code}: {ex.Message}");
+            Console.Error.WriteLine(ex.Code is null ? $"Error: {ex.Message}" : $"{ex.Code}: {ex.Message}");
             return 1;
         }
     }
