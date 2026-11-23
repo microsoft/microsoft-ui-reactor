@@ -1721,6 +1721,8 @@ public sealed partial class Reconciler : IDisposable
         internal bool ReleaseWhenExcluded;
         // Set while a visual-lane renter waits to get its XAML opacity on the visual (ElementPool).
         internal EventHandler<object>? OpacitySyncLayoutHandler;
+        // The visual offset the pool's reset wrote, so the renter's sync can tell a later write from it.
+        internal global::System.Numerics.Vector3? PoolResetOffset;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -2788,7 +2790,8 @@ public sealed partial class Reconciler : IDisposable
             var rented = _pool.TryRent(typeof(T), visualLane);
             if (rented is T t)
             {
-                if (visualLane && ElementPool.IsVisualTaken(rented)) ElementPool.SyncOpacityWhenLoaded(rented);
+                // Armed once the mount succeeds (Mount), so a mount that throws leaves no subscription.
+                if (visualLane && ElementPool.IsVisualTaken(rented)) _visualLaneRental = rented;
                 return t;
             }
         }
@@ -2797,6 +2800,9 @@ public sealed partial class Reconciler : IDisposable
 
     // Spec 066 §7.2: which pool lane the control the current mount rents may come from.
     private PoolRentContext _rentContext;
+
+    // The visual-lane control the current mount rented, whose load-time sync starts once the mount succeeds.
+    private FrameworkElement? _visualLaneRental;
 
     // Element types (exact, or a base of them) registered on this reconciler by app code. Their
     // handlers may write facades.

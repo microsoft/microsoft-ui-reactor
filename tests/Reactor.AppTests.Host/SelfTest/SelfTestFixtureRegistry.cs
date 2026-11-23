@@ -907,6 +907,7 @@ internal static class SelfTestFixtureRegistry
         ("TransformsOnVisual_Drag", static harness => new TransformsOnVisualFixtures.Drag(harness)),
         ("TransformsOnVisual_Diagnostic", static harness => new TransformsOnVisualFixtures.Diagnostic(harness)),
         ("ImplicitSlots_DeferredRestoreSurvivesThrow", static harness => new ImplicitAnimationSlotsFixtures.DeferredRestoreSurvivesThrow(harness)),
+        ("ImplicitSlots_DepartingLayoutReleasedBeforeSetters", static harness => new ImplicitAnimationSlotsFixtures.DepartingLayoutReleasedBeforeSetters(harness)),
         ("ConnectedAnimation_MountUnmount", static harness => new LayoutAnimationFixtures.ConnectedAnimationMountUnmount(harness)),
         ("ConnectedAnimation_StartsAcrossReplace", static harness => new LayoutAnimationFixtures.ConnectedAnimationStartsAcrossReplace(harness)),
         ("ConnectedAnimation_NoSourceDoesNotStart", static harness => new LayoutAnimationFixtures.ConnectedAnimationNoSourceDoesNotStart(harness)),
