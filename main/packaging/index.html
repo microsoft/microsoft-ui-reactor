@@ -3501,7 +3501,7 @@ version check). Flip it to <code>false</code> only if you've explicitly chosen
 a framework-dependent distribution shape and your install
 instructions tell users to install the WinAppRuntime first.</p>
 <p>To ship this shape, <code>dotnet publish -c Release -r win-x64</code>. The
-publish folder contains <code>MyApp.exe</code>, <code>Reactor.dll</code>, the WinUI runtime
+publish folder contains <code>MyApp.exe</code>, <code>Microsoft.UI.Reactor.dll</code>, the WinUI runtime
 (<code>Microsoft.WindowsAppRuntime.Bootstrap.dll</code>, the XAML compiler
 output <code>MyApp.xbf</code>, etc.), and the .NET runtime if
 <code>WindowsAppSDKSelfContained=true</code>. Zip it and you have a sideloadable
@@ -3583,7 +3583,7 @@ in CI by running publish twice:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">dotnet</span> <span class="n">publish</span> <span class="n">-c</span> <span class="n">Release</span> <span class="n">-r</span> <span class="n">win-x64</span>   <span class="n">-o</span> <span class="n">out</span><span class="p">/</span><span class="n">x64</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">dotnet</span> <span class="n">publish</span> <span class="n">-c</span> <span class="n">Release</span> <span class="n">-r</span> <span class="n">win-arm64</span> <span class="n">-o</span> <span class="n">out</span><span class="p">/</span><span class="n">arm64</span>
 </code></pre></div>
-<p>There is no separate Reactor build for ARM64 — <code>Reactor.dll</code> is
+<p>There is no separate Reactor build for ARM64 — <code>Microsoft.UI.Reactor.dll</code> is
 AnyCPU-equivalent managed code that compiles for both architectures
 from the same source. The native bits below it (the WinUI 3 runtime
 and any <code>System.Drawing.Common</code> / <code>TraceEvent</code> natives transitively
@@ -3677,8 +3677,8 @@ trimmer, so apps that use none of the Advanced subsystems should leave
 <code>Microsoft.UI.Reactor.Advanced</code> off their <code>&lt;PackageReference&gt;</code> list — that
 keeps both the moved subsystems and the Win2D native payload out of your
 build. That split is the whole reason Advanced is a sibling package and not
-a folder inside <code>Reactor.dll</code>.</p>
-<p><strong><code>Reactor.dll</code> is in your publish output as a managed assembly,
+a folder inside <code>Microsoft.UI.Reactor.dll</code>.</p>
+<p><strong><code>Microsoft.UI.Reactor.dll</code> is in your publish output as a managed assembly,
 not a tucked-away framework package.</strong> Reactor ships as the public preview
 NuGet package <code>Microsoft.UI.Reactor</code> version <code>0.1.0-preview.18</code>; local
 source-built smoke packages still use <code>0.0.0-local</code> via <code>mur pack-local</code>.

@@ -3860,7 +3860,7 @@ library can annotate its own forwarders and consumers get the benefit.
 <p><code>Element</code> declares <code>implicit operator Element(string)</code>, so <code>VStack("hi")</code> builds
 its child by calling <code>TextBlock</code> <em>inside Reactor's own assembly</em>. That call site
 cannot be intercepted — interceptors work on ordinary method calls, never on
-operators, and the operator body is already compiled into <code>Reactor.dll</code>.</p>
+operators, and the operator body is already compiled into <code>Microsoft.UI.Reactor.dll</code>.</p>
 <p>Instead, the enclosing factory call stamps the converted argument as it passes
 it through, using <strong>the argument expression's own line</strong>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">VStack</span><span class="p">(</span>
