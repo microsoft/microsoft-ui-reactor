@@ -274,7 +274,12 @@ public sealed partial class Reconciler
             // A keyed Memo shares its factory output's control and tag, so the exit paths read its
             // declaration from the control's state (#1663).
             if (element is KeyedMemoElement && element.ElementTransition.GetExitTransition() is not null)
-                GetOrCreateReactorState(control).MemoTransition = element.ElementTransition;
+            {
+                var memoState = GetOrCreateReactorState(control);
+                memoState.MemoTransition = element.ElementTransition;
+                // A flyout inside the Memo has already recorded itself on the shared control.
+                memoState.MemoWrapsDecorator = memoState.DecoratorElement is not null;
+            }
         }
 
         // Apply interaction states (.InteractionStates() modifier)

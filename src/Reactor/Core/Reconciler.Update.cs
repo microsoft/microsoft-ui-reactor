@@ -423,7 +423,12 @@ public sealed partial class Reconciler
         {
             bool newExit = newEl.ElementTransition?.GetExitTransition() is not null;
             if (newExit || oldEl.ElementTransition?.GetExitTransition() is not null)
-                GetOrCreateReactorState(target).MemoTransition = newExit ? newEl.ElementTransition : null;
+            {
+                var memoState = GetOrCreateReactorState(target);
+                memoState.MemoTransition = newExit ? newEl.ElementTransition : null;
+                // No outer layer is updating this control, so a flyout on it sits inside the Memo.
+                memoState.MemoWrapsDecorator = newExit && modifierParent is null && memoState.DecoratorElement is not null;
+            }
         }
         // A nested update can replace the control or introduce its first
         // restorable inner declaration. Publish the edge before outer restoration.

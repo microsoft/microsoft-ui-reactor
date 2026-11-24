@@ -1690,6 +1690,9 @@ public sealed partial class Reconciler : IDisposable
         // exit owns the slot; if it later drops its exit under the same key, an inner Memo's exit
         // isn't restored, because the inner Memo isn't re-diffed while the outer key holds.
         internal Animation.ElementTransition? MemoTransition;
+        // The keyed Memo owning MemoTransition wraps the flyout decorator in DecoratorElement, rather
+        // than the flyout wrapping the Memo, so its exit comes before the decorator chain's.
+        internal bool MemoWrapsDecorator;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
         // Properties written on the handed-out Visual by a modifier. Kept on native
@@ -1996,6 +1999,7 @@ public sealed partial class Reconciler : IDisposable
                 state.DecoratorElement = null;
                 state.ModifierTargets = null;
                 state.MemoTransition = null;
+                state.MemoWrapsDecorator = false;
             }
             return;
         }
@@ -2363,6 +2367,7 @@ public sealed partial class Reconciler : IDisposable
             state.DecoratorElement = null;
             state.ModifierTargets = null;
             state.MemoTransition = null;
+            state.MemoWrapsDecorator = false;
             if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
         ClearPublishedSource(fe);
@@ -2451,6 +2456,7 @@ public sealed partial class Reconciler : IDisposable
         state.DecoratorElement = null;
         state.ModifierTargets = null;
         state.MemoTransition = null;
+        state.MemoWrapsDecorator = false;
         if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
@@ -2959,6 +2965,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.DecoratorElement = null;
                 rs.ModifierTargets = null;
                 rs.MemoTransition = null;
+                rs.MemoWrapsDecorator = false;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
@@ -5153,12 +5160,15 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// The <c>.Transition()</c> whose exit side plays when <paramref name="control"/> leaves the
-    /// tree, or null. Layers are searched outermost first: a flyout decorator's chain (which
-    /// reaches a keyed Memo it wraps), then a keyed Memo over the control, then the tag's chain.
+    /// tree, or null. Layers are searched outermost first: a keyed Memo wrapping a flyout
+    /// decorator, else the decorator's chain (which reaches a keyed Memo it wraps), then a keyed
+    /// Memo over the control, then the tag's chain.
     /// </summary>
     private static ElementTransition? FindExitTransition(UIElement control)
     {
         if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState state) return null;
+        if (state.MemoTransition is { } outerMemo && (state.DecoratorElement is null || state.MemoWrapsDecorator))
+            return outerMemo;
         ElementTransition? transition = null;
         if (state.DecoratorElement is not null)
             transition = FindMountedElementValue(control, static element => element.ElementTransition);

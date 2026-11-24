@@ -763,6 +763,8 @@ internal static class TransitionTests
         MemoNested,
         /// <summary>A flyout decorator with a fade exit wraps a keyed Memo with a scale exit: the outer flyout's fade plays.</summary>
         FlyoutOverMemo,
+        /// <summary>A keyed Memo with a fade exit wraps a flyout whose target has a scale exit: the outer Memo's fade plays.</summary>
+        MemoOverFlyout,
         /// <summary>As <see cref="Memo"/>, then the pooled control is rented by a plain element, whose removal is immediate.</summary>
         MemoPooledReuse,
     }
@@ -777,7 +779,7 @@ internal static class TransitionTests
     {
         private static readonly Animation.Transition FadeExit = Animation.Transition.Exit(Animation.Transition.Fade);
 
-        private Element Target(bool exit)
+        private Element Target(bool exit, int memoMs = 600)
         {
             var inner = Border(null).Width(100).Height(40);
             Element Declare(Element e) => exit ? e.Transition(FadeExit, Curve.Linear(600)) : e;
@@ -791,6 +793,10 @@ internal static class TransitionTests
                         Memo("k", () => inner).Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
                         TextBlock("flyout"))
                     .Transition(FadeExit, Curve.Linear(600)),
+                ExitWrapper.MemoOverFlyout => Memo("k", () => Flyout(
+                        inner.Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("flyout")))
+                    .Transition(FadeExit, Curve.Linear(memoMs)),
                 _ => Declare(Memo("k", () => inner)),
             };
         }
@@ -808,9 +814,10 @@ internal static class TransitionTests
             try
             {
                 var current = initial;
-                if (wrapper is ExitWrapper.MemoExitAdded or ExitWrapper.MemoExitDropped)
+                if (wrapper is ExitWrapper.MemoExitAdded or ExitWrapper.MemoExitDropped or ExitWrapper.MemoOverFlyout)
                 {
-                    var retimed = VStack(Target(!exitsAtMount));
+                    // MemoOverFlyout retimes its exit, so the update re-records it over the flyout.
+                    var retimed = VStack(wrapper is ExitWrapper.MemoOverFlyout ? Target(true, memoMs: 650) : Target(!exitsAtMount));
                     reconciler.Update(current, retimed, panel, static () => { });
                     current = retimed;
                     H.Check(name + "_UpdateKeptControl", panel.Children.Count == 1 && ReferenceEquals(panel.Children[0], control));
@@ -831,7 +838,7 @@ internal static class TransitionTests
                     $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
                 H.Check(name + "_FadeStarted", reconciler.IsExiting(control)
                     && ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Opacity") is not null);
-                if (wrapper is ExitWrapper.FlyoutOverMemo)
+                if (wrapper is ExitWrapper.FlyoutOverMemo or ExitWrapper.MemoOverFlyout)
                     H.Check(name + "_OuterExitWins",
                         ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Scale") is null);
                 if (replace)
