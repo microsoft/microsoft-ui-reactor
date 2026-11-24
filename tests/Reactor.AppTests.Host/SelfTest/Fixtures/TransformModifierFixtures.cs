@@ -755,6 +755,25 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // A descriptor's own opacity write (Button's IsDisabledFocusable dimming) replaces the
+            // keyframe like a modifier's, so the check must not restart the loop over the dim.
+            using var reconciler = new Reconciler();
+            var first = Button("Dimmed", static () => { }).Opacity(0.8).Keyframes("fade", 1, OpacityPulse);
+            var second = (first with { IsDisabledFocusable = true }).Width(120);
+            var control = (Microsoft.UI.Xaml.Controls.Button)reconciler.Mount(first, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            reconciler.Update(first, second, control, () => { });
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_DisabledFocusableDimReplacesLoop", restarts == 0
+                && Math.Abs(control.Opacity - 0.4) < 0.001, $"restarts={restarts}, opacity={control.Opacity}");
+            reconciler.Update(second, Button("Dimmed", static () => { }), control, () => { });
+            H.SetContent(null);
+        }
+
+        {
             // A Memo wrapper's .OnMount runs after its child armed the check, and its opacity write
             // replaces the keyframe the same way.
             using var reconciler = new Reconciler();
