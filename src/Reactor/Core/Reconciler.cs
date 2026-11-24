@@ -7012,7 +7012,7 @@ public sealed partial class Reconciler : IDisposable
     private static int s_pendingKeyframeOpacityChecks;
 
     /// <summary>
-    /// Snapshots a control's opacity and the visual's Opacity animation around user code (setters,
+    /// Snapshots a control's opacity and the visual's Opacity value and animation around user code (setters,
     /// <c>.OnMount</c>, <c>.OnUpdate</c>). A change to either is a deliberate opacity write, so it
     /// cancels a pending keyframe restart as a modifier's write does (#1669). Free when none is pending.
     /// </summary>
@@ -7022,6 +7022,7 @@ public sealed partial class Reconciler : IDisposable
         private readonly ReactorState? _state;
         private readonly double _opacity;
         private readonly AnimationController? _controller;
+        private readonly float _visualOpacity;
 
         internal KeyframeOpacityProbe(UIElement element)
         {
@@ -7035,14 +7036,20 @@ public sealed partial class Reconciler : IDisposable
             _state = state;
             _opacity = element.Opacity;
             // The keyframe already took the visual, so this has no handoff side effects.
-            _controller = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
+            var visual = ElementCompositionPreview.GetElementVisual(element);
+            _controller = visual.TryGetAnimationController("Opacity");
+            _visualOpacity = visual.Opacity;
         }
 
         internal void Complete()
         {
             if (_element is null || _state is not { KeyframeOpacityCheck: not null } state) return;
+            var visual = ElementCompositionPreview.GetElementVisual(_element);
+            // The visual's base value counts too: once XAML's push stopped the keyframe, a write to the
+            // visual leaves no controller to compare.
             if (global::System.Math.Abs(_element.Opacity - _opacity) > 1e-9
-                || !Equals(ElementCompositionPreview.GetElementVisual(_element).TryGetAnimationController("Opacity"), _controller))
+                || !Equals(visual.TryGetAnimationController("Opacity"), _controller)
+                || global::System.Math.Abs(visual.Opacity - _visualOpacity) > 1e-6f)
                 CancelKeyframeOpacityCheck(state);
         }
     }

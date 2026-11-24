@@ -651,6 +651,32 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // Once the push stopped the keyframe there's no controller left to compare, so a later
+            // write to the visual's opacity must still count as a deliberate replacement. The test
+            // stops the loop itself, standing in for the push, while the element waits collapsed.
+            using var reconciler = new Reconciler();
+            var plain = Border(TextBlock("Stopped Then Written"));
+            var first = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var second = first.Set(static b => ElementCompositionPreview.GetElementVisual(b).Opacity = 0.6f).Width(120);
+            var control = (Border)reconciler.Mount(first, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            var host = new Border { Child = control, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            visual.StopAnimation("Opacity");
+            reconciler.Update(first, second, control, () => { });
+            host.Visibility = Visibility.Visible;
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_VisualWriteAfterStopReplacesLoop", restarts == 0, $"restarts={restarts}");
+            reconciler.Update(second, plain, control, () => { });
+            host.Child = null;
+            H.SetContent(null);
+        }
+
+        {
             // A Memo wrapper's .OnMount runs after its child armed the check, and its opacity write
             // replaces the keyframe the same way.
             using var reconciler = new Reconciler();
