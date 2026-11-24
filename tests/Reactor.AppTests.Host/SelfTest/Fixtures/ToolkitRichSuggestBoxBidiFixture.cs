@@ -88,7 +88,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         }
     }
 
-    private sealed record Side(string Label, Wct.RichSuggestBox Box, WinUI.RichEditBox Editor, FrameworkElement? Frame);
+    private sealed record Side(string Label, FrameworkElement Box, WinUI.RichEditBox Editor, FrameworkElement? Frame);
 
     private sealed record Snapshot(byte[] Pixels, int Width, int Height, double ScaleX, double ScaleY);
 
@@ -157,7 +157,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
 
         // 4. Document geometry.
         foreach (var side in sides)
-            side.Box.TextDocument!.SetText(TextSetOptions.None, string.Join('\r', Paragraphs));
+            side.Editor.TextDocument.SetText(TextSetOptions.None, string.Join('\r', Paragraphs));
         // WaitFor checks before it pumps, and view invalidation only schedules a measure.
         await Harness.Render();
         bool hidden = await Harness.WaitFor(() => sides.All(s => Placeholder(s)?.Visibility != Visibility.Visible));
@@ -166,6 +166,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
 
         var ltrInk = MeasureDocument(ltr, await SnapAsync(ltr, "document"));
         var rtlInk = MeasureDocument(rtl, await SnapAsync(rtl, "document"));
+        await RecordPlainEditorAsync(ltr);
         if (ltrInk is null || rtlInk is null) return;
         foreach (var (side, ink) in new[] { (ltr, ltrInk), (rtl, rtlInk) })
         {
@@ -211,6 +212,40 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         }
     }
 
+    // Recorded only, to classify the document outcome: the same SetText into a plain WinUI RichEditBox
+    // created outside Reactor and Toolkit, in RTL, in the same kind of frame. Added after the last
+    // Reactor render and removed before teardown, so the reconciler never sees it.
+    private async Task RecordPlainEditorAsync(Side sibling)
+    {
+        if (VisualTreeHelper.GetParent(sibling.Frame!) is not WinUI.Panel panel) return;
+        var editor = new WinUI.RichEditBox { Width = BoxWidth, FlowDirection = FlowDirection.RightToLeft };
+        var frame = new WinUI.Border
+        {
+            Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 128, 128, 128)),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Child = editor,
+        };
+        panel.Children.Add(frame);
+        try
+        {
+            var plain = new Side("PlainRTL", editor, editor, frame);
+            bool ready = await Harness.WaitFor(() => editor.IsLoaded && TextView(plain) is not null);
+            Console.WriteLine(Invariant($"# {Name} PlainRTL editor: ready={ready}, flow={editor.FlowDirection}, ") +
+                Invariant($"textAlignment={editor.TextAlignment}, readingOrder={editor.TextReadingOrder}, padding={editor.Padding}, focus={editor.FocusState}"));
+            if (!ready) return;
+            editor.TextDocument.SetText(TextSetOptions.None, string.Join('\r', Paragraphs));
+            await Harness.Render();
+            await Harness.Render(100);
+            var ink = MeasureDocument(plain, await SnapAsync(plain, "document"));
+            Console.WriteLine($"# {Name} PlainRTL document ink (box-relative): {(ink is null ? "incomplete" : Describe(ink))}; view={ViewRect(plain)}");
+        }
+        finally
+        {
+            panel.Children.Remove(frame);
+            await Harness.Render();
+        }
+    }
+
     private void CheckPlaceholder(Side side, bool latin, Snapshot snapshot)
     {
         // WinUI-private, template-pinned part (RichEditBox_themeresources.xaml at fb389b88).
@@ -247,7 +282,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
 
     private Ink[]? MeasureDocument(Side side, Snapshot snapshot)
     {
-        var doc = side.Box.TextDocument!;
+        var doc = side.Editor.TextDocument;
         var view = TextView(side);
         H.Check($"{Name}_{side.Label}_Document_TextViewFound", view is not null);
         if (view is null) return null;
