@@ -292,8 +292,10 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test --shard 1/2
 
 ### Sharding the corpus across runners
 
-CI splits the selftest corpus in two for the Selftests, Packaged Selftests, AOT Selftests and
-Coverage jobs, one runner per half, with `--shard <k>/<n>`. The split lives in
+CI splits the selftest corpus across runners with `--shard <k>/<n>`: three for the Selftests and
+Packaged Selftests jobs, four for AOT Selftests (its per-shard NativeAOT publish is the longest
+fixed cost, so it needs the extra shard to finish with the others), and two for the Coverage
+lanes. The split lives in
 `tests/_shared/SelfTestShard.cs`, which both hosts and both wrappers compile.
 
 - **It is a partition by construction.** Non-pinned fixtures are dealt round-robin in registry

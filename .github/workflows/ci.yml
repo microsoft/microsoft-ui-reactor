@@ -243,7 +243,7 @@ jobs:
         run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore
 
   selftests:
-    name: Selftests (${{ matrix.shard }}/2)
+    name: Selftests (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
@@ -252,15 +252,18 @@ jobs:
     # (issue #988). This job-level cap is the outer backstop for a genuinely wedged runner, so it
     # must sit above that budget but well below the 360-minute default.
     timeout-minutes: 45
-    # Two runners, each running half the fixture corpus (tests/_shared/SelfTestShard.cs). Every
-    # shard also proves the split covers every non-pinned fixture exactly once
-    # (SelfTestBatch.Shards_PartitionTheCorpus), so a shard cannot quietly drop part of the suite.
+    # Three runners, each running a third of the fixture corpus (tests/_shared/SelfTestShard.cs).
+    # A shard spends about 5 minutes on setup, restore and build whatever the count, and the
+    # fixtures themselves take about 14 runner-minutes, so a third shard is what keeps this job
+    # below Build solution. Every shard also proves the split covers every non-pinned fixture
+    # exactly once (SelfTestBatch.Shards_PartitionTheCorpus), so a shard cannot quietly drop part
+    # of the suite.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
-      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/2
+      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -278,7 +281,7 @@ jobs:
         run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64
 
   packaged-tests:
-    name: Packaged Selftests (MSIX) (${{ matrix.shard }}/2)
+    name: Packaged Selftests (MSIX) (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
@@ -290,9 +293,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
-      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/2
+      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -809,18 +812,21 @@ jobs:
           Write-Host "No High/Critical vulnerable packages in shipped projects."
 
   aot-selftests:
-    name: AOT Selftests (${{ matrix.shard }}/2)
+    name: AOT Selftests (${{ matrix.shard }}/4)
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
-    # Half the fixture corpus per runner, split like the JIT Selftests job. Each shard publishes
-    # its own AOT host: fanning one publish out through an artifact would put an upload, a second
-    # job start and a download on the critical path, which costs more than a parallel publish.
+    # A quarter of the fixture corpus per runner, split like the JIT Selftests job. Each shard
+    # publishes its own AOT host: fanning one publish out through an artifact would put an upload,
+    # a second job start and a download on the critical path, which costs more than a parallel
+    # publish. That publish takes about 7 minutes per shard and the fixtures about 12
+    # runner-minutes in total, so this job needs one more shard than the JIT Selftests job to
+    # stay below Build solution.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -864,7 +870,7 @@ jobs:
         run: >
           ./tests/Reactor.AppTests.Host/Test-SelfTestShards.ps1
           -HostExe (Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe')
-          -Count 2 -Shard ${{ matrix.shard }}
+          -Count 4 -Shard ${{ matrix.shard }}
 
       - name: Run AOT selftests
         shell: pwsh
@@ -876,7 +882,7 @@ jobs:
             Write-Error "AOT-published host not found at $exe"
             exit 1
           }
-          & $exe --self-test --shard ${{ matrix.shard }}/2 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
+          & $exe --self-test --shard ${{ matrix.shard }}/4 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
           $code = $LASTEXITCODE
 
           $tap = Get-Content aot-selftest-output.tap
@@ -884,7 +890,7 @@ jobs:
           if (-not $plan) { throw 'The run printed no TAP plan (1..N).' }
           $planned = [int]($plan.Substring(3))
           if ($planned -ne [int]$env:EXPECTED) {
-            throw "The run planned $planned fixture(s), but shard ${{ matrix.shard }}/2 lists $env:EXPECTED."
+            throw "The run planned $planned fixture(s), but shard ${{ matrix.shard }}/4 lists $env:EXPECTED."
           }
           if (-not ($tap | Where-Object { $_ -like '# Total failures:*' })) {
             throw "The run never reached its '# Total failures:' trailer, so the TAP stream is truncated (exit $code)."

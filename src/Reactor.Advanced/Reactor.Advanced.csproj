@@ -69,9 +69,13 @@
     <InternalsVisibleTo Include="Reactor.Markdown.TestRenderer" />
   </ItemGroup>
 
+  <!-- RuntimeIdentifier and SelfContained must flow through unchanged. An app references
+       Reactor directly as well as through this project, and it passes both to its direct
+       reference, so stripping them here built Reactor a second time in a RID-less
+       configuration on every `-r <rid>` build (the AOT selftest and trim-proof publishes). -->
   <ItemGroup>
     <ProjectReference Include="..\Reactor\Reactor.csproj"
-                      GlobalPropertiesToRemove="PublishTrimmed;PublishAot;RuntimeIdentifier;SelfContained" />
+                      GlobalPropertiesToRemove="PublishTrimmed;PublishAot" />
   </ItemGroup>
 
   <ItemGroup>
