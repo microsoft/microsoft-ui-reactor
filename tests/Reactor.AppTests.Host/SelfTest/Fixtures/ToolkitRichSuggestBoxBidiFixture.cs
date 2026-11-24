@@ -20,11 +20,17 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <remarks>
 /// <para>Source predictions (Toolkit 39c45efe, WinUI release/2.2.0 fb389b88): the Toolkit
 /// <c>RichEditBox</c> template part sets no FlowDirection/TextAlignment/TextReadingOrder, so flow is
-/// inherited and alignment/reading order stay at WinUI's runtime defaults (recorded, not asserted).
-/// Text placement is then decided by content (Latin at the physical left, Hebrew at the physical
-/// right) in both flows, and FlowDirection only mirrors chrome (the asymmetric
-/// TextControlThemePadding). WinUI's <c>CTextBoxView::IsRightToLeft</c> is hard-coded false, so the
-/// text view itself is never mirrored.</para>
+/// inherited and alignment/reading order stay at WinUI's runtime defaults (recorded, not asserted),
+/// and FlowDirection only mirrors chrome (the asymmetric TextControlThemePadding). WinUI's
+/// <c>CTextBoxView::IsRightToLeft</c> is hard-coded false, so the text view itself is never mirrored.
+/// The placeholder places text by content (Latin at the physical left, Hebrew at the physical right)
+/// in both flows, as predicted.</para>
+/// <para>The document is not asserted against that content-placement prediction. In this
+/// configuration a plain WinUI RichEditBox renders Hebrew and Hebrew-first paragraphs at the physical
+/// left under DetectFromContent, in both flows (CI evidence, heads eca5b82..6e5ff46). RichEdit's
+/// context alignment is closed-source, so that is recorded as observed native behaviour, not asserted.
+/// What the Toolkit wrapper owns is asserted instead: its document renders exactly like a plain
+/// RichEditBox with the same text, size, padding, theme, flow and focus state.</para>
 /// <para>Instruments. Positions are physical: each box sits alone in a tight LTR <c>Border</c> with an
 /// opaque neutral fill, everything is transformed into that frame, and it is also what is rendered to a
 /// bitmap, so pixel 0 is the box's left edge. The placeholder is measured by
@@ -54,9 +60,6 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
     private const double InkTolerance = 3.0;
     // The same first glyph at the same line edge renders identically: one antialiased pixel.
     private const double SameGlyphTolerance = 1.0;
-    // Two side bearings, RichEdit's whole-unit viewport (TxGetViewportRect floors/ceils) and a
-    // possible trailing caret reserve. Wrong alignment would make the span ~40 DIP, not ~300.
-    private const double SpanTolerance = 6.0;
     // Luminance distance from the region's median (its background) that counts as ink. Over the
     // #808080 frame, primary and placeholder text differ from the text-control fill by >90 in both
     // light and dark themes.
@@ -166,7 +169,8 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
 
         var ltrInk = MeasureDocument(ltr, await SnapAsync(ltr, "document"));
         var rtlInk = MeasureDocument(rtl, await SnapAsync(rtl, "document"));
-        await RecordPlainEditorAsync(ltr);
+        var plainLtrInk = await MeasurePlainEditorAsync(ltr);
+        var plainRtlInk = await MeasurePlainEditorAsync(rtl);
         if (ltrInk is null || rtlInk is null) return;
         foreach (var (side, ink) in new[] { (ltr, ltrInk), (rtl, rtlInk) })
         {
@@ -174,11 +178,24 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             string detail = Invariant($"{Describe(ink)}; view={ViewRect(side)}");
             H.Check($"{Name}_{side.Label}_Document_LatinStartsShared",
                 Math.Abs(ink[0].Left - ink[3].Left) <= SameGlyphTolerance, detail);
-            H.Check($"{Name}_{side.Label}_Document_HebrewEndsShared",
-                Math.Abs(ink[1].Right - ink[2].Right) <= SameGlyphTolerance, detail);
-            H.Check($"{Name}_{side.Label}_Document_SpansViewport",
-                Math.Abs(ink[1].Right - ink[0].Left - view.ActualWidth) <= SpanTolerance,
-                Invariant($"span={ink[1].Right - ink[0].Left:F2}, viewWidth={view.ActualWidth:F2}; {detail}"));
+            // Observed native behaviour, recorded only (see remarks).
+            Console.WriteLine(Invariant($"# {Name} {side.Label} native note (recorded, not asserted): Hebrew p1=[{ink[1].Left:F2},{ink[1].Right:F2}], ") +
+                Invariant($"Hebrew-first p2=[{ink[2].Left:F2},{ink[2].Right:F2}], Hebrew right - Latin left={ink[1].Right - ink[0].Left:F2}, viewWidth={view.ActualWidth:F2}"));
+        }
+
+        // Parity with a plain WinUI RichEditBox: same text, size, padding, theme, flow and focus state.
+        H.Check($"{Name}_Document_PlainReferencesMeasured", plainLtrInk is not null && plainRtlInk is not null);
+        if (plainLtrInk is not null && plainRtlInk is not null)
+        {
+            H.Check($"{Name}_LTR_Document_MatchesPlainRichEditBox", SameInk(ltrInk, plainLtrInk),
+                $"toolkit=[{Describe(ltrInk)}]; plain=[{Describe(plainLtrInk)}]");
+            H.Check($"{Name}_RTL_Document_MatchesPlainRichEditBox", SameInk(rtlInk, plainRtlInk),
+                $"toolkit=[{Describe(rtlInk)}]; plain=[{Describe(plainRtlInk)}]");
+            // Positive control: the same comparator must reject a mismatched pair (the 4 DIP flow
+            // mirror), so the matches above cannot come from empty or uniformly placed ink.
+            H.Check($"{Name}_Document_ParityOracleRejectsFlowMismatch",
+                !SameInk(ltrInk, plainRtlInk) && !SameInk(rtlInk, plainLtrInk),
+                $"ltr=[{Describe(ltrInk)}]; plainRtl=[{Describe(plainRtlInk)}]; rtl=[{Describe(rtlInk)}]; plainLtr=[{Describe(plainLtrInk)}]");
         }
 
         // LTR vs RTL: identical relative to the text view; only the view's physical inset mirrors.
@@ -208,17 +225,17 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             string orientation = Invariant($"type={view?.GetType().Name}, localStart->{start:F2}, localEnd->{end:F2}, width={view?.ActualWidth:F2}");
             Console.WriteLine($"# {Name} {side.Label} text-view orientation: {orientation}");
             H.Check($"{Name}_{side.Label}_TextView_PhysicallyLeftToRight",
-                view is not null && Near(end - start, view.ActualWidth) && view.ActualWidth > 2 * SpanTolerance, orientation);
+                view is not null && Near(end - start, view.ActualWidth) && view.ActualWidth > BoxWidth / 2, orientation);
         }
     }
 
-    // Recorded only, to classify the document outcome: the same SetText into a plain WinUI RichEditBox
-    // created outside Reactor and Toolkit, in RTL, in the same kind of frame. Added after the last
-    // Reactor render and removed before teardown, so the reconciler never sees it.
-    private async Task RecordPlainEditorAsync(Side sibling)
+    // The parity reference: a plain WinUI RichEditBox created outside Reactor and Toolkit, with the
+    // sibling Toolkit editor's flow, in the same kind of frame and panel (so the same theme). Added after
+    // the last Reactor render and removed before teardown, so the reconciler never sees it.
+    private async Task<Ink[]?> MeasurePlainEditorAsync(Side sibling)
     {
-        if (VisualTreeHelper.GetParent(sibling.Frame!) is not WinUI.Panel panel) return;
-        var editor = new WinUI.RichEditBox { Width = BoxWidth, FlowDirection = FlowDirection.RightToLeft };
+        if (VisualTreeHelper.GetParent(sibling.Frame!) is not WinUI.Panel panel) return null;
+        var editor = new WinUI.RichEditBox { Width = BoxWidth, FlowDirection = sibling.Box.FlowDirection };
         var frame = new WinUI.Border
         {
             Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, 128, 128, 128)),
@@ -228,16 +245,24 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         panel.Children.Add(frame);
         try
         {
-            var plain = new Side("PlainRTL", editor, editor, frame);
+            var plain = new Side($"Plain{sibling.Label}", editor, editor, frame);
             bool ready = await Harness.WaitFor(() => editor.IsLoaded && TextView(plain) is not null);
-            Console.WriteLine(Invariant($"# {Name} PlainRTL editor: ready={ready}, flow={editor.FlowDirection}, ") +
-                Invariant($"textAlignment={editor.TextAlignment}, readingOrder={editor.TextReadingOrder}, padding={editor.Padding}, focus={editor.FocusState}"));
-            if (!ready) return;
+            var t = sibling.Editor;
+            string detail = Invariant($"ready={ready}, flow={editor.FlowDirection}/{t.FlowDirection}, width={editor.ActualWidth:F2}/{t.ActualWidth:F2}, ") +
+                Invariant($"padding={editor.Padding}/{t.Padding}, border={editor.BorderThickness}/{t.BorderThickness}, ") +
+                Invariant($"align={editor.TextAlignment}/{t.TextAlignment}, order={editor.TextReadingOrder}/{t.TextReadingOrder}, ") +
+                Invariant($"font={editor.FontSize}/{t.FontSize}, theme={editor.ActualTheme}/{t.ActualTheme}, focus={editor.FocusState}/{t.FocusState}");
+            H.Check($"{Name}_{plain.Label}_ComparableToToolkitEditor",
+                ready && editor.FlowDirection == t.FlowDirection && Near(editor.ActualWidth, t.ActualWidth) &&
+                editor.Padding == t.Padding && editor.BorderThickness == t.BorderThickness &&
+                editor.TextAlignment == t.TextAlignment && editor.TextReadingOrder == t.TextReadingOrder &&
+                Math.Abs(editor.FontSize - t.FontSize) <= 0.01 && editor.ActualTheme == t.ActualTheme &&
+                editor.FocusState == FocusState.Unfocused && t.FocusState == FocusState.Unfocused, detail);
+            if (!ready) return null;
             editor.TextDocument.SetText(TextSetOptions.None, string.Join('\r', Paragraphs));
             await Harness.Render();
             await Harness.Render(100);
-            var ink = MeasureDocument(plain, await SnapAsync(plain, "document", assert: false), assert: false);
-            Console.WriteLine($"# {Name} PlainRTL document ink (box-relative): {(ink is null ? "incomplete" : Describe(ink))}; view={ViewRect(plain)}");
+            return MeasureDocument(plain, await SnapAsync(plain, "document"));
         }
         finally
         {
@@ -245,6 +270,12 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             await Harness.Render();
         }
     }
+
+    private static bool SameInk(Ink[] a, Ink[] b) =>
+        a.Length == b.Length && a.Zip(b).All(p =>
+            p.First.Count > 0 && p.Second.Count > 0 &&
+            Math.Abs(p.First.Left - p.Second.Left) <= SameGlyphTolerance &&
+            Math.Abs(p.First.Right - p.Second.Right) <= SameGlyphTolerance);
 
     private void CheckPlaceholder(Side side, bool latin, Snapshot snapshot)
     {
@@ -280,11 +311,11 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             ink is { Count: > 0 } && Math.Abs(inkEdge - target) <= InkTolerance, detail);
     }
 
-    private Ink[]? MeasureDocument(Side side, Snapshot snapshot, bool assert = true)
+    private Ink[]? MeasureDocument(Side side, Snapshot snapshot)
     {
         var doc = side.Editor.TextDocument;
         var view = TextView(side);
-        Verify(assert, $"{Name}_{side.Label}_Document_TextViewFound", view is not null, "ContentElement.Content");
+        H.Check($"{Name}_{side.Label}_Document_TextViewFound", view is not null);
         if (view is null) return null;
         double boxLeft = In(side, side.Box).Left;
         var interior = Interior(side);
@@ -313,7 +344,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             Console.WriteLine(Invariant($"# {Name} {side.Label} p{i}: ink={Rel(ink, boxLeft)}, getRect client={client} none={none} hit={hit}, ") +
                 Invariant($"getPoint head left={headLeft} right={headRight}, paragraphFormat rtl={format.RightToLeft} align={format.Alignment}"));
             bool measured = range.Text == Paragraphs[i] && client.Height > 0 && double.IsFinite(client.Y) && ink is { Count: > 0 };
-            Verify(assert, $"{Name}_{side.Label}_Document_Paragraph{i}_Measured", measured,
+            H.Check($"{Name}_{side.Label}_Document_Paragraph{i}_Measured", measured,
                 Invariant($"text={range.Text == Paragraphs[i]}, band={client.Y:F2}+{client.Height:F2}, ink={Rel(ink, boxLeft)}"));
             complete &= measured;
             if (ink is { } found) result[i] = found with { Left = found.Left - boxLeft, Right = found.Right - boxLeft };
@@ -358,17 +389,10 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             Math.Max(0, editor.Height - b.Top - b.Bottom));
     }
 
-    // The plain-editor probe only classifies, so its instrument outcomes are logged, never asserted.
-    private void Verify(bool assert, string name, bool ok, string detail)
-    {
-        if (assert) H.Check(name, ok, detail);
-        else Console.WriteLine($"# {name} (recorded, not asserted): {(ok ? "ok" : "not ok")} {detail}");
-    }
-
     private static Rect In(Side side, FrameworkElement element) =>
         element.TransformToVisual(side.Frame).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
-    private async Task<Snapshot> SnapAsync(Side side, string phase, bool assert = true)
+    private async Task<Snapshot> SnapAsync(Side side, string phase)
     {
         var root = side.Frame!;
         var rtb = new RenderTargetBitmap();
@@ -381,7 +405,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             Invariant($"scale={snapshot.ScaleX:F3}x{snapshot.ScaleY:F3}, rasterization={scale}, bytes={pixels.Length}");
         Console.WriteLine($"# {Name} {side.Label} {phase} snapshot: {detail}");
         // Precondition for every ink check: the bitmap covers exactly the frame at the device scale.
-        Verify(assert, $"{Name}_{side.Label}_{phase.Replace(' ', '_')}_BitmapCoversFrame",
+        H.Check($"{Name}_{side.Label}_{phase.Replace(' ', '_')}_BitmapCoversFrame",
             Math.Abs(snapshot.ScaleX - scale) <= 0.02 && Math.Abs(snapshot.ScaleY - scale) <= 0.02 &&
             pixels.Length >= rtb.PixelWidth * rtb.PixelHeight * 4, detail);
         return snapshot;
