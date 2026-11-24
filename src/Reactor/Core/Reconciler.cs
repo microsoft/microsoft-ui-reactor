@@ -8034,9 +8034,9 @@ public sealed partial class Reconciler : IDisposable
         {
             // Every write that points a ref at this control is recorded, so a ref already
             // pointing here is already tracked and the steady-state update skips the DP read.
-            bool tracked = ReferenceEquals(newRef.Current, fe);
+            // Record it before SetCurrent, whose CurrentChanged dispatch can throw.
+            if (!ReferenceEquals(newRef.Current, fe)) TrackProducerRef(fe, newRef);
             newRef.SetCurrent(fe);
-            if (!tracked) TrackProducerRef(fe, newRef);
             AssertTypedRefMatch(newRef, fe);
         }
 

@@ -937,6 +937,24 @@ internal static class PoolLaneFixtures
                 H.Check(p + "_RenterNotReferenced", swapped.Current is null && r.Current is null);
             }
 
+            // A direct Mount runs outside a Reconcile commit, so the ref's CurrentChanged dispatches
+            // synchronously and can throw after Current was set. Unmount must still clear the ref.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingDispatch";
+                using var reconciler = new Reconciler();
+                var r = new ElementRef();
+                Action<FrameworkElement?> boom = static v => { if (v is not null) throw new InvalidOperationException("boom"); };
+                r.CurrentChanged += boom;
+                bool threw = false;
+                try { reconciler.Mount(Memo("k", static () => Target("A")).Ref(r), static () => { }); }
+                catch (InvalidOperationException) { threw = true; }
+                r.CurrentChanged -= boom;
+                var control = r.Current;
+                H.Check(p + "_Threw", threw && control is WinUI.Border);
+                if (control is not null) reconciler.UnmountChild(control);
+                H.Check(p + "_ClearedOnUnmount", r.Current is null);
+            }
+
             // A changed Memo key remounts: the ref moves to the replacement before the old control is
             // unmounted, and that unmount must not clear it.
             {
