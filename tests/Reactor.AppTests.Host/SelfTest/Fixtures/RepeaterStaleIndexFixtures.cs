@@ -32,7 +32,9 @@ internal static class RepeaterStaleIndexFixtures
         bool Focus = false,
         bool ChangeWhileScrolledAway = false,
         bool ScrollAwayAfterChange = false,
-        bool StayScrolledAway = false);
+        bool StayScrolledAway = false,
+        bool FocusAfterChange = false,
+        bool ExpectEmpty = false);
 
     private static Element Row(int key, int gen, bool composite)
     {
@@ -131,12 +133,14 @@ internal static class RepeaterStaleIndexFixtures
         }
 
         Button? target = null;
-        if (s.Focus)
+        async Task FocusTargetAsync()
         {
             target = h.FindControl<Button>(b => b.Content as string == "r2 g0");
             h.Check(Name("FocusTaken"), target?.Focus(FocusState.Programmatic) == true);
             await Harness.Render();
         }
+        if (s.Focus && !s.FocusAfterChange)
+            await FocusTargetAsync();
 
         if (s.ChangeWhileScrolledAway)
         {
@@ -158,16 +162,18 @@ internal static class RepeaterStaleIndexFixtures
         if (s.ChangeWhileScrolledAway && changed.Count == initial.Count)
             h.Check(Name("NoScrollJump"), offset() >= scrollable() - 1, $"offset {offset():0} of {scrollable():0}");
 
+        // Focusing a row the reorder shifted while nothing was focused pins it with its stale index.
+        if (s.Focus && s.FocusAfterChange)
+            await FocusTargetAsync();
 
         if (target is not null && s.ChangeWhileScrolledAway)
         {
             var focused = FocusManager.GetFocusedElement(target.XamlRoot) as DependencyObject;
             h.Check(Name("FocusLeftStaleRow"),
-                !ReferenceEquals(focused, target) && IsDescendantOf(focused, repeater),
+                !ReferenceEquals(focused, target) && IsDescendantOf(focused, repeater) != s.ExpectEmpty,
                 $"focused {focused?.GetType().Name ?? "null"} '{(focused as Button)?.Content}'");
             if (s.StayScrolledAway)
                 h.Check(Name("FocusFollowedItem"), focused is Button { Content: "r2 g0" } && !ReferenceEquals(focused, target));
-
         }
 
         if (s.ChangeWhileScrolledAway && !s.StayScrolledAway)
@@ -183,6 +189,11 @@ internal static class RepeaterStaleIndexFixtures
         await Harness.Render();
 
         var painted = Painted();
+        if (s.ExpectEmpty)
+        {
+            h.Check(Name("NoRowsPainted"), painted.Count == 0, $"painted [{string.Join(", ", painted)}]");
+            return;
+        }
         var expected = (s.StayScrolledAway ? changed.TakeLast(painted.Count) : changed.Take(painted.Count)).Select(k => $"r{k} g1").ToList();
         h.Check(Name("RowsPainted"), painted.Count >= 5);
         h.Check(Name("RowsMatchKeys"), painted.SequenceEqual(expected),
@@ -193,6 +204,24 @@ internal static class RepeaterStaleIndexFixtures
     private static List<int> Move2ToTop(List<int> k) { k.RemoveAt(2); k.Insert(0, 2); return k; }
     private static List<int> Remove2(List<int> k) { k.RemoveAt(2); return k; }
     private static List<int> Move2ToEnd(List<int> k) { k.RemoveAt(2); k.Add(2); return k; }
+    private static List<int> Clear(List<int> k) { k.Clear(); return k; }
+
+    // A reorder while nothing in the list is focused leaves the shifted rows with stale
+    // indices. Focusing one afterwards pins it, and it used to come back as a stale row after a
+    // scroll away and back.
+    internal class FocusedAfterOnScreenSwapThenScrolled_NoStaleRow(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
+            new("FocusedAfterSwapThenScrolled", Swap2And3, Focus: true, FocusAfterChange: true, ScrollAwayAfterChange: true));
+    }
+
+    // With no row left to take focus, focus has to leave the list: it used to stay on the
+    // deleted row's control, still pinned and still invocable from the keyboard.
+    internal class FocusedRowListClearedWhileScrolledAway_FocusLeavesList(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
+            new("FocusedListCleared", Clear, Focus: true, ChangeWhileScrolledAway: true, ExpectEmpty: true));
+    }
 
     // An on-screen reorder used to leave two rows claiming the moved row's index, and the next
     // re-render then diffed one row's content into the other row's control: one row was
