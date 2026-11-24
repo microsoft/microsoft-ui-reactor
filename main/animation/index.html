@@ -1220,6 +1220,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Scale Transition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transform-origin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transform origin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3614,6 +3631,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Scale Transition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transform-origin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transform origin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4159,17 +4193,38 @@ factor:</p>
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">            </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span>
 <a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">             </span><span class="p">.</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
 <a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">             </span><span class="p">.</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">CardBackground</span><span class="p">)</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">             </span><span class="p">.</span><span class="n">Scale</span><span class="p">(</span><span class="n">enlarged</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mf">1.5f</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mf">1.0f</span><span class="p">)</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">             </span><span class="p">.</span><span class="n">ScaleTransition</span><span class="p">()</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="p">}</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">             </span><span class="p">.</span><span class="n">TransformOrigin</span><span class="p">(</span><span class="mf">0.5f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5f</span><span class="p">)</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">             </span><span class="p">.</span><span class="n">Scale</span><span class="p">(</span><span class="n">enlarged</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mf">1.5f</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mf">1.0f</span><span class="p">)</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">             </span><span class="p">.</span><span class="n">ScaleTransition</span><span class="p">()</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="p">}</span>
 </code></pre></div>
 <p><img alt="Scale transition" src="../images/animation/scale-transition.png" /></p>
 <p>A value of <code>1.0f</code> is normal size, <code>1.5f</code> is 150%. Scale grows from the
-element's top-left corner by default — set <code>.CenterPoint()</code> to scale around a
-different origin. You can pass a custom <code>Vector3Transition</code> to control which
-axes animate.</p>
+element's leading top corner by default. The sample sets <code>.TransformOrigin(0.5f, 0.5f)</code>
+so it grows from the centre (see <a href="#transform-origin">Transform origin</a>). You can pass a
+custom <code>Vector3Transition</code> to control which axes animate.</p>
+<h3 id="transform-origin">Transform origin<a class="headerlink" href="#transform-origin" title="Permanent link">&para;</a></h3>
+<p><code>.Scale()</code> and <code>.Rotation()</code> pivot on the element's leading top corner unless you
+move the pivot. <code>.TransformOrigin(x, y)</code> sets it as a fraction of the element's laid-out
+size: <code>(0.5f, 0.5f)</code> is the centre and <code>(1, 1)</code> the trailing bottom corner. The pivot
+follows resizes, hit-testing and UI Automation bounds honour it, and it works with hover
+states, keyframes and enter or exit transitions on the same element.</p>
+<p><code>.CenterPoint(new Vector3(x, y, 0))</code> sets the pivot in pixels instead. On an element that
+also has <code>.TransformOrigin()</code>, it's an offset added to the size-relative pivot, like CSS
+<code>calc(50% + 10px)</code>.</p>
+<p>A few details:</p>
+<ul>
+<li><code>x</code> is flow-relative. In a right-to-left layout <code>0</code> is the right edge, the same as
+  the transform space WinUI uses.</li>
+<li>While <code>.LayoutAnimation()</code> animates the element's size, the pivot follows the animating
+  size, while the content already renders at its final size. At rest it's exact.</li>
+<li>With <code>.TransformOrigin()</code> set, <code>.Animate()</code> and <code>WithAnimation</code> animate a <code>.CenterPoint()</code>
+  change as a move of the offset, and the pivot keeps following the size.</li>
+<li><code>.TransformOrigin()</code> takes the element's composition visual, like the other transform
+  modifiers (see below). <code>.TransformOrigin(0, 0)</code> doesn't, since it's the default pivot.</li>
+</ul>
 <h2 id="translation-transition">Translation Transition<a class="headerlink" href="#translation-transition" title="Permanent link">&para;</a></h2>
 <p><code>.TranslationTransition()</code> animates position offsets. Set <code>.Translation()</code>
 to the target X, Y, Z offset in pixels:</p>
@@ -4287,7 +4342,7 @@ that your own code writes.</p>
 <p><code>.BackgroundTransition()</code> stays WinUI's XAML <code>BrushTransition</code>, so it follows
 the same setting on its own.</p>
 <h3 id="reading-transforms-back-and-set">Reading transforms back and <code>.Set(...)</code><a class="headerlink" href="#reading-transforms-back-and-set" title="Permanent link">&para;</a></h3>
-<p><code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code> and <code>.CenterPoint()</code> write the
+<p><code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code>, <code>.CenterPoint()</code> and <code>.TransformOrigin()</code> write the
 element's composition visual, and so do the four transitions and every
 compositor feature on this page. A non-identity transform, a transition or a
 compositor feature takes the visual, and an identity value such as
@@ -4296,7 +4351,9 @@ compositor feature takes the visual, and an identity value such as
 <li><code>fe.Scale</code>, <code>fe.Rotation</code> and <code>fe.CenterPoint</code> read back identity for values
   set with <code>.Scale()</code>, <code>.Rotation()</code> and <code>.CenterPoint()</code>. Read
   <code>ElementCompositionPreview.GetElementVisual(fe).Scale</code> (or <code>RotationAngle</code>,
-  in radians, and <code>CenterPoint</code>) instead.</li>
+  in radians, and <code>CenterPoint</code>) instead. With <code>.TransformOrigin()</code> set, an
+  expression drives <code>CenterPoint</code> and the getter doesn't return it. The pivot is
+  the element's size times the origin, plus the <code>.CenterPoint()</code> offset.</li>
 <li>WinUI rejects <code>.Set(fe =&gt; fe.Rotation = …)</code>, and the same for <code>Scale</code>,
   <code>CenterPoint</code>, <code>RotationAxis</code>, <code>TransformMatrix</code>, <code>UIElement.StartAnimation</code>
   and the XAML <code>*Transition</code> properties, and the same writes from <code>.OnMount(...)</code>.
@@ -4610,21 +4667,23 @@ the GPU — Reactor's render loop is never involved:</p>
 <a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">                    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Hover me&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
 <a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">                        </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">)</span>
 <a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">                </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">).</span><span class="n">Size</span><span class="p">(</span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="mi">60</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">SystemSuccess</span><span class="p">)</span>
-<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">                 </span><span class="p">.</span><span class="n">InteractionStates</span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">s</span>
-<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">                    </span><span class="p">.</span><span class="n">PointerOver</span><span class="p">(</span><span class="n">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">0.85f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">1.05f</span><span class="p">)</span>
-<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">                    </span><span class="p">.</span><span class="n">Pressed</span><span class="p">(</span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">0.95f</span><span class="p">,</span><span class="w"> </span><span class="n">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">0.7f</span><span class="p">)),</span>
-<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a><span class="w">                </span><span class="n">Border</span><span class="p">(</span>
-<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="w">                    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Press me&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
-<a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a><span class="w">                        </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">)</span>
-<a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="w">                </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">).</span><span class="n">Size</span><span class="p">(</span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="mi">60</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">AccentSecondary</span><span class="p">)</span>
-<a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a><span class="w">                 </span><span class="p">.</span><span class="n">InteractionStates</span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">s</span>
-<a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a><span class="w">                    </span><span class="p">.</span><span class="n">PointerOver</span><span class="p">(</span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">1.03f</span><span class="p">)</span>
-<a id="__codelineno-12-22" name="__codelineno-12-22" href="#__codelineno-12-22"></a><span class="w">                    </span><span class="p">.</span><span class="n">Pressed</span><span class="p">(</span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">0.97f</span><span class="p">,</span><span class="w"> </span><span class="n">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">0.8f</span><span class="p">),</span>
-<a id="__codelineno-12-23" name="__codelineno-12-23" href="#__codelineno-12-23"></a><span class="w">                    </span><span class="n">curve</span><span class="p">:</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Animation</span><span class="p">.</span><span class="n">Curve</span><span class="p">.</span><span class="n">Spring</span><span class="p">(</span><span class="mf">0.5f</span><span class="p">))</span>
-<a id="__codelineno-12-24" name="__codelineno-12-24" href="#__codelineno-12-24"></a><span class="w">            </span><span class="p">)</span>
-<a id="__codelineno-12-25" name="__codelineno-12-25" href="#__codelineno-12-25"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
-<a id="__codelineno-12-26" name="__codelineno-12-26" href="#__codelineno-12-26"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-12-27" name="__codelineno-12-27" href="#__codelineno-12-27"></a><span class="p">}</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">                 </span><span class="p">.</span><span class="n">TransformOrigin</span><span class="p">(</span><span class="mf">0.5f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5f</span><span class="p">)</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">                 </span><span class="p">.</span><span class="n">InteractionStates</span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">s</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">                    </span><span class="p">.</span><span class="n">PointerOver</span><span class="p">(</span><span class="n">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">0.85f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">1.05f</span><span class="p">)</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a><span class="w">                    </span><span class="p">.</span><span class="n">Pressed</span><span class="p">(</span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">0.95f</span><span class="p">,</span><span class="w"> </span><span class="n">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">0.7f</span><span class="p">)),</span>
+<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="w">                </span><span class="n">Border</span><span class="p">(</span>
+<a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a><span class="w">                    </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Press me&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
+<a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="w">                        </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">)</span>
+<a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a><span class="w">                </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">).</span><span class="n">Size</span><span class="p">(</span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="mi">60</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">AccentSecondary</span><span class="p">)</span>
+<a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a><span class="w">                 </span><span class="p">.</span><span class="n">TransformOrigin</span><span class="p">(</span><span class="mf">0.5f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5f</span><span class="p">)</span>
+<a id="__codelineno-12-22" name="__codelineno-12-22" href="#__codelineno-12-22"></a><span class="w">                 </span><span class="p">.</span><span class="n">InteractionStates</span><span class="p">(</span><span class="n">s</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">s</span>
+<a id="__codelineno-12-23" name="__codelineno-12-23" href="#__codelineno-12-23"></a><span class="w">                    </span><span class="p">.</span><span class="n">PointerOver</span><span class="p">(</span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">1.03f</span><span class="p">)</span>
+<a id="__codelineno-12-24" name="__codelineno-12-24" href="#__codelineno-12-24"></a><span class="w">                    </span><span class="p">.</span><span class="n">Pressed</span><span class="p">(</span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="mf">0.97f</span><span class="p">,</span><span class="w"> </span><span class="n">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">0.8f</span><span class="p">),</span>
+<a id="__codelineno-12-25" name="__codelineno-12-25" href="#__codelineno-12-25"></a><span class="w">                    </span><span class="n">curve</span><span class="p">:</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Animation</span><span class="p">.</span><span class="n">Curve</span><span class="p">.</span><span class="n">Spring</span><span class="p">(</span><span class="mf">0.5f</span><span class="p">))</span>
+<a id="__codelineno-12-26" name="__codelineno-12-26" href="#__codelineno-12-26"></a><span class="w">            </span><span class="p">)</span>
+<a id="__codelineno-12-27" name="__codelineno-12-27" href="#__codelineno-12-27"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-12-28" name="__codelineno-12-28" href="#__codelineno-12-28"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-12-29" name="__codelineno-12-29" href="#__codelineno-12-29"></a><span class="p">}</span>
 </code></pre></div>
 <p><img alt="Interaction states" src="../images/animation/interaction-states.png" /></p>
 <p>The builder supports <code>.PointerOver(...)</code>, <code>.Pressed(...)</code>, and
@@ -4635,8 +4694,8 @@ a <code>curve:</code> parameter for spring or ease transitions between states.</
 <code>.CenterPoint()</code> on the same element. A state's <code>scale</code>, <code>translation</code>, and
 <code>rotation</code> are the values the element animates to, not offsets from its own
 transform, and leaving the state returns to the element's own values. Use
-<code>.CenterPoint()</code> to make a hover scale grow from somewhere other than the
-top-left corner.</p>
+<code>.TransformOrigin(0.5f, 0.5f)</code> to make a hover scale grow from the centre, as the
+sample does, or <code>.CenterPoint()</code> for a pivot in pixels.</p>
 <h2 id="enterexit-transitions">Enter/Exit Transitions<a class="headerlink" href="#enterexit-transitions" title="Permanent link">&para;</a></h2>
 <p><code>.Transition()</code> animates an element when it enters or leaves the tree.
 Combine transitions with <code>+</code> (parallel) and <code>|</code> (asymmetric enter/exit):</p>
@@ -4741,15 +4800,16 @@ Define keyframes at progress points from 0.0 to 1.0:</p>
 <a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">                </span><span class="n">TextBlock</span><span class="p">(</span><span class="s">&quot;Pulse target&quot;</span><span class="p">).</span><span class="n">FontSize</span><span class="p">(</span><span class="mi">16</span><span class="p">).</span><span class="n">Bold</span><span class="p">()</span>
 <a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">                    </span><span class="p">.</span><span class="n">HAlign</span><span class="p">(</span><span class="n">HorizontalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">).</span><span class="n">VAlign</span><span class="p">(</span><span class="n">VerticalAlignment</span><span class="p">.</span><span class="n">Center</span><span class="p">)</span>
 <a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">            </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">12</span><span class="p">).</span><span class="n">CornerRadius</span><span class="p">(</span><span class="mi">8</span><span class="p">).</span><span class="n">Size</span><span class="p">(</span><span class="mi">200</span><span class="p">,</span><span class="w"> </span><span class="mi">60</span><span class="p">).</span><span class="n">Background</span><span class="p">(</span><span class="n">Theme</span><span class="p">.</span><span class="n">AccentSecondary</span><span class="p">)</span>
-<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">             </span><span class="p">.</span><span class="n">Keyframes</span><span class="p">(</span><span class="s">&quot;pulse&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">kf</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">kf</span>
-<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">                </span><span class="p">.</span><span class="n">Duration</span><span class="p">(</span><span class="mi">600</span><span class="p">)</span>
-<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">0.0f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">.</span><span class="n">One</span><span class="p">)</span>
-<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">0.4f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">(</span><span class="mf">1.3f</span><span class="p">,</span><span class="w"> </span><span class="mf">1.3f</span><span class="p">,</span><span class="w"> </span><span class="mf">1f</span><span class="p">),</span><span class="w"> </span><span class="n">easing</span><span class="p">:</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Animation</span><span class="p">.</span><span class="n">Easing</span><span class="p">.</span><span class="n">Decelerate</span><span class="p">)</span>
-<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">0.7f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">(</span><span class="mf">0.95f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.95f</span><span class="p">,</span><span class="w"> </span><span class="mf">1f</span><span class="p">))</span>
-<a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">1.0f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">.</span><span class="n">One</span><span class="p">,</span><span class="w"> </span><span class="n">easing</span><span class="p">:</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Animation</span><span class="p">.</span><span class="n">Easing</span><span class="p">.</span><span class="n">Accelerate</span><span class="p">))</span>
-<a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
-<a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a><span class="p">}</span>
+<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">             </span><span class="p">.</span><span class="n">TransformOrigin</span><span class="p">(</span><span class="mf">0.5f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5f</span><span class="p">)</span>
+<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">             </span><span class="p">.</span><span class="n">Keyframes</span><span class="p">(</span><span class="s">&quot;pulse&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">kf</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">kf</span>
+<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">                </span><span class="p">.</span><span class="n">Duration</span><span class="p">(</span><span class="mi">600</span><span class="p">)</span>
+<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">0.0f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">.</span><span class="n">One</span><span class="p">)</span>
+<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">0.4f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">(</span><span class="mf">1.3f</span><span class="p">,</span><span class="w"> </span><span class="mf">1.3f</span><span class="p">,</span><span class="w"> </span><span class="mf">1f</span><span class="p">),</span><span class="w"> </span><span class="n">easing</span><span class="p">:</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Animation</span><span class="p">.</span><span class="n">Easing</span><span class="p">.</span><span class="n">Decelerate</span><span class="p">)</span>
+<a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">0.7f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">(</span><span class="mf">0.95f</span><span class="p">,</span><span class="w"> </span><span class="mf">0.95f</span><span class="p">,</span><span class="w"> </span><span class="mf">1f</span><span class="p">))</span>
+<a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a><span class="w">                </span><span class="p">.</span><span class="n">At</span><span class="p">(</span><span class="mf">1.0f</span><span class="p">,</span><span class="w"> </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="k">global</span><span class="p">::</span><span class="n">System</span><span class="p">.</span><span class="n">Numerics</span><span class="p">.</span><span class="n">Vector3</span><span class="p">.</span><span class="n">One</span><span class="p">,</span><span class="w"> </span><span class="n">easing</span><span class="p">:</span><span class="w"> </span><span class="n">Microsoft</span><span class="p">.</span><span class="n">UI</span><span class="p">.</span><span class="n">Reactor</span><span class="p">.</span><span class="n">Animation</span><span class="p">.</span><span class="n">Easing</span><span class="p">.</span><span class="n">Accelerate</span><span class="p">))</span>
+<a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a><span class="w">        </span><span class="p">).</span><span class="n">Padding</span><span class="p">(</span><span class="mi">24</span><span class="p">);</span>
+<a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a><span class="p">}</span>
 </code></pre></div>
 <p><img alt="Keyframe animation" src="../images/animation/keyframes.png" /></p>
 <p>The builder supports <code>.Duration(ms)</code>, <code>.Loop()</code> for infinite repeat, and

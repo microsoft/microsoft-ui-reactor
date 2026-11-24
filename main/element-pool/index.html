@@ -3453,7 +3453,7 @@ is permanent. Reactor takes it for <code>.Animate()</code>, <code>.Transition()<
 <code>.ScrollLinked()</code>, the implicit transitions (<code>.OpacityTransition()</code>,
 <code>.ScaleTransition()</code>, <code>.RotationTransition()</code>, <code>.TranslationTransition()</code>),
 a non-identity <code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code> or <code>.CenterPoint()</code>,
-and the children of a <code>.Stagger()</code> panel. After that
+a <code>.TransformOrigin()</code> other than <code>(0, 0)</code>, and the children of a <code>.Stagger()</code> panel. After that
 WinUI refuses every write to the control's <code>Rotation</code>, <code>Scale</code>,
 <code>CenterPoint</code>, <code>RotationAxis</code> and <code>TransformMatrix</code> facades and to its
 XAML implicit transitions (<code>OpacityTransition</code> and friends), even an
