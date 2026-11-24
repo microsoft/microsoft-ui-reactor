@@ -7,7 +7,7 @@
     <AssemblyName>Reactor.ApiIndex</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Build-time API-index generator: reflects over the built Reactor.dll and Reactor.Advanced.dll surfaces
+    <!-- Build-time API-index generator: reflects over the built Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll surfaces
          (Assembly.GetExportedTypes / Type.GetMembers) by design. The IL2*/IL3* analyzer
          is enabled (IsAotCompatible) so the intentional reflection is *annotated* rather
          than silently ignored — every reflecting entry point carries a

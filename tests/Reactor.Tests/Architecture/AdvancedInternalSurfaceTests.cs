@@ -11,7 +11,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests.Architecture;
 
 /// <summary>
-/// Spec 062 §7 — pins the <c>InternalsVisibleTo("Reactor.Advanced")</c> surface.
+/// Spec 062 §7 — pins the <c>InternalsVisibleTo("Microsoft.UI.Reactor.Advanced")</c> surface.
 ///
 /// Track B moved charting, docking, markdown and the data grid out of core into
 /// <c>Reactor.Advanced</c>. Those subsystems still reach a handful of core
@@ -20,8 +20,8 @@ namespace Microsoft.UI.Reactor.Tests.Architecture;
 /// internal in core, and nothing tells a reviewer when that reach grows.
 ///
 /// This test converts the open-ended grant into a reviewed contract. It reads the
-/// compiled <c>Reactor.Advanced.dll</c> metadata, resolves every reference that
-/// lands in <c>Reactor.dll</c>, keeps the ones whose definition is <b>not</b>
+/// compiled <c>Microsoft.UI.Reactor.Advanced.dll</c> metadata, resolves every reference that
+/// lands in <c>Microsoft.UI.Reactor.dll</c>, keeps the ones whose definition is <b>not</b>
 /// public, and compares that set against <see cref="ApprovedSurface"/>. Adding a
 /// new internal dependency fails the build until the entry is added here — which
 /// is the point: each entry should be a deliberate decision, not an accident of
@@ -36,7 +36,7 @@ namespace Microsoft.UI.Reactor.Tests.Architecture;
 /// </summary>
 public class AdvancedInternalSurfaceTests
 {
-    private const string CoreAssemblyName = "Reactor";
+    private const string CoreAssemblyName = "Microsoft.UI.Reactor";
 
     /// <summary>
     /// The reviewed set of core internals that <c>Reactor.Advanced</c> is allowed
@@ -123,7 +123,7 @@ public class AdvancedInternalSurfaceTests
         "member: Microsoft.UI.Reactor.ElementExtensions::OnUpdateAdd");
 
     [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the on-disk Location of Reactor.dll / Reactor.Advanced.dll to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the on-disk Location of Microsoft.UI.Reactor.dll / Microsoft.UI.Reactor.Advanced.dll to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
     public void Advanced_TouchesOnlyTheApprovedCoreInternalSurface()
     {
         var actual = ScanInternalSurface(out var coreTypesIndexed, out var advancedTypesScanned);
@@ -179,15 +179,15 @@ public class AdvancedInternalSurfaceTests
 
     // ── Scanner ───────────────────────────────────────────────────────────────
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the on-disk Location of Reactor.dll / Reactor.Advanced.dll to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the on-disk Location of Microsoft.UI.Reactor.dll / Microsoft.UI.Reactor.Advanced.dll to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
     private static ImmutableSortedSet<string> ScanInternalSurface(
         out int coreTypesIndexed,
         out int advancedTypesScanned)
     {
         var corePath = typeof(Element).Assembly.Location;
         var advancedPath = typeof(global::Microsoft.UI.Reactor.Advanced.Factories).Assembly.Location;
-        Assert.False(string.IsNullOrEmpty(corePath), "Could not locate Reactor.dll on disk.");
-        Assert.False(string.IsNullOrEmpty(advancedPath), "Could not locate Reactor.Advanced.dll on disk.");
+        Assert.False(string.IsNullOrEmpty(corePath), "Could not locate Microsoft.UI.Reactor.dll on disk.");
+        Assert.False(string.IsNullOrEmpty(advancedPath), "Could not locate Microsoft.UI.Reactor.Advanced.dll on disk.");
 
         using var coreStream = global::System.IO.File.OpenRead(corePath);
         using var corePe = new PEReader(coreStream);

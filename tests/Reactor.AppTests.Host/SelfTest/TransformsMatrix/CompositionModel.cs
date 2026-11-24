@@ -96,7 +96,11 @@ internal static class CompositionModel
         if (c.UserCode == UserCodeAxis.SetFacade && !DeclaresScale(transform))
             pose = pose with { Scale = Uniform(SetterScale) };
         // §4.3: a facade Translation from user code adds to the visual's, unless .Translation() owns it.
-        if (c.UserCode == UserCodeAxis.TranslationDrag && transform != TransformAxis.Translation)
+        // The drag lives on the control, so a keyed Memo that replaces it loses the drag: the
+        // recorder keys its Memo by the Background transition, which removeModifier drops.
+        bool remounted = c.Wrapper == WrapperAxis.Memo && c.Transition == TransitionAxis.Background
+            && step is MatrixStep.RemoveModifier or MatrixStep.Unmount;
+        if (c.UserCode == UserCodeAxis.TranslationDrag && transform != TransformAxis.Translation && !remounted)
             pose = pose with { Translation = pose.Translation + new Vector3(DragX, 0, 0) };
         return pose;
     }

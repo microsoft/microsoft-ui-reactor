@@ -1,5 +1,5 @@
 // In-memory CSharpCompilation builder for Suggester / FactoryIndex tests.
-// We deliberately avoid loading the real Reactor.dll: the suggesters are pure
+// We deliberately avoid loading the real Microsoft.UI.Reactor.dll: the suggesters are pure
 // over Compilation/Diagnostic/SyntaxNode, so a minimal stub type tree is the
 // fastest, most deterministic surface to test against. Spec 038 §5 conventions.
 
@@ -39,6 +39,7 @@ internal static class TestCompilation
     static bool IsReactorOrWinUI(string asmName)
     {
         if (asmName.StartsWith("Reactor", StringComparison.OrdinalIgnoreCase)) return true;
+        if (asmName.StartsWith("Microsoft.UI.Reactor", StringComparison.OrdinalIgnoreCase)) return true;
         if (asmName.StartsWith("Microsoft.UI.Xaml", StringComparison.OrdinalIgnoreCase)) return true;
         if (asmName.StartsWith("Microsoft.WindowsAppRuntime", StringComparison.OrdinalIgnoreCase)) return true;
         if (asmName.StartsWith("WinRT", StringComparison.OrdinalIgnoreCase)) return true;

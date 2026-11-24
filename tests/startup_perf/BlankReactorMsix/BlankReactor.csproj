@@ -9,7 +9,7 @@
       or AnyCPU `$(Platform)`. Because BlankReactor's <Platforms> doesn't
       include AnyCPU, design-time evaluation otherwise picks AnyCPU and the
       Reactor ProjectReference resolves to the AnyCPU obj path which never
-      gets built — surfacing as `CS0006: Metadata file Reactor.dll could not
+      gets built — surfacing as `CS0006: Metadata file Microsoft.UI.Reactor.dll could not
       be found`. Coercing to x64 here normalises the active platform before
       any other targets evaluate. CLI builds that already pass `-p:Platform=`
       hit the condition first and keep their explicit value.
@@ -121,9 +121,9 @@
       SetPlatform pins the Reactor build to match this project's $(Platform)
       so VS's design-time GetTargetPath query (which would otherwise resolve
       Reactor at its default AnyCPU and look for an obj\Debug\<tfm>\ref\
-      Reactor.dll that never gets produced) returns the same x64/ARM64 path
+      Microsoft.UI.Reactor.dll that never gets produced) returns the same x64/ARM64 path
       that the actual build emits. Fixes
-        CS0006: Metadata file '...\src\Reactor\obj\Debug\<tfm>\ref\Reactor.dll'
+        CS0006: Metadata file '...\src\Reactor\obj\Debug\<tfm>\ref\Microsoft.UI.Reactor.dll'
                 could not be found
       when opening BlankReactor.csproj (or Reactor.slnx) in Visual Studio.
       Skipped if $(Platform) somehow evaluates to empty so we never pass an

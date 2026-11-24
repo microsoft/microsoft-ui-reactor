@@ -59,6 +59,53 @@ Conventions for contributors:
 
 ### Changed
 
+- **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
+  visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
+  the first time it is written, so the transforms use one channel whether or not a compositor
+  feature is present. An identity value (`.Scale(1)`, `.Rotation(0)`) on a control whose visual
+  wasn't taken writes nothing. On a transformed element `fe.Scale`, `fe.Rotation` and
+  `fe.CenterPoint` read back identity (read `ElementCompositionPreview.GetElementVisual(fe)`
+  instead), and WinUI rejects a `.Set(...)` or `.OnMount(...)` that writes `Rotation`, `Scale`,
+  `CenterPoint`, `RotationAxis`, `TransformMatrix` or a XAML `*Transition` property after the
+  visual was taken. **Migration:** move the write into the modifier. `REACTOR_ANIM_004` now treats
+  the four transform modifiers as taking the visual, flags such a `.Set` at build time and rewrites
+  a single assignment (`.Set(fe => fe.Rotation = 45).Scale(2)` becomes `.Rotation(45).Scale(2)`), and
+  the run-time `DiagnosticLog` warning that names the modifier also covers `.OnMount(...)`. A
+  `.Set` write on mount still works for `Rotation`, `Scale` and `CenterPoint` (the value moves to the
+  visual), but not on a later render. Transformed controls are pooled in the visual lane, and the
+  first handoff costs about 0.1 ms per element. `REACTOR_ANIM_004` checks `.Set` only, so a facade write
+  in `.OnMount(...)` surfaces at run time. `ReactorDiagnostics.GetAppliedProperties` reports the four
+  modifiers as `Visual.Scale`, `Visual.RotationAngle`, `Visual.Translation` and `Visual.CenterPoint`.
+- **Breaking: each package's main assembly is now named after the package (issue #1664).**
+  `Reactor.dll` is now `Microsoft.UI.Reactor.dll` and `Reactor.Advanced.dll` is now
+  `Microsoft.UI.Reactor.Advanced.dll`, matching the `Microsoft.UI.Reactor` and
+  `Microsoft.UI.Reactor.Advanced` package ids (`Microsoft.UI.Reactor.Devtools.dll` already
+  matched). The bundled helper `Reactor.Wrappers.Abstractions.dll` keeps its name. Namespaces and
+  package ids don't change, but upgrade `Microsoft.UI.Reactor`, `Microsoft.UI.Reactor.Advanced` and
+  `Microsoft.UI.Reactor.Devtools` together: an older Advanced or Devtools package references the
+  `Reactor` assembly and fails to load next to the new core. Also update anything that names the
+  files or the assembly, such as assembly-qualified type names (`"…, Reactor"`),
+  `InternalsVisibleTo`, `TrimmerRootAssembly`, signing or coverage filters, and
+  `ms-appx:///Reactor/…` paths, which are now `ms-appx:///Microsoft.UI.Reactor/…`. A file-based app
+  saved as `reactor.cs` no longer collides with Reactor. `mur --create` still refuses `Reactor`,
+  because its generated solution already has a project with that name.
+
+- **An element with `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` or
+  `.TranslationTransition()` keeps its transforms on the composition visual (spec 066 §9 rows 1
+  and 2).** The transitions take the element's visual, so on such an element `fe.Scale`,
+  `fe.Rotation` and `fe.CenterPoint` read back identity for values set with `.Scale()`, `.Rotation()`
+  and `.CenterPoint()` (read `ElementCompositionPreview.GetElementVisual(fe)` instead), and WinUI
+  rejects a `.Set(...)` that writes `Rotation`, `Scale`, `CenterPoint`, `RotationAxis`,
+  `TransformMatrix` or a XAML `*Transition` property on a later render. Use the modifiers. Reactor
+  now logs a `DiagnosticLog` warning that names them when WinUI rejects a setter's facade write or
+  a user facade blocks the visual, and `REACTOR_ANIM_004` treats the four transition modifiers as
+  taking the visual and suggests them, with a code fix, for the matching `*Transition` writes.
+
+- **`.Animate(curve, properties)` animates only the properties it names (spec 066 §5.3).** A
+  `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()` change on an element whose
+  `.Animate(...)` excludes that property used to animate with its curve anyway. It now jumps, or
+  follows the element's transition for that property.
+
 - Opt-in Markdown text selection supports double-click to select a word and
   triple-click to select a text surface, including drag extension by either unit.
   Selection drags from inline links and release-mode custom link buttons do not
@@ -158,6 +205,17 @@ Conventions for contributors:
   once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
   style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
 
+- **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
+  transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
+  composition visual moved a facade `Translation` to the visual and enabled translation there, after
+  which WinUI ignored every later `fe.Translation` write, so a drag card that wrote `fe.Translation`
+  from a handler stopped moving once it gained a hover state, a transition, `.Animate(...)` or an
+  animated scale, and with transforms on the visual a plain `.Scale(pressed ? 0.97f : 1)` would have
+  done the same.
+  Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
+  `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
+  write `fe.Translation` on an element that declares one of those.
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming
@@ -166,6 +224,7 @@ Conventions for contributors:
 - `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
   block's default text brush and updates it when the block's effective theme
   changes (issue #1002).
+
 - **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
   animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625
   and #1626).** They all install implicit animations on the element's composition visual, and now
@@ -177,7 +236,26 @@ Conventions for contributors:
   the compositor, so the property jumps again. When two features animate the same property, the
   winner keeps the rule it had (`.LayoutAnimation()` over `.Animate()` over a transition), and
   removing the winner brings the other back instead of leaving no animation. A removed
-  `.BackgroundTransition()` stays in place until spec 066 layer 2.
+  `.BackgroundTransition()` is cleared too (spec 066 layer 2).
+
+- **`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` and
+  `.TranslationTransition()` work with every compositor feature (spec 066 §5, issue #1623).** They
+  set WinUI's XAML transitions, which block the composition visual, so combining one with
+  `.LayoutAnimation()`, `.Animate()`, `.Transition()`, `.InteractionStates()` or `.Keyframes()` threw
+  `UnauthorizedAccessException`. They now run on the visual with WinUI's own curve,
+  cubic-bezier (0.8, 0, 0.2, 1), instead of the linear one the compositor fallback used, keep a
+  `Vector3Transition`'s `Components` axis mask, and still jump when the Windows "Animation effects"
+  setting is off, as WinUI's do. `.TranslationTransition()` now animates `.Translation()` changes, as
+  WinUI's does, instead of layout moves, which the fallback animated by mistake; use
+  `.LayoutAnimation()` for those. On an update, adding or removing a transition applies to values
+  changed in the same render.
+
+- **The pool no longer hands a renter the previous renter's `.BackgroundTransition()` or
+  `OpacityTransition` (spec 066 §5.6 and §7.4, issue #1624).** Both lanes clear a panel's
+  `BackgroundTransition`, and dropping `.BackgroundTransition()` on a later render clears it too
+  (the Background arm of #1626). `.OpacityTransition()` no longer sets WinUI's XAML transition, so its
+  control is pooled in the visual lane, and a control whose `OpacityTransition` a `.Set` wrote is
+  dropped, because that transition locks its `RenderTransform` as the transform transitions do.
 
 - **Controls whose composition visual Reactor took are pooled again, and the pool no longer hands a
   renter the previous renter's theme transitions or a taken visual (spec 066 §7, issues #1624,
@@ -193,11 +271,11 @@ Conventions for contributors:
   lanes clear `ChildrenTransitions`, `ChildTransitions` and `ContentTransitions`, so a pooled panel,
   border or button no longer plays the previous renter's `.WithTransitions(...)` (#1639).
 - An app whose assembly name matches one of its references, such as a file-based app saved as
-  `reactor.cs` next to Reactor's own `Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
+  `microsoft.ui.reactor.cs` next to Reactor's own `Microsoft.UI.Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
   instead of crashing at startup with a `TypeLoadException` for
   `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
   the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
-  rejects project names that collide with Reactor's assemblies or package ids (issue #1664).
+  rejects project names that collide with Reactor's assemblies (issue #1664).
 
 - Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
   `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
@@ -276,6 +354,11 @@ Conventions for contributors:
 - Tight Markdown list items keep their leading text before child lists, headings,
   blockquotes, and code blocks. Ordered numbering is preserved across nesting
   levels, including in cross-block text selection (PR #1628).
+
+- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
+  not individual message boundaries. Dragging above or below a message while still
+  inside the enclosing `ScrollView`/`ScrollViewer` no longer causes autoscroll
+  (PR #1631, openclaw/openclaw-windows-node#1844).
 
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
@@ -440,8 +523,8 @@ Conventions for contributors:
   `.Transition(..., Curve.Linear(...))` enter and exit animations, and the compositor fallback
   for `.OpacityTransition()`, `.RotationTransition()`, `.ScaleTransition()` and
   `.TranslationTransition()` on an element whose visual was already handed out. That fallback
-  is built on the linear curve, so it is now linear too. Spec 066 later moves it to the XAML
-  transition curve.
+  is built on the linear curve, so it was linear too, until spec 066 layer 2 replaced it with
+  the XAML transition curve (see the #1623 entry above).
 
 - ReactorGallery search keeps complete samples that contain ellipses in comments
   or display text, restoring the Pan and `OpacityTransition` examples in

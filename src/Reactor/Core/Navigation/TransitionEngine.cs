@@ -86,8 +86,8 @@ internal static class TransitionEngine
         }
 
         // Reset stale compositor properties from previous animations
-        inVisual.Offset = Vector3.Zero;
-        inVisual.Scale = Vector3.One;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = Vector3.Zero);
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = Vector3.One);
 
         HitTestSuppression? outgoingSuppression = null;
         HitTestSuppression? incomingSuppression = null;
@@ -204,8 +204,8 @@ internal static class TransitionEngine
                 break;
             default:
                 // Shared-element-only navigation still swaps the surrounding pages.
-                outVisual.Opacity = 0;
-                inVisual.Opacity = 1;
+                Core.Reconciler.WithoutImplicitAnimations(outVisual, () => outVisual.Opacity = 0);
+                Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Opacity = 1);
                 break;
         }
     }
@@ -333,14 +333,28 @@ internal static class TransitionEngine
     }
 
     /// <summary>
-    /// Stops the animations this engine starts and returns the visual to its resting state.
+    /// Stops the animations this engine starts and returns the visual to its resting state. The
+    /// reset doesn't fire the page's implicit keys (an <c>.OpacityTransition()</c> on its root).
     /// </summary>
     internal static void NormalizeVisual(Visual visual)
     {
         ReleaseAnimatedProperties(visual);
-        visual.Opacity = 1;
-        visual.Offset = Vector3.Zero;
-        visual.Scale = Vector3.One;
+        Core.Reconciler.WithoutImplicitAnimations(visual, () =>
+        {
+            visual.Opacity = 1;
+            visual.Offset = Vector3.Zero;
+            visual.Scale = Vector3.One;
+        });
+    }
+
+    /// <summary>
+    /// Hides a page at once, without fading it through an implicit Opacity key the page declares
+    /// (spec 066 §5: <c>.OpacityTransition()</c> is a key on the visual).
+    /// </summary>
+    internal static void SetOpacityNow(UIElement page, float opacity)
+    {
+        var visual = Animation.AnimationHelper.GetElementVisual(page);
+        Core.Reconciler.WithoutImplicitAnimations(visual, () => visual.Opacity = opacity);
     }
 
     /// <summary>
@@ -491,7 +505,7 @@ internal static class TransitionEngine
         outVisual.StartAnimation("Opacity", outFade);
 
         // Incoming: slide in + fade in
-        inVisual.Offset = inStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = inStart);
 
         var inOffset = compositor.CreateVector3KeyFrameAnimation();
         inOffset.InsertKeyFrame(0f, inStart);
@@ -566,7 +580,7 @@ internal static class TransitionEngine
         outOffset.Duration = HorizontalSlideExitDuration;
         outVisual.StartAnimation("Offset", outOffset);
 
-        inVisual.Offset = plan.InStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = plan.InStart);
         var inOffset = compositor.CreateVector3KeyFrameAnimation();
         inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
         inOffset.Duration = HorizontalSlideEntranceDuration;
@@ -597,7 +611,7 @@ internal static class TransitionEngine
         }
         else
         {
-            inVisual.Offset = offset;
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = offset);
             var inOffset = compositor.CreateVector3KeyFrameAnimation();
             inOffset.InsertKeyFrame(
                 (float)(VerticalSlideHandoffTime.TotalMilliseconds / VerticalSlideDuration.TotalMilliseconds),
@@ -676,7 +690,7 @@ internal static class TransitionEngine
             outFade.Duration = EntranceExitDuration;
             outVisual.StartAnimation("Opacity", outFade);
 
-            inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0);
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0));
             var inOffset = compositor.CreateVector3KeyFrameAnimation();
             inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
             inOffset.Duration = EntranceDuration;
@@ -802,7 +816,7 @@ internal static class TransitionEngine
         outFade.Duration = plan.OutOpacityDuration;
         outVisual.StartAnimation("Opacity", outFade);
 
-        inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f);
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f));
 
         var inScale = compositor.CreateVector3KeyFrameAnimation();
         inScale.InsertKeyFrame(1f, Vector3.One, inScaleEasing);
@@ -858,7 +872,7 @@ internal static class TransitionEngine
         else
         {
             // Forward: incoming scales up from 0.85 + fades in, outgoing fades out
-            inVisual.Scale = new Vector3(0.85f, 0.85f, 1f);
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = new Vector3(0.85f, 0.85f, 1f));
 
             var inScale = compositor.CreateVector3KeyFrameAnimation();
             inScale.InsertKeyFrame(0f, new Vector3(0.85f, 0.85f, 1f));
@@ -909,7 +923,7 @@ internal static class TransitionEngine
         outVisual.StartAnimation("Opacity", outFade);
 
         // Incoming: spring offset + fade
-        inVisual.Offset = inStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = inStart);
 
         var inSpring = compositor.CreateSpringVector3Animation();
         inSpring.DampingRatio = spring.DampingRatio;

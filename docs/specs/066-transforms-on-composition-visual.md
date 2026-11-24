@@ -288,6 +288,26 @@ setting today. This spec doesn't change them.
 equivalent on the handoff visual, so it stays a XAML property. Two changes are needed. The pool clears
 it (§7), and an update that drops `.BackgroundTransition()` sets it back to null (§6.3).
 
+### §5.7 As shipped in layer 2
+
+- **The visual is taken even with animations off.** `ApplyImplicitTransitions` takes it whenever one of
+  the four transitions is declared, and only then applies the §5.5 gate. So readback (§9 row 2), the
+  setters that throw (§9 row 1) and the pool lane (§7.2 demand) don't depend on a machine setting.
+- **`TranslationTransition` is a claim without a key.** It goes through `ImplicitAnimationSlots` under
+  the `"Translation"` key like the others (so slots, chain precedence, release and `ReleaseAll` apply),
+  but the sink publishes nothing for it. `ResolvePolicy` reads the effective claim.
+- **Mount order is unchanged** (modifiers, then transitions), so a declared initial value jumps, which
+  matches the compositor half of Layer V's write-then-attach probe. A XAML transition attached after the
+  write has nothing to animate either, so no §9 row is needed.
+- **A `.Set`-written `OpacityTransition` locks `RenderTransform` too**, like the transform transitions
+  (measured in `ElementPoolLanes_ImplicitTransitions`). The pool nulls it and the `RenderTransform` reset
+  then refuses, so the control is dropped rather than leaked (§7.4).
+- **Fixtures.** `CompositorTransitionFixtures` (#1623 per transition × feature × order, curve, mask,
+  reduced motion, same-reconcile ordering, readback, Background removal, the §9 diagnostic) and
+  `PoolLaneFixtures.ImplicitTransitionResidue`. The curve and mask oracles read RenderTargetBitmap with a
+  seeked controller and skip, with a positive control, on a desktop where RTB doesn't show composition
+  animations in flight (the same condition that fails `TransformsMatrix_Instrument_Motion`).
+
 ## §6 ImplicitAnimations ownership
 
 ### §6.1 Rules

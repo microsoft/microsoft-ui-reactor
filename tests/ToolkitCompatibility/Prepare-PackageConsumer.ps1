@@ -34,8 +34,8 @@ try {
         if ($required -notin $entries) { throw "Shipping package is missing $required" }
     }
     if (-not ($entries | Where-Object { $_ -match '\.xbf$' })) { throw 'No shipped XBF resource.' }
-    $assemblyEntries = @($archive.Entries | Where-Object FullName -Match '^lib/[^/]+/Reactor\.dll$')
-    if ($assemblyEntries.Count -ne 1) { throw 'Expected one shipped Reactor runtime assembly.' }
+    $assemblyEntries = @($archive.Entries | Where-Object FullName -Match '^lib/[^/]+/Microsoft\.UI\.Reactor\.dll$')
+    if ($assemblyEntries.Count -ne 1) { throw 'Expected one shipped Microsoft.UI.Reactor.dll runtime assembly.' }
     $assemblyStream = $assemblyEntries[0].Open()
     try { $reactorAssemblyHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($assemblyStream)) }
     finally { $assemblyStream.Dispose() }

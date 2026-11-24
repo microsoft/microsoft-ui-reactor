@@ -151,6 +151,165 @@ try {
             $summaryFailures.Add("MSIX lane rows were not $($blockerCase.Status)/$($blockerCase.Kind): $($blockerCase.Name)")
         } else { Write-Output "PASS summary $($blockerCase.Name)" }
     }
+
+    $catalog = @(
+        @{ Control = 'DockPanel'; Label = 'attached-dock-last-child-fill-geometry'; Proof = 'update' },
+        @{ Control = 'UniformGrid'; Label = 'first-column-keyed-reorder'; Proof = 'update' },
+        @{ Control = 'SwitchPresenter'; Label = 'actual-matching-default-case-collection'; Proof = 'sample-native-case-selection' },
+        @{ Control = 'TabbedCommandBar'; Label = 'actual-tabs-command-invocation'; Proof = 'sample-native-tabs-commands' },
+        @{ Control = 'SettingsCard'; Label = 'rich-slots-clear-restore-click'; Proof = 'update' },
+        @{ Control = 'Segmented'; Label = 'uia-value-patterns'; Proof = 'update' }
+    )
+    $coverageLanes = @('jit-unpackaged', 'aot-unpackaged')
+    @{
+        revision = 'synthetic-coverage-fixture'
+        controls = @($catalog.Control)
+        parameters = @{ Runtime = @('jit', 'aot'); Deployment = @('unpackaged') }
+    } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'run.json')
+    $coverageLanes | ForEach-Object { @{ lane = $_; status = 'blocked'; detail = 'Synthetic coverage fixture' } } |
+        ConvertTo-Json | Set-Content (Join-Path $directory 'matrix.json')
+    $coverageCases = @(
+        @{ Name = 'complete'; Covered = $true; Valid = $true },
+        @{ Name = 'missing-planned-counterpart'; Covered = $false; Valid = $true },
+        @{ Name = 'missing-result'; Covered = $false; Valid = $false },
+        @{ Name = 'failed-counterpart'; Covered = $false; Valid = $true },
+        @{ Name = 'blocked-counterpart-other-lane-passes'; Covered = $false; Valid = $true },
+        @{ Name = 'inapplicable-counterpart'; Covered = $false; Valid = $true },
+        @{ Name = 'duplicate-counterpart'; Covered = $false; Valid = $false },
+        @{ Name = 'duplicate-outcome'; Covered = $false; Valid = $false },
+        @{ Name = 'wrong-control'; Covered = $false; Valid = $false },
+        @{ Name = 'wrong-scenario-case'; Covered = $false; Valid = $false },
+        @{ Name = 'incomplete-capture'; Covered = $false; Valid = $false },
+        @{ Name = 'truncated'; Covered = $false; Valid = $false },
+        @{ Name = 'approval-label'; Covered = $false; Valid = $true },
+        @{ Name = 'failed-label'; Covered = $false; Valid = $true },
+        @{ Name = 'unrelated-assertion-failed'; Covered = $true; Valid = $true }
+    )
+    foreach ($case in $coverageCases) {
+        $coverageInventory = @('environment/identity-runtime-location') + @(
+            foreach ($entry in $catalog) {
+                "$($entry.Control)/$($entry.Label)"
+                "$($entry.Control)/$(if ($case.Name -eq 'missing-planned-counterpart' -and $entry.Control -eq 'DockPanel') { 'mount' } else { $entry.Proof })"
+                "$($entry.Control)/os-text-scaling"
+            }
+        )
+        $coverageInventory | Set-Content (Join-Path $lane 'inventory.validated.txt')
+        foreach ($laneName in $coverageLanes) {
+            $destination = Join-Path $directory $laneName
+            $outcomes = @(
+                foreach ($entry in $catalog) {
+                    $control = $entry.Control
+                    $proofName = if ($case.Name -eq 'missing-planned-counterpart' -and $control -eq 'DockPanel') { 'mount' } else { $entry.Proof }
+                    $processKeys = @($coverageInventory | Where-Object { $_ -eq 'environment/identity-runtime-location' -or $_.StartsWith("$control/") })
+                    $resultRows = @(
+                        [pscustomobject]@{ Control = 'environment'; Scenario = 'identity-runtime-location'; Status = 'passed'; Detail = 'Synthetic environment' },
+                        [pscustomobject]@{ Control = $control; Scenario = $entry.Label; Status = 'blocked'; Detail = 'Original named blocker'; ReasonKind = 'not-implemented' },
+                        [pscustomobject]@{ Control = $control; Scenario = $proofName; Status = 'passed'; Detail = 'Finite synthetic assertion' },
+                        [pscustomobject]@{ Control = $control; Scenario = 'os-text-scaling'; Status = 'blocked'; Detail = 'Original OS blocker'; ReasonKind = 'not-implemented' }
+                    )
+                    $subject = $control -eq 'DockPanel' -and $laneName -eq 'jit-unpackaged'
+                    if ($subject) {
+                        switch ($case.Name) {
+                            'missing-result' { $resultRows = @($resultRows[0], $resultRows[1], $resultRows[3]) }
+                            'failed-counterpart' { $resultRows[2].Status = 'failed' }
+                            'blocked-counterpart-other-lane-passes' { $resultRows[2].Status = 'blocked' }
+                            'inapplicable-counterpart' { $resultRows[2].Status = 'inapplicable' }
+                            'duplicate-counterpart' { $resultRows += $resultRows[2] }
+                            'wrong-control' { $resultRows[2].Control = 'UniformGrid' }
+                            'wrong-scenario-case' { $resultRows[2].Scenario = 'Update' }
+                            'approval-label' { $resultRows[1].ReasonKind = 'approval' }
+                            'failed-label' { $resultRows[1].Status = 'failed' }
+                            'unrelated-assertion-failed' { $resultRows[3].Status = 'failed' }
+                        }
+                    }
+                    $failureCount = @($resultRows | Where-Object Status -EQ 'failed').Count
+                    $blockCount = @($resultRows | Where-Object Status -EQ 'blocked').Count
+                    $tapLines = @('TAP version 13') + @(
+                        for ($i = 0; $i -lt $resultRows.Count; $i++) {
+                            $result = $resultRows[$i]
+                            $prefix = if ($result.Status -in @('passed', 'inapplicable')) { 'ok' } else { 'not ok' }
+                            $suffix = if ($result.Status -eq 'inapplicable') { ' # SKIP native contract' } else { '' }
+                            "$prefix $($i + 1) - $($result.Control)/$($result.Scenario)$suffix"
+                        }
+                    ) + @("1..$($processKeys.Count)", "# Total failures: $failureCount", "# Total blocked: $blockCount")
+                    if (-not ($subject -and $case.Name -eq 'truncated')) { $tapLines += '# COMPLETE' }
+                    $tapLines | Set-Content (Join-Path $destination "$control.stdout.txt")
+                    $resultRows | ForEach-Object { $_ | ConvertTo-Json -Compress } |
+                        Set-Content (Join-Path $destination "$control.results.jsonl")
+                    $outcome = @{
+                        control = $control; status = if ($failureCount) { 'failed' } else { 'blocked' }
+                        detail = 'Synthetic process'; exitCode = if ($failureCount) { 1 } else { 2 }
+                        execution = @{ timedOut = $false; captureComplete = -not ($subject -and $case.Name -eq 'incomplete-capture') }
+                    }
+                    $outcome
+                    if ($subject -and $case.Name -eq 'duplicate-outcome') { $outcome }
+                }
+            )
+            $outcomes | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $destination 'controls.json')
+        }
+        $inputs = @(Get-ChildItem $directory -File -Recurse |
+            Where-Object Name -NotIn @('summary.md', 'scenario-matrix.json'))
+        $before = @($inputs | Get-FileHash | ForEach-Object Hash) -join ','
+        & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null
+        if ((@($inputs | Get-FileHash | ForEach-Object Hash) -join ',') -cne $before) {
+            throw "Coverage summary mutated raw evidence or inventory: $($case.Name)"
+        }
+        $summary = @(Get-Content (Join-Path $directory 'scenario-matrix.json') -Raw | ConvertFrom-Json)
+        $report = Get-Content (Join-Path $directory 'summary.md') -Raw
+        if ($summary.Count -ne 48) { throw "Coverage summary changed the planned row count: $($case.Name)" }
+        foreach ($row in $summary) {
+            $entry = @($catalog | Where-Object { "$($_.Control)/$($_.Label)" -ceq $row.scenario })
+            $expectedProof = $null
+            if ($entry.Count -eq 1 -and $entry[0].Control -notin @('SettingsCard', 'Segmented')) {
+                $shouldCover = if ($entry[0].Control -ne 'DockPanel') { $true }
+                    elseif ($case.Name -eq 'missing-planned-counterpart') { $false }
+                    elseif ($row.lane -eq 'jit-unpackaged') { $case.Covered }
+                    else { $true }
+                if ($shouldCover) { $expectedProof = "$($entry[0].Control)/$($entry[0].Proof)" }
+            }
+            if ($row.coveredByScenario -cne $expectedProof) {
+                throw "Incorrect coverage link: $($case.Name), $($row.lane)/$($row.scenario), expected '$expectedProof', actual '$($row.coveredByScenario)'"
+            }
+            if ($expectedProof -and (-not $row.validatedCompleteProcess -or $row.status -cne 'blocked' -or
+                $row.reasonKind -cne 'not-implemented' -or $row.detail -cne 'Original named blocker' -or
+                -not $report.Contains("| $($row.lane) | $($row.scenario) | $expectedProof |"))) {
+                throw "Coverage annotation changed the raw blocker or is missing from the report: $($case.Name)"
+            }
+        }
+        $subjectRow = @($summary | Where-Object {
+            $_.lane -eq 'jit-unpackaged' -and $_.scenario -ceq 'DockPanel/attached-dock-last-child-fill-geometry'
+        })[0]
+        if ($subjectRow.validatedCompleteProcess -ne $case.Valid) {
+            throw "Unexpected process validation: $($case.Name)"
+        }
+        if ($case.Name -eq 'complete') {
+            foreach ($entry in $catalog) {
+                if (-not $report.Contains("| $($entry.Control) | P2 F0 B2 N0 | P2 F0 B2 N0 |")) {
+                    throw "Coverage annotation changed raw totals for $($entry.Control)."
+                }
+            }
+            if (-not $report.Contains('- not-implemented: 24 planned checks.')) {
+                throw 'Coverage annotation changed raw block classification totals.'
+            }
+        }
+        Write-Output "PASS coverage $($case.Name)"
+    }
+    foreach ($duplicate in @('control', 'lane')) {
+        $run = Get-Content (Join-Path $directory 'run.json') -Raw | ConvertFrom-Json
+        $run.controls = @($catalog.Control)
+        $run.parameters.Runtime = @('jit', 'aot')
+        if ($duplicate -eq 'control') { $run.controls += 'DockPanel' }
+        else { $run.parameters.Runtime += 'jit' }
+        $run | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'run.json')
+        $rejected = $false
+        try { & (Join-Path $PSScriptRoot 'Summarize-Matrix.ps1') -EvidenceDirectory $directory | Out-Null }
+        catch {
+            if ($_.Exception.Message -cne 'Duplicate planned controls or lanes make scenario references ambiguous.') { throw }
+            $rejected = $true
+        }
+        if (-not $rejected) { throw "Coverage summary accepted ambiguous planned $duplicate references." }
+        Write-Output "PASS coverage duplicate-planned-$duplicate"
+    }
 } finally {
     Remove-Item -LiteralPath $directory -Recurse -Force
 }

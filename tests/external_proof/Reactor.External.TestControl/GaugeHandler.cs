@@ -7,7 +7,7 @@ namespace Reactor.External.TestControl;
 /// <summary>
 /// Issue #206 — external V1 handler for a Slider-shaped value-bearing control,
 /// authored against the public Reactor surface ONLY (no
-/// <c>InternalsVisibleTo</c> from Reactor.dll). It is the worked proof that a
+/// <c>InternalsVisibleTo</c> from Microsoft.UI.Reactor.dll). It is the worked proof that a
 /// third-party custom value control can suppress the echo from its own
 /// programmatic write with nothing but the public primitives:
 /// <list type="bullet">

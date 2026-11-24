@@ -29,7 +29,12 @@ Preserve the complete `bin\x64\Release\net10.0-windows10.0.22621.0\win-x64`
 directory from each build. Independent builds can embed different source paths
 or commit metadata even when the benchmark sources are identical. Reuse the
 baseline's compiled benchmark DLL and matching PDB in both preserved directories,
-leaving each side's `Reactor.dll` and other dependencies unchanged.
+leaving each side's Reactor DLL and other dependencies unchanged.
+
+The shared benchmark DLL binds to the Reactor assembly name it was compiled against, so
+both sides must come from the same side of the assembly rename. Builds before it ship
+`Reactor.dll`, later builds ship `Microsoft.UI.Reactor.dll`, and the runner refuses a pair
+that mixes the two. The recorded run below predates the rename.
 
 ```powershell
 Copy-Item C:\temp\mixed-base-bin\PerfBench.MixedKeys.dll C:\temp\mixed-candidate-bin\PerfBench.MixedKeys.dll

@@ -799,7 +799,7 @@ public class ReactorDiagnosticsComponentsTests
         };
 
         Assert.Equal(
-            new[] { ("Scale", "UIElement.Scale"), ("Rotation", "UIElement.Rotation"), ("Translation", "UIElement.Translation"), ("CenterPoint", "UIElement.CenterPoint") },
+            new[] { ("Scale", "Visual.Scale"), ("Rotation", "Visual.RotationAngle"), ("Translation", "Visual.Translation"), ("CenterPoint", "Visual.CenterPoint") },
             AppliedModifierMap.Describe(m, typeof(WinUI.TextBlock)).Select(p => (p.Modifier, p.Property)));
     }
 
