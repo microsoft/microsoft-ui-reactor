@@ -151,6 +151,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- An opacity `.Keyframes(...)` animation now keeps playing when the element's own
+  `Opacity` (a `.Opacity(x)` modifier or a style setter) reaches the visual after the
+  animation started. XAML writes that value to the visual in its next frame, which stopped
+  the animation, so `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated at
+  mount. Reactor now restarts the keyframe once after that frame unless a modifier
+  replaced it (issue #1669).
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming
