@@ -879,12 +879,13 @@ internal static class TransitionTests
     }
 
     /// <summary>
-    /// A resource refresh walks a keyed Memo's subtree, updating an inner Memo against itself.
-    /// The Memo still wraps the flyout afterwards, so its fade exit, not the flyout target's
-    /// scale exit, plays on removal (#1663). With <paramref name="replaceTarget"/> the refresh
-    /// remounts the target, so the Memo's exit is re-recorded on a fresh control.
+    /// A resource refresh walks a keyed Memo's subtree, updating the Memo against itself. The Memo
+    /// still wraps the flyout afterwards, so its fade exit, not the flyout target's scale exit,
+    /// plays on removal (#1663). With <paramref name="replaceTarget"/> the refresh remounts the
+    /// target, so the Memo's exit is re-recorded on a fresh control; with <paramref name="nested"/>
+    /// an outer keyed Memo without an exit wraps it.
     /// </summary>
-    internal sealed class MemoExitAfterResourceRefresh(Harness h, bool replaceTarget) : SelfTestFixtureBase(h)
+    internal sealed class MemoExitAfterResourceRefresh(Harness h, bool replaceTarget, bool nested) : SelfTestFixtureBase(h)
     {
         private sealed record RemountingBox : Element;
 
@@ -892,7 +893,7 @@ internal static class TransitionTests
 
         public override async Task RunAsync()
         {
-            var name = replaceTarget ? "MemoExitRefreshReplaced" : "MemoExitRefresh";
+            var name = "MemoExitRefresh" + (replaceTarget ? "Replaced" : "") + (nested ? "Nested" : "");
             var parent = new Border();
             H.SetContent(parent);
             using var host = new Hosting.ReactorHost(H.Window) { ContentTarget = parent };
@@ -902,13 +903,13 @@ internal static class TransitionTests
             var scaleExit = Animation.Transition.Exit(Animation.Transition.Scale(0.5f));
             var fadeExit = Animation.Transition.Exit(Animation.Transition.Fade);
             bool show = true;
-            host.Mount(_ => VStack(!show ? null : replaceTarget
-                ? Memo("memo", () => Flyout(new RemountingBox().Transition(scaleExit, Curve.Linear(600)), TextBlock("flyout")))
-                    .Transition(fadeExit, Curve.Linear(600))
-                : Memo("outer", () => Memo("inner", () => Flyout(
-                        Border(null).Width(100).Height(40).Transition(scaleExit, Curve.Linear(600)),
-                        TextBlock("flyout")))
-                    .Transition(fadeExit, Curve.Linear(600)))));
+            host.Mount(_ =>
+            {
+                Element target = replaceTarget ? new RemountingBox() : Border(null).Width(100).Height(40);
+                Element memo = Memo("memo", () => Flyout(target.Transition(scaleExit, Curve.Linear(600)), TextBlock("flyout")))
+                    .Transition(fadeExit, Curve.Linear(600));
+                return VStack(!show ? null : nested ? Memo("outer", () => memo) : memo);
+            });
             await host.WaitForIdleAsync();
             var panel = (StackPanel)parent.Child;
             var mounted = panel.Children[0];

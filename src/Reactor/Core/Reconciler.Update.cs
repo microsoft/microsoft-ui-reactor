@@ -341,6 +341,10 @@ public sealed partial class Reconciler
             }
         }
 
+        // A keyed Memo's update can hand back a replaced control; keep the old control's layer order for it.
+        bool memoWrappedDecorator = newEl is KeyedMemoElement
+            && control.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoWrapsDecorator: true };
+
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
         //   (3) global `ControlRegistry`, (4) composition-primitive switch.
@@ -431,13 +435,15 @@ public sealed partial class Reconciler
             {
                 var memoState = GetOrCreateReactorState(target);
                 memoState.MemoTransition = newExit ? newEl.ElementTransition : null;
-                // The layer order holds while the Memo keeps its exit on the same control (a resource
-                // refresh passes the same Memo as old and new). A new exit, or a replaced control
-                // whose state starts fresh, sits over a flyout on the control only when no outer
-                // layer is updating the control.
+                // The layer order holds while the Memo keeps its exit (a resource refresh passes the
+                // same Memo as old and new), and a replaced control, whose state starts fresh, takes
+                // the order the old control had. A new exit sits over a flyout on the control only
+                // when no outer layer is updating the control.
                 if (!newExit) memoState.MemoWrapsDecorator = false;
-                else if (!oldExit || result is not null)
+                else if (!oldExit)
                     memoState.MemoWrapsDecorator = modifierParent is null && memoState.DecoratorElement is not null;
+                else if (result is not null)
+                    memoState.MemoWrapsDecorator = memoWrappedDecorator;
             }
         }
         // A nested update can replace the control or introduce its first
