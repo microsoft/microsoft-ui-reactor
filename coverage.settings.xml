@@ -7,13 +7,13 @@
              measuring how much of the harness its own fixtures exercise is
              circular and inflates the number without saying anything about
              product-code quality. -->
-        <ModulePath>.*[/\\]Reactor\.dll$</ModulePath>
+        <ModulePath>.*[/\\]Microsoft\.UI\.Reactor\.dll$</ModulePath>
         <!-- Spec 062 Track B: charting/D3, docking, markdown and the data grid moved
-             out of Reactor.dll into Reactor.Advanced.dll. That is ~39% of the product
+             out of Microsoft.UI.Reactor.dll into Microsoft.UI.Reactor.Advanced.dll. That is ~39% of the product
              lines — and the best-covered part of it — so without this entry the merged
              report silently stops measuring them and the headline percentage drops even
              though nothing regressed. -->
-        <ModulePath>.*[/\\]Reactor\.Advanced\.dll$</ModulePath>
+        <ModulePath>.*[/\\]Microsoft\.UI\.Reactor\.Advanced\.dll$</ModulePath>
       </Include>
     </ModulePaths>
     <Sources>

@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// unchecked, and all four unchecked surfaces have shipped a phantom API:
 /// bare <c>```csharp</c> template blocks, example source inside <b>string
 /// literals</b> in doc apps, gallery <c>SourceCode</c> strings, and <c>///</c>
-/// doc comments in <c>src/</c> — the last of which ship in <c>Reactor.xml</c>
+/// doc comments in <c>src/</c> — the last of which ship in <c>Microsoft.UI.Reactor.xml</c>
 /// as IntelliSense and have been observed re-seeding the guide templates that
 /// quote them.</para>
 ///
@@ -50,7 +50,7 @@ public sealed class PhantomSymbolLintTests
     /// </summary>
     public static TheoryData<string, string, string> HistoricalDefects() => new()
     {
-        // src/Reactor/Core/Element.cs:33 — shipped in Reactor.xml.
+        // src/Reactor/Core/Element.cs:33 — shipped in Microsoft.UI.Reactor.xml.
         { "Text", "/// Set via fluent extension methods: Text(\"hi\").Margin(10).Width(200)", "doc" },
         // src/Reactor/Core/Element.cs:340.
         { "Text", "/// Allows writing: VStack(\"Hello\", \"World\") instead of VStack(Text(\"Hello\"), Text(\"World\"))", "doc" },
@@ -486,7 +486,7 @@ public sealed class PhantomSymbolLintTests
     /// The durable gate: sweep every <c>///</c> doc comment in <c>src/</c> with
     /// the shipping matcher and hold the result against an explicit budget.
     /// <c>src/</c> is the propagation source — these comments ship in
-    /// <c>Reactor.xml</c> as IntelliSense, and guide templates have been
+    /// <c>Microsoft.UI.Reactor.xml</c> as IntelliSense, and guide templates have been
     /// observed quoting them almost verbatim — so this is the surface where
     /// letting a new phantom in costs the most.
     ///
@@ -505,7 +505,7 @@ public sealed class PhantomSymbolLintTests
     /// class is bounded independently.</para>
     ///
     /// <para>Every entry is a real defect, not a suppression — each is an
-    /// unwritable spelling shipped in <c>Reactor.xml</c>. They are budgeted
+    /// unwritable spelling shipped in <c>Microsoft.UI.Reactor.xml</c>. They are budgeted
     /// rather than fixed here because each file is owned by a concurrent
     /// branch; fixing them from this branch would collide.</para>
     /// </summary>
@@ -559,7 +559,7 @@ public sealed class PhantomSymbolLintTests
         {
             Assert.Fail(
                 "REACTOR_DOC_PHANTOM_001: a phantom API entered a /// doc comment in src/.\n" +
-                "These ship in Reactor.xml as IntelliSense and are quoted by guide templates,\n" +
+                "These ship in Microsoft.UI.Reactor.xml as IntelliSense and are quoted by guide templates,\n" +
                 "so nothing else in the toolchain will catch them.\n\n" +
                 string.Join("\n", over) +
                 "\n\nFix the doc comment. If the text names the phantom in order to warn\n" +

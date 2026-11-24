@@ -46,13 +46,14 @@ Developer machine
 |  |  Process: user-mode, host's trust level                  |  |
 |  |                                                          |  |
 |  |  +-----------------+   +-------------------------------+ |  |
-|  |  | Reactor.dll     |   | WinUI 3 controls (WindowsApp  | |  |
-|  |  | + Analyzers.dll |-->| SDK 2.0.1)                    | |  |
-|  |  | + Localization  |   | - keyboard / IME / paste      | |  |
-|  |  |   .Generator    |   | - accessibility / TextBox     | |  |
-|  |  +-----------------+   | - font/glyph rendering        | |  |
-|  |          |             +-------------------------------+ |  |
-|  |          |  (--preview / --devtools run + --vscode or   |  |
+|  |  | Microsoft.UI.   |   | WinUI 3 controls (WindowsApp  | |  |
+|  |  |  Reactor.dll    |   | SDK 2.0.1)                    | |  |
+|  |  | + Analyzers.dll |-->| - keyboard / IME / paste      | |  |
+|  |  | + Localization  |   | - accessibility / TextBox     | |  |
+|  |  |   .Generator    |   | - font/glyph rendering        | |  |
+|  |  +-----------------+   +-------------------------------+ |  |
+|  |          |                                               |  |
+|  |          |  (--preview / --devtools run + --vscode or    |  |
 |  |          |   --embed, opt-in; Devtools package only)     |  |
 |  |          v                                                |  |
 |  |  +----------------------------------------------------+  |  |
@@ -73,7 +74,7 @@ Developer machine
 
 Three things to notice:
 
-1. **Reactor.dll runs inside the consuming app's process.** It has no separate process, no service, no daemon.
+1. **Microsoft.UI.Reactor.dll runs inside the consuming app's process.** It has no separate process, no service, no daemon.
 2. The dev-time preview capture server and the `mur` CLI are *not* shipped to end users. They are developer-loop tooling; in a production app build the developer simply doesn't pass `--preview` / `--devtools` and the server never instantiates.
 3. There is no arrow leaving the box. **There is no Reactor process that talks to the network or to another machine.**
 
@@ -106,7 +107,7 @@ These are facts about the shipped framework. Each was verified during the 2026-0
 | Consuming-app process integrity | Host EXE memory | Same process, same user | Same as any in-process library defect — code execution at host's trust level |
 | Dev-time loopback port (preview capture server) | Localhost, kernel-owned port table | Same-user processes that can read the stdout banner | Read of preview frames; remote-control of the developer's running app window (focus steal, component switch) |
 | Per-launch bearer tokens | Process memory + dev stdout | Same-user, same-machine | Same as above — token *is* the dev surface's auth |
-| Source-ported OSS (Yoga, md4c, D3) | Repo source, compiled into Reactor.dll | Anyone who can submit a PR | Smuggled defect in a parser — runs at consuming-app trust level |
+| Source-ported OSS (Yoga, md4c, D3) | Repo source, compiled into Microsoft.UI.Reactor.dll | Anyone who can submit a PR | Smuggled defect in a parser — runs at consuming-app trust level |
 
 **There are no cross-user assets, no remote credentials, no Azure resources, and no end-user PII handled by the framework.**
 

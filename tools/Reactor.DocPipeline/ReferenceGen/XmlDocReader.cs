@@ -20,7 +20,7 @@ internal sealed record ParamDoc(string Name, string Text);
 
 /// <summary>
 /// Author-facing model of one <c>&lt;member&gt;</c> element from
-/// <c>Reactor.xml</c>. Crefs use the canonical Roslyn form
+/// <c>Microsoft.UI.Reactor.xml</c>. Crefs use the canonical Roslyn form
 /// (<c>T:Namespace.Type</c>, <c>M:Namespace.Type.Method(System.String)</c>,
 /// <c>P:</c>, <c>F:</c>, <c>E:</c>).
 /// </summary>
@@ -45,7 +45,7 @@ internal sealed record MemberDoc(
 }
 
 /// <summary>
-/// Parses <c>Reactor.xml</c> documentation files using
+/// Parses <c>Microsoft.UI.Reactor.xml</c> documentation files using
 /// <see cref="System.Xml.Linq"/>. The reader is lossy on element ordering
 /// (only the documented section list above) but preserves inline XML
 /// inside summaries / remarks so <see cref="CrefResolver"/> can rewrite

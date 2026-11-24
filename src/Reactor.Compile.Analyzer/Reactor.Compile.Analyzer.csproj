@@ -14,7 +14,7 @@
       provisional v1 protocol surface (`ReactorBinding<T>.OnCustomEvent`,
       `Prop.Controlled`, descriptor string-form refs).
 
-      Packaging decision (ship-with-Reactor.dll vs separate NuGet) is
+      Packaging decision (ship-with-Microsoft.UI.Reactor.dll vs separate NuGet) is
       deferred to spec 047 §14 Phase 1 (1.18 / 1.20). For now consumers
       opt in via:
 

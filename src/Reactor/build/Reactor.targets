@@ -169,21 +169,21 @@
       output automatically, but PackageReference publish only copies assemblies
       unless the package target explicitly marks these files for output/publish.
     -->
-    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor.pri"
-          Link="Reactor.pri"
-          TargetPath="Reactor.pri"
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Microsoft.UI.Reactor.pri"
+          Link="Microsoft.UI.Reactor.pri"
+          TargetPath="Microsoft.UI.Reactor.pri"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           Visible="false" />
-    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor\Hosting\ReactorApplication.xaml"
-          Link="Reactor\Hosting\ReactorApplication.xaml"
-          TargetPath="Reactor\Hosting\ReactorApplication.xaml"
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Microsoft.UI.Reactor\Hosting\ReactorApplication.xaml"
+          Link="Microsoft.UI.Reactor\Hosting\ReactorApplication.xaml"
+          TargetPath="Microsoft.UI.Reactor\Hosting\ReactorApplication.xaml"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           Visible="false" />
-    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor\Hosting\ReactorApplication.xbf"
-          Link="Reactor\Hosting\ReactorApplication.xbf"
-          TargetPath="Reactor\Hosting\ReactorApplication.xbf"
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Microsoft.UI.Reactor\Hosting\ReactorApplication.xbf"
+          Link="Microsoft.UI.Reactor\Hosting\ReactorApplication.xbf"
+          TargetPath="Microsoft.UI.Reactor\Hosting\ReactorApplication.xbf"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           Visible="false" />
@@ -245,8 +245,8 @@
 
   <!--
     Issue #1664. Simple assembly names are case-insensitive, so an app whose assembly is
-    named like one of its references (a file-based app saved as `reactor.cs` is the
-    `reactor` assembly, and Reactor ships as Reactor.dll) shadows that reference at run
+    named like one of its references (a file-based app saved as `microsoft.ui.reactor.cs` is the
+    `microsoft.ui.reactor` assembly, and Reactor ships as Microsoft.UI.Reactor.dll) shadows that reference at run
     time: every type ref into it binds to the app instead, and the app dies in its module
     initializer with a TypeLoadException. Fail the build with the cause instead.
     MSBuild condition string comparison is case-insensitive, which is the loader's rule.

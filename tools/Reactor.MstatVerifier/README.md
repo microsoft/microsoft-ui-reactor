@@ -12,7 +12,7 @@ directions of the same mstat check), all invoked via `dotnet run` from
   hello-world AOT exe stays under a size budget. Entries marked `RequiredWhenDevtoolsOn: false`
   (the HTTP client and TLS stack) are only checked for absence: the preview host no longer needs
   them.
-- `reactor-il <path-to-Reactor.dll>` — walks `Reactor.dll` with Mono.Cecil and fails if any
+- `reactor-il <path-to-Microsoft.UI.Reactor.dll>` — walks `Microsoft.UI.Reactor.dll` with Mono.Cecil and fails if any
   devtools *implementation* type leaked into the core assembly.
 - `negative-resolution <path-to-fixture.csproj>` — shells `dotnet build` on a fixture and
   asserts it fails with `CS0246`/`CS0234` (devtools impl types are unavailable without the

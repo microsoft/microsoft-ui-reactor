@@ -121,7 +121,7 @@ public static class PackLocalCommand
         // even after the source nupkg's bytes change — same version string = no
         // refresh. For local-iteration `0.0.0-local` workflows this is the
         // single most common "I packed a fix but the consumer still sees the
-        // old behavior" footgun: a stale Reactor.dll missing newly-added APIs
+        // old behavior" footgun: a stale Microsoft.UI.Reactor.dll missing newly-added APIs
         // produces a MissingMethodException at runtime instead of a build error.
         // Clearing the extracted directories here forces the next restore to
         // re-extract from the freshly-packed feed.

@@ -36,7 +36,7 @@ static int Usage()
 {
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  Reactor.MstatVerifier <absence|presence> <path-to.mstat> <path-to.exe>");
-    Console.Error.WriteLine("  Reactor.MstatVerifier reactor-il <path-to-Reactor.dll>");
+    Console.Error.WriteLine("  Reactor.MstatVerifier reactor-il <path-to-Microsoft.UI.Reactor.dll>");
     Console.Error.WriteLine("  Reactor.MstatVerifier negative-resolution <path-to-fixture.csproj>");
     return 2;
 }
@@ -82,7 +82,7 @@ static bool IsMode(string value, string mode) =>
 
 static int VerifyReactorIl(string reactorDllPath)
 {
-    if (!File.Exists(reactorDllPath)) return Fail($"Reactor.dll not found: {reactorDllPath}");
+    if (!File.Exists(reactorDllPath)) return Fail($"Microsoft.UI.Reactor.dll not found: {reactorDllPath}");
 
     using var assembly = AssemblyDefinition.ReadAssembly(reactorDllPath);
     var failures = new List<string>();
@@ -93,11 +93,11 @@ static int VerifyReactorIl(string reactorDllPath)
             continue;
 
         if (IsDevtoolsImplementationNamespace(type.Namespace))
-            failures.Add($"Unexpected devtools implementation type in Reactor.dll: {fullName}");
+            failures.Add($"Unexpected devtools implementation type in Microsoft.UI.Reactor.dll: {fullName}");
 
         if (fullName.Contains("PreviewCaptureServer", StringComparison.Ordinal)
             || type.Name == "DevtoolsHost")
-            failures.Add($"Unexpected devtools implementation symbol in Reactor.dll: {fullName}");
+            failures.Add($"Unexpected devtools implementation symbol in Microsoft.UI.Reactor.dll: {fullName}");
     }
 
     if (failures.Count > 0)
@@ -107,7 +107,7 @@ static int VerifyReactorIl(string reactorDllPath)
         return 1;
     }
 
-    Console.WriteLine($"Reactor.dll IL verification passed: {Path.GetFileName(reactorDllPath)}");
+    Console.WriteLine($"Microsoft.UI.Reactor.dll IL verification passed: {Path.GetFileName(reactorDllPath)}");
     return 0;
 }
 
