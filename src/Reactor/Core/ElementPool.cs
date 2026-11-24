@@ -596,6 +596,7 @@ public sealed class ElementPool : IDisposable
             case WinUI.RichTextBlock rtb:
                 Reconciler.CancelInlineUiExtentPin(rtb);
                 rtb.Blocks.Clear();
+                rtb.ClearValue(WinUI.RichTextBlock.ForegroundProperty);
                 break;
             case WinUI.ProgressBar pb:
                 pb.IsIndeterminate = false;

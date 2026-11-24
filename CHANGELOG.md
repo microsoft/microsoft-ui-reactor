@@ -167,6 +167,10 @@ Conventions for contributors:
 
 ### Fixed
 
+- Animated icons now use `.Foreground(brush)`, `.Foreground(ThemeRef)`, and
+  interaction-state foreground overrides. All three paths share support for
+  controls, text blocks, rich text blocks, and icon elements (issue #1674).
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming

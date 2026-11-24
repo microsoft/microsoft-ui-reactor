@@ -301,8 +301,7 @@ internal static class ModifierTable
     private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
     private static readonly string[] PanelControlBorder = { "Panel", "Control", "Border" };
     private static readonly string[] ControlOrTextBlock = { "Control", "TextBlock" };
-    private static readonly string[] ForegroundThemeControlGate =
-        [..ControlOrTextBlock, "RichTextBlock"];
+    private static readonly string[] ForegroundControlGate = { "Control", "TextBlock", "RichTextBlock", "IconElement" };
     private static readonly string[] RichTextBlockOnly = { "RichTextBlockElement" };
     private static readonly string[] TextOrRichTextBlock = { "TextBlockElement", "RichTextBlockElement" };
 
@@ -492,8 +491,7 @@ internal static class ModifierTable
             { "FontFamily", new ModifierInfo("FontFamily", controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontSize",   new ModifierInfo("FontSize",   controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontWeight", new ModifierInfo("FontWeight", controlGate: ControlOrTextBlock, elementTypes: RichTextBlockOnly) },
-            { "Foreground", new ModifierInfo("Foreground", controlGate: ControlOrTextBlock,
-                elementTypes: RichTextBlockOnly, themeControlGate: ForegroundThemeControlGate) },
+            { "Foreground", new ModifierInfo("Foreground", controlGate: ForegroundControlGate, elementTypes: RichTextBlockOnly) },
 
             // ── Type-specific modifiers (REACTOR_MOD_002, Info) ──────────────────────
             // No generic overload exists, so the rewrite only compiles on these element

@@ -66,6 +66,13 @@ internal static class AppliedModifierMap
             : Is<WinUI.TextBlock>(t) ? "TextBlock." + property
             : null;
 
+    private static string? ForegroundOwner(Type t) =>
+        Is<WinUI.Control>(t) ? "Control.Foreground"
+        : Is<WinUI.TextBlock>(t) ? "TextBlock.Foreground"
+        : Is<WinUI.RichTextBlock>(t) ? "RichTextBlock.Foreground"
+        : Is<WinUI.IconElement>(t) ? "IconElement.Foreground"
+        : null;
+
     private static string? BackgroundOwner(Type t) =>
         Is<WinUI.Panel>(t) ? "Panel.Background"
         : Is<WinUI.Control>(t) ? "Control.Background"
@@ -117,7 +124,7 @@ internal static class AppliedModifierMap
         new("BorderThickness", m => m.BorderThickness, BorderOwner("BorderThickness")),
         new("BorderInlineStart", m => m.BorderInlineStart, BorderOwner("BorderThickness")),
         new("Background", m => m.Background, BackgroundOwner),
-        new("Foreground", m => m.Foreground, ControlOrTextBlock("Foreground")),
+        new("Foreground", m => m.Foreground, ForegroundOwner),
         new("AutomationName", m => m.AutomationName, Always("AutomationProperties.Name")),
         new("AutomationId", m => m.AutomationId, Always("AutomationProperties.AutomationId")),
         new("IsDragRegion", m => m.IsDragRegion, Always("TitleBar.IsDragRegion")),

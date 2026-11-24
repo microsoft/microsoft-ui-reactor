@@ -1381,7 +1381,7 @@ public static partial class ElementExtensions
 
     /// <summary>
     /// Sets the foreground from a WinUI theme resource on <see cref="WinUI.Control"/>,
-    /// <see cref="WinUI.TextBlock"/>, or <see cref="WinUI.RichTextBlock"/>.
+    /// <see cref="WinUI.TextBlock"/>, <see cref="WinUI.RichTextBlock"/>, or <see cref="WinUI.IconElement"/>.
     /// WinUI updates the brush when the element's effective theme changes.
     /// For example, <c>RichTextBlock("Hello").Foreground(Theme.PrimaryText)</c>.
     /// </summary>

@@ -486,6 +486,7 @@ internal static class CleanElementScan
                 ["StackPanel"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.StackPanel)),
                 ["Grid"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Grid)),
                 ["TextBlock"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBlock)),
+                ["RichTextBlock"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.RichTextBlock)),
                 ["Viewbox"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Viewbox)),
                 ["TextBox"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBox)),
                 ["ToggleSwitch"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.ToggleSwitch)),

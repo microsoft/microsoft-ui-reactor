@@ -2346,17 +2346,16 @@ public sealed partial class Reconciler : IDisposable
             state.ModifierTargets = null;
             if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
-        ClearPublishedSource(fe);
+        ClearDetachedProperties(fe);
     }
 
     /// <summary>
-    /// A control that leaves Reactor's ownership (pool return, recycle, detach) stops
-    /// describing the element it no longer hosts: the published <c>ReactorSource</c> goes with
-    /// the element pointer, so neither an inspector nor <c>GetSource</c>'s published-value
-    /// fallback reports stale attribution. Applies to controls without a ReactorState too.
+    /// Drops the published source and modifier ownership attached to a native control when it
+    /// leaves Reactor's ownership (pool return, recycle, detach), even without a ReactorState.
     /// </summary>
-    private static void ClearPublishedSource(FrameworkElement fe)
+    private static void ClearDetachedProperties(FrameworkElement fe)
     {
+        ForegroundModifier.ClearApplied(fe);
         if (global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported && Diagnostics.ReactorSourcePublisher.IsEnabled)
             fe.ClearValue(Diagnostics.ReactorDiagnostics.SourceProperty);
     }
@@ -2419,7 +2418,7 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public static void DetachReactorState(FrameworkElement fe)
     {
-        ClearPublishedSource(fe);
+        ClearDetachedProperties(fe);
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
@@ -2932,7 +2931,7 @@ public sealed partial class Reconciler : IDisposable
             fe.ClearValue(FrameworkElement.DataContextProperty);
             // The element pointer is gone; so is what was published about it, even when the
             // pool then declines the control (pooling disabled, full, or not poolable).
-            ClearPublishedSource(fe);
+            ClearDetachedProperties(fe);
 
             _pool.Return(fe);
         }
@@ -6475,13 +6474,7 @@ public sealed partial class Reconciler : IDisposable
             ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
                 ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
 
-        var foregroundProperty = fe switch
-        {
-            WinUI.Control => WinUI.Control.ForegroundProperty,
-            TextBlock => TextBlock.ForegroundProperty,
-            _ => null,
-        };
-        if (foregroundProperty is not null)
+        if (ForegroundModifier.GetProperty(fe) is { } foregroundProperty)
             ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
                 ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
@@ -7417,7 +7410,8 @@ public sealed partial class Reconciler : IDisposable
     // flyout decorator or keyed memo layered over another element's control. Only the owner's
     // inline overlays are recorded (issue #965).
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender,
-        bool keepRemovedBackground = false, bool ownsControl = false)
+        bool keepRemovedBackground = false, bool ownsControl = false,
+        ForegroundModifier.UpdateAction foregroundUpdate = ForegroundModifier.UpdateAction.None)
     {
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
@@ -7758,17 +7752,7 @@ public sealed partial class Reconciler : IDisposable
             else if (fe is WinUI.Border bdr) bdr.ClearValue(WinUI.Border.BackgroundProperty);
         }
 
-        // Foreground (Control or TextBlock)
-        if (m.Foreground is not null && !ReferenceEquals(m.Foreground, oldM?.Foreground))
-        {
-            if (fe is WinUI.Control fgCtrl) fgCtrl.Foreground = m.Foreground;
-            else if (fe is TextBlock fgTb) fgTb.Foreground = m.Foreground;
-        }
-        else if (m.Foreground is null && oldM?.Foreground is not null)
-        {
-            if (fe is WinUI.Control fgCtrl) fgCtrl.ClearValue(WinUI.Control.ForegroundProperty);
-            else if (fe is TextBlock fgTb) fgTb.ClearValue(TextBlock.ForegroundProperty);
-        }
+        ForegroundModifier.Apply(fe, oldM, m, foregroundUpdate);
 
         // AutomationProperties.Name
         if (m.AutomationName is not null && m.AutomationName != oldM?.AutomationName)
@@ -9187,6 +9171,7 @@ public sealed partial class Reconciler : IDisposable
         WinUI.ContentControl => "ContentControl",
         WinUI.Panel => "Panel",
         WinUI.Control => "Control",
+        WinUI.IconElement => "IconElement",
         _ => fe.GetType().Name,
     };
 
@@ -9194,7 +9179,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (property == "Background" && (fe is WinUI.Panel || fe is WinUI.Control || fe is WinUI.Border))
             return "Background";
-        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock || fe is WinUI.RichTextBlock))
+        if (property == "Foreground" && ForegroundModifier.GetProperty(fe) is not null)
             return "Foreground";
         if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
             || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
