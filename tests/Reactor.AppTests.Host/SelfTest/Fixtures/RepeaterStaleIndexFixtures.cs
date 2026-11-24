@@ -34,7 +34,12 @@ internal static class RepeaterStaleIndexFixtures
         bool ScrollAwayAfterChange = false,
         bool StayScrolledAway = false,
         bool FocusAfterChange = false,
-        bool ExpectEmpty = false);
+        bool ExpectEmpty = false,
+        bool ExpectFocusKept = false,
+        bool ChangeWhileInactive = false);
+
+    [global::System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
 
     private static Element Row(int key, int gen, bool composite)
     {
@@ -153,14 +158,45 @@ internal static class RepeaterStaleIndexFixtures
             }
         }
 
+        Window? otherWindow = null;
+        nint otherHwnd = 0;
+        if (s.ChangeWhileInactive)
+        {
+            otherWindow = new Window { Content = new TextBlock { Text = "other window" } };
+            otherWindow.Activate();
+            otherHwnd = WinRT.Interop.WindowNative.GetWindowHandle(otherWindow);
+            if (!await Harness.WaitFor(() => GetForegroundWindow() == otherHwnd))
+            {
+                // Only possible while this process holds the foreground (an interactive run).
+                h.Skip(Name("FocusDeferredWhileInactive"), "this process can't take the foreground here, so no window of it is active");
+                otherWindow.Close();
+                otherWindow = null;
+            }
+        }
+
         h.ClickButton("Change");
         await Harness.Render();
+
+        if (otherWindow is not null && target is not null)
+        {
+            // Moving focus would activate the list's window, so it has to wait.
+            h.Check(Name("FocusDeferredWhileInactive"),
+                ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target) && GetForegroundWindow() == otherHwnd,
+                $"foreground is the other window: {GetForegroundWindow() == otherHwnd}");
+            otherWindow.Close();
+            h.Check(Name("FocusMovedAfterActivation"),
+                await Harness.WaitFor(() => !ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target), maxPasses: 40, perPassMs: 25));
+        }
 
         // Moving focus off the stale row must not scroll the list: focusing a clipped or cached
         // row scrolls it into view. A removal is excluded because the scroller's own anchoring
         // moves the offset then.
         if (s.ChangeWhileScrolledAway && changed.Count == initial.Count)
             h.Check(Name("NoScrollJump"), offset() >= scrollable() - 1, $"offset {offset():0} of {scrollable():0}");
+
+        if (s.ExpectFocusKept && target is not null)
+            h.Check(Name("FocusKeptOnCorrectRow"), ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target),
+                $"focused '{(FocusManager.GetFocusedElement(target.XamlRoot) as Button)?.Content}'");
 
         // Focusing a row the reorder shifted while nothing was focused pins it with its stale index.
         if (s.Focus && s.FocusAfterChange)
@@ -205,6 +241,23 @@ internal static class RepeaterStaleIndexFixtures
     private static List<int> Remove2(List<int> k) { k.RemoveAt(2); return k; }
     private static List<int> Move2ToEnd(List<int> k) { k.RemoveAt(2); k.Add(2); return k; }
     private static List<int> Clear(List<int> k) { k.Clear(); return k; }
+    private static List<int> Move4To1(List<int> k) { var t = k[4]; k.RemoveAt(4); k.Insert(1, t); return k; }
+
+    // Moving a row past the focused one by several positions leaves the focused row in its right
+    // place with a stale stored index (no other control takes that index): focus must stay.
+    internal class FocusedRowShiftedByMultiPositionMove_FocusStays(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
+            new("FocusedShiftedByMultiMove", Move4To1, Focus: true, ExpectFocusKept: true));
+    }
+
+    // The stale row's window is inactive: focus must not move (that would activate the window)
+    // until the window is activated again.
+    internal class FocusedRowMovedWhileWindowInactive_WaitsForActivation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
+            new("FocusedMovedInactive", Move2ToTop, Focus: true, ChangeWhileScrolledAway: true, ChangeWhileInactive: true));
+    }
 
     // A reorder while nothing in the list is focused leaves the shifted rows with stale
     // indices. Focusing one afterwards pins it, and it used to come back as a stale row after a

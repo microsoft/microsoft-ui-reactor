@@ -21,9 +21,11 @@ namespace Microsoft.UI.Reactor.Core;
 // that follows a Move, Remove or Reset, and, once the list has had one, whenever focus moves
 // onto a row, because a row that was shifted while unfocused keeps its stale index and becomes
 // pinned the moment it's focused. A focused control whose index is stale but which the layout
-// still shows in the right place (another control holds its stale index) is left alone until
-// it moves on screen: it only turns into the stale case once it scrolls into the pinned pool,
-// so the check runs again after the next EffectiveViewportChanged on it.
+// still shows in its right place (it sits between its neighbouring keys' rows) is left alone,
+// and the check runs again after the next EffectiveViewportChanged on it: it only turns into
+// the stale case once it scrolls into the pinned pool. Focus isn't moved while another window
+// of this process is active, because that would activate the list's window; the check waits
+// for the list's window to be activated.
 public sealed partial class ElementFactory<T>
 {
     private ItemsRepeater? _focusCheckRepeater;
@@ -120,18 +122,89 @@ public sealed partial class ElementFactory<T>
         if (index < 0 || index == expected)
             return;
 
-        // Another control holds the stale index: the layout shows this one in its right place.
-        foreach (var control in _keyByControl.Keys)
+        // A stale index alone doesn't make the row wrong: the layout keeps shifted rows in their
+        // right place, it just doesn't update their stored index on a Move.
+        if (IsCorrectlyPlaced(repeater, listState, child, key, expected))
         {
-            if (!ReferenceEquals(control, child) && repeater.GetElementIndex(control) == index)
-            {
-                if (child is FrameworkElement fe)
-                    WatchFocusedContainer(repeater, fe);
-                return;
-            }
+            if (child is FrameworkElement fe)
+                WatchFocusedContainer(repeater, fe);
+            return;
+        }
+
+        if (FocusWouldStealActivation(repeater))
+        {
+            // Moving focus would activate the window. Defer to its next activation.
+            WaitForActivation(repeater);
+            return;
         }
 
         MoveFocusOffStaleContainer(repeater, child, key, index);
+    }
+
+    // Whether `child` is shown where its key belongs: the key is still in the list, no other
+    // control has been realized for it, and it sits between the controls of its neighbouring
+    // keys in reading order. A stale pinned control fails this once it's left the layout (its
+    // neighbours aren't next to it), and a control the repeater handed back for its old index
+    // fails it because the key's own row was realized again elsewhere.
+    private bool IsCorrectlyPlaced(ItemsRepeater repeater, Internal.ReactorListState listState, UIElement child, string key, int expected)
+    {
+        if (expected < 0) return false;
+        if (_controlByKey.TryGetValue(key, out var live) && !ReferenceEquals(live, child) && repeater.GetElementIndex(live) >= 0)
+            return false;
+
+        var source = listState.Source;
+        var previous = expected > 0 ? RealizedControl(repeater, source[expected - 1].Key) : null;
+        var next = expected + 1 < source.Count ? RealizedControl(repeater, source[expected + 1].Key) : null;
+        if (previous is null && next is null) return false;
+
+        var at = PositionIn(child, repeater);
+        return (previous is null || IsBefore(PositionIn(previous, repeater), at))
+            && (next is null || IsBefore(at, PositionIn(next, repeater)));
+    }
+
+    private UIElement? RealizedControl(ItemsRepeater repeater, string key)
+        => _controlByKey.TryGetValue(key, out var control) && repeater.GetElementIndex(control) >= 0 ? control : null;
+
+    private static global::Windows.Foundation.Point PositionIn(UIElement element, ItemsRepeater repeater)
+        => element.TransformToVisual(repeater).TransformPoint(default);
+
+    // Reading order: by row, then along the row (a stack has one coordinate, a grid both).
+    private static bool IsBefore(global::Windows.Foundation.Point a, global::Windows.Foundation.Point b)
+        => a.Y < b.Y - 0.5 || (Math.Abs(a.Y - b.Y) <= 0.5 && a.X < b.X);
+
+    private ReactorWindow? _activationWindow;
+
+    // Focus moved programmatically requests activation of its window; WinUI's own recycling path
+    // avoids that with an internal no-activate focus call. The request can only succeed while
+    // this process holds the foreground, so the list's window is at risk exactly when another
+    // window of this process is the active one. When another process is in the foreground, the
+    // OS foreground lock refuses the request, and a visible background window still gets its
+    // stale row released.
+    private static bool FocusWouldStealActivation(ItemsRepeater repeater)
+    {
+        var root = repeater.XamlRoot;
+        if (ReactorApp.FindWindowForXamlRoot(root) is { IsActive: true }) return false;
+        if (root?.ContentIslandEnvironment is not { } environment) return false;
+        var hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(environment.AppWindowId);
+        var foreground = ForegroundWindow.Get();
+        return hwnd != 0 && foreground != 0 && foreground != hwnd && ForegroundWindow.BelongsToThisProcess(foreground);
+    }
+
+    // A Reactor window re-runs the check when it's activated. Other hosts rely on the GotFocus
+    // that activation raises when it restores focus to the row (WatchFocusEntering).
+    private void WaitForActivation(ItemsRepeater repeater)
+    {
+        if (_activationWindow is not null) return;
+        if (ReactorApp.FindWindowForXamlRoot(repeater.XamlRoot) is not { } window) return;
+        EventHandler handler = null!;
+        handler = (_, _) =>
+        {
+            window.Activated -= handler;
+            _activationWindow = null;
+            ScheduleFocusedContainerCheck(repeater);
+        };
+        _activationWindow = window;
+        window.Activated += handler;
     }
 
     // Focus follows the item when its row is on screen; otherwise it goes to the on-screen row
@@ -219,4 +292,18 @@ public sealed partial class ElementFactory<T>
         }
         return null;
     }
+}
+
+internal static partial class ForegroundWindow
+{
+    [global::System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "GetForegroundWindow")]
+    private static partial nint GetForegroundWindow();
+
+    [global::System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "GetWindowThreadProcessId")]
+    private static partial uint GetWindowThreadProcessId(nint hwnd, out uint processId);
+
+    internal static nint Get() => GetForegroundWindow();
+
+    internal static bool BelongsToThisProcess(nint hwnd)
+        => GetWindowThreadProcessId(hwnd, out var processId) != 0 && processId == (uint)global::System.Environment.ProcessId;
 }
