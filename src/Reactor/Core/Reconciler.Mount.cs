@@ -861,6 +861,8 @@ public sealed partial class Reconciler
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
+        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(container);
 
         try
         {

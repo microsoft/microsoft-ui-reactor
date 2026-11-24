@@ -5217,6 +5217,8 @@ public sealed partial class Reconciler : IDisposable
         var curve = Microsoft.UI.Reactor.Core.Internal.AnimationKindMap.ToCurve(kind);
         if (curve is null) return false;
 
+        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(control);
         try
         {
             var visual = AnimationHelper.GetElementVisual(control);
@@ -6915,11 +6917,9 @@ public sealed partial class Reconciler : IDisposable
                 Drop();
                 return; // No compositor (e.g. unit tests) or it is shutting down.
             }
-            commit.Completed = (_, _) =>
-            {
-                if (dispatcher.HasThreadAccess) SafeCheck();
-                else dispatcher.TryEnqueue(SafeCheck);
-            };
+            // Always queued: Completed runs inline when the commit already finished, which can be
+            // before ApplyKeyframeAnimations publishes the entry's started controllers.
+            commit.Completed = (_, _) => dispatcher.TryEnqueue(SafeCheck);
         }
 
         // The check and the waits run from the dispatcher after the update returned, so an
@@ -6941,8 +6941,8 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // XAML pushes when it first renders the element. Under a collapsed ancestor in the live tree
-        // nothing renders until that ancestor's Visibility changes, so watch it (and Loaded, for a
-        // move to another parent) rather than every layout pass. Off the tree, wait for layout, as
+        // nothing renders until that ancestor's Visibility changes, so watch it (and Loaded and
+        // Unloaded, for a move to another parent) rather than every layout pass. Off the tree, wait for layout, as
         // the pool's renter sync does.
         void WaitForRender(FrameworkElement fe)
         {
@@ -6956,6 +6956,10 @@ public sealed partial class Reconciler : IDisposable
                 check.WaitTarget = fe;
                 check.LoadedHandler = (_, _) => Resume(fe);
                 fe.Loaded += check.LoadedHandler;
+                // A move to a visible parent in the same turn can skip Loaded while Unloaded is
+                // pending (ElementPool.SyncOpacityWhenLoaded), but that Unloaded still comes.
+                check.UnloadedHandler = (_, _) => Resume(fe);
+                fe.Unloaded += check.UnloadedHandler;
                 KeyframeOpacityWaitsForTests++;
                 return;
             }
@@ -6967,7 +6971,10 @@ public sealed partial class Reconciler : IDisposable
             try
             {
                 if (!Owns(out _)) { Drop(); return; }
-                WaitForLayout(fe);
+                // Already rendering (an Unloaded can arrive after the frame that pushed, with no
+                // layout pass left to wait for): check after the next commit. Otherwise wait for layout.
+                if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                else WaitForLayout(fe);
             }
             catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
         }
@@ -7039,6 +7046,7 @@ public sealed partial class Reconciler : IDisposable
         internal FrameworkElement? WaitTarget;
         internal EventHandler<object>? LayoutHandler;
         internal RoutedEventHandler? LoadedHandler;
+        internal RoutedEventHandler? UnloadedHandler;
         internal UIElement? Hidden;
         internal long VisibilityToken;
 
@@ -7048,6 +7056,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 if (LayoutHandler is { } onLayout) { fe.LayoutUpdated -= onLayout; KeyframeOpacityWaitsForTests--; }
                 if (LoadedHandler is { } onLoaded) fe.Loaded -= onLoaded;
+                if (UnloadedHandler is { } onUnloaded) fe.Unloaded -= onUnloaded;
             }
             if (Hidden is { } hidden)
             {
@@ -7057,6 +7066,7 @@ public sealed partial class Reconciler : IDisposable
             WaitTarget = null;
             LayoutHandler = null;
             LoadedHandler = null;
+            UnloadedHandler = null;
             Hidden = null;
         }
     }

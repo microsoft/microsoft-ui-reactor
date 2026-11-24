@@ -702,6 +702,59 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // An ambient (Animations.Animate) exit fade takes the opacity channel too.
+            using var reconciler = new Reconciler();
+            var child = Border(TextBlock("Ambient Exit")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var withChild = VStack(child);
+            var without = VStack();
+            var panel = (FrameworkElement)reconciler.Mount(withChild, () => { })!;
+            var host = new Border { Child = panel, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            var control = (Border)Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(panel, 0);
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            await AfterNextCommit(visual);
+            bool pending = Reconciler.KeyframeOpacityPendingForTests(control);
+            Animations.Animate(AnimationKind.Spring, () => reconciler.Update(withChild, without, panel, () => { }));
+            host.Visibility = Visibility.Visible;
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_AmbientExitNotReplacedByLoop", pending && restarts == 0,
+                $"pending={pending}, restarts={restarts}");
+            host.Child = null;
+            H.SetContent(null);
+        }
+
+        {
+            // Moved from a collapsed parent to a visible one in the same turn: the check must still
+            // follow it to the frame that pushes, whether or not WinUI raises Loaded.
+            using var reconciler = new Reconciler();
+            var faded = Border(TextBlock("Reparented Opacity Loop")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var control = (Border)reconciler.Mount(faded, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            var hidden = new Border { Child = control, Visibility = Visibility.Collapsed };
+            var shown = new Border();
+            var both = new StackPanel { Children = { hidden, shown } };
+            H.SetContent(both);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            bool pending = Reconciler.KeyframeOpacityPendingForTests(control);
+            hidden.Child = null;
+            shown.Child = control;
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            await AfterNextCommit(visual);
+            var running = visual.TryGetAnimationController("Opacity");
+            H.Check("TransformKeyframes_ReparentedFromCollapsedRestarted", pending && running is not null
+                && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity")),
+                $"pending={pending}, running={running is not null}, restarts={Reconciler.KeyframeOpacityRestartsForTests(control)}");
+            reconciler.Update(faded, Border(TextBlock("Reparented Opacity Loop")), control, () => { });
+            shown.Child = null;
+            H.SetContent(null);
+        }
+
+        {
             // A Memo wrapper's .OnMount runs after its child armed the check, and its opacity write
             // replaces the keyframe the same way.
             using var reconciler = new Reconciler();
