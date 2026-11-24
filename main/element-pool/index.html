@@ -3451,7 +3451,8 @@ property state into the next reader's mount.</p>
 is permanent. Reactor takes it for <code>.Animate()</code>, <code>.Transition()</code>,
 <code>.InteractionStates()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>,
 <code>.ScrollLinked()</code>, the implicit transitions (<code>.OpacityTransition()</code>,
-<code>.ScaleTransition()</code>, <code>.RotationTransition()</code>, <code>.TranslationTransition()</code>)
+<code>.ScaleTransition()</code>, <code>.RotationTransition()</code>, <code>.TranslationTransition()</code>),
+a non-identity <code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code> or <code>.CenterPoint()</code>,
 and the children of a <code>.Stagger()</code> panel. After that
 WinUI refuses every write to the control's <code>Rotation</code>, <code>Scale</code>,
 <code>CenterPoint</code>, <code>RotationAxis</code> and <code>TransformMatrix</code> facades and to its
@@ -3474,7 +3475,7 @@ identity write. So each type has two lanes:</p>
 <tr>
 <td>Visual</td>
 <td>Controls whose visual was taken, reset to a fresh control's pixels</td>
-<td>Only a built-in element whose chain, including a keyed <code>Memo</code> over it, takes the visual at mount (<code>.Animate()</code>, an enter <code>.Transition()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>, <code>.ScrollLinked()</code>, an implicit transition other than <code>.BackgroundTransition()</code>) and carries no <code>.Set</code> setters or <code>.OnMount</code> callbacks</td>
+<td>Only a built-in element whose chain, including a keyed <code>Memo</code> over it, takes the visual at mount (<code>.Animate()</code>, an enter <code>.Transition()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>, <code>.ScrollLinked()</code>, an implicit transition other than <code>.BackgroundTransition()</code>, a non-identity transform modifier) and carries no <code>.Set</code> setters or <code>.OnMount</code> callbacks</td>
 </tr>
 </tbody>
 </table>
@@ -3485,7 +3486,8 @@ user code never meets a control it couldn't have met fresh: a
 whose rotation facade would throw. <code>.InteractionStates()</code> and an
 exit-only <code>.Transition()</code> don't make an element eligible, because a
 fresh control keeps writable facades until the first hover or the
-removal.</p>
+removal. Neither does an identity transform such as <code>.Scale(1)</code>, which never takes the
+visual, so <code>Border().Scale(1).Ref(r)</code> can still write <code>r.Current.Rotation</code>.</p>
 <p><code>Return</code> picks the lane from a <code>VisualTaken</code> marker that every handoff
 sets on the native control's attached state, so it holds whichever
 managed wrapper reaches the control. Before a visual-lane control is
@@ -3493,8 +3495,9 @@ pushed, <code>CleanElement</code> stops every compositor animation on it, drops
 its implicit animations, writes identity to the visual (opacity, scale,
 rotation, center point, anchor point, orientation, transform matrix,
 clip and translation), disables translation, zeroes the <code>Translation</code>
-facade and forgets Reactor's composition bookkeeping. <code>Offset</code> and
-<code>Size</code> are left to layout. Navigation pages are never pooled, because a
+facade and forgets Reactor's composition bookkeeping. <code>Size</code> is left to layout, and
+the renter gets its layout <code>Offset</code> back once it loads, because the reset runs after the
+control left the tree. Navigation pages are never pooled, because a
 navigation transition's completion can still reach them after they
 leave the tree.</p>
 <h2 id="returning-on-unmount">Returning on unmount<a class="headerlink" href="#returning-on-unmount" title="Permanent link">&para;</a></h2>

@@ -1278,6 +1278,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#dont-mix-fetranslation-with-translation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Don't mix fe.Translation with .Translation()
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3661,6 +3672,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#dont-mix-fetranslation-with-translation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Don't mix fe.Translation with .Translation()
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4265,8 +4287,11 @@ that your own code writes.</p>
 <p><code>.BackgroundTransition()</code> stays WinUI's XAML <code>BrushTransition</code>, so it follows
 the same setting on its own.</p>
 <h3 id="reading-transforms-back-and-set">Reading transforms back and <code>.Set(...)</code><a class="headerlink" href="#reading-transforms-back-and-set" title="Permanent link">&para;</a></h3>
-<p>An element with one of the four transitions keeps its transforms on the
-composition visual. Two things follow:</p>
+<p><code>.Scale()</code>, <code>.Rotation()</code>, <code>.Translation()</code> and <code>.CenterPoint()</code> write the
+element's composition visual, and so do the four transitions and every
+compositor feature on this page. A non-identity transform, a transition or a
+compositor feature takes the visual, and an identity value such as
+<code>.Scale(1)</code> on an untouched control doesn't. Once the visual is taken:</p>
 <ul>
 <li><code>fe.Scale</code>, <code>fe.Rotation</code> and <code>fe.CenterPoint</code> read back identity for values
   set with <code>.Scale()</code>, <code>.Rotation()</code> and <code>.CenterPoint()</code>. Read
@@ -4274,11 +4299,21 @@ composition visual. Two things follow:</p>
   in radians, and <code>CenterPoint</code>) instead.</li>
 <li>WinUI rejects <code>.Set(fe =&gt; fe.Rotation = …)</code>, and the same for <code>Scale</code>,
   <code>CenterPoint</code>, <code>RotationAxis</code>, <code>TransformMatrix</code>, <code>UIElement.StartAnimation</code>
-  and the XAML <code>*Transition</code> properties, once the visual is taken. Use
-  <code>.Rotation()</code>, <code>.Scale()</code>, <code>.CenterPoint()</code> and the transition modifiers
+  and the XAML <code>*Transition</code> properties, and the same writes from <code>.OnMount(...)</code>.
+  Use <code>.Rotation()</code>, <code>.Scale()</code>, <code>.CenterPoint()</code> and the transition modifiers
   instead. Reactor logs a warning that names the modifier when that happens,
-  and the <code>REACTOR_ANIM_004</code> analyzer flags the <code>.Set</code> at build time.</li>
+  and the <code>REACTOR_ANIM_004</code> analyzer flags the <code>.Set</code> at build time and
+  rewrites the simple cases.</li>
 </ul>
+<h3 id="dont-mix-fetranslation-with-translation">Don't mix <code>fe.Translation</code> with <code>.Translation()</code><a class="headerlink" href="#dont-mix-fetranslation-with-translation" title="Permanent link">&para;</a></h3>
+<p>A drag that writes <code>fe.Translation</code> from a handler or an <code>ElementRef</code> keeps
+working next to <code>.Scale()</code>, <code>.Rotation()</code> and the other features, because
+Reactor enables translation on the visual only for a declared Translation
+channel: <code>.Translation()</code>, a <code>translation:</code> keyframe or an
+<code>.InteractionStates()</code> translation. On an element that declares one, WinUI
+ignores <code>fe.Translation</code> writes once the element has rendered. Either drive
+the position through <code>.Translation()</code> or write <code>fe.Translation</code> yourself, not
+both.</p>
 <h2 id="layout-animation">Layout Animation<a class="headerlink" href="#layout-animation" title="Permanent link">&para;</a></h2>
 <p><code>.LayoutAnimation()</code> animates elements when their position changes due to
 layout reflow — items entering, leaving, or reordering in a <a href="../collections/">collection</a>:</p>
