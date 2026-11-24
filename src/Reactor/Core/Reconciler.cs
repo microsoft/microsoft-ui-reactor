@@ -7095,6 +7095,7 @@ public sealed partial class Reconciler : IDisposable
     {
         private readonly UIElement? _element;
         private readonly ReactorState? _state;
+        private readonly KeyframeOpacityCheckState? _check;
         private readonly double _opacity;
         private readonly AnimationController? _controller;
         private readonly float _visualOpacity;
@@ -7109,6 +7110,7 @@ public sealed partial class Reconciler : IDisposable
             }
             _element = element;
             _state = state;
+            _check = state.KeyframeOpacity;
             _opacity = element.Opacity;
             // The keyframe already took the visual, so this has no handoff side effects.
             var visual = ElementCompositionPreview.GetElementVisual(element);
@@ -7118,7 +7120,9 @@ public sealed partial class Reconciler : IDisposable
 
         internal void Complete()
         {
-            if (_element is null || _state is not { KeyframeOpacity: not null } state) return;
+            // A nested update (a decorator's target) may have armed a newer check meanwhile. Its
+            // keyframe is what changed the controller, so it stays.
+            if (_element is null || _state is not { } state || !ReferenceEquals(state.KeyframeOpacity, _check)) return;
             var visual = ElementCompositionPreview.GetElementVisual(_element);
             // The visual's base value counts too: once XAML's push stopped the keyframe, a write to the
             // visual leaves no controller to compare.

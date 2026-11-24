@@ -774,6 +774,30 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // A Flyout target whose opacity keyframe replays before its first frame arms a new check in
+            // the nested update. The outer update's probe must leave that newer check alone.
+            using var reconciler = new Reconciler();
+            var menu = TextBlock("Menu");
+            Element Wrapped(int trigger) => Flyout(Border(TextBlock("Flyout Target")).Opacity(0.4)
+                .Keyframes("fade", trigger, OpacityPulse), menu);
+            var first = Wrapped(1);
+            var second = Wrapped(2);
+            var control = (Border)reconciler.Mount(first, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            reconciler.Update(first, second, control, () => { });
+            bool pending = Reconciler.KeyframeOpacityPendingForTests(control);
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            var running = visual.TryGetAnimationController("Opacity");
+            H.Check("TransformKeyframes_FlyoutTargetReplayKeepsCheck", pending && running is not null
+                && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity")),
+                $"pending={pending}, running={running is not null}, restarts={Reconciler.KeyframeOpacityRestartsForTests(control)}");
+            reconciler.Update(second, Flyout(Border(TextBlock("Flyout Target")), menu), control, () => { });
+            H.SetContent(null);
+        }
+
+        {
             // A Memo wrapper's .OnMount runs after its child armed the check, and its opacity write
             // replaces the keyframe the same way.
             using var reconciler = new Reconciler();
