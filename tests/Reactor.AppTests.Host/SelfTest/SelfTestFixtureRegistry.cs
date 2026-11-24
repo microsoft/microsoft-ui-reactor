@@ -299,6 +299,7 @@ internal static class SelfTestFixtureRegistry
         ("KeyedWrapper_ErrorBoundary_GrowAndReverse", static harness => new KeyedWrapperChildrenFixtures.ErrorBoundaryChildren(harness)),
         ("KeyedWrapper_KeyedMemo_GrowAndReverse", static harness => new KeyedWrapperChildrenFixtures.KeyedMemoChildren(harness)),
         ("KeyedWrapper_KeyedMemoInnerKey_GrowAndReverse", static harness => new KeyedWrapperChildrenFixtures.KeyedMemoInnerKeyChildren(harness)),
+        ("Toolkit_HeaderedItemsControl_KeyedChildren", static harness => new ToolkitHeaderedItemsControlFixture(harness)),
         // A child whose update returns a new control is unmounted when it leaves a
         // single-child slot, as it is when it leaves a panel (SlotReplacementFixtures).
         ("SlotReplace_Border", static harness => new SlotReplacementFixtures.InBorder(harness)),
