@@ -15,6 +15,10 @@ internal sealed class MarkdownSelectionInputFixture : Component
     private readonly MarkdownTextSelectionOptions _outerOptions = new();
     private readonly MarkdownTextSelectionOptions _innerOptions = new();
     private readonly MarkdownTextSelectionOptions _longOptions = new();
+    private readonly MarkdownTextSelectionOptions _membershipOptions = new();
+    private Border? _membershipBorder;
+    private Border? _layoutProbe;
+    private MarkdownSelectionHost? _membershipHost;
     private int _clicks;
     private int _blankClicks;
     private int _customClicks;
@@ -22,6 +26,9 @@ internal sealed class MarkdownSelectionInputFixture : Component
     public override Element Render()
     {
         var (streamed, setStreamed) = UseState(false);
+        var (memberAdded, setMemberAdded) = UseState(false);
+        var (reversed, setReversed) = UseState(false);
+        var (firstGated, setFirstGated) = UseState(false);
         Element Md(string text, MarkdownTextSelectionOptions options) =>
             Microsoft.UI.Reactor.Advanced.Factories.Markdown(text, new MarkdownOptions { TextSelection = options });
         var link = RichTextBlock("").Set(control =>
@@ -43,6 +50,15 @@ internal sealed class MarkdownSelectionInputFixture : Component
                     .OnMountAdd(fe => ((Button)fe).Click += OnCustomLinkClick)
                     .OnUnmountAdd(fe => ((Button)fe).Click -= OnCustomLinkClick),
             });
+        // The Visibility gate changes selection membership without changing rendering.
+        var first = MarkdownTextSelection.Visibility(!firstGated,
+            MarkdownTextSelection.Surface("first", TextBlock("first"))).WithKey("first");
+        var second = Border(MarkdownTextSelection.Surface("second", TextBlock("second")))
+            .WithKey("second").OnMountAdd(fe => _membershipBorder = (Border)fe);
+        var third = MarkdownTextSelection.Surface("third", TextBlock("third")).WithKey("third");
+        var members = new List<Element> { first, second };
+        if (memberAdded) members.Add(third);
+        if (reversed) members.Reverse();
         return VStack(
             TextBlock("Clicks 0").AutomationId("SelectionClicks").Set(text =>
             {
@@ -67,14 +83,48 @@ internal sealed class MarkdownSelectionInputFixture : Component
                 .AutomationId("SelectionOuter"),
             ItemsView(new[] { "message" }, row => row, (_, _) =>
                 ItemContainer(MarkdownTextSelection.Scope(_longOptions,
-                    Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
+                    VStack(Md(string.Join("\n\n", Enumerable.Range(0, 70).Select(i => $"drag paragraph {i:D2}")), _longOptions))
+                        .Set(TracePointerRouting))
                     .AutomationId("SelectionLong")))
                     .Height(180).AutomationId("SelectionTimeline"),
             Border(TextBlock("\u00A0").AutomationId("SelectionBlank").AutomationName("Blank chat"))
                     .Height(48).Background("#00000000")
                     .OnMountAdd(fe => ((Border)fe).Tapped += OnBlankTapped)
                     .OnUnmountAdd(fe => ((Border)fe).Tapped -= OnBlankTapped),
-            TextBox().Width(420).AutomationId("SelectionComposer")).Width(450);
+            TextBox().Width(420).AutomationId("SelectionComposer"),
+            Button("Toggle member", () => setMemberAdded(!memberAdded)).AutomationId("SelectionAddMember"),
+            Button("Toggle member visibility", () =>
+            {
+                if (_membershipBorder is { } border)
+                    border.Visibility = border.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            }).AutomationId("SelectionToggleMemberVisibility"),
+            Button("Reverse members", () => setReversed(true)).AutomationId("SelectionReverseMembers"),
+            Button("Gate first member", () => setFirstGated(!firstGated)).AutomationId("SelectionGateFirstMember"),
+            Button("Probe idle", ProbeIdle).AutomationId("SelectionIdleProbe"),
+            MarkdownTextSelection.Scope(_membershipOptions, VStack(members.ToArray()))
+                .AutomationId("SelectionMembership")
+                .OnMountAdd(fe => _membershipHost = (MarkdownSelectionHost)fe),
+            Border(null).Height(1).OnMountAdd(fe => _layoutProbe = (Border)fe)).Width(450);
+    }
+
+    private void ProbeIdle()
+    {
+        var host = _membershipHost ?? throw new InvalidOperationException("Missing membership scope.");
+        var probe = _layoutProbe ?? throw new InvalidOperationException("Missing layout probe.");
+        var before = (host.LayoutPassCount, host.MembershipCheckCount, host.SegmentReadCount, host.TransformCount);
+        int layouts = 0;
+        void OnLayout(object? sender, object args) => layouts++;
+        probe.LayoutUpdated += OnLayout;
+        probe.Height++;
+        var timer = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            probe.LayoutUpdated -= OnLayout;
+            var after = (host.LayoutPassCount, host.MembershipCheckCount, host.SegmentReadCount, host.TransformCount);
+            AutomationProperties.SetHelpText(host, $"idle layouts={layouts} unchanged={before == after}");
+        };
+        timer.Start();
     }
 
     private void OnBlankTapped(object sender, TappedRoutedEventArgs args)
@@ -89,7 +139,7 @@ internal sealed class MarkdownSelectionInputFixture : Component
             AutomationProperties.SetHelpText(button, $"Custom clicks {++_customClicks}");
     }
 
-    private static void TracePointerRouting(StackPanel panel)
+    internal static void TracePointerRouting(StackPanel panel)
     {
         MarkdownSelectionHost? scope = null;
         var history = new Queue<string>();
@@ -102,7 +152,8 @@ internal sealed class MarkdownSelectionInputFixture : Component
             history.Enqueue($"{kind} pressCount={pressCount} source={args.OriginalSource.GetType().Name} id={args.Pointer.PointerId} " +
                 $"left={point.Properties.IsLeftButtonPressed} modifiers={args.KeyModifiers} xy={point.Position.X:F1},{point.Position.Y:F1} " +
                 $"handled={args.Handled} captures={scope.PointerCaptures?.Count ?? 0} " +
-                $"selection={scope.Document.Start}..{scope.Document.End}");
+                $"selection={scope.Document.Start}..{scope.Document.End} " +
+                $"nativePending={scope.HasPendingNativePress} tracking={scope.IsTrackingLayout}");
             while (history.Count > 20) history.Dequeue();
             AutomationProperties.SetHelpText(scope, string.Join(" | ", history));
         }
@@ -130,5 +181,49 @@ internal sealed class MarkdownSelectionInputFixture : Component
             scope.RemoveHandler(UIElement.PointerCaptureLostEvent, lost);
             scope = null;
         };
+    }
+}
+
+internal sealed class MarkdownSelectionEdgesFixture : Component<bool>
+{
+    private readonly MarkdownTextSelectionOptions _options = new();
+    private MarkdownSelectionHost? _scope;
+    private TextBlock? _captureStatus;
+
+    public override Element Render()
+    {
+        Element content = VStack(0,
+            TextBlock("earlier messages").Height(300),
+            MarkdownTextSelection.Scope(_options,
+                VStack(Microsoft.UI.Reactor.Advanced.Factories.Markdown("edge anchor alpha\n\nedge anchor bravo",
+                    new MarkdownOptions { TextSelection = _options }))
+                .Set((StackPanel panel) =>
+                {
+                    MarkdownSelectionInputFixture.TracePointerRouting(panel);
+                    panel.Loaded += (_, _) =>
+                    {
+                        for (DependencyObject? parent = panel; parent is not null;
+                            parent = VisualTreeHelper.GetParent(parent))
+                            if (parent is MarkdownSelectionHost scope) { _scope = scope; break; }
+                        if (_scope is null)
+                            throw new InvalidOperationException("The edge proof needs its enclosing selection scope.");
+                    };
+                    panel.Unloaded += (_, _) => _scope = null;
+                })).Height(70).AutomationId("SelectionEdgeMessage"),
+            TextBlock("later messages").Height(300));
+        Element scroller = Props ? ScrollView(content) : ScrollViewer(content);
+        return VStack(
+            Button("Release selection capture", () =>
+            {
+                var scope = _scope ?? throw new InvalidOperationException("Selection scope is not loaded.");
+                scope.ReleasePointerCaptures();
+                var status = _captureStatus ?? throw new InvalidOperationException("Capture status is not loaded.");
+                string text = $"Released captures={scope.PointerCaptures?.Count ?? 0}";
+                Reconciler.UpdateDefaultAutomationName(status, status.Text, text);
+                status.Text = text;
+            })
+                .AutomationId("SelectionReleaseCapture"),
+            TextBlock("Capture not released").AutomationId("SelectionCaptureStatus").Set(text => _captureStatus = text),
+            scroller.Height(240).Width(400).AutomationId("SelectionEdgeViewport")).Width(450);
     }
 }

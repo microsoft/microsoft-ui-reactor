@@ -48,11 +48,12 @@ Yoga/Flex layout math.
   safe only because their event trampolines subscribe once for the control's
   lifetime and read the current element from attached state at invocation time,
   and because `Reconciler.ReturnControl<T>` preserves `ReactorState.ControlEventState`
-  across rent/return (issue #114). It also keeps a
-  `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements
-  that have had `GetElementVisual()` called — those permanently lose the XAML
-  implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …) and are
-  therefore excluded from pooling. Flag:
+  across rent/return (issue #114). Each type has two lanes (spec 066 §7): a
+  control whose composition visual was taken permanently refuses the facade
+  transforms and the XAML implicit transitions, so `Return` puts it in the
+  visual lane (after the §7.3 visual reset) by the native `ReactorState.VisualTaken`
+  marker, and only a mount that takes the visual at mount and carries no setters or
+  mount callbacks rents from it. Flag:
   - new event wiring on a poolable control that bypasses the one-time
     `ControlEventStateBox` trampoline, or a handler that captures the element
     it was wired for instead of reading current state (stale callbacks after
@@ -61,9 +62,10 @@ Yoga/Flex layout math.
     or without updating the `netstandard2.0` analyzer mirror (both are gated by
     tests — `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement` and
     `Analyzer_Poolable_Type_Mirror_Matches_ElementPool`);
-  - code that touches an element's composition Visual without calling
-    `ElementPool.MarkCompositorTainted`, so a tainted element can still be
-    pooled and handed to a renter that needs implicit transitions;
+  - code that takes an element's composition Visual through
+    `ElementCompositionPreview.GetElementVisual` instead of
+    `AnimationHelper.GetElementVisual` (which sets `VisualTaken`), so the control
+    can land in the plain lane and throw on the next renter's facade write;
   - state left on a control when it's returned to the pool (next renter sees
     stale value/selection/handlers);
   - per-element state read from `FrameworkElement.Tag` or a CWT instead of

@@ -48,7 +48,7 @@ public sealed class SourceMapTransparentGeneratorTests
                 // a compile error.
                 //
                 // Built with a CONSTRUCTOR, not `Factories.TextBlock`, to stay faithful to
-                // the real thing: `Element.cs`'s operator lives in Reactor.dll, a different
+                // the real thing: `Element.cs`'s operator lives in Microsoft.UI.Reactor.dll, a different
                 // compilation, so its body is never intercepted and the converted element
                 // arrives unstamped. Calling a factory here would put an extra
                 // interceptable call site inside this compilation and inflate every
@@ -177,11 +177,17 @@ public sealed class SourceMapTransparentGeneratorTests
     /// forms differ, a `params` slot written with the wrong type — shows up as a compile
     /// error in the emitted file rather than as a wrong string in it.</para>
     /// </summary>
+    /// <param name="userCode">The consumer source to compile in the probe.</param>
+    /// <param name="enabled">The default value of the generator's <c>ReactorSourceMap</c> option.</param>
+    /// <param name="buildProperties">Optional MSBuild properties exposed to the generator.</param>
     /// <param name="surface">Where the stand-in surface lives. With anything but
     /// <see cref="SurfaceShape.InSource"/> it is its own assembly, referenced from the
     /// probe — see <see cref="SurfaceShape"/>.</param>
     /// <param name="librarySource">Optional extra project, compiled against the surface and
     /// referenced the same way (requires a referenced <paramref name="surface"/>).</param>
+    /// <param name="extraFiles">Additional source files and their paths in the probe compilation.</param>
+    /// <param name="completeAfterGeneration">Companion generator output included in the binding and final compilation checks.</param>
+    /// <param name="outputKind">The kind of assembly the compilations produce.</param>
     internal static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedSource) Run(
         string userCode,
         bool enabled = true,

@@ -145,15 +145,16 @@ internal static class DiagramProcessor
         string? topic = null)
     {
         var result = new DiagramResult();
+        var selectedTopicDir = topic is null ? null : ResolveTopicDirectory(diagramsRoot, topic);
         if (!Directory.Exists(diagramsRoot)) return result;
 
-        var topics = topic is null
+        var topics = selectedTopicDir is null
             ? Directory.GetDirectories(diagramsRoot)
-            : new[] { Path.Combine(diagramsRoot, topic) }.Where(Directory.Exists).ToArray();
+            : new[] { selectedTopicDir }.Where(Directory.Exists).ToArray();
 
         foreach (var topicDir in topics)
         {
-            var topicId = Path.GetFileName(topicDir);
+            var topicId = Path.GetFileName(Path.TrimEndingDirectorySeparator(topicDir));
             var outDir = Path.Combine(outputImagesRoot, topicId);
             Directory.CreateDirectory(outDir);
 
@@ -663,15 +664,33 @@ internal static class DiagramProcessor
     /// </summary>
     public static string ScaffoldDiagram(string diagramsRoot, string topic, string id)
     {
-        var topicDir = Path.Combine(diagramsRoot, topic);
+        var topicDir = ResolveTopicDirectory(diagramsRoot, topic);
+        var path = ResolveDiagramPath(topicDir, id + ".mmd", $"Diagram id '{id}'");
         Directory.CreateDirectory(topicDir);
-        var path = Path.Combine(topicDir, id + ".mmd");
         if (File.Exists(path))
             throw new DocPipelineException(
                 "REACTOR_DOC_DIAGRAM_002",
                 $"diagram already exists: {path}");
         File.WriteAllText(path, StarterTemplate);
         return path;
+    }
+
+    private static string ResolveTopicDirectory(string diagramsRoot, string topic) =>
+        ResolveDiagramPath(diagramsRoot, topic, $"Diagram topic '{topic}'");
+
+    private static string ResolveDiagramPath(string root, string path, string description)
+    {
+        if (Path.IsPathRooted(path))
+            throw new DocPipelineException($"{description} must be a relative path.");
+
+        try
+        {
+            return DocPaths.ResolveContained(root, path, "Path");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or PathTooLongException)
+        {
+            throw new DocPipelineException($"{description} is invalid. {ex.Message}");
+        }
     }
 
     private const string StarterTemplate = """

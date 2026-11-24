@@ -66,7 +66,7 @@ The `mur` CLI ships these embedded — works from any directory:
 |---|---|---|
 | `mur --skill` | This SKILL.md | embedded in `mur` |
 | `mur --api`   | The signatures index (≈70K tokens: every factory/modifier/hook/Theme token/enum, plus ctors/properties/methods/events on every public type — including static classes like `ControlRegistry` and `ReactorApp`) | embedded in `mur` |
-| `mur --regen-api` | Rebuilds `skills/reactor.api.txt` from a freshly-built `Reactor.dll` (selfhost only) | rebuilds `tools/Reactor.SignaturesGen` |
+| `mur --regen-api` | Rebuilds `skills/reactor.api.txt` from a freshly-built `Microsoft.UI.Reactor.dll` (selfhost only) | rebuilds `tools/Reactor.SignaturesGen` |
 | `mur check <path>` | **Is** the build (same exit code as `dotnet build`); adds one-line diagnostics with skill pointers for known REACTOR_* IDs and `→ try:` did-you-mean suggestions | wraps MSBuild |
 
 A consumer who doesn't have `mur` can read the same files directly from the

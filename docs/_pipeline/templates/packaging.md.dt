@@ -102,7 +102,7 @@ a framework-dependent distribution shape and your install
 instructions tell users to install the WinAppRuntime first.
 
 To ship this shape, `dotnet publish -c Release -r win-x64`. The
-publish folder contains `MyApp.exe`, `Reactor.dll`, the WinUI runtime
+publish folder contains `MyApp.exe`, `Microsoft.UI.Reactor.dll`, the WinUI runtime
 (`Microsoft.WindowsAppRuntime.Bootstrap.dll`, the XAML compiler
 output `MyApp.xbf`, etc.), and the .NET runtime if
 `WindowsAppSDKSelfContained=true`. Zip it and you have a sideloadable
@@ -188,7 +188,7 @@ dotnet publish -c Release -r win-x64   -o out/x64
 dotnet publish -c Release -r win-arm64 -o out/arm64
 ```
 
-There is no separate Reactor build for ARM64 — `Reactor.dll` is
+There is no separate Reactor build for ARM64 — `Microsoft.UI.Reactor.dll` is
 AnyCPU-equivalent managed code that compiles for both architectures
 from the same source. The native bits below it (the WinUI 3 runtime
 and any `System.Drawing.Common` / `TraceEvent` natives transitively
@@ -285,9 +285,9 @@ trimmer, so apps that use none of the Advanced subsystems should leave
 `Microsoft.UI.Reactor.Advanced` off their `<PackageReference>` list — that
 keeps both the moved subsystems and the Win2D native payload out of your
 build. That split is the whole reason Advanced is a sibling package and not
-a folder inside `Reactor.dll`.
+a folder inside `Microsoft.UI.Reactor.dll`.
 
-**`Reactor.dll` is in your publish output as a managed assembly,
+**`Microsoft.UI.Reactor.dll` is in your publish output as a managed assembly,
 not a tucked-away framework package.** Reactor ships as the public preview
 NuGet package `Microsoft.UI.Reactor` version `{{reactorVersion}}`; local
 source-built smoke packages still use `0.0.0-local` via `mur pack-local`.

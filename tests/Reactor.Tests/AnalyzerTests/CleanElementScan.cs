@@ -489,6 +489,8 @@ internal static class CleanElementScan
                 ["Viewbox"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.Viewbox)),
                 ["TextBox"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.TextBox)),
                 ["ToggleSwitch"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.ToggleSwitch)),
+                // Spec 066 layer 3 (#1639): the theme-transition clear for Button and ScrollViewer.
+                ["ContentControl"] = ProbeFor(typeof(Microsoft.UI.Xaml.Controls.ContentControl)),
             };
 
     /// <summary>

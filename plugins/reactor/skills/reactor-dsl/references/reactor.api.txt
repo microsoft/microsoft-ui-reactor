@@ -1,5 +1,5 @@
 # Reactor API — signatures index (generated)
-# Source of truth: Reactor.dll and Reactor.Advanced.dll public surfaces.
+# Source of truth: Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll public surfaces.
 # Regenerate: `mur --regen-api`  (or build tools/Reactor.SignaturesGen — its
 #             AfterBuild target rewrites this file).
 # Format: one symbol per line. No prose. Alphabetized within each section.

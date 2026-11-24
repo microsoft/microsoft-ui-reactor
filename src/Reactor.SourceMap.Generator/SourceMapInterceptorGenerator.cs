@@ -605,7 +605,7 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
     /// compilation, and it cannot be reached any other way: per the interceptors spec,
     /// "interception can only occur for calls to ordinary member methods — not
     /// constructors, delegates, properties, local functions, <em>operators</em>", and
-    /// the operator's body is already compiled into Reactor.dll. The one place the
+    /// the operator's body is already compiled into Microsoft.UI.Reactor.dll. The one place the
     /// consumer's line number is still available is the ENCLOSING call, which the
     /// generator is already intercepting — so the interceptor stamps the converted
     /// argument on its way past.</para>

@@ -74,7 +74,7 @@ Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-compar
 
 ### Element pooling
 
-`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. It also keeps a `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements that have had `GetElementVisual()` called on them — those permanently lose the XAML implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …), so they are excluded from pooling rather than handed to a future user that might need those APIs.
+`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. Each type has two lanes (spec 066 §7): a control whose composition visual was taken (marked by the native `ReactorState.VisualTaken`, set by every `AnimationHelper.GetElementVisual`) permanently refuses the facade transforms and XAML implicit transitions, so it is reset and pooled in a visual lane that only a mount which takes the visual at mount, with no setters or mount callbacks, rents from.
 
 ### Per-element state via attached DP
 
@@ -236,7 +236,7 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   treat the markup errors as a likely cascade: fix the earlier error first, then confirm
   they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
-  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
+  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Microsoft.UI.Reactor.dll' ... used by another process`. If it still races under
   parallel WinUI builds, prebuild `src/Reactor` alone first, then escalate **on the build
   command only** — `-m:1 -nodereuse:false` (or `$env:MSBUILDDISABLENODEREUSE='1'`) — and run
   the suite separately with `--no-build`. (`-p:CI=true` also skips SignaturesGen.)

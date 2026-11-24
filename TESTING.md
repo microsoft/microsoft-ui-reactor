@@ -102,7 +102,7 @@ Environment variables are not argv tokens, so `MSBUILDDISABLENODEREUSE=1` is saf
 host does inherit it — child processes inherit the environment — but it is never parsed as
 an MTP option, which is what the rejection above turns on.
 
-So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Reactor.dll`
+So when a build needs `-m:1 -nodereuse:false` (the `CS2012 …\intermediatexaml\Microsoft.UI.Reactor.dll`
 race — see [`AGENTS.md`](AGENTS.md) field notes), split the command in two:
 
 ```bash
@@ -187,6 +187,14 @@ dotnet test tests/Reactor.Tests
 # Run a specific test class
 dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 ```
+
+### Checking XML documentation in `Reactor.Tests`
+
+`Reactor.Tests` generates XML documentation by default. Release builds,
+including the CI solution build, fail on malformed XML (`CS1570`) or unresolved
+`cref` references (`CS1574`). Fix `CS1570` first so the compiler can report the
+remaining documentation diagnostics. Missing member documentation (`CS1591`)
+is permitted. See [issue #1053](https://github.com/microsoft/microsoft-ui-reactor/issues/1053).
 
 ### Console-mutating tests need collection isolation
 
@@ -284,8 +292,10 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test --shard 1/2
 
 ### Sharding the corpus across runners
 
-CI splits the selftest corpus in two for the Selftests, Packaged Selftests, AOT Selftests and
-Coverage jobs, one runner per half, with `--shard <k>/<n>`. The split lives in
+CI splits the selftest corpus across runners with `--shard <k>/<n>`: three for the Selftests and
+Packaged Selftests jobs, four for AOT Selftests (its per-shard NativeAOT publish is the longest
+fixed cost, so it needs the extra shard to finish with the others), and two for the Coverage
+lanes. The split lives in
 `tests/_shared/SelfTestShard.cs`, which both hosts and both wrappers compile.
 
 - **It is a partition by construction.** Non-pinned fixtures are dealt round-robin in registry
@@ -458,11 +468,11 @@ Selftests run against a real WinUI dispatcher: most user-visible work (template 
 
 | You want to… | Use | Why |
 |---|---|---|
-| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains the **shared harness host** (`ReactorApp.PrimaryWindow?.Host`) to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but only knows about the harness window. |
+| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains `ReactorApp.PrimaryWindow?.Host` to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but that host is not the one `H.CreateHost()` returns, even though both render into the harness window. |
 | Wait until a probe predicate against the live visual tree holds | `await Harness.WaitFor(() => H.FindText("Foo") is not null)` | Re-queries the predicate each pass against the current tree. The contention-proof alternative to a one-shot snapshot. Pass `maxPasses`/`perPassMs` to tune. **The predicate must re-query** — capturing a value from before the loop defeats it. |
 | Wait for a timer's cleanup to finish | A completion callback awaited with `Task.WaitAsync(timeout)` | Register before triggering the operation, signal after cleanup, and assert the actual state afterward. Report a timeout through `H.Check` rather than letting it escape. |
 | Check survival through a hold period or a refreshed deadline | An injected scheduler with captured callbacks; see [timer lifetime tests](#timer-lifetime-tests) | Elapsed time is the stimulus. Advance controlled schedules instead of waiting on a predicate that is already true. |
-| Drain an **isolated** `ReactorHost` (one you constructed with `new ReactorHost(myWindow)`, not `H.CreateHost()`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** your isolated one. Drive the isolated host directly. Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
+| Drain a fixture's own `ReactorHost` (from `H.CreateHost()`, or one you constructed with `new ReactorHost(myWindow)`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** yours. `H.CreateHost()` is a separate `new ReactorHost(window)`, so a state change inside it re-renders a host `Harness.Render()` never awaits. Drive that host directly, then poll the outcome with `Harness.WaitFor` (#1679 tracks making `Harness.Render` drain these hosts itself). Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
 
 **Anti-pattern — blind delays:**
 
@@ -470,7 +480,7 @@ Selftests run against a real WinUI dispatcher: most user-visible work (template 
 // ❌ Flaky: Task.Delay is a guess; it won't catch a slower runner.
 host.Mount(...);
 await Task.Delay(200);
-await Harness.Render();    // pumps the WRONG host if `host` is isolated
+await Harness.Render();    // pumps the WRONG host: `host` is the fixture's own
 var ctrl = FindFirst<MyControl>(window.Content);   // may be null on this pass
 ```
 
@@ -504,7 +514,7 @@ Rules of thumb:
 - **Converting a fixed delay to `WaitFor` is not a safe default — the remediation can itself be the vacuous one.** Because `WaitFor` establishes its predicate *at the moment it returns* and nothing more, the conversion is correct for an *eventual* assertion (false at t=0, converges) and silently vacuous for a *survival* assertion — "still visible", "still expanded" — which is true at t=0 and short-circuits at zero elapsed time. Before converting, ask: **if the predicate is true the instant `WaitFor` is called, does the next assertion still mean what I think it means?**
 - **Ask the same of a precondition `throw`.** Report-and-return when the fixture's other checks remain meaningful; throw loudly when the fixture is structurally invalid (a renamed reflection target) and they do not.
 - **Converting a gate can strip a settle a *later* assertion relied on.** If a following `H.Check` depended on the removed `Render(N)` rather than on its own wait, it will start failing. Give each check its own `WaitFor` instead of letting it inherit someone else's delay.
-- **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
+- **`host.WaitForIdleAsync()` for a fixture's own hosts.** If the fixture drives its own `ReactorHost` (from `H.CreateHost()` or `new ReactorHost(...)`), neither `Harness.Render` nor `Harness.WaitFor` knows about it.
 - **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
 
 ### Timer lifetime tests
@@ -804,7 +814,9 @@ longer matches anything. Don't bend the model to fit `main`.
 Before recording or comparing, the fixture runs a positive and a negative control for every
 oracle (`TransformsMatrix_Instrument_*`) and stops if one fails. A pool soak (`@soak.short`,
 `@soak.full`) churns random elements and checks every plain renter for leftover facades, XAML
-transitions and a taken visual; its violation counts are in the ledger, so a layer that fixes a
+transitions and a taken visual, and every renter from the visual lane (`visualRented`, spec 066
+§7.2) for a non-identity visual, leftover implicit keys and running animations; its violation
+counts are in the ledger, so a layer that fixes a
 leak declares it. The full run also records platform probes (`@probe`) and, with an interactive
 desktop and system animations on, logs PrintWindow evidence for the XAML transition curve
 (`# TransformsMatrix screen:` lines), which is never recorded because it depends on the desktop.
@@ -1090,8 +1102,8 @@ once, with a real fixture to pin the contract against.
 
 ### Scope and knobs
 
-The whole corpus runs under identity, split across two CI runners (the test step took 2m35s-3m07s
-per shard on hosted runners in 2026-09).
+The whole corpus runs under identity, split across three CI runners. With two runners, the test
+step took 2m35s-3m07s per shard on hosted runners in 2026-09.
 
 | Environment variable | Effect |
 |---|---|
@@ -1414,10 +1426,10 @@ dotnet build tests/Reactor.AppTests.Host      -c Debug -p:Optimize=false -p:Debu
 # Step 2: Instrument the product DLLs statically
 #         (dynamic instrumentation skips referenced assemblies)
 dotnet-coverage instrument \
-  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.dll" \
+  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.dll" \
   -s coverage.settings.xml
 dotnet-coverage instrument \
-  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Reactor.Advanced.dll" \
+  "tests/Reactor.AppTests.Host/bin/$(RuntimeIdentifier)/Debug/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.Advanced.dll" \
   -s coverage.settings.xml
 
 # Step 3: Collect
@@ -1428,7 +1440,7 @@ dotnet-coverage collect -s coverage.settings.xml \
 # --- Merge ---
 # The exact union of covered lines. Not `dotnet-coverage merge`: it drops covered lines
 # from these reports (tests/coverage/ci/README.md explains why). It refuses reports that
-# do not list the same lines, such as a selftest report whose Reactor.Advanced.dll was
+# do not list the same lines, such as a selftest report whose Microsoft.UI.Reactor.Advanced.dll was
 # not instrumented in Step 2.
 pwsh tests/coverage/ci/Merge-Cobertura.ps1 -OutFile merged.cobertura.xml \
   unit.cobertura.xml selftest.cobertura.xml

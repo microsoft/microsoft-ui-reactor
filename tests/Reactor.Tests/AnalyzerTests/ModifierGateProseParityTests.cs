@@ -21,12 +21,9 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// quietly wrong. This is the concrete text consumer issue #1062 was filed about.
 /// </para>
 /// <para>
-/// Note what this fact does <b>not</b> need: the gate group identifiers. The prose names receiver
-/// <em>types</em>, so the comparison is set-vs-set against the typed
-/// <see cref="ModifierInfo.ControlGate"/> — the rule the issue lands on, applied. A check phrased
-/// over gate <em>names</em> would have been the exposed one; see
-/// <see cref="ModifierGateIdentifierTests"/> for the matcher that makes name-based matching safe
-/// when an artifact leaves no alternative.
+/// The prose names receiver types. Compare those sets with <see cref="ModifierInfo.ControlGate"/>
+/// for direct writes and <see cref="ModifierInfo.ThemeControlGate"/> for the documented theme
+/// overloads.
 /// </para>
 /// </remarks>
 public class ModifierGateProseParityTests
@@ -43,10 +40,13 @@ public class ModifierGateProseParityTests
         ["StackPanel"] = "StackPanel",
         ["RelativePanel"] = "RelativePanel",
         ["TextBlock"] = "TextBlock",
+        ["RichTextBlock"] = "RichTextBlock",
     };
 
-    [Fact]
-    public void Skill_Prose_Gate_List_Matches_The_Table()
+    [Theory]
+    [InlineData("Gates", false)]
+    [InlineData("ThemeRef gates", true)]
+    public void Skill_Prose_Gate_List_Matches_The_Table(string clauseName, bool themed)
     {
         var repoRoot = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(repoRoot);
@@ -63,15 +63,12 @@ public class ModifierGateProseParityTests
         var file = Path.Join(repoRoot!, relativeSkillPath);
         Assert.True(File.Exists(file), $"{SkillPath} not found at {file}");
 
-        var text = File.ReadAllText(file);
+        var row = Assert.Single(File.ReadLines(file),
+            line => line.StartsWith("| `REACTOR_MOD_003` |", StringComparison.Ordinal));
 
-        // The clause runs from "Gates:" to the end of that sentence.
-        var clause = Regex.Match(text, @"Gates:\s*(?<body>[^.|]+)");
-        Assert.True(
-            clause.Success,
-            $"No 'Gates: …' clause found in {SkillPath}. The REACTOR_MOD_003 row used to state the " +
-            "receiver gates in prose; if that was intentionally removed, delete this fact with it — " +
-            "do not leave a parity gate that silently measures nothing.");
+        // Each gate clause ends at the end of its sentence or table cell.
+        var clause = Regex.Match(row, $@"\b{Regex.Escape(clauseName)}:\s*(?<body>[^.|]+)");
+        Assert.True(clause.Success, $"No '{clauseName}:' clause in the REACTOR_MOD_003 row of {SkillPath}.");
 
         // "Background → Panel/Control/Border; Foreground and fonts → Control/TextBlock; …"
         var stated = new Dictionary<string, ISet<string>>(StringComparer.Ordinal);
@@ -82,7 +79,6 @@ public class ModifierGateProseParityTests
 
         foreach (var arrow in arrows)
         {
-
             var types = new HashSet<string>(
                 arrow[1].Split('/').Select(t => t.Trim()).Where(t => t.Length > 0),
                 StringComparer.Ordinal);
@@ -99,15 +95,26 @@ public class ModifierGateProseParityTests
             }
         }
 
-        // Floor: the five gate statements in that row cover 9 properties once fonts are expanded.
-        // A parser that silently stopped matching reads the same as a table with no gates.
-        Assert.True(
-            stated.Count >= 9,
-            $"Only {stated.Count} gate statements were parsed out of the {SkillPath} " +
-            "REACTOR_MOD_003 row; expected at least 9. The parser has probably stopped matching the " +
-            "prose shape — fix it rather than lowering this floor.");
-
         var problems = new List<string>();
+        var gateName = themed ? nameof(ModifierInfo.ThemeControlGate) : nameof(ModifierInfo.ControlGate);
+
+        if (themed)
+        {
+            foreach (var (property, info) in ModifierTable.Properties)
+            {
+                if (info.ThemeControlGate is not null && !stated.ContainsKey(property))
+                    problems.Add($"{property}: ModifierTable declares a ThemeControlGate but the skill omits it.");
+            }
+        }
+        else
+        {
+            // The five direct-write gate statements cover 9 properties once fonts are expanded.
+            Assert.True(
+                stated.Count >= 9,
+                $"Only {stated.Count} gate statements were parsed out of the {SkillPath} " +
+                "REACTOR_MOD_003 row; expected at least 9. The parser has probably stopped matching the " +
+                "prose shape — fix it rather than lowering this floor.");
+        }
 
         foreach (var (property, prose) in stated.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
@@ -126,11 +133,10 @@ public class ModifierGateProseParityTests
                 continue;
             }
 
-            if (info.ControlGate is not { } gate)
+            var gate = themed ? info.ThemeControlGate : info.ControlGate;
+            if (gate is null)
             {
-                problems.Add(
-                    $"{property}: the skill states a gate but ModifierInfo.ControlGate is null, so " +
-                    "ApplyModifiers writes it unconditionally");
+                problems.Add($"{property}: the skill lists '{clauseName}' receivers but ModifierInfo.{gateName} is null.");
                 continue;
             }
 
@@ -138,14 +144,14 @@ public class ModifierGateProseParityTests
             if (!expected.SetEquals(gate))
             {
                 problems.Add(
-                    $"{property}: the skill says [{Join(expected)}] but ModifierTable's controlGate is " +
-                    $"[{Join(gate)}]");
+                    $"{property}: the skill lists [{Join(expected)}] for '{clauseName}' but " +
+                    $"ModifierInfo.{gateName} is [{Join(gate)}].");
             }
         }
 
         Assert.True(
             problems.Count == 0,
-            $"The REACTOR_MOD_003 gate prose in {SkillPath} has drifted from ModifierTable. That row " +
+            $"The REACTOR_MOD_003 '{clauseName}' clause in {SkillPath} has drifted from ModifierTable. That row " +
             "ships to end users as agent guidance, so a stale gate there is advice to write code the " +
             "analyzer will reject:\n  " + string.Join("\n  ", problems));
     }

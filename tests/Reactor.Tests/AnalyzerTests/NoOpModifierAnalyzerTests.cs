@@ -263,6 +263,7 @@ namespace Microsoft.UI.Reactor
         public static T Background<T>(this T el, Brush brush) where T : Element => el;
         public static T Background<T>(this T el, ThemeRef theme) where T : Element => el;
         public static T Foreground<T>(this T el, Brush brush) where T : Element => el;
+        public static T Foreground<T>(this T el, ThemeRef theme) where T : Element => el;
         public static T BorderBrush<T>(this T el, Brush brush) where T : Element => el;
         public static T BorderThickness<T>(this T el, double thickness) where T : Element => el;
         public static T CornerRadius<T>(this T el, double radius) where T : Element => el;
@@ -679,6 +680,17 @@ namespace TestApp
     {
         var body = App(@"
         internal static Element M(Brush b) => Text(""hi"").Foreground(b).FontSize(14);");
+
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Only_Themed_Generic_Foreground_Applies_To_A_RichTextBlock()
+    {
+        var body = App(@"
+        internal static Element Themed(ThemeRef t) => RichTextBlock().Foreground(t);
+        internal static Element ExplicitGeneric(Brush b) => RichTextBlock().{|REACTOR_MOD_003:Foreground<RichTextBlockElement>|}(b);
+        internal static Element UnsupportedControl(ThemeRef t) => Border().{|REACTOR_MOD_003:Foreground|}(t);");
 
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }

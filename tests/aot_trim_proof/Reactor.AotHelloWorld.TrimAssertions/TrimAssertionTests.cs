@@ -193,9 +193,10 @@ public sealed class TrimAssertionTests
     private static IEnumerable<string> AssembliesToScan(string publishDir)
     {
         // Inclusive set: every file whose name looks like Reactor-owned code.
-        // Pattern: Reactor*.dll, Reactor*.exe (handles Reactor.dll, the app
-        // exe, and Reactor.External.TestControl.dll uniformly).
-        return Directory.EnumerateFiles(publishDir, "Reactor*.*", SearchOption.AllDirectories)
+        // Patterns: Microsoft.UI.Reactor*.dll (the framework assemblies) and
+        // Reactor*.dll / Reactor*.exe (the app exe and Reactor.External.TestControl.dll).
+        return new[] { "Microsoft.UI.Reactor*.*", "Reactor*.*" }
+            .SelectMany(pattern => Directory.EnumerateFiles(publishDir, pattern, SearchOption.AllDirectories))
             .Where(p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
                      || p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
     }

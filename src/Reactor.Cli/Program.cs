@@ -128,7 +128,7 @@ void ShowHelp()
     Console.WriteLine("  --version, -v    Show version information");
     Console.WriteLine("  --skill          Print the SKILL.md AI reference to stdout");
     Console.WriteLine("  --api            Print the reactor.api.txt signatures index to stdout");
-    Console.WriteLine("  --regen-api      Regenerate both API indexes from the built Reactor.dll and Reactor.Advanced.dll");
+    Console.WriteLine("  --regen-api      Regenerate both API indexes from the built Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll");
     Console.WriteLine("  --create <name>  Scaffold a new Reactor project");
     Console.WriteLine();
     Console.WriteLine("Commands:");
@@ -236,6 +236,16 @@ int CreateProject(string name)
     {
         Console.Error.WriteLine($"Error: Invalid project name '{name}'. Use only letters, digits, underscores, and dots. Must start with a letter or underscore.");
         return 1;
+    }
+
+    switch (Microsoft.UI.Reactor.Cli.ProjectNameRules.Check(name))
+    {
+        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.AssemblyName:
+            Console.Error.WriteLine($"Error: Project name '{name}' collides with a Reactor assembly name. Assembly names are case-insensitive, so the app would load in place of Reactor's assembly and crash at startup. Choose a different name, for example '{name}App'.");
+            return 1;
+        case Microsoft.UI.Reactor.Cli.ProjectNameRules.Collision.SolutionProject:
+            Console.Error.WriteLine($"Error: Project name '{name}' matches the Reactor project in the generated solution, and a solution can't hold two projects with the same name. Choose a different name, for example '{name}App'.");
+            return 1;
     }
 
     var dir = Path.Combine(Directory.GetCurrentDirectory(), name);
@@ -396,7 +406,7 @@ string GenerateSln(string name, string appGuid, string patchGuid)
         "MinimumVisualStudioVersion = 10.0.40219.1",
         $"Project(\"{csharpGuid}\") = \"{name}\", \"{name}.csproj\", \"{ag}\"",
         "EndProject",
-        $"Project(\"{csharpGuid}\") = \"Reactor\", \"..\\src\\Reactor\\Reactor.csproj\", \"{pg}\"",
+        $"Project(\"{csharpGuid}\") = \"{Microsoft.UI.Reactor.Cli.ProjectNameRules.GeneratedSolutionReactorProject}\", \"..\\src\\Reactor\\Reactor.csproj\", \"{pg}\"",
         "EndProject",
         "Global",
         // x64 is listed first so `dotnet build` with no -p:Platform picks x64,

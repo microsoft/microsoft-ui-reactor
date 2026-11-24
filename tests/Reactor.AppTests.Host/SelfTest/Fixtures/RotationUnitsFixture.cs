@@ -28,6 +28,7 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
 
     public override async Task RunAsync()
     {
+        using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
         using var reconciler = new Reconciler();
         Element plain = Border(null).Width(100).Height(40).Background("#FFFF0000");
         var curve = Curve.Linear(50);
@@ -43,9 +44,8 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
             _ when compositorTransition => el.Transition(Transition.Fade).RotationTransition(transitionDuration),
             _ => el,
         };
-        // WinUI refuses GetElementVisual while the XAML RotationTransition is set, so the
-        // transition is added only after the enter transition has handed out the visual.
-        // Reactor then falls back to compositor implicit animations.
+        // The transition is added after the enter transition took the visual, the order that
+        // reached the compositor fallback before spec 066 layer 2 ran every transition there.
         var initial = compositorTransition ? plain.Rotation(0).Transition(Transition.Fade) : Decorate(plain.Rotation(0));
         var rotated = Decorate(plain.CenterPoint(Pivot).Rotation(90));
         bool topLeftPivot = mode is "Keyframes" or "InteractionStates";
@@ -86,7 +86,7 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
                 H.Check(name + "_CompositorFallback", visual.ImplicitAnimations?.ContainsKey("RotationAngle") == true);
             }
             if (mode == "TaintedDirect" || compositorTransition)
-                H.Check(name + "_VisualHandedOut", ElementPool.IsCompositorTainted(target));
+                H.Check(name + "_VisualHandedOut", ElementPool.IsVisualTaken(target));
 
             void Apply() => reconciler.Update(initial, rotated, target, () => { });
             if (mode == "Ambient") AnimationScope.WithAnimation(curve, Apply);
