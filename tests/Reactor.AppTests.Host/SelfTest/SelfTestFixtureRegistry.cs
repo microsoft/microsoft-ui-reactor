@@ -290,6 +290,7 @@ internal static class SelfTestFixtureRegistry
         ("RepeaterStale_FocusedRowShiftedByMultiPositionMove_FocusStays", static harness => new RepeaterStaleIndexFixtures.FocusedRowShiftedByMultiPositionMove_FocusStays(harness)),
         ("RepeaterStale_FocusedRowMovedWhileWindowInactive_WaitsForActivation", static harness => new RepeaterStaleIndexFixtures.FocusedRowMovedWhileWindowInactive_WaitsForActivation(harness)),
         ("RepeaterStale_FocusedRowListCleared_OnlyMiddleTargetUsable_FocusLeavesList", static harness => new RepeaterStaleIndexFixtures.FocusedRowListCleared_OnlyMiddleTargetUsable_FocusLeavesList(harness)),
+        ("RepeaterStale_FocusedRowListCleared_OffWindowTargetSkipped_FocusLeavesList", static harness => new RepeaterStaleIndexFixtures.FocusedRowListCleared_OffWindowTargetSkipped_FocusLeavesList(harness)),
         ("RepeaterStale_NestedScrollers_StaleRowReleased_NoOuterScrollJump", static harness => new RepeaterStaleIndexFixtures.NestedScrollers_StaleRowReleased_NoOuterScrollJump(harness)),
         ("RepeaterStale_HorizontalStack_FocusedRowShiftedWithUnevenMargins_FocusStays", static harness => new RepeaterStaleIndexFixtures.HorizontalStack_FocusedRowShiftedWithUnevenMargins_FocusStays(harness)),
         ("RepeaterStale_ColumnFirstGrid_FocusedItemShiftedAcrossColumns_FocusStays", static harness => new RepeaterStaleIndexFixtures.ColumnFirstGrid_FocusedItemShiftedAcrossColumns_FocusStays(harness)),

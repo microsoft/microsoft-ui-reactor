@@ -361,6 +361,16 @@ public sealed partial class ElementFactory<T>
                 && !Contains(fe, viewContent, view.HorizontalOffset, view.VerticalOffset, view.ViewportWidth, view.ViewportHeight, view.ZoomFactor))
                 return false;
         }
+
+        // And inside the window: an element with no scroller around it can still be laid out
+        // outside it, where focus would be invisible.
+        if (fe.XamlRoot is { Content: UIElement rootContent } xamlRoot)
+        {
+            var inRoot = fe.TransformToVisual(rootContent).TransformBounds(new global::Windows.Foundation.Rect(0, 0, fe.ActualWidth, fe.ActualHeight));
+            if (inRoot.Left < -0.5 || inRoot.Top < -0.5
+                || inRoot.Right > xamlRoot.Size.Width + 0.5 || inRoot.Bottom > xamlRoot.Size.Height + 0.5)
+                return false;
+        }
         return true;
     }
 

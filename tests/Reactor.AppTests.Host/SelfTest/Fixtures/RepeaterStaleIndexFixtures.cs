@@ -402,6 +402,57 @@ internal static class RepeaterStaleIndexFixtures
         }
     }
 
+    // The first tab stop outside the list is laid out beyond the window edge: focus must skip it
+    // for a visible control, or it ends up somewhere invisible.
+    internal class FocusedRowListCleared_OffWindowTargetSkipped_FocusLeavesList(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var initial = Enumerable.Range(0, RowCount).ToList();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("offwindow").Height(32).Margin(left: -5000),
+                    Button("Change", () => setPhase(1)),
+                    LazyVStack(phase == 0 ? initial : new List<int>(), k => k.ToString(), (k, _) => Button($"r{k}").Height(32)).Height(150));
+            });
+            await Harness.Render();
+
+            var offWindow = H.FindControl<Button>(b => b.Content as string == "offwindow");
+            var change = H.FindControl<Button>(b => b.Content as string == "Change");
+            var list = H.FindControl<WinXC.ScrollViewer>(v => v.Content is WinXC.ItemsRepeater);
+            var target = H.FindControl<Button>(b => b.Content as string == "r2");
+            if (offWindow is null || change is null || list is null || target is null)
+            {
+                H.Check("RepeaterStale_OffWindow_Found", false);
+                return;
+            }
+            var root = target.XamlRoot;
+            var offBounds = offWindow.TransformToVisual(root.Content).TransformBounds(new global::Windows.Foundation.Rect(0, 0, offWindow.ActualWidth, offWindow.ActualHeight));
+            H.Check("RepeaterStale_OffWindow_TargetOutsideWindow", offBounds.Right < 0, $"off-window button right edge {offBounds.Right:0}");
+            if (!ReferenceEquals(FocusManager.FindFirstFocusableElement(root.Content), offWindow))
+            {
+                H.Skip("RepeaterStale_OffWindow_FocusSkipsOffWindowTarget", "the window's first tab stop isn't this fixture's off-window button");
+                return;
+            }
+
+            H.Check("RepeaterStale_OffWindow_FocusTaken", target.Focus(FocusState.Programmatic));
+            await Harness.Render();
+            list.ChangeView(null, list.ScrollableHeight, null, disableAnimation: true);
+            H.Check("RepeaterStale_OffWindow_ScrolledAway", await Harness.WaitFor(() => list.VerticalOffset >= list.ScrollableHeight - 1));
+            await Harness.Render();
+            H.Check("RepeaterStale_OffWindow_FocusHeldBeforeChange", ReferenceEquals(FocusManager.GetFocusedElement(root), target));
+
+            H.ClickButton("Change");
+            await Harness.Render();
+
+            var focused = FocusManager.GetFocusedElement(root);
+            H.Check("RepeaterStale_OffWindow_FocusSkipsOffWindowTarget", ReferenceEquals(focused, change),
+                $"focused '{(focused as Button)?.Content ?? focused?.GetType().Name}'");
+        }
+    }
     // A list inside an outer scroller that shows only part of it: the row focus moves to has to
     // be fully visible in the outer scroller too, or focusing it scrolls the outer one.
     internal class NestedScrollers_StaleRowReleased_NoOuterScrollJump(Harness h) : SelfTestFixtureBase(h)
