@@ -48,6 +48,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
+        if (flag == AnimateProperty.Opacity) state.KeyframeOpacityCheck = null;
         return state;
     }
 
@@ -204,6 +205,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties &= ~flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
+        if (flag == AnimateProperty.Opacity) state.KeyframeOpacityCheck = null;
     }
 
     /// <summary>

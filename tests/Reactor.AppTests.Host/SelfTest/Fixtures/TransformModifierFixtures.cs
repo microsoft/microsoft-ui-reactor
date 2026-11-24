@@ -441,18 +441,24 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         opacityVisual.ImplicitAnimations = opacityImplicit;
         H.Check("TransformKeyframes_OpacityNonDefaultBase", Math.Abs(opacityVisual.Opacity - 0.4f) < 0.001f);
         opacityReconciler.Update(opacityAnimated, withOpacity, opacityControl, () => { });
-        await Harness.Render();
+        // The style's opacity may not have reached the visual yet. XAML pushes it in its next
+        // frame, which stops a running opacity animation (#1669), so sample after that frame.
+        await AfterNextCommit(opacityVisual);
         var opacityController = opacityVisual.TryGetAnimationController("Opacity");
-        H.Check("TransformKeyframes_OpacityLoopStarted", opacityController is not null);
+        // .Opacity(0.4) under .Animate() starts its own transition on the channel, so the running
+        // controller must be the one "fade" started, not merely any controller.
+        H.Check("TransformKeyframes_OpacityLoopStarted", opacityController is not null
+            && Equals(opacityController, Reconciler.KeyframeControllerForTests(opacityControl, "fade", "Opacity")));
         if (opacityController is not null)
         {
             opacityController.Pause();
             opacityController.Progress = 0.5f;
         }
         opacityReconciler.Update(withOpacity, opacityLoop, opacityControl, () => { });
-        await Harness.Render();
+        await AfterNextCommit(opacityVisual);
         var retainedOpacity = opacityVisual.TryGetAnimationController("Opacity");
         H.Check("TransformKeyframes_OpacityLoopRetained", retainedOpacity is not null
+            && Equals(retainedOpacity, Reconciler.KeyframeControllerForTests(opacityControl, "fade", "Opacity"))
             && Math.Abs(retainedOpacity.Progress - 0.5f) < 0.001f, $"progress={retainedOpacity?.Progress}");
         H.Check("TransformKeyframes_OpacityStyleReleased", opacityControl.ReadLocalValue(UIElement.OpacityProperty) == DependencyProperty.UnsetValue
             && Math.Abs(opacityControl.Opacity - 0.65) < 0.001);
@@ -460,6 +466,33 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         H.Check("TransformKeyframes_OpacityResetAfterLoopRemoval", opacityVisual.TryGetAnimationController("Opacity") is null
             && Math.Abs(opacityVisual.Opacity - 0.65f) < 0.001f, $"opacity={opacityVisual.Opacity}");
         H.SetContent(null);
+
+        // A loop mounted with a local opacity starts before XAML pushes that opacity to the
+        // visual, so the push stops it on every first frame unless Reactor restarts it (#1669).
+        using var mountedReconciler = new Reconciler();
+        var mountedLoop = Border(TextBlock("Mounted Opacity Loop")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+        var mountedControl = (Border)mountedReconciler.Mount(mountedLoop, () => { })!;
+        var mountedVisual = ElementCompositionPreview.GetElementVisual(mountedControl);
+        bool mountedStarted = mountedVisual.TryGetAnimationController("Opacity") is not null;
+        int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+        H.SetContent(mountedControl);
+        await Harness.Render();
+        await AfterNextCommit(mountedVisual);
+        H.Check("TransformKeyframes_MountedOpacityLoopSurvivesXamlPush", mountedStarted
+            && mountedVisual.TryGetAnimationController("Opacity") is { } mountedController
+            && Equals(mountedController, Reconciler.KeyframeControllerForTests(mountedControl, "fade", "Opacity"))
+            && Math.Abs(mountedControl.Opacity - 0.4) < 0.001,
+            $"started={mountedStarted}, restarts={Reconciler.KeyframeOpacityRestartsForTests - restartsBefore}, opacity={mountedVisual.Opacity}");
+        mountedReconciler.Update(mountedLoop, Border(TextBlock("Mounted Opacity Loop")), mountedControl, () => { });
+        H.SetContent(null);
+    }
+
+    // XAML pushes a changed UIElement.Opacity to the visual during a frame, and that frame
+    // commits before RequestCommitAsync completes. The Render after lets the completion run.
+    private static async Task AfterNextCommit(Microsoft.UI.Composition.Visual visual)
+    {
+        await Task.WhenAny(global::System.WindowsRuntimeSystemExtensions.AsTask(visual.Compositor.RequestCommitAsync()), Task.Delay(2000));
+        await Harness.Render();
     }
 }
 

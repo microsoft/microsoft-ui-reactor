@@ -1696,6 +1696,9 @@ public sealed partial class Reconciler : IDisposable
         // removing one named animation can release its deferred reset.
         internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
         internal AnimateProperty DeferredModifierResets;
+        // The Opacity controller a keyframe started that XAML's next opacity push may stop (#1669).
+        // Any modifier write to the channel clears it, so a deliberate replacement isn't undone.
+        internal AnimationController? KeyframeOpacityCheck;
         // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
         internal Animation.ImplicitAnimationClaims? ImplicitClaims;
         // Names this control holds keyframe trigger entries under, whichever layer declared them,
@@ -6719,7 +6722,11 @@ public sealed partial class Reconciler : IDisposable
             {
                 visual.StartAnimation(anim.Target, anim);
                 if (visual.TryGetAnimationController(anim.Target) is { } controller)
+                {
                     started[anim.Target] = controller;
+                    if (anim.Target == "Opacity")
+                        RestartOpacityAfterXamlPush(uie, visual, entry.Name, anim, controller);
+                }
             }
             _keyframeTriggerValues[key] = (entry.Trigger, started);
 
@@ -6728,6 +6735,78 @@ public sealed partial class Reconciler : IDisposable
                     new KeyframeChannelOwner(entries, entry));
         }
     }
+
+    /// <summary>
+    /// XAML writes a changed <see cref="UIElement.Opacity"/> (a local value, a style setter) to the
+    /// handed-out visual during its next frame, and that write stops whatever animation runs on the
+    /// visual's Opacity. A keyframe started before that frame, such as one mounted together with
+    /// <c>.Opacity(x)</c>, would never play. This checks once after the next commit, and restarts
+    /// the keyframe when its animation is gone while this entry still owns the channel (#1669).
+    /// </summary>
+    private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, string name,
+        CompositionAnimation animation, AnimationController controller)
+    {
+        var state = GetOrCreateReactorState(uie);
+        state.KeyframeOpacityCheck = controller;
+        var dispatcher = uie.DispatcherQueue;
+        var startedAt = global::System.Diagnostics.Stopwatch.GetTimestamp();
+        RequestCheck();
+
+        void RequestCheck()
+        {
+            global::Windows.Foundation.IAsyncAction commit;
+            try { commit = visual.Compositor.RequestCommitAsync(); }
+            catch { return; /* No compositor (e.g. unit tests) */ }
+            commit.Completed = (_, _) =>
+            {
+                if (dispatcher.HasThreadAccess) Check();
+                else dispatcher.TryEnqueue(Check);
+            };
+        }
+
+        void Check()
+        {
+            if (!Equals(state.KeyframeOpacityCheck, controller)) return;
+            if (uie is FrameworkElement { IsLoaded: false } fe)
+            {
+                // Mounted off the tree: XAML's push comes with the first frame after it loads.
+                RoutedEventHandler? onLoaded = null;
+                onLoaded = (_, _) =>
+                {
+                    fe.Loaded -= onLoaded;
+                    RequestCheck();
+                };
+                fe.Loaded += onLoaded;
+                return;
+            }
+            state.KeyframeOpacityCheck = null;
+            if (visual.TryGetAnimationController("Opacity") is not null) return;
+            if (!_keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+                || entry.Started is not { } started || !started.TryGetValue("Opacity", out var owned)
+                || !Equals(owned, controller))
+                return;
+            // A finite keyframe that simply finished is not restarted.
+            if (animation is KeyFrameAnimation { IterationBehavior: AnimationIterationBehavior.Count } finite
+                && global::System.Diagnostics.Stopwatch.GetElapsedTime(startedAt) >= finite.Duration * finite.IterationCount)
+                return;
+            visual.StartAnimation("Opacity", animation);
+            if (visual.TryGetAnimationController("Opacity") is not { } restarted) return;
+            started["Opacity"] = restarted;
+            if (state.KeyframeChannelOwners?.TryGetValue(AnimateProperty.Opacity, out var channelOwner) == true
+                && Equals(channelOwner.DeferredController, controller))
+                state.KeyframeChannelOwners[AnimateProperty.Opacity] = channelOwner with { DeferredController = restarted };
+            KeyframeOpacityRestartsForTests++;
+        }
+    }
+
+    // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts restarts after a XAML opacity push.
+    internal static int KeyframeOpacityRestartsForTests;
+
+    // Test-only seam, same visibility: the controller the named entry started on a compositor property,
+    // so a fixture can tell its keyframe from another animation on the same channel.
+    internal static AnimationController? KeyframeControllerForTests(UIElement uie, string name, string property)
+        => _keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+            && entry.Started?.TryGetValue(property, out var controller) == true ? controller : null;
 
     private static void TrackKeyframeChannelOwners(ReactorState state, AnimateProperty channels, KeyframeChannelOwner owner)
     {
@@ -6879,6 +6958,7 @@ public sealed partial class Reconciler : IDisposable
             state.TransformRest = null;
             state.KeyframeChannelOwners = null;
             state.DeferredModifierResets = default;
+            state.KeyframeOpacityCheck = null;
             state.ImplicitClaims = null;
             if (state.KeyframeNames is { } names)
             {
