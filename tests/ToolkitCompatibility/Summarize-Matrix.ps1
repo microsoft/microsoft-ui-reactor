@@ -9,6 +9,10 @@ $lanes = @(Get-Content (Join-Path $directory 'matrix.json') -Raw | ConvertFrom-J
 $runtime = if ($run.parameters.PSObject.Properties['Runtime']) { @($run.parameters.Runtime) } else { @('jit', 'aot') }
 $deployment = if ($run.parameters.PSObject.Properties['Deployment']) { @($run.parameters.Deployment) } else { @('unpackaged', 'loose', 'msix') }
 $plannedLanes = @($runtime | ForEach-Object { $r = $_; $deployment | ForEach-Object { "$r-$_" } })
+if (@($run.controls | Sort-Object -Unique).Count -ne @($run.controls).Count -or
+    @($plannedLanes | Sort-Object -Unique).Count -ne $plannedLanes.Count) {
+    throw 'Duplicate planned controls or lanes make scenario references ambiguous.'
+}
 $inventoryFiles = @(Get-ChildItem $directory -Filter 'inventory.validated.txt' -File -Recurse | Where-Object Length -GT 0)
 if (-not $inventoryFiles) { throw 'No validated scenario inventory exists; cannot invent a per-scenario matrix.' }
 $inventory = @(Get-Content $inventoryFiles[0].FullName | Where-Object { $_ })
@@ -81,6 +85,21 @@ foreach ($laneName in $plannedLanes) {
                     elseif ($lane.Count) { $lane[0].detail }
                     else { 'Planned lane did not execute.' }
             }
+            $coveredByScenario = $null
+            if ($validated -and $status -ceq 'blocked' -and $kind -ceq 'not-implemented') {
+                # These finite aliases retain their raw verdicts and pinned inventory keys.
+                $counterpart = switch -CaseSensitive ($key) {
+                    'DockPanel/attached-dock-last-child-fill-geometry' { 'DockPanel/update' }
+                    'UniformGrid/first-column-keyed-reorder' { 'UniformGrid/update' }
+                    'SwitchPresenter/actual-matching-default-case-collection' { 'SwitchPresenter/sample-native-case-selection' }
+                    'TabbedCommandBar/actual-tabs-command-invocation' { 'TabbedCommandBar/sample-native-tabs-commands' }
+                }
+                # Only this lane's revalidated control process can supply the proof.
+                $proof = @($results | Where-Object { "$($_.Control)/$($_.Scenario)" -ceq $counterpart })
+                if ($proof.Count -eq 1 -and $proof[0].Status -ceq 'passed') {
+                    $coveredByScenario = $counterpart
+                }
+            }
             $rows.Add([pscustomobject]@{
                 lane = $laneName
                 control = $control
@@ -89,6 +108,7 @@ foreach ($laneName in $plannedLanes) {
                 reasonKind = $kind
                 detail = $detail
                 validatedCompleteProcess = $validated
+                coveredByScenario = $coveredByScenario
                 laneStatus = if ($lane.Count) { $lane[0].status } else { 'not-executed' }
                 laneDetail = if ($lane.Count) { $lane[0].detail } else { 'Planned lane did not execute.' }
             })
@@ -135,6 +155,22 @@ $text.Add('## Block classification')
 $text.Add('')
 foreach ($group in @($rows | Where-Object status -EQ 'blocked' | Group-Object reasonKind)) {
     $text.Add("- $($group.Name): $($group.Count) planned checks.")
+}
+$text.Add('')
+$text.Add('## Same-run coverage annotations')
+$text.Add('')
+$text.Add('Raw statuses, reasons and P/F/B/N counts above are unchanged. These legacy blocked labels duplicate finite assertions in the linked passing scenario, not additional executed checks or broader edge-case coverage.')
+$text.Add('Each counterpart belongs to the same control and lane in this run, with complete revalidated process evidence. Separate-suite source links are not lane evidence.')
+$text.Add('')
+$coverage = @($rows | Where-Object coveredByScenario)
+if ($coverage.Count) {
+    $text.Add('| Lane | Recorded blocked scenario | Passing counterpart |')
+    $text.Add('|---|---|---|')
+    foreach ($row in $coverage) {
+        $text.Add("| $($row.lane) | $($row.scenario) | $($row.coveredByScenario) |")
+    }
+} else {
+    $text.Add('No legacy blocked label has a verified passing counterpart in this run.')
 }
 $text.Add('')
 $text.Add('See `scenario-matrix.json` for every operation and exact reason, and the original per-process TAP/JSONL for observed values. This report does not claim that every Toolkit feature works.')
