@@ -902,6 +902,41 @@ internal static class PoolLaneFixtures
                 H.Check(p + "_RenterNotReferenced", r.Current is null, $"current={r.Current?.GetType().Name}");
             }
 
+            // Two layers that mount no control, each with its own ref: the control holds both.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_TwoLayers";
+                using var lab = new Lab(H);
+                ElementRef outer = new(), inner = new();
+                var mounted = await lab.Show(Memo("outer", () => Memo("inner", static () => Target("A")).Ref(inner)).Ref(outer));
+                H.Check(p + "_RefsSet", mounted is not null && ReferenceEquals(outer.Current, mounted)
+                    && ReferenceEquals(inner.Current, mounted),
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+                await lab.Show(null);
+                H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
+            // Updates on a wrapper layer: an unchanged ref stays tracked, a swapped one is dropped.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_Update";
+                using var lab = new Lab(H);
+                ElementRef r = new(), swapped = new();
+                static Element Wrapped(string text, ElementRef r) => new ModifiedElement(Target(text), new ElementModifiers { Ref = r });
+                var mounted = await lab.Show(Wrapped("A", r));
+                var updated = await lab.Show(Wrapped("A2", r));
+                H.Check(p + "_PatchedInPlace", mounted is not null && ReferenceEquals(updated, mounted));
+                H.Check(p + "_RefKept", mounted is not null && ReferenceEquals(r.Current, mounted));
+                await lab.Show(Wrapped("A3", swapped));
+                var tracked = (mounted?.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ProducerRefs;
+                H.Check(p + "_SwapClearsOld", r.Current is null && mounted is not null && ReferenceEquals(swapped.Current, mounted));
+                H.Check(p + "_SwapUntracks", ReferenceEquals(tracked, swapped), tracked?.GetType().Name ?? "null");
+                await lab.Show(null);
+                H.Check(p + "_ClearedOnUnmount", swapped.Current is null);
+                var renter = await lab.Show(Target("B"));
+                H.Check(p + "_Recycled", ReferenceEquals(renter, mounted));
+                H.Check(p + "_RenterNotReferenced", swapped.Current is null && r.Current is null);
+            }
+
             // A changed Memo key remounts: the ref moves to the replacement before the old control is
             // unmounted, and that unmount must not clear it.
             {

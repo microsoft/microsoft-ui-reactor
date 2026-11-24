@@ -2230,8 +2230,9 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative
     /// <c>.Ref</c> producer slot, an <c>XYFocus*</c> edge, or an accessibility
-    /// relationship edge. Such elements must be tagged so the unmount path can find the
-    /// element and clear the producer ref / tear the edges down (CR-001).
+    /// relationship edge. Such elements are tagged so the unmount path reaches them (CR-001).
+    /// The producer ref itself is cleared from the refs <c>ApplyModifiers</c> recorded on the
+    /// control's <see cref="ReactorState"/>, whichever layer declared it (#1659).
     /// </summary>
     private static bool HasReferenceModifiers(Element element)
     {
@@ -4847,8 +4848,9 @@ public sealed partial class Reconciler : IDisposable
         return false;
     }
 
-    // Same rule as CleanupReferenceStateForUnmount: a ref an update already moved to a
-    // replacement control keeps it.
+    // Clear a ref only while it still names this control. When an update replaces a control,
+    // ApplyModifiers points the ref at the replacement before the caller unmounts the old
+    // control, and the ref must keep it.
     private static void ClearTrackedProducerRefs(FrameworkElement control)
     {
         if (!TryGetReactorState(control, out var state) || state.ProducerRefs is not { } refs) return;
@@ -4877,17 +4879,6 @@ public sealed partial class Reconciler : IDisposable
             ClearKeyframeAnimations(control, element.KeyframeAnimations);
         if (element?.ScrollAnimation is not null)
             ClearScrollAnimation(control, element.ScrollAnimation);
-        CleanupReferenceStateForUnmount(control, element);
-    }
-
-    private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
-    {
-        // Clear the producer ref only while it still names this control. When an update
-        // replaces a control, ApplyModifiers points the element's ref at the replacement
-        // before the caller unmounts the old control, and the ref must keep it.
-        if (element?.Modifiers?.Ref is { } producerRef && producerRef.Current is { } current
-            && IsSameNativeElement(current, control))
-            producerRef.SetCurrent(null);
     }
 
     // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
