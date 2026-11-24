@@ -213,6 +213,24 @@ Conventions for contributors:
   until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
   honoured too.
 
+- An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
+  `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
+  XAML writes that value to the visual when it first renders it, which stopped the animation, so
+  `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
+  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
+  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+
+- Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
+  corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
+  and drop another row, because WinUI's `ItemsRepeater` doesn't update its element
+  indices for a move and Reactor looked rows up by index. Reactor now tracks realized
+  rows by key. A focused row that moved or was removed while scrolled out of view no
+  longer comes back showing the wrong item. Focus moves to a nearby row instead, so the
+  repeater recycles the stale control. WinUI's own indices are still stale after a move,
+  so `ItemsView` click and selection right after a reorder, and app code that calls
+  `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
+  microsoft/microsoft-ui-xaml#12659).
+
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after
@@ -223,6 +241,15 @@ Conventions for contributors:
   Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
   `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
   write `fe.Translation` on an element that declares one of those.
+
+- **A pooled control no longer hands its previous renter's local values to the next renter
+  (spec 066 §7, issue #1662).** A `TextBlock` or control mounted where one with `.Foreground(...)`
+  was removed kept the old brush, and so did a `RichTextBlock` a custom handler rented itself. A
+  `Button`, `TextBox` or `ToggleSwitch` kept
+  a previous `.FontSize(...)`, `.FontFamily(...)`, `.FontWeight(...)`, `.TabIndex(...)` or
+  `.SoundMode(...)`, any element kept `.XYFocusKeyboardNavigation(...)` and `.TabNavigation(...)`,
+  and a `.Set(c => c.Clip = …)` clipped the next renter, in both pool lanes. The pool now clears
+  them all on return, so a renter shows its own values or the defaults.
 
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
