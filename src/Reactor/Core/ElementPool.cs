@@ -345,6 +345,9 @@ public sealed class ElementPool : IDisposable
         // A context flyout is a live object graph owned by the previous renter's component.
         // Without this, right-clicking a recycled control shows the *previous* element's menu.
         fe.ClearValue(UIElement.ContextFlyoutProperty);
+        // Issue #1662: only user code writes Clip, and no renter's mount writes it back, so a
+        // .Set(c => c.Clip = …) would otherwise clip the next renter too, in either lane.
+        fe.ClearValue(UIElement.ClipProperty);
 
         // Issue #522 defense-in-depth — the in-place Update path clears the
         // synthesized themed Style when an element transitions ThemeBindings
@@ -404,7 +407,9 @@ public sealed class ElementPool : IDisposable
         // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
         // CornerRadius / BorderBrush / BorderThickness → Control | Border | Grid | StackPanel,
         // Background → Panel | Control | Border, IsEnabled → Control.
-        // Both content-alignment properties also belong to Control (#1013).
+        // Both content-alignment properties also belong to Control (#1013), and Foreground →
+        // Control | TextBlock (#1662): ApplyModifiers writes nothing when neither the old nor
+        // the new modifiers set it, so a renter that declares none kept the previous brush.
         // These border-box modifier gates also admit RelativePanel, which gets no clear
         // here because RelativePanel is not in PoolableTypes — it is never returned to the
         // pool, so there is no local value for a later renter to inherit. Canvas is the
@@ -439,6 +444,7 @@ public sealed class ElementPool : IDisposable
             resetControl.ClearValue(Control.IsEnabledProperty);
             resetControl.ClearValue(Control.HorizontalContentAlignmentProperty);
             resetControl.ClearValue(Control.VerticalContentAlignmentProperty);
+            resetControl.ClearValue(Control.ForegroundProperty);
         }
         else if (fe is WinUI.Border resetBorder)
         {
@@ -479,6 +485,7 @@ public sealed class ElementPool : IDisposable
             // nothing verified. Deleting the line used to break no test. Now it does, and
             // since #1193 it would be verified in the case arm too.
             resetText.ClearValue(TextBlock.PaddingProperty);
+            resetText.ClearValue(TextBlock.ForegroundProperty);
         }
 
         // spec 059: clear the TitleBar.IsDragRegion attached prop so a pooled

@@ -207,6 +207,12 @@ Conventions for contributors:
 
 ### Fixed
 
+- A pooled control no longer hands its previous renter's local `Foreground` or `UIElement.Clip`
+  to the next renter (issue #1662). A `TextBlock` or control mounted where a `.Foreground(...)`
+  one was removed kept the old brush, and a `.Set(c => c.Clip = …)` clipped the next renter, in
+  both pool lanes. The pool now clears both on return, so a renter shows its own values or the
+  defaults.
+
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after

@@ -848,6 +848,83 @@ internal static class PoolLaneFixtures
         }
     }
 
+    /// <summary>
+    /// #1662: a local <c>Foreground</c> or <c>UIElement.Clip</c> the previous renter wrote doesn't
+    /// reach the next renter, in either lane. A renter that declares its own value keeps it.
+    /// </summary>
+    internal sealed class RenterLocals(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string Blue = "#FF0000FF";
+
+        private static Microsoft.UI.Xaml.Media.RectangleGeometry Clip(double size) =>
+            new() { Rect = new global::Windows.Foundation.Rect(0, 0, size, size) };
+
+        private static bool IsUnset(object? local) => local == DependencyProperty.UnsetValue;
+
+        private static bool IsBlue(object? local) =>
+            local is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.B: 255, Color.R: 0 };
+
+        public override async Task RunAsync()
+        {
+            foreach (bool visualLane in new[] { false, true })
+            {
+                string lane = "ElementPoolLanes_RenterLocals_" + (visualLane ? "Visual" : "Plain");
+                Element Lane(Element e) => visualLane ? e.Animate(Curve.Linear(100)) : e;
+
+                await Case(lane + "_TextBlockForeground", visualLane, Lane(TextBlock("same").Foreground(Red)),
+                    Lane(TextBlock("same")), WinUI.TextBlock.ForegroundProperty, IsUnset, pixels: true);
+                await Case(lane + "_ButtonForeground", visualLane, Lane(Button("same").Foreground(Red)),
+                    Lane(Button("same")), WinUI.Control.ForegroundProperty, IsUnset);
+                await Case(lane + "_RichTextBlockForeground", visualLane, Lane(RichTextBlock("same").Foreground(Red)),
+                    Lane(RichTextBlock("same")), WinUI.RichTextBlock.ForegroundProperty, IsUnset);
+                await Case(lane + "_RichTextBlockSetForeground", visualLane,
+                    Lane(RichTextBlock("same").Set(static r => r.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red))),
+                    Lane(RichTextBlock("same")), WinUI.RichTextBlock.ForegroundProperty, IsUnset);
+                await Case(lane + "_Clip", visualLane, Lane(Target("same").Set(static b => b.Clip = Clip(10))),
+                    Lane(Target("same")), UIElement.ClipProperty, IsUnset, pixels: true);
+
+                // The reset runs on return, so a renter's own declaration still lands.
+                await Case(lane + "_TextBlockForegroundDeclared", visualLane, Lane(TextBlock("same").Foreground(Red)),
+                    Lane(TextBlock("same").Foreground(Blue)), WinUI.TextBlock.ForegroundProperty, IsBlue);
+                await Case(lane + "_ButtonForegroundDeclared", visualLane, Lane(Button("same").Foreground(Red)),
+                    Lane(Button("same").Foreground(Blue)), WinUI.Control.ForegroundProperty, IsBlue);
+            }
+
+            // A renter with setters never rents from the visual lane (spec 066 §7.2), so this is plain only.
+            var declared = Clip(20);
+            await Case("ElementPoolLanes_RenterLocals_Plain_ClipDeclared", false, Target("same").Set(static b => b.Clip = Clip(10)),
+                Target("same").Set(b => b.Clip = declared), UIElement.ClipProperty, local => ReferenceEquals(local, declared));
+        }
+
+        private async Task Case(string p, bool visualLane, Element previous, Element renter,
+            DependencyProperty property, Func<object?, bool> expected, bool pixels = false)
+        {
+            using var lab = new Lab(H);
+            var first = await lab.Show(previous);
+            // Positive controls: the previous renter really wrote the local value, in the lane under test.
+            H.Check(p + "_PreviousWrote", first is not null && !IsUnset(first.ReadLocalValue(property)));
+            if (first is null) return;
+            H.Check(p + "_Lane", ElementPool.IsVisualTaken(first) == visualLane);
+            if (pixels)
+            {
+                var (before, beforeSizes) = await DiffFromFresh(H, lab, renter);
+                H.Check(p + "_PreviousDiffersFromFresh", before > 4, $"diff={before} {beforeSizes}");
+            }
+
+            await lab.Show(null);
+            var second = await lab.Show(renter);
+            H.Check(p + "_Recycled", second is not null && ReferenceEquals(first, second));
+            if (second is null) return;
+            var local = second.ReadLocalValue(property);
+            H.Check(p + "_RenterValue", expected(local), $"local={local}");
+            if (pixels)
+            {
+                var (diff, sizes) = await DiffFromFresh(H, lab, renter);
+                H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
+            }
+        }
+    }
+
     /// <summary>A control whose keyframe names change records only the names it still holds.</summary>
     internal sealed class KeyframeNames(Harness h) : SelfTestFixtureBase(h)
     {
