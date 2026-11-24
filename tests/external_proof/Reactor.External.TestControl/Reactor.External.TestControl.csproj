@@ -3,7 +3,7 @@
   <!--
     Spec 047 §14 Phase 1 (1.16) — external-assembly proof.
 
-    This library lives OUTSIDE of Reactor.dll and references it as a regular
+    This library lives OUTSIDE of Microsoft.UI.Reactor.dll and references it as a regular
     NuGet/project reference. There is NO InternalsVisibleTo from Reactor to
     this assembly — the very fact that this project compiles proves that the
     public V1 protocol surface is sufficient for an external author to ship
@@ -50,7 +50,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Regular project reference — NOT InternalsVisibleTo. Reactor.dll's
+    <!-- Regular project reference — NOT InternalsVisibleTo. Microsoft.UI.Reactor.dll's
          public surface alone must be sufficient. -->
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
 

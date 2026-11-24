@@ -362,7 +362,7 @@ reports; the current summarizer rejects missing metadata rather than inferring
 complete capture from TAP alone. It writes `scenario-matrix.json` and `summary.md`. Published binary,
 PRI and XBF hashes, effective build properties and restored dependency assets
 are retained per lane. Package-consumer runs validate the staged-source/package
-hashes and the exact resolved package version; untransformed JIT `Reactor.dll`
+hashes and the exact resolved package version; untransformed JIT `Microsoft.UI.Reactor.dll`
 must match the assembly inside the prepared nupkg.
 
 For coordinated input diagnostics, launch the same published executable with

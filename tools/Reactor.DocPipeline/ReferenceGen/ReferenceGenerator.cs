@@ -34,7 +34,7 @@ internal sealed record GeneratedPage(MemberDoc Member, RouterResult Route, strin
 /// Orchestrates reference page generation:
 ///
 /// <list type="number">
-/// <item>Reads <c>Reactor.xml</c> from disk.</item>
+/// <item>Reads <c>Microsoft.UI.Reactor.xml</c> from disk.</item>
 /// <item>Groups by category via <see cref="MemberRouter"/>.</item>
 /// <item>Filters to the categories requested by the caller (Phase 1B
 ///   restricts to <c>hooks</c>).</item>

@@ -30,7 +30,7 @@ namespace Microsoft.UI.Reactor.Tests.Docking;
 /// live behaviour is pinned by the
 /// <c>NativeDocking_A11y_FocusFallback_LandsInsideHostSubtree</c> self-test fixture.
 /// What these tests pin is the <i>call shape</i>, read straight out of the shipped
-/// <c>Reactor.Advanced.dll</c> with <see cref="MetadataReader"/> — no type loading,
+/// <c>Microsoft.UI.Reactor.Advanced.dll</c> with <see cref="MetadataReader"/> — no type loading,
 /// no COM activation. Between them they fail if the illegal pairing comes back, if
 /// the host-scoped search is dropped, or if the focus move is removed.
 /// </para>
@@ -248,12 +248,12 @@ public sealed class DockHostFocusFallbackTests
 
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
         "SingleFile", "IL3000",
-        Justification = "Test-only: reads Reactor.Advanced.dll's on-disk Location to feed the IL/metadata scanner (PEReader) — the assertion below fails loudly on an empty path. IL3000 only affects single-file publish; this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
+        Justification = "Test-only: reads Microsoft.UI.Reactor.Advanced.dll's on-disk Location to feed the IL/metadata scanner (PEReader) — the assertion below fails loudly on an empty path. IL3000 only affects single-file publish; this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
     private static AnnouncerScan ScanAnnouncerCore()
     {
         var assemblyPath = typeof(DockHostLiveAnnouncer).Assembly.Location;
         Assert.False(string.IsNullOrEmpty(assemblyPath),
-            "Could not locate Reactor.Advanced.dll on disk.");
+            "Could not locate Microsoft.UI.Reactor.Advanced.dll on disk.");
 
         var opcodes = BuildOpCodeTable();
         var members = new SortedSet<string>(StringComparer.Ordinal);

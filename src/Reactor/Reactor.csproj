@@ -7,7 +7,7 @@
          Core/Polyfills/ClosedTypeAttributes.cs. Requires the .NET 11 SDK. -->
     <LangVersion>15</LangVersion>
     <RootNamespace>Microsoft.UI.Reactor</RootNamespace>
-    <AssemblyName>Reactor</AssemblyName>
+    <AssemblyName>Microsoft.UI.Reactor</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
@@ -20,7 +20,7 @@
          configurations can resolve a matching Reactor build. AnyCPU stays
          the default for `dotnet pack`. Without this, VS's solution-level
          project-ref mapping falls back to AnyCPU on ARM64 hosts and the
-         expected `bin/ARM64/Release/.../Reactor.dll` never appears,
+         expected `bin/ARM64/Release/.../Microsoft.UI.Reactor.dll` never appears,
          leaving downstream projects unable to bind the assembly. Mirrors
          the same declaration in Reactor.Tests.csproj. -->
     <Platforms>AnyCPU;x64;ARM64</Platforms>
@@ -84,7 +84,7 @@
              so no extra internal seam beyond this IVT.
          This IVT publishes exactly those seams to the relocated code; the
          direction stays one-way (Advanced → core). -->
-    <InternalsVisibleTo Include="Reactor.Advanced" />
+    <InternalsVisibleTo Include="Microsoft.UI.Reactor.Advanced" />
     <InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />
     <!-- Spec 047 — PerfBench.ControlModel benches the V1 control model
          against the Direct/Bound baselines; it references internal descriptor
@@ -178,7 +178,7 @@
   <!-- Bundle Reactor.Wrappers.Abstractions.dll into this package's lib/ folder.
        The ProjectReference above carries PrivateAssets="all" so NuGet adds no
        package dependency for it; this target instead copies the built DLL next
-       to Reactor.dll so the package is self-contained (the wrapper-authoring
+       to Microsoft.UI.Reactor.dll so the package is self-contained (the wrapper-authoring
        attributes resolve for any consumer). The DLL is a runtime reference, so
        the build already copied it into $(TargetDir) — we read it from there
        rather than resolving references, so this works under a NoBuild pack
@@ -196,18 +196,18 @@
 
   <!-- Pack ReactorApplication.xbf, which WinUI's LoadComponent needs at runtime. A pack-time
        target, because a <None> guarded by Exists() is evaluated before the build creates the
-       file. Packed as build output so it lands in the same lib/ folder as Reactor.dll; a
+       file. Packed as build output so it lands in the same lib/ folder as Microsoft.UI.Reactor.dll; a
        literal lib\$(TargetFramework)\ path created a second lib/ folder. -->
   <PropertyGroup>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);_PackReactorApplicationXbf</TargetsForTfmSpecificBuildOutput>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.xbf</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
   <Target Name="_PackReactorApplicationXbf">
-    <Error Condition="!Exists('$(TargetDir)Reactor\Hosting\ReactorApplication.xbf')"
-           Text="ReactorApplication.xbf was not found at '$(TargetDir)Reactor\Hosting\ReactorApplication.xbf'. Build src/Reactor before packing." />
+    <Error Condition="!Exists('$(TargetDir)$(AssemblyName)\Hosting\ReactorApplication.xbf')"
+           Text="ReactorApplication.xbf was not found at '$(TargetDir)$(AssemblyName)\Hosting\ReactorApplication.xbf'. Build src/Reactor before packing." />
     <ItemGroup>
-      <BuildOutputInPackage Include="$(TargetDir)Reactor\Hosting\ReactorApplication.xbf"
-                            TargetPath="Reactor\Hosting\ReactorApplication.xbf" />
+      <BuildOutputInPackage Include="$(TargetDir)$(AssemblyName)\Hosting\ReactorApplication.xbf"
+                            TargetPath="$(AssemblyName)\Hosting\ReactorApplication.xbf" />
     </ItemGroup>
   </Target>
 
