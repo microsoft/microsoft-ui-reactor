@@ -218,6 +218,10 @@ Conventions for contributors:
   `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
   microsoft/microsoft-ui-xaml#12659).
 
+- Markdown selection skips offscreen glyph queries during drag growth for single-run
+  printable-ASCII left-to-right paragraphs with positive axis-aligned 2D transforms.
+  Other layouts retain the reference geometry path (PR #1698).
+
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after
