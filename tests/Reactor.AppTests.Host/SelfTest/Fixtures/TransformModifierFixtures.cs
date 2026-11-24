@@ -489,7 +489,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             var control = (Border)reconciler.Mount(faded, () => { })!;
             var visual = ElementCompositionPreview.GetElementVisual(control);
             bool started = visual.TryGetAnimationController("Opacity") is not null;
-            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
             await AfterNextCommit(visual);
             var host = new Border { Child = control, Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible };
             H.SetContent(host);
@@ -502,7 +502,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 await AfterNextCommit(visual);
             }
             var running = visual.TryGetAnimationController("Opacity");
-            int restarts = Reconciler.KeyframeOpacityRestartsForTests - restartsBefore;
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
             // The visual's base opacity reads 0.4 only once XAML pushed it, and the restart count
             // shows the keyframe survived because Reactor restarted it, not because of timing.
             H.Check(name + "SurvivesXamlPush", started && running is not null
@@ -515,19 +515,79 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // A finite keyframe that ran out on its own, and a loop still running, with no opacity
+            // push between, are left alone.
+            foreach (var (scenario, fade) in new (string, Func<KeyframeBuilder, KeyframeBuilder>)[]
+            {
+                ("FinishedOpacityKeyframeNotReplayed", static kf => kf.Duration(1).At(0, opacity: 1).At(1, opacity: 0.5f)),
+                ("RunningOpacityLoopNotRestarted", OpacityPulse),
+            })
+            {
+                using var reconciler = new Reconciler();
+                var plain = Border(TextBlock("Unpushed Opacity Keyframe")).Opacity(0.4);
+                var faded = plain.Keyframes("fade", 1, fade).Width(120);
+                var control = (Border)reconciler.Mount(plain, () => { })!;
+                H.SetContent(control);
+                await Harness.Render();
+                var visual = ElementCompositionPreview.GetElementVisual(control);
+                await AfterNextCommit(visual);
+                int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
+                reconciler.Update(plain, faded, control, () => { });
+                bool started = Reconciler.KeyframeControllerForTests(control, "fade", "Opacity") is not null;
+                await Harness.Render(50);
+                await AfterNextCommit(visual);
+                int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
+                // A completed keyframe keeps its controller, so the check leaves it alone.
+                H.Check("TransformKeyframes_" + scenario, started && restarts == 0,
+                    $"started={started}, restarts={restarts}");
+                reconciler.Update(faded, plain, control, () => { });
+                H.SetContent(null);
+            }
+        }
+
+        {
+            // A finite fade the push stopped is restarted even when the check runs after the fade's
+            // duration: the UI thread is blocked past it before the frame that pushes.
             using var reconciler = new Reconciler();
-            var plain = Border(TextBlock("Finished Opacity Keyframe"));
-            var faded = plain.Opacity(0.4).Keyframes("fade", 1, static kf => kf.Duration(1).At(0, opacity: 1).At(1, opacity: 0.5f));
-            var control = (Border)reconciler.Mount(faded, () => { })!;
+            var plain = Border(TextBlock("Delayed Opacity Keyframe"));
+            var faded = plain.Opacity(0.4).Keyframes("fade", 1, static kf => kf.Duration(300).At(0, opacity: 1).At(1, opacity: 0.5f));
+            var control = (Border)reconciler.Mount(plain, () => { })!;
+            H.SetContent(control);
+            await Harness.Render();
             var visual = ElementCompositionPreview.GetElementVisual(control);
-            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+            await AfterNextCommit(visual);
+            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
+            reconciler.Update(plain, faded, control, () => { });
+            global::System.Threading.Thread.Sleep(400);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            var running = visual.TryGetAnimationController("Opacity");
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
+            H.Check("TransformKeyframes_DelayedFiniteOpacityKeyframeRestarted", restarts == 1 && running is not null
+                && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity")),
+                $"restarts={restarts}, running={running is not null}");
+            reconciler.Update(faded, plain, control, () => { });
+            H.SetContent(null);
+        }
+
+        {
+            // A setter's opacity write replaces the keyframe like a modifier's, so the check must not undo it.
+            using var reconciler = new Reconciler();
+            var plain = Border(TextBlock("Setter Opacity"));
+            var first = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var second = first.Set(static b => b.Opacity = 0.6).Width(120);
+            var control = (Border)reconciler.Mount(first, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
+            reconciler.Update(first, second, control, () => { });
             H.SetContent(control);
             await Harness.Render();
             await AfterNextCommit(visual);
-            int restarts = Reconciler.KeyframeOpacityRestartsForTests - restartsBefore;
-            H.Check("TransformKeyframes_FinishedOpacityKeyframeNotReplayed", restarts == 0
-                && visual.TryGetAnimationController("Opacity") is null, $"restarts={restarts}");
-            reconciler.Update(faded, plain, control, () => { });
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
+            H.Check("TransformKeyframes_OpacitySetterReplacesLoop", restarts == 0
+                && visual.TryGetAnimationController("Opacity") is null && Math.Abs(control.Opacity - 0.6) < 0.001,
+                $"restarts={restarts}, opacity={control.Opacity}");
+            reconciler.Update(second, plain, control, () => { });
             H.SetContent(null);
         }
 
@@ -539,12 +599,12 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             var second = plain.Opacity(0.6).Keyframes("fade", 1, OpacityPulse);
             var control = (Border)reconciler.Mount(first, () => { })!;
             var visual = ElementCompositionPreview.GetElementVisual(control);
-            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
             reconciler.Update(first, second, control, () => { });
             H.SetContent(control);
             await Harness.Render();
             await AfterNextCommit(visual);
-            int restarts = Reconciler.KeyframeOpacityRestartsForTests - restartsBefore;
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
             H.Check("TransformKeyframes_OpacityModifierReplacesLoop", restarts == 0
                 && visual.TryGetAnimationController("Opacity") is null && Math.Abs(visual.Opacity - 0.6f) < 0.001f,
                 $"restarts={restarts}, opacity={visual.Opacity}");
@@ -566,7 +626,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             var visual = ElementCompositionPreview.GetElementVisual(control);
             // XAML's first push of the styled opacity must not start .Animate()'s implicit
             // Opacity animation in the keyframe's place: the restart count proves it was stopped.
-            int deferRestartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+            int deferRestartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
             reconciler.Update(deferAnimated, deferWithOpacity, control, () => { });
             reconciler.Update(deferWithOpacity, loop, control, () => { });
             H.SetContent(control);
@@ -574,7 +634,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             await AfterNextCommit(visual);
             bool loopRestarted = visual.TryGetAnimationController("Opacity") is { } running
                 && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity"))
-                && Reconciler.KeyframeOpacityRestartsForTests - deferRestartsBefore == 1;
+                && Reconciler.KeyframeOpacityRestartsForTests(control) - deferRestartsBefore == 1;
             // Only a decorator's shared target (KeyframeReleaseStage.BeforePlayback) compares the
             // deferred controller with the running one, so check the bookkeeping it reads directly.
             bool deferredFollows = control.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState
@@ -620,22 +680,48 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             var linked = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse).ScrollLinked(viewer, static b => b.FadeOut(0, 100));
             var control = (Border)reconciler.Mount(linked, () => { })!;
             var visual = ElementCompositionPreview.GetElementVisual(control);
-            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
             H.SetContent(control);
             await Harness.Render();
             await AfterNextCommit(visual);
-            int restarts = Reconciler.KeyframeOpacityRestartsForTests - restartsBefore;
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
             H.Check("TransformKeyframes_ScrollLinkedOpacityNotReplaced", restarts == 0, $"restarts={restarts}");
             reconciler.Update(linked, plain, control, () => { });
+            H.SetContent(null);
+        }
+
+        {
+            // Disposal drops the tree without unmounting it, so it must cancel a check still
+            // waiting for a collapsed element to render.
+            var reconciler = new Reconciler();
+            var faded = Border(TextBlock("Disposed Opacity Check")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var control = (Border)reconciler.Mount(faded, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            var host = new Border { Child = control, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            static bool Waiting(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
+                is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null } or Reconciler.ReactorState { KeyframeOpacityCheck: not null };
+            bool armed = Waiting(control);
+            reconciler.Dispose();
+            H.Check("TransformKeyframes_DisposeCancelsOpacityCheck", armed && !Waiting(control),
+                $"armed={armed}, waiting={Waiting(control)}");
+            host.Child = null;
             H.SetContent(null);
         }
     }
 
     // XAML pushes a changed UIElement.Opacity to the visual during a frame, and that frame
     // commits before RequestCommitAsync completes. The Render after lets the completion run.
+    // A commit that times out or faults fails the fixture, so a no-restart check can't pass
+    // only because the restart callback never ran.
     private static async Task AfterNextCommit(Microsoft.UI.Composition.Visual visual)
     {
-        await Task.WhenAny(global::System.WindowsRuntimeSystemExtensions.AsTask(visual.Compositor.RequestCommitAsync()), Task.Delay(2000));
+        var commit = global::System.WindowsRuntimeSystemExtensions.AsTask(visual.Compositor.RequestCommitAsync());
+        if (await Task.WhenAny(commit, Task.Delay(5000)) != commit)
+            throw new TimeoutException("The compositor did not commit within 5s.");
+        await commit;
         await Harness.Render();
     }
 }

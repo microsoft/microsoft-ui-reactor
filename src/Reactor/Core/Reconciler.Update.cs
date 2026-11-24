@@ -525,7 +525,7 @@ public sealed partial class Reconciler
         {
             if (targetCanAdvanceTrigger && result is null)
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
-            ApplyKeyframeAnimations(target, keyframes);
+            ApplyKeyframeAnimations(target, keyframes, this);
         }
         else if (oldEl.KeyframeAnimations is not null)
         {

@@ -142,7 +142,7 @@ Invariants:
    animation runs on the visual's `Opacity`, and it lands with the first frame that renders the element
    (not while it is off the tree or under a collapsed ancestor). An opacity keyframe started before that
    frame, next to `.Opacity(x)` or a style setter, would never play, so `ApplyKeyframeAnimations`
-   restarts it once after that frame's commit unless a modifier wrote the channel in between (#1669).
+   restarts it once after that frame's commit unless a modifier or setter wrote the opacity in between (#1669).
 
 ## §4 Modifier behaviour
 

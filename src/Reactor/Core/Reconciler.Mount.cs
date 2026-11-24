@@ -279,7 +279,7 @@ public sealed partial class Reconciler
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (control is not null && element.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(control, element.KeyframeAnimations);
+            ApplyKeyframeAnimations(control, element.KeyframeAnimations, this);
 
         // Apply scroll-linked expression animations (.ScrollLinked() modifier)
         if (control is not null && element.ScrollAnimation is not null)
