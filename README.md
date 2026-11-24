@@ -68,8 +68,8 @@ class MyApp : Component
 </td>
 <td>
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hello-reactor-dark.jpg" />
-  <img src="docs/images/hello-reactor-light.jpg" width="300" alt="The Hello Reactor window, showing Count: 3 with minus and plus buttons" />
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hello-reactor-dark.webp" />
+  <img src="docs/images/hello-reactor-light.webp" width="300" alt="The Hello Reactor window, showing Count: 3 with minus and plus buttons" />
 </picture>
 </td>
 </tr>
