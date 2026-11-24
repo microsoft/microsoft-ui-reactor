@@ -469,10 +469,83 @@ class C
     }
 
     [Fact]
-    public async Task Chain_Without_A_Visual_Owning_Modifier_Is_Not_Matched()
+    public async Task Chain_With_Only_Identity_Transforms_Is_Not_Matched()
     {
-        // .Translation(...) is not visual-owning today, so it only gates the Translation arm.
-        await VerifyAsync(@"class C { Element M() => Border().Translation(0, 0, 4).Set(fe => { fe.Rotation = 5; fe.ScaleTransition = new Vector3Transition(); }); }");
+        // An identity transform never takes the visual (spec 066 §3 invariant 2), so it only
+        // gates the Translation arm.
+        await VerifyAsync(@"class C { Element M() => Border().Translation(0, 0, 0).Set(fe => { fe.Rotation = 5; fe.ScaleTransition = new Vector3Transition(); }); }");
+    }
+
+    [Theory]
+    [InlineData("Border().Scale(1)", "fe.Rotation = 5")]
+    [InlineData("Border().Scale(1f)", "fe.Rotation = 5")]
+    [InlineData("Border().Scale(Vector3.One)", "fe.Rotation = 5")]
+    [InlineData("Border().CenterPoint(Vector3.Zero)", "fe.Rotation = 5")]
+    [InlineData("Border().Translation(0, 0f, 0.0f)", "fe.Rotation = 5")]
+    [InlineData("Border().Rotation(0)", "fe.Scale = new Vector3(2, 2, 1)")]
+    public async Task Identity_Transform_Does_Not_Take_The_Visual(string chain, string write)
+    {
+        await VerifyAsync(@"class C { Element M() => " + chain + ".Set(fe => " + write + "); }");
+    }
+
+    // ── Spec 066 layer 4: the transform modifiers take the visual ──────────
+
+    [Theory]
+    [InlineData("Scale(2f)")]
+    [InlineData("Rotation(30)")]
+    [InlineData("Translation(10, 0, 0)")]
+    [InlineData("CenterPoint(new Vector3(10, 5, 0))")]
+    public async Task A_Transform_Modifier_Takes_The_Visual_And_Fixes(string trigger)
+    {
+        // Rotation as the trigger is the one with a write it can't also be: use Scale there.
+        var (write, fixedCall) = trigger.StartsWith("Rotation", global::System.StringComparison.Ordinal)
+            ? ("fe.Scale = new Vector3(2, 2, 1)", "Scale(new Vector3(2, 2, 1))")
+            : ("fe.Rotation = 45", "Rotation(45)");
+        await VerifyFixAsync(
+            "class C { Element M() => Border()." + trigger + ".Set(fe => {|REACTOR_ANIM_004:" + write + "|}); }",
+            "class C { Element M() => Border()." + trigger + "." + fixedCall + "; }");
+    }
+
+    [Fact]
+    public async Task Transform_Trigger_Message_Names_It()
+    {
+        await VerifyAsync(
+            @"class C { Element M(float s) => Border().Set(fe => {|#0:fe.Rotation = 45|}).Scale(s); }",
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning)
+                .WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.Rotation', but '.Scale(...)' on the same element takes its composition visual, after which WinUI rejects the write. Use '.Rotation(degrees)' instead."));
+    }
+
+    [Fact]
+    public async Task Identity_Modifier_Over_The_Same_Facade_Still_Takes_The_Visual()
+    {
+        // The setter left the facade non-identity, so '.Scale(1)' takes the visual to override it,
+        // and the setter's next run throws. The same modifier on the chain means the write is dead,
+        // so there is no fix.
+        var source = @"class C { Element M() => Border().Set(fe => {|REACTOR_ANIM_004:fe.Scale = new Vector3(2, 2, 1)|}).Scale(1); }";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
+    public async Task Later_Same_Modifier_Blocks_The_Fix()
+    {
+        // The rewrite would put a dead '.Rotation(45)' before the '.Rotation(30)' that wins, so the
+        // advice is to remove the write instead.
+        var source = @"class C { Element M() => Border().Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}).Rotation(30); }";
+        await VerifyFixAsync(source, source);
+        await VerifyAsync(
+            @"class C { Element M() => Border().Set(fe => {|#0:fe.Rotation = 45|}).Rotation(30); }",
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning)
+                .WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.Rotation', but '.Rotation(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove the write or merge the value into the existing '.Rotation(...)' call."));
+    }
+
+    [Fact]
+    public async Task Translation_Write_Next_To_Another_Transform_Is_Not_Matched()
+    {
+        // #1642: no Translation channel is declared, so translation stays disabled and the facade
+        // keeps working after '.Scale(...)' takes the visual.
+        await VerifyAsync(@"class C { Element M() => Border().Scale(0.97f).Set(fe => fe.Translation = new Vector3(40, 0, 0)); }");
     }
 
     [Fact]

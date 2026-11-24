@@ -261,8 +261,11 @@ the same setting on its own.
 
 ### Reading transforms back and `.Set(...)`
 
-An element with one of the four transitions keeps its transforms on the
-composition visual. Two things follow:
+`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` write the
+element's composition visual, and so do the four transitions and every
+compositor feature on this page. A non-identity transform, a transition or a
+compositor feature takes the visual, and an identity value such as
+`.Scale(1)` on an untouched control doesn't. Once the visual is taken:
 
 - `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read back identity for values
   set with `.Scale()`, `.Rotation()` and `.CenterPoint()`. Read
@@ -270,10 +273,22 @@ composition visual. Two things follow:
   in radians, and `CenterPoint`) instead.
 - WinUI rejects `.Set(fe => fe.Rotation = …)`, and the same for `Scale`,
   `CenterPoint`, `RotationAxis`, `TransformMatrix`, `UIElement.StartAnimation`
-  and the XAML `*Transition` properties, once the visual is taken. Use
-  `.Rotation()`, `.Scale()`, `.CenterPoint()` and the transition modifiers
+  and the XAML `*Transition` properties, and the same writes from `.OnMount(...)`.
+  Use `.Rotation()`, `.Scale()`, `.CenterPoint()` and the transition modifiers
   instead. Reactor logs a warning that names the modifier when that happens,
-  and the `REACTOR_ANIM_004` analyzer flags the `.Set` at build time.
+  and the `REACTOR_ANIM_004` analyzer flags the `.Set` at build time and
+  rewrites the simple cases.
+
+### Don't mix `fe.Translation` with `.Translation()`
+
+A drag that writes `fe.Translation` from a handler or an `ElementRef` keeps
+working next to `.Scale()`, `.Rotation()` and the other features, because
+Reactor enables translation on the visual only for a declared Translation
+channel: `.Translation()`, a `translation:` keyframe or an
+`.InteractionStates()` translation. On an element that declares one, WinUI
+ignores `fe.Translation` writes once the element has rendered. Either drive
+the position through `.Translation()` or write `fe.Translation` yourself, not
+both.
 
 ## Layout Animation
 

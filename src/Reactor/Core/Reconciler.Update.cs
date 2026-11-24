@@ -526,12 +526,6 @@ public sealed partial class Reconciler
         {
             ApplyImplicitTransitions(target, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot);
         }
-        else if (TakesVisual(newEl.ImplicitTransitions) || TakesVisual(oldEl.ImplicitTransitions))
-        {
-            // Move a facade Translation a setter wrote in this update onto the visual, also when this
-            // update dropped the last transition: the visual stays taken (as ClearLayoutAnimation does).
-            AnimationHelper.GetElementVisual(target);
-        }
         if (newEl.ThemeTransitions is not null)
             ApplyThemeTransitions(target, newEl.ThemeTransitions);
 
@@ -562,13 +556,6 @@ public sealed partial class Reconciler
             if (targetCanAdvanceTrigger && result is null)
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
             ApplyKeyframeAnimations(target, keyframes);
-        }
-        else if (oldEl.KeyframeAnimations is not null)
-        {
-            // The keyframes took the visual, so facade transforms the setters wrote in this
-            // update must move to it, as the cleanup that used to run here did (#1641).
-            try { AnimationHelper.GetElementVisual(target); }
-            catch { /* No compositor (e.g. unit tests) */ }
         }
         // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
         if (newEl.ScrollAnimation is not null)

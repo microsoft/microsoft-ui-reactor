@@ -59,6 +59,23 @@ Conventions for contributors:
 
 ### Changed
 
+- **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
+  visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
+  the first time it is written, so the transforms use one channel whether or not a compositor
+  feature is present. An identity value (`.Scale(1)`, `.Rotation(0)`) on a control whose visual
+  wasn't taken writes nothing. On a transformed element `fe.Scale`, `fe.Rotation` and
+  `fe.CenterPoint` read back identity (read `ElementCompositionPreview.GetElementVisual(fe)`
+  instead), and WinUI rejects a `.Set(...)` or `.OnMount(...)` that writes `Rotation`, `Scale`,
+  `CenterPoint`, `RotationAxis`, `TransformMatrix` or a XAML `*Transition` property after the
+  visual was taken. **Migration:** move the write into the modifier. `REACTOR_ANIM_004` now treats
+  the four transform modifiers as taking the visual, flags such a `.Set` at build time and rewrites
+  a single assignment (`.Set(fe => fe.Rotation = 45).Scale(2)` becomes `.Rotation(45).Scale(2)`), and
+  the run-time `DiagnosticLog` warning that names the modifier also covers `.OnMount(...)`. A
+  `.Set` write on mount still works for `Rotation`, `Scale` and `CenterPoint` (the value moves to the
+  visual), but not on a later render. Transformed controls are pooled in the visual lane, and the
+  first handoff costs about 0.1 ms per element. `REACTOR_ANIM_004` checks `.Set` only, so a facade write
+  in `.OnMount(...)` surfaces at run time. `ReactorDiagnostics.GetAppliedProperties` reports the four
+  modifiers as `Visual.Scale`, `Visual.RotationAngle`, `Visual.Translation` and `Visual.CenterPoint`.
 - **Breaking: each package's main assembly is now named after the package (issue #1664).**
   `Reactor.dll` is now `Microsoft.UI.Reactor.dll` and `Reactor.Advanced.dll` is now
   `Microsoft.UI.Reactor.Advanced.dll`, matching the `Microsoft.UI.Reactor` and
@@ -250,6 +267,17 @@ Conventions for contributors:
   `--devtools run` / `--preview`, instead of a `MissingMethodException`. The version check moved from
   the package into `Microsoft.UI.Reactor`, because an older package can fail before its own check runs.
 
+- **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
+  transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
+  composition visual moved a facade `Translation` to the visual and enabled translation there, after
+  which WinUI ignored every later `fe.Translation` write, so a drag card that wrote `fe.Translation`
+  from a handler stopped moving once it gained a hover state, a transition, `.Animate(...)` or an
+  animated scale, and with transforms on the visual a plain `.Scale(pressed ? 0.97f : 1)` would have
+  done the same.
+  Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
+  `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
+  write `fe.Translation` on an element that declares one of those.
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming
@@ -258,6 +286,7 @@ Conventions for contributors:
 - `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
   block's default text brush and updates it when the block's effective theme
   changes (issue #1002).
+
 - **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
   animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625
   and #1626).** They all install implicit animations on the element's composition visual, and now

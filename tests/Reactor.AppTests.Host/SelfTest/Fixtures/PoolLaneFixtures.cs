@@ -222,6 +222,9 @@ internal static class PoolLaneFixtures
                 // Since spec 066 layer 2 every .XxxTransition() but Background takes the visual at mount.
                 ("TranslationTransitionOnly", Target("R").TranslationTransition(), true, null),
                 ("OpacityTransitionOnly", Target("R").OpacityTransition(), true, null),
+                // Since spec 066 layer 4 a non-identity transform takes the visual at mount.
+                ("TransformOnly", Target("R").Scale(2), true, null),
+                ("TransformWithSetter", Target("R").Set(static b => b.Rotation = 10).Scale(2), false, null),
                 ("IdentityTransformRef", Target("R").Scale(1).Rotation(0).Ref(probe), false, _ =>
                 {
                     try { probe.Current!.Rotation = 10; return null; }
@@ -753,6 +756,28 @@ internal static class PoolLaneFixtures
             H.Check(p + "_OffsetNotAnimated", !Running(ElementCompositionPreview.GetElementVisual(rentedControl), "Offset"));
             var (diff, sizes) = await DiffFromFresh(H, lab, renter);
             H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
+        }
+    }
+
+    /// <summary>
+    /// A visual-lane renter that declares <c>.Translation()</c> gets translation enabled again: the
+    /// visual reset disables it and forgets that Reactor enabled it (spec 066 §4.3 and §7.3).
+    /// </summary>
+    internal sealed class TranslationRenter(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_TranslationRenter";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Target("T").Translation(10, 0, 0));
+            H.Check(p + "_Mounted", first is not null && ElementPool.IsVisualTaken(first));
+            await lab.Show(null);
+            var rented = await lab.Show(Target("R").Translation(20, 0, 0));
+            H.Check(p + "_Recycled", rented is not null && ReferenceEquals(rented, first));
+            if (rented is null) return;
+            await Harness.Render();
+            var box = (await Snap.CaptureAsync(lab.Root)).RedBox();
+            H.Check(p + "_Applied", box is { } b && Math.Abs(b.X0 - 20) <= 2, $"box={box}");
         }
     }
 

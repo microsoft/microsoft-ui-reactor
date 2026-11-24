@@ -9,7 +9,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
 /// Issue #1614: removing a poolable control that carries a non-identity facade transform
-/// (<c>.Rotation</c>, <c>.Scale</c>, <c>.CenterPoint</c>, <c>.Translation</c>) must not throw,
+/// (<c>Rotation</c>, <c>Scale</c>, <c>CenterPoint</c>, <c>Translation</c>, which since spec 066
+/// layer 4 only user code writes) must not throw,
 /// and the control handed to the next renter must have identity transforms.
 /// </summary>
 /// <remarks>
@@ -28,21 +29,33 @@ internal static class PooledFacadeTransformFixtures
 
         public override async Task RunAsync()
         {
+            // Since spec 066 layer 4 the transform modifiers write the composition visual, so only
+            // user code (.Set, a ref) leaves a facade engaged on a pooled control.
             var plain = new Expect();
-            await RunCase<WinUI.Border>("BorderRotation", BorderOf, e => e.Rotation(45f), IsBorderWith, plain);
-            await RunCase<WinUI.Border>("BorderScale", BorderOf, e => e.Scale(1.2f), IsBorderWith, plain);
+            await RunCase<WinUI.Border>("BorderRotation", BorderOf, e => ((BorderElement)e).Set(static b => b.Rotation = 45f), IsBorderWith, plain);
+            await RunCase<WinUI.Border>("BorderScale", BorderOf, e => ((BorderElement)e).Set(static b => b.Scale = new Vector3(1.2f, 1.2f, 1)), IsBorderWith, plain);
             await RunCase<WinUI.Border>("BorderCenterPoint",
-                BorderOf, e => e.CenterPoint(new Vector3(50, 20, 0)), IsBorderWith, plain);
-            await RunCase<WinUI.Border>("BorderTranslation", BorderOf, e => e.Translation(12, 18, 0), IsBorderWith, plain);
+                BorderOf, e => ((BorderElement)e).Set(static b => b.CenterPoint = new Vector3(50, 20, 0)), IsBorderWith, plain);
+            await RunCase<WinUI.Border>("BorderTranslation", BorderOf, e => ((BorderElement)e).Set(static b => b.Translation = new Vector3(12, 18, 0)), IsBorderWith, plain);
             await RunCase<WinUI.TextBlock>("TextBlockAll",
                 text => TextBlock(text),
-                e => e.Rotation(30f).Scale(new Vector3(1.5f, 1.8f, 1)).Translation(4, 5, 0)
-                    .CenterPoint(new Vector3(20, 10, 0)),
+                e => ((TextBlockElement)e).Set(static tb =>
+                {
+                    tb.Rotation = 30f;
+                    tb.Scale = new Vector3(1.5f, 1.8f, 1);
+                    tb.Translation = new Vector3(4, 5, 0);
+                    tb.CenterPoint = new Vector3(20, 10, 0);
+                }),
                 static (tb, text) => tb.Text == text, plain);
             await RunCase<WinUI.StackPanel>("StackPanelRotation",
-                text => VStack(TextBlock(text)), e => e.Rotation(90f),
+                text => VStack(TextBlock(text)), e => ((StackElement)e).Set(static sp => sp.Rotation = 90f),
                 static (sp, text) => sp.Children.Count == 1 && sp.Children[0] is WinUI.TextBlock c && c.Text == text,
                 plain);
+            // The modifiers take the visual, so the control goes to the visual lane, which a plain
+            // renter never rents from (§7.2).
+            await RunCase<WinUI.Border>("BorderModifiers", BorderOf,
+                e => e.Rotation(45f).Scale(1.2f).Translation(12, 18, 0).CenterPoint(new Vector3(50, 20, 0)),
+                IsBorderWith, new Expect(Facade: false, Recycled: false, Taken: true));
 
             // Since spec 066 layer 2 the transition modifiers run on the composition visual, so the
             // transforms live there and the control goes to the visual lane, which a plain renter
@@ -63,8 +76,9 @@ internal static class PooledFacadeTransformFixtures
             // the control's lifetime, even once removed. Clearing RenderTransform on return then
             // throws, and the pool must drop the control instead of failing the reconcile.
             await RunCase<WinUI.Border>("BorderTransitionRemoved", BorderOf,
-                e => ((BorderElement)e).Scale(1.2f).Set(b =>
+                e => ((BorderElement)e).Set(b =>
                 {
+                    b.Scale = new Vector3(1.2f, 1.2f, 1);
                     b.ScaleTransition = new Vector3Transition();
                     b.ScaleTransition = null;
                 }),
