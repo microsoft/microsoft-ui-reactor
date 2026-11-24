@@ -167,6 +167,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- `.LayoutAnimation()` uses linear easing for position and optional size changes in
+  non-spring mode (#1652).
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming

@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
@@ -124,6 +125,81 @@ internal static class LayoutAnimationFixtures
                 }
                 H.Check("LayoutAnim_SizeHasOffsetAnimation", hasOffset);
                 H.Check("LayoutAnim_SizeHasSizeAnimation", hasSize);
+            }
+        }
+    }
+
+    internal class LinearSizeProgress(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var config = new LayoutAnimationConfig
+            {
+                Duration = TimeSpan.FromMinutes(1),
+                AnimateOffset = false,
+                AnimateSize = true,
+            };
+            Element Stage(double width) =>
+                VStack(0, Border(null).Width(width).Height(40)
+                    .HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Top)
+                    .LayoutAnimation(config))
+                    .Width(300).Height(100).Background("#FFFFFFFF")
+                    .HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Top);
+
+            using var reconciler = new Reconciler();
+            var initial = Stage(80);
+            var stage = (Panel)reconciler.Mount(initial, static () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(stage.Children[0]);
+            var compositor = visual.Compositor;
+            // XAML content has its final layout size. Draw the visual's animated Size separately.
+            using var sprite = compositor.CreateSpriteVisual();
+            using var brush = compositor.CreateColorBrush(Microsoft.UI.Colors.Red);
+            using var sizeExpression = compositor.CreateExpressionAnimation("target.Size");
+            sprite.Brush = brush;
+            sizeExpression.SetReferenceParameter("target", visual);
+            sprite.StartAnimation("Size", sizeExpression);
+            ElementCompositionPreview.SetElementChildVisual(stage, sprite);
+
+            async Task<double> ReadWidthAsync()
+            {
+                await TransformsMatrixRecorder.Frames(3);
+                var box = (await Snap.CaptureAsync(stage)).RedBox();
+                return box is { } bounds ? bounds.X1 - bounds.X0 : double.NaN;
+            }
+
+            try
+            {
+                H.SetContent(stage);
+                await Harness.Render();
+                await TransformsMatrixRecorder.Frames(3);
+                visual.StopAnimation("Size");
+
+                reconciler.Update(initial, Stage(160), stage, static () => { });
+                await Harness.Render();
+                await TransformsMatrixRecorder.Frames(3);
+                var controller = visual.TryGetAnimationController("Size");
+                H.Check("LayoutAnimation_LinearSizeProgress_Controller", controller is not null);
+                if (controller is null) return;
+
+                controller.Pause();
+                controller.Progress = 0;
+                double startWidth = await ReadWidthAsync();
+                controller.Progress = 0.5f;
+                double midWidth = await ReadWidthAsync();
+                controller.Progress = 1;
+                double endWidth = await ReadWidthAsync();
+
+                double span = endWidth - startWidth;
+                double progress = (midWidth - startWidth) / span;
+                H.Check("LayoutAnimation_LinearSizeProgress_Midpoint",
+                    span > 20 && Math.Abs(progress - 0.5) <= 0.06,
+                    $"start={startWidth:F1} mid={midWidth:F1} end={endWidth:F1} progress={progress:F2}");
+            }
+            finally
+            {
+                ElementCompositionPreview.SetElementChildVisual(stage, null);
+                reconciler.UnmountChild(stage);
+                H.SetContent(null);
             }
         }
     }

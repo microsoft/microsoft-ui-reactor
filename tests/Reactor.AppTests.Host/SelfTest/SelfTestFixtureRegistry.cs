@@ -876,6 +876,7 @@ internal static class SelfTestFixtureRegistry
         ("LayoutAnimation_OffsetSetup", static harness => new LayoutAnimationFixtures.OffsetAnimationSetup(harness)),
         ("LayoutAnimation_SpringSetup", static harness => new LayoutAnimationFixtures.SpringAnimationSetup(harness)),
         ("LayoutAnimation_SizeSetup", static harness => new LayoutAnimationFixtures.SizeAnimationSetup(harness)),
+        ("LayoutAnimation_LinearSizeProgress", static harness => new LayoutAnimationFixtures.LinearSizeProgress(harness)),
         ("ImplicitSlots_LayoutKeepsTransition", static harness => new ImplicitAnimationSlotsFixtures.LayoutKeepsTransition(harness)),
         ("ImplicitSlots_RemovedTransitionClears", static harness => new ImplicitAnimationSlotsFixtures.RemovedTransitionClears(harness)),
         ("ImplicitSlots_RemovedFallbackTransitionClears", static harness => new ImplicitAnimationSlotsFixtures.RemovedFallbackTransitionClears(harness)),
