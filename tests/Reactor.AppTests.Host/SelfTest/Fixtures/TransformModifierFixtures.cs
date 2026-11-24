@@ -677,6 +677,31 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // An exit fade takes the opacity channel, so a pending check must not restart the keyframe
+            // over it. The child waits collapsed, then is removed so its exit fade plays.
+            using var reconciler = new Reconciler();
+            var child = Border(TextBlock("Exit Fade")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse)
+                .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade);
+            var withChild = VStack(child);
+            var without = VStack();
+            var panel = (FrameworkElement)reconciler.Mount(withChild, () => { })!;
+            var host = new Border { Child = panel, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            var control = (Border)Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(panel, 0);
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            await AfterNextCommit(visual);
+            reconciler.Update(withChild, without, panel, () => { });
+            host.Visibility = Visibility.Visible;
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_ExitFadeNotReplacedByLoop", restarts == 0, $"restarts={restarts}");
+            host.Child = null;
+            H.SetContent(null);
+        }
+
+        {
             // A Memo wrapper's .OnMount runs after its child armed the check, and its opacity write
             // replaces the keyframe the same way.
             using var reconciler = new Reconciler();

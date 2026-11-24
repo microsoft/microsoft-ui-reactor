@@ -6224,6 +6224,8 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyFadeTransition(UIElement uie, Compositor compositor, Curve curve, bool isEnter, TimeSpan delay)
     {
+        // The fade owns the opacity channel now, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         if (isEnter)
         {
