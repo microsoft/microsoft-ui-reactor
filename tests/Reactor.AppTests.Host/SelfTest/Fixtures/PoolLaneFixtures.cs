@@ -497,9 +497,13 @@ internal static class PoolLaneFixtures
         {
             const string p = "ElementPoolLanes_MemoKeyframes";
             using var lab = new Lab(H);
-            var first = await lab.Show(Memo("k", static () => Target("M")).Keyframes("pulse", 1, Pulse));
+            var first = await lab.Show(Memo("k", static () => Target("M").Opacity(0.4)).Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Mounted", first is WinUI.Border && ElementPool.IsVisualTaken(first));
+            if (first is null) return;
+            var state = Reconciler.GetOrCreateReactorState(first);
+            H.Check(p + "_TracksOpacity", state.OpacityKeyframe is not null && state.DeclaredOpacity.Value == 0.4f);
             await lab.Show(null);
+            H.Check(p + "_ClearsOpacityState", state.OpacityKeyframe is null && state.DeclaredOpacity == default);
 
             var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Recycled", ReferenceEquals(renter, first));

@@ -1012,6 +1012,8 @@ internal static class SelfTestFixtureRegistry
         // Animation combination tests — single features
         ("ModifierTransform_Direct", static harness => new TransformModifierFixture(harness, "Direct")),
         ("ModifierTransform_Transitions", static harness => new TransformModifierTransitionsFixture(harness)),
+        ("LoopingKeyframeOpacity", static harness => new KeyframeOpacityFixture(harness, loop: true)),
+        ("OneShotKeyframeOpacity", static harness => new KeyframeOpacityFixture(harness, loop: false)),
         ("ModifierTransform_RemovalOrdering", static harness => new TransformModifierOrderingFixture(harness)),
         ("ModifierTransform_Decorator", static harness => new TransformModifierDecoratorFixture(harness)),
         ("ModifierTransform_CompositionOwnership", static harness => new TransformCompositionOwnershipFixture(harness)),

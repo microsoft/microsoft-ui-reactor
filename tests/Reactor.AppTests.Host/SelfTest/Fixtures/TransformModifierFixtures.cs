@@ -815,23 +815,23 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
-            // A modifier write replaces the keyframe on its channel, so the check must not undo it.
+            // A declaration change before the first XAML push must survive the pending restart.
             using var reconciler = new Reconciler();
-            var plain = Border(TextBlock("Replaced Opacity Loop"));
+            var plain = Border(TextBlock("Deferred Opacity Loop"));
             var first = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
             var second = plain.Opacity(0.6).Keyframes("fade", 1, OpacityPulse);
             var control = (Border)reconciler.Mount(first, () => { })!;
             var visual = ElementCompositionPreview.GetElementVisual(control);
-            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
             reconciler.Update(first, second, control, () => { });
             H.SetContent(control);
             await Harness.Render();
             await AfterNextCommit(visual);
-            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
-            H.Check("TransformKeyframes_OpacityModifierReplacesLoop", restarts == 0
-                && visual.TryGetAnimationController("Opacity") is null && Math.Abs(visual.Opacity - 0.6f) < 0.001f,
-                $"restarts={restarts}, opacity={visual.Opacity}");
-            reconciler.Update(second, plain, control, () => { });
+            var playing = visual.TryGetAnimationController("Opacity");
+            H.Check("TransformKeyframes_OpacityModifierDefersDuringRestart", playing is not null
+                && Equals(playing, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity")));
+            reconciler.Update(second, plain.Opacity(0.6), control, () => { });
+            H.Check("TransformKeyframes_OpacityModifierRestoredAfterRestart",
+                visual.TryGetAnimationController("Opacity") is null && Math.Abs(visual.Opacity - 0.6f) < 0.001f);
             H.SetContent(null);
         }
 
@@ -931,11 +931,18 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 await AfterNextCommit(visual);
                 static bool Waiting(Border b) => Reconciler.KeyframeOpacityPendingForTests(b);
                 bool armed = Waiting(control);
+                var state = Reconciler.GetOrCreateReactorState(control);
+                bool tracksOpacity = state.OpacityKeyframe is not null && state.DeclaredOpacity.Value == 0.4f;
                 if (detach) Reconciler.DetachReactorState(control);
                 else reconciler.Dispose();
                 H.Check(detach ? "TransformKeyframes_DetachCancelsOpacityCheck" : "TransformKeyframes_DisposeCancelsOpacityCheck",
                     armed && !Waiting(control), $"armed={armed}, waiting={Waiting(control)}");
-                if (detach) reconciler.Dispose();
+                if (detach)
+                {
+                    H.Check("TransformKeyframes_DetachClearsOpacityState",
+                        tracksOpacity && state.OpacityKeyframe is null && state.DeclaredOpacity == default);
+                    reconciler.Dispose();
+                }
                 host.Child = null;
                 H.SetContent(null);
             }
@@ -974,6 +981,304 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             throw new TimeoutException("The compositor did not commit within 5s.");
         await commit;
         await Harness.Render();
+    }
+}
+
+/// <summary>Opacity keyframes hold the channel until removal (#1651) or completion (#1660).</summary>
+internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFixtureBase(h)
+{
+    public override async Task RunAsync()
+    {
+        await CheckPlayback(changeOpacity: true);
+        if (loop)
+        {
+            await CheckLoopReplay(withDeclaration: true, redeclare: true);
+            await CheckLoopReplay(withDeclaration: true);
+            await CheckLoopReplay(withDeclaration: false);
+            await CheckLoopReplay(withDeclaration: true, removeAfterReplay: true);
+            await CheckLoopReplay(withDeclaration: true, dropDeclaration: true);
+            await CheckFlyoutChildOpacityOnReplay();
+        }
+        else
+        {
+            await CheckPlayback(changeOpacity: false);
+            await CheckRemovedOneShotDeclaration();
+            await CheckOneShotReplayAfterLoop();
+        }
+    }
+
+    private async Task CheckOneShotReplayAfterLoop()
+    {
+        using var reconciler = new Reconciler();
+        var plain = VStack().Width(40).Height(40).Background("#FFFF0000");
+        var target = (StackPanel)reconciler.Mount(plain, () => { })!;
+        target.Style = new Style(typeof(StackPanel)) { Setters = { new Setter(UIElement.OpacityProperty, 0.65d) } };
+        var visual = AnimationHelper.GetElementVisual(target);
+        var stage = new Border { Width = 40, Height = 40, Child = target,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) };
+        var host = new Border { Width = 40, Height = 40, Child = stage };
+        H.SetContent(host);
+        try
+        {
+            var seed = plain.Opacity(0.4);
+            reconciler.Update(plain, seed, target, () => { });
+            await Harness.Render();
+            var pulse = plain.Keyframes("pulse", 1, k => k.Loop().Duration(10000).At(1, opacity: 0.9f));
+            var playing = pulse.Opacity(0.4);
+            reconciler.Update(seed, playing, target, () => { });
+            await Harness.Render();
+            H.Check("OpacityReplay_LoopStarted", visual.TryGetAnimationController("Opacity") is not null);
+
+            reconciler.Update(playing, pulse, target, () => { });
+            await Harness.Render();
+            var replay = plain.Keyframes("pulse", 2, k => k.Duration(150).At(1, opacity: 0.25f));
+            reconciler.Update(pulse, replay, target, () => { });
+            var state = Reconciler.GetOrCreateReactorState(target);
+            H.Check("OpacityReplay_OneShotStarted", visual.TryGetAnimationController("Opacity") is not null);
+            H.Check("OpacityReplay_OneShotCompleted", await Harness.WaitForWithin(() => state.OpacityKeyframe is null, 3000));
+            await Harness.Render();
+            var opacity = 1 - (await Snap.CaptureAsync(host)).Green(20, 20) / 255;
+            H.Check("OpacityReplay_OneShotEndpoint", Math.Abs(opacity - 0.25) < 0.02, $"opacity={opacity:F2}");
+
+            reconciler.Update(replay, plain, target, () => { });
+            H.Check("OpacityReplay_StyleRestoredOnRemoval", Math.Abs(visual.Opacity - 0.65f) < 0.001f,
+                $"visual={visual.Opacity}");
+        }
+        finally
+        {
+            reconciler.UnmountChild(target);
+            H.SetContent(null);
+        }
+    }
+
+    private async Task CheckRemovedOneShotDeclaration()
+    {
+        using var reconciler = new Reconciler();
+        var plain = VStack().Width(40).Height(40).Background("#FFFF0000");
+        var target = (FrameworkElement)reconciler.Mount(plain, () => { })!;
+        var visual = AnimationHelper.GetElementVisual(target);
+        var stage = new Border { Width = 40, Height = 40, Child = target,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) };
+        var host = new Border { Width = 40, Height = 40, Child = stage };
+        H.SetContent(host);
+        try
+        {
+            var seed = plain.Opacity(0.4);
+            reconciler.Update(plain, seed, target, () => { });
+            await Harness.Render();
+            var first = plain.Keyframes("first", 1, k => k.Duration(10000).At(1, opacity: 0.9f));
+            var playing = first.Opacity(0.4);
+            reconciler.Update(seed, playing, target, () => { });
+            var controller = visual.TryGetAnimationController("Opacity");
+            H.Check("OpacityOneShot_FirstStarted", controller is not null);
+            if (controller is null) return;
+            controller.Pause();
+            reconciler.Update(playing, first, target, () => { });
+            H.Check("OpacityOneShot_RemovalResetsImmediately", visual.TryGetAnimationController("Opacity") is null
+                && Math.Abs(visual.Opacity - 1) < 0.001f);
+
+            var replaced = first.Set(static control => ElementCompositionPreview.GetElementVisual(control).Opacity = 0.7f);
+            reconciler.Update(first, replaced, target, () => { });
+            await Harness.Render();
+            var second = plain.Keyframes("second", 1, k => k.Duration(150).At(1, opacity: 0.25f));
+            reconciler.Update(replaced, second, target, () => { });
+            var state = Reconciler.GetOrCreateReactorState(target);
+            H.Check("OpacityOneShot_SecondStarted", visual.TryGetAnimationController("Opacity") is not null);
+            H.Check("OpacityOneShot_SecondCompleted", await Harness.WaitForWithin(() => state.OpacityKeyframe is null, 3000));
+            await Harness.Render();
+            var opacity = 1 - (await Snap.CaptureAsync(host)).Green(20, 20) / 255;
+            H.Check("OpacityOneShot_StandaloneEndpoint", Math.Abs(opacity - 0.25) < 0.02, $"opacity={opacity:F2}");
+        }
+        finally { H.SetContent(null); }
+    }
+
+    private async Task CheckFlyoutChildOpacityOnReplay()
+    {
+        using var reconciler = new Reconciler();
+        var child = Border(TextBlock("Shared opacity"));
+        var menu = TextBlock("Menu");
+        var plain = Flyout(child, menu);
+        var target = (Border)reconciler.Mount(plain, () => { })!;
+        var visual = AnimationHelper.GetElementVisual(target);
+        H.SetContent(target);
+        try
+        {
+            var seed = plain.Opacity(0.4);
+            reconciler.Update(plain, seed, target, () => { });
+            await Harness.Render();
+            var pulse = plain.Keyframes("pulse", 1, k => k.Loop().Duration(60000).At(1, opacity: 0.9f));
+            var playing = pulse.Opacity(0.4);
+            reconciler.Update(seed, playing, target, () => { });
+            await Harness.Render();
+            H.Check("OpacityLoop_FlyoutLoopStarted", visual.TryGetAnimationController("Opacity") is not null);
+            reconciler.Update(playing, pulse, target, () => { });
+            await Harness.Render();
+
+            var updatedChild = child.Set(static control => ElementCompositionPreview.GetElementVisual(control).Opacity = 0.7f);
+            var replay = Flyout(updatedChild, menu).Keyframes("pulse", 2, k => k.Loop().Duration(60000).At(1, rotation: 90));
+            reconciler.Update(pulse, replay, target, () => { });
+            await Harness.Render();
+            H.Check("OpacityLoop_FlyoutRotationStarted", visual.TryGetAnimationController("RotationAngle") is not null);
+            H.Check("OpacityLoop_FlyoutChildSetterPreserved", visual.TryGetAnimationController("Opacity") is null
+                && Math.Abs(visual.Opacity - 0.7f) < 0.001f,
+                $"visual={visual.Opacity}");
+        }
+        finally { H.SetContent(null); }
+    }
+
+    private async Task CheckLoopReplay(bool withDeclaration, bool redeclare = false, bool removeAfterReplay = false,
+        bool dropDeclaration = false)
+    {
+        var name = dropDeclaration ? "OpacityLoop_RemovedDeclaration" : removeAfterReplay ? "OpacityLoop_RemovedReplay"
+            : redeclare ? "OpacityLoop_Redeclared" : withDeclaration ? "OpacityLoop_UnchangedDeclaration" : "OpacityLoop_KeyframesOnly";
+        using var reconciler = new Reconciler();
+        var plain = Border().Width(100).Height(40).Background("#FFFF0000");
+        var target = (Border)reconciler.Mount(plain, () => { })!;
+        target.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.65d) } };
+        // For the removed declaration case, seed the XAML facade before the keyframe takes the visual.
+        if (!dropDeclaration) AnimationHelper.GetElementVisual(target);
+        var stage = new Border { Width = 120, Height = 40, Child = target,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) };
+        var host = new Border { Width = 120, Height = 40, Child = stage };
+        H.SetContent(host);
+        try
+        {
+            var seed = withDeclaration ? plain.Opacity(0.4) : plain;
+            if (withDeclaration) reconciler.Update(plain, seed, target, () => { });
+            await Harness.Render();
+            var pulse = plain.Keyframes("pulse", 1, k => k.Loop().Duration(60000).At(0, opacity: 1).At(1, opacity: 0.9f));
+            var playing = withDeclaration ? pulse.Opacity(0.4) : pulse;
+            reconciler.Update(seed, playing, target, () => { });
+            await Harness.Render();
+            var visual = ElementCompositionPreview.GetElementVisual(target);
+            await Harness.WaitForWithin(() => !Reconciler.KeyframeOpacityPendingForTests(target), 3000);
+            var controller = visual.TryGetAnimationController("Opacity");
+            H.Check(name + "_Started", controller is not null);
+            if (controller is null) return;
+            controller.Pause();
+            controller.Progress = 0.5f;
+
+            if (redeclare || dropDeclaration)
+            {
+                H.Check(name + "_LocalSeed", target.ReadLocalValue(UIElement.OpacityProperty) is double local
+                    && Math.Abs(local - 0.4) < 0.001);
+                reconciler.Update(playing, pulse, target, () => { });
+                H.Check(name + "_StyleVisibleImmediately", target.ReadLocalValue(UIElement.OpacityProperty) == DependencyProperty.UnsetValue
+                    && Math.Abs(target.Opacity - 0.65) < 0.001);
+                playing = pulse;
+                if (redeclare)
+                {
+                    playing = pulse.Opacity(0.3);
+                    reconciler.Update(pulse, playing, target, () => { });
+                }
+                H.Check(name + "_HeldBeforeReplay", Equals(controller, visual.TryGetAnimationController("Opacity"))
+                    && Math.Abs(controller.Progress - 0.5f) < 0.001f);
+            }
+
+            var replay = plain.Width(120).Keyframes("pulse", 2, k => k.Loop().Duration(60000).At(1, rotation: 90));
+            if (withDeclaration && !dropDeclaration) replay = replay.Opacity(redeclare ? 0.3 : 0.4);
+            reconciler.Update(playing, replay, target, () => { });
+            await Harness.Render();
+            H.Check(name + "_RotationStarted", visual.TryGetAnimationController("RotationAngle") is not null);
+            if (dropDeclaration)
+                H.Check(name + "_StyleRestored", visual.TryGetAnimationController("Opacity") is null
+                    && Math.Abs(visual.Opacity - 0.65f) < 0.001f, $"visual={visual.Opacity}");
+            else if (redeclare)
+                H.Check(name + "_LatestOpacity", visual.TryGetAnimationController("Opacity") is null
+                    && Math.Abs(target.Opacity - 0.3) < 0.001 && Math.Abs(visual.Opacity - 0.3f) < 0.001f,
+                    $"native={target.Opacity}, visual={visual.Opacity}");
+            else
+            {
+                H.Check(name + "_OriginalLoopRetained", Equals(controller, visual.TryGetAnimationController("Opacity"))
+                    && Math.Abs(controller.Progress - 0.5f) < 0.001f);
+                if (removeAfterReplay)
+                {
+                    reconciler.Update(replay, plain.Width(120).Opacity(0.4), target, () => { });
+                    await Harness.Render();
+                    var opacity = 1 - (await Snap.CaptureAsync(host)).Green(20, 20) / 255;
+                    H.Check(name + "_DeclaredOpacityRestored", visual.TryGetAnimationController("Opacity") is null
+                        && Math.Abs(opacity - 0.4) < 0.02, $"opacity={opacity:F2}");
+                }
+                else
+                {
+                    reconciler.Update(replay, replay.Opacity(0.3), target, () => { });
+                    await Harness.Render();
+                    H.Check(name + "_OpacityAfterReplay", visual.TryGetAnimationController("Opacity") is null
+                        && Math.Abs(target.Opacity - 0.3) < 0.001 && Math.Abs(visual.Opacity - 0.3f) < 0.001f,
+                        $"native={target.Opacity}, visual={visual.Opacity}");
+                }
+            }
+        }
+        finally { H.SetContent(null); }
+    }
+
+    private async Task CheckPlayback(bool changeOpacity)
+    {
+        var name = loop ? "OpacityLoop" : changeOpacity ? "OpacityOneShot_Update" : "OpacityOneShot_ExistingDeclaration";
+        using var reconciler = new Reconciler();
+        var plain = VStack().Width(100).Height(40).Background("#FFFF0000");
+        var seed = plain.Opacity(changeOpacity ? 1 : 0.8);
+        bool pauseRotation = !loop && changeOpacity;
+        var playing = seed.Keyframes("pulse", 1, k =>
+        {
+            if (loop) k.Loop();
+            return k.Duration(10000).At(0, opacity: 0.9f).At(1, opacity: 1, rotation: pauseRotation ? 90f : null);
+        });
+        var target = (FrameworkElement)reconciler.Mount(changeOpacity ? playing : seed, () => { })!;
+        H.SetContent(target);
+        try
+        {
+            var visual = ElementCompositionPreview.GetElementVisual(target);
+            await Harness.Render();
+            if (!changeOpacity)
+            {
+                // Add a one-shot after the declared 0.8 is already visible.
+                reconciler.Update(seed, playing, target, () => { });
+                await Harness.Render();
+            }
+            var controller = visual.TryGetAnimationController("Opacity");
+            H.Check(name + "_Started", controller is not null);
+            if (controller is null) return;
+            controller.Pause();
+            controller.Progress = 0.5f;
+
+            var rotation = pauseRotation ? visual.TryGetAnimationController("RotationAngle") : null;
+            if (pauseRotation)
+            {
+                H.Check(name + "_RotationStarted", rotation is not null);
+                if (rotation is null) return;
+                rotation.Pause();
+                rotation.Progress = 0.25f;
+            }
+
+            var latest = playing;
+            if (changeOpacity)
+            {
+                var intermediate = playing.Opacity(0.85);
+                latest = playing.Opacity(0.8);
+                reconciler.Update(playing, intermediate, target, () => { });
+                reconciler.Update(intermediate, latest, target, () => { });
+                await Harness.Render();
+                H.Check(name + "_PlaybackPreserved", Equals(controller, visual.TryGetAnimationController("Opacity"))
+                    && Math.Abs(controller.Progress - 0.5f) < 0.001f);
+            }
+
+            if (loop)
+                reconciler.Update(latest, plain.Opacity(0.8), target, () => { });
+            else
+            {
+                controller.PlaybackRate = 16;
+                controller.Resume();
+            }
+            H.Check(name + "_DeclaredOpacityRestored", await Harness.WaitForWithin(
+                () => visual.TryGetAnimationController("Opacity") is null
+                    && Math.Abs(target.Opacity - 0.8) < 0.001 && Math.Abs(visual.Opacity - 0.8f) < 0.001f, 3000),
+                $"native={target.Opacity}, visual={visual.Opacity}");
+            if (rotation is not null)
+                H.Check(name + "_RotationStillPaused", Equals(rotation, visual.TryGetAnimationController("RotationAngle"))
+                    && Math.Abs(rotation.Progress - 0.25f) < 0.001f, $"progress={rotation.Progress}");
+        }
+        finally { H.SetContent(null); }
     }
 }
 
