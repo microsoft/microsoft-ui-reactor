@@ -715,6 +715,82 @@ internal static partial class MarkdownSelectionFixtures
         }
     }
 
+    internal class ViewportEdgeAutoscroll(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var options = new MarkdownTextSelectionOptions();
+            var host = H.CreateHost();
+            foreach (bool modern in new[] { false, true })
+            {
+                string kind = modern ? "ScrollView" : "ScrollViewer";
+                Element content = VStack(
+                    TextBlock("earlier messages").Height(300),
+                    MarkdownTextSelection.Scope(options,
+                        Md("select this message", new MarkdownOptions { TextSelection = options })),
+                    TextBlock("later messages").Height(300));
+                Element scrollElement = modern ? ScrollView(content) : ScrollViewer(content);
+                host.Mount(_ => scrollElement.Height(240).Width(400));
+                await Harness.Render();
+                await WaitForLoadedScopes(H);
+                var selection = H.FindControl<MarkdownSelectionHost>(_ => true)!;
+                var scroller = modern
+                    ? (Microsoft.UI.Xaml.FrameworkElement)H.FindControl<ScrollView>(_ => true)!
+                    : H.FindControl<ScrollViewer>(_ => true)!;
+                double Offset() => scroller is ScrollView current ? current.VerticalOffset : ((ScrollViewer)scroller).VerticalOffset;
+                if (scroller is ScrollView view)
+                    view.ScrollTo(0, 200, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+                else
+                    ((ScrollViewer)scroller).ChangeView(null, 200, null, true);
+                if (!await Harness.WaitFor(() => Math.Abs(Offset() - 200) < .5, perPassMs: 16))
+                    throw new InvalidOperationException($"{kind} did not reach the nonzero baseline: {Offset()}.");
+                selection.Refresh();
+                var viewport = selection.ScrollViewport();
+                var message = selection.Viewport();
+                H.Check($"MdSelection_{kind}_MessageIsInsideViewport",
+                    viewport.Top < -50 && viewport.Bottom > selection.ActualHeight + 50
+                    && Math.Abs(message.Top) < .5 && Math.Abs(message.Height - selection.ActualHeight) < .5,
+                    $"viewport={viewport}; message={message}; height={selection.ActualHeight}; offset={Offset()}");
+
+                double before = Offset();
+                selection.Select(7, 10);
+                selection.ScrollDrag(selection.RootPoint(new Point(30, -12)));
+                bool scrolledAboveMessage = await Harness.WaitFor(() => Math.Abs(Offset() - before) > .5,
+                    maxPasses: 6, perPassMs: 16);
+                H.Check($"MdSelection_{kind}_AboveMessageDoesNotScroll",
+                    !scrolledAboveMessage && selection.Document.SelectedText == "thi",
+                    $"before={before}; after={Offset()}; selected={selection.Document.SelectedText}");
+                before = Offset();
+                selection.ScrollDrag(selection.RootPoint(new Point(30, selection.ActualHeight + 12)));
+                bool scrolledBelowMessage = await Harness.WaitFor(() => Math.Abs(Offset() - before) > .5,
+                    maxPasses: 6, perPassMs: 16);
+                H.Check($"MdSelection_{kind}_BelowMessageDoesNotScroll", !scrolledBelowMessage,
+                    $"before={before}; after={Offset()}");
+
+                before = Offset();
+                selection.ScrollDrag(selection.RootPoint(new Point(30, viewport.Top - 12)));
+                bool scrolledUp = await Harness.WaitFor(() => Offset() < before - 1, perPassMs: 16);
+                H.Check($"MdSelection_{kind}_ViewportTopScrollsUp",
+                    scrolledUp,
+                    $"before={before}; after={Offset()}; caret={selection.Document.Caret}");
+                before = Offset();
+                selection.ScrollDrag(selection.RootPoint(new Point(30, selection.ScrollViewport().Bottom + 12)));
+                bool scrolledDown = await Harness.WaitFor(() => Offset() > before + 1, perPassMs: 16);
+                H.Check($"MdSelection_{kind}_ViewportBottomScrollsDown",
+                    scrolledDown,
+                    $"before={before}; after={Offset()}; caret={selection.Document.Caret}");
+                before = Offset();
+                for (int tick = 0; tick < 3; tick++)
+                {
+                    selection.ScrollDrag(selection.RootPoint(new Point(30, -12)));
+                    await Harness.Render();
+                }
+                H.Check($"MdSelection_{kind}_InteriorScrollDragCallsLeaveOffsetUnchanged", Math.Abs(Offset() - before) < .5,
+                    $"before={before}; after={Offset()}");
+            }
+        }
+    }
+
     internal class ItemsViewClippedNavigation(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
