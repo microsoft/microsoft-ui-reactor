@@ -742,7 +742,7 @@ internal static class RegisterTypeElementTagFixtures
 
             await Harness.Render();
             CheckTag($"{Name}_Mount_TaggedWithCurrentElement", control, rendered);
-            H.Check($"{Name}_Mount_VisualUntouched", control is not null && !ElementPool.IsCompositorTainted(control));
+            H.Check($"{Name}_Mount_VisualUntouched", control is not null && !ElementPool.IsVisualTaken(control));
 
             H.ClickButton("RTT Rename exit");
             H.Check($"{Name}_Renamed", await Harness.WaitFor(() => control?.Text == "rtt-exit-b"));
@@ -750,7 +750,7 @@ internal static class RegisterTypeElementTagFixtures
 
             H.ClickButton("RTT Remove exit");
             await Harness.Render();
-            H.Check($"{Name}_RemovalPlayedExitTransition", control is not null && ElementPool.IsCompositorTainted(control),
+            H.Check($"{Name}_RemovalPlayedExitTransition", control is not null && ElementPool.IsVisualTaken(control),
                 "the control was removed without its exit transition");
         }
 

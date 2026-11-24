@@ -284,6 +284,26 @@ setting today. This spec doesn't change them.
 equivalent on the handoff visual, so it stays a XAML property. Two changes are needed. The pool clears
 it (§7), and an update that drops `.BackgroundTransition()` sets it back to null (§6.3).
 
+### §5.7 As shipped in layer 2
+
+- **The visual is taken even with animations off.** `ApplyImplicitTransitions` takes it whenever one of
+  the four transitions is declared, and only then applies the §5.5 gate. So readback (§9 row 2), the
+  setters that throw (§9 row 1) and the pool lane (§7.2 demand) don't depend on a machine setting.
+- **`TranslationTransition` is a claim without a key.** It goes through `ImplicitAnimationSlots` under
+  the `"Translation"` key like the others (so slots, chain precedence, release and `ReleaseAll` apply),
+  but the sink publishes nothing for it. `ResolvePolicy` reads the effective claim.
+- **Mount order is unchanged** (modifiers, then transitions), so a declared initial value jumps, which
+  matches the compositor half of Layer V's write-then-attach probe. A XAML transition attached after the
+  write has nothing to animate either, so no §9 row is needed.
+- **A `.Set`-written `OpacityTransition` locks `RenderTransform` too**, like the transform transitions
+  (measured in `ElementPoolLanes_ImplicitTransitions`). The pool nulls it and the `RenderTransform` reset
+  then refuses, so the control is dropped rather than leaked (§7.4).
+- **Fixtures.** `CompositorTransitionFixtures` (#1623 per transition × feature × order, curve, mask,
+  reduced motion, same-reconcile ordering, readback, Background removal, the §9 diagnostic) and
+  `PoolLaneFixtures.ImplicitTransitionResidue`. The curve and mask oracles read RenderTargetBitmap with a
+  seeked controller and skip, with a positive control, on a desktop where RTB doesn't show composition
+  animations in flight (the same condition that fails `TransformsMatrix_Instrument_Motion`).
+
 ## §6 ImplicitAnimations ownership
 
 ### §6.1 Rules
@@ -399,7 +419,9 @@ context as a new argument. The **visual lane** is eligible only when both of the
   A transform counts only when its effective value isn't identity, the same rule as §3 invariant 2.
   An identity-only chain such as `Border().Scale(1).Ref(r)` would never take the visual on a fresh
   control, so it must not get a visual-lane control that would throw on a later facade write
-  through the ref.
+  through the ref. For the same reason a feature counts only when it takes the visual at mount:
+  `.InteractionStates` takes it on the first state change, an exit-only `.Transition` on removal,
+  and `.ScrollLinked` without a `ScrollViewer` never, so none of those is demand on its own.
 - *Compatibility.* No declaration in the chain carries setters (`.Set`, `.OnMount`-style callbacks) and
   the control isn't a custom or third-party handler. A setter could write a facade that throws on a
   rented visual-taken control but works on a fresh one. Example: `.Set(b => b.Rotation = 10).Scale(2)`
@@ -423,20 +445,33 @@ managed wrapper, which another RCW for the same control doesn't see (the duplica
 
 Applied in `CleanElement` when the control's `VisualTaken` flag is set. Measured cost is in §11.
 
-1. `StopAnimation` for `Opacity`, `Scale`, `RotationAngle`, `RotationAngleInDegrees`, `CenterPoint`,
-   `Offset`, `Size`, `Orientation`, `AnchorPoint` and `TransformMatrix`. Stop `Translation` **only if the
+1. `StopAnimation` for every animatable `Visual` property: `Opacity`, `Scale`, `RotationAngle`,
+   `RotationAngleInDegrees`, `RotationAxis`, `CenterPoint`, `Offset`, `Size`, `Orientation`, `AnchorPoint`,
+   `TransformMatrix`, `RelativeOffsetAdjustment` and `RelativeSizeAdjustment`. A `.ScrollLinked` expression
+   can target any of them, and a keyed `Memo`'s isn't stopped at unmount. Stopping a property also stops its
+   subchannels (`Offset.Y`). Stop `Translation` **only if the
    property exists** (`Properties.TryGetVector3("Translation")`). `StopAnimation` on a property-set entry
    that was never inserted throws `ArgumentException` (measured in the perf run). Step 1 also stops a
    `.TransformOrigin` expression and looping keyframes.
 2. `ImplicitAnimationSlots.ReleaseAll` (`ImplicitAnimations = null`).
-3. Identity writes. `Opacity = 1`, `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
+3. Identity writes. `Opacity = 1`. XAML pushes `UIElement.Opacity` to the visual only when it changes, so on the first
+   layout pass that finds a visual-lane renter in the live tree (or its `Loaded`, which WinUI can raise late or skip for a
+   re-added control), the visual gets its `UIElement.Opacity` unless a Reactor feature owns the visual's
+   opacity by then, or something wrote the visual first (navigation hiding a page). The renter's implicit `Opacity`
+   key is held back for that write, so the value shows without a fade. Otherwise a style or modifier opacity equal to the previous renter's would never reach it.
+   Then `Scale = One`, `RotationAngle = 0`, `RotationAxis = UnitZ`,
    `CenterPoint = Zero`, `AnchorPoint = Zero`, `Orientation = Identity`, `TransformMatrix = Identity`,
-   `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
+   zero relative adjustments, `Clip = null`, and `Properties["Translation"] = Zero` when the property exists. Then `SetIsTranslationEnabled(false)`,
    and then `UIElement.Translation = Zero` when it isn't already. That facade stays writable after the
    handoff (Q8a, P1g). §4.3 leaves it to user code when no Reactor Translation channel is declared, so
    a control mounted with `.Set(b => b.Translation = …).Scale(2)` would otherwise carry its offset to
    the next renter.
-   `Offset` and `Size` are left to layout (P2).
+   `Offset` and `Size` belong to layout (P2). Layout writes `Offset` only when the position changes, so a
+   stopped animation's last value, or a direct write through the visual, would stay. The reset writes
+   `ActualOffset` back unconditionally, because a stopped expression's last value lands after the stop. The control has
+   usually left the tree by then, where `ActualOffset` reads zero, so the renter's load-time sync (below) also writes its own
+   layout offset, with its implicit `Offset` key held back. `Size`
+   is left alone, since a fresh handoff visual doesn't reliably carry `ActualSize`.
 4. Clear the `ReactorState` composition bookkeeping. That covers `CompositionModifierProperties`,
    `TransformRest`, `KeyframeChannelOwners`, `DeferredModifierResets`, the implicit-slot claims, the
    origin bookkeeping, and the keyframe trigger table entries for the control. The origin itself is put

@@ -33,6 +33,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private readonly Dictionary<MarkdownSelectionMarker, Rect> _surfaceBounds = [];
     private readonly HashSet<FrameworkElement> _layoutOwners = [];
     private readonly Dictionary<MarkdownSelectionMarker, TextSegment[]> _segments = [];
+    private readonly Dictionary<FrameworkElement, GeneralTransform> _transforms = [];
     private readonly DispatcherTimer _dragTimer = new() { Interval = TimeSpan.FromMilliseconds(40) };
     private readonly DispatcherTimer _clickTimer = new();
     private readonly PointerEventHandler _pressed;
@@ -66,7 +67,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal MarkdownTextSelectionOptions Options { get; set; } = null!;
     internal UIElement? Body { get; private set; }
     internal MarkdownSelectionDocument Document { get; } = new();
+    internal bool IsDocumentDirty => _documentDirty;
+    internal bool IsTrackingLayout => _trackingLayout;
+    internal bool HasPendingNativePress => _nativePressOwner is not null;
     internal int CachedCharacterCount => _characterRects.Count;
+    internal int LayoutPassCount { get; private set; }
+    internal int MembershipCheckCount { get; private set; }
+    internal int SegmentReadCount { get; private set; }
+    internal int TransformCount { get; private set; }
 
     internal MarkdownSelectionHost()
     {
@@ -100,17 +108,21 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal void InvalidateDocument()
     {
         _documentDirty = true;
-        if (_loaded && !_trackingLayout && !_refreshPending)
+        if (_loaded && !_trackingLayout && !_refreshPending && _automationPeer is not null
+            && AutomationPeer.ListenerExists(AutomationEvents.TextPatternOnTextChanged))
         {
-            // A real content/layout invalidation gets one coalesced refresh; idle scopes
-            // remain detached from the window-wide LayoutUpdated event.
             _refreshPending = true;
             UpdateLayoutTracking();
+            // LayoutUpdated only fires after a layout pass. Semantic-only changes
+            // (a Visibility gate, surface text or separator) don't schedule one.
+            InvalidateArrange();
         }
     }
 
     private void UpdateLayoutTracking()
     {
+        // LayoutUpdated is window-wide, not subtree-scoped. Idle messages must
+        // unsubscribe, rather than scan native text merely to discover no change.
         bool track = !_detached && _loaded && (_refreshPending || _pointer is not null
             || _nativePressOwner is not null || Document.Start != Document.End || HasVisibleCaret);
         if (track == _trackingLayout) return;
@@ -193,7 +205,9 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void OnLayout(object? sender, object e)
     {
         if (_detached || !IsLoaded) return;
+        LayoutPassCount++;
         _refreshPending = false;
+        _transforms.Clear();
         _surfaceBounds.Clear();
         CheckMembership();
         bool nativeTextChanged = InvalidateNativeSegments();
@@ -272,6 +286,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         ClearVisibilitySubscriptions();
         _layoutOwners.Clear();
         _segments.Clear();
+        _transforms.Clear();
         _documentDirty = true;
         Document.Rebuild([]);
         _overlay.Children.Clear();
@@ -299,6 +314,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     private void CheckMembership()
     {
+        MembershipCheckCount++;
         _membership.Clear();
         _visibilityNodes.Clear();
         if (Body is not null) Visit(Body, _membership, ancestorsVisible: true);
@@ -317,6 +333,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         {
             if (!membershipChecked)
             {
+                _transforms.Clear();
                 _surfaceBounds.Clear();
                 CheckMembership();
             }
@@ -434,10 +451,21 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     {
         try
         {
+            TransformCount++;
             return element.TransformToVisual(this)
                 .TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
         }
         catch (ArgumentException) { return default; }
+    }
+
+    private GeneralTransform Transform(FrameworkElement element)
+    {
+        if (!_transforms.TryGetValue(element, out var transform))
+        {
+            TransformCount++;
+            _transforms[element] = transform = element.TransformToVisual(this);
+        }
+        return transform;
     }
 
     private Rect SurfaceBounds(MarkdownSelectionMarker surface)
@@ -495,6 +523,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     {
         if (source is Hyperlink hyperlink)
         {
+            Refresh();
             for (var node = (DependencyObject)hyperlink; node is not null && !ReferenceEquals(node, this);
                 node = VisualTreeHelper.GetParent(node))
             {
@@ -580,11 +609,11 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         var link = LinkSegmentAtPoint(_dragPoint, glyphOffset, entry, e.OriginalSource as Hyperlink);
         var nativeOwner = (UIElement?)linkButton ?? link?.Owner;
         _pointer = e.Pointer;
+        UpdateLayoutTracking();
         if (nativeOwner is not null && count == 1 && !shift)
         {
             // Let the native control activate and retain focus for an ordinary click.
             _nativePressOwner = nativeOwner;
-            UpdateLayoutTracking();
             DrawSelection();
             return;
         }
@@ -727,7 +756,6 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (!CanHandleKey(e.OriginalSource, e.Handled)) return;
-        Refresh();
         bool extend = IsDown(VirtualKey.Shift), ctrl = IsDown(VirtualKey.Control);
         e.Handled = HandleKey(e.Key, extend, ctrl);
     }
@@ -766,13 +794,14 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     internal bool HandleKey(VirtualKey key, bool extend, bool ctrl)
     {
+        Refresh();
         switch (key)
         {
             case VirtualKey.A when ctrl:
                 Document.Select(0, Document.Text.Length);
                 break;
             case VirtualKey.C when ctrl:
-                CopySelection();
+                CopySelectionCore();
                 break;
             case VirtualKey.Left:
                 Document.Move(-1, extend);
@@ -806,6 +835,12 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     internal void CopySelection(Action<string>? write = null)
     {
+        Refresh();
+        CopySelectionCore(write);
+    }
+
+    private void CopySelectionCore(Action<string>? write = null)
+    {
         string text = Document.SelectedText;
         if (text.Length == 0) return;
         MarkdownSelectionCopy.Write(text, write ?? (static value =>
@@ -831,7 +866,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         var entry = Document.EntryAt(Document.Caret);
         if (entry?.Identity is not MarkdownSelectionMarker marker) return;
         var rect = CharacterBounds(Document.Caret);
-        var local = marker.TransformToVisual(this).Inverse.TransformBounds(rect);
+        var local = Transform(marker).Inverse.TransformBounds(rect);
         marker.StartBringIntoView(new BringIntoViewOptions { TargetRect = local, AnimationDesired = false });
     }
 
@@ -946,7 +981,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             var pointer = segment.Start.GetPositionAtOffset(endOffset, LogicalDirection.Backward);
             if (pointer is not null)
             {
-                var end = segment.Owner.TransformToVisual(this).TransformBounds(
+                var end = Transform(segment.Owner).TransformBounds(
                     pointer.GetCharacterRect(LogicalDirection.Backward));
                 return _glyphRects[(offset, next)] = GlyphRectangle(start, end);
             }
@@ -1015,7 +1050,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         if (entry?.Identity is not MarkdownSelectionMarker marker) return;
         marker.StartBringIntoView(new BringIntoViewOptions
         {
-            TargetRect = marker.TransformToVisual(this).Inverse.TransformBounds(CharacterBounds(offset)),
+            TargetRect = Transform(marker).Inverse.TransformBounds(CharacterBounds(offset)),
             VerticalAlignmentRatio = alignToTop ? 0 : 1,
             AnimationDesired = false
         });
@@ -1039,7 +1074,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             var pointer = segment.Start.GetPositionAtOffset(segmentOffset, LogicalDirection.Forward);
             if (pointer is not null)
             {
-                var rect = segment.Owner.TransformToVisual(this).TransformBounds(
+                var rect = Transform(segment.Owner).TransformBounds(
                     pointer.GetCharacterRect(LogicalDirection.Forward));
                 rect.Width = Math.Max(1, rect.Width);
                 rect.Height = Math.Max(1, rect.Height);
@@ -1069,7 +1104,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             if (!_segments.TryGetValue(surface, out var cached)) continue;
             int index = 0;
             bool matches = true;
-            foreach (var current in SurfaceTextSegments(surface))
+            foreach (var current in ReadSegments(surface))
             {
                 if (current.Text.Length == 0) continue;
                 if (index >= cached.Length || !ReferenceEquals(current.Identity, cached[index].Identity)
@@ -1135,7 +1170,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         if (!_segments.TryGetValue(marker, out var segments))
         {
             int offset = 0;
-            _segments[marker] = segments = SurfaceTextSegments(marker).Where(segment => segment.Text.Length > 0)
+            _segments[marker] = segments = ReadSegments(marker).Where(segment => segment.Text.Length > 0)
                 .Select(segment =>
                 {
                     var indexed = segment with { LocalStart = offset };
@@ -1145,6 +1180,12 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
         }
 
         return segments;
+    }
+
+    private IEnumerable<TextSegment> ReadSegments(MarkdownSelectionMarker marker)
+    {
+        SegmentReadCount++;
+        return SurfaceTextSegments(marker);
     }
 
     private static IEnumerable<TextSegment> SurfaceTextSegments(MarkdownSelectionMarker marker)
@@ -1198,6 +1239,11 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
 
     private void DrawSelection()
     {
+        if (Document.Start == Document.End && (FocusState == FocusState.Unfocused || Document.Text.Length == 0))
+        {
+            if (_overlay.Children.Count > 0) _overlay.Children.Clear();
+            return;
+        }
         // Keep layout stable: the overlay is non-hit-testable and never participates
         // in document registration. Only selected, viewport-intersecting cells are drawn.
         _selectionRectangles.Clear();
@@ -1249,6 +1295,12 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     }
 
     internal void Select(int start, int end)
+    {
+        Refresh();
+        SelectRefreshed(start, end);
+    }
+
+    internal void SelectRefreshed(int start, int end)
     {
         Document.Select(start, end);
         DrawSelection();

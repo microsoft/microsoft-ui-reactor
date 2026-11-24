@@ -4,11 +4,12 @@
 The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI controls so a scroll-heavy
 list or fast-mounting subtree doesn't allocate a fresh `TextBlock` /
 `Button` / `Border` on every render. Each WinUI type gets its own
-fixed-size stack (cap 32) inside `ElementPool`; the
-[reconciler](reconciliation.md) calls `TryRent(typeof(T))` on mount
-and `Return(element)` on unmount. This page documents the rental
-contract, the cleanup pass that resets a returned element, and the
-exclusions that keep pooling safe — composition-tainted visuals,
+fixed-size stacks (cap 32 per lane) inside `ElementPool`; the
+[reconciler](reconciliation.md) rents on mount and calls
+`Return(element)` on unmount. This page documents the rental
+contract, the two lanes that keep a control whose composition visual
+was taken away from code that can't use it, the cleanup pass that
+resets a returned element, and the exclusions that keep pooling safe —
 transform-transition locks, non-poolable types, and parent-state
 corner cases.
 
@@ -20,20 +21,20 @@ handlers in `Reconciler.Mount.cs` allocate their structural wrappers
 directly.
 
 ```csharp
-public FrameworkElement? TryRent(Type type)
+internal FrameworkElement? TryRent(Type type, bool visualLane)
 {
     if (!Enabled) return null;
     if (!PoolableTypes.Contains(type)) return null;
+    if (visualLane && _visualPools.TryGetValue(type, out var taken) && taken.Count > 0) return Rented(taken.Pop());
     if (!_pools.TryGetValue(type, out var stack) || stack.Count == 0) return null;
-    var item = stack.Pop();
-    return item;
+    return Rented(stack.Pop());
 }
 ```
 
-![Element-pool state machine: a control starts unpooled, transitions to Rented on Mount, to Returning on Unmount, and back to Pooled after ForceDetach + CleanElement — unless the per-type cap is exceeded or the control became compositor-tainted, in which case it falls out of pooling.](images/element-pool/rental-states.svg)
+![Element-pool state machine: a control starts unpooled, transitions to Rented on Mount, to Returning on Unmount, and back to Pooled after ForceDetach + CleanElement — unless the lane's cap is exceeded or WinUI refused the reset, in which case it falls out of pooling.](images/element-pool/rental-states.svg)
 
 `TryRent` is three checks and a pop: pool enabled, type in the
-poolable set, stack non-empty. Anything that fails returns `null` and
+poolable set, a non-empty lane. Anything that fails returns `null` and
 the caller falls through to `new TextBlock()` / `new WinUI.Button()`.
 The exclusions are deliberate — the live-previewer can flip
 `Pool.Enabled = false` when recycled controls with stale property
@@ -57,6 +58,45 @@ modifier or `.Set` callback might have written, and adding a type to
 `PoolableTypes` without a matching `CleanElement` case would leak
 property state into the next reader's mount.
 
+## Two lanes
+
+Taking a control's composition visual (`ElementCompositionPreview.GetElementVisual`)
+is permanent. Reactor takes it for `.Animate()`, `.Transition()`,
+`.InteractionStates()`, `.Keyframes()`, `.LayoutAnimation()`,
+`.ScrollLinked()`, the implicit transitions (`.OpacityTransition()`,
+`.ScaleTransition()`, `.RotationTransition()`, `.TranslationTransition()`)
+and the children of a `.Stagger()` panel. After that
+WinUI refuses every write to the control's `Rotation`, `Scale`,
+`CenterPoint`, `RotationAxis` and `TransformMatrix` facades and to its
+XAML implicit transitions (`OpacityTransition` and friends), even an
+identity write. So each type has two lanes:
+
+| Lane | Holds | Who rents from it |
+|---|---|---|
+| Plain | Controls whose visual was never taken | Everyone, as before |
+| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual at mount (`.Animate()`, an enter `.Transition()`, `.Keyframes()`, `.LayoutAnimation()`, `.ScrollLinked()`, an implicit transition other than `.BackgroundTransition()`) and carries no `.Set` setters or `.OnMount` callbacks |
+
+An eligible element takes from the visual lane first and falls back to
+the plain lane. Every other element only takes from the plain lane, so
+user code never meets a control it couldn't have met fresh: a
+`Border().Set(b => b.Rotation = 10)` gets a plain control, never one
+whose rotation facade would throw. `.InteractionStates()` and an
+exit-only `.Transition()` don't make an element eligible, because a
+fresh control keeps writable facades until the first hover or the
+removal.
+
+`Return` picks the lane from a `VisualTaken` marker that every handoff
+sets on the native control's attached state, so it holds whichever
+managed wrapper reaches the control. Before a visual-lane control is
+pushed, `CleanElement` stops every compositor animation on it, drops
+its implicit animations, writes identity to the visual (opacity, scale,
+rotation, center point, anchor point, orientation, transform matrix,
+clip and translation), disables translation, zeroes the `Translation`
+facade and forgets Reactor's composition bookkeeping. `Offset` and
+`Size` are left to layout. Navigation pages are never pooled, because a
+navigation transition's completion can still reach them after they
+leave the tree.
+
 ## Returning on unmount
 
 `Return` is the more interesting half. A control coming back to the
@@ -70,37 +110,48 @@ public void Return(FrameworkElement element)
     if (!Enabled) return;
     var type = element.GetType();
     if (!PoolableTypes.Contains(type)) return;
+    // A handler may return its control through UnmountContext.ReturnControl and the engine
+    // return it again. Pushing it twice would hand one control to two renters.
+    if (_pooled.Contains(element)) return;
 
-    // Don't pool elements that had GetElementVisual() called — they permanently
-    // lose XAML implicit transition API access (OpacityTransition, etc.).
-    if (IsCompositorTainted(element)) return;
+    // The lane follows the native control's marker, whichever wrapper reached it (#1643).
+    var state = element.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
+    // A renter returned before it loaded must not stay on the window's layout list.
+    if (state is not null) StopOpacitySync(element, state);
+    if (state?.PoolExcluded == true)
+    {
+        if (state.ReleaseWhenExcluded)
+        {
+            Reconciler.ClearElementTag(element);
+            Reconciler.ClearCurrentEventHandlers(element);
+        }
+        return;
+    }
+    var lanes = state?.VisualTaken == true ? _visualPools : _pools;
 
-    // Issue #1614: attaching an implicit transform transition permanently locks
-    // RenderTransform (nulling the transition does not release it), so such a control is
-    // no longer interchangeable with a fresh one. Same reasoning as the taint check above.
-    // This is the fast path; the catch around CleanElement below is the backstop for a
-    // control whose transition was attached and later removed.
-    if (element.ScaleTransition is not null || element.RotationTransition is not null
-        || element.TranslationTransition is not null) return;
-
-    if (!_pools.TryGetValue(type, out var stack))
+    if (!lanes.TryGetValue(type, out var stack))
     {
         stack = new Stack<FrameworkElement>();
-        _pools[type] = stack;
+        lanes[type] = stack;
     }
 
     if (stack.Count >= MaxPerType) return;
 ```
 
-The path runs in six steps after the type check: composition-taint
-check (a visual that has had `GetElementVisual()` called permanently
-loses access to XAML implicit transitions like `OpacityTransition`,
-so it must not be pooled), transform-transition check (see the tips
-below), per-type stack lookup, per-type cap check (stop accepting at
-32 instances), then — past the snippet boundary — the
-detach-from-parent dance and `CleanElement(...)` reset before the
-control finally pushes onto the stack. If WinUI refuses a transform
-reset during `CleanElement`, the control is dropped instead. The scratch-panel round-trip
+The path runs in five steps after the type check: lane choice from the
+`VisualTaken` marker (a navigation page is dropped here), per-lane
+stack lookup, per-lane cap check (stop accepting at 32 instances),
+then — past the snippet boundary — the detach-from-parent dance and
+`CleanElement(...)` reset before the control finally pushes onto its
+lane. Reactor never sets the XAML implicit transitions, but a user
+`.Set` can, so `CleanElement` clears them on a plain-lane control. Any
+of them (`OpacityTransition`, `ScaleTransition`, `RotationTransition`,
+`TranslationTransition`) locks the control's `RenderTransform` for good,
+even once removed, so WinUI then refuses the `RenderTransform` reset and
+the control is dropped instead. `CleanElement` also clears the
+theme transitions `.WithTransitions(...)` writes (`ChildrenTransitions`,
+`ChildTransitions`, `ContentTransitions`) and a panel's
+`BackgroundTransition` in both lanes. The scratch-panel round-trip
 in `ForceDetach` is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws `COMException` when the
 control is later re-parented, and `_scratchPanel.Children.Add` +
@@ -174,22 +225,14 @@ means adding it to `ElementPool.PoolableTypes` *and* extending
 `CleanElement` with a switch arm that resets every property the
 control might have carried. Skipping the second step leaks state.
 
-**`GetElementVisual()` is one-way.** Once a control's composition
-visual has been requested (typically for an `.Animate()` modifier),
-the control can no longer use XAML implicit transitions and is
-permanently un-poolable. `ElementPool.MarkCompositorTainted` records
-this; the next `Return` for that instance silently drops it. Reach for
-`.OpacityTransition()` and friends before `.Animate()` when both
-work.
+**Compositor features pool too.** A list item with `.Animate()`,
+`.Transition()` or `.LayoutAnimation()` returns to the visual lane and
+the next such item reuses it, so it pays the visual reset instead of a
+fresh control plus a new handoff. Keep `.Set(...)` and `.OnMount(...)`
+off those chains where you can: a chain with either only rents from
+the plain lane.
 
-**Transform transitions are one-way too.** Attaching `.ScaleTransition()`,
-`.RotationTransition()` or `.TranslationTransition()` locks the control's
-`RenderTransform` for good, even if the transition is later removed, so
-`Return` drops the control. The facade transforms themselves
-(`.Rotation()`, `.Scale()`, `.Translation()`, `.CenterPoint()`) are reset
-to identity on return and don't affect pooling.
-
-**The cap is 32 per type.** A burst of 100 list items mounts 32 from
+**The cap is 32 per type and lane.** A burst of 100 list items mounts 32 from
 the pool and 68 fresh; the next render returns 32 to the pool and
 drops 36. That's fine for steady-state scrolling — the working set
 stabilizes around the visible window — but doesn't scale to giant
