@@ -184,6 +184,12 @@ public class ModifierUnsetClearValueTests
             .Select(call => call.ArgumentList.Arguments[1].Expression)
             .OfType<LiteralExpressionSyntax>()
             .Select(literal => literal.Token.ValueText).ToHashSet(StringComparer.Ordinal);
+        // Spec 066 §8.2: .TransformOrigin's early release is the binding's inactive state.
+        if (ReadIfStatements("ClearRemovedTransformModifiers").Any(statement =>
+                statement.Condition.ToString().Contains("TransformOrigin", StringComparison.Ordinal)
+                && statement.Statement.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>()
+                    .Any(call => call.Expression.ToString() == "TransformOriginBinding.Deactivate")))
+            facadeResets.Add("TransformOrigin");
         var inert = ReadUnsetArms()
             .Where(entry => !entry.Arm.DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
@@ -199,6 +205,10 @@ public class ModifierUnsetClearValueTests
                     && call.ArgumentList.Arguments.Count >= 3
                     && call.ArgumentList.Arguments[1].Expression is LiteralExpressionSyntax literal
                     && literal.Token.ValueText == entry.Modifier)))
+            .Where(entry => !(entry.Method == "ApplyModifiers" && entry.Modifier == "TransformOrigin"
+                && facadeResets.Contains(entry.Modifier)
+                && entry.Arm.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                    .Any(call => call.Expression.ToString() == "TransformOriginBinding.Apply")))
             .Select(entry => entry.Method + "." + entry.Modifier)
             .ToList();
 

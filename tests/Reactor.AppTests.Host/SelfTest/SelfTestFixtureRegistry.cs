@@ -1028,6 +1028,17 @@ internal static class SelfTestFixtureRegistry
         ("ModifierTransform_Handoff_Transition", static harness => new TransformVisualHandoffFixture(harness, "Transition")),
         ("ModifierTransform_Handoff_Keyframes", static harness => new TransformVisualHandoffFixture(harness, "Keyframes")),
         ("ModifierTransform_Handoff_Animate", static harness => new TransformVisualHandoffFixture(harness, "Animate")),
+        // Spec 066 §8 (#773): the size-relative .TransformOrigin pivot.
+        ("TransformOrigin_Centre", static harness => new TransformOriginFixture(harness, "Centre")),
+        ("TransformOrigin_Resize", static harness => new TransformOriginFixture(harness, "Resize")),
+        ("TransformOrigin_Rtl", static harness => new TransformOriginFixture(harness, "Rtl")),
+        ("TransformOrigin_Unset", static harness => new TransformOriginFixture(harness, "Unset")),
+        ("TransformOrigin_Offset", static harness => new TransformOriginFixture(harness, "Offset")),
+        ("TransformOrigin_WithAnimationOffset", static harness => new TransformOriginFixture(harness, "WithAnimationOffset")),
+        ("TransformOrigin_AnimateOffset", static harness => new TransformOriginFixture(harness, "AnimateOffset")),
+        ("TransformOrigin_Hover", static harness => new TransformOriginFixture(harness, "Hover")),
+        ("TransformOrigin_Pool", static harness => new TransformOriginFixture(harness, "Pool")),
+        ("TransformOrigin_Navigation", static harness => new TransformOriginFixture(harness, "Navigation")),
         // Spec 066 §12.1: the transforms matrix and behaviour ledger. A fixed sample here; the full
         // matrix runs in the Transforms matrix workflow (REACTOR_TRANSFORMS_MATRIX=full).
         ("TransformsMatrix", static harness => new TransformsMatrixFixture(harness)),

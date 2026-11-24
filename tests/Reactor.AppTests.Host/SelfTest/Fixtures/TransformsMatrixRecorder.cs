@@ -205,6 +205,7 @@ internal sealed class TransformsMatrixRecorder(Border caseHost, Border freshHost
             TransformAxis.Translation => e.Translation(p.Translation.X, p.Translation.Y, p.Translation.Z),
             TransformAxis.CenterPoint => e.CenterPoint(p.CenterPoint),
             TransformAxis.ScaleRotationCenter => e.Scale(p.Scale).Rotation(p.Degrees).CenterPoint(p.CenterPoint),
+            TransformAxis.TransformOrigin => e.TransformOrigin(p.Origin.X, p.Origin.Y).Scale(p.Scale).Rotation(p.Degrees),
             _ => e,
         };
     }

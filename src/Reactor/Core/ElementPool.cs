@@ -670,6 +670,9 @@ public sealed class ElementPool : IDisposable
         foreach (var channel in TakenVisualChannels)
             visual.StopAnimation(channel);
         if (hasTranslation) visual.StopAnimation("Translation");
+        // A .TransformOrigin's expression stopped with CenterPoint above; its property-set entries
+        // can't be removed, so they go to the inactive state (spec 066 §8.2, §7.3 step 4).
+        Animation.TransformOriginBinding.ResetForPool(visual);
         // ClearElementTag already released the Reactor claims (ImplicitAnimationSlots.ReleaseAll);
         // this drops keys no claim owns, for example ones user code installed. Before
         // any write below, so none of them starts an implicit animation.

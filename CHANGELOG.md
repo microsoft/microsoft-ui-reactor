@@ -28,6 +28,15 @@ Conventions for contributors:
 
 ### Added
 
+- **`.TransformOrigin(x, y)` sets a size-relative pivot for `.Scale()` and `.Rotation()` (spec 066
+  §8, issue #773).** `(0.5f, 0.5f)` is the centre. The pivot is a compositor expression on the
+  element's visual size, so it follows resizes, and hit-testing and UI Automation bounds honour it. It
+  works with `.InteractionStates`, `.Keyframes`, `.Transition` and navigation, and `x` is
+  flow-relative (`0` is the right edge in a right-to-left layout). A `.CenterPoint()` on the same
+  element becomes a pixel offset added to the origin, and animating it (`.Animate()`, `WithAnimation`)
+  animates that offset. The default pivot is still the leading top corner. Navigation's DrillIn now uses the same
+  binding, and puts back a page's own origin when it ends.
+
 - **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
   §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
   `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds

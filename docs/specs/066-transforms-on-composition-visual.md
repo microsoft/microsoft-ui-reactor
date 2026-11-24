@@ -529,8 +529,9 @@ nothing else may start an animation on that property or write it.
   write happens. The offset animation above replaces it.
 - `ResetCompositionModifier("CenterPoint")` is origin-aware. It resets the offset, not the property.
 - Navigation's `NormalizeVisual` stops `"CenterPoint"` unconditionally. After a transition it calls
-  `EnsureOrigin(visual)`, which restarts the expression when the element still declares an origin
-  (`ReactorState` records that).
+  `TransformOriginBinding.Restore(page, visual)`, which restarts the expression when the element still
+  declares an origin (`ReactorState` records that), or else leaves the inactive state. DrillIn binds
+  its centre pivot with the same expression (`BindCentre`, origin `(0.5, 0.5)`).
 
 Measured (the earlier #773 investigation and this spike, see Appendix A):
 
