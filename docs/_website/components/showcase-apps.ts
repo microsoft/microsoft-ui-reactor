@@ -55,16 +55,6 @@ export const SHOWCASE_APPS: ShowcaseApp[] = [
     screenshot: shot("ide", 1280, 802),
   },
   {
-    id: "regedit",
-    name: "Registry Editor",
-    summary: "A port of regedit.exe to a declarative component model.",
-    kind: "Port",
-    path: "samples/apps/regedit",
-    icon: "folder-tree",
-    bloom: "teal",
-    screenshot: shot("regedit", 800, 501),
-  },
-  {
     id: "headtrax",
     name: "HeadTrax",
     summary: "A data grid over SQLite and GraphQL data sources.",
