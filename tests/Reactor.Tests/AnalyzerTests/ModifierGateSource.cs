@@ -38,8 +38,8 @@ internal readonly record struct ModifierGateArgument(string? Slot, string Identi
 /// assertion meant to catch a mis-widened gate. Issue #1062.
 /// </para>
 /// <para>
-/// <b>Prefer the typed property.</b> <see cref="ModifierInfo.ControlGate"/> is the authority and
-/// comparing its <em>contents</em> is immune to the naming structure — that is what
+/// <b>Prefer the typed property.</b> <see cref="Analyzers.ModifierInfo.ControlGate"/> is the authority
+/// and comparing its <em>contents</em> is immune to the naming structure — that is what
 /// <see cref="ModifierTableIntegrityTests"/> does, and why those 20 facts were never exposed.
 /// Reach for this reader only when the artifact really is text, and then match with
 /// <see cref="AnchoredPattern(string, string)"/>, never a bare <c>Contains</c>.
@@ -112,6 +112,7 @@ internal static class ModifierGateSource
     /// <see cref="ControlGate"/>, <see cref="PoolResetGate"/>, or <see cref="AnySlot"/>. Spliced
     /// into the pattern unescaped, because <see cref="AnySlot"/> is itself a regex alternation.
     /// </param>
+    /// <param name="identifier">The literal gate identifier to match.</param>
     public static string AnchoredPattern(string slot, string identifier) =>
         slot + @":\s*" + Regex.Escape(identifier) + @"\s*[,)]";
 

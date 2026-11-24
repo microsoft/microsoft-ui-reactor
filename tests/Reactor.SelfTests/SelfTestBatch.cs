@@ -996,11 +996,11 @@ public class SelfTestBatch
                "never scheduled at all.",
 
                "reported Skipped (Assert.Inconclusive). The Host ran to completion without ever " +
-               "naming them, so the likely cause is two-place fixture registration: a name that " +
-               "`--list-fixtures` reports but the run's `Create()` switch does not produce.",
+               "naming them. Compare `--list-fixtures` for the same Host binary, tier, and shard " +
+               "with the fixture markers in its TAP output.",
 
-               $"Start at teardown and at the fixture registry, not at '{fixture}' — it is named " +
-               "here only because it started last.")
+               $"Start with teardown and the TAP output. '{fixture}' is named here because it " +
+               "started last.")
 
             : ("SELFTEST HOST STOPPED MID-RUN — this is NOT a suite-budget kill.",
 
@@ -1406,7 +1406,7 @@ public class SelfTestBatch
             $"This wrapper always runs the UNPACKAGED Host, where the '{PackagedFixturePrefix}' " +
             $"fixtures are declared SelfTestTier.Packaged and must therefore be excluded — so zero " +
             $"is never the healthy answer here. Something removed the mechanism or its subject:\n" +
-            $"  (a) SelfTestFixtureRegistry.TierRequirements was emptied, so nothing is declared " +
+            $"  (a) The SelfTestTier.Packaged tiers were dropped from SelfTestFixtureRegistry.Registrations, so nothing is declared " +
             $"tier-specific any more and those fixtures are back to self-skipping into the amber " +
             $"inventory (issue #1154 restored).\n" +
             $"  (b) PackagedIdentityFixtures.IsPackagedTier mis-evaluates — if it answered true " +
@@ -1445,7 +1445,7 @@ public class SelfTestBatch
             $"{report.Count} fixture(s) were excluded from this run because they require a " +
             $"different host, and were not executed:\n\n" +
             string.Join("", report.Names.Select(n => $"- `{n}`\n")) +
-            $"\n<sub>Declared in `SelfTestFixtureRegistry.TierRequirements`. These are asserted " +
+            $"\n<sub>Declared in `SelfTestFixtureRegistry.Registrations`. These are asserted " +
             $"for real by `Reactor.PackagedTests`. Background: issue #1154.</sub>";
 
         Console.WriteLine($"Not applicable to this tier ({report.Count}): {string.Join(", ", report.Names)}");

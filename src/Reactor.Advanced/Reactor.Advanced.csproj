@@ -66,9 +66,19 @@
     <InternalsVisibleTo Include="Reactor.Markdown.TestRenderer" />
   </ItemGroup>
 
+  <!-- An app references Reactor directly as well as through this project, and its direct
+       reference forwards every global property. Any property removed here therefore gives
+       Reactor a second configuration, so Reactor.csproj compiles twice. That is why
+       RuntimeIdentifier and SelfContained flow through unchanged: stripping them built Reactor
+       a second, RID-less time on every `-r <rid>` build (the AOT selftest and trim-proof
+       publishes). PublishTrimmed and PublishAot are still removed, because this repo sets them
+       inside each app's csproj (see PublishAotInternal) rather than as global properties, so
+       removing them costs nothing here. They only matter when an app passes
+       -p:PublishAot=true or -p:PublishTrimmed=true on the command line, which still builds
+       Reactor twice. AOT Trim Proof's "Check Reactor was built once" step guards the RID case. -->
   <ItemGroup>
     <ProjectReference Include="..\Reactor\Reactor.csproj"
-                      GlobalPropertiesToRemove="PublishTrimmed;PublishAot;RuntimeIdentifier;SelfContained" />
+                      GlobalPropertiesToRemove="PublishTrimmed;PublishAot" />
   </ItemGroup>
 
   <ItemGroup>

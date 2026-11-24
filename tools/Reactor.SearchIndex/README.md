@@ -52,9 +52,20 @@ rewritten to absolute GitHub URLs, because the prose is read far from the file i
 - **Keywords are required** and canonicalized (trim / lowercase / collapse / dedupe) — generation
   fails if an included control has none. `curatedKeywords` (the consumer's higher-weighted 5.0
   BM25 slot) is optional and canonicalized the same way.
-- **Real code only** — sample cards with placeholder tokens (`...`, `<your-key>`, abbreviated
-  URLs) are rejected. Every *other* clean card on the page is emitted, in source order, with
-  case-insensitively duplicate headers dropped.
+- **Real code only** — comment-only cards, code ellipses, and explicit comment elisions are
+  rejected. Mark omitted implementation with `// ...` or `// omitted: reason`. Legacy elision
+  comments beginning with `...` or ending with `, ...` are also recognized in empty blocks.
+  Ordinary comments and display text can contain ellipses. String literals starting with a
+  URI scheme are checked for `<your-key>` fill-ins and abbreviated path segments such as
+  `/.../` or `/( ... )`, wherever the literal appears. This includes URI templates displayed
+  by `TextBlock`. A scheme starts with an ASCII letter, contains letters, digits, `+`, `-`,
+  or `.`, and ends with `:` immediately followed by a non-whitespace character. Prose such
+  as `Example: https://...` is treated as display text. URI query and fragment text can
+  contain ellipses. Direct `MapControl` / `Factories.MapControl` token arguments also reject
+  fill-ins, and explicit `Uri` / `System.Uri` construction also checks relative paths.
+  For relative paths in other calls or placeholders assembled from variables and
+  interpolation, mark the omission explicitly with `// omitted: reason`.
+  Clean cards are emitted in source order, with case-insensitively duplicate headers dropped.
 - **No silent drops** — an orphan/typo'd editorial key, a misspelled editorial field, an
   unparseable `ControlInfo` entry, a `docs` entry missing its title or uri, an unclosed / nested /
   mismatched `<!-- index:… -->` marker, a marker id naming no control, a repo-relative link in a
@@ -68,6 +79,14 @@ byte-equality with the committed file (the staleness gate that runs in CI `dotne
 `SearchIndexToolTests.cs` covers the editorial/skip/override/marker/CLI edge cases; and
 `SearchIndexSkillParityTests.cs` requires every API a marked skill block demonstrates to appear in
 one of that entry's emitted samples.
+
+`SearchIndexCoverageTests.cs` independently enumerates registry routes and their source cards,
+then checks that their headers appear in the index in source order. Its manifest records each
+deliberate omission with a reason. Editorial override headers come directly from `editorial.json`
+and apply to the first non-skipped card, or provide a standalone sample header. Remove an omission
+entry when its card becomes a complete sample. This check derives expected cards from source
+without calling the generator's placeholder predicate, so refreshing an incomplete index still
+fails coverage.
 
 Curate `editorial.json` and the SKILL.md markers, never the generated JSON.
 

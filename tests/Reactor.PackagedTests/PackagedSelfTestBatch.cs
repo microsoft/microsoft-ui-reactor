@@ -260,8 +260,8 @@ public class PackagedSelfTestBatch
     /// half that guards the dangerous direction.
     /// </summary>
     /// <remarks>
-    /// <para>Identity-dependent fixtures are declared <c>SelfTestTier.Packaged</c> in
-    /// <c>SelfTestFixtureRegistry.TierRequirements</c>, so the unpackaged host filters them out of
+    /// <para>Identity-dependent fixtures are declared <c>SelfTestTier.Packaged</c> on their
+    /// <c>SelfTestFixtureRegistry.Registrations</c> entries, so the unpackaged host filters them out of
     /// its corpus entirely (issue #1154). That filter keys off an entry-assembly probe, and if it
     /// ever answered "unpackaged" <i>here</i>, this tier would run a corpus with no identity
     /// fixtures in it.</para>

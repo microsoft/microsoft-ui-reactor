@@ -37,6 +37,8 @@ dotnet test tests/Reactor.Tests -p:Platform=x64 && dotnet test tests/Reactor.Sel
 
 `Reactor.SelfTests` and `Reactor.AppTests` declare a `ProjectReference` to `Reactor.AppTests.Host` with `ReferenceOutputAssembly="false"`, so `dotnet test` rebuilds the Host first. No stale binaries. `Reactor.PackagedTests` does the same for `Reactor.PackagedTests.Host`.
 
+For `Reactor.DocPipeline.Tests`, see [Running the doc pipeline tests](docs/contributing/doc-pipeline.md#running-the-doc-pipeline-tests).
+
 ## Flag translation
 
 The suites moved to Microsoft.Testing.Platform when xunit.v3 v4 removed VSTest
@@ -186,6 +188,14 @@ dotnet test tests/Reactor.Tests
 dotnet test tests/Reactor.Tests --filter-class "*ReconcilerMountUpdateTests*"
 ```
 
+### Checking XML documentation in `Reactor.Tests`
+
+`Reactor.Tests` generates XML documentation by default. Release builds,
+including the CI solution build, fail on malformed XML (`CS1570`) or unresolved
+`cref` references (`CS1574`). Fix `CS1570` first so the compiler can report the
+remaining documentation diagnostics. Missing member documentation (`CS1591`)
+is permitted. See [issue #1053](https://github.com/microsoft/microsoft-ui-reactor/issues/1053).
+
 ### Console-mutating tests need collection isolation
 
 Tests that write to `Console.Out`/`Console.Error` must be grouped with `[Collection("ConsoleTests")]` to prevent cross-test interference.
@@ -232,6 +242,7 @@ Some tests here parse repo *sources* with Roslyn rather than exercising Reactor 
 | `GallerySnippetAgreementTests` | A `SampleCard` snippet uses a lowerCamelCase name that does not exist in the live code beside it — the snippet renamed, or the card did and the snippet did not. Direction is snippet → live only: a snippet may omit, it may not invent. |
 | `GallerySampleLintTests` | An ItemsView view builder returns something other than an item-container root; a shape paints with `.Background(...)` instead of `Fill`/`Stroke`; or an `ms-appx` asset is missing or not copied to the output. Also checks [PUA glyph fonts](#pua-glyph-fonts-in-gallery-samples) in live gallery code and displayed snippets. |
 | `SearchIndexGeneratorTests` | `samples/ReactorGallery/reactor-search-index.json` is stale. Regenerate with `dotnet run --project tools/Reactor.SearchIndex`. |
+| `SearchIndexCoverageTests` | A routed Gallery card is missing or out of order in the index, or a [manifest entry](tests/Reactor.Tests/Tooling/SearchIndexCoverageTests.cs) no longer names a source card. This check still catches omissions after index regeneration. |
 
 A snippet-agreement failure names the page, line, card title and identifier, and says which of the two sides to move. There is no allowlist: fix the snippet or fix the card.
 
@@ -281,8 +292,10 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test --shard 1/2
 
 ### Sharding the corpus across runners
 
-CI splits the selftest corpus in two for the Selftests, Packaged Selftests, AOT Selftests and
-Coverage jobs, one runner per half, with `--shard <k>/<n>`. The split lives in
+CI splits the selftest corpus across runners with `--shard <k>/<n>`: three for the Selftests and
+Packaged Selftests jobs, four for AOT Selftests (its per-shard NativeAOT publish is the longest
+fixed cost, so it needs the extra shard to finish with the others), and two for the Coverage
+lanes. The split lives in
 `tests/_shared/SelfTestShard.cs`, which both hosts and both wrappers compile.
 
 - **It is a partition by construction.** Non-pinned fixtures are dealt round-robin in registry
@@ -342,22 +355,20 @@ locating and running the Host so every mode agrees on where the binary lives; it
 configuration and TFM stamped into the test assembly by `Reactor.SelfTests.csproj`, so
 `dotnet test -c Release` finds the Release Host rather than a stale Debug one.
 
-### Fixture registration is two-place — and what that does to name searches
+### Fixture registration and TAP names
 
-For SelfTest, add the fixture to `AllFixtures` **and** to the `Create()` switch in
-`tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. For E2E, add it to
-`AllFixtures` **and** to the `Build()` switch in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
+Register each fixture with one name and factory in the ordered `Registrations` table. SelfTest
+uses `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. E2E uses
+`tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Keep the relative order of existing entries
+because it determines SelfTest execution order and shard assignment, and E2E navigation order.
 
 `--list-fixtures` lists only SelfTest fixtures for the current host tier.
-`FixtureRegistryConsistencyTests` in `Reactor.Tests` compares `AllFixtures` with the factory
-switch for both SelfTest and E2E. It reports each fixture registered on just one side and
-identifies where the registration is missing.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names, and that an entry carries `SelfTestTier.Packaged` exactly when its name has the `Packaged_` prefix.
 
-That split also makes searching for a TAP name unsafe unless you search the whole tree. TAP
-carries two kinds of name and they live in different files: *fixture* names (registry only, and
-the class they map to is often spelled differently — `CenterOnCurrent_UsesCursorMonitor` →
-`CenterOnCurrentUsesCursorMonitor`) and *check* names (string literals in `H.Check(...)` inside
-`Fixtures/`). Neither location is a superset:
+Search the whole host tree for names from TAP output. *Fixture* names are registered in the table,
+and the class they map to is often spelled differently (`CenterOnCurrent_UsesCursorMonitor`
+maps to `CenterOnCurrentUsesCursorMonitor`). *Check* names come from `H.Check(...)` in the
+fixture implementations.
 
 | probe | blind spot |
 |---|---|
@@ -434,7 +445,7 @@ to silence a flake, fix the flake instead — a skip makes the flake invisible r
 A skip is a per-run observation; tier applicability is a fixed property of the fixture, so a skip
 would restate the same permanent fact on every run and accumulate in the amber inventory — which is
 what [#1154](https://github.com/microsoft/microsoft-ui-reactor/issues/1154) was. Declare the tier in
-`SelfTestFixtureRegistry.TierRequirements` instead and the fixture is simply not selected; see §3.
+its `SelfTestFixtureRegistry.Registrations` entry instead and the fixture is simply not selected; see §3.
 
 For raw-TAP consumers (the AOT job pipes `--self-test` straight to a `.tap` artifact and greps
 `^not ok `), the Host emits a `# Total skipped fixtures: N` trailer — placed *after*
@@ -457,11 +468,11 @@ Selftests run against a real WinUI dispatcher: most user-visible work (template 
 
 | You want to… | Use | Why |
 |---|---|---|
-| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains the **shared harness host** (`ReactorApp.PrimaryWindow?.Host`) to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but only knows about the harness window. |
+| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains `ReactorApp.PrimaryWindow?.Host` to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but that host is not the one `H.CreateHost()` returns, even though both render into the harness window. |
 | Wait until a probe predicate against the live visual tree holds | `await Harness.WaitFor(() => H.FindText("Foo") is not null)` | Re-queries the predicate each pass against the current tree. The contention-proof alternative to a one-shot snapshot. Pass `maxPasses`/`perPassMs` to tune. **The predicate must re-query** — capturing a value from before the loop defeats it. |
 | Wait for a timer's cleanup to finish | A completion callback awaited with `Task.WaitAsync(timeout)` | Register before triggering the operation, signal after cleanup, and assert the actual state afterward. Report a timeout through `H.Check` rather than letting it escape. |
 | Check survival through a hold period or a refreshed deadline | An injected scheduler with captured callbacks; see [timer lifetime tests](#timer-lifetime-tests) | Elapsed time is the stimulus. Advance controlled schedules instead of waiting on a predicate that is already true. |
-| Drain an **isolated** `ReactorHost` (one you constructed with `new ReactorHost(myWindow)`, not `H.CreateHost()`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** your isolated one. Drive the isolated host directly. Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
+| Drain a fixture's own `ReactorHost` (from `H.CreateHost()`, or one you constructed with `new ReactorHost(myWindow)`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** yours. `H.CreateHost()` is a separate `new ReactorHost(window)`, so a state change inside it re-renders a host `Harness.Render()` never awaits. Drive that host directly, then poll the outcome with `Harness.WaitFor` (#1679 tracks making `Harness.Render` drain these hosts itself). Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
 
 **Anti-pattern — blind delays:**
 
@@ -469,7 +480,7 @@ Selftests run against a real WinUI dispatcher: most user-visible work (template 
 // ❌ Flaky: Task.Delay is a guess; it won't catch a slower runner.
 host.Mount(...);
 await Task.Delay(200);
-await Harness.Render();    // pumps the WRONG host if `host` is isolated
+await Harness.Render();    // pumps the WRONG host: `host` is the fixture's own
 var ctrl = FindFirst<MyControl>(window.Content);   // may be null on this pass
 ```
 
@@ -503,7 +514,7 @@ Rules of thumb:
 - **Converting a fixed delay to `WaitFor` is not a safe default — the remediation can itself be the vacuous one.** Because `WaitFor` establishes its predicate *at the moment it returns* and nothing more, the conversion is correct for an *eventual* assertion (false at t=0, converges) and silently vacuous for a *survival* assertion — "still visible", "still expanded" — which is true at t=0 and short-circuits at zero elapsed time. Before converting, ask: **if the predicate is true the instant `WaitFor` is called, does the next assertion still mean what I think it means?**
 - **Ask the same of a precondition `throw`.** Report-and-return when the fixture's other checks remain meaningful; throw loudly when the fixture is structurally invalid (a renamed reflection target) and they do not.
 - **Converting a gate can strip a settle a *later* assertion relied on.** If a following `H.Check` depended on the removed `Render(N)` rather than on its own wait, it will start failing. Give each check its own `WaitFor` instead of letting it inherit someone else's delay.
-- **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
+- **`host.WaitForIdleAsync()` for a fixture's own hosts.** If the fixture drives its own `ReactorHost` (from `H.CreateHost()` or `new ReactorHost(...)`), neither `Harness.Render` nor `Harness.WaitFor` knows about it.
 - **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
 
 ### Timer lifetime tests
@@ -577,7 +588,7 @@ This shape cost six separate investigations before it was diagnosed (issue #988)
 | `Run aborted by dispatcher-starvation hang on fixture 'X' (FailFast did not land; the wrapper's budget killed the process)` | Same signal, but the process would not die even under `FailFast`. **Still causal**, and the extra clause is the diagnosis: it points below the CLR — a native lock or a wedged UI thread. | Debug `X` as above, but expect a native cause. A dump is worth more than a managed stack here. |
 | `Run aborted: suite exceeded its <N>s budget with fixture 'X' in flight (POSITIONAL attribution…)` | The suite ran out of its shared budget with no hang signal. `X` was merely in flight. | Look at the reported elapsed-vs-budget, **not** at `X`. `--filter X` removes the other ~1400 fixtures that shared the budget — it removes the cause, so it passes whether or not `X` is healthy, in *either* direction. |
 | `Run aborted after fixture 'X'` / `Run aborted before fixture 'X'` — with ` (Host died mid-run with no '# Total failures:' trailer — NOT a budget kill; issue #978)` | The Host process stopped mid-fixture on its own (usually a native crash). **This is not #988**, and raising the budget does nothing for it. | Read the exit-code classification in the message first. Check the tail output and stderr for the native fault. |
-| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Look at teardown, not at `X`. Issue #680 (0xC0000005 at final process exit) is one known cause; the other is two-place fixture registration — a name `--list-fixtures` reports that the run's `Create()` switch does not produce. |
+| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Start with teardown and the TAP output. Issue #680 (0xC0000005 at final process exit) is a known teardown cause. Compare missing fixture names with `--list-fixtures` for the same Host binary, tier, and shard. |
 
 > **Do not let the two "arbitrary victim" failures collapse into one.** A budget kill (#988) and a silent mid-run death (#978) look nearly identical from outside: one fixture blamed, everything after it missing, and the victim moving between runs. The discriminator is the **`# Total failures:` trailer** — a budget kill interrupts a Host that *would* have printed it, whereas a Host that dies mid-fixture never reaches it. Prefer the trailer over elapsed time: timing corroborates but cannot decide, because a slow machine and a fast crash produce overlapping durations. The abort reasons above state which one fired, so this is readable off any skipped fixture without a re-run.
 
@@ -752,6 +763,130 @@ A native crash terminates the AOT process — the per-fixture managed watchdog c
 
 **4. Expected pass count.** As of 2026-10-05, an AOT run of the suite produces: 1598 fixtures total → 19 skipped, 0 failed. Seventeen of those skips came from `DefaultAotSkipPatterns` (they are the ones tagged `# SKIP crashes/hangs under NativeAOT`); `SelfTestVerdict_OnlySkips_PositiveControl` is skipped by design on every run; and `ValCov_Issue1262_PredicateCancellationReported` self-skips its checks because `EventListener` callbacks do not flow under a NativeAOT publish. Since then the three Devtools fixtures in that list went with the in-app MCP server, so `DefaultAotSkipPatterns` now has 14 entries; re-probe for the current totals. The skip list covers fixtures that exercise subsystems documented as not-yet-AOT-clean in [`docs/aot-support.md`](docs/aot-support.md) (PropertyGrid auto-discovery, `UseObservable` on POCOs, hot-reload state migration, XAML-metadata-dependent control hosting). When you fix one of those subsystems, drop the corresponding entries from `DefaultAotSkipPatterns` — `SelfTestRunner.ValidateDefaultSkipPatterns` aborts the run (TAP `Bail out!`, exit 1) if an entry stops matching a real fixture, but nothing detects an entry that has merely started *passing*, so re-probe periodically.
 
+### Transforms matrix and behaviour ledger
+
+Spec 066 (transforms on the composition visual, [#1630](https://github.com/microsoft/microsoft-ui-reactor/issues/1630))
+lands as a stack of layers, and each one must change behaviour only on purpose. The
+`TransformsMatrix` selftest ([`TransformsMatrixFixture.cs`](tests/Reactor.AppTests.Host/SelfTest/Fixtures/TransformsMatrixFixture.cs),
+spec 066 §12.1) records what every combination of transform modifiers, implicit transitions and
+compositor features actually does, and compares it with a ledger committed before the first layer.
+
+**The matrix.** Every *Transform × Transition × Feature* triple (7 × 6 × 9 = 378 cases), with the
+wrapper (direct, keyed `Memo`, `ModifiedElement`), flow direction, reduced motion, user code (a
+`.Set` facade write, a facade `Translation` drag) and a sub-variant assigned so that every pair of
+values across all eight dimensions occurs at least once. The generator is seeded, and a case id is
+just its triple, for example `Scale.Opacity.Animate`, so ids never change when the pairwise
+assignment does. Reduced motion is `TransitionEngine.OverrideAnimationsEnabled`, which is what
+Reactor reads. On `main` only navigation transitions read it, and XAML implicit
+transitions follow the system setting, which a run doesn't change. Layer 2 makes `.XxxTransition()`
+read it (spec 066 §5.5), and declares the ledger change. Layer 5 adds `TransformOrigin` to the transform axis.
+
+**What a case records.** Each case runs one lifecycle — `mount`, `change` (the declared values),
+`removeFeature`, `addFeature`, `removeModifier`, `unmount`, `rentPlain` and `rentTransformed`
+(rent from the pool as a plain and as a transformed element) — and records, per step: `threw`,
+`pose` (the RenderTargetBitmap bounding box), `active` (the pose while hover, an enter or an exit
+holds the channel), `motion` (per changed channel: `ANIMATING`, `JUMPED`, `NOT-APPLIED`, `HELD`),
+`curve` (progress at a quarter of the time, in steps of 0.2: linear reads 0.2, the Fluent
+(0.8,0,0.2,1) ease 0.0, the compositor's default ease-out 0.6), except under a facade `Translation` drag,
+where the handoff migrates the drag at a varying moment, so `curve` is recorded but never compared, `running` (animations still going
+when the step settled), `residue` (transitions still installed after `removeModifier`, #1626, or `remounted` when a keyed `Memo` replaced the control),
+`opacity` (the settled opacity at the target's centre, in steps of 0.05, so a lost update reads 1.00
+instead of 0.80), `hit`/`uia`/`ttv`, `channel` (facade or visual), `pool` and `diag` (`DiagnosticLog` warnings).
+Motion is controller-driven, layout `Offset` included: each new animation is paused and seeked to
+its start, 25%, 50% and 100%, measured from where it actually starts, so no verdict depends on
+wall-clock timing. Two things RenderTargetBitmap can't see are recorded as such rather than
+guessed: a XAML transition in flight (`unobservable`) and a lone `CenterPoint` (`invisible`). An
+inconclusive verdict fails the case after its reruns, and so does a compositor that stops producing
+frames. Facade `Translation` drag cases also record `screen`, the PrintWindow pose, because
+RenderTargetBitmap reports a drag the screen doesn't show once translation is enabled (spec 066
+§12.2, Q1f; it reproduced over RDP in the spike, not on hosted runners, and each run logs which). It
+needs an interactive desktop (hosted runners have one): without one the instrument is skipped, the
+field reads `skip`, which matches any value, and a record run with a desktop replaces a recorded
+`skip` with the real pose.
+
+`model` says whether the step agrees with the analytic composition model
+([`CompositionModel.cs`](tests/Reactor.AppTests.Host/SelfTest/TransformsMatrix/CompositionModel.cs)),
+and the ledger pins every disagreement exactly (a throw or a `screen` pose is pinned by its own field).
+Each disagreement on `main`, a throw included, must be attributed
+by exactly one rule in `transforms-ledger.known.json`, and a full run fails on a rule that no
+longer matches anything. Don't bend the model to fit `main`.
+
+Before recording or comparing, the fixture runs a positive and a negative control for every
+oracle (`TransformsMatrix_Instrument_*`) and stops if one fails. A pool soak (`@soak.short`,
+`@soak.full`) churns random elements and checks every plain renter for leftover facades, XAML
+transitions and a taken visual, and every renter from the visual lane (`visualRented`, spec 066
+§7.2) for a non-identity visual, leftover implicit keys and running animations; its violation
+counts are in the ledger, so a layer that fixes a
+leak declares it. The full run also records platform probes (`@probe`) and, with an interactive
+desktop and system animations on, logs PrintWindow evidence for the XAML transition curve
+(`# TransformsMatrix screen:` lines), which is never recorded because it depends on the desktop.
+
+**Three files** in [`tests/Reactor.AppTests.Host/SelfTest/Baselines/`](tests/Reactor.AppTests.Host/SelfTest/Baselines/):
+
+| File | Written by | Contents |
+|---|---|---|
+| `transforms-ledger.json` | the recorder; never edit it by hand | One line per case step. Your PR's diff of it shows reviewers exactly which behaviours changed |
+| `transforms-ledger.expected.json` | you, per PR | One entry per intended change: `{ "case", "step", "field", "before", "after", "reason" }`. `case`, `step` and `field` take `*` and `{a,b}`; `step`, `before` and `after` default to `*`; `(absent)` is a value only one side has (a pairwise reassignment shows as step and field `dims`). The reason starts with `§9 row N` or `fixes #NNNN` |
+| `transforms-ledger.known.json` | you | Rules attributing model disagreements: `{ "case", "dims", "step", "part", "issue", "note" }`, where `part` is `pose`, `active` or `motion:<channel>`, `dims` matches the case's pairwise dimensions (`*user=SetFacade*`), and `issue` is `#NNNN` or `§9 row N` |
+
+The fixture reads these files from the checkout, so editing or re-recording them needs no
+rebuild. The packaged host falls back to the copies embedded at build time.
+
+**Modes.** `REACTOR_TRANSFORMS_MATRIX` picks one:
+
+```powershell
+# Default, in the normal (sharded) selftest corpus: the controls, a fixed seeded sample (the
+# control group, then cases until every value of every dimension appears; 9 today) and a short
+# soak, compared with the ledger. About a minute.
+dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter TransformsMatrix
+
+# Every case, the full soak and the probes, compared with the ledger. About 25 minutes locally.
+$env:REACTOR_TRANSFORMS_MATRIX = 'full'
+
+# The same run, but it rewrites transforms-ledger.json instead of comparing.
+$env:REACTOR_TRANSFORMS_MATRIX = 'record'
+
+# Narrow a full or record run: `|`-separated patterns over case ids. A filtered record
+# replaces only the matching cases in the ledger.
+$env:REACTOR_TRANSFORMS_MATRIX_FILTER = 'Scale.*.Animate|@soak.short'
+```
+
+A mismatch or an inconclusive oracle reruns the case up to three times before it fails, and
+poses compare within ±2 DIP. Record mode reruns a changed case once to confirm the change, and
+keeps a committed value that the new observation matches within tolerance, so regenerating the
+ledger only rewrites lines whose behaviour changed. If any check fails (an oracle, a model rule, a
+change that doesn't reproduce), it writes `transforms-ledger.rejected.json` instead of the ledger. Under NativeAOT the `diag` field isn't
+compared, because `EventListener` callbacks don't flow there.
+
+**Declaring a change (every layer after V).**
+
+1. Run the record mode and commit the regenerated `transforms-ledger.json`. Read its diff.
+2. Replace the contents of `transforms-ledger.expected.json` with one entry per intended change,
+   citing the spec 066 §9 row it introduces or the issue it fixes. Remove or narrow a
+   `known.json` rule whose disagreements your layer fixed.
+3. `TransformsMatrixTests.Ledger_ChangesFromTheBase_AreAllDeclared` (in `Reactor.Tests`, every
+   PR) diffs your ledger against the one on the PR's **base** commit. An undeclared difference
+   fails with a ready-to-paste entry; so does an expectation that matches no difference (stale).
+   The control group (`None.None.None`, every other dimension at its default) can't change at
+   all except its `rentTransformed` step, and no expectation can excuse it.
+4. Expectations identical to the base's were landed by an earlier PR, so they're ignored: a PR
+   that doesn't touch the ledger never has to clear them, and one that does replaces them.
+
+CI passes the base commit's files in `REACTOR_TRANSFORMS_LEDGER_BASE` and
+`REACTOR_TRANSFORMS_EXPECTED_BASE` (`absent` when the base has none, `skip` outside a PR).
+Locally the base is the merge base with `origin/main`. On a branch stacked on another layer, set
+`REACTOR_TRANSFORMS_BASE_REF` to the parent branch, for example
+`$env:REACTOR_TRANSFORMS_BASE_REF = 'origin/my-layer-1'`.
+
+**CI.** The `Transforms matrix` workflow
+([`.github/workflows/transforms-matrix.yml`](.github/workflows/transforms-matrix.yml)) runs the
+full mode on PRs carrying the `transforms-matrix` label, which spec 066 layer PRs add, and nightly
+on `main`, where any difference from `main`'s own ledger is a regression or a flaky case. A
+manual run with `mode: record`, or a PR labelled `transforms-matrix-record`, uploads a regenerated
+ledger as an artifact (`transforms-matrix-record`), for when your machine records different poses
+than a hosted runner or can't record at all: a locked or disconnected session renders no
+compositor frames, and the instrument controls then refuse to record. The matrix never runs
+inside the sharded selftest corpus.
 ---
 
 ## 3. Packaged selftest (`tests/Reactor.PackagedTests`) — MSTest + TAP, under MSIX identity
@@ -900,18 +1035,18 @@ git branch -D coexist-probe
 
 ### Writing a packaged fixture
 
-Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Two steps,
-and both are load-bearing. **Gate** the fixture body:
+Fixtures live in the shared corpus (`tests/Reactor.AppTests.Host/SelfTest/Fixtures/`). Add the
+fixture's name and factory to `SelfTestFixtureRegistry.Registrations`. Then configure the
+packaged tier in two steps. **Gate** the fixture body.
 
 ```csharp
 if (!PackagedIdentityFixtures.RequirePackagedTier(H, this)) return;
 ```
 
-and **declare** its tier in `SelfTestFixtureRegistry.TierRequirements`, beside its entry in
-`AllFixtures`:
+**Declare** the tier as the third element of the fixture's `Registrations` entry.
 
 ```csharp
-["Packaged_MyNewThing"] = SelfTestTier.Packaged,
+("Packaged_MyNewThing", static harness => new MyNewThingFixture(harness), SelfTestTier.Packaged),
 ```
 
 Register it with the **`Packaged_`** prefix — that is what the shim's
@@ -967,8 +1102,8 @@ once, with a real fixture to pin the contract against.
 
 ### Scope and knobs
 
-The whole corpus runs under identity, split across two CI runners (the test step took 2m35s-3m07s
-per shard on hosted runners in 2026-09).
+The whole corpus runs under identity, split across three CI runners. With two runners, the test
+step took 2m35s-3m07s per shard on hosted runners in 2026-09.
 
 | Environment variable | Effect |
 |---|---|
@@ -1002,6 +1137,7 @@ E2E test classes (across two host apps):
 | `AccessibilityInteractionTests` | WinUI | Keyboard nav, live regions, headings, semantic panels |
 | `EventHandlerTests` | WinUI | OnTapped, OnSizeChanged, OnPointerPressed, OnKeyDown, UseReducer |
 | `DataGridTests` | WinUI | Click-to-edit, keyboard commit |
+| `ToolkitInputTests` | WinUI | Toolkit range thumbs, suggestion/token input, sizer drags, actual Tab focus |
 | `WinFormsInteropTests` | WinForms | XAML Island rendering, tab navigation, UIA across boundaries |
 
 ```bash
@@ -1020,6 +1156,91 @@ enough that queue ordering makes a timing-sensitive race always won or always lo
 or `1`) for that environment and tool version. If the defect is *when* state is read rather than
 *whether* input arrived, prove the detector with a mutation before counting repeated green E2E
 runs as evidence.
+
+### Toolkit real-input cases (#1601)
+
+`ToolkitInputTests` hosts the actual `samples/apps/wct-controls` pages and mappings,
+not parallel test-only adapters. Both test hosts import the same sample sources and
+dependencies. The six `ToolkitInput_*` routes expose only range, rich suggestions,
+tokenizing text and the three sizers; they never navigate to the camera page.
+The host adds template-part automation IDs and read-only, sequenced native observations.
+Tests require an observation newer than the first post-action read, so a rejected
+range edit cannot pass on a stale pre-drag value.
+
+The eight cases cover accepted and rejected drags of both range thumbs, two
+Down/Enter rich-suggestion commits, typed token conversion/free text/removal,
+ContentSizer height, PropertySizer target width and both bounds, GridSplitter
+column widths, and forward/reverse focus traversal through the range thumbs.
+Keyboard tests use `App.SendKeys(..., viaSendInput: true)` without a focus target;
+pointer actions use `App.Click`/`App.Drag`. UIA Invoke is used only by the existing
+fixture navigator/reset infrastructure, never as the interaction under test.
+Drag diagnostics are captured in MSTest output/TRX: the pre-drag source bounds,
+DPI and requested destination, followed by the unmodified successful CLI JSON
+with its resolved endpoints. These are input geometry, not native manipulation
+deltas; do not infer the latter from pointer displacement alone.
+ContentSizer additionally buffers native manipulation starting/started/delta/completed
+events, initial target size and drag settings, then publishes them as HelpText only
+after completion. Its oracle derives the exact declared height from the native
+cumulative deltas and captured initial ActualHeight using Toolkit's truncation and
+bounds contract, not raw pointer distance. It requires a fresh completed gesture,
+nonzero movement in the intended direction, matching CLI coordinates/window,
+independent advertised-target identity and measurements, and an unchanged sizer
+sibling. Forward and reverse gestures each use their own start size. Only settled
+layout retains the existing two-DIP rounding tolerance; declared height must match
+exactly. The observers do not mark events handled, change manipulation settings or
+request renders during input. `ContentSizerOracleTests` exercises this validation
+headlessly without starting the host.
+GridSplitter has a separate oracle for its native Columns/PreviousAndNext,
+two-star-column contract. It captures the advertised grid/panes independently,
+checks stable definition identities and exact native star weights from initial
+ActualWidths plus/minus the signed cumulative delta, then checks settled pane
+geometry and the unchanged pixel middle column/grid/row. Native bounds reject
+invalid candidate pairs; this is not PropertySizer's clamp contract.
+`GridSplitterOracleTests` covers the pure calculation and evidence validation.
+RangeSelector keyboard **value** changes remain unsupported by the sample's
+controlled mapping because this Toolkit version does not raise `ValueChanged`
+for them. Tab traversal does not claim to cover that limitation.
+
+Headless preparation (no host launch or package registration):
+
+```powershell
+dotnet build tests\Reactor.AppTests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+dotnet build tests\Reactor.PackagedTests.Host -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+pwsh -NoProfile -File tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.InputCapabilityDiagnosticsTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.ContentSizerOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.GridSplitterOracleTests|ClassName=Microsoft.UI.Reactor.AppTests.Tests.InfrastructureHelperTests"
+```
+
+For a separately authorized read-only readiness capture,
+`SessionInteractivityGuard.CaptureInputCapability()` records one `GetCursorPos`
+result and its immediate native error before sampling caller/desktop metadata.
+Error zero on a failed call is reported as unknown, never fabricated as
+`ACCESS_DENIED`. Metadata is labeled as later, non-atomic context; it does not
+prove the reason for the earlier result. `GetState()` remains a separate probe:
+`Active` does not establish that its WTS query succeeded or guarantee foreground
+ownership, and cursor readability does not prove a future input call is allowed.
+The existing failure remains Inconclusive and prevents dispatch without retry.
+CI's skipped-input gate and stress reporting recognize the stable
+`[REACTOR_E2E_INPUT_BLOCKED]` marker, independently of the precise native error
+wording, so these Inconclusive results cannot be mistaken for executed passes.
+`InputCapabilityDiagnosticsTests` checks this reporting with fake observations,
+without making native readiness calls.
+
+Compilation and headless helper tests are **not runtime input passes**. To execute
+the new cases, obtain explicit authorization for an unlocked, interactive Windows
+desktop with input injection available, the pinned SDK/.NET runtime and a working
+`winapp ui` CLI. Reserve that desktop for the run, with no simultaneous user input,
+other UI automation or selftests. No camera access, OS settings changes, elevation
+or Appx installation/registration is needed. After authorization, the bounded run is:
+
+```powershell
+$env:REACTOR_E2E_RETRIES = '0'
+dotnet test tests\Reactor.AppTests --no-build -c Debug -p:Platform=x64 --filter "ClassName=Microsoft.UI.Reactor.AppTests.Tests.ToolkitInputTests" --report-trx --report-trx-filename toolkit-input.trx
+```
+
+Require eight executed passes, not skips/inconclusive results. Stop on detected
+human input and seek renewed authorization rather than trying another transport
+or host. Runtime checks and mutation checks remain necessary before closing #1601;
+the authored test inventory alone does not establish coverage.
 
 ### The suite runs as one named winapp workflow
 

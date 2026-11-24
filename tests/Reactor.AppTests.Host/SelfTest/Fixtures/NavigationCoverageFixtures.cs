@@ -758,10 +758,10 @@ internal static class NavigationCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  6h. Transitioned pages are compositor-tainted
-    //      GetElementVisual permanently costs an element the XAML implicit-transition APIs, so
-    //      ElementPool refuses to pool anything it has been called on. Navigation pages are
-    //      often Borders or Grids, which are poolable.
+    //  6h. Transitioned pages are marked visual-taken and kept out of the pool
+    //      A navigation's completion can still reach both pages after they leave the tree, so
+    //      neither may be pooled (spec 066 §7.3). Navigation pages are often Borders or Grids,
+    //      which are poolable.
     // ════════════════════════════════════════════════════════════════════════
 
     internal class NavTransitionMarksCompositorTainted(Harness h) : SelfTestFixtureBase(h)
@@ -777,7 +777,7 @@ internal static class NavigationCoverageFixtures
 
             H.Check(
                 "NavTaint_CleanBeforeTransition",
-                !ElementPool.IsCompositorTainted(outgoing) && !ElementPool.IsCompositorTainted(incoming));
+                !ElementPool.IsVisualTaken(outgoing) && !ElementPool.IsVisualTaken(incoming));
 
             var done = new global::System.Threading.Tasks.TaskCompletionSource(
                 global::System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
@@ -785,8 +785,8 @@ internal static class NavigationCoverageFixtures
                 outgoing, incoming, NavigationTransition.Entrance(), NavigationMode.Push,
                 onComplete: () => done.TrySetResult());
 
-            H.Check("NavTaint_OutgoingTainted", ElementPool.IsCompositorTainted(outgoing));
-            H.Check("NavTaint_IncomingTainted", ElementPool.IsCompositorTainted(incoming));
+            H.Check("NavTaint_OutgoingTainted", ElementPool.IsVisualTaken(outgoing) && IsPoolExcluded(outgoing));
+            H.Check("NavTaint_IncomingTainted", ElementPool.IsVisualTaken(incoming) && IsPoolExcluded(incoming));
 
             await global::System.Threading.Tasks.Task.WhenAny(
                 done.Task, global::System.Threading.Tasks.Task.Delay(5000));
@@ -799,8 +799,21 @@ internal static class NavigationCoverageFixtures
                 onComplete: () => { });
 
             H.Check("NavTaint_InstantSwapAlsoTaints",
-                ElementPool.IsCompositorTainted(suppressOut) && ElementPool.IsCompositorTainted(suppressIn));
+                IsPoolExcluded(suppressOut) && IsPoolExcluded(suppressIn));
+
+            // The pool takes an ordinary taken control into its visual lane, but not a page.
+            using var pool = new ElementPool();
+            var taken = new Border();
+            Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(taken);
+            pool.Return(outgoing);
+            pool.Return(taken);
+            H.Check("NavTaint_PoolRefusesPage",
+                ReferenceEquals(pool.TryRent(typeof(Border), visualLane: true), taken)
+                && pool.TryRent(typeof(Border), visualLane: true) is null);
         }
+
+        private static bool IsPoolExcluded(Microsoft.UI.Xaml.UIElement e)
+            => e.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState { PoolExcluded: true };
     }
 
     // ════════════════════════════════════════════════════════════════════════

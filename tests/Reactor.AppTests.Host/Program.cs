@@ -57,6 +57,13 @@ if (args.Contains(ShutdownPolicyGateProbe.Flag))
     Environment.Exit(ShutdownPolicyGateProbe.Run());
 }
 
+if (args.Contains(ThemeRefProbe.Flag))
+{
+    // Issue #1534 — a theme-resource read for the other theme, in a process where nothing
+    // else has touched the theme dictionaries yet; see ThemeRefProbe.
+    Environment.Exit(ThemeRefProbe.Run(args));
+}
+
 if (args.Contains("--self-test"))
 {
     var filterIdx = Array.IndexOf(args, "--filter");

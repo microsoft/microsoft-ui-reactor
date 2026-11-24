@@ -11,6 +11,10 @@ Final evidence must record the exact integrated commits, mapping hash, dependenc
 versions, commands, outputs and process exit codes. Fixes for #1564, #1565 and
 #1566 are independently owned; a harness change does not establish their status.
 
+The [2026-11-19 validation report](reports/2026-11-19-validation.md) records four
+complete but blocked unpackaged lanes on a pinned revision, separately from
+later deployment preparation. It is not a compatibility verdict for current main.
+
 ## Required matrix
 
 All 25 controls below run on x64 in these six lanes, first against project
@@ -88,6 +92,122 @@ nonempty output, not pixel-perfect parity or physical keyboard navigation.
 OS high contrast and alternate OS text scaling require the real setting, not a
 font-size substitute. No shared desktop setting is changed.
 
+### Coverage aliases, not new native passes
+
+Four legacy `PendingOperations` labels duplicate finite assertions already in
+other scenarios. Their inventory keys and raw blocked results are retained for
+compatibility with pinned evidence. `Summarize-Matrix.ps1` adds
+`coveredByScenario` only to a `blocked/not-implemented` row whose exact counterpart
+passed in the **same control process, lane and run**, after complete TAP/JSONL,
+exit-code and capture-metadata validation. Missing, failed, blocked, inapplicable,
+duplicate/ambiguous or other-lane results cannot supply that annotation.
+
+| Recorded blocked label | Passing counterpart | Bounded assertions represented |
+|---|---|---|
+| `DockPanel/attached-dock-last-child-fill-geometry` | `DockPanel/update` | [Attached Left -> Top, LastChildFill true -> false, exact edge/last-child sizes and allocated width](Scenarios.cs#L296-L320). Not every dock edge or last-child reorder/removal. |
+| `UniformGrid/first-column-keyed-reorder` | `UniformGrid/update` | [FirstColumn=1 offset and cell geometry](Scenarios.cs#L283-L295), [retained keyed instances, inserted tile-6 and removed tile-5](Scenarios.cs#L378-L411). Not arbitrary FirstColumn values or row/column boundaries. |
+| `SwitchPresenter/actual-matching-default-case-collection` | `SwitchPresenter/sample-native-case-selection` | [Actual matching/default/no-default case collections, stable identities and fresh remount](SwitchPresenterSampleChecks.cs#L12-L118). Not dynamic case replacement/removal while mounted. |
+| `TabbedCommandBar/actual-tabs-command-invocation` | `TabbedCommandBar/sample-native-tabs-commands` | [Actual Home/View tabs, five commands twice, two-command burst, current callbacks and fresh remount](TabbedCommandBarSampleChecks.cs#L15-L100). Uses public UIA Invoke, not physical keyboard/pointer navigation. |
+
+The report lists these same-lane links separately. It never changes raw status,
+reason, detail, P/F/B/N totals, process/lane verdicts or the scenario inventory.
+An annotated blocked row is **not** a new pass. Read `coveredByScenario` as the
+fully qualified scenario key in that row's lane and report run, not as a
+cross-run or cross-consumer link. Additional desired edge cases need separately
+named scenarios; these four mappings must not clear unrelated compound labels.
+The pinned Segmented provider gap stays blocked, and OS text-scale coverage is
+unchanged.
+
+For historical archives, generate any new summary from a separate copy of the
+recorded metadata/TAP/JSONL and validated inventories, retaining the original
+reports and source revision. Never run the summarizer against frozen evidence
+in place; it writes its report files into `-EvidenceDirectory`.
+
+### Separate physical-input suite
+
+The following are **source links**, not proof of execution or acceptance in any
+compatibility lane. They live in the separate `Reactor.AppTests` E2E suite in
+[`ToolkitInputTests.cs`](../Reactor.AppTests/Tests/ToolkitInputTests.cs).
+Recorded execution evidence must identify that suite's revision, runtime and
+deployment independently. None supplies `coveredByScenario`.
+
+| Named family | Existing E2E source and scope | Not established by those tests |
+|---|---|---|
+| RangeSelector / `both-real-thumbs-parent-accept-reject-callback-routing` | [Accept and route each thumb callback](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L18-L38), [reject and reassert both endpoints](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L42-L58), [actual Tab/Shift+Tab focus](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L173-L197) | No stale callback after remount; no claim that physical input ran in each compatibility lane. |
+| RichSuggestBox / `type-query-insert-delete-token` | [`RichSuggestBox_DownEnter_CommitsFullTokensAcrossRenders`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L62-L87) types/filters a query and commits two full tokens | Token deletion and request cancellation on removal remain separate. |
+| TokenizingTextBox / `type-suggest-add-remove-max-tokens` | [`TokenizingTextBox_TypesConvertsAndRemovesOnlyChosenToken`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L91-L109) types, filters, converts delimiter input and selectively removes tokens | Maximum-token boundary, physical suggestion choice and unsubscribe-on-removal remain separate. |
+| ContentSizer / `real-target-resize` | [`ContentSizer_Drag_ResizesAdvertisedTarget`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L113-L131) checks two drags against the target height, settled layout and unchanged width | Other orientations and physical input after target detach/remount. |
+| PropertySizer / `real-bound-target-resize-bounds` | [`PropertySizer_Drag_UpdatesTargetAndClampsBothBounds`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L135-L143) checks target/binding at both bounds | Callback release on removal and physical input after remount. |
+| GridSplitter / `real-grid-definition-resize` | [`GridSplitter_Drag_ResizesBothColumns`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L147-L169) checks adjacent columns/panes, preserved total and fixed sibling | Row orientation, keyboard resizing and physical input after remount. |
+
+The dependency-free `Test-ResultProtocol.ps1` regression checks these reporting
+rules using bounded synthetic runs, including passing and rejected counterpart
+cases. It does not launch the consumer, exercise native controls or establish
+new native coverage.
+
+### Bounded OS text-scale check (#1602)
+
+`SettingsCard/os-text-scaling` now captures and checks the current core scenario's
+string header and `TextBlock` description when the observed real OS
+`UISettings.TextScaleFactor` is greater than 1. At 100% it remains
+`blocked/approval`; other controls remain `blocked/not-implemented` even on a
+scaled host. Rich headers, non-TextBlock descriptions and explicit clip geometries
+are also unimplemented, not native limitations or passes. High-contrast behavior
+is unchanged.
+
+The check requires exactly one realized header outside the content/icon/description
+slots, nonempty attached text with OS scaling enabled, and no native trimming.
+A separate native TextBlock measures the full text with matching typography and
+the current OS scale, without trimming, fixed height or a line cap. For wrapped
+text, its width preserves the native measured content width within the arranged
+slot, accounting for margins and never shrinking below the actual text extent.
+This avoids rewrapping a single line when its fractional `ActualWidth` is slightly
+smaller than its rounded layout width. The probe retains native layout rounding.
+Required and
+allocated dimensions must be finite, positive and fit within one DIP of layout
+rounding. Each text box must also fit within every ancestor's rectangular bounds
+through the window content, with no collapsed or fully transparent ancestor.
+This is deliberately conservative, including ancestors that do not clip.
+The TAP log records text, typography, wrapping, dimensions, ancestor bounds,
+theme, rasterization scale, and OS scale before/after. The PNG is captured before
+the assertions so a failed fit can still be inspected.
+
+This does not prove scale-to-scale growth, pixel-perfect visibility, overlapping
+sibling behavior, arbitrary rich text, long-content stress, or other controls.
+The existing short core strings are the measured scope. Captures require human
+review. A build or headless geometry test is **not** WinUI/runtime acceptance.
+
+After the positive checks, the same bounded scenario runs three native negative
+controls. It halves each text slot's height in turn, verifies a nonzero native
+size reduction, and requires a role-matched trimming, text-overflow or
+ancestor-overflow failure. Invalid measurements and unrelated exceptions do not
+count. It then applies a SettingsCard ancestor clip cutting through the header
+and requires the exact `not-implemented` explicit-clip outcome, not a pass.
+Each mutation restores the original dependency-property value (including unset)
+in `finally`, checks the original text/card dimensions and reruns the positive
+oracle. Both text slots are rechecked after all three rejections. The TAP log
+records the perturbations, observed reasons and restored baseline; the PNG is
+the unmodified positive capture, not a screenshot of the negative controls.
+
+Headless regression tests compile the same measurement guards without WinUI,
+WinRT initialization, or the compatibility consumer. The project is included in
+solution builds and runs in the PR CI Unit Tests job:
+
+```powershell
+dotnet test tests\ToolkitCompatibility.HeadlessTests --filter-class "*TextScalingMeasurementsTests*"
+```
+
+Later, on an explicitly approved dedicated host/VM, run the SettingsCard lane at
+100% and confirm `blocked/approval`, then at a real scale above 100% (including
+the chosen maximum acceptance scale). Verify nonzero full-text measurements,
+the exact two checked slots, ancestor bounds, stable OS scale, and the PNG.
+Verify all three native negative-control reasons and the final restored positive
+baseline in that same run. Explicit clip geometry must remain blocked, never
+silently accepted. Confirm an unsupported control remains `blocked/not-implemented`.
+Repeat under each deployment/runtime being claimed. High-contrast captures still
+require real OS high contrast. Any setting changes and restoration need their
+own authorization; these instructions do not grant it.
+
 Mounts require actual visual-tree attachment and nonzero layout rather than
 `IsLoaded` alone. Removal checks detachment and exactly one public `OnUnmount`
 notification. `GetElementTag` is diagnostic association, not a guarantee of
@@ -117,6 +237,91 @@ created by that exact run. Do not create/trust certificates, enable Developer
 Mode, alter accessibility settings or grant camera permission implicitly.
 Installation/signing/input blockers go to the coordinator for user decisions.
 Coordinate foreground input runs before starting them.
+
+### Segmented UIA comparison (#1599)
+
+`tests\ToolkitSegmentedUiaProbe` is a separate **native-only** WinUI application.
+It has no Reactor reference and does not use `NativeBaseline` (which still runs
+inside a Reactor host). It uses the centrally pinned Toolkit and WinUI packages,
+explicit native XAML metadata registration, and the same `SegmentedUiaDiagnostics`
+source as the Segmented arm of `LocalEvidenceChecks`.
+
+The probe first requires a stock ListView positive control to expose every item's
+selection identity for indices 0 and 1. It then records direct Toolkit Segmented
+instances with the harness's string items and with explicit SegmentedItem
+containers (the code-only equivalent of declarative native items). Both use the
+harness's labels, width, single-selection mode and accessible root name.
+This is not a literal XAML-authored application.
+
+The shared capture records the root, container and public child peers, their
+managed types as well as native class names, raw and typed Selection/SelectionItem
+patterns, container EventsSource peers, and per-item IsSelected at both indices.
+The child walk is bounded at depth 16 / 256 peers and reports truncation; absence
+in a truncated tree is not proof of absence. It does not construct a replacement
+peer, add an adapter, change the existing depth-4 acceptance search, or upgrade a
+blocked `uia-value-patterns` result. Selection is assigned programmatically and
+restored, not driven through physical input. The Reactor capture is also saved
+as `segmented-uia.txt` beside its `results.jsonl`, independently of console capture.
+
+Headless preparation (no application launch):
+
+```powershell
+dotnet build tests\ToolkitSegmentedUiaProbe\ToolkitSegmentedUiaProbe.csproj -p:Platform=x64
+dotnet build tests\ToolkitCompatibility\ToolkitCompatibility.csproj -p:Platform=x64 -p:SkipSignaturesGen=true -m:1 -nodereuse:false
+```
+
+Only after a coordinated runtime slot, run these **sequentially**, using new
+evidence paths. Neither command is a headless test.
+
+```powershell
+tests\ToolkitSegmentedUiaProbe\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ToolkitSegmentedUiaProbe.exe --run C:\evidence\segmented-native.txt
+pwsh tests\ToolkitCompatibility\Run-Matrix.ps1 -EvidenceDirectory C:\evidence\segmented-reactor -Runtime jit -Deployment unpackaged -Filter Segmented
+```
+
+The native probe closes its one window automatically. Exit 0 plus `COMPLETE`
+means a complete diagnostic capture, **not** accessibility acceptance. A failed
+ListView positive control, timeout, exception or missing completion invalidates
+the comparison. The filtered Reactor run additionally executes its existing
+property, programmatic-focus and render-capture scenarios; it does not inject
+physical input. Exit 2 for blocked coverage remains non-success.
+
+For independent cross-process inspection, use `--inspect <new-log-path>` instead
+of `--run`. After the same automatic capture and ListView positive control, it
+keeps all three controls visible with distinct automation IDs. Its two buttons
+assign index 0 / List or index 1 / Grid to every control and log the actual native
+indices. Observe the selection state through the independent UIA client, not the
+status label alone. Close the diagnostic window to finish and release the slot.
+This mode remains open until closed and is not an unattended matrix lane.
+
+Compare `native-segmented-strings` against `sample-mappings` at both indices.
+If only the deeper walk or EventsSource reveals providers, investigate that
+specific path before changing the harness. If only Reactor differs, investigate
+the mapping/host rather than the Toolkit contract. If both lack providers while
+ListView passes, the evidence supports an inherited native accessibility gap,
+but still needs a read-only cross-process UIA inspection before an upstream
+report. In-process peer enumeration alone does not establish what a screen reader
+can observe. Preserve the resolved assets, exact source revision and binary hashes
+with both captures. A future runtime result must not be inferred from a build.
+
+The November 18-19, 2026 JIT/unpackaged comparison for #1599 resolved Toolkit
+`8.3.260402-preview2` and WinUI `2.2.1` (Windows App SDK `2.2.0`). Stock ListView
+exposed `ListViewAutomationPeer` Selection and `ListViewItemDataAutomationPeer`
+SelectionItem; all three item identities matched at both indices. Both direct
+Segmented forms and the Reactor mapping instead exposed a
+`FrameworkElementAutomationPeer` with class `NamedContainerAutomationPeer` /
+role Group and `ListViewItemAutomationPeer` children. No Selection or
+SelectionItem provider or container EventsSource was present. Each public tree
+contained seven peers with no truncation.
+
+An independent Computer Use UIA read then showed ListView's selected row changing
+List -> Grid -> List while neither native Segmented form exposed selected-item
+state. The diagnostic log confirmed all three native indices changed together.
+This identifies a native accessibility gap for those versions, rather than a
+Reactor mapping failure. The SDK Inspect executable required elevation and was
+not run; no Inspect property export or screen-reader announcement is claimed.
+The issue artifact preserves the version-pinned evidence. The compatibility
+scenario remains **blocked**, not passed or inapplicable; no replacement peer is
+installed. Retest the native comparison after a Toolkit/WinUI upgrade.
 
 ## Running
 

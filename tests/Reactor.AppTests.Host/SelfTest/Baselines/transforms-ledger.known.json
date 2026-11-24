@@ -1,0 +1,10 @@
+{
+  "known": [
+    { "case": "*.*.Keyframes", "dims": "*user=None*variant=B*", "step": "change", "part": "motion:Opacity", "issue": "#1651", "note": "A declared .Opacity() change overrides a looping keyframe entry on opacity, which the model says holds the channel. Since spec 066 layer 2 the implicit transitions no longer throw here, so it shows with them too." },
+    { "case": "*.*.Keyframes", "dims": "*user=None*variant=A*", "step": "{addFeature,removeModifier}", "part": "opacity", "issue": "#1660", "note": "A one-shot keyframe entry added while .Opacity() declares 0.8 finishes at its last value, 1, which overrides the declared opacity until it next changes. Since spec 066 layer 2 the implicit transitions no longer throw here, so it shows with them too." },
+    { "case": "*.*.TransitionExit", "dims": "*wrapper=Memo*user=None*", "step": "unmount", "part": "active", "issue": "#1663", "note": "An exit .Transition() declared on a keyed Memo does not play when the Memo is removed, so the control is gone at once. Other user dims are attributed by their own rules." },
+    { "case": "*", "dims": "*user=SetFacade*", "part": "*", "issue": "§9 row 1", "note": "A .Set facade Scale write mixed with modifiers or features: the setter re-runs and clobbers the declared value or is migrated by the handoff, and throws once the visual is taken." },
+    { "case": "Translation.*.*", "dims": "*user=TranslationDrag*", "part": "*", "issue": "§9 row 3", "note": "A facade Translation drag mixed with .Translation(): on main the last writer wins, and writing or resetting the declared translation zeroes the drag." },
+    { "case": "{None,Identity,Scale,Rotation,CenterPoint,ScaleRotationCenter}.*.*", "dims": "*user=TranslationDrag*", "part": "*", "issue": "#1642", "note": "A facade Translation drag on an element without .Translation(): a handoff migrates or enables translation and the drag is lost (spec 066 §4.3 rule 1)." }
+  ]
+}

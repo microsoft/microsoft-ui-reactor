@@ -154,6 +154,45 @@ public class ModifierTableIntegrityTests
             "An unexplained exclusion is indistinguishable from an oversight.");
     }
 
+    [Fact]
+    public void Every_Visual_Owning_Modifier_And_ANIM_004_Fix_Target_Is_A_Real_Generic_Modifier()
+    {
+        // REACTOR_ANIM_004 binds both its trigger set and its rewrite targets by name. A row
+        // naming a modifier that does not exist never triggers, and a fix target that does not
+        // exist would make the analyzer's speculative bind fail and silently drop the fix.
+        var names = ModifierTable.VisualOwningModifiers.Keys
+            .Concat(FacadeTransformSetAnalyzer.FacadeMembers.Values
+                .Select(member => member.Modifier)
+                .OfType<string>());
+
+        var missing = names
+            .Where(name => !DeclaredGenericModifiers.Value.Contains(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            missing.Count == 0,
+            "REACTOR_ANIM_004 names modifiers that ElementExtensions/FlexExtensions do not declare " +
+            $"in the fluent '(this T el, ...)' shape: [{string.Join(", ", missing)}].");
+        Assert.All(ModifierTable.VisualOwningModifiers, row => Assert.False(string.IsNullOrWhiteSpace(row.Value)));
+    }
+
+    [Fact]
+    public void ANIM_004_Members_Are_Never_Mapped_For_MOD_002()
+    {
+        // Spec 066 §9.1: one .Set write must never get both REACTOR_ANIM_004 and REACTOR_MOD_002,
+        // which would also offer two competing fixes on the same .Set. MOD_002 only fires for
+        // members mapped in Properties, so none of ANIM_004's members may be mapped there.
+        var both = FacadeTransformSetAnalyzer.FacadeMembers.Keys
+            .Append("Translation")
+            .Where(ModifierTable.Properties.ContainsKey)
+            .ToList();
+
+        Assert.True(
+            both.Count == 0,
+            $"These REACTOR_ANIM_004 members are mapped in ModifierTable.Properties: [{string.Join(", ", both)}].");
+    }
+
     // ── Staleness ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -716,11 +755,11 @@ public class ModifierTableIntegrityTests
     }
 
     /// <summary>
-    /// <c>Reconciler</c> carries a <b>second</b> copy of the same allow-list:
     /// <c>GetDependencyPropertyName</c> decides which properties a <c>ThemeRef</c> binding may emit
-    /// a <c>&lt;Setter&gt;</c> for. Nothing pins it to <c>ApplyModifiers</c>, so
-    /// <c>.Background(Theme.X)</c> and <c>.Background("#fff")</c> can silently disagree about which
-    /// controls they reach — and both analyzers would be right about only one of them.
+    /// a <c>&lt;Setter&gt;</c> for. Its allow-list matches <c>ApplyModifiers</c> by default.
+    /// A separate <see cref="ModifierInfo.ThemeControlGate"/> can add receivers while preserving
+    /// those supported by <c>ApplyModifiers</c>. For example, <c>Foreground(ThemeRef)</c> also
+    /// reaches <c>RichTextBlock</c>.
     /// </summary>
     [Fact]
     public void GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table()
@@ -738,6 +777,18 @@ public class ModifierTableIntegrityTests
 
         foreach (var (prop, themeGate) in themeGates.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
+            if (ElementSpecificThemeProperties.Contains(prop))
+                continue;
+
+            ModifierTable.Properties.TryGetValue(prop, out var info);
+            if ((info?.ThemeControlGate ?? info?.ControlGate) is { } declared
+                && !themeGate.SetEquals(declared))
+            {
+                problems.Add(
+                    $"{prop}: ModifierTable declares [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
+                    $"but the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}].");
+            }
+
             if (!applyGates.TryGetValue(prop, out var applyGate))
             {
                 problems.Add(
@@ -747,7 +798,17 @@ public class ModifierTableIntegrityTests
                 continue;
             }
 
-            if (!themeGate.SetEquals(applyGate))
+            if (info?.ThemeControlGate is not null)
+            {
+                if (!themeGate.IsSupersetOf(applyGate))
+                {
+                    var missingReceivers = applyGate.Except(themeGate).OrderBy(t => t, StringComparer.Ordinal);
+                    problems.Add(
+                        $"{prop}: the ThemeRef path is missing ApplyModifiers receivers " +
+                        $"[{string.Join("|", missingReceivers)}].");
+                }
+            }
+            else if (!themeGate.SetEquals(applyGate))
             {
                 problems.Add(
                     $"{prop}: the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}] " +
@@ -755,21 +816,28 @@ public class ModifierTableIntegrityTests
                     "A modifier that works with a literal brush and not with a Theme token (or vice versa) is a " +
                     "silent, overload-dependent bug.");
             }
+        }
 
-            if (ModifierTable.Properties.TryGetValue(prop, out var info)
-                && info.ControlGate is { } declared
-                && !themeGate.SetEquals(declared))
-            {
-                problems.Add(
-                    $"{prop}: ModifierTable declares [{string.Join("|", declared.OrderBy(t => t, StringComparer.Ordinal))}] " +
-                    $"but the ThemeRef path reaches [{string.Join("|", themeGate.OrderBy(t => t, StringComparer.Ordinal))}].");
-            }
+        foreach (var prop in ElementSpecificThemeProperties.Where(prop => !themeGates.ContainsKey(prop)))
+            problems.Add($"{prop}: listed as element-specific but GetDependencyPropertyName no longer maps it. Remove the row.");
+
+        foreach (var (prop, info) in ModifierTable.Properties)
+        {
+            if (info.ThemeControlGate is not null && !themeGates.ContainsKey(prop))
+                problems.Add($"{prop}: declares a ThemeControlGate but GetDependencyPropertyName does not map it.");
         }
 
         Assert.True(
             problems.Count == 0,
             "Reconciler's two applicability copies have drifted:\n  " + string.Join("\n  ", problems));
     }
+
+    /// <summary>
+    /// ThemeRef properties that come from one element's own extension rather than a common
+    /// modifier, so <c>ApplyModifiers</c> has no brush counterpart to agree with.
+    /// <c>PaneBackground</c> is <c>SplitViewElement.PaneBackground(ThemeRef)</c>.
+    /// </summary>
+    private static readonly HashSet<string> ElementSpecificThemeProperties = new(StringComparer.Ordinal) { "PaneBackground" };
 
     /// <summary>
     /// Property name → the WinUI type names <c>Reconciler.GetDependencyPropertyName</c> will emit a

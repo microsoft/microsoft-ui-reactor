@@ -129,6 +129,49 @@ suppression": passing `null` as the curve marks the scope active but
 disables animation, useful for one-off explicit writes inside an outer
 animated scope.
 
+## Shared implicit keys
+
+`.LayoutAnimation()`, `.Animate(...)` and the implicit transitions
+(`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()`,
+`.TranslationTransition()`) all work by installing implicit animations on
+the element's composition visual, keyed by the property they animate
+(`Offset`, `Size`, `Opacity`, `Scale`, `RotationAngle`, `CenterPoint`).
+One element can declare several of them, so Reactor keeps a record of
+which feature claims each key instead of letting each feature replace the
+visual's whole collection. Adding or removing one feature never drops
+another feature's key.
+
+When two features claim the same key, one wins:
+
+| Key | Winner, highest first |
+|---|---|
+| `Offset` | `.LayoutAnimation()`, then `.Animate(...)`, then an ambient reorder move |
+| `Size` | `.LayoutAnimation()` |
+| `Opacity`, `Scale`, `RotationAngle` | `.Animate(...)`, then the matching transition |
+| `CenterPoint` | `.Animate(...)` |
+
+Removing the winner brings the next claim back. For example, an
+element with `.LayoutAnimation()` that later adds `.Animate(Curve.Spring(),
+AnimateProperty.Opacity)` and `.OpacityTransition()` fades with the
+spring, and dropping `.Animate(...)` on a later render returns it to the
+transition's fade. When a keyed `Memo` or a flyout and the element
+inside it both declare the same feature, the outer declaration wins, and
+removing it restores the inner one. A reorder animated by an ambient
+`Animations.Animate(...)` scope claims `Offset` below all of them.
+
+Removing a transition modifier removes its transition, so a later
+change of that property jumps instead of animating. Reactor never sets
+WinUI's XAML transitions (`UIElement.OpacityTransition` and its
+siblings), which would block the handoff (#1623): the Opacity, Scale and
+Rotation transitions are implicit keys with WinUI's (0.8, 0, 0.2, 1)
+curve, and `.TranslationTransition()` claims no key at all, because an
+implicit `Translation` key never fires for a property-set write. Reactor
+animates its own `.Translation()` writes instead. On an update, the
+transitions are claimed and released before setters and modifiers
+write, so a value changed in the same render follows the new
+declaration. With the system's "Animation effects" setting off, no
+transition key is installed (spec 066 §5).
+
 ## Keyframe authoring
 
 ```csharp

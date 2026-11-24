@@ -212,9 +212,10 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_DIALOG_001` | Warning | Imperative ContentDialog.ShowAsync escapes the render tree; use the controlled ContentDialog(...) element with IsOpen | `ImperativeContentDialogAnalyzer.cs` |
 | `REACTOR_MOD_001` | Info | Same atomic-replace placement modifier (.Grid/.Canvas/.RelativePanel/.Flex) applied twice in one chain; last-wins overwrite drops earlier args (ships a merge fix) | `DuplicateAtomicModifierAnalyzer.cs` |
 | `REACTOR_MOD_002` | Info | .Set assigns a property that has a first-class fluent modifier; the write re-runs every render, is never unwound, and pins the element to the update path (ships a chain-rewrite fix) | `PoolResetSetAnalyzer.cs` |
-| `REACTOR_MOD_003` | Warning | Common modifier applied to an element whose mounted control is outside the types `ApplyModifiers` writes it to, so the value is silently dropped (e.g. `.Background(...)` on a Rectangle renders an invisible shape); ships a did-you-mean fix to `.Fill`/`.Stroke` for shapes | `NoOpModifierAnalyzer.cs` |
+| `REACTOR_MOD_003` | Warning | The selected generic modifier overload compiles, but the reconciler discards its value on the mounted control. For example, `.Background(...)` on a `Rectangle` has no effect. The rule offers a fix to `.Fill(...)` or `.Stroke(...)` for shapes. | `NoOpModifierAnalyzer.cs` |
 | `REACTOR_MEDIA_001` | Info | WebView2 is a direct child of an auto-layout stack (HStack/VStack/FlexRow/FlexColumn) without explicit .Width/.Height | `UnsizedWebViewInStackAnalyzer.cs` |
 | `REACTOR_ANIM_003` | Warning | async lambda to WithAnimation loses the ThreadStatic scope after await | `AnimationScopeAsyncAnalyzer.cs` |
+| `REACTOR_ANIM_004` | Warning | `.Set` writes a `UIElement` transform facade (`Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix`, the `*Transition` properties) or calls `StartAnimation` on an element whose chain uses a modifier that takes the composition visual (`ModifierTable.VisualOwningModifiers`), so WinUI rejects the write; also flags a `.Set` `Translation` write that conflicts with `.Translation(...)` (#1642). Ships a fix to `.Rotation`/`.Scale`/`.CenterPoint` and to the `.XxxTransition()` modifiers, which run on the visual since spec 066 layer 2 (spec 066 §9.1) | `FacadeTransformSetAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_002` | Warning | UseEffect(Action) allocates a timer/subscription/event with no returned cleanup | `EffectCleanupAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_003` | Warning | A custom control updates its hosted child with Reconciler.UpdateChild, which skips the element-type check and leaves a replaced control mounted; use Reconcile (ships a rewrite fix) | `ReconcilerUpdateChildAnalyzer.cs` |
 | `REACTOR_MEMO_001` | Info | Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache | `MemoWrapperModifierAnalyzer.cs` |
@@ -229,6 +230,12 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 (variable hook counts across early returns, async boundaries inside `UseEffect`);
 they now ship — `_002` flags a hook after a single-guard early return, `_003`
 flags an `async`-void `UseEffect` body (spec 060 §4.1).
+
+`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for writes through
+`ApplyModifiers`. When a `ThemeRef` overload has a separate receiver list,
+the rule uses `ThemeControlGate`. For example, the generic brush overload of
+`Foreground` reaches `Control` and `TextBlock`, and the `ThemeRef` overload
+also reaches `RichTextBlock`.
 
 ## Combined sizing without extra copies
 

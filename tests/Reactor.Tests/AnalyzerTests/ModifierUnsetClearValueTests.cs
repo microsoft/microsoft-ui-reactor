@@ -124,6 +124,12 @@ public class ModifierUnsetClearValueTests
             ["CenterPoint"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
             ["RotationAxis"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
             ["TransformMatrix"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            // Issue #1624: the XAML implicit transitions have no DependencyProperty either, and only
+            // a user .Set leaves one now (spec 066 §5). Null is a fresh control's value.
+            ["OpacityTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
+            ["ScaleTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
+            ["RotationTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
+            ["TranslationTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
         };
 
     /// <summary>

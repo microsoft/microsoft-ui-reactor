@@ -385,7 +385,7 @@ internal static class ChildReconciler
         if (reconciler.CanUpdate(oldEl, newEl))
         {
             existingControl ??= children.Get(i);
-            var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+            var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate, childIndex: i);
             if (replacement is not null)
             {
                 // Child type changed at runtime — replace in place
@@ -675,7 +675,7 @@ internal static class ChildReconciler
             if (panelIdx < childCount)
             {
                 existingControl ??= map.ControlAt(prefixLen);
-                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate, childIndex: prefixLen);
                 if (replacement is not null)
                 {
                     if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
@@ -729,7 +729,7 @@ internal static class ChildReconciler
             if (panelIdx >= 0 && panelIdx < childCount)
             {
                 existingControl ??= map.ControlAt(oldIdx);
-                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate, childIndex: newIdx);
                 if (replacement is not null)
                 {
                     if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
@@ -1130,7 +1130,8 @@ internal static class ChildReconciler
                 _newChildren[_newStart + newIdx],
                 existing,
                 _requestRerender,
-                out var unmountedByUpdate);
+                out var unmountedByUpdate,
+                childIndex: _newStart + newIdx);
             if (replacement is not null)
             {
                 if (!unmountedByUpdate) _reconciler.UnmountChild(existing);
@@ -1368,11 +1369,10 @@ internal static class ChildReconciler
         try
         {
             var visual = Animation.AnimationHelper.GetElementVisual(ctrl);
-            var compositor = visual.Compositor;
-            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
-            var coll = compositor.CreateImplicitAnimationCollection();
-            coll["Offset"] = anim;
-            visual.ImplicitAnimations = coll;
+            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(visual.Compositor, "Offset", curve);
+            // A declared layout, .Animate() or transition Offset key wins over the ambient move,
+            // and the element's other keys stay (spec 066 §6).
+            Animation.ImplicitAnimationSlots.Claim(ctrl, "Offset", Animation.ImplicitFeature.Move, 0, anim);
         }
         catch
         {

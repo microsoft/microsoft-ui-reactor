@@ -230,6 +230,8 @@ internal static class SelfTestRunner
         // before they can be re-enabled under AOT. --
         "Issue142_CustomControlPrivateDp_Renders",
         "Issue142_ThirdPartyControlPrivateDp_Renders",
+        // Mounts the same third-party control, so it needs the same provider.
+        "ThemeRefStyle_ThirdPartyStyleFallsBack",
 
         // Same root cause, for this host's own compiled page: ReactorApplication finds
         // the host's generated XamlMetaDataProvider only by reflecting over the entry

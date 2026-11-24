@@ -157,6 +157,8 @@ internal static class AnimateModifierTests
     {
         public override async Task RunAsync()
         {
+            // Transitions honour the system's animation setting (spec 066 §5.5); this checks their keys.
+            using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             using var reconciler = new Reconciler();
             var child = TextBlock("Content");
             Element Wrap(Element element) => childSkip ? VStack(element) : element;

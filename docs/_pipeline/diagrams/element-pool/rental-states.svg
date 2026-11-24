@@ -78,10 +78,10 @@
   <text class="edge-label" x="280" y="202">stack &lt; cap</text>
 
   <path class="edge" d="M610 230 Q 660 280 660 352" marker-end="url(#arr)"/>
-  <text class="edge-label" x="670" y="305">cap (32 / type)</text>
+  <text class="edge-label" x="670" y="305">cap (32 / lane)</text>
 
   <path class="edge" d="M450 240 Q 410 320 384 352" marker-end="url(#arr)"/>
-  <text class="edge-label" x="350" y="305" text-anchor="end">compositor-tainted</text>
+  <text class="edge-label" x="350" y="305" text-anchor="end">reset refused</text>
 
   <path class="edge" d="M210 90 L178 162" marker-end="url(#arr)"/>
   <text class="edge-label" x="160" y="135" text-anchor="end">Dispose</text>

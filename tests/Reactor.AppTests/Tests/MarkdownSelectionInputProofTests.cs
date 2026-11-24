@@ -13,6 +13,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private const int SampleIntervalMs = 150;
     private const int PollIntervalMs = 100;
     private const int WaitSeconds = 8;
+    private const double ScrollPercentTolerance = .01;
     private const uint MouseMove = 0x0001, MouseMoveNoCoalesce = 0x2000, MouseVirtualDesk = 0x4000, MouseAbsolute = 0x8000;
     private readonly HashSet<ushort> _heldKeys = [];
     [ClassInitialize]
@@ -79,48 +80,15 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             textRegistered = true;
             Automation.AddAutomationEventHandler(TextPattern.TextSelectionChangedEvent, inner, TreeScope.Element, selectionHandler);
             selectionRegistered = true;
-            void Point(double x, double y)
-            {
-                GuardForeground();
-                int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
-                int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
-                Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
-                Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
-                    "Pointer target is inside the virtual desktop");
-                Send(new Input
-                {
-                    Union = new InputUnion
-                    {
-                        Mouse = new MouseInput
-                        {
-                            X = (int)Math.Clamp(Math.Floor((Math.Round(x) - left + .5) * 65536 / width), 0, 65535),
-                            Y = (int)Math.Clamp(Math.Floor((Math.Round(y) - top + .5) * 65536 / height), 0, 65535),
-                            Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
-                        }
-                    }
-                });
-                Thread.Sleep(PointerSettleMs);
-            }
-            void Mouse(uint flags)
-            {
-                GuardForeground();
-                Send(new Input { Type = 0, Union = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
-            }
             void Click(double x, double y)
             {
                 Point(x, y);
                 Mouse(2); mouseHeld = true;
                 Mouse(4); mouseHeld = false;
             }
-            static double[] Glyph(TextPatternRange document, int start)
+            void MultiClick(double x, double y, int count)
             {
-                var range = document.Clone();
-                range.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, start);
-                range.MoveEndpointByRange(TextPatternRangeEndpoint.End, range, TextPatternRangeEndpoint.Start);
-                range.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 1);
-                var bounds = range.GetBoundingRectangles();
-                Assert.IsTrue(bounds.Length > 0 && bounds[0].Width > 0 && bounds[0].Height > 0);
-                return [bounds[0].X, bounds[0].Y, bounds[0].Width, bounds[0].Height];
+                for (int i = 0; i < count; i++) Click(x, y);
             }
             var link = outerText.DocumentRange.FindText("native link", false, false);
             Assert.IsNotNull(link);
@@ -144,12 +112,76 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 && dragged.CompareEndpoints(TextPatternRangeEndpoint.End, link, TextPatternRangeEndpoint.End) <= 0,
                 "Link drag range must stay inside the pressed hyperlink");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag must not activate link");
+            var customLinkRange = outerText.DocumentRange.FindText("button link", false, false);
+            Assert.IsNotNull(customLinkRange);
+            var customButton = Find("SelectionCustomLink");
+            var customGlyph = Glyph(customLinkRange, 2);
+            double customX = customGlyph[0] + customGlyph[2] / 2;
+            double customY = customGlyph[1] + customGlyph[3] / 2;
+            var customDragGlyph = Glyph(customLinkRange, 9);
+            double customDragX = customDragGlyph[0] + customDragGlyph[2] / 2;
+            double customDragY = customDragGlyph[1] + customDragGlyph[3] / 2;
+            Console.WriteLine($"Custom link drag screen positions: ({customX},{customY}) to ({customDragX},{customDragY})");
+            Assert.IsTrue(Math.Abs(customDragX - customX) > 4, "Custom link glyphs must be farther apart than the drag threshold");
+            string routingBeforeClick = outer.Current.HelpText;
+            Point(customX, customY);
+            Mouse(2); mouseHeld = true;
+            Wait(() => outer.Current.HelpText != routingBeforeClick &&
+                outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal),
+                "custom button click press delivered");
+            Assert.IsTrue(outer.Current.HelpText.Split(" | ")[^1]
+                .Contains("nativePending=True tracking=True", StringComparison.Ordinal),
+                "A pending native click must keep selection layout tracking active");
+            Mouse(4); mouseHeld = false;
+            Wait(() => outer.Current.HelpText.Split(" | ")[^1].StartsWith("release ", StringComparison.Ordinal) &&
+                outer.Current.HelpText.Split(" | ")[^1].Contains("nativePending=False", StringComparison.Ordinal),
+                "custom button release clears the pending native press");
+            Wait(() => customButton.Current.HelpText == "Custom clicks 1", "custom link button click");
+            Thread.Sleep((int)GetDoubleClickTime() + 1);
+            Point(customX, customY);
+            string routingBeforeCustomPress = outer.Current.HelpText;
+            Mouse(2); mouseHeld = true;
+            Wait(() => outer.Current.HelpText != routingBeforeCustomPress &&
+                outer.Current.HelpText.Split(" | ")[^1].StartsWith("press ", StringComparison.Ordinal) &&
+                outerText.GetSelection().Single().GetText(-1) == "",
+                "custom button press was routed without selecting a word");
+            string customPress = outer.Current.HelpText.Split(" | ")[^1];
+            Assert.IsTrue(customPress.Contains("nativePending=True tracking=True", StringComparison.Ordinal),
+                "A pending native press must keep selection layout tracking active");
+            Point(customDragX, customDragY);
+            Assert.IsTrue(GetCursorPos(out var customDragCursor));
+            Assert.IsTrue(Math.Abs(customDragCursor.X - customDragX) <= 1 &&
+                Math.Abs(customDragCursor.Y - customDragY) <= 1, "Cursor reached the second custom link glyph");
+            Console.WriteLine($"Custom button drag before release: routing={outer.Current.HelpText}");
+            Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
+                "custom link button drag selects before release");
+            Mouse(4); mouseHeld = false;
+            Wait(() => outerText.GetSelection().Single().GetText(-1).Length > 0,
+                "custom link button drag selects");
+            var customDragged = outerText.GetSelection().Single();
+            Assert.IsTrue(customDragged.CompareEndpoints(TextPatternRangeEndpoint.Start,
+                    customLinkRange, TextPatternRangeEndpoint.Start) >= 0
+                && customDragged.CompareEndpoints(TextPatternRangeEndpoint.End,
+                    customLinkRange, TextPatternRangeEndpoint.End) <= 0,
+                "Custom link drag range must stay inside the link label");
+            Assert.AreEqual("Custom clicks 1", customButton.Current.HelpText,
+                "custom link drag must not activate its release-mode button");
             var outerSelection = outerText.GetSelection().Single().GetText(-1);
-            var outerRangeBeforeInnerInput = outerText.GetSelection().Single().Clone();
             Console.WriteLine($"Link drag selected={outerSelection}");
             var innerGlyph = Glyph(innerText.DocumentRange, 1);
-            Click(innerGlyph[0] + innerGlyph[2] / 2, innerGlyph[1] + innerGlyph[3] / 2);
-            Thread.Sleep(SampleIntervalMs);
+            double innerX = innerGlyph[0] + innerGlyph[2] / 2;
+            double innerY = innerGlyph[1] + innerGlyph[3] / 2;
+            MultiClick(innerX, innerY, 2);
+            Console.WriteLine($"Inner double-click selection={innerText.GetSelection().Single().GetText(-1)}; routing={inner.Current.HelpText}");
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner ",
+                "double-click selects the word with trailing whitespace");
+            Click(innerX, innerY);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text",
+                "triple-click selects the Markdown paragraph");
+            Key(0x27, false); Key(0x27, true);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "" &&
+                receivedSelection.Contains(""), "collapse before testing Ctrl+A");
+            receivedSelection.Clear();
             uint clipboardSequence = GetClipboardSequenceNumber();
             Key(0x11, false);
             Key(0x41, false); Key(0x41, true);
@@ -158,9 +190,12 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text", "inner Ctrl+A");
             Wait(() => receivedSelection.Contains("inner text"), "Ctrl+A exact selection-change event");
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link after timer settle");
-            Assert.AreEqual(outerSelection, outerText.GetSelection().Single().GetText(-1), "outer selection unchanged");
-            Assert.IsTrue(outerRangeBeforeInnerInput.Compare(outerText.GetSelection().Single()),
-                "Nested input must not move either endpoint of the saved outer range");
+            var outerRangeAfterClickAway = outerText.GetSelection().Single();
+            Assert.AreEqual("", outerRangeAfterClickAway.GetText(-1),
+                "Clicking another selection scope clears the old selection");
+            Assert.AreEqual(0, outerRangeAfterClickAway.CompareEndpoints(
+                TextPatternRangeEndpoint.Start, outerRangeAfterClickAway, TextPatternRangeEndpoint.End),
+                "Click-away leaves no selected accessibility range");
             Wait(() => GetClipboardSequenceNumber() != clipboardSequence && ReadClipboard() == "inner text",
                 "fresh inner clipboard write");
             var clipboard = ReadClipboard();
@@ -177,9 +212,25 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
             Assert.AreEqual(0, innerText.GetSelection().Single().CompareEndpoints(
                 TextPatternRangeEndpoint.Start, shiftAnchor, TextPatternRangeEndpoint.Start), "Shift+click keeps anchor");
             Console.WriteLine($"Shift+click selected={innerText.GetSelection().Single().GetText(-1)}");
+            var lastWord = Glyph(innerText.DocumentRange, 7);
+            double lastX = lastWord[0] + lastWord[2] / 2;
+            double lastY = lastWord[1] + lastWord[3] / 2;
+            Click(lastX, lastY);
+            Mouse(2); mouseHeld = true;
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "text",
+                "second press anchors the final word before streaming");
             ((InvokePattern)Find("SelectionStream").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
-            Wait(() => innerText.DocumentRange.GetText(-1) == "inner text streamed" &&
-                receivedText.Contains("inner text streamed"), "streaming exact text-change event");
+            Wait(() => innerText.DocumentRange.GetText(-1) == "new inner text" &&
+                receivedText.Contains("new inner text"), "streaming exact text-change event");
+            Assert.AreEqual("text", innerText.GetSelection().Single().GetText(-1),
+                "layout during a held double-click must preserve the whole word");
+            innerGlyph = Glyph(innerText.DocumentRange, 5);
+            innerX = innerGlyph[0] + innerGlyph[2] / 2;
+            innerY = innerGlyph[1] + innerGlyph[3] / 2;
+            Point(innerX, innerY);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "inner text",
+                "reverse word drag retains its anchor after a streaming prefix edit");
+            Mouse(4); mouseHeld = false;
             Console.WriteLine($"Streaming text={innerText.DocumentRange.GetText(-1)} selected={innerText.GetSelection().Single().GetText(-1)}; textEvents={textEvents}");
 
             var longElement = Find("SelectionLong");
@@ -189,6 +240,69 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 new PropertyCondition(AutomationElement.IsScrollPatternAvailableProperty, true));
             Assert.IsNotNull(scrollElement);
             var scroll = (ScrollPattern)scrollElement.GetCurrentPattern(ScrollPattern.Pattern);
+            void ResetLongScroll()
+            {
+                scroll.SetScrollPercent(ScrollPattern.NoScroll, 0);
+                try
+                {
+                    Wait(() => scroll.Current.VerticalScrollPercent == 0, "reset before edge drag");
+                }
+                finally
+                {
+                    Console.WriteLine($"Edge drag reset: scroll={scroll.Current.VerticalScrollPercent}; routing={longElement.Current.HelpText}");
+                }
+            }
+            foreach (int clickCount in new[] { 2, 3 })
+            {
+                ResetLongScroll();
+                Thread.Sleep((int)GetDoubleClickTime() + 1);
+                var anchorGlyph = Glyph(longText.DocumentRange, 7);
+                double anchorX = anchorGlyph[0] + anchorGlyph[2] / 2;
+                double anchorY = anchorGlyph[1] + anchorGlyph[3] / 2;
+                for (int click = 1; click < clickCount; click++) Click(anchorX, anchorY);
+                Mouse(2); mouseHeld = true;
+                string initial = clickCount == 2 ? "paragraph " : "drag paragraph 00";
+                Wait(() => longText.GetSelection().Single().GetText(-1) == initial,
+                    $"click count {clickCount} establishes a complete selection unit");
+                var edgeViewport = scrollElement.Current.BoundingRectangle;
+                Point(anchorX, edgeViewport.Bottom + 12);
+                Assert.IsTrue(GetCursorPos(out var heldPoint));
+                double lastScroll = scroll.Current.VerticalScrollPercent;
+                int lastLength = longText.GetSelection().Single().GetText(-1).Length;
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    Thread.Sleep(SampleIntervalMs);
+                    Wait(() => scroll.Current.VerticalScrollPercent > lastScroll &&
+                        longText.GetSelection().Single().GetText(-1).Length > lastLength,
+                        $"click count {clickCount} stationary autoscroll sample {sample}");
+                    GuardForeground();
+                    Assert.IsTrue(GetCursorPos(out var currentPoint));
+                    Assert.AreEqual(heldPoint.X, currentPoint.X, "Granular edge drag pointer X unchanged");
+                    Assert.AreEqual(heldPoint.Y, currentPoint.Y, "Granular edge drag pointer Y unchanged");
+                    string selected = longText.GetSelection().Single().GetText(-1);
+                    if (clickCount == 2)
+                    {
+                        Assert.IsTrue(selected.StartsWith("paragraph 00\n", StringComparison.Ordinal) &&
+                            selected.EndsWith("paragraph ", StringComparison.Ordinal),
+                            $"Word autoscroll keeps complete anchor and active words: '{selected}'");
+                    }
+                    else
+                    {
+                        Assert.IsTrue(selected.StartsWith("drag paragraph 00\n", StringComparison.Ordinal) &&
+                            global::System.Text.RegularExpressions.Regex.IsMatch(selected, @"drag paragraph \d{2}$"),
+                            $"Paragraph autoscroll keeps complete paragraphs: '{selected}'");
+                    }
+                    lastScroll = scroll.Current.VerticalScrollPercent;
+                    lastLength = selected.Length;
+                }
+                Mouse(4); mouseHeld = false;
+                Wait(() => longElement.Current.HelpText.Split(" | ")[^1] is var latest &&
+                    latest.StartsWith("release ", StringComparison.Ordinal) &&
+                    latest.Contains("captures=0", StringComparison.Ordinal),
+                    $"click count {clickCount} drag release delivered before resetting the scroller");
+                Console.WriteLine($"Granular stationary edge drag passed: clicks={clickCount}; scroll={lastScroll}; selectedLength={lastLength}");
+            }
+            ResetLongScroll();
             var firstGlyph = Glyph(longText.DocumentRange, 1);
             Point(firstGlyph[0] + firstGlyph[2] / 2, firstGlyph[1] + firstGlyph[3] / 2);
             Mouse(2); mouseHeld = true;
@@ -217,7 +331,119 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 Console.WriteLine($"Stationary drag sample {sample}: pointer={stationary.X},{stationary.Y}; scrollPercent={previousScroll}; selectedLength={previousLength}");
             }
             Mouse(4); mouseHeld = false;
+            Wait(() => longElement.Current.HelpText.Split(" | ")[^1] is var release &&
+                release.StartsWith("release ", StringComparison.Ordinal) &&
+                release.Contains("captures=0", StringComparison.Ordinal),
+                "character drag release delivered before sampling the stopped scroller");
+            Thread.Sleep(SampleIntervalMs);
+            double releasedScroll = scroll.Current.VerticalScrollPercent;
+            Assert.IsTrue(releasedScroll > ScrollPercentTolerance && releasedScroll < 100 - ScrollPercentTolerance,
+                $"Release stop baseline must not be clamped: scrollPercent={releasedScroll}");
+            var releasedRange = longText.GetSelection().Single().Clone();
+            for (int sample = 0; sample < 3; sample++)
+            {
+                Thread.Sleep(SampleIntervalMs);
+                Assert.AreEqual(releasedScroll, scroll.Current.VerticalScrollPercent,
+                    "Releasing the mouse stops stationary edge autoscroll");
+                Assert.IsTrue(releasedRange.Compare(longText.GetSelection().Single()),
+                    "Releasing the mouse stops extending the selection");
+            }
             Assert.AreEqual("Clicks 1", Find("SelectionClicks").Current.Name, "drag did not activate link at end");
+            var currentLink = outerText.DocumentRange.FindText("native link", false, false);
+            Assert.IsNotNull(currentLink);
+            var currentLinkGlyph = Glyph(currentLink, 2);
+            Click(currentLinkGlyph[0] + currentLinkGlyph[2] / 2, currentLinkGlyph[1] + currentLinkGlyph[3] / 2);
+            Wait(() => Find("SelectionClicks").Current.Name == "Clicks 2", "link click after selection");
+            var dismissed = longText.GetSelection().Single();
+            Assert.AreEqual("", dismissed.GetText(-1), "Clicking another message collapses the old selection");
+            Assert.AreEqual(0, dismissed.CompareEndpoints(TextPatternRangeEndpoint.Start,
+                dismissed, TextPatternRangeEndpoint.End), "Click-away leaves no selected accessibility range");
+            void SelectInnerText()
+            {
+                innerText.DocumentRange.Select();
+                Wait(() => innerText.GetSelection().Single().GetText(-1) == "new inner text",
+                    "reselect inner message before click-away");
+            }
+            SelectInnerText();
+            var blank = Find("SelectionBlank");
+            var blankBounds = blank.Current.BoundingRectangle;
+            Click(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "" &&
+                blank.Current.HelpText == "Blank clicks 1", "blank chat click dismisses selection and reaches target");
+            var currentInnerGlyph = Glyph(innerText.DocumentRange, 5);
+            double currentInnerX = currentInnerGlyph[0] + currentInnerGlyph[2] / 2;
+            double currentInnerY = currentInnerGlyph[1] + currentInnerGlyph[3] / 2;
+            var innerMove = MoveInput(currentInnerX, currentInnerY);
+            var blankMove = MoveInput(blankBounds.Left + blankBounds.Width / 2, blankBounds.Top + blankBounds.Height / 2);
+            var down = new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 2 } } };
+            var up = new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 4 } } };
+            static int PressCount(string routing)
+            {
+                string press = routing.Split(" | ").Last(entry => entry.StartsWith("press pressCount=", StringComparison.Ordinal));
+                int start = "press pressCount=".Length;
+                return int.Parse(press.AsSpan(start, press.IndexOf(' ', start) - start),
+                    global::System.Globalization.CultureInfo.InvariantCulture);
+            }
+            int finalPress = PressCount(inner.Current.HelpText) + 3;
+            // One batch keeps all four clicks in the same double-click interval.
+            Input[] clickAwaySequence = [innerMove, down, up, blankMove, down, up, innerMove, down, up, down, up];
+            mouseHeld = true;
+            Assert.AreEqual((uint)clickAwaySequence.Length,
+                SendInput((uint)clickAwaySequence.Length, clickAwaySequence, Marshal.SizeOf<Input>()));
+            mouseHeld = false;
+            Wait(() => blank.Current.HelpText == "Blank clicks 2",
+                "blank chat click resets pending multiclick state");
+            Wait(() => inner.Current.HelpText.Split(" | ")[^1].StartsWith(
+                    $"release pressCount={finalPress} ", StringComparison.Ordinal),
+                "all three inner clicks finished");
+            Assert.AreEqual("inner ", innerText.GetSelection().Single().GetText(-1),
+                "two presses after click-away select a word rather than a paragraph");
+            SelectInnerText();
+            var composer = Find("SelectionComposer");
+            var composerBounds = composer.Current.BoundingRectangle;
+            Click(composerBounds.Left + composerBounds.Width / 2, composerBounds.Top + composerBounds.Height / 2);
+            Wait(() => innerText.GetSelection().Single().GetText(-1) == "" && composer.Current.HasKeyboardFocus,
+                "composer click dismisses selection and receives keyboard focus");
+            var membership = Find("SelectionMembership");
+            var membershipText = (TextPattern)membership.GetCurrentPattern(TextPattern.Pattern);
+            Assert.AreEqual("first\nsecond", membershipText.DocumentRange.GetText(-1));
+            var membershipEvents = new global::System.Collections.Concurrent.ConcurrentQueue<string>();
+            AutomationEventHandler membershipHandler = (_, _) =>
+            {
+                try { membershipEvents.Enqueue(membershipText.DocumentRange.GetText(-1)); }
+                catch (Exception ex) { eventFailures.Enqueue(ex); }
+            };
+            Automation.AddAutomationEventHandler(TextPattern.TextChangedEvent, membership, TreeScope.Element, membershipHandler);
+            try
+            {
+                var add = Find("SelectionAddMember");
+                add.SetFocus();
+                Wait(() => add.Current.HasKeyboardFocus, "membership scope is idle");
+                void Invoke(string id) => ((InvokePattern)Find(id).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+                Invoke("SelectionAddMember");
+                Wait(() => membershipEvents.Contains("first\nsecond\nthird"), "idle child mount TextChanged");
+                Invoke("SelectionAddMember");
+                Wait(() => membershipEvents.Contains("first\nsecond"), "idle child unmount TextChanged");
+                Invoke("SelectionToggleMemberVisibility");
+                Wait(() => membershipEvents.Contains("first"), "idle native collapse TextChanged");
+                Invoke("SelectionToggleMemberVisibility");
+                Wait(() => membershipEvents.Count(value => value == "first\nsecond") >= 2,
+                    "idle native expansion TextChanged");
+                Invoke("SelectionAddMember");
+                Wait(() => membershipEvents.Count(value => value == "first\nsecond\nthird") >= 2,
+                    "idle remount TextChanged");
+                Invoke("SelectionReverseMembers");
+                Wait(() => membershipEvents.Contains("third\nsecond\nfirst"), "idle keyed reorder TextChanged");
+                Invoke("SelectionGateFirstMember");
+                Wait(() => membershipEvents.Contains("third\nsecond"), "idle semantic-only gate TextChanged");
+                Invoke("SelectionIdleProbe");
+                Wait(() => membership.Current.HelpText.StartsWith("idle layouts=", StringComparison.Ordinal),
+                    "idle layout probe completed");
+                var idleProbe = membership.Current.HelpText;
+                Assert.IsTrue(idleProbe.EndsWith("unchanged=True", StringComparison.Ordinal) &&
+                    !idleProbe.Contains("layouts=0 ", StringComparison.Ordinal), idleProbe);
+            }
+            finally { Automation.RemoveAutomationEventHandler(TextPattern.TextChangedEvent, membership, membershipHandler); }
             if (!eventFailures.IsEmpty) throw new AggregateException("External UIA event reads failed", eventFailures);
             Console.WriteLine($"Received TextChanged={string.Join("|", receivedText)}; TextSelectionChanged={string.Join("|", receivedSelection)}");
             Console.WriteLine($"External input checks passed; textEvents={textEvents}, selectionEvents={selectionEvents}, PID={TestSession.HostPid}");
@@ -250,6 +476,178 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
                 throw new AggregateException("Test and cleanup failures", cleanupFailures);
             }
         }
+    }
+
+    [TestMethod]
+    [E2eRetry(3)]
+    public void Selection_ViewportEdges_Modern() => VerifyViewportEdges("Markdown_Selection_Edges_Modern");
+
+    [TestMethod]
+    [E2eRetry(3)]
+    public void Selection_ViewportEdges_Legacy() => VerifyViewportEdges("Markdown_Selection_Edges_Legacy");
+
+    private static void VerifyViewportEdges(string fixture)
+    {
+        SessionInteractivityGuard.EnsureInputInjectable(fixture);
+        GetWindowThreadProcessId((nint)TestSession.HostHwnd, out uint windowPid);
+        Assert.AreEqual((uint)TestSession.HostPid, windowPid, "Only drive the owned host window");
+        AcquireForeground();
+        var window = AutomationElement.FromHandle((nint)TestSession.HostHwnd);
+        AutomationElement Find(string id) => window.FindFirst(TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.AutomationIdProperty, id))
+            ?? throw new InvalidOperationException($"Missing {id}");
+        GuardForeground();
+        ((InvokePattern)Find("ResetFixture").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Wait(() => Find("FixtureStatus").Current.Name == "Ready", "fresh fixture reset");
+        ((InvokePattern)Find("Nav_" + fixture).GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        Wait(() => Find("FixtureStatus").Current.Name == "Loaded: " + fixture, "edge fixture navigation");
+        var message = Find("SelectionEdgeMessage");
+        var text = (TextPattern)message.GetCurrentPattern(TextPattern.Pattern);
+        AutomationElement? scrollElement = TreeWalker.ControlViewWalker.GetParent(message);
+        while (scrollElement is not null && !scrollElement.TryGetCurrentPattern(ScrollPattern.Pattern, out _))
+            scrollElement = TreeWalker.ControlViewWalker.GetParent(scrollElement);
+        Assert.IsNotNull(scrollElement);
+        var scroll = (ScrollPattern)scrollElement.GetCurrentPattern(ScrollPattern.Pattern);
+        Assert.IsTrue(scroll.Current.VerticallyScrollable, "A nonzero scrolling extent is required");
+        bool mouseHeld = false;
+        nint previousDpi = SetThreadDpiAwarenessContext(-4);
+        Assert.AreNotEqual((nint)0, previousDpi, "Per-monitor-aware input coordinates");
+        try
+        {
+            void Begin()
+            {
+                GuardForeground();
+                scroll.SetScrollPercent(ScrollPattern.NoScroll, 50);
+                Wait(() => Math.Abs(scroll.Current.VerticalScrollPercent - 50) < .1, "interior scroll baseline");
+                var viewport = scrollElement.Current.BoundingRectangle;
+                var bounds = message.Current.BoundingRectangle;
+                Assert.IsTrue(bounds.Top > viewport.Top + 20 && bounds.Bottom < viewport.Bottom - 20,
+                    $"Message must sit inside viewport: message={bounds}; viewport={viewport}");
+                var glyph = Glyph(text.DocumentRange, 7);
+                Point(glyph[0] + glyph[2] / 2, glyph[1] + glyph[3] / 2);
+                Mouse(2); mouseHeld = true;
+                Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
+                    .Contains("captures=1", StringComparison.Ordinal),
+                    "real pointer press captured by the message");
+            }
+            void Stable(double before, string operation)
+            {
+                Assert.IsTrue(before > ScrollPercentTolerance && before < 100 - ScrollPercentTolerance,
+                    $"{operation}: baseline must not be clamped; scrollPercent={before}");
+                Assert.IsTrue(GetCursorPos(out var stationary));
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    Thread.Sleep(SampleIntervalMs);
+                    GuardForeground();
+                    Assert.IsTrue(GetCursorPos(out var current));
+                    Assert.AreEqual(stationary.X, current.X, "Stationary pointer X unchanged");
+                    Assert.AreEqual(stationary.Y, current.Y, "Stationary pointer Y unchanged");
+                    Assert.AreEqual(before, scroll.Current.VerticalScrollPercent, ScrollPercentTolerance, operation);
+                }
+                Console.WriteLine($"{fixture}: {operation}; scrollPercent={before}");
+            }
+            void End()
+            {
+                Mouse(4); mouseHeld = false;
+                Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
+                    .Contains("captures=0", StringComparison.Ordinal),
+                    "pointer capture released");
+            }
+            Begin();
+            var viewport = scrollElement.Current.BoundingRectangle;
+            var bounds = message.Current.BoundingRectangle;
+            double x = bounds.Left + bounds.Width / 2;
+            double before = scroll.Current.VerticalScrollPercent;
+            Point(x, bounds.Top - 12);
+            Stable(before, "drag above message inside viewport stays still");
+            Point(x, bounds.Bottom + 12);
+            Stable(before, "drag below message inside viewport stays still");
+            Point(x, viewport.Top - 12);
+            Wait(() => scroll.Current.VerticalScrollPercent < before - .1, "top viewport edge scrolls up");
+            Point(x, viewport.Top + viewport.Height / 2);
+            Thread.Sleep(SampleIntervalMs);
+            Stable(scroll.Current.VerticalScrollPercent, "reentry stops edge scrolling");
+            before = scroll.Current.VerticalScrollPercent;
+            Point(x, viewport.Bottom + 12);
+            Wait(() => scroll.Current.VerticalScrollPercent > before + .1, "bottom viewport edge scrolls down");
+            End();
+            Thread.Sleep(SampleIntervalMs);
+            Stable(scroll.Current.VerticalScrollPercent, "release outside viewport stops scrolling");
+
+            Begin();
+            viewport = scrollElement.Current.BoundingRectangle;
+            before = scroll.Current.VerticalScrollPercent;
+            Point(x, viewport.Top - 12);
+            Wait(() => scroll.Current.VerticalScrollPercent < before - .1, "edge scroll active before capture loss");
+            GuardForeground();
+            Assert.AreEqual("Capture not released", Find("SelectionCaptureStatus").Current.Name,
+                "Capture-loss positive control has not already run");
+            ((InvokePattern)Find("SelectionReleaseCapture").GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            Wait(() => message.Current.HelpText.Split(" | ", StringSplitOptions.None)[^1]
+                is var latest && latest.Contains("capture-lost", StringComparison.Ordinal)
+                && latest.Contains("left=True", StringComparison.Ordinal)
+                && Find("SelectionCaptureStatus").Current.Name == "Released captures=0",
+                "native capture-lost event delivered while button remains held");
+            Thread.Sleep(SampleIntervalMs);
+            Stable(scroll.Current.VerticalScrollPercent, "capture loss stops edge scrolling");
+            Mouse(4); mouseHeld = false;
+        }
+        finally
+        {
+            try
+            {
+                if (mouseHeld) Send(new Input { Union = new InputUnion { Mouse = new MouseInput { Flags = 4 } } });
+            }
+            finally
+            {
+                Assert.AreNotEqual((nint)0, SetThreadDpiAwarenessContext(previousDpi));
+            }
+        }
+    }
+
+    private static Input MoveInput(double x, double y)
+    {
+        GuardForeground();
+        int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
+        int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
+        Assert.IsTrue(width > 0 && height > 0, "Virtual desktop has an input extent");
+        Assert.IsTrue(x >= left && x < left + width && y >= top && y < top + height,
+            "Pointer target is inside the virtual desktop");
+        return new Input
+        {
+            Union = new InputUnion
+            {
+                Mouse = new MouseInput
+                {
+                    X = (int)Math.Clamp(Math.Floor((Math.Round(x) - left + .5) * 65536 / width), 0, 65535),
+                    Y = (int)Math.Clamp(Math.Floor((Math.Round(y) - top + .5) * 65536 / height), 0, 65535),
+                    Flags = MouseMove | MouseMoveNoCoalesce | MouseVirtualDesk | MouseAbsolute
+                }
+            }
+        };
+    }
+
+    private static void Point(double x, double y)
+    {
+        Send(MoveInput(x, y));
+        Thread.Sleep(PointerSettleMs);
+    }
+
+    private static void Mouse(uint flags)
+    {
+        GuardForeground();
+        Send(new Input { Type = 0, Union = new InputUnion { Mouse = new MouseInput { Flags = flags } } });
+    }
+
+    private static double[] Glyph(TextPatternRange document, int start)
+    {
+        var range = document.Clone();
+        range.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, start);
+        range.MoveEndpointByRange(TextPatternRangeEndpoint.End, range, TextPatternRangeEndpoint.Start);
+        range.MoveEndpointByUnit(TextPatternRangeEndpoint.End, TextUnit.Character, 1);
+        var bounds = range.GetBoundingRectangles();
+        Assert.IsTrue(bounds.Length > 0 && bounds[0].Width > 0 && bounds[0].Height > 0);
+        return [bounds[0].X, bounds[0].Y, bounds[0].Width, bounds[0].Height];
     }
 
     private static string ReadClipboard()
@@ -399,4 +797,7 @@ public sealed partial class MarkdownSelectionInputProofTests : AppTestBase
     private static partial bool GetCursorPos(out ScreenPoint point);
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial uint SendInput(uint count, [In] Input[] inputs, int size);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDoubleClickTime();
 }

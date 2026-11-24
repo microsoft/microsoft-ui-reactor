@@ -1121,6 +1121,9 @@ public sealed class ReactorPerfTraceTests
     private static List<CapturedEtwEvent> Capture(byte level, ulong keywords, Action emit)
         => Capture(level, keywords, emit, out _);
 
+    /// <param name="level">The level used to enable the provider on the private ETW session.</param>
+    /// <param name="keywords">The provider keyword mask used by the session.</param>
+    /// <param name="emit">The action that emits events while the session is active.</param>
     /// <param name="written">Events the provider handed ETW while <paramref name="emit"/> ran.</param>
     private static List<CapturedEtwEvent> Capture(byte level, ulong keywords, Action emit, out long written)
     {
