@@ -151,6 +151,17 @@ Conventions for contributors:
 
 ### Fixed
 
+- Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
+  corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
+  and drop another row, because WinUI's `ItemsRepeater` doesn't update its element
+  indices for a move and Reactor looked rows up by index. Reactor now tracks realized
+  rows by key. A focused row that moved or was removed while scrolled out of view no
+  longer comes back showing the wrong item. Focus moves to a nearby row instead, so the
+  repeater recycles the stale control. WinUI's own indices are still stale after a move,
+  so `ItemsView` click and selection right after a reorder, and app code that calls
+  `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
+  microsoft/microsoft-ui-xaml#12659).
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming
