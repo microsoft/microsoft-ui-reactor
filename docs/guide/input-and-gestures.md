@@ -179,34 +179,30 @@ nor `onEnded` fire.
 `PanGesture.Translation` is cumulative since `Began`; `PanGesture.Delta` is
 per-callback.
 
-### Keep pans at 60 Hz: write Translation directly
+### Drive a pan through state and `.Translation()`
 
-Reactor's render loop re-enqueues at `DispatcherQueuePriority.Low` on every
-tick so layout and paint aren't starved by back-to-back setState calls. That's
-correct for general UI, but it means a per-event `setState` during pan drops
-frames — by the time the Low-priority render drains, several manipulation
-events have already piled up. `setOffset(offset + g.Delta)` would also read a
-stale `offset` closure, compounding the problem.
-
-For smooth 60 Hz panning, grab a ref to the mounted element and write
-`Translation` directly inside `onChanged`. No reconciler round-trip; the
-compositor property update is cheap enough to run on every tick. Only call
-setState at gesture end — once per drag, not 60× per second.
+Keep the dragged position in state and declare it with `.Translation()`, which
+puts it on the composition visual. Compute the next position from the
+committed position plus `g.Translation`, which is cumulative since `Began`,
+rather than from `offset + g.Delta`: a delta added to the `offset` captured by
+the last render loses movement whenever two events arrive before that render
+runs. A small component re-renders on every pan event and keeps up with the
+pointer.
 
 ```csharp
 class PanGestureExample : Component
 {
     public override Element Render()
     {
-        // For 60 Hz smooth panning, write directly to the mounted element's
-        // Translation inside onChanged. Going through setState would queue
-        // Low-priority re-renders that get starved by the manipulation event
-        // stream itself, producing a laggy drag. The committedRef holds the
-        // position at the last gesture end so successive drags accumulate.
-        // Reset lives on a sibling Button because WinUI suppresses the tap
-        // recognizer when ManipulationMode ≠ System — .OnDoubleTap on the same
-        // element as .OnPan wouldn't fire.
-        var cardRef = UseRef<FrameworkElement?>(null);
+        // The card's position lives in state, and .Translation() puts it on the
+        // composition visual. Each pan event re-renders this component, which
+        // keeps up with the pointer because the component is small. If yours
+        // re-renders a lot of UI per event, move the draggable card into its own
+        // component so only the card re-renders. committedRef holds the position
+        // at the last gesture end so successive drags accumulate. Reset lives on
+        // a sibling Button because WinUI suppresses the tap recognizer when
+        // ManipulationMode ≠ System, so .OnDoubleTap on the .OnPan element
+        // wouldn't fire.
         var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
 
@@ -214,8 +210,6 @@ class PanGestureExample : Component
         {
             committedRef.Current = Vector2.Zero;
             setOffset(Vector2.Zero);
-            if (cardRef.Current is { } fe)
-                fe.Translation = System.Numerics.Vector3.Zero;
         }
 
         return VStack(8,
@@ -227,15 +221,9 @@ class PanGestureExample : Component
                     .Background(Theme.Accent)
                     .CornerRadius(8)
                     .Translation(offset.X, offset.Y, 0)
-                    .OnMount(fe => cardRef.Current = fe)
                     .OnPan(
-                        onChanged: g =>
-                        {
-                            var next = committedRef.Current +
-                                new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-                            if (cardRef.Current is { } fe)
-                                fe.Translation = new System.Numerics.Vector3(next.X, next.Y, 0);
-                        },
+                        onChanged: g => setOffset(committedRef.Current +
+                            new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
                         onEnded: g =>
                         {
                             committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
@@ -244,17 +232,22 @@ class PanGestureExample : Component
                         withInertia: true)
             ).Height(260).Background(Theme.CardBackground).CornerRadius(8).Padding(16),
 
+            TextBlock($"Position: ({offset.X:F0}, {offset.Y:F0})"),
             Button("Reset position", Reset)
         );
     }
 }
 ```
 
-![Card with .OnPan that writes Translation directly for 60 Hz drag](images/input-and-gestures/pan-gesture.png)
+![Card with .OnPan that drives .Translation() from state](images/input-and-gestures/pan-gesture.png)
 
-If the panned position doesn't drive anything else on the screen (no adjacent
-counter, no snap-to-grid indicator), you can even skip the setState at
-gesture end and treat the ref as the single source of truth.
+The per-event render is the cost to watch. Reactor schedules a render at
+`DispatcherQueuePriority.Low` when the previous one took longer than a frame,
+so input and paint keep running, and a component that re-renders a lot of UI
+on every pan event falls behind the pointer. Move the draggable element into
+its own component so a pan re-renders only that element. Don't write
+`fe.Translation` on an element that declares `.Translation()`: WinUI ignores
+the write once translation is enabled on the visual.
 
 ### Can I combine `.OnPan` with `.OnTapped` / `.OnDoubleTapped` on the same element?
 
@@ -680,10 +673,14 @@ see [recipes/drag-reorder](recipes/drag-reorder.md).
 
 ### Pinch-to-zoom on an image
 
-Combine `.OnPinch` with the element's `Scale` compositor property driven from
-state. Scale is cumulative since `Began` — apply it directly in `onChanged` for 60 Hz
-behavior (same pattern as pan above), then commit to `UseState` in
-`onEnded`. The reconciler unions `ManipulationModes` so adding
+Combine `.OnPinch` with `.Scale(...)` driven from state. Scale is cumulative
+since `Began`, so set the state from the scale at the last gesture end times
+the gesture's scale, the same way the pan snippet above uses `g.Translation`.
+As with pan, a component that re-renders a lot of UI per event falls behind,
+so keep the zoomable element in its own component. Don't write the `fe.Scale`
+facade on an element that declares `.Scale()`: the modifier takes the
+composition visual, after which WinUI throws on facade writes. The reconciler
+unions `ManipulationModes` so adding
 `.OnRotate` on the same element is free.
 
 ### Trap focus inside a modal
@@ -747,11 +744,14 @@ touch and mouse uniformly, and respects the system's tap-distance
 threshold. Reach for `.OnPointerPressed` only when you need the
 raw event (preview, capture, multi-touch coordination).
 
-**Write `Translation` directly during pan.** A per-event `setState`
-during pan drops frames — Reactor's render loop priorities lose to
-the manipulation event stream. Grab a ref to the mounted element
-and write `Translation` inside `onChanged`; commit to state once on
-`onEnded`. The pan snippet above is the canonical shape.
+**Keep the per-event render small during pan.** The pan snippet above
+re-renders on every pan event, which keeps up when the component is small.
+A component that re-renders a lot of UI per event falls behind the pointer,
+so move the draggable element into its own component. Compute the position
+from the cumulative `g.Translation`, not by adding `g.Delta` to the last
+rendered value. Don't write `fe.Translation` on an element that declares
+`.Translation(...)`: it enables translation on the composition visual, and
+WinUI then ignores the `fe.Translation` writes.
 
 **Long-press needs `enableMouseEmulation: true` for mouse users.**
 WinUI's `Holding` event doesn't fire for mouse pointers by design.
