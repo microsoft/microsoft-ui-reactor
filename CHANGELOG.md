@@ -207,6 +207,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
+  `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
+  XAML writes that value to the visual when it first renders it, which stopped the animation, so
+  `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
+  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
+  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+
 - Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
   corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
   and drop another row, because WinUI's `ItemsRepeater` doesn't update its element
