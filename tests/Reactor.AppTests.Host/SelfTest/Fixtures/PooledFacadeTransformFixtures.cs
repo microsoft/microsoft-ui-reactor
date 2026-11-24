@@ -24,7 +24,7 @@ internal static class PooledFacadeTransformFixtures
 {
     internal sealed class Removal(Harness h) : SelfTestFixtureBase(h)
     {
-        private sealed record Expect(bool Facade = true, bool Recycled = true, bool LocalRenderTransform = false);
+        private sealed record Expect(bool Facade = true, bool Recycled = true, bool LocalRenderTransform = false, bool Taken = false);
 
         public override async Task RunAsync()
         {
@@ -44,23 +44,23 @@ internal static class PooledFacadeTransformFixtures
                 static (sp, text) => sp.Children.Count == 1 && sp.Children[0] is WinUI.TextBlock c && c.Text == text,
                 plain);
 
-            // An implicit transform transition locks RenderTransform for the control's lifetime,
-            // with or without a facade value, so the pool must drop the control rather than
-            // recycle it or touch RenderTransform on it.
+            // Since spec 066 layer 2 the transition modifiers run on the composition visual, so the
+            // transforms live there and the control goes to the visual lane, which a plain renter
+            // never rents from (§7.2).
             var slow = new Vector3Transition { Duration = TimeSpan.FromSeconds(10) };
             await RunCase<WinUI.Border>("BorderTransitioned", BorderOf,
                 e => e.ScaleTransition(slow).RotationTransition(TimeSpan.FromSeconds(10))
                     .TranslationTransition(slow).Scale(1.2f).Rotation(45f).Translation(12, 18, 0),
-                IsBorderWith, new Expect(Recycled: false));
+                IsBorderWith, new Expect(Facade: false, Recycled: false, Taken: true));
             await RunCase<WinUI.Border>("BorderTransitionOnly", BorderOf, e => e.ScaleTransition(),
-                IsBorderWith, new Expect(Facade: false, Recycled: false));
+                IsBorderWith, new Expect(Facade: false, Recycled: false, Taken: true));
             await RunCase<WinUI.Border>("BorderRotationTransitionOnly", BorderOf, e => e.RotationTransition(),
-                IsBorderWith, new Expect(Facade: false, Recycled: false));
+                IsBorderWith, new Expect(Facade: false, Recycled: false, Taken: true));
             await RunCase<WinUI.Border>("BorderTranslationTransitionOnly", BorderOf, e => e.TranslationTransition(),
-                IsBorderWith, new Expect(Facade: false, Recycled: false));
+                IsBorderWith, new Expect(Facade: false, Recycled: false, Taken: true));
 
-            // The lock outlives the transition, so a control whose transition was attached and
-            // then removed passes the pool's transition check. Clearing its RenderTransform then
+            // A XAML transform transition, which only user code sets now, locks RenderTransform for
+            // the control's lifetime, even once removed. Clearing RenderTransform on return then
             // throws, and the pool must drop the control instead of failing the reconcile.
             await RunCase<WinUI.Border>("BorderTransitionRemoved", BorderOf,
                 e => ((BorderElement)e).Scale(1.2f).Set(b =>
@@ -121,7 +121,7 @@ internal static class PooledFacadeTransformFixtures
             if (expect.Facade) H.Check(prefix + "_FacadeEngaged", !IsIdentity(first), Describe(first));
             if (expect.LocalRenderTransform)
                 H.Check(prefix + "_RenderTransformSet", first.ReadLocalValue(UIElement.RenderTransformProperty) is RotateTransform);
-            H.Check(prefix + "_NotTainted", !ElementPool.IsVisualTaken(first));
+            H.Check(prefix + (expect.Taken ? "_VisualTaken" : "_NotTainted"), ElementPool.IsVisualTaken(first) == expect.Taken);
 
             // Removal is the pool return. Before the fix CleanElement threw here and the host
             // replaced its whole content with the error fallback, taking the button with it.

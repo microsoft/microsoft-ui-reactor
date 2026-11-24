@@ -180,28 +180,81 @@ namespace Microsoft.UI.Reactor
     }
 
     [Fact]
-    public async Task Transitions_Report_With_Removal_Advice_And_No_Fix()
+    public async Task Transitions_Report_With_The_Modifier_As_Advice()
     {
-        // On main the .XxxTransition() modifiers set the same XAML property, which blocks the
-        // handoff too (#1623), so the rule must not steer to them until spec 066 layer 2.
+        // Spec 066 layer 2: the .XxxTransition() modifiers run on the composition visual, so they
+        // are the fix for the XAML property that blocks the handoff. A call in the value declines it.
         var source = @"
 class C
 {
     Element A() => Border().InteractionStates().Set(fe => {|#0:fe.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(200) }|});
-    Element B() => Border().SpringLayoutAnimation().Set(fe => {|#1:fe.RotationTransition = new ScalarTransition()|});
-    Element C2() => Border().LayoutAnimation().Set(fe => {|#2:fe.ScaleTransition = new Vector3Transition()|});
-    Element D(Microsoft.UI.Xaml.Controls.ScrollViewer sv) => Border().ScrollLinked(sv).Set(fe => {|#3:fe.TranslationTransition = new Vector3Transition()|});
 }";
         await VerifyAsync(
             source,
             new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(0)
-                .WithMessage("'.Set(...)' writes 'UIElement.OpacityTransition', but '.InteractionStates(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove it, because '.OpacityTransition(...)' sets the same XAML transition and also blocks the handoff. Animate the change with '.Animate(...)' instead."),
-            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(1),
-            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(2),
-            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(3));
+                .WithMessage("'.Set(...)' writes 'UIElement.OpacityTransition', but '.InteractionStates(...)' on the same element takes its composition visual, after which WinUI rejects the write. Use '.OpacityTransition(duration)' instead."));
 
-        var unfixed = Markup(source, 4);
+        var unfixed = Markup(source, 1);
         await VerifyFixAsync(unfixed, unfixed);
+    }
+
+    [Theory]
+    // The scalar modifiers take a duration and build the transition themselves.
+    [InlineData("A(TimeSpan d) => Border().SpringLayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.OpacityTransition = new ScalarTransition { Duration = d }|})",
+        "A(TimeSpan d) => Border().SpringLayoutAnimation().OpacityTransition(d)")]
+    [InlineData("A() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.RotationTransition = new ScalarTransition()|})",
+        "A() => Border().LayoutAnimation().RotationTransition()")]
+    // The Vector3 modifiers take the transition.
+    [InlineData("A(TimeSpan d) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = new Vector3Transition { Duration = d }|})",
+        "A(TimeSpan d) => Border().LayoutAnimation().ScaleTransition(new Vector3Transition { Duration = d })")]
+    [InlineData("A(Vector3Transition t, Microsoft.UI.Xaml.Controls.ScrollViewer sv) => Border().ScrollLinked(sv).Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = t|})",
+        "A(Vector3Transition t, Microsoft.UI.Xaml.Controls.ScrollViewer sv) => Border().ScrollLinked(sv).TranslationTransition(t)")]
+    public async Task Transitions_Fix_To_The_Modifier(string before, string after)
+    {
+        await VerifyFixAsync("class C { Element " + before + "; }", "class C { Element " + after + "; }");
+    }
+
+    [Fact]
+    public async Task Transition_Values_That_Do_Not_Map_Onto_The_Modifier_Do_Not_Fix()
+    {
+        // A null removes the transition, which the modifier can't express, and the scalar
+        // modifiers take a duration rather than a transition object. A Vector3 value that may be
+        // null would turn into a default transition, so it isn't moved either.
+        var source = @"
+class C
+{
+    Element A() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.OpacityTransition = null|});
+    Element B(ScalarTransition existing) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.RotationTransition = existing|});
+    Element C2() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = null|});
+    Element D() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = default|});
+    Element E(bool on) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = on ? new Vector3Transition() : null|});
+    Element F(Vector3Transition? maybe) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = maybe|});
+    Element G() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = null!|});
+    Element H() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = (default(Vector3Transition)!)|});
+    Element I() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = ((null)!)|});
+    Element J() => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.OpacityTransition = new ScalarTransition { Duration = default }|});
+    Element K(bool zero, TimeSpan d) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.RotationTransition = new ScalarTransition { Duration = zero ? default : d }|});
+    Element L(Vector3Transition? maybe) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.ScaleTransition = maybe!|});
+    Element M2(bool on) => Border().LayoutAnimation().Set(fe => {|REACTOR_ANIM_004:fe.TranslationTransition = (on ? new Vector3Transition() : null)!|});
+}";
+        await VerifyFixAsync(source, source);
+    }
+
+    [Fact]
+    public async Task Clearing_A_Transition_Is_Advised_To_Be_Removed()
+    {
+        await VerifyAsync(
+            @"class C { Element M() => Border().LayoutAnimation().Set(fe => {|#0:fe.ScaleTransition = null|}); }",
+            new DiagnosticResult(FacadeTransformSetAnalyzer.DiagnosticId, DiagnosticSeverity.Warning).WithLocation(0)
+                .WithMessage("'.Set(...)' writes 'UIElement.ScaleTransition', but '.LayoutAnimation(...)' on the same element takes its composition visual, after which WinUI rejects the write. Remove it: an element without '.ScaleTransition(...)' has no such transition, so there is nothing to clear."));
+    }
+
+    [Fact]
+    public async Task A_Transition_Modifier_Takes_The_Visual()
+    {
+        await VerifyFixAsync(
+            @"class C { Element M() => Border().OpacityTransition().Set(fe => {|REACTOR_ANIM_004:fe.Rotation = 45|}); }",
+            @"class C { Element M() => Border().OpacityTransition().Rotation(45); }");
     }
 
     [Fact]

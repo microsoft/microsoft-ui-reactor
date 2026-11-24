@@ -77,6 +77,7 @@ internal static class DslExtensionFixtures
     {
         public override async Task RunAsync()
         {
+            using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
@@ -89,7 +90,9 @@ internal static class DslExtensionFixtures
             await Harness.Render();
             var tb = H.FindText("TransExt");
             H.Check("TransExt_Present", tb is not null);
-            H.Check("TransExt_Opacity", tb!.OpacityTransition is not null);
+            // Spec 066 §5: an implicit key on the composition visual, not the XAML property.
+            var keys = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(tb!).ImplicitAnimations;
+            H.Check("TransExt_Opacity", tb!.OpacityTransition is null && keys?.ContainsKey("Opacity") == true);
         }
     }
 

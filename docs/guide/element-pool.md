@@ -63,7 +63,9 @@ property state into the next reader's mount.
 Taking a control's composition visual (`ElementCompositionPreview.GetElementVisual`)
 is permanent. Reactor takes it for `.Animate()`, `.Transition()`,
 `.InteractionStates()`, `.Keyframes()`, `.LayoutAnimation()`,
-`.ScrollLinked()` and the children of a `.Stagger()` panel. After that
+`.ScrollLinked()`, the implicit transitions (`.OpacityTransition()`,
+`.ScaleTransition()`, `.RotationTransition()`, `.TranslationTransition()`)
+and the children of a `.Stagger()` panel. After that
 WinUI refuses every write to the control's `Rotation`, `Scale`,
 `CenterPoint`, `RotationAxis` and `TransformMatrix` facades and to its
 XAML implicit transitions (`OpacityTransition` and friends), even an
@@ -72,7 +74,7 @@ identity write. So each type has two lanes:
 | Lane | Holds | Who rents from it |
 |---|---|---|
 | Plain | Controls whose visual was never taken | Everyone, as before |
-| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual at mount (`.Animate()`, an enter `.Transition()`, `.Keyframes()`, `.LayoutAnimation()`, `.ScrollLinked()`) and carries no `.Set` setters or `.OnMount` callbacks |
+| Visual | Controls whose visual was taken, reset to a fresh control's pixels | Only a built-in element whose chain, including a keyed `Memo` over it, takes the visual at mount (`.Animate()`, an enter `.Transition()`, `.Keyframes()`, `.LayoutAnimation()`, `.ScrollLinked()`, an implicit transition other than `.BackgroundTransition()`) and carries no `.Set` setters or `.OnMount` callbacks |
 
 An eligible element takes from the visual lane first and falls back to
 the plain lane. Every other element only takes from the plain lane, so
@@ -127,14 +129,6 @@ public void Return(FrameworkElement element)
     }
     var lanes = state?.VisualTaken == true ? _visualPools : _pools;
 
-    // Issue #1614: attaching an implicit transform transition permanently locks
-    // RenderTransform (nulling the transition does not release it), so such a control is
-    // no longer interchangeable with a fresh one. This is the fast path; the catch around
-    // CleanElement below is the backstop for a control whose transition was attached and
-    // later removed.
-    if (element.ScaleTransition is not null || element.RotationTransition is not null
-        || element.TranslationTransition is not null) return;
-
     if (!lanes.TryGetValue(type, out var stack))
     {
         stack = new Stack<FrameworkElement>();
@@ -144,19 +138,20 @@ public void Return(FrameworkElement element)
     if (stack.Count >= MaxPerType) return;
 ```
 
-The path runs in six steps after the type check: lane choice from the
-`VisualTaken` marker (a navigation page is dropped here),
-transform-transition check, per-lane stack lookup, per-lane cap check
-(stop accepting at 32 instances), then — past the snippet boundary —
-the detach-from-parent dance and `CleanElement(...)` reset before the
-control finally pushes onto its lane. The transform-transition check
-exists because attaching `.ScaleTransition()`, `.RotationTransition()`
-or `.TranslationTransition()` locks the control's `RenderTransform`
-for good, even if the transition is later removed. If WinUI refuses a
-reset during `CleanElement` (a user `.Set` write can leave such a lock
-behind), the control is dropped instead. `CleanElement` also clears the
+The path runs in five steps after the type check: lane choice from the
+`VisualTaken` marker (a navigation page is dropped here), per-lane
+stack lookup, per-lane cap check (stop accepting at 32 instances),
+then — past the snippet boundary — the detach-from-parent dance and
+`CleanElement(...)` reset before the control finally pushes onto its
+lane. Reactor never sets the XAML implicit transitions, but a user
+`.Set` can, so `CleanElement` clears them on a plain-lane control. Any
+of them (`OpacityTransition`, `ScaleTransition`, `RotationTransition`,
+`TranslationTransition`) locks the control's `RenderTransform` for good,
+even once removed, so WinUI then refuses the `RenderTransform` reset and
+the control is dropped instead. `CleanElement` also clears the
 theme transitions `.WithTransitions(...)` writes (`ChildrenTransitions`,
-`ChildTransitions`, `ContentTransitions`) in both lanes. The scratch-panel round-trip
+`ChildTransitions`, `ContentTransitions`) and a panel's
+`BackgroundTransition` in both lanes. The scratch-panel round-trip
 in `ForceDetach` is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws `COMException` when the
 control is later re-parented, and `_scratchPanel.Children.Add` +

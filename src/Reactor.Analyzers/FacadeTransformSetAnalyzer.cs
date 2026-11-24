@@ -79,17 +79,12 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     private const string NoModifierAdvice =
         "No modifier covers it, so animate it with '.Keyframes(...)' or '.Animate(...)', or take the visual with ElementCompositionPreview.GetElementVisual in '.OnMount(...)'";
 
-    // The .XxxTransition() modifiers still set the same XAML property on main, which blocks the
-    // handoff just as the .Set write does (#1623), so suggesting them would not help. Spec 066
-    // layer 2 moves them to the compositor; that change switches these rows to the modifier.
-    private static string TransitionAdvice(string modifier) =>
-        "Remove it, because '." + modifier + "(...)' sets the same XAML transition and also blocks the handoff. Animate the change with '.Animate(...)' instead";
-
     /// <summary>
     /// <c>UIElement</c> members the rule matches, other than <c>Translation</c>, keyed by member
     /// name. <c>StopAnimation</c> is deliberately absent: WinUI exempts it from facade
     /// strictness, so cleanup such as <c>.Set(b =&gt; b.StopAnimation(a)).LayoutAnimation()</c>
-    /// is valid.
+    /// is valid. Spec 066 layer 2 runs the <c>.XxxTransition()</c> modifiers on the visual, so
+    /// they are the advice for the matching XAML property.
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, FacadeMember> FacadeMembers =
         new Dictionary<string, FacadeMember>(System.StringComparer.Ordinal)
@@ -97,10 +92,10 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             ["Rotation"] = new("Rotation", "Use '.Rotation(degrees)' instead"),
             ["Scale"] = new("Scale", "Use '.Scale(...)' instead"),
             ["CenterPoint"] = new("CenterPoint", "Use '.CenterPoint(...)' instead"),
-            ["OpacityTransition"] = new(null, TransitionAdvice("OpacityTransition")),
-            ["RotationTransition"] = new(null, TransitionAdvice("RotationTransition")),
-            ["ScaleTransition"] = new(null, TransitionAdvice("ScaleTransition")),
-            ["TranslationTransition"] = new(null, TransitionAdvice("TranslationTransition")),
+            ["OpacityTransition"] = new("OpacityTransition", "Use '.OpacityTransition(duration)' instead"),
+            ["RotationTransition"] = new("RotationTransition", "Use '.RotationTransition(duration)' instead"),
+            ["ScaleTransition"] = new("ScaleTransition", "Use '.ScaleTransition(...)' instead"),
+            ["TranslationTransition"] = new("TranslationTransition", "Use '.TranslationTransition(...)' instead"),
             ["RotationAxis"] = new(null, NoModifierAdvice),
             ["TransformMatrix"] = new(null, NoModifierAdvice),
             [StartAnimationName] = new(null,
@@ -257,7 +252,10 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 (name == StartAnimationName ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
                 owningModifier,
                 name == StartAnimationName ? "call" : "write",
-                info.Advice));
+                info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
+                    && assignment is not null && IsNullValue(assignment.Right)
+                    ? "Remove it: an element without '." + transitionModifier + "(...)' has no such transition, so there is nothing to clear"
+                    : info.Advice));
         }
     }
     /// <summary>
@@ -369,13 +367,30 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
+        // The values that move into the modifier call. A transition object the modifier builds
+        // itself is dropped, and only its duration moves.
+        if (BuildModifierArguments(assignment, modifier) is not { } arguments)
+            return false;
+        if (IsScalarTransitionModifier(modifier) && !IsXamlType(model.GetTypeInfo(assignment.Right, ct).Type, "ScalarTransition"))
+            return false;
+        // The Vector3 modifiers turn a null argument into a default transition, where the write
+        // meant none. Only a value the compiler proves non-null moves, and a '!' proves nothing.
+        if (modifier is "ScaleTransition" or "TranslationTransition"
+            && assignment.Right is not BaseObjectCreationExpressionSyntax
+            && (ContainsSuppression(assignment.Right)
+                || model.GetTypeInfo(assignment.Right, ct).Nullability.FlowState != NullableFlowState.NotNull))
+            return false;
+        var moved = arguments.Arguments.Select(static argument => argument.Expression).ToList();
+
         // A setter runs while the reconciler applies the element; a modifier argument is evaluated
         // while the tree is built. Moving a call, an increment or a nested assignment changes when
         // (and how often) its side effects happen, so only side-effect-free values move.
-        if (assignment.Right.DescendantNodesAndSelf().Any(static node =>
-                node is InvocationExpressionSyntax or AssignmentExpressionSyntax or AwaitExpressionSyntax
+        if (moved.Any(static value => value.DescendantNodesAndSelf().Any(static node =>
+                node is InvocationExpressionSyntax or AwaitExpressionSyntax
+                // A member initializer ('new Vector3Transition { Duration = d }') sets the new object only.
+                || (node is AssignmentExpressionSyntax && !node.Parent.IsKind(SyntaxKind.ObjectInitializerExpression))
                 || node.IsKind(SyntaxKind.PreIncrementExpression) || node.IsKind(SyntaxKind.PreDecrementExpression)
-                || node.IsKind(SyntaxKind.PostIncrementExpression) || node.IsKind(SyntaxKind.PostDecrementExpression)))
+                || node.IsKind(SyntaxKind.PostIncrementExpression) || node.IsKind(SyntaxKind.PostDecrementExpression))))
         {
             return false;
         }
@@ -383,7 +398,7 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         // The lambda is deleted, so a right-hand side that reads its parameter
         // ('fe.CenterPoint = new((float)fe.ActualWidth / 2, ...)') would not compile, or would
         // silently bind to an outer symbol of the same name.
-        if (SetLambdaHelpers.ReferencesIdentifier(assignment.Right, paramName))
+        if (moved.Any(value => SetLambdaHelpers.ReferencesIdentifier(value, paramName)))
             return false;
 
         // The rewrite deletes the whole invocation; a directive inside it would be unbalanced,
@@ -418,17 +433,73 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 SyntaxKind.SimpleMemberAccessExpression,
                 setAccess.Expression.WithoutTrivia(),
                 SyntaxFactory.IdentifierName(modifier)),
-            BuildModifierArguments(assignment));
+            arguments);
         var bound = model.GetSpeculativeSymbolInfo(
             setInvocation.SpanStart, rewritten, SpeculativeBindingOption.BindAsExpression).Symbol;
         return bound is IMethodSymbol method && method.Name == modifier && IsReactorExtension(method);
     }
 
+    private static bool IsScalarTransitionModifier(string modifier) =>
+        modifier is "OpacityTransition" or "RotationTransition";
+
+    private static bool IsXamlType(ITypeSymbol? type, string name) =>
+        type is not null && type.Name == name && type.ContainingNamespace?.ToDisplayString() == XamlNamespace;
+
     /// <summary>
-    /// The modifier's argument list for a fixable write: the right-hand side, unchanged.
-    /// Shared with <see cref="FacadeTransformSetCodeFix"/>.
+    /// The modifier's argument list for a fixable write, or null when the value doesn't map onto
+    /// the modifier's parameters. Usually the right-hand side, unchanged. The scalar transition
+    /// modifiers take a duration and build the transition themselves, so
+    /// <c>new ScalarTransition { Duration = d }</c> becomes <c>(d)</c>, and a bare
+    /// <c>new ScalarTransition()</c> no argument. A null transition would remove it, which the
+    /// modifier can't express. Shared with <see cref="FacadeTransformSetCodeFix"/>.
     /// </summary>
-    internal static ArgumentListSyntax BuildModifierArguments(AssignmentExpressionSyntax assignment) =>
-        SyntaxFactory.ArgumentList(
-            SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(assignment.Right.WithoutTrivia())));
+    internal static ArgumentListSyntax? BuildModifierArguments(AssignmentExpressionSyntax assignment, string modifier)
+    {
+        var right = assignment.Right;
+        if (IsScalarTransitionModifier(modifier))
+        {
+            if (right is not BaseObjectCreationExpressionSyntax creation || creation.ArgumentList is { Arguments.Count: > 0 })
+                return null;
+            if (creation.Initializer is not { } initializer || initializer.Expressions.Count == 0)
+                return SyntaxFactory.ArgumentList();
+            if (initializer.Expressions.Count == 1
+                && initializer.Expressions[0] is AssignmentExpressionSyntax { Left: IdentifierNameSyntax { Identifier.Text: "Duration" } } duration
+                && duration.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                // The modifier's parameter is a TimeSpan?, so a target-typed 'default' or 'null'
+                // would become no duration (the 300 ms default) instead of a zero one.
+                && !duration.Right.DescendantNodesAndSelf().Any(static node =>
+                    node.IsKind(SyntaxKind.DefaultLiteralExpression) || node.IsKind(SyntaxKind.NullLiteralExpression)))
+            {
+                return SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(duration.Right.WithoutTrivia())));
+            }
+            return null;
+        }
+        if (modifier is "ScaleTransition" or "TranslationTransition" && IsNullValue(right))
+        {
+            return null;
+        }
+        return SyntaxFactory.ArgumentList(
+            SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(right.WithoutTrivia())));
+    }
+
+    /// <summary>A <c>!</c> suppression anywhere in the value, which hides a possible null from flow analysis.</summary>
+    private static bool ContainsSuppression(ExpressionSyntax value) =>
+        value.DescendantNodesAndSelf().Any(static node => node.IsKind(SyntaxKind.SuppressNullableWarningExpression));
+
+    /// <summary>A literal <c>null</c> or <c>default</c>, through any mix of parentheses and <c>!</c> suppressions.</summary>
+    private static bool IsNullValue(ExpressionSyntax value)
+    {
+        while (true)
+        {
+            if (value is PostfixUnaryExpressionSyntax suppressed && suppressed.IsKind(SyntaxKind.SuppressNullableWarningExpression))
+                value = suppressed.Operand;
+            else if (value is ParenthesizedExpressionSyntax parenthesized)
+                value = parenthesized.Expression;
+            else
+                break;
+        }
+        return value.IsKind(SyntaxKind.NullLiteralExpression) || value.IsKind(SyntaxKind.DefaultLiteralExpression)
+            || value is DefaultExpressionSyntax;
+    }
 }

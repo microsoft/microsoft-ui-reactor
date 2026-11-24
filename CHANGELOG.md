@@ -59,6 +59,22 @@ Conventions for contributors:
 
 ### Changed
 
+- **An element with `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` or
+  `.TranslationTransition()` keeps its transforms on the composition visual (spec 066 §9 rows 1
+  and 2).** The transitions take the element's visual, so on such an element `fe.Scale`,
+  `fe.Rotation` and `fe.CenterPoint` read back identity for values set with `.Scale()`, `.Rotation()`
+  and `.CenterPoint()` (read `ElementCompositionPreview.GetElementVisual(fe)` instead), and WinUI
+  rejects a `.Set(...)` that writes `Rotation`, `Scale`, `CenterPoint`, `RotationAxis`,
+  `TransformMatrix` or a XAML `*Transition` property on a later render. Use the modifiers. Reactor
+  now logs a `DiagnosticLog` warning that names them when WinUI rejects a setter's facade write or
+  a user facade blocks the visual, and `REACTOR_ANIM_004` treats the four transition modifiers as
+  taking the visual and suggests them, with a code fix, for the matching `*Transition` writes.
+
+- **`.Animate(curve, properties)` animates only the properties it names (spec 066 §5.3).** A
+  `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()` change on an element whose
+  `.Animate(...)` excludes that property used to animate with its curve anyway. It now jumps, or
+  follows the element's transition for that property.
+
 - Opt-in Markdown text selection supports double-click to select a word and
   triple-click to select a text surface, including drag extension by either unit.
   Selection drags from inline links and release-mode custom link buttons do not
@@ -170,7 +186,26 @@ Conventions for contributors:
   the compositor, so the property jumps again. When two features animate the same property, the
   winner keeps the rule it had (`.LayoutAnimation()` over `.Animate()` over a transition), and
   removing the winner brings the other back instead of leaving no animation. A removed
-  `.BackgroundTransition()` stays in place until spec 066 layer 2.
+  `.BackgroundTransition()` is cleared too (spec 066 layer 2).
+
+- **`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` and
+  `.TranslationTransition()` work with every compositor feature (spec 066 §5, issue #1623).** They
+  set WinUI's XAML transitions, which block the composition visual, so combining one with
+  `.LayoutAnimation()`, `.Animate()`, `.Transition()`, `.InteractionStates()` or `.Keyframes()` threw
+  `UnauthorizedAccessException`. They now run on the visual with WinUI's own curve,
+  cubic-bezier (0.8, 0, 0.2, 1), instead of the linear one the compositor fallback used, keep a
+  `Vector3Transition`'s `Components` axis mask, and still jump when the Windows "Animation effects"
+  setting is off, as WinUI's do. `.TranslationTransition()` now animates `.Translation()` changes, as
+  WinUI's does, instead of layout moves, which the fallback animated by mistake; use
+  `.LayoutAnimation()` for those. On an update, adding or removing a transition applies to values
+  changed in the same render.
+
+- **The pool no longer hands a renter the previous renter's `.BackgroundTransition()` or
+  `OpacityTransition` (spec 066 §5.6 and §7.4, issue #1624).** Both lanes clear a panel's
+  `BackgroundTransition`, and dropping `.BackgroundTransition()` on a later render clears it too
+  (the Background arm of #1626). `.OpacityTransition()` no longer sets WinUI's XAML transition, so its
+  control is pooled in the visual lane, and a control whose `OpacityTransition` a `.Set` wrote is
+  dropped, because that transition locks its `RenderTransform` as the transform transitions do.
 
 - **Controls whose composition visual Reactor took are pooled again, and the pool no longer hands a
   renter the previous renter's theme transitions or a taken visual (spec 066 §7, issues #1624,
@@ -438,8 +473,8 @@ Conventions for contributors:
   `.Transition(..., Curve.Linear(...))` enter and exit animations, and the compositor fallback
   for `.OpacityTransition()`, `.RotationTransition()`, `.ScaleTransition()` and
   `.TranslationTransition()` on an element whose visual was already handed out. That fallback
-  is built on the linear curve, so it is now linear too. Spec 066 later moves it to the XAML
-  transition curve.
+  is built on the linear curve, so it was linear too, until spec 066 layer 2 replaced it with
+  the XAML transition curve (see the #1623 entry above).
 
 - ReactorGallery search keeps complete samples that contain ellipses in comments
   or display text, restoring the Pan and `OpacityTransition` examples in
