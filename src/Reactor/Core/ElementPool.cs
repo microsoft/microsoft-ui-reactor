@@ -386,6 +386,10 @@ public sealed class ElementPool : IDisposable
         // also names the same underlying DP, so this is a widening, not a retarget.
         fe.ClearValue(UIElement.IsHitTestVisibleProperty);
         fe.ClearValue(UIElement.IsTabStopProperty);
+        // Issue #1662: .XYFocusKeyboardNavigation(...) and .TabNavigation(...) write these on any
+        // element, and ApplyModifiers clears them only on a set → unset transition.
+        fe.ClearValue(UIElement.XYFocusKeyboardNavigationProperty);
+        fe.ClearValue(UIElement.TabFocusNavigationProperty);
 
         // Issue #985: six common modifiers are written by ApplyModifiers onto receivers
         // this method never reset, so a pooled control handed its previous renter's local
@@ -407,9 +411,12 @@ public sealed class ElementPool : IDisposable
         // pooled (Reconciler.cs): Padding → Control | Border | Grid | StackPanel | TextBlock,
         // CornerRadius / BorderBrush / BorderThickness → Control | Border | Grid | StackPanel,
         // Background → Panel | Control | Border, IsEnabled → Control.
-        // Both content-alignment properties also belong to Control (#1013), and Foreground →
-        // Control | TextBlock (#1662): ApplyModifiers writes nothing when neither the old nor
-        // the new modifiers set it, so a renter that declares none kept the previous brush.
+        // Both content-alignment properties also belong to Control (#1013). Issue #1662 adds the
+        // rest of what ApplyModifiers writes to these receivers: Foreground → Control | TextBlock,
+        // and FontFamily / FontSize / FontWeight / TabIndex / ElementSoundMode → Control (the
+        // TextBlock fonts are reset in its case arm below). ApplyModifiers writes none of them when
+        // neither the old nor the new modifiers set them, so a renter that declares none kept the
+        // previous renter's values.
         // These border-box modifier gates also admit RelativePanel, which gets no clear
         // here because RelativePanel is not in PoolableTypes — it is never returned to the
         // pool, so there is no local value for a later renter to inherit. Canvas is the
@@ -445,6 +452,11 @@ public sealed class ElementPool : IDisposable
             resetControl.ClearValue(Control.HorizontalContentAlignmentProperty);
             resetControl.ClearValue(Control.VerticalContentAlignmentProperty);
             resetControl.ClearValue(Control.ForegroundProperty);
+            resetControl.ClearValue(Control.FontFamilyProperty);
+            resetControl.ClearValue(Control.FontSizeProperty);
+            resetControl.ClearValue(Control.FontWeightProperty);
+            resetControl.ClearValue(Control.TabIndexProperty);
+            resetControl.ClearValue(Control.ElementSoundModeProperty);
         }
         else if (fe is WinUI.Border resetBorder)
         {
@@ -603,6 +615,7 @@ public sealed class ElementPool : IDisposable
             case WinUI.RichTextBlock rtb:
                 Reconciler.CancelInlineUiExtentPin(rtb);
                 rtb.Blocks.Clear();
+                rtb.ClearValue(WinUI.RichTextBlock.ForegroundProperty);
                 break;
             case WinUI.ProgressBar pb:
                 pb.IsIndeterminate = false;
