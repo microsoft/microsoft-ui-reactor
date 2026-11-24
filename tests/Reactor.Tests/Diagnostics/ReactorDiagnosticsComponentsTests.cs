@@ -799,7 +799,7 @@ public class ReactorDiagnosticsComponentsTests
         };
 
         Assert.Equal(
-            new[] { ("Scale", "UIElement.Scale"), ("Rotation", "UIElement.Rotation"), ("Translation", "UIElement.Translation"), ("CenterPoint", "UIElement.CenterPoint") },
+            new[] { ("Scale", "Visual.Scale"), ("Rotation", "Visual.RotationAngle"), ("Translation", "Visual.Translation"), ("CenterPoint", "Visual.CenterPoint") },
             AppliedModifierMap.Describe(m, typeof(WinUI.TextBlock)).Select(p => (p.Modifier, p.Property)));
     }
 
@@ -820,6 +820,22 @@ public class ReactorDiagnosticsComponentsTests
         Assert.DoesNotContain(merged, p => p.Modifier == "DefaultAutomationName");
     }
 
+    [Fact]
+    public void DescribeChain_KeepsBothPivotContributors_AcrossDecoratorLevels()
+    {
+        // Spec 066 §8.1: the pivot is size × origin + the CenterPoint offset, so an outer origin
+        // doesn't replace an inner CenterPoint (or the reverse); a later same modifier still does.
+        var crossLevel = Flyout(Button("Go").CenterPoint(new global::System.Numerics.Vector3(10, 0, 0)), TextBlock("menu"))
+            .TransformOrigin(0.5f, 0.5f);
+        var sameModifier = Flyout(Button("Go").TransformOrigin(0, 0), TextBlock("menu")).TransformOrigin(1, 1);
+
+        static string[] Pivot(Element e) => AppliedModifierMap
+            .DescribeChain(Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap.DecoratorChain(e), typeof(WinUI.Button), null)
+            .Where(p => p.Property == "Visual.CenterPoint").Select(p => p.Modifier).ToArray();
+
+        Assert.Equal(new[] { "CenterPoint", "TransformOrigin" }, Pivot(crossLevel));
+        Assert.Equal(new[] { "TransformOrigin" }, Pivot(sameModifier));
+    }
     [Fact]
     public void DescribeChain_KeepsEveryContributorToAComposedProperty()
     {

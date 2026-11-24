@@ -7,6 +7,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.TransformsMatrix;
 /// <summary>Declared transform values on one element.</summary>
 internal readonly record struct Pose(Vector3 Scale, float Degrees, Vector3 Translation, Vector3 CenterPoint)
 {
+    /// <summary>The size-relative <c>.TransformOrigin</c>; the pivot is <c>Size × Origin + CenterPoint</c>.</summary>
+    public Vector2 Origin { get; init; }
+
     public static Pose Identity => new(Vector3.One, 0, Vector3.Zero, Vector3.Zero);
 
     public Pose Scaled(float factor) => this with { Scale = new Vector3(Scale.X * factor, Scale.Y * factor, Scale.Z) };
@@ -76,10 +79,15 @@ internal static class CompositionModel
         TransformAxis.CenterPoint => Pose.Identity with { CenterPoint = second ? new Vector3(25, 10, 0) : new Vector3(50, 20, 0) },
         TransformAxis.ScaleRotationCenter => new Pose(Uniform(second ? 2f : 1.5f), second ? 90 : 30, Vector3.Zero,
             second ? new Vector3(25, 10, 0) : new Vector3(50, 20, 0)),
+        // Layer 5: off-centre in x, so the RTL mirror only matches when the origin is flow-relative.
+        TransformAxis.TransformOrigin => new Pose(Uniform(second ? 2f : 1.5f), second ? 90 : 30, Vector3.Zero, Vector3.Zero) { Origin = OriginValue },
         _ => Pose.Identity,
     };
 
-    public static bool DeclaresScale(TransformAxis t) => t is TransformAxis.Identity or TransformAxis.Scale or TransformAxis.ScaleRotationCenter;
+    /// <summary>The <c>.TransformOrigin</c> the <see cref="TransformAxis.TransformOrigin"/> cases declare.</summary>
+    public static readonly Vector2 OriginValue = new(0.75f, 0.5f);
+
+    public static bool DeclaresScale(TransformAxis t) => t is TransformAxis.Identity or TransformAxis.Scale or TransformAxis.ScaleRotationCenter or TransformAxis.TransformOrigin;
 
     /// <summary>The pose at rest after <paramref name="step"/> (§12.1 B, per-channel precedence).</summary>
     public static Pose Expected(MatrixCase c, MatrixStep step)
@@ -96,7 +104,11 @@ internal static class CompositionModel
         if (c.UserCode == UserCodeAxis.SetFacade && !DeclaresScale(transform))
             pose = pose with { Scale = Uniform(SetterScale) };
         // §4.3: a facade Translation from user code adds to the visual's, unless .Translation() owns it.
-        if (c.UserCode == UserCodeAxis.TranslationDrag && transform != TransformAxis.Translation)
+        // The drag lives on the control, so a keyed Memo that replaces it loses the drag: the
+        // recorder keys its Memo by the Background transition, which removeModifier drops.
+        bool remounted = c.Wrapper == WrapperAxis.Memo && c.Transition == TransitionAxis.Background
+            && step is MatrixStep.RemoveModifier or MatrixStep.Unmount;
+        if (c.UserCode == UserCodeAxis.TranslationDrag && transform != TransformAxis.Translation && !remounted)
             pose = pose with { Translation = pose.Translation + new Vector3(DragX, 0, 0) };
         return pose;
     }
@@ -148,10 +160,10 @@ internal static class CompositionModel
     /// <c>Translation · T(pivot) · R · S · T(−pivot)</c> with <c>pivot = Size × origin + CenterPoint</c>,
     /// and the transform space is flow-relative (Q9), so RTL mirrors the result about the stage.
     /// </summary>
-    public static Box Bounds(Pose pose, bool rtl, double shift = 0, Vector2 origin = default)
+    public static Box Bounds(Pose pose, bool rtl, double shift = 0)
     {
         double radians = pose.Degrees * Math.PI / 180, cos = Math.Cos(radians), sin = Math.Sin(radians);
-        double px = Width * origin.X + pose.CenterPoint.X, py = Height * origin.Y + pose.CenterPoint.Y;
+        var (px, py) = Pivot(pose);
         double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
         foreach (var (cx, cy) in new (double, double)[] { (0, 0), (Width, 0), (0, Height), (Width, Height) })
         {
@@ -168,7 +180,8 @@ internal static class CompositionModel
     public static (double X, double Y) Point(Pose pose, bool rtl, double shift, double localX, double localY)
     {
         double radians = pose.Degrees * Math.PI / 180;
-        var (x, y) = Transform(pose, localX, localY, pose.CenterPoint.X, pose.CenterPoint.Y, Math.Cos(radians), Math.Sin(radians));
+        var (px, py) = Pivot(pose);
+        var (x, y) = Transform(pose, localX, localY, px, py, Math.Cos(radians), Math.Sin(radians));
         x += Left + shift;
         y += Top;
         return (rtl ? StageSize - x : x, y);
@@ -220,6 +233,9 @@ internal static class CompositionModel
         double vx = (cx - px) * pose.Scale.X, vy = (cy - py) * pose.Scale.Y;
         return (vx * cos - vy * sin + px + pose.Translation.X, vx * sin + vy * cos + py + pose.Translation.Y);
     }
+
+    private static (double X, double Y) Pivot(Pose pose) =>
+        (Width * pose.Origin.X + pose.CenterPoint.X, Height * pose.Origin.Y + pose.CenterPoint.Y);
 
     private static Vector3 Uniform(float s) => new(s, s, 1);
 }

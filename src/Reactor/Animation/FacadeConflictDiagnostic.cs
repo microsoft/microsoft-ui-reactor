@@ -22,18 +22,19 @@ internal static class FacadeConflictDiagnostic
         + "See REACTOR_ANIM_004.";
 
     /// <summary>
-    /// A <c>.Set(...)</c> setter threw <see cref="UnauthorizedAccessException"/> on a control whose
-    /// composition visual Reactor took. Always returns false.
+    /// A <c>.Set(...)</c> setter, or the <paramref name="source"/> user callback, threw
+    /// <see cref="UnauthorizedAccessException"/> on a control whose composition visual Reactor
+    /// took. Always returns false.
     /// </summary>
-    internal static bool ReportRejectedSetter(object control)
+    internal static bool ReportRejectedSetter(object control, string source = "'.Set(...)' setter")
     {
         if (control is UIElement element && DiagnosticLog.IsWarningEnabled && ElementPool.IsVisualTaken(element))
         {
             DiagnosticLog.Warning(LogCategory.Reactor, SetterOperation,
-                "A '.Set(...)' setter on a " + element.GetType().Name + " wrote a UIElement facade transform "
+                "A " + source + " on a " + element.GetType().Name + " wrote a UIElement facade transform "
                 + "(Rotation, Scale, CenterPoint, RotationAxis, TransformMatrix), a XAML implicit transition or called "
                 + "UIElement.StartAnimation after Reactor took the element's composition visual for a transition, "
-                + "a transform or a compositor feature, and WinUI rejected it. " + Modifiers);
+                + "a transform modifier or a compositor feature, and WinUI rejected it. " + Modifiers);
         }
         return false;
     }

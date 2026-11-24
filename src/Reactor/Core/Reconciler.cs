@@ -1707,6 +1707,17 @@ public sealed partial class Reconciler : IDisposable
         // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
         // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
         internal bool VisualTaken;
+        // Set by AnimationHelper.GetElementVisual once the handoff succeeded, unlike VisualTaken,
+        // which some features set ahead of it. WinUI then rejects facade writes, so the facades
+        // read identity and a later handoff returns this visual (the same instance for the
+        // control's lifetime) without asking WinUI again.
+        internal Microsoft.UI.Composition.Visual? HandedOutVisual;
+        // Reactor enabled translation on the handed-out visual for a declared Translation channel
+        // (spec 066 §4.3). The pool's visual reset disables it again and clears this.
+        internal bool TranslationEnabled;
+        // The .TransformOrigin pivot expression runs on the handed-out visual's CenterPoint (spec 066
+        // §8.2), started by an origin or by navigation's DrillIn. The pool's visual reset stops it.
+        internal bool OriginExpressionRunning;
         // A navigation transition's completion can still reach the control after it leaves the tree.
         internal bool PoolExcluded;
         // A connected-animation source: an excluded return still drops the element it hosted.
@@ -2839,12 +2850,23 @@ public sealed partial class Reconciler : IDisposable
         bool demand = element.AnimationConfig is not null || element.ElementTransition?.GetEnterTransition() is not null
             || element.KeyframeAnimations is not null
             || element.LayoutAnimation is not null || element.ScrollAnimation?.ScrollViewer is not null
-            || TakesVisual(element.ImplicitTransitions)
+            || TakesVisual(element.ImplicitTransitions) || DeclaresTransform(modifiers)
             || (outer.Armed && outer.Transparent && outer.Demand);
         bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
             || (outer.Armed && outer.Blocked);
         return new(Armed: true, Transparent: element is KeyedMemoElement, demand, blocked, candidate);
     }
+
+    // Spec 066 layer 4: a transform modifier takes the visual at mount unless its value is the
+    // identity (§3 invariant 2). A rented control's facades read identity, and setters block the
+    // lane anyway, so the declared value decides. Layer 5: so does a .TransformOrigin other than
+    // (0, 0), which starts its expression at mount.
+    private static bool DeclaresTransform(ElementModifiers? m)
+        => m is not null
+            && ((m.Scale is { } scale && scale != Vector3.One) || (m.Rotation is { } rotation && rotation != 0)
+                || (m.Translation is { } translation && translation != Vector3.Zero)
+                || (m.CenterPoint is { } center && center != Vector3.Zero)
+                || (m.TransformOrigin is { } origin && origin != Vector2.Zero));
 
     // The built-in element types whose handler rents a poolable control. Exact types: a record
     // derived from one may come with its own handler.
@@ -6007,9 +6029,6 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearLayoutAnimation(UIElement uie, int slot = 0)
     {
-        // The layout animation took the visual. Taking it again moves a facade Translation that
-        // a setter wrote in this update onto it.
-        AnimationHelper.GetElementVisual(uie);
         ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
         ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
     }
@@ -6433,11 +6452,15 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("Scale", scaleAnim);
         }
 
-        if (values?.Translation.HasValue == true || newState == InteractionState.Normal)
+        // Translation only for a declared Translation channel (spec 066 §4.3): a state that moves it,
+        // or Normal after something enabled it. Enabling it otherwise would make WinUI ignore a
+        // facade Translation drag on the element (#1642).
+        if (values?.Translation.HasValue == true
+            || (newState == InteractionState.Normal && AnimationHelper.TranslationEnabled(uie)))
         {
             // Animate Translation, not Offset: on a XAML element's handoff visual, Offset is the
             // layout position, so animating it to zero pulls the element to its parent's origin.
-            ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+            AnimationHelper.EnableTranslation(uie, visual);
             var targetTranslation = values?.Translation ?? rest.Translation;
             var translationAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetTranslation, curve);
             visual.StartAnimation("Translation", translationAnim);
@@ -6568,6 +6591,10 @@ public sealed partial class Reconciler : IDisposable
         public Vector3 Scale = Vector3.One;
         public Vector3 Translation;
         public float RotationDegrees;
+        // The static .CenterPoint() value; the origin expression's offset while an origin is active.
+        public Vector3 CenterPoint;
+        // The active .TransformOrigin(), or null when the pivot is the static CenterPoint (spec 066 §8.2).
+        public Vector2? Origin;
     }
 
     private static TransformRest RestTransformOf(UIElement uie)
@@ -6780,7 +6807,7 @@ public sealed partial class Reconciler : IDisposable
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
                 // Translation, not Offset: Offset is the layout position on a XAML handoff visual (#1432)
-                ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+                AnimationHelper.EnableTranslation(uie, visual);
                 anim.Target = "Translation";
                 if (def.Loop) anim.IterationBehavior = AnimationIterationBehavior.Forever;
                 foreach (var kf in def.Keyframes)
@@ -6988,6 +7015,8 @@ public sealed partial class Reconciler : IDisposable
             state.DeferredModifierResets = default;
             state.ImplicitClaims = null;
             state.StaggerDelay = null;
+            state.TranslationEnabled = false;
+            state.OriginExpressionRunning = false;
             if (state.KeyframeNames is { } names)
             {
                 foreach (var name in names) _keyframeTriggerValues.Remove((uie, name));
@@ -7281,7 +7310,7 @@ public sealed partial class Reconciler : IDisposable
     {
         static bool Declares(ElementModifiers? modifiers) => modifiers?.Visual is { } v
             && (v.Opacity.HasValue || v.Scale.HasValue || v.Rotation.HasValue
-                || v.Translation.HasValue || v.CenterPoint.HasValue);
+                || v.Translation.HasValue || v.CenterPoint.HasValue || v.TransformOrigin.HasValue);
 
         while (target is ModifiedElement wrapped)
         {
@@ -7404,6 +7433,10 @@ public sealed partial class Reconciler : IDisposable
         if (old?.CenterPoint.HasValue == true && current?.CenterPoint.HasValue != true
             && FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is null)
             AnimationHelper.ResetCompositionModifier(control, "CenterPoint");
+        // After CenterPoint, so the restored static pivot is the remaining offset.
+        if (old?.TransformOrigin.HasValue == true && current?.TransformOrigin.HasValue != true
+            && FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is null)
+            TransformOriginBinding.Deactivate(control);
     }
 
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
@@ -7589,6 +7622,14 @@ public sealed partial class Reconciler : IDisposable
             if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
                 AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
+        // Before CenterPoint (spec 066 §8.2): an origin that starts here takes the current offset,
+        // and a CenterPoint change in the same render then writes or animates that offset, so a
+        // curve isn't cancelled by the expression starting after it.
+        if (m.TransformOrigin.HasValue && m.TransformOrigin != oldM?.TransformOrigin)
+            TransformOriginBinding.Apply(fe, m.TransformOrigin.Value);
+        else if (!m.TransformOrigin.HasValue && oldM?.TransformOrigin.HasValue == true
+            && FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is { } originOwner)
+            TransformOriginBinding.Apply(fe, originOwner.Modifiers.TransformOrigin!.Value);
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
             AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
@@ -7863,9 +7904,14 @@ public sealed partial class Reconciler : IDisposable
         // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
         ApplyDragDropHandlers(fe, oldM, m);
 
-        // OnMountAction — only run on initial mount (oldM is null)
+        // OnMountAction — only run on initial mount (oldM is null). Spec 066 §9 row 1: name the
+        // modifier when WinUI rejects a facade write the callback makes after the handoff; the
+        // filter returns false, so the exception is unchanged.
         if (m.OnMountAction is not null && oldM is null)
-            m.OnMountAction(fe);
+        {
+            try { m.OnMountAction(fe); }
+            catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(fe, "'.OnMount(...)' callback")) { throw; }
+        }
 
         // OnUpdateAction — the update-time counterpart, run on every in-place
         // update (oldM is not null) but never at mount. Runs after child

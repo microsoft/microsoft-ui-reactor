@@ -222,6 +222,9 @@ internal static class PoolLaneFixtures
                 // Since spec 066 layer 2 every .XxxTransition() but Background takes the visual at mount.
                 ("TranslationTransitionOnly", Target("R").TranslationTransition(), true, null),
                 ("OpacityTransitionOnly", Target("R").OpacityTransition(), true, null),
+                // Since spec 066 layer 4 a non-identity transform takes the visual at mount.
+                ("TransformOnly", Target("R").Scale(2), true, null),
+                ("TransformWithSetter", Target("R").Set(static b => b.Rotation = 10).Scale(2), false, null),
                 ("IdentityTransformRef", Target("R").Scale(1).Rotation(0).Ref(probe), false, _ =>
                 {
                     try { probe.Current!.Rotation = 10; return null; }
@@ -757,6 +760,28 @@ internal static class PoolLaneFixtures
     }
 
     /// <summary>
+    /// A visual-lane renter that declares <c>.Translation()</c> gets translation enabled again: the
+    /// visual reset disables it and forgets that Reactor enabled it (spec 066 §4.3 and §7.3).
+    /// </summary>
+    internal sealed class TranslationRenter(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string p = "ElementPoolLanes_TranslationRenter";
+            using var lab = new Lab(H);
+            var first = await lab.Show(Target("T").Translation(10, 0, 0));
+            H.Check(p + "_Mounted", first is not null && ElementPool.IsVisualTaken(first));
+            await lab.Show(null);
+            var rented = await lab.Show(Target("R").Translation(20, 0, 0));
+            H.Check(p + "_Recycled", rented is not null && ReferenceEquals(rented, first));
+            if (rented is null) return;
+            await Harness.Render();
+            var box = (await Snap.CaptureAsync(lab.Root)).RedBox();
+            H.Check(p + "_Applied", box is { } b && Math.Abs(b.X0 - 20) <= 2, $"box={box}");
+        }
+    }
+
+    /// <summary>
     /// A handler registered for <c>KeyedMemoElement</c> is app code: it may write a facade on the
     /// control its child mounts, so that child never rents from the visual lane.
     /// </summary>
@@ -820,6 +845,128 @@ internal static class PoolLaneFixtures
                 is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.R: 255, Color.G: 0 });
             var renter = await lab.Show(TextBox("r", static _ => { }));
             H.Check(p + "_NotRented", !ReferenceEquals(renter, source));
+        }
+    }
+
+    /// <summary>
+    /// #1662: a local value the previous renter wrote (<c>Foreground</c>, <c>UIElement.Clip</c>, the
+    /// Control fonts, tab and focus navigation, sound mode) doesn't reach the next renter, in either
+    /// lane, whether the renter mounts through a descriptor or rents the control itself. A renter
+    /// that declares its own value keeps it.
+    /// </summary>
+    internal sealed class RenterLocals(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string Blue = "#FF0000FF";
+
+        private static Microsoft.UI.Xaml.Media.RectangleGeometry Clip(double size) =>
+            new() { Rect = new global::Windows.Foundation.Rect(0, 0, size, size) };
+
+        private static bool IsUnset(object? local) => local == DependencyProperty.UnsetValue;
+
+        private static bool IsBlue(object? local) =>
+            local is Microsoft.UI.Xaml.Media.SolidColorBrush { Color.B: 255, Color.R: 0 };
+
+        public override async Task RunAsync()
+        {
+            foreach (bool visualLane in new[] { false, true })
+            {
+                string lane = "ElementPoolLanes_RenterLocals_" + (visualLane ? "Visual" : "Plain");
+                Element Lane(Element e) => visualLane ? e.Animate(Curve.Linear(100)) : e;
+
+                await Case(lane + "_TextBlockForeground", visualLane, Lane(TextBlock("same").Foreground(Red)),
+                    Lane(TextBlock("same")), WinUI.TextBlock.ForegroundProperty, IsUnset, pixels: true);
+                await Case(lane + "_ButtonForeground", visualLane, Lane(Button("same").Foreground(Red)),
+                    Lane(Button("same")), WinUI.Control.ForegroundProperty, IsUnset);
+                await Case(lane + "_RichTextBlockForeground", visualLane, Lane(RichTextBlock("same").Foreground(Red)),
+                    Lane(RichTextBlock("same")), WinUI.RichTextBlock.ForegroundProperty, IsUnset);
+                await Case(lane + "_RichTextBlockSetForeground", visualLane,
+                    Lane(RichTextBlock("same").Set(static r => r.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red))),
+                    Lane(RichTextBlock("same")), WinUI.RichTextBlock.ForegroundProperty, IsUnset);
+                await Case(lane + "_Clip", visualLane, Lane(Target("same").Set(static b => b.Clip = Clip(10))),
+                    Lane(Target("same")), UIElement.ClipProperty, IsUnset,
+                    // The visual reset already drops the rendered clip, so only the plain lane's pixels can see the leak.
+                    pixels: !visualLane);
+                await Case(lane + "_ButtonFontSize", visualLane, Lane(Button("same").FontSize(30)),
+                    Lane(Button("same")), WinUI.Control.FontSizeProperty, IsUnset);
+                await Case(lane + "_ButtonFontFamily", visualLane, Lane(Button("same").FontFamily("Consolas")),
+                    Lane(Button("same")), WinUI.Control.FontFamilyProperty, IsUnset);
+                await Case(lane + "_ButtonFontWeight", visualLane, Lane(Button("same").FontWeight(Microsoft.UI.Text.FontWeights.Bold)),
+                    Lane(Button("same")), WinUI.Control.FontWeightProperty, IsUnset);
+                await Case(lane + "_ButtonTabIndex", visualLane, Lane(Button("same").TabIndex(5)),
+                    Lane(Button("same")), WinUI.Control.TabIndexProperty, IsUnset);
+                await Case(lane + "_ButtonSoundMode", visualLane, Lane(Button("same").SoundMode(ElementSoundMode.Off)),
+                    Lane(Button("same")), WinUI.Control.ElementSoundModeProperty, IsUnset);
+                await Case(lane + "_XYFocusKeyboardNavigation", visualLane,
+                    Lane(Target("same").XYFocusKeyboardNavigation(Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled)),
+                    Lane(Target("same")), UIElement.XYFocusKeyboardNavigationProperty, IsUnset);
+                await Case(lane + "_TabNavigation", visualLane,
+                    Lane(Target("same").TabNavigation(Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle)),
+                    Lane(Target("same")), UIElement.TabFocusNavigationProperty, IsUnset);
+
+                // The reset runs on return, so a renter's own declaration still lands.
+                await Case(lane + "_TextBlockForegroundDeclared", visualLane, Lane(TextBlock("same").Foreground(Red)),
+                    Lane(TextBlock("same").Foreground(Blue)), WinUI.TextBlock.ForegroundProperty, IsBlue);
+                await Case(lane + "_ButtonForegroundDeclared", visualLane, Lane(Button("same").Foreground(Red)),
+                    Lane(Button("same").Foreground(Blue)), WinUI.Control.ForegroundProperty, IsBlue);
+            }
+
+            // A renter with setters never rents from the visual lane (spec 066 §7.2), so this is plain only.
+            var declared = Clip(20);
+            await Case("ElementPoolLanes_RenterLocals_Plain_ClipDeclared", false, Target("same").Set(static b => b.Clip = Clip(10)),
+                Target("same").Set(b => b.Clip = declared), UIElement.ClipProperty, local => ReferenceEquals(local, declared));
+
+            // A handler that rents the control itself gets no descriptor mount, so the pool alone must
+            // hand back a fresh control. RichTextBlock's descriptor would otherwise hide its leak.
+            foreach (bool visualLane in new[] { false, true })
+            {
+                string lane = "ElementPoolLanes_RenterLocals_RawRent_" + (visualLane ? "Visual" : "Plain");
+                RawRent(lane + "_RichTextBlockForeground", visualLane,
+                    () => new WinUI.RichTextBlock { Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red) },
+                    WinUI.RichTextBlock.ForegroundProperty);
+                RawRent(lane + "_Clip", visualLane, () => new WinUI.Border { Clip = Clip(10) }, UIElement.ClipProperty);
+            }
+        }
+
+        private void RawRent<TControl>(string p, bool visualLane, Func<TControl> create, DependencyProperty property)
+            where TControl : FrameworkElement
+        {
+            using var pool = new ElementPool();
+            var control = create();
+            if (visualLane) AnimationHelper.GetElementVisual(control);
+            H.Check(p + "_PreviousWrote", !IsUnset(control.ReadLocalValue(property)));
+            pool.Return(control);
+            var rented = pool.TryRent(typeof(TControl), visualLane);
+            H.Check(p + "_Recycled", ReferenceEquals(rented, control));
+            H.Check(p + "_Cleared", rented is not null && IsUnset(rented.ReadLocalValue(property)),
+                $"local={rented?.ReadLocalValue(property)}");
+        }
+
+        private async Task Case(string p, bool visualLane, Element previous, Element renter,
+            DependencyProperty property, Func<object?, bool> expected, bool pixels = false)
+        {
+            using var lab = new Lab(H);
+            var first = await lab.Show(previous);
+            // Positive controls: the previous renter really wrote the local value, in the lane under test.
+            H.Check(p + "_PreviousWrote", first is not null && !IsUnset(first.ReadLocalValue(property)));
+            if (first is null) return;
+            H.Check(p + "_Lane", ElementPool.IsVisualTaken(first) == visualLane);
+            if (pixels)
+            {
+                var (before, beforeSizes) = await DiffFromFresh(H, lab, renter);
+                H.Check(p + "_PreviousDiffersFromFresh", before > 4, $"diff={before} {beforeSizes}");
+            }
+
+            await lab.Show(null);
+            var second = await lab.Show(renter);
+            H.Check(p + "_Recycled", second is not null && ReferenceEquals(first, second));
+            if (second is null) return;
+            var local = second.ReadLocalValue(property);
+            H.Check(p + "_RenterValue", expected(local), $"local={local}");
+            if (pixels)
+            {
+                var (diff, sizes) = await DiffFromFresh(H, lab, renter);
+                H.Check(p + "_PixelIdenticalToFresh", diff is >= 0 and <= 4, $"diff={diff} {sizes}");
+            }
         }
     }
 

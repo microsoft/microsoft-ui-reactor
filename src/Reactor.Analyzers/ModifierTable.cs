@@ -488,6 +488,8 @@ internal static class ModifierTable
             // generic modifier and write nothing. The RichTextBlockElement overloads are what
             // make the suggestion sound on that receiver — FontSize's was added alongside this
             // table for exactly that reason.
+            // CleanElement resets these four on Control and TextBlock (#1662), and they stay MOD_002
+            // per #1195, like the content-alignment pair: the next mount re-applies a .Set write.
             { "FontFamily", new ModifierInfo("FontFamily", controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontSize",   new ModifierInfo("FontSize",   controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontWeight", new ModifierInfo("FontWeight", controlGate: ControlOrTextBlock, elementTypes: RichTextBlockOnly) },
@@ -679,13 +681,13 @@ internal static class ModifierTable
             ["Resources"] = "Modifier takes an Action<ResourceBuilder>; the property is a ResourceDictionary.",
 
             // Spec 066 §9.1: a blanket MOD_002 suggestion would rewrite working code on a plain
-            // element into code that takes the visual (spec 066 layer 4 moves these modifiers
-            // onto it), and the analyzer cannot see the later facade writes from event handlers
+            // element into code that takes the visual (since spec 066 layer 4 these modifiers
+            // write it), and the analyzer cannot see the later facade writes from event handlers
             // or ElementRef.Current that would then throw. Keeping them out also means one .Set
             // write never gets both a REACTOR_ANIM_004 and a REACTOR_MOD_002 diagnostic.
-            ["Scale"] = "Spec 066 layer 4 moves the modifier onto the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
-            ["Rotation"] = "Spec 066 layer 4 moves the modifier onto the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
-            ["CenterPoint"] = "Spec 066 layer 4 moves the modifier onto the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["Scale"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["Rotation"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
+            ["CenterPoint"] = "The modifier takes the composition visual, which locks the facades for the control's lifetime; REACTOR_ANIM_004 covers the harmful combination.",
 
             // Candidates, deliberately unmapped pending verification of how they reach the
             // control. Mapping one wrongly ships a code fix that compiles and does nothing,
@@ -704,8 +706,8 @@ internal static class ModifierTable
     /// <remarks>
     /// <para>
     /// Spec 066 §9.1. The set grows with that spec's rollout, one row per modifier that
-    /// starts taking the visual: layer 2 added the four <c>.XxxTransition()</c>, layer 4 adds
-    /// <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> and <c>.CenterPoint</c>, and layer 5
+    /// starts taking the visual: layer 2 added the four <c>.XxxTransition()</c>, layer 4
+    /// <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> and <c>.CenterPoint</c>, and layer 5 adds
     /// <c>.TransformOrigin</c>. Add a row in the same change that makes the modifier take the
     /// visual, never earlier: before that the facade write still works, so the warning would be
     /// a false positive. The same change makes <c>Reconciler.ForMount</c> count the modifier as
@@ -734,6 +736,15 @@ internal static class ModifierTable
             ["ScaleTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual to install its Scale implicit key.",
             ["RotationTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual to install its RotationAngle implicit key.",
             ["TranslationTransition"] = "Reconciler.ApplyImplicitTransitions takes the visual, and AnimationHelper animates Translation writes on it.",
+            // Spec 066 layer 4: the transforms always write the visual, so a non-identity value
+            // takes it at mount. An identity value on a fresh control doesn't (§3 invariant 2),
+            // which FacadeTransformSetAnalyzer honours for constant arguments.
+            ["Scale"] = "AnimationHelper.SetOrAnimateVector3 writes Visual.Scale, taking the visual unless the value is the identity.",
+            ["Rotation"] = "AnimationHelper.SetOrAnimate writes Visual.RotationAngle, taking the visual unless the value is 0.",
+            ["Translation"] = "AnimationHelper.SetOrAnimateVector3 enables translation and writes the visual's Translation, taking the visual unless the value is zero.",
+            ["CenterPoint"] = "AnimationHelper.SetOrAnimateVector3 writes Visual.CenterPoint, taking the visual unless the value is zero.",
+            // Spec 066 layer 5: an origin other than (0, 0) starts its pivot expression on the visual at mount.
+            ["TransformOrigin"] = "TransformOriginBinding.Apply starts the pivot expression on Visual.CenterPoint, taking the visual unless the origin is (0, 0).",
         };
 
     // ── Attached properties ──────────────────────────────────────────────────

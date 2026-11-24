@@ -376,6 +376,9 @@ and `.Margin(16).Bold()` both compile on a `TextBlockElement`.
 .AutomationName("name")
 .OnMount(action)
 .Translation(x, y, z)
+.Scale(1.2f) / .Rotation(degrees)  // pivot: the leading top corner unless set below
+.TransformOrigin(0.5f, 0.5f)          // size-relative pivot; (0.5f, 0.5f) is the centre, x flow-relative
+.CenterPoint(new Vector3(x, y, 0))    // pixel pivot, or a pixel offset added to .TransformOrigin
 ```
 
 ### Transitions (any Element)

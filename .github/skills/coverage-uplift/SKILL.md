@@ -122,7 +122,7 @@ dotnet test tests/Reactor.AppTests -p:Platform=x64
 
 Always pass `-p:Platform=x64` (AnyCPU app/test builds fail with *"WindowsAppSDKSelfContained
 requires a supported Windows architecture"*) and `-p:SkipSignaturesGen=true` on
-`Reactor.Tests` to dodge the `CS2012 …\intermediatexaml\Reactor.dll` race. If the race
+`Reactor.Tests` to dodge the `CS2012 …\intermediatexaml\Microsoft.UI.Reactor.dll` race. If the race
 persists under parallel builds, escalate **on the `dotnet build` line only** — prebuild
 `src/Reactor` first, then add `-m:1 -nodereuse:false` (or set
 `$env:MSBUILDDISABLENODEREUSE='1'`) to the build — and keep running the suite through the

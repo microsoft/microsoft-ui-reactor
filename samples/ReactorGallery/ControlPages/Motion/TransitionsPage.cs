@@ -86,6 +86,7 @@ TextBlock(""Opacity is animated, not toggled"")
                             .Background(Theme.LayerFill)
                             .HAlign(HorizontalAlignment.Center)
                             .VAlign(VerticalAlignment.Center)
+                            .TransformOrigin(0.5f, 0.5f)
                             .Scale(enlarged ? 1.4f : 1.0f)
                             .ScaleTransition()),
                     Caption("Scale is a render transform, so it does not re-run layout — neighbours "
@@ -98,6 +99,7 @@ var (enlarged, setEnlarged) = UseState(false);
 VStack(12,
     Button(enlarged ? ""Shrink"" : ""Enlarge"", () => setEnlarged(!enlarged)),
     Border(TextBlock(""Scales from its centre""))
+        .TransformOrigin(0.5f, 0.5f) // the pivot, as a fraction of the size
         .Scale(enlarged ? 1.4f : 1.0f)
         .ScaleTransition())
 // Something has to change the value: the transition animates Scale whenever it changes,

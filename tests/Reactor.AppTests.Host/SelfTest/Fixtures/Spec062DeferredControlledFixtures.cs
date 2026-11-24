@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>
 /// Spec 062 §14 — live-WinUI proof that a source-generated
 /// <c>[WrapControlled(Deferred = true)]</c> wrapper authored in an EXTERNAL
-/// assembly (no <c>InternalsVisibleTo</c> from Reactor.dll) round-trips its
+/// assembly (no <c>InternalsVisibleTo</c> from Microsoft.UI.Reactor.dll) round-trips its
 /// two-way value through the suppress-counter echo channel using only Reactor's
 /// PUBLIC surface.
 ///
