@@ -218,6 +218,15 @@ Conventions for contributors:
   `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
   write `fe.Translation` on an element that declares one of those.
 
+- **A pooled control no longer hands its previous renter's local values to the next renter
+  (spec 066 §7, issue #1662).** A `TextBlock` or control mounted where one with `.Foreground(...)`
+  was removed kept the old brush, and so did a `RichTextBlock` a custom handler rented itself. A
+  `Button`, `TextBox` or `ToggleSwitch` kept
+  a previous `.FontSize(...)`, `.FontFamily(...)`, `.FontWeight(...)`, `.TabIndex(...)` or
+  `.SoundMode(...)`, any element kept `.XYFocusKeyboardNavigation(...)` and `.TabNavigation(...)`,
+  and a `.Set(c => c.Clip = …)` clipped the next renter, in both pool lanes. The pool now clears
+  them all on return, so a renter shows its own values or the defaults.
+
 - Idle Markdown text-selection scopes no longer enumerate native text or compute
   transforms on unrelated window layout passes. Input and automation access refresh
   stale documents lazily; active selections retain layout tracking and streaming

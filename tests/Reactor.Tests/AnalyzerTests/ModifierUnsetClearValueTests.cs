@@ -750,6 +750,22 @@ public class ModifierUnsetClearValueTests
         // TextBlock is a Padding receiver in ModifierTable's control gate. It predates #985
         // (it arrived with #950) but lived past the switch where no scanner reached it.
         "TextBlock.Padding",
+        // Issue #1662 — the rest of what ApplyModifiers writes to a poolable receiver and clears
+        // only on a set → unset transition. RichTextBlock's Foreground is its element property,
+        // cleared on unset by its descriptor, and pooled so a raw rent gets a fresh control too.
+        "Control.Foreground",
+        "Control.FontFamily",
+        "Control.FontSize",
+        "Control.FontWeight",
+        "Control.TabIndex",
+        "Control.ElementSoundMode",
+        "TextBlock.Foreground",
+        "RichTextBlock.Foreground",
+        "UIElement.XYFocusKeyboardNavigation",
+        "UIElement.TabFocusNavigation",
+        // No modifier writes Clip, so it breaks this list's modifier rule: only a .Set writes it,
+        // and no mount writes it back (#1662).
+        "UIElement.Clip",
     ];
 
     [Fact]
