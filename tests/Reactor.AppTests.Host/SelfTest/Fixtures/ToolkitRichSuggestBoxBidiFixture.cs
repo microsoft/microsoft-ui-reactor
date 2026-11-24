@@ -25,8 +25,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// right) in both flows, and FlowDirection only mirrors chrome (the asymmetric
 /// TextControlThemePadding). WinUI's <c>CTextBoxView::IsRightToLeft</c> is hard-coded false, so the
 /// text view itself is never mirrored.</para>
-/// <para>Instruments. Positions are physical: everything is transformed into the boxes' shared LTR
-/// panel and reported relative to each box's left edge. The placeholder is measured by
+/// <para>Instruments. Positions are physical: each box sits alone in a tight LTR <c>Border</c> with an
+/// opaque neutral fill, everything is transformed into that frame, and it is also what is rendered to a
+/// bitmap, so pixel 0 is the box's left edge. The placeholder is measured by
 /// <c>TextPointer.GetCharacterRect</c> and, independently, by rendered ink. The document is measured by
 /// rendered ink only: native <c>ITextRange.GetRect</c> returns a zero-width rect at x=0 for an
 /// all-Hebrew paragraph and reports a Latin-first mixed paragraph narrower (47) than its Hebrew-first
@@ -56,8 +57,9 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
     // Two side bearings, RichEdit's whole-unit viewport (TxGetViewportRect floors/ceils) and a
     // possible trailing caret reserve. Wrong alignment would make the span ~40 DIP, not ~300.
     private const double SpanTolerance = 6.0;
-    // Premultiplied luminance distance from the region's median (its background) that counts as ink.
-    // Theme text vs. text-control fill differs by >150 in both light and dark themes.
+    // Luminance distance from the region's median (its background) that counts as ink. Over the
+    // #808080 frame, primary and placeholder text differ from the text-control fill by >90 in both
+    // light and dark themes.
     private const int InkContrast = 64;
 
     private static readonly string[] Paragraphs =
@@ -74,23 +76,23 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         {
             var (placeholder, setPlaceholder) = UseState(Latin);
             Props.SetPlaceholder = setPlaceholder;
+            // A tight, opaque LTR frame per box: its local space is physical and it is what gets rendered.
             Element Box(FlowDirection direction) =>
-                RichSuggestBoxElement.RichSuggestBox(placeholderText: placeholder)
-                    .Width(BoxWidth)
-                    .HAlign(HorizontalAlignment.Left)
-                    .Set(b => b.FlowDirection = direction);
+                Border(RichSuggestBoxElement.RichSuggestBox(placeholderText: placeholder)
+                        .Width(BoxWidth)
+                        .Set(b => b.FlowDirection = direction))
+                    .Background("#FF808080")
+                    .HAlign(HorizontalAlignment.Left);
             // The first focusable element absorbs any activation focus, keeping both editors unfocused.
             return VStack(Button("focus sink", () => { }), Box(FlowDirection.LeftToRight), Box(FlowDirection.RightToLeft));
         }
     }
 
-    private sealed record Side(string Label, Wct.RichSuggestBox Box, WinUI.RichEditBox Editor);
+    private sealed record Side(string Label, Wct.RichSuggestBox Box, WinUI.RichEditBox Editor, FrameworkElement? Frame);
 
     private sealed record Snapshot(byte[] Pixels, int Width, int Height, double ScaleX, double ScaleY);
 
     private readonly record struct Ink(double Left, double Right, int Count, int Background);
-
-    private FrameworkElement _panel = null!;
 
     public override async Task RunAsync()
     {
@@ -105,13 +107,16 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         if (sides.Length != 2) return;
         var (ltr, rtl) = (sides[0], sides[1]);
 
-        // Pixels and positions are read in the boxes' shared parent, which must itself be LTR.
-        var panel = VisualTreeHelper.GetParent(ltr.Box) as FrameworkElement;
-        H.Check($"{Name}_SharedLeftToRightPanel",
-            panel is not null && ReferenceEquals(panel, VisualTreeHelper.GetParent(rtl.Box)) &&
-            panel.FlowDirection == FlowDirection.LeftToRight, $"panel={panel?.GetType().Name}, flow={panel?.FlowDirection}");
-        if (panel is null) return;
-        _panel = panel;
+        // Pixels and positions are read in each box's own frame, which must be LTR and box-sized.
+        foreach (var side in sides)
+        {
+            var f = side.Frame;
+            H.Check($"{Name}_{side.Label}_TightLeftToRightFrame",
+                f is not null && f.FlowDirection == FlowDirection.LeftToRight &&
+                Near(f.ActualWidth, side.Box.ActualWidth) && Near(In(side, side.Box).Left, 0),
+                Invariant($"frame={f?.GetType().Name}, flow={f?.FlowDirection}, width={f?.ActualWidth:F2}, box={side.Box.ActualWidth:F2}"));
+        }
+        if (sides.Any(s => s.Frame is null)) return;
 
         // 1-2. Property contract.
         H.Check($"{Name}_RootDirections",
@@ -147,8 +152,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
                 current.Length == 2 && ReferenceEquals(ltr.Box, current[0].Box) && ReferenceEquals(rtl.Box, current[1].Box));
             if (!shown) continue;
             await Harness.Render(100);
-            var snapshot = await SnapAsync(panel);
-            foreach (var side in sides) CheckPlaceholder(side, latin, snapshot);
+            foreach (var side in sides) CheckPlaceholder(side, latin, await SnapAsync(side, $"placeholder {Script(latin)}"));
         }
 
         // 4. Document geometry.
@@ -159,10 +163,9 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         bool hidden = await Harness.WaitFor(() => sides.All(s => Placeholder(s)?.Visibility != Visibility.Visible));
         H.Check($"{Name}_Document_PlaceholderHidden", hidden);
         await Harness.Render(100);
-        var document = await SnapAsync(panel);
 
-        var ltrInk = MeasureDocument(ltr, document);
-        var rtlInk = MeasureDocument(rtl, document);
+        var ltrInk = MeasureDocument(ltr, await SnapAsync(ltr, "document"));
+        var rtlInk = MeasureDocument(rtl, await SnapAsync(rtl, "document"));
         if (ltrInk is null || rtlInk is null) return;
         foreach (var (side, ink) in new[] { (ltr, ltrInk), (rtl, rtlInk) })
         {
@@ -198,7 +201,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         foreach (var side in sides)
         {
             var view = TextView(side);
-            var t = view?.TransformToVisual(panel);
+            var t = view?.TransformToVisual(side.Frame);
             double start = t?.TransformPoint(new Point(0, 0)).X ?? double.NaN;
             double end = t?.TransformPoint(new Point(view!.ActualWidth, 0)).X ?? double.NaN;
             string orientation = Invariant($"type={view?.GetType().Name}, localStart->{start:F2}, localEnd->{end:F2}, width={view?.ActualWidth:F2}");
@@ -215,14 +218,14 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         H.Check($"{Name}_{side.Label}_Placeholder_{Script(latin)}_InheritsFlow", p.FlowDirection == side.Box.FlowDirection,
             $"root={side.Box.FlowDirection}, placeholder={p.FlowDirection}");
 
-        double boxLeft = InPanel(side.Box).Left;
+        double boxLeft = In(side, side.Box).Left;
         var (contentLeft, contentRight) = ContentEdges(side);
         double target = latin ? contentLeft : contentRight;
         var first = p.ContentStart.GetCharacterRect(LogicalDirection.Forward);
-        var firstInPanel = p.TransformToVisual(_panel).TransformBounds(first);
-        double edge = latin ? firstInPanel.Left : firstInPanel.Right;
+        var firstInFrame = p.TransformToVisual(side.Frame).TransformBounds(first);
+        double edge = latin ? firstInFrame.Left : firstInFrame.Right;
 
-        var block = InPanel(p);
+        var block = In(side, p);
         var interior = Interior(side);
         var line = new Rect(interior.Left, block.Top + p.Padding.Top, interior.Width,
             Math.Max(0, block.Height - p.Padding.Top - p.Padding.Bottom));
@@ -248,7 +251,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         var view = TextView(side);
         H.Check($"{Name}_{side.Label}_Document_TextViewFound", view is not null);
         if (view is null) return null;
-        double boxLeft = InPanel(side.Box).Left;
+        double boxLeft = In(side, side.Box).Left;
         var interior = Interior(side);
         var result = new Ink[Paragraphs.Length];
         bool complete = true;
@@ -269,7 +272,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
 
             // Only the line band comes from GetRect: the middle half of the line, mapped through the
             // (unmirrored, asserted below) text view, across the whole editor interior.
-            var band = view.TransformToVisual(_panel).TransformBounds(
+            var band = view.TransformToVisual(side.Frame).TransformBounds(
                 new Rect(0, client.Y + client.Height / 4, 1, Math.Max(0, client.Height / 2)));
             var ink = FindInk(snapshot, new Rect(interior.Left, band.Top, interior.Width, band.Height));
             Console.WriteLine(Invariant($"# {Name} {side.Label} p{i}: ink={Rel(ink, boxLeft)}, getRect client={client} none={none} hit={hit}, ") +
@@ -284,25 +287,25 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
     }
 
     // The box-relative text view rect.
-    private Rect ViewRect(Side side)
+    private static Rect ViewRect(Side side)
     {
-        var view = InPanel(TextView(side)!);
-        double boxLeft = InPanel(side.Box).Left;
+        var view = In(side, TextView(side)!);
+        double boxLeft = In(side, side.Box).Left;
         return new Rect(view.Left - boxLeft, view.Top, view.Width, view.Height);
     }
 
-    private (double Left, double Right)? ViewInset(Side side)
+    private static (double Left, double Right)? ViewInset(Side side)
     {
         if (TextView(side) is not { } view) return null;
-        var editor = InPanel(side.Editor);
-        var v = InPanel(view);
+        var editor = In(side, side.Editor);
+        var v = In(side, view);
         return (Math.Round(v.Left - editor.Left, 2), Math.Round(editor.Right - v.Right, 2));
     }
 
-    // Editor content box in panel coordinates: border plus padding, mirrored with flow.
-    private (double Left, double Right) ContentEdges(Side side)
+    // Editor content box in frame coordinates: border plus padding, mirrored with flow.
+    private static (double Left, double Right) ContentEdges(Side side)
     {
-        var editor = InPanel(side.Editor);
+        var editor = In(side, side.Editor);
         var (b, p) = (side.Editor.BorderThickness, side.Editor.Padding);
         double start = b.Left + p.Left, end = b.Right + p.Right;
         return side.Box.FlowDirection == FlowDirection.RightToLeft
@@ -310,29 +313,39 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             : (editor.Left + start, editor.Right - end);
     }
 
-    // Editor interior (inside the border) in panel coordinates; the scan never sees border strokes.
-    private Rect Interior(Side side)
+    // Editor interior (inside the border) in frame coordinates; the scan never sees border strokes.
+    private static Rect Interior(Side side)
     {
-        var editor = InPanel(side.Editor);
+        var editor = In(side, side.Editor);
         var b = side.Editor.BorderThickness;
         double inset = Math.Max(b.Left, b.Right) + 1;
         return new Rect(editor.Left + inset, editor.Top + b.Top, Math.Max(0, editor.Width - 2 * inset),
             Math.Max(0, editor.Height - b.Top - b.Bottom));
     }
 
-    private Rect InPanel(FrameworkElement element) =>
-        element.TransformToVisual(_panel).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+    private static Rect In(Side side, FrameworkElement element) =>
+        element.TransformToVisual(side.Frame).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
-    private static async Task<Snapshot> SnapAsync(FrameworkElement root)
+    private async Task<Snapshot> SnapAsync(Side side, string phase)
     {
+        var root = side.Frame!;
         var rtb = new RenderTargetBitmap();
         await rtb.RenderAsync(root);
         var pixels = (await rtb.GetPixelsAsync()).ToArray();
-        return new Snapshot(pixels, rtb.PixelWidth, rtb.PixelHeight,
+        var snapshot = new Snapshot(pixels, rtb.PixelWidth, rtb.PixelHeight,
             rtb.PixelWidth / root.ActualWidth, rtb.PixelHeight / root.ActualHeight);
+        double scale = root.XamlRoot?.RasterizationScale ?? 1;
+        string detail = Invariant($"bitmap={rtb.PixelWidth}x{rtb.PixelHeight}, frame={root.ActualWidth:F2}x{root.ActualHeight:F2}, ") +
+            Invariant($"scale={snapshot.ScaleX:F3}x{snapshot.ScaleY:F3}, rasterization={scale}, bytes={pixels.Length}");
+        Console.WriteLine($"# {Name} {side.Label} {phase} snapshot: {detail}");
+        // Precondition for every ink check: the bitmap covers exactly the frame at the device scale.
+        H.Check($"{Name}_{side.Label}_{phase.Replace(' ', '_')}_BitmapCoversFrame",
+            Math.Abs(snapshot.ScaleX - scale) <= 0.02 && Math.Abs(snapshot.ScaleY - scale) <= 0.02 &&
+            pixels.Length >= rtb.PixelWidth * rtb.PixelHeight * 4, detail);
+        return snapshot;
     }
 
-    // Horizontal ink extent (panel DIPs) of pixels contrasting with the region's median luminance.
+    // Horizontal ink extent (frame DIPs) of pixels contrasting with the region's median luminance.
     private static Ink? FindInk(Snapshot s, Rect region)
     {
         int x0 = Math.Clamp((int)Math.Floor(region.Left * s.ScaleX), 0, s.Width);
@@ -372,7 +385,8 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
     private Side[] Sides() => H.FindAllControls<Wct.RichSuggestBox>(_ => true)
         .Select(box => (box, editor: Descendants(box).OfType<WinUI.RichEditBox>().FirstOrDefault(e => e.Name == "RichEditBox")))
         .Where(x => x.editor is not null)
-        .Select(x => new Side(x.box.FlowDirection == FlowDirection.RightToLeft ? "RTL" : "LTR", x.box, x.editor!))
+        .Select(x => new Side(x.box.FlowDirection == FlowDirection.RightToLeft ? "RTL" : "LTR", x.box, x.editor!,
+            VisualTreeHelper.GetParent(x.box) as WinUI.Border))
         .OrderBy(s => s.Label == "RTL")
         .ToArray();
 
