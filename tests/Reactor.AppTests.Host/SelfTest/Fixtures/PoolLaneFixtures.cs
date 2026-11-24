@@ -955,6 +955,27 @@ internal static class PoolLaneFixtures
                 H.Check(p + "_ClearedOnUnmount", r.Current is null);
             }
 
+            // Two tracked refs, each with a subscriber that throws when its ref is cleared: unmount
+            // clears both and still reports the failure.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingClear";
+                using var reconciler = new Reconciler();
+                ElementRef outer = new(), inner = new();
+                Action<FrameworkElement?> boom = static v => { if (v is null) throw new InvalidOperationException("boom"); };
+                var control = reconciler.Mount(Memo("outer", () => Memo("inner", static () => Target("A")).Ref(inner)).Ref(outer),
+                    static () => { });
+                outer.CurrentChanged += boom;
+                inner.CurrentChanged += boom;
+                bool threw = false;
+                try { if (control is not null) reconciler.UnmountChild(control); }
+                catch (InvalidOperationException) { threw = true; }
+                outer.CurrentChanged -= boom;
+                inner.CurrentChanged -= boom;
+                H.Check(p + "_Threw", control is not null && threw);
+                H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
             // A changed Memo key remounts: the ref moves to the replacement before the old control is
             // unmounted, and that unmount must not clear it.
             {

@@ -4856,10 +4856,19 @@ public sealed partial class Reconciler : IDisposable
         if (!TryGetReactorState(control, out var state) || state.ProducerRefs is not { } refs) return;
         state.ProducerRefs = null;
         if (refs is Microsoft.UI.Reactor.Input.ElementRef single)
+        {
             ClearProducerRefIfCurrent(control, single);
-        else
-            foreach (var producerRef in (List<Microsoft.UI.Reactor.Input.ElementRef>)refs)
-                ClearProducerRefIfCurrent(control, producerRef);
+            return;
+        }
+        // Outside a Reconcile commit, clearing a ref dispatches CurrentChanged synchronously and
+        // can throw. Clear the rest first, so one throwing subscriber can't strand another ref.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
+        foreach (var producerRef in (List<Microsoft.UI.Reactor.Input.ElementRef>)refs)
+        {
+            try { ClearProducerRefIfCurrent(control, producerRef); }
+            catch (Exception ex) { failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex); }
+        }
+        failure?.Throw();
     }
 
     private static void ClearProducerRefIfCurrent(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
