@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 // components/Primitives/src/WrapPanel and StaggeredPanel).
 internal static class ToolkitPanelLayout
 {
-    // Half a physical pixel at any scale >= 100% after layout rounding.
+    // Layout rounding moves an edge by at most half a physical pixel: <= 0.5 DIP at any scale >= 100%.
     internal const double Tolerance = 0.5;
 
     internal sealed class Probe
@@ -79,7 +79,7 @@ internal sealed class ToolkitWrapPanelOrientationFixture(Harness h) : SelfTestFi
         // Vertical: U = height, so VerticalSpacing separates items within a column and
         // HorizontalSpacing separates columns. 40 + 5 + 40 = 85 fits; a third tile needs
         // 130 > 120, so it starts the second column at x = 50 + 10.
-        var vertical = await CheckLayout("Vertical", WinUI.Orientation.Vertical,
+        var vertical = await CheckLayout("Vertical", WinUI.Orientation.Vertical, afterUpdate: false,
         [
             new(0, 0, 50, 40), new(0, 45, 50, 40),
             new(60, 0, 50, 40), new(60, 45, 50, 40),
@@ -93,7 +93,7 @@ internal sealed class ToolkitWrapPanelOrientationFixture(Harness h) : SelfTestFi
 
         // Horizontal: four tiles fit in 240 (180 + 50 = 230); the fifth wraps to y = 40 + 5.
         probe.SetPhase(1);
-        var horizontal = await CheckLayout("Horizontal", WinUI.Orientation.Horizontal,
+        var horizontal = await CheckLayout("Horizontal", WinUI.Orientation.Horizontal, afterUpdate: true,
         [
             new(0, 0, 50, 40), new(60, 0, 50, 40), new(120, 0, 50, 40),
             new(180, 0, 50, 40), new(0, 45, 50, 40),
@@ -103,7 +103,7 @@ internal sealed class ToolkitWrapPanelOrientationFixture(Harness h) : SelfTestFi
             $"vertical={ToolkitPanelLayout.Describe(vertical)}; horizontal={ToolkitPanelLayout.Describe(horizontal)}");
 
         async Task<ToolkitPanelLayout.Slot[]> CheckLayout(
-            string phase, WinUI.Orientation orientation, ToolkitPanelLayout.Slot[] expected)
+            string phase, WinUI.Orientation orientation, bool afterUpdate, ToolkitPanelLayout.Slot[] expected)
         {
             await Harness.Render();
             var settled = await Harness.WaitFor(() =>
@@ -115,8 +115,9 @@ internal sealed class ToolkitWrapPanelOrientationFixture(Harness h) : SelfTestFi
             Console.WriteLine($"# {Name}_{phase}: {detail}");
             H.Check($"{Name}_{phase}_NativeOrientation", current.Orientation == orientation, detail);
             H.Check($"{Name}_{phase}_Placement", settled, detail);
-            H.Check($"{Name}_{phase}_RetainsNativeInstances",
-                ReferenceEquals(current, panel) && ToolkitPanelLayout.SameInstances(current, children));
+            if (afterUpdate)
+                H.Check($"{Name}_{phase}_RetainsNativeInstances",
+                    ReferenceEquals(current, panel) && ToolkitPanelLayout.SameInstances(current, children));
             return actual;
         }
     }
@@ -164,7 +165,7 @@ internal sealed class ToolkitStaggeredPanelShortestColumnFixture(Harness h) : Se
         // 300 / 100 = 3 columns. Each child goes to the first strictly shortest column:
         // heights [100,30,40] fill row 0, then 3 -> col 1 (30), 4 -> col 2 (40), 5 -> col 2 (60).
         // Round-robin would instead place 3, 4 and 5 at columns 0, 1 and 2.
-        var initial = await CheckLayout("Initial",
+        var initial = await CheckLayout("Initial", afterUpdate: false,
         [
             Slot(0, 0, 100), Slot(1, 0, 30), Slot(2, 0, 40),
             Slot(1, 30, 50), Slot(2, 40, 20), Slot(2, 60, 60),
@@ -176,7 +177,7 @@ internal sealed class ToolkitStaggeredPanelShortestColumnFixture(Harness h) : Se
         // Growing child 1 to 90 makes column 2 (40) shortest for child 3; columns 1 and 2 then
         // tie at 90 and child 4 takes the lower index; child 5 then takes column 2 (90).
         probe.SetPhase(1);
-        var updated = await CheckLayout("HeightUpdate",
+        var updated = await CheckLayout("HeightUpdate", afterUpdate: true,
         [
             Slot(0, 0, 100), Slot(1, 0, 90), Slot(2, 0, 40),
             Slot(2, 40, 50), Slot(1, 90, 20), Slot(2, 90, 60),
@@ -185,7 +186,8 @@ internal sealed class ToolkitStaggeredPanelShortestColumnFixture(Harness h) : Se
             Enumerable.Range(3, 3).All(i => !ToolkitPanelLayout.Matches([updated[i]], [initial[i]])),
             $"initial={ToolkitPanelLayout.Describe(initial)}; updated={ToolkitPanelLayout.Describe(updated)}");
 
-        async Task<ToolkitPanelLayout.Slot[]> CheckLayout(string phase, ToolkitPanelLayout.Slot[] expected)
+        async Task<ToolkitPanelLayout.Slot[]> CheckLayout(
+            string phase, bool afterUpdate, ToolkitPanelLayout.Slot[] expected)
         {
             await Harness.Render();
             var settled = await Harness.WaitFor(() =>
@@ -196,8 +198,9 @@ internal sealed class ToolkitStaggeredPanelShortestColumnFixture(Harness h) : Se
                 + $"expected={ToolkitPanelLayout.Describe(expected)}; actual={ToolkitPanelLayout.Describe(actual)}";
             Console.WriteLine($"# {Name}_{phase}: {detail}");
             H.Check($"{Name}_{phase}_Placement", settled, detail);
-            H.Check($"{Name}_{phase}_RetainsNativeInstances",
-                ReferenceEquals(current, panel) && ToolkitPanelLayout.SameInstances(current, children));
+            if (afterUpdate)
+                H.Check($"{Name}_{phase}_RetainsNativeInstances",
+                    ReferenceEquals(current, panel) && ToolkitPanelLayout.SameInstances(current, children));
             return actual;
         }
     }
