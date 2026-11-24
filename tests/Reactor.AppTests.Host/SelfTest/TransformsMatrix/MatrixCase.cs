@@ -2,9 +2,9 @@
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.TransformsMatrix;
 
 // Spec 066 §12.1 B. Each enum is one matrix dimension, in ledger order. Adding a value appends
-// cases (and changes pairwise assignments, which shows up in the ledger's `dims` lines). Layer 5
-// adds TransformOrigin to TransformAxis.
-internal enum TransformAxis { None, Identity, Scale, Rotation, Translation, CenterPoint, ScaleRotationCenter }
+// cases. A value appended to TransformAxis keeps every existing case and its pairwise assignment,
+// because the generator walks it outermost (layer 5 appended TransformOrigin).
+internal enum TransformAxis { None, Identity, Scale, Rotation, Translation, CenterPoint, ScaleRotationCenter, TransformOrigin }
 
 internal enum TransitionAxis { None, Opacity, Scale, Rotation, Translation, Background }
 

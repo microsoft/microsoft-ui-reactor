@@ -108,6 +108,7 @@ class ScaleDemo : Component
             ).Padding(12)
              .CornerRadius(8)
              .Background(Theme.CardBackground)
+             .TransformOrigin(0.5f, 0.5f)
              .Scale(enlarged ? 1.5f : 1.0f)
              .ScaleTransition()
         ).Padding(24);
@@ -118,9 +119,32 @@ class ScaleDemo : Component
 ![Scale transition](images/animation/scale-transition.png)
 
 A value of `1.0f` is normal size, `1.5f` is 150%. Scale grows from the
-element's top-left corner by default — set `.CenterPoint()` to scale around a
-different origin. You can pass a custom `Vector3Transition` to control which
-axes animate.
+element's leading top corner by default. The sample sets `.TransformOrigin(0.5f, 0.5f)`
+so it grows from the centre (see [Transform origin](#transform-origin)). You can pass a
+custom `Vector3Transition` to control which axes animate.
+
+### Transform origin
+
+`.Scale()` and `.Rotation()` pivot on the element's leading top corner unless you
+move the pivot. `.TransformOrigin(x, y)` sets it as a fraction of the element's laid-out
+size: `(0.5f, 0.5f)` is the centre and `(1, 1)` the trailing bottom corner. The pivot
+follows resizes, hit-testing and UI Automation bounds honour it, and it works with hover
+states, keyframes and enter or exit transitions on the same element.
+
+`.CenterPoint(new Vector3(x, y, 0))` sets the pivot in pixels instead. On an element that
+also has `.TransformOrigin()`, it's an offset added to the size-relative pivot, like CSS
+`calc(50% + 10px)`.
+
+A few details:
+
+- `x` is flow-relative. In a right-to-left layout `0` is the right edge, the same as
+  the transform space WinUI uses.
+- While `.LayoutAnimation()` animates the element's size, the pivot follows the animating
+  size, while the content already renders at its final size. At rest it's exact.
+- With `.TransformOrigin()` set, `.Animate()` and `WithAnimation` animate a `.CenterPoint()`
+  change as a move of the offset, and the pivot keeps following the size.
+- `.TransformOrigin()` takes the element's composition visual, like the other transform
+  modifiers (see below). `.TransformOrigin(0, 0)` doesn't, since it's the default pivot.
 
 ## Translation Transition
 
@@ -261,7 +285,7 @@ the same setting on its own.
 
 ### Reading transforms back and `.Set(...)`
 
-`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` write the
+`.Scale()`, `.Rotation()`, `.Translation()`, `.CenterPoint()` and `.TransformOrigin()` write the
 element's composition visual, and so do the four transitions and every
 compositor feature on this page. A non-identity transform, a transition or a
 compositor feature takes the visual, and an identity value such as
@@ -270,7 +294,9 @@ compositor feature takes the visual, and an identity value such as
 - `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read back identity for values
   set with `.Scale()`, `.Rotation()` and `.CenterPoint()`. Read
   `ElementCompositionPreview.GetElementVisual(fe).Scale` (or `RotationAngle`,
-  in radians, and `CenterPoint`) instead.
+  in radians, and `CenterPoint`) instead. With `.TransformOrigin()` set, an
+  expression drives `CenterPoint` and the getter doesn't return it. The pivot is
+  the element's size times the origin, plus the `.CenterPoint()` offset.
 - WinUI rejects `.Set(fe => fe.Rotation = …)`, and the same for `Scale`,
   `CenterPoint`, `RotationAxis`, `TransformMatrix`, `UIElement.StartAnimation`
   and the XAML `*Transition` properties, and the same writes from `.OnMount(...)`.
@@ -637,6 +663,7 @@ class InteractionStatesDemo : Component
                     TextBlock("Hover me").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
                 ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.SystemSuccess)
+                 .TransformOrigin(0.5f, 0.5f)
                  .InteractionStates(s => s
                     .PointerOver(opacity: 0.85f, scale: 1.05f)
                     .Pressed(scale: 0.95f, opacity: 0.7f)),
@@ -644,6 +671,7 @@ class InteractionStatesDemo : Component
                     TextBlock("Press me").FontSize(16).Bold()
                         .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
                 ).Padding(16).CornerRadius(8).Size(150, 60).Background(Theme.AccentSecondary)
+                 .TransformOrigin(0.5f, 0.5f)
                  .InteractionStates(s => s
                     .PointerOver(scale: 1.03f)
                     .Pressed(scale: 0.97f, opacity: 0.8f),
@@ -665,8 +693,8 @@ States combine with `.Scale()`, `.Rotation()`, `.Translation()`, and
 `.CenterPoint()` on the same element. A state's `scale`, `translation`, and
 `rotation` are the values the element animates to, not offsets from its own
 transform, and leaving the state returns to the element's own values. Use
-`.CenterPoint()` to make a hover scale grow from somewhere other than the
-top-left corner.
+`.TransformOrigin(0.5f, 0.5f)` to make a hover scale grow from the centre, as the
+sample does, or `.CenterPoint()` for a pivot in pixels.
 
 ## Enter/Exit Transitions
 
@@ -766,6 +794,7 @@ class KeyframeDemo : Component
                 TextBlock("Pulse target").FontSize(16).Bold()
                     .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center)
             ).Padding(12).CornerRadius(8).Size(200, 60).Background(Theme.AccentSecondary)
+             .TransformOrigin(0.5f, 0.5f)
              .Keyframes("pulse", count, kf => kf
                 .Duration(600)
                 .At(0.0f, scale: global::System.Numerics.Vector3.One)

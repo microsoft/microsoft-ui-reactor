@@ -735,7 +735,7 @@ internal static class CompositorTransitionFixtures
 
             TransitionEngine.SetOpacityNow(Control, 0);
             H.Check(Name + "_HideIsImmediate", !Running(visual) && Near(visual.Opacity, 0), $"running={Running(visual)} opacity={visual.Opacity}");
-            TransitionEngine.NormalizeVisual(visual);
+            TransitionEngine.NormalizeVisual(Control, visual);
             H.Check(Name + "_ResetIsImmediate", !Running(visual) && Near(visual.Opacity, 1), $"running={Running(visual)} opacity={visual.Opacity}");
             H.Check(Name + "_KeyKept", visual.ImplicitAnimations?.ContainsKey("Opacity") == true);
         }

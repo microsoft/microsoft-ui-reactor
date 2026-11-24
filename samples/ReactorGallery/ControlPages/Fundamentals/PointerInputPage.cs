@@ -137,6 +137,7 @@ Border(TextBlock(""Drag me""))
                         .Width(180)
                         .OnPinch(onChanged: e => scaleBy(s => s * (float)e.ScaleDelta))
                         .OnRotate(onChanged: e => rotateBy(a => a + (float)e.AngleDelta))
+                        .TransformOrigin(0.5f, 0.5f)
                         .Scale(scale)
                         .Rotation(angle),
                     HStack(8,
@@ -152,6 +153,7 @@ var (angle, rotateBy) = UseReducer(0f);
 Border(TextBlock(""Pinch or rotate me""))
     .OnPinch(onChanged: e => scaleBy(s => s * (float)e.ScaleDelta))
     .OnRotate(onChanged: e => rotateBy(a => a + (float)e.AngleDelta))
+    .TransformOrigin(0.5f, 0.5f) // zoom and turn about the centre
     .Scale(scale)
     .Rotation(angle)
 "),

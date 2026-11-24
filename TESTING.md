@@ -771,7 +771,7 @@ lands as a stack of layers, and each one must change behaviour only on purpose. 
 spec 066 §12.1) records what every combination of transform modifiers, implicit transitions and
 compositor features actually does, and compares it with a ledger committed before the first layer.
 
-**The matrix.** Every *Transform × Transition × Feature* triple (7 × 6 × 9 = 378 cases), with the
+**The matrix.** Every *Transform × Transition × Feature* triple (8 × 6 × 9 = 432 cases, the eighth transform being `.TransformOrigin` from spec 066 layer 5), with the
 wrapper (direct, keyed `Memo`, `ModifiedElement`), flow direction, reduced motion, user code (a
 `.Set` facade write, a facade `Translation` drag) and a sub-variant assigned so that every pair of
 values across all eight dimensions occurs at least once. The generator is seeded, and a case id is

@@ -94,6 +94,7 @@ internal static class AnimationHelper
         MarkCompositionWrite(state, property);
         if (property == "Scale") (state.TransformRest ??= new()).Scale = value;
         else if (property == "Translation") (state.TransformRest ??= new()).Translation = value;
+        else if (property == "CenterPoint") (state.TransformRest ??= new()).CenterPoint = value;
     }
 
     private static Reconciler.ReactorState MarkCompositionWrite(Reconciler.ReactorState state, string property)
@@ -262,7 +263,7 @@ internal static class AnimationHelper
         if (moveCenter) visual.CenterPoint = center;
         if (moveScale) MarkCompositionWrite(state, "Scale", scale);
         if (moveRotation) MarkCompositionWrite(state, "Rotation", rotation);
-        if (moveCenter) MarkCompositionWrite(state, "CenterPoint");
+        if (moveCenter) MarkCompositionWrite(state, "CenterPoint", center);
         return visual;
     }
 
@@ -291,18 +292,20 @@ internal static class AnimationHelper
                 case "Scale": rest.Scale = Vector3.One; break;
                 case "Rotation": rest.RotationDegrees = 0; break;
                 case "Translation": rest.Translation = Vector3.Zero; break;
+                case "CenterPoint": rest.CenterPoint = Vector3.Zero; break;
             }
         }
         if (state is null || (state.CompositionModifierProperties & flag) == 0) return;
         var visual = GetElementVisual(element);
+        var animated = AnimatedChannel(visual, state, property, out var channel);
         // A shared target can replace the deferred animation before its decorator plays.
-        if (expectedController is not null && !Equals(expectedController, visual.TryGetAnimationController(CompositorPropertyName(property))))
+        if (expectedController is not null && !Equals(expectedController, animated.TryGetAnimationController(channel)))
         {
             ClearCompositionOwnership(state, flag);
             return;
         }
         if (state.KeyframeChannelOwners?.TryGetValue(flag, out var owner) == true && owner.Entry.Definition.Loop
-            && visual.TryGetAnimationController(CompositorPropertyName(property)) is { } controller)
+            && animated.TryGetAnimationController(channel) is { } controller)
         {
             state.DeferredModifierResets |= flag;
             state.KeyframeChannelOwners[flag] = owner with { DeferredController = controller };
@@ -324,11 +327,35 @@ internal static class AnimationHelper
                 case "Translation":
                     visual.Properties.InsertVector3("Translation", Vector3.Zero);
                     break;
-                case "CenterPoint": visual.CenterPoint = Vector3.Zero; break;
+                case "CenterPoint" when animated is CompositionPropertySet properties:
+                    // Spec 066 §8.2: under an origin, the offset resets and the expression stays.
+                    properties.StopAnimation(channel);
+                    properties.InsertVector3(channel, Vector3.Zero);
+                    break;
+                case "CenterPoint":
+                    visual.CenterPoint = Vector3.Zero;
+                    TransformOriginBinding.Displaced(state);
+                    break;
             }
         }
         finally { visual.ImplicitAnimations = implicitAnimations; }
         ClearCompositionOwnership(state, flag);
+    }
+
+    /// <summary>
+    /// The object and property a modifier's channel animates: the visual's own property, except
+    /// <c>CenterPoint</c> under an active <c>.TransformOrigin</c>, whose value is the origin
+    /// expression's offset in the visual's property set (spec 066 §8.2).
+    /// </summary>
+    private static CompositionObject AnimatedChannel(Visual visual, Reconciler.ReactorState? state, string property, out string channel)
+    {
+        if (property == "CenterPoint" && TransformOriginBinding.IsActive(state))
+        {
+            channel = TransformOriginBinding.OffsetProperty;
+            return visual.Properties;
+        }
+        channel = CompositorPropertyName(property);
+        return visual;
     }
 
     private static void ClearCompositionOwnership(Reconciler.ReactorState state, AnimateProperty flag)
@@ -574,7 +601,9 @@ internal static class AnimationHelper
         var visual = GetAnimationVisual(element, out var state);
         if (property == "Translation") EnableTranslation(element, state, visual);
         var compositor = visual.Compositor;
-        var target = CompositorPropertyName(property);
+        // Spec 066 §8.2: under a .TransformOrigin a CenterPoint curve animates the expression's offset.
+        var animated = AnimatedChannel(visual, state, property, out var target);
+        if (property == "CenterPoint" && ReferenceEquals(animated, visual)) TransformOriginBinding.Displaced(state);
 
         switch (curve)
         {
@@ -584,7 +613,7 @@ internal static class AnimationHelper
                 anim.DampingRatio = spring.DampingRatio;
                 anim.Period = TimeSpan.FromSeconds(spring.Period);
                 anim.FinalValue = value;
-                visual.StartAnimation(target, anim);
+                animated.StartAnimation(target, anim);
                 break;
             }
             case EaseCurve ease:
@@ -601,7 +630,7 @@ internal static class AnimationHelper
                 }
                 anim.InsertKeyFrame(1.0f, value, easing);
                 anim.Duration = ease.Duration;
-                visual.StartAnimation(target, anim);
+                animated.StartAnimation(target, anim);
                 break;
             }
             case LinearCurve linear:
@@ -609,7 +638,7 @@ internal static class AnimationHelper
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.InsertKeyFrame(1.0f, value, compositor.CreateLinearEasingFunction());
                 anim.Duration = linear.Duration;
-                visual.StartAnimation(target, anim);
+                animated.StartAnimation(target, anim);
                 break;
             }
             default:
@@ -706,7 +735,15 @@ internal static class AnimationHelper
                 EnableTranslation(element, state, visual);
                 visual.Properties.InsertVector3("Translation", value);
                 break;
-            case "CenterPoint": visual.CenterPoint = value; break;
+            case "CenterPoint" when TransformOriginBinding.IsActive(state):
+                // Spec 066 §8.2: the origin expression owns CenterPoint; the value is its offset.
+                visual.Properties.StopAnimation(TransformOriginBinding.OffsetProperty);
+                visual.Properties.InsertVector3(TransformOriginBinding.OffsetProperty, value);
+                break;
+            case "CenterPoint":
+                visual.CenterPoint = value;
+                TransformOriginBinding.Displaced(state);
+                break;
         }
         MarkCompositionWrite(state, property, value);
     }
