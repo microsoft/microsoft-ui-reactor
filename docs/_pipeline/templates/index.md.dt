@@ -4,7 +4,7 @@ app: readme
 order: 0
 audience: beginner
 goal: |
-  Landing page. Say what Reactor is (native WinUI 3 apps in plain C#,
+  Landing page. Say what Reactor is (native WinUI apps in plain C#,
   declarative, no XAML), show a tiny real example, draw the render loop,
   say who Reactor is for and why to pick it, and map where to go next.
   Short, scannable and inviting. Not a tutorial.
@@ -13,12 +13,12 @@ tier: solid
 
 # Overview
 
-Build native Windows apps with WinUI 3, in plain C#.
+Build native Windows apps with WinUI, in plain C#.
 
 Microsoft.UI.Reactor (Reactor) is a declarative, component-based framework for
 building Windows desktop apps in C#. You write components. Each component has a
 `Render()` method that returns a description of the UI for the current state.
-When the state changes, Reactor updates the real WinUI 3 controls on screen.
+When the state changes, Reactor updates the real WinUI controls on screen.
 There is no XAML, no data binding and no view model to write.
 
 ## At a glance
@@ -28,7 +28,7 @@ There is no XAML, no data binding and no view model to write.
 | **Language** | C# only. Layout, styling, state and logic all live in `.cs` files. |
 | **UI model** | Declarative. `Render()` returns a tree of immutable element records, and Reactor keeps the screen in sync with it. |
 | **State** | [Hooks](hooks.md) such as `UseState`, `UseReducer` and `UseEffect`, called inside `Render()`. |
-| **Output** | Real WinUI 3 controls such as `Button`, `TextBox` and `NavigationView`. No web view and no custom renderer. |
+| **Output** | Real WinUI controls such as `Button`, `TextBox` and `NavigationView`. No web view and no custom renderer. |
 | **Interop** | Host Reactor content in a XAML app, or XAML controls in a Reactor app. They share one visual tree. |
 | **Runs on** | Windows 10 version 1809 or later, and Windows 11, with .NET 10. |
 | **Status** | Public preview. The `Microsoft.UI.Reactor` package is on NuGet.org. |
@@ -60,7 +60,7 @@ Text styles and theme colors are built in:
 
 ## How it works
 
-![The Reactor render loop. Your component's Render method returns an element tree of immutable C# records. The reconciler compares it with the previous tree and mounts or updates real WinUI 3 controls, patching only what changed. A user event calls a state setter, and Render runs again.](images/index/render-loop.svg)
+![The Reactor render loop. Your component's Render method returns an element tree of immutable C# records. The reconciler compares it with the previous tree and mounts or updates real WinUI controls, patching only what changed. A user event calls a state setter, and Render runs again.](images/index/render-loop.svg)
 
 1. You write [components](components.md). A component's `Render()` returns an
    element tree, built from factory methods such as `VStack`, `TextBlock` and
@@ -94,7 +94,7 @@ using them. Reactor is another way to describe the same WinUI content.
   any other code.
 - **The UI follows the state.** You describe what the screen should show. You
   do not write code that changes the screen step by step.
-- **Native controls.** Your app uses real WinUI 3 controls, with Fluent
+- **Native controls.** Your app uses real WinUI controls, with Fluent
   design, keyboard support and accessibility built in.
 - **A fast inner loop.** `dotnet watch` applies code changes to the running
   app and keeps component state. Roslyn analyzers catch common mistakes as

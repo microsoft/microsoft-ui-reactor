@@ -112,13 +112,13 @@ without code changes — see [styling](styling.md).
 
 ## Type-Ramp Factories
 
-For headings and body copy that match the WinUI 3 type ramp, use the
+For headings and body copy that match the WinUI type ramp, use the
 named factories instead of repeating `.FontSize(...).Bold()` chains:
 
 ```csharp snippet="layout/type-ramp"
 ```
 
-![WinUI 3 type ramp: Title / Subtitle / BodyLarge / BodyStrong / Body](screenshot://layout/type-ramp)
+![WinUI type ramp: Title / Subtitle / BodyLarge / BodyStrong / Body](screenshot://layout/type-ramp)
 
 | Factory | WinUI style |
 |---------|-------------|

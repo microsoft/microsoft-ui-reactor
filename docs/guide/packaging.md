@@ -1,7 +1,7 @@
 
 # Packaging
 
-A Microsoft.UI.Reactor (Reactor) app is a normal WinUI 3 / Windows App SDK
+A Microsoft.UI.Reactor (Reactor) app is a normal WinUI / Windows App SDK
 executable — `dotnet publish` produces the deployable artifact and the
 framework itself adds nothing exotic to the project file.
 
@@ -9,13 +9,13 @@ What you choose at publish time is the **shape** of that artifact: a
 packaged MSIX (the [`dotnet new reactor`](install.md) default), an
 unpackaged folder, a single-file bundle, or a Native AOT native binary —
 each combined with a `win-x64` or `win-arm64` runtime identifier. The
-trade-offs are the same ones any WinUI 3 app faces. Native AOT has its own
+trade-offs are the same ones any WinUI app faces. Native AOT has its own
 page, [Native AOT](native-aot.md), because it changes what your code may
 do with reflection.
 
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|
-| Unpackaged | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI 3 runtime alongside it. Run from anywhere; ship as a zip. |
+| Unpackaged | `WindowsPackageType=None`, `WindowsAppSDKSelfContained=true` | `win-x64` / `win-arm64` | A folder with `MyApp.exe` and the WinUI runtime alongside it. Run from anywhere; ship as a zip. |
 | MSIX | `WindowsPackageType=MSIX`, `GenerateAppxPackageOnBuild=true`, signed via `PackageCertificateThumbprint` or `PackageCertificateKeyFile` | `win-x64` / `win-arm64` | A signed `.msix`. Required for Microsoft Store; the cleanest sideload story for enterprise. |
 | Single-file | `PublishSingleFile=true`, `IncludeNativeLibrariesForSelfExtract=true` | `win-x64` / `win-arm64` (must be set) | One `.exe` that self-extracts the WinUI runtime to `%TEMP%/.net/` on first launch. |
 | Native AOT | `PublishAot=true` | `win-x64` / `win-arm64` (required) | A native binary with no JIT and no runtime code generation. The code is trimmed, so reflection over types the compiler can't see fails. See [Native AOT](native-aot.md). |
@@ -59,7 +59,7 @@ the shape every sample in this repo uses:
 </PropertyGroup>
 ```
 
-The load-bearing properties are `UseWinUI=true` (pulls the WinUI 3
+The load-bearing properties are `UseWinUI=true` (pulls the WinUI
 XAML runtime), `WindowsPackageType=None` (no MSIX wrapper —
 `MyApp.exe` runs straight from the publish folder), and the explicit
 `<Platforms>x64;ARM64</Platforms>` (Windows App SDK self-contained
@@ -67,7 +67,7 @@ builds reject the AnyCPU default — the template orders x64 first so
 unqualified `dotnet build` picks the right default on x64 dev
 machines, with ARM64 second for Snapdragon X). The
 [`Microsoft.WindowsAppSDK.WinUI`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK.WinUI)
-sub-package brings the WinUI 3 SDK — reference assemblies plus the MSBuild
+sub-package brings the WinUI SDK — reference assemblies plus the MSBuild
 build/props/targets — while the native WinUI runtime is supplied by the
 machine-wide Windows App Runtime install (or bundled into the publish output
 when `WindowsAppSDKSelfContained=true`). That sub-package, together with
@@ -144,7 +144,7 @@ real single-project MSIX app:
 `Publisher` must match the subject of the signing certificate, and
 `Name` plus `Publisher` together derive the PackageFamilyName that
 Windows uses to identify the app. The
-[WinUI 3 packaging docs](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/packaging/)
+[WinUI packaging docs](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/packaging/)
 cover the manifest surface in full. The signing certificate is
 either a Microsoft Store-issued cert (for Store submissions) or a
 self-signed cert imported into `Cert:\CurrentUser\My` (for
@@ -155,7 +155,7 @@ notifier APIs require it.
 ## Single-file publish
 
 Single-file collapses the publish folder into one `.exe` that
-self-extracts on launch. For a WinUI 3 app the native runtime bits
+self-extracts on launch. For a WinUI app the native runtime bits
 are not in managed assemblies, so the bare `PublishSingleFile=true`
 leaves several DLLs alongside the binary — add
 `IncludeNativeLibrariesForSelfExtract` to fold those into the bundle:
@@ -196,13 +196,13 @@ dotnet publish -c Release -r win-arm64 -o out/arm64
 
 There is no separate Reactor build for ARM64 — `Microsoft.UI.Reactor.dll` is
 AnyCPU-equivalent managed code that compiles for both architectures
-from the same source. The native bits below it (the WinUI 3 runtime
+from the same source. The native bits below it (the WinUI runtime
 and any `System.Drawing.Common` / `TraceEvent` natives transitively
 pulled in by Reactor) ship per-RID, which is why the runtime
 identifier matters even for managed-only Reactor code. The repo's
 sample apps default to `<Platforms>x64;ARM64</Platforms>`; the
 `dotnet new reactor` templates use `<Platforms>x86;x64;ARM64</Platforms>`
-(x86 retained for parity with the WinUI 3 templates), but Reactor
+(x86 retained for parity with the WinUI templates), but Reactor
 itself is only tested on x64 / ARM64.
 
 ## Native AOT
@@ -281,7 +281,7 @@ not a tucked-away framework package.** Reactor ships as the public preview
 NuGet package `Microsoft.UI.Reactor` version `0.1.0-preview.18`; local
 source-built smoke packages still use `0.0.0-local` via `mur pack-local`.
 Trim-friendly deployments don't get any framework-side magic; the same trimmer
-configuration that works for any WinUI 3 app works here.
+configuration that works for any WinUI app works here.
 
 **Scaffolded projects don't reference `Microsoft.WindowsAppSDK`.** The
 Windows App SDK arrives transitively through `Microsoft.UI.Reactor`, as

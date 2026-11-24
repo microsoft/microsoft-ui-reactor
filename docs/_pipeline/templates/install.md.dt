@@ -55,7 +55,7 @@ the same project.
 
 ### winapp
 
-The fastest way is the Windows App SDK CLI, `winapp`.
+The fastest way is the WinApp CLI, `winapp`.
 
 <!-- steps -->
 
@@ -144,7 +144,7 @@ MyApp folder. Fix any build errors before you stop.
 | `reactor-singlefile` | One `.cs` file and no project. See [One file, no project](#one-file-no-project). |
 
 The project templates set up the `Microsoft.UI.Reactor` package reference, the
-WinUI 3 target framework, MSIX packaging, and an `App.cs` that mounts one
+WinUI target framework, MSIX packaging, and an `App.cs` that mounts one
 component. There is no `App.xaml` and no `MainWindow.xaml.cs`.
 
 > **Why a custom template?** `dotnet new console` does not produce a WinUI
@@ -252,7 +252,7 @@ required:
 | `Microsoft.Windows.SDK.BuildTools.WinApp` | Lets `dotnet run` package the app. It carries its own copy of the winapp CLI, so you do not need to install that. Without it, `dotnet run` cannot package the app, and the app fails at startup with `COMException … REGDB_E_CLASSNOTREG`. That error does not mention the missing package. To avoid it without this package, run the app unpackaged (see below). |
 | `OutputType=WinExe` | Links the app for the Windows GUI subsystem. Without it the build still succeeds, but the `.exe` is a console program, so Windows opens a console window next to your UI for as long as the app runs. |
 | `TargetFramework=net10.0-windows10.0.22621.0` | Reactor ships for `net10.0-windows10.0.22621`. A lower Windows version compiles against nothing, and you get `CS0234: the namespace 'Reactor' does not exist`, as if the package were missing. |
-| `UseWinUI=true` | Brings in the WinUI 3 build targets. |
+| `UseWinUI=true` | Brings in the WinUI build targets. |
 
 You do not have to type the header. `dotnet new reactor-singlefile -n Counter`
 creates `Counter/Counter.cs` with the same five directives and a starter

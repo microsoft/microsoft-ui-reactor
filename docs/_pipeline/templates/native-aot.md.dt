@@ -61,7 +61,7 @@ single-file, see [Packaging](packaging.md).
   when you publish. The app does not compile methods while it starts.
 - **No runtime host.** The app does not load `coreclr.dll` or the other .NET
   host files. The repo's startup benchmark notes that a non-AOT C# app pays
-  about 70–100 ms of CLR bootstrap cost compared with a pure C++ WinUI 3 app
+  about 70–100 ms of CLR bootstrap cost compared with a pure C++ WinUI app
   ([`tests/startup_perf/README.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/tests/startup_perf/README.md)).
   The repo does not publish a measured AOT startup time for a Reactor app, so
   measure your own.

@@ -60,7 +60,7 @@ control and want to copy working code for it.
 
 | Sample | What it shows | Run |
 | --- | --- | --- |
-| [ReactorGallery](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/ReactorGallery) | Every WinUI 3 control, rebuilt with the Reactor DSL. It is the Reactor version of WinUI Gallery. See [Controls](controls.md). | `dotnet run --project samples/ReactorGallery -p:Platform=x64` |
+| [ReactorGallery](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/ReactorGallery) | Every WinUI control, rebuilt with the Reactor DSL. It is the Reactor version of WinUI Gallery. See [Controls](controls.md). | `dotnet run --project samples/ReactorGallery -p:Platform=x64` |
 | [TodoApp](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/TodoApp) | A small to-do app: state in `UseReducer`, a `Command` with a keyboard accelerator, flex layout, theme tokens and a `TitleBar`. See [Your first app](getting-started.md). | `dotnet run --project samples/TodoApp -p:Platform=x64` |
 | [StylingGallery](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/StylingGallery) | One tab each for theme tokens, `RequestedTheme`, `UseColorScheme`, lightweight styling and style caching. See [Styling and Theming](styling.md). | `dotnet run --project samples/StylingGallery -p:Platform=x64` |
 
@@ -138,7 +138,7 @@ These samples mix Reactor with XAML, WinForms and third-party controls.
 
 | Sample | What it shows | Run |
 | --- | --- | --- |
-| [InteropFirst](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/InteropFirst) | A plain WinUI 3 XAML and MVVM app that hosts a Reactor component in a `ReactorHostControl`. A XAML `ListView` and the Reactor component show the same `ObservableCollection` and use the same commands. See [Host Reactor in a XAML page](xaml-developers.md#host-reactor-in-a-xaml-page). | `dotnet run --project samples/InteropFirst/InteropFirst.csproj -p:Platform=x64` |
+| [InteropFirst](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/InteropFirst) | A plain WinUI XAML and MVVM app that hosts a Reactor component in a `ReactorHostControl`. A XAML `ListView` and the Reactor component show the same `ObservableCollection` and use the same commands. See [Host Reactor in a XAML page](xaml-developers.md#host-reactor-in-a-xaml-page). | `dotnet run --project samples/InteropFirst/InteropFirst.csproj -p:Platform=x64` |
 | [ReactorHostControlDemo](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/ReactorHostControlDemo) | The smallest way to put a Reactor component in a XAML window: one `ReactorHostControl` with `ComponentType` set in markup. | `dotnet run --project samples/ReactorHostControlDemo -p:Platform=x64` |
 | [WinFormsInterop](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/WinFormsInterop) | A WinForms window that hosts a Reactor component through XAML Islands, next to native WinForms controls. Tab moves focus across both sides. See [WinForms Interop](winforms-interop.md). | `dotnet run --project samples/WinFormsInterop -p:Platform=x64` |
 | [wct-controls](https://github.com/microsoft/microsoft-ui-reactor/tree/main/samples/apps/wct-controls) | 25 Windows Community Toolkit controls, wrapped with the Reactor wrapper generator and shown in a `NavigationView` gallery. See [Extending Reactor with Native Controls](extending-reactor-controls.md). | `dotnet run --project samples/apps/wct-controls -p:Platform=x64 -p:RuntimeIdentifier=win-x64` |

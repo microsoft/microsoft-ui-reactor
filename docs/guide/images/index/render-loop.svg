@@ -54,7 +54,7 @@
 
   <!-- WinUI controls -->
   <rect class="box-out" x="770" y="50" width="210" height="84" rx="6"/>
-  <text class="label" x="875" y="78" text-anchor="middle">Real WinUI 3 controls</text>
+  <text class="label" x="875" y="78" text-anchor="middle">Real WinUI controls</text>
   <text class="sub" x="875" y="98" text-anchor="middle">StackPanel, TextBlock, Button</text>
   <text class="sub" x="875" y="114" text-anchor="middle">native, on screen</text>
 
