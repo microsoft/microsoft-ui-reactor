@@ -335,6 +335,11 @@ Conventions for contributors:
   blockquotes, and code blocks. Ordered numbering is preserved across nesting
   levels, including in cross-block text selection (PR #1628).
 
+- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
+  not individual message boundaries. Dragging above or below a message while still
+  inside the enclosing `ScrollView`/`ScrollViewer` no longer causes autoscroll
+  (PR #1631, openclaw/openclaw-windows-node#1844).
+
 - Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
   declaration restores its identity value and releases modifier-owned composition
   animations. Removing `.Opacity()` also releases its compositor override so styles

@@ -92,6 +92,59 @@ nonempty output, not pixel-perfect parity or physical keyboard navigation.
 OS high contrast and alternate OS text scaling require the real setting, not a
 font-size substitute. No shared desktop setting is changed.
 
+### Coverage aliases, not new native passes
+
+Four legacy `PendingOperations` labels duplicate finite assertions already in
+other scenarios. Their inventory keys and raw blocked results are retained for
+compatibility with pinned evidence. `Summarize-Matrix.ps1` adds
+`coveredByScenario` only to a `blocked/not-implemented` row whose exact counterpart
+passed in the **same control process, lane and run**, after complete TAP/JSONL,
+exit-code and capture-metadata validation. Missing, failed, blocked, inapplicable,
+duplicate/ambiguous or other-lane results cannot supply that annotation.
+
+| Recorded blocked label | Passing counterpart | Bounded assertions represented |
+|---|---|---|
+| `DockPanel/attached-dock-last-child-fill-geometry` | `DockPanel/update` | [Attached Left -> Top, LastChildFill true -> false, exact edge/last-child sizes and allocated width](Scenarios.cs#L296-L320). Not every dock edge or last-child reorder/removal. |
+| `UniformGrid/first-column-keyed-reorder` | `UniformGrid/update` | [FirstColumn=1 offset and cell geometry](Scenarios.cs#L283-L295), [retained keyed instances, inserted tile-6 and removed tile-5](Scenarios.cs#L378-L411). Not arbitrary FirstColumn values or row/column boundaries. |
+| `SwitchPresenter/actual-matching-default-case-collection` | `SwitchPresenter/sample-native-case-selection` | [Actual matching/default/no-default case collections, stable identities and fresh remount](SwitchPresenterSampleChecks.cs#L12-L118). Not dynamic case replacement/removal while mounted. |
+| `TabbedCommandBar/actual-tabs-command-invocation` | `TabbedCommandBar/sample-native-tabs-commands` | [Actual Home/View tabs, five commands twice, two-command burst, current callbacks and fresh remount](TabbedCommandBarSampleChecks.cs#L15-L100). Uses public UIA Invoke, not physical keyboard/pointer navigation. |
+
+The report lists these same-lane links separately. It never changes raw status,
+reason, detail, P/F/B/N totals, process/lane verdicts or the scenario inventory.
+An annotated blocked row is **not** a new pass. Read `coveredByScenario` as the
+fully qualified scenario key in that row's lane and report run, not as a
+cross-run or cross-consumer link. Additional desired edge cases need separately
+named scenarios; these four mappings must not clear unrelated compound labels.
+The pinned Segmented provider gap stays blocked, and OS text-scale coverage is
+unchanged.
+
+For historical archives, generate any new summary from a separate copy of the
+recorded metadata/TAP/JSONL and validated inventories, retaining the original
+reports and source revision. Never run the summarizer against frozen evidence
+in place; it writes its report files into `-EvidenceDirectory`.
+
+### Separate physical-input suite
+
+The following are **source links**, not proof of execution or acceptance in any
+compatibility lane. They live in the separate `Reactor.AppTests` E2E suite in
+[`ToolkitInputTests.cs`](../Reactor.AppTests/Tests/ToolkitInputTests.cs).
+Recorded execution evidence must identify that suite's revision, runtime and
+deployment independently. None supplies `coveredByScenario`.
+
+| Named family | Existing E2E source and scope | Not established by those tests |
+|---|---|---|
+| RangeSelector / `both-real-thumbs-parent-accept-reject-callback-routing` | [Accept and route each thumb callback](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L18-L38), [reject and reassert both endpoints](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L42-L58), [actual Tab/Shift+Tab focus](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L173-L197) | No stale callback after remount; no claim that physical input ran in each compatibility lane. |
+| RichSuggestBox / `type-query-insert-delete-token` | [`RichSuggestBox_DownEnter_CommitsFullTokensAcrossRenders`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L62-L87) types/filters a query and commits two full tokens | Token deletion and request cancellation on removal remain separate. |
+| TokenizingTextBox / `type-suggest-add-remove-max-tokens` | [`TokenizingTextBox_TypesConvertsAndRemovesOnlyChosenToken`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L91-L109) types, filters, converts delimiter input and selectively removes tokens | Maximum-token boundary, physical suggestion choice and unsubscribe-on-removal remain separate. |
+| ContentSizer / `real-target-resize` | [`ContentSizer_Drag_ResizesAdvertisedTarget`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L113-L131) checks two drags against the target height, settled layout and unchanged width | Other orientations and physical input after target detach/remount. |
+| PropertySizer / `real-bound-target-resize-bounds` | [`PropertySizer_Drag_UpdatesTargetAndClampsBothBounds`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L135-L143) checks target/binding at both bounds | Callback release on removal and physical input after remount. |
+| GridSplitter / `real-grid-definition-resize` | [`GridSplitter_Drag_ResizesBothColumns`](../Reactor.AppTests/Tests/ToolkitInputTests.cs#L147-L169) checks adjacent columns/panes, preserved total and fixed sibling | Row orientation, keyboard resizing and physical input after remount. |
+
+The dependency-free `Test-ResultProtocol.ps1` regression checks these reporting
+rules using bounded synthetic runs, including passing and rejected counterpart
+cases. It does not launch the consumer, exercise native controls or establish
+new native coverage.
+
 ### Bounded OS text-scale check (#1602)
 
 `SettingsCard/os-text-scaling` now captures and checks the current core scenario's
