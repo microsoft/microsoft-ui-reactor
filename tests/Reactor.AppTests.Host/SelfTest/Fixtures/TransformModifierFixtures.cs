@@ -733,23 +733,28 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
 
         {
             // Disposal drops the tree without unmounting it, so it must cancel a check still
-            // waiting for a collapsed element to render.
-            var reconciler = new Reconciler();
-            var faded = Border(TextBlock("Disposed Opacity Check")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
-            var control = (Border)reconciler.Mount(faded, () => { })!;
-            var visual = ElementCompositionPreview.GetElementVisual(control);
-            var host = new Border { Child = control, Visibility = Visibility.Collapsed };
-            H.SetContent(host);
-            await Harness.Render();
-            await AfterNextCommit(visual);
-            static bool Waiting(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
-                is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null } or Reconciler.ReactorState { KeyframeOpacityCheck: not null };
-            bool armed = Waiting(control);
-            reconciler.Dispose();
-            H.Check("TransformKeyframes_DisposeCancelsOpacityCheck", armed && !Waiting(control),
-                $"armed={armed}, waiting={Waiting(control)}");
-            host.Child = null;
-            H.SetContent(null);
+            // waiting for a collapsed element to render. Detaching a control's Reactor state must too.
+            foreach (bool detach in new[] { false, true })
+            {
+                var reconciler = new Reconciler();
+                var faded = Border(TextBlock("Disposed Opacity Check")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+                var control = (Border)reconciler.Mount(faded, () => { })!;
+                var visual = ElementCompositionPreview.GetElementVisual(control);
+                var host = new Border { Child = control, Visibility = Visibility.Collapsed };
+                H.SetContent(host);
+                await Harness.Render();
+                await AfterNextCommit(visual);
+                static bool Waiting(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
+                    is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null } or Reconciler.ReactorState { KeyframeOpacityCheck: not null };
+                bool armed = Waiting(control);
+                if (detach) Reconciler.DetachReactorState(control);
+                else reconciler.Dispose();
+                H.Check(detach ? "TransformKeyframes_DetachCancelsOpacityCheck" : "TransformKeyframes_DisposeCancelsOpacityCheck",
+                    armed && !Waiting(control), $"armed={armed}, waiting={Waiting(control)}");
+                if (detach) reconciler.Dispose();
+                host.Child = null;
+                H.SetContent(null);
+            }
         }
     }
 

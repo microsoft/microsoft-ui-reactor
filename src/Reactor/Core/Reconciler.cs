@@ -2439,6 +2439,8 @@ public sealed partial class Reconciler : IDisposable
         state.DecoratorElement = null;
         state.ModifierTargets = null;
         if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
+        // A pending keyframe opacity restart holds a layout handler and its reconciler (#1669).
+        CancelKeyframeOpacityCheck(fe, state);
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
         state.Modifiers?.ClearCurrentHandlers();
