@@ -880,41 +880,54 @@ internal static class TransitionTests
 
     /// <summary>
     /// A resource refresh walks a keyed Memo's subtree, updating an inner Memo against itself.
-    /// The inner Memo still wraps the flyout afterwards, so its fade exit, not the flyout
-    /// target's scale exit, plays on removal (#1663).
+    /// The Memo still wraps the flyout afterwards, so its fade exit, not the flyout target's
+    /// scale exit, plays on removal (#1663). With <paramref name="replaceTarget"/> the refresh
+    /// remounts the target, so the Memo's exit is re-recorded on a fresh control.
     /// </summary>
-    internal sealed class MemoExitAfterResourceRefresh(Harness h) : SelfTestFixtureBase(h)
+    internal sealed class MemoExitAfterResourceRefresh(Harness h, bool replaceTarget) : SelfTestFixtureBase(h)
     {
+        private sealed record RemountingBox : Element;
+
+        private static Border NewBox() => new() { Width = 100, Height = 40 };
+
         public override async Task RunAsync()
         {
+            var name = replaceTarget ? "MemoExitRefreshReplaced" : "MemoExitRefresh";
             var parent = new Border();
             H.SetContent(parent);
             using var host = new Hosting.ReactorHost(H.Window) { ContentTarget = parent };
             using var isolation = ThemeResourceListeners.IsolateForTest(host);
+            // Every update hands back a new control, as a handler that always remounts does.
+            host.Reconciler.RegisterType<RemountingBox, Border>(static (_, _, _) => NewBox(), static (_, _, _, _, _) => NewBox());
+            var scaleExit = Animation.Transition.Exit(Animation.Transition.Scale(0.5f));
+            var fadeExit = Animation.Transition.Exit(Animation.Transition.Fade);
             bool show = true;
-            host.Mount(_ => VStack(show
-                ? Memo("outer", static () => Memo("inner", static () => Flyout(
-                        Border(null).Width(100).Height(40)
-                            .Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+            host.Mount(_ => VStack(!show ? null : replaceTarget
+                ? Memo("memo", () => Flyout(new RemountingBox().Transition(scaleExit, Curve.Linear(600)), TextBlock("flyout")))
+                    .Transition(fadeExit, Curve.Linear(600))
+                : Memo("outer", () => Memo("inner", () => Flyout(
+                        Border(null).Width(100).Height(40).Transition(scaleExit, Curve.Linear(600)),
                         TextBlock("flyout")))
-                    .Transition(Animation.Transition.Exit(Animation.Transition.Fade), Curve.Linear(600)))
-                : null));
+                    .Transition(fadeExit, Curve.Linear(600)))));
             await host.WaitForIdleAsync();
             var panel = (StackPanel)parent.Child;
-            var control = panel.Children[0];
+            var mounted = panel.Children[0];
             try
             {
                 Theme.NotifyResourcesChanged();
                 await host.WaitForIdleAsync();
-                H.Check("MemoExitRefresh_RefreshKeptControl", panel.Children.Count == 1 && ReferenceEquals(panel.Children[0], control));
+                var control = panel.Children.Count == 1 ? panel.Children[0] : null;
+                H.Check(name + (replaceTarget ? "_RefreshReplacedControl" : "_RefreshKeptControl"),
+                    control is not null && ReferenceEquals(control, mounted) != replaceTarget);
+                if (control is null) return;
 
                 show = false;
                 host.RequestRender();
                 await host.WaitForIdleAsync();
                 var visual = ElementCompositionPreview.GetElementVisual(control);
-                H.Check("MemoExitRefresh_ExitInFlight", host.Reconciler.IsExiting(control) && panel.Children.Contains(control),
+                H.Check(name + "_ExitInFlight", host.Reconciler.IsExiting(control) && panel.Children.Contains(control),
                     $"exiting={host.Reconciler.IsExiting(control)} count={panel.Children.Count}");
-                H.Check("MemoExitRefresh_MemoFadeWins", visual.TryGetAnimationController("Opacity") is not null
+                H.Check(name + "_MemoFadeWins", visual.TryGetAnimationController("Opacity") is not null
                     && visual.TryGetAnimationController("Scale") is null);
                 await Harness.WaitFor(() => !host.Reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
             }
