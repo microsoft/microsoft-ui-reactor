@@ -995,6 +995,18 @@ internal static class PoolLaneFixtures
     /// </summary>
     internal sealed class WrapperRefs(Harness h) : SelfTestFixtureBase(h)
     {
+        private sealed record ThrowingEdgeElement(ElementRef<RefNode>? Target) : Element;
+
+        private static bool s_throwOnClear;
+
+        private static readonly Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode> ThrowingEdge =
+            new Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode>()
+            .Reference<RefNode>(get: static e => e.Target, set: static (c, t) =>
+            {
+                if (t is null && s_throwOnClear) throw new InvalidOperationException("boom");
+                c.Right = t;
+            });
+
         public override async Task RunAsync()
         {
             var cases = new (string Name, Func<ElementRef, Element> Build)[]
@@ -1096,6 +1108,23 @@ internal static class PoolLaneFixtures
                 H.Check(p + "_Threw", control is not null && threw);
                 H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
                     $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
+            // Unmount runs user-supplied reference setters with null, and one can throw. The
+            // control's own ref is still cleared.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingEdgeSetter";
+                using var reconciler = new Reconciler();
+                reconciler.RegisterHandler(new Core.V1Protocol.Descriptor.DescriptorHandler<ThrowingEdgeElement, RefNode>(ThrowingEdge));
+                var r = new ElementRef();
+                var control = reconciler.Mount(new ThrowingEdgeElement(new ElementRef<RefNode>(new ElementRef())).Ref(r), static () => { });
+                bool threw = false;
+                s_throwOnClear = true;
+                try { if (control is not null) reconciler.UnmountChild(control); }
+                catch (InvalidOperationException) { threw = true; }
+                finally { s_throwOnClear = false; }
+                H.Check(p + "_Threw", control is RefNode && threw);
+                H.Check(p + "_OwnRefCleared", r.Current is null);
             }
 
             // A changed Memo key remounts: the ref moves to the replacement before the old control is

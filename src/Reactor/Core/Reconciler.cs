@@ -4795,6 +4795,8 @@ public sealed partial class Reconciler : IDisposable
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
         ElementPool.CancelOpacitySync(control);
+        // First: the reference-edge teardown below runs user setters that can throw.
+        ClearTrackedProducerRefs(control);
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.
@@ -4805,7 +4807,6 @@ public sealed partial class Reconciler : IDisposable
             if (current is null) break;
             CleanupElementStateForUnmount(control, current);
         }
-        ClearTrackedProducerRefs(control);
     }
 
     private static void TrackProducerRef(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
@@ -4866,7 +4867,10 @@ public sealed partial class Reconciler : IDisposable
         foreach (var producerRef in (List<Microsoft.UI.Reactor.Input.ElementRef>)refs)
         {
             try { ClearProducerRefIfCurrent(control, producerRef); }
-            catch (Exception ex) { failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex); }
+            catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
+            {
+                failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            }
         }
         failure?.Throw();
     }
