@@ -6457,7 +6457,9 @@ public sealed partial class Reconciler : IDisposable
         // so a facade transform has already moved and been recorded.
         var rest = RestTransformOf(uie);
 
-        // Compositor properties — animate via Visual
+        // Compositor properties — animate via Visual. The state takes the opacity channel, so a
+        // pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(uie);
         var targetOpacity = values?.Opacity ?? 1.0f;
         var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetOpacity, curve);
         visual.StartAnimation("Opacity", opacityAnim);
