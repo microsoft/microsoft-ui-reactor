@@ -141,7 +141,8 @@ Gestures follow a **phase lifecycle**: `Began → Changed (repeat) → Ended | C
 ### Pan gesture
 
 ```csharp
-var (offset, setOffset) = UseState(new Point(0, 0));
+var (rest, setRest) = UseState(new Point(0, 0));  // position at the last gesture end
+var (drag, setDrag) = UseState(new Point(0, 0));  // translation of the current gesture
 
 return Border(child)
     .OnPan(
@@ -149,60 +150,44 @@ return Border(child)
         axis: PanAxis.Both,  // or Horizontal, Vertical
         withInertia: true,   // momentum after release
         onBegan: (e) => { /* pan began */ },
-        onChanged: (e) =>
-        {
-            // PanGesture.Delta is the per-event movement, a Point — Reactor flattens
-            // WinUI's ManipulationDelta, so there is no e.Delta.Translation here.
-            setOffset(new Point(offset.X + e.Delta.X, offset.Y + e.Delta.Y));
-        },
-        onEnded: (e) => { /* pan ended */ })
-    .Translation((float)offset.X, (float)offset.Y, 0);
-```
-
-### 60Hz pan pattern (performance-critical)
-
-For smooth dragging, write `Translation` directly via ref during the
-gesture and only `setState` at the end. The cell must be an **`ElementRef`**
-from `UseElementRef<T>` — that is what the reconciler populates. A `UseRef`
-box is not accepted by `.Ref(...)` and would never point at anything.
-
-```csharp
-var itemRef = this.UseElementRef<FrameworkElement>();
-var (finalPos, setFinalPos) = UseState(new Point(0, 0));
-
-return Border(child)
-    .Ref(itemRef)
-    .OnPan(
-        onChanged: (e) =>
-        {
-            // Direct property write — no re-render per frame
-            if (itemRef.Current is { } el)
-            {
-                var t = el.Translation;
-                el.Translation = new System.Numerics.Vector3(
-                    t.X + (float)e.Delta.X,
-                    t.Y + (float)e.Delta.Y,
-                    t.Z);
-            }
-        },
+        // PanGesture.Translation is cumulative since Began, a Point. Reactor flattens
+        // WinUI's ManipulationDelta, so there is no e.Delta.Translation here.
+        onChanged: (e) => setDrag(e.Translation),
         onEnded: (e) =>
         {
-            // Sync state once at end
-            if (itemRef.Current is { } el)
-                setFinalPos(new Point(el.Translation.X, el.Translation.Y));
-        });
+            setRest(new Point(rest.X + e.Translation.X, rest.Y + e.Translation.Y));
+            setDrag(new Point(0, 0));
+        })
+    .Translation((float)(rest.X + drag.X), (float)(rest.Y + drag.Y), 0);
 ```
+
+### Smooth drags (performance-critical)
+
+`.Translation(...)` puts the position on the composition visual, and each pan
+event re-renders the component. Two rules keep the card under the pointer:
+
+- **Build the position from the cumulative `e.Translation`**, plus the position
+  at the last gesture end, as above. Don't write `setOffset(offset + e.Delta)`:
+  `offset` is the value from the last render, so an event that arrives before the
+  next render loses its movement. `rest` is safe to read in `onEnded` because it
+  only changes between gestures.
+- **Keep the per-event render small.** A small component keeps up with the
+  pointer at every pan event. One that re-renders a lot of UI per event falls
+  behind, because Reactor renders at `DispatcherQueuePriority.Low` after a render
+  that took longer than a frame. Move the draggable element into its own
+  component so a pan re-renders only that element.
 
 **Don't mix `el.Translation` with `.Translation(...)`.** Pick one per element.
 Reactor enables translation on the composition visual only when the element
 declares `.Translation(...)`, a `translation:` keyframe or an
 `.InteractionStates(...)` translation, and once it is enabled WinUI silently
-ignores `el.Translation` writes. So the ref pattern above keeps working next to
-`.Scale(...)`, `.Rotation(...)` or `.Animate(...)` (a pressed-card
-`.Scale(pressed ? 0.97f : 1)` is fine), but not next to `.Translation(...)`,
-and `REACTOR_ANIM_004` flags `.Set(fe => fe.Translation = ...)` on a chain that
-declares it. The same goes for reading back: `el.Scale` and `el.Rotation` read
-identity once a transform modifier has taken the visual.
+ignores `el.Translation` writes. Code that writes `el.Translation` through an
+`ElementRef` (from `UseElementRef<T>`; `.Ref(...)` doesn't accept a `UseRef` box)
+keeps working next to `.Scale(...)`, `.Rotation(...)` or `.Animate(...)` (a
+pressed-card `.Scale(pressed ? 0.97f : 1)` is fine), but not next to
+`.Translation(...)`, and `REACTOR_ANIM_004` flags `.Set(fe => fe.Translation = ...)`
+on a chain that declares it. The same goes for reading back: `el.Scale` and
+`el.Rotation` read identity once a transform modifier has taken the visual.
 
 ### Pinch and Rotate
 
@@ -399,8 +384,9 @@ Via `args.UIOverride` on drag-over handlers:
 1. **CANNOT combine `OnPan` and `OnTapped` on the same element.** They
    conflict via `ManipulationMode`. If you need both, put `OnTapped` on a
    child and `OnPan` on the parent.
-2. **60Hz pan pattern** — for smooth drag UIs, write `Translation` directly
-   via ref during `onChanged`, and only `setState` in `onEnded`.
+2. **Smooth drags** — drive `.Translation(...)` from state built from the
+   cumulative `e.Translation`, and keep the dragged element in a small component
+   so the render on every pan event keeps up.
 3. **Gesture phase lifecycle** — always handle both `onEnded` and
    `onCancelled` to avoid stuck state.
 4. **`AllowDrop` auto-enables** — just attaching `.OnDrop()` sets the flag.

@@ -150,15 +150,15 @@ class PanGestureExample : Component
 {
     public override Element Render()
     {
-        // For 60 Hz smooth panning, write directly to the mounted element's
-        // Translation inside onChanged. Going through setState would queue
-        // Low-priority re-renders that get starved by the manipulation event
-        // stream itself, producing a laggy drag. The committedRef holds the
-        // position at the last gesture end so successive drags accumulate.
-        // Reset lives on a sibling Button because WinUI suppresses the tap
-        // recognizer when ManipulationMode ≠ System — .OnDoubleTap on the same
-        // element as .OnPan wouldn't fire.
-        var cardRef = UseRef<FrameworkElement?>(null);
+        // The card's position lives in state, and .Translation() puts it on the
+        // composition visual. Each pan event re-renders this component, which
+        // keeps up with the pointer because the component is small. If yours
+        // re-renders a lot of UI per event, move the draggable card into its own
+        // component so only the card re-renders. committedRef holds the position
+        // at the last gesture end so successive drags accumulate. Reset lives on
+        // a sibling Button because WinUI suppresses the tap recognizer when
+        // ManipulationMode ≠ System, so .OnDoubleTap on the .OnPan element
+        // wouldn't fire.
         var committedRef = UseRef(Vector2.Zero);
         var (offset, setOffset) = UseState(Vector2.Zero);
 
@@ -166,8 +166,6 @@ class PanGestureExample : Component
         {
             committedRef.Current = Vector2.Zero;
             setOffset(Vector2.Zero);
-            if (cardRef.Current is { } fe)
-                fe.Translation = System.Numerics.Vector3.Zero;
         }
 
         return VStack(8,
@@ -178,23 +176,10 @@ class PanGestureExample : Component
                     .Width(120).Height(120)
                     .Background(Theme.Accent)
                     .CornerRadius(8)
-                    // No .Translation(offset...) here: the card's position is written to
-                    // fe.Translation directly, and a declared .Translation() would own
-                    // translation on the composition visual, after which WinUI ignores
-                    // fe.Translation writes. Restore the committed position on mount instead.
-                    .OnMount(fe =>
-                    {
-                        cardRef.Current = fe;
-                        fe.Translation = new System.Numerics.Vector3(committedRef.Current.X, committedRef.Current.Y, 0);
-                    })
+                    .Translation(offset.X, offset.Y, 0)
                     .OnPan(
-                        onChanged: g =>
-                        {
-                            var next = committedRef.Current +
-                                new Vector2((float)g.Translation.X, (float)g.Translation.Y);
-                            if (cardRef.Current is { } fe)
-                                fe.Translation = new System.Numerics.Vector3(next.X, next.Y, 0);
-                        },
+                        onChanged: g => setOffset(committedRef.Current +
+                            new Vector2((float)g.Translation.X, (float)g.Translation.Y)),
                         onEnded: g =>
                         {
                             committedRef.Current += new Vector2((float)g.Translation.X, (float)g.Translation.Y);
@@ -203,7 +188,7 @@ class PanGestureExample : Component
                         withInertia: true)
             ).Height(260).Background(Theme.CardBackground).CornerRadius(8).Padding(16),
 
-            TextBlock($"Committed: ({offset.X:F0}, {offset.Y:F0})"),
+            TextBlock($"Position: ({offset.X:F0}, {offset.Y:F0})"),
             Button("Reset position", Reset)
         );
     }

@@ -6662,8 +6662,13 @@ public sealed partial class Reconciler : IDisposable
     {
         if (visual.ImplicitAnimations is not { } keys) return;
         foreach (var key in StaggerChannels)
-            if (keys.TryGetValue(key, out var animation) && animation is CompositionAnimation composition)
-                AnimationHelper.SetDelay(composition, delay);
+            SetDelayIfPresent(keys, key, delay);
+    }
+
+    private static void SetDelayIfPresent(ImplicitAnimationCollection keys, string key, TimeSpan delay)
+    {
+        if (keys.TryGetValue(key, out var animation) && animation is CompositionAnimation composition)
+            AnimationHelper.SetDelay(composition, delay);
     }
 
     /// <summary>A panel with <c>.Stagger()</c> whose update is reconciling its children.</summary>

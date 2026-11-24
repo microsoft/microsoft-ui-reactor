@@ -118,6 +118,7 @@ internal static class SelfTestFixtureRegistry
         ("Markdown_Selection_LifecycleAndStreaming", static harness => new MarkdownSelectionFixtures.LifecycleAndStreaming(harness)),
         ("Markdown_Selection_RangeChildren", static harness => new MarkdownSelectionFixtures.RangeChildren(harness)),
         ("Markdown_Selection_ItemsViewClippedNavigation", static harness => new MarkdownSelectionFixtures.ItemsViewClippedNavigation(harness)),
+        ("Markdown_Selection_ViewportEdgeAutoscroll", static harness => new MarkdownSelectionFixtures.ViewportEdgeAutoscroll(harness)),
         ("Markdown_CodeBlockAndLinks", static harness => new MarkdownFixtures.CodeBlockAndLinks(harness)),
         ("Markdown_AllHeadingLevels", static harness => new MarkdownFixtures.AllHeadingLevels(harness)),
         ("Markdown_InlineFormatting", static harness => new MarkdownFixtures.InlineFormatting(harness)),
