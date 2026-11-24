@@ -288,6 +288,14 @@ internal static class RepeaterStaleIndexFixtures
             new("ItemsViewOnScreen", Swap2And3, Kind: ListKind.ItemsView));
     }
 
+    // ItemsView's ScrollView brings a newly focused item into view too: moving focus off the
+    // stale row must not scroll it either.
+    internal class ItemsView_FocusedRowMovedWhileScrolledAway_NoScrollJump(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
+            new("ItemsViewFocusedMoved", Move2ToTop, Kind: ListKind.ItemsView, Focus: true, ChangeWhileScrolledAway: true));
+    }
+
     // A focused row that has scrolled out of view sits in the repeater's pinned pool. When it
     // moved, the repeater used to hand it back for its old index on the way back, so that row
     // showed the moved item and the moved item was painted a second time.
@@ -327,6 +335,71 @@ internal static class RepeaterStaleIndexFixtures
     {
         public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
             new("FocusedSwappedThenScrolled", Swap2And3, Focus: true, ScrollAwayAfterChange: true));
+    }
+
+    // The list is cleared and the window's first and last tab stops are clipped by their
+    // scrollers: focus has to reach a usable control between them, or it stays on the deleted row.
+    internal class FocusedRowListCleared_OnlyMiddleTargetUsable_FocusLeavesList(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var initial = Enumerable.Range(0, RowCount).ToList();
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                return VStack(
+                    ScrollViewer(VStack(Button("above").Height(32), TextBlock("").Height(500))).Height(30),
+                    Button("Change", () => setPhase(1)),
+                    LazyVStack(phase == 0 ? initial : new List<int>(), k => k.ToString(), (k, _) => Button($"r{k}").Height(32)).Height(150),
+                    ScrollViewer(VStack(TextBlock("").Height(500), Button("below").Height(32))).Height(30));
+            });
+            await Harness.Render();
+
+            var above = H.FindControl<Button>(b => b.Content as string == "above");
+            var below = H.FindControl<Button>(b => b.Content as string == "below");
+            var change = H.FindControl<Button>(b => b.Content as string == "Change");
+            var list = H.FindControl<WinXC.ScrollViewer>(v => v.Content is WinXC.ItemsRepeater);
+            var target = H.FindControl<Button>(b => b.Content as string == "r2");
+            if (above is null || below is null || change is null || list is null || target is null)
+            {
+                H.Check("RepeaterStale_MiddleTarget_Found", false);
+                return;
+            }
+            WinXC.ScrollViewer? aboveScroller = null;
+            for (DependencyObject? node = above; node is not null && aboveScroller is null; node = VisualTreeHelper.GetParent(node))
+                aboveScroller = node as WinXC.ScrollViewer;
+            if (aboveScroller is null)
+            {
+                H.Check("RepeaterStale_MiddleTarget_Found", false);
+                return;
+            }
+            aboveScroller.ChangeView(null, 200, null, disableAnimation: true);
+            H.Check("RepeaterStale_MiddleTarget_AboveClipped", await Harness.WaitFor(() => aboveScroller.VerticalOffset >= 199));
+
+            var content = target.XamlRoot.Content;
+            var first = FocusManager.FindFirstFocusableElement(content);
+            var last = FocusManager.FindLastFocusableElement(content);
+            if (!ReferenceEquals(first, above) || !ReferenceEquals(last, below))
+            {
+                H.Skip("RepeaterStale_MiddleTarget_FocusLandsOnMiddleTarget",
+                    $"the window's first/last tab stops are {(first as FrameworkElement)?.Name ?? first?.GetType().Name}/{(last as FrameworkElement)?.Name ?? last?.GetType().Name}, not this fixture's clipped buttons");
+                return;
+            }
+
+            H.Check("RepeaterStale_MiddleTarget_FocusTaken", target.Focus(FocusState.Programmatic));
+            await Harness.Render();
+            list.ChangeView(null, list.ScrollableHeight, null, disableAnimation: true);
+            H.Check("RepeaterStale_MiddleTarget_ScrolledAway", await Harness.WaitFor(() => list.VerticalOffset >= list.ScrollableHeight - 1));
+            await Harness.Render();
+
+            H.ClickButton("Change");
+            await Harness.Render();
+
+            var focused = FocusManager.GetFocusedElement(target.XamlRoot);
+            H.Check("RepeaterStale_MiddleTarget_FocusLandsOnMiddleTarget", ReferenceEquals(focused, change),
+                $"focused '{(focused as Button)?.Content ?? focused?.GetType().Name}'");
+        }
     }
 
     // A list inside an outer scroller that shows only part of it: the row focus moves to has to

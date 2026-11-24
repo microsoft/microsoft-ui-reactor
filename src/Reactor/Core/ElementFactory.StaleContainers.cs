@@ -250,8 +250,8 @@ public sealed partial class ElementFactory<T>
     // take focus itself (a stack, a component wrapper) lands on its first focusable descendant
     // (RepeaterStale_FocusedCompositeRowMovedWhileScrolledAway_NoStaleRow); a row with nothing
     // focusable refuses it, and the next row is tried. When no row takes it (the list was
-    // cleared, or no visible row is focusable), focus leaves the list for the first or last
-    // focusable element outside it, so the stale control is still released.
+    // cleared, or no visible row is focusable), focus leaves the list for the first fully
+    // visible tab stop outside it, so the stale control is still released.
     private void MoveFocusOffStaleContainer(ItemsRepeater repeater, UIElement stale, string key, int staleIndex)
     {
         var root = repeater.XamlRoot;
@@ -277,55 +277,52 @@ public sealed partial class ElementFactory<T>
         }
 
         if (root?.Content is not { } content) return;
-        foreach (var outside in new[] { FocusManager.FindFirstFocusableElement(content), FocusManager.FindLastFocusableElement(content) })
+        foreach (var outside in FocusableOutside(content, repeater))
         {
-            if (outside is UIElement element
-                && !IsDescendantOf(element, repeater)
-                && IsFullyInViewport(element, element as FrameworkElement ?? viewport)
-                && FocusWithoutScrolling(element, state))
+            if (IsFullyInViewport(outside, outside) && FocusWithoutScrolling(outside, state))
                 return;
+        }
+    }
+
+    // Enabled tab stops outside the list, in tree order, skipping collapsed subtrees. Bounded so
+    // a huge window can't turn this rare fallback into a long walk.
+    private static IEnumerable<Control> FocusableOutside(UIElement content, ItemsRepeater repeater)
+    {
+        const int MaxVisited = 4096;
+        int visited = 0;
+        var pending = new Stack<DependencyObject>();
+        pending.Push(content);
+        while (pending.Count > 0 && visited++ < MaxVisited)
+        {
+            var node = pending.Pop();
+            if (ReferenceEquals(node, repeater) || node is UIElement { Visibility: Visibility.Collapsed }) continue;
+            if (node is Control { IsEnabled: true, IsTabStop: true } control)
+                yield return control;
+            int count = VisualTreeHelper.GetChildrenCount(node);
+            for (int i = count - 1; i >= 0; i--)
+                pending.Push(VisualTreeHelper.GetChild(node, i));
         }
     }
 
     // The target was chosen because it's already fully visible, but focusing still has the
     // scrollers around it bring it into view, with their own margins, so the list would still
-    // nudge. A ScrollViewer does that from its GotFocus handling, which WinUI raises after the
-    // focus call returns, so its BringIntoViewOnFocusChange stays off until a low-priority
-    // dispatcher pass, then gets its previous value back; other scrollers ask through the
-    // element's BringIntoViewRequested, which is handled for the duration of the call.
+    // nudge. That request reaches the scrollers through the element's BringIntoViewRequested,
+    // which WinUI routes after the focus call returns, so the handler that marks it handled
+    // stays installed until a low-priority dispatcher pass.
     private static bool FocusWithoutScrolling(UIElement element, FocusState state)
     {
-        List<(ScrollViewer Viewer, object Value)>? restore = null;
-        for (var node = VisualTreeHelper.GetParent(element); node is not null; node = VisualTreeHelper.GetParent(node))
-        {
-            if (node is ScrollViewer viewer && viewer.BringIntoViewOnFocusChange)
-            {
-                (restore ??= new()).Add((viewer, viewer.ReadLocalValue(ScrollViewer.BringIntoViewOnFocusChangeProperty)));
-                viewer.BringIntoViewOnFocusChange = false;
-            }
-        }
-
         global::Windows.Foundation.TypedEventHandler<UIElement, BringIntoViewRequestedEventArgs> suppress = (_, args) => args.Handled = true;
         element.BringIntoViewRequested += suppress;
-        try { return element.Focus(state); }
+        bool focused = false;
+        try { focused = element.Focus(state); }
         finally
         {
-            element.BringIntoViewRequested -= suppress;
-            if (restore is not null)
-            {
-                void Restore()
-                {
-                    foreach (var (viewer, value) in restore)
-                    {
-                        if (value == DependencyProperty.UnsetValue) viewer.ClearValue(ScrollViewer.BringIntoViewOnFocusChangeProperty);
-                        else viewer.SetValue(ScrollViewer.BringIntoViewOnFocusChangeProperty, value);
-                    }
-                }
-                var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                if (queue is null || !queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Restore))
-                    Restore();
-            }
+            void Release() => element.BringIntoViewRequested -= suppress;
+            var queue = focused ? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() : null;
+            if (queue is null || !queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Release))
+                Release();
         }
+        return focused;
     }
 
     // The nearest scrolling ancestor, or the repeater itself when it doesn't scroll.
