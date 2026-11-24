@@ -16,7 +16,7 @@ Use these types to add your own controls to Reactor or to change how built-in co
 | [`ControlDescriptor<TElement, TControl>`](ControlDescriptor.md) | Spec 047 §6 / §14 Phase 2 (Q1 spike) — declarative control description. |
 | [`ControlRegistry`](ControlRegistry.md) | Spec 048 §8 — the global, lazy, lock-free control registry that backs the factory-as-registration pattern. |
 | [`DescriptorHandler<TElement, TControl>`](DescriptorHandler.md) | Spec 047 §6 / §14 Phase 2 (Q1 spike) — interpreter that drives a `ControlDescriptor<TElement, TControl>` against the v1 protocol surface. |
-| [`ElementPool`](ElementPool.md) | Per-CLR-type pool (cap 32) that recycles unmounted WinUI FrameworkElement instances. |
+| [`ElementPool`](ElementPool.md) | Per-CLR-type pool (cap 32 per lane) that recycles unmounted WinUI FrameworkElement instances. |
 | [`IDecoratorElementHandler<TElement>`](IDecoratorElementHandler.md) | Spec 047 §14 Phase 3 completion — decorator-style V1 handler contract for elements whose returned `UIElement` identity may change on update or whose unmount disposition diverges from the standard pool-return. |
 | [`IElementHandler<TElement, TControl>`](IElementHandler.md) | Spec 047 §4 / §14 Phase 1 (1.6) — author-facing handler contract for porting a control onto the v1 protocol. |
 | [`PoolPolicy<TControl>`](PoolPolicy.md) | Spec 047 §13 Q18 / §14 Phase 1 (1.5) — author-facing pool policy. |

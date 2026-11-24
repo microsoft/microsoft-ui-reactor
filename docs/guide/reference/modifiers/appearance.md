@@ -182,7 +182,7 @@ Declared in `ElementExtensions`.
 
 ## `Foreground`
 
-Sets the foreground from a WinUI theme resource. Resolves at render time and adapts when the theme changes (Light ↔ Dark). Usage: `TextBlock("Hello").Foreground(Theme.PrimaryText)`
+Sets the foreground from a WinUI theme resource on [`Control`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.control), [`TextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.textblock), or [`RichTextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.richtextblock). WinUI updates the brush when the element's effective theme changes. For example, `RichTextBlock("Hello").Foreground(Theme.PrimaryText)`.
 
 ```csharp
 RichTextBlockElement Foreground(this RichTextBlockElement el, Brush brush)
@@ -210,7 +210,7 @@ Declared in `ElementExtensions`.
 | `Foreground(RichTextParagraph, string)` |  |
 | `Foreground(RichTextRun, Brush)` |  |
 | `Foreground(RichTextRun, string)` |  |
-| `Foreground<T>(T, ThemeRef)` | Sets the foreground from a WinUI theme resource. Resolves at render time and adapts when the theme changes (Light ↔ Dark). Usage: `TextBlock("Hello").Foreground(Theme.PrimaryText)` |
+| `Foreground<T>(T, ThemeRef)` | Sets the foreground from a WinUI theme resource on [`Control`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.control), [`TextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.textblock), or [`RichTextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.richtextblock). WinUI updates the brush when the element's effective theme changes. For example, `RichTextBlock("Hello").Foreground(Theme.PrimaryText)`. |
 | `Foreground<T>(T, Brush)` |  |
 | `Foreground<T>(T, string)` | Sets the foreground from a color string (named color or #RRGGBB / #AARRGGBB). Returns a fresh, caller-independent brush per call (see [`BrushHelper.Parse`](../theming/BrushHelper.md#parse) — the parsed color is cached, the brush is not); the diff compares brushes structurally (color + opacity). Use the [`Foreground`](#foreground) overload to supply an explicit brush. |
 
