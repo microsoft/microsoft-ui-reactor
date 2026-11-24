@@ -20,7 +20,7 @@
     A "measurement" is a [pscustomobject] with:
       Key    stable identifier ('nupkg.<PkgKey>' for a package, or
              'asm|<PkgKey>|<Dll>' for one shipped DLL inside it)
-      Label  display name (e.g. 'Microsoft.UI.Reactor.nupkg' or 'Reactor.dll')
+      Label  display name (e.g. 'Microsoft.UI.Reactor.nupkg' or 'Microsoft.UI.Reactor.dll')
       Group  section header ('Packages (compressed .nupkg)' | 'Assemblies in <package>')
       Bytes  size in bytes, or $null when the artifact was not produced.
 

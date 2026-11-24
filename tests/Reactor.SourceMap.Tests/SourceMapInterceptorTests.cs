@@ -162,7 +162,7 @@ public sealed class SourceMapInterceptorTests : IDisposable
         // so a bare-string child's TextBlock call site lives inside Element.cs, in the
         // Reactor assembly, NOT in user code — and it is structurally unreachable:
         // interceptors cannot intercept operators, and the operator's body is already
-        // compiled into Reactor.dll. Layer 1 therefore left these children null.
+        // compiled into Microsoft.UI.Reactor.dll. Layer 1 therefore left these children null.
         //
         // Argument-position stamping closes it from the other side: the enclosing
         // VStack call IS intercepted, and its interceptor stamps the converted argument

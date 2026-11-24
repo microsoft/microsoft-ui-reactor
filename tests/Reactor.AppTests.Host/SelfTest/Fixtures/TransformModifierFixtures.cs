@@ -532,7 +532,7 @@ internal sealed class TransformModifierOrderingFixture(Harness h) : SelfTestFixt
             await Harness.Render();
             Exception? thrown = null;
             try { reconciler.Update(before, after, target, () => { }); }
-            catch (Exception ex) { thrown = ex; }
+            catch (UnauthorizedAccessException ex) { thrown = ex; }
             // Spec 066 §9 row 1: the transform took the visual, which locks Rotation, Scale and
             // CenterPoint for the control's lifetime. Translation stays writable, and with
             // translation enabled by the departed .Translation() the facade value is ignored on

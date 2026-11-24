@@ -30,7 +30,7 @@
     <!-- Don't stage the NativeAOT native symbol .pdb into the publish directory. -->
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
 
-    <!-- Strip docs: don't copy reference-related .pdb/.xml (e.g. Reactor.xml ~1.9 MB, Reactor.pdb) next to referenced assemblies. -->
+    <!-- Strip docs: don't copy reference-related .pdb/.xml (e.g. Microsoft.UI.Reactor.xml ~1.9 MB, Microsoft.UI.Reactor.pdb) next to referenced assemblies. -->
     <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
 
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>

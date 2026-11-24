@@ -3,7 +3,7 @@
   <!--
     Spec 047 §14 Phase 1 (1.16) — selftests for the external-assembly proof.
 
-    These tests reference Reactor.dll as a regular project reference (no
+    These tests reference Microsoft.UI.Reactor.dll as a regular project reference (no
     InternalsVisibleTo from Reactor into this assembly). Tests that require
     a WinUI dispatcher are gated with [Fact(Skip = …)] and the live
     equivalents live in tests/Reactor.AppTests.Host as

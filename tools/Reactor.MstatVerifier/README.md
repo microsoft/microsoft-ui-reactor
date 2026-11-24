@@ -10,7 +10,7 @@ directions of the same mstat check), all invoked via `dotnet run` from
   `System.Net.Http.*`, `System.Text.Json` metadata, …) are **absent** (devtools switched off)
   or **present** (positive control), and — in `absence` mode — that the hello-world AOT exe
   stays under a size budget.
-- `reactor-il <path-to-Reactor.dll>` — walks `Reactor.dll` with Mono.Cecil and fails if any
+- `reactor-il <path-to-Microsoft.UI.Reactor.dll>` — walks `Microsoft.UI.Reactor.dll` with Mono.Cecil and fails if any
   devtools *implementation* type leaked into the core assembly.
 - `negative-resolution <path-to-fixture.csproj>` — shells `dotnet build` on a fixture and
   asserts it fails with `CS0246`/`CS0234` (devtools impl types are unavailable without the

@@ -354,9 +354,8 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         var arguments = link.ArgumentList.Arguments;
         if (arguments.Count == 0)
             return false;
-        foreach (var argument in arguments)
+        foreach (var value in arguments.Select(static argument => argument.Expression))
         {
-            var value = argument.Expression;
             if (model.GetConstantValue(value, ct) is { HasValue: true, Value: { } constant }
                 && constant is int or long or float or double or decimal)
             {

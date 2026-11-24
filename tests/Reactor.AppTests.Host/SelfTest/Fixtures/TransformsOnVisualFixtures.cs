@@ -65,9 +65,9 @@ internal static class TransformsOnVisualFixtures
                     : static e => e.Set(static b => b.Rotation = 10);
                 Exception? thrown = null;
                 try { await Update(identity(setter(Target()))); }
-                catch (Exception ex) { thrown = ex; }
+                catch (UnauthorizedAccessException ex) { thrown = ex; }
                 H.Check(p + "_LaterSetterWorks", thrown is null
-                    && (name == "Rotation" ? Control.Scale == new Vector3(1.5f, 1.5f, 1) : Control.Rotation == 10),
+                    && (name == "Rotation" ? Control.Scale == new Vector3(1.5f, 1.5f, 1) : FloatCheck.Near(Control.Rotation, 10)),
                     thrown?.GetType().Name ?? $"scale={Control.Scale} rotation={Control.Rotation}");
 
                 await Mount(value(Target()));
@@ -87,7 +87,7 @@ internal static class TransformsOnVisualFixtures
             await Mount(Target().InteractionStates(static b => b.PointerOver(scale: 1.1f)).Rotation(0));
             Exception? early = null;
             try { Control.Scale = new Vector3(1.5f, 1.5f, 1); }
-            catch (Exception ex) { early = ex; }
+            catch (UnauthorizedAccessException ex) { early = ex; }
             H.Check(Name + "_InteractionStates_IdentityKeepsFacades", early is null, early?.GetType().Name ?? "");
         }
     }
@@ -102,7 +102,7 @@ internal static class TransformsOnVisualFixtures
         {
             await Mount(Target().Scale(2).Rotation(30).Translation(10, 5, 0).CenterPoint(new Vector3(4, 2, 0)));
             H.Check(Name + "_VisualTaken", ElementPool.IsVisualTaken(Control));
-            H.Check(Name + "_FacadesIdentity", Control.Scale == Vector3.One && Control.Rotation == 0
+            H.Check(Name + "_FacadesIdentity", Control.Scale == Vector3.One && FloatCheck.Near(Control.Rotation, 0)
                 && Control.CenterPoint == Vector3.Zero && Control.Translation == Vector3.Zero,
                 $"scale={Control.Scale} rotation={Control.Rotation} center={Control.CenterPoint} translation={Control.Translation}");
             var visual = Visual;
@@ -234,14 +234,14 @@ internal static class TransformsOnVisualFixtures
             listener.Reset();
             Exception? setter = null;
             try { await Update(WithSetter(20, scale: true)); }
-            catch (Exception ex) { setter = ex; }
+            catch (UnauthorizedAccessException ex) { setter = ex; }
             H.Check(Name + "_Setter_Throws", setter is UnauthorizedAccessException, setter?.GetType().Name ?? "none");
             Warns(Name + "_Setter_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.SetterOperation, StringComparison.Ordinal), listener.Describe());
 
             listener.Reset();
             Exception? onMount = null;
             try { await Mount(Target().Scale(2).OnMount(static fe => fe.Rotation = 10)); }
-            catch (Exception ex) { onMount = ex; }
+            catch (UnauthorizedAccessException ex) { onMount = ex; }
             H.Check(Name + "_OnMount_Throws", onMount is UnauthorizedAccessException, onMount?.GetType().Name ?? "none");
             Warns(Name + "_OnMount_Warns", listener.Describe().Contains("W:Reactor/" + FacadeConflictDiagnostic.SetterOperation, StringComparison.Ordinal), listener.Describe());
 

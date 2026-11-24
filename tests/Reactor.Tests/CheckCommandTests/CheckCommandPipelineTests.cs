@@ -73,7 +73,7 @@ public class CheckCommandPipelineTests
     public void Emit_preserves_complete_error_messages_in_every_mode(string modeFlag)
     {
         const string message = """
-            Task 'WinAppSdkExpandPriContent' failed. Could not find file 'C:\src\SampleApp\obj\Debug\net10.0-windows10.0.26100.0\win-x64\Reactor.Advanced.pri.xml'.
+            Task 'WinAppSdkExpandPriContent' failed. Could not find file 'C:\src\SampleApp\obj\Debug\net10.0-windows10.0.26100.0\win-x64\Microsoft.UI.Reactor.Advanced.pri.xml'.
             """;
         var diags = CheckCommand.ParseDiagnostics($"App.csproj(1,1): error APPX0002: {message} [App.csproj]");
         Assert.True(CheckArgs.TryParse(modeFlag.Length == 0 ? [] : [modeFlag], out var args, out var error), error);
