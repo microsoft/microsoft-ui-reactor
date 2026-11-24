@@ -167,26 +167,40 @@ public sealed partial class ElementFactory<T>
         var next = expected + 1 < source.Count ? RealizedControl(repeater, source[expected + 1].Key) : null;
         if (previous is null && next is null) return false;
 
-        // A column-first grid fills down each column before moving across; every other layout
-        // Reactor hosts (stacks, row-first grids, lined flow) fills along rows.
-        bool columnFirst = repeater.Layout is UniformGridLayout { Orientation: Orientation.Vertical };
-        var at = PositionIn(child, repeater);
-        return (previous is null || IsBefore(PositionIn(previous, repeater), at, columnFirst))
-            && (next is null || IsBefore(at, PositionIn(next, repeater), columnFirst));
+        // Lines run down the cross axis: a column-first grid and a horizontal stack fill along X
+        // first, every other layout Reactor hosts (vertical stacks, row-first grids, lined flow)
+        // along Y.
+        bool columnFirst = repeater.Layout is UniformGridLayout { Orientation: Orientation.Vertical }
+            or StackLayout { Orientation: Orientation.Horizontal };
+        var at = BoundsIn(child, repeater);
+        return (previous is null || IsBefore(BoundsIn(previous, repeater), at, columnFirst))
+            && (next is null || IsBefore(at, BoundsIn(next, repeater), columnFirst));
     }
 
     private UIElement? RealizedControl(ItemsRepeater repeater, string key)
         => _controlByKey.TryGetValue(key, out var control) && repeater.GetElementIndex(control) >= 0 ? control : null;
 
-    private static global::Windows.Foundation.Point PositionIn(UIElement element, ItemsRepeater repeater)
-        => element.TransformToVisual(repeater).TransformPoint(default);
+    private static global::Windows.Foundation.Rect BoundsIn(UIElement element, ItemsRepeater repeater)
+    {
+        var size = element is FrameworkElement fe ? new global::Windows.Foundation.Size(fe.ActualWidth, fe.ActualHeight) : element.RenderSize;
+        return element.TransformToVisual(repeater).TransformBounds(new global::Windows.Foundation.Rect(new global::Windows.Foundation.Point(), size));
+    }
 
-    // Fill order: by row then along it, or by column then down it for a column-first grid (a
-    // stack has one coordinate, so either order works for it).
-    private static bool IsBefore(global::Windows.Foundation.Point a, global::Windows.Foundation.Point b, bool columnFirst)
-        => columnFirst
-            ? a.X < b.X - 0.5 || (Math.Abs(a.X - b.X) <= 0.5 && a.Y < b.Y)
-            : a.Y < b.Y - 0.5 || (Math.Abs(a.Y - b.Y) <= 0.5 && a.X < b.X);
+    // Fill order. Two items are on the same line when their bounds overlap across it, so items of
+    // one row with different margins or alignment still order along the row; otherwise the line
+    // that comes first wins.
+    private static bool IsBefore(global::Windows.Foundation.Rect a, global::Windows.Foundation.Rect b, bool columnFirst)
+    {
+        if (columnFirst)
+        {
+            if (a.Right <= b.Left + 0.5) return true;
+            if (b.Right <= a.Left + 0.5) return false;
+            return a.Top < b.Top;
+        }
+        if (a.Bottom <= b.Top + 0.5) return true;
+        if (b.Bottom <= a.Top + 0.5) return false;
+        return a.Left < b.Left;
+    }
 
     private ReactorWindow? _activationWindow;
 

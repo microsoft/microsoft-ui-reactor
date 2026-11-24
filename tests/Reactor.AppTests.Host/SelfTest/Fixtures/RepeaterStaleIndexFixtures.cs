@@ -329,6 +329,51 @@ internal static class RepeaterStaleIndexFixtures
             new("FocusedSwappedThenScrolled", Swap2And3, Focus: true, ScrollAwayAfterChange: true));
     }
 
+    // A horizontal stack whose rows sit at different heights (alternating top margins): a focused
+    // row the reorder shifts along the stack is still in its right place, so focus must stay
+    // (ordering by top edge first would call it misplaced).
+    internal class HorizontalStack_FocusedRowShiftedWithUnevenMargins_FocusStays(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var initial = Enumerable.Range(0, RowCount).ToList();
+            var changed = Move4To1(initial.ToList());
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("Change", () => setPhase(1)),
+                    LazyHStack(phase == 0 ? initial : changed, k => k.ToString(),
+                        (k, _) => Button($"r{k}").Width(60).Height(32).Margin(top: k % 2 == 0 ? 0 : 20)).Height(80));
+            });
+            await Harness.Render();
+
+            var repeater = H.FindControl<WinXC.ItemsRepeater>(_ => true);
+            var target = H.FindControl<Button>(b => b.Content as string == "r2");
+            var neighbour = H.FindControl<Button>(b => b.Content as string == "r1");
+            if (repeater is null || target is null || neighbour is null)
+            {
+                H.Check("RepeaterStale_HStackMargins_Found", false);
+                return;
+            }
+            double Top(Button b) => b.TransformToVisual(repeater).TransformPoint(default).Y;
+            H.Check("RepeaterStale_HStackMargins_RowsAtDifferentHeights", Math.Abs(Top(target) - Top(neighbour)) >= 10,
+                $"r2 top {Top(target):0}, r1 top {Top(neighbour):0}");
+
+            H.Check("RepeaterStale_HStackMargins_FocusTaken", target.Focus(FocusState.Programmatic));
+            await Harness.Render();
+
+            H.ClickButton("Change");
+            await Harness.Render();
+
+            H.Check("RepeaterStale_HStackMargins_FocusKeptOnCorrectRow",
+                ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target),
+                $"focused '{(FocusManager.GetFocusedElement(target.XamlRoot) as Button)?.Content}'");
+        }
+    }
+
     // A column-first grid fills each column before moving across. A focused item the reorder
     // shifts from the bottom of one column to the top of the next is still in its right place,
     // so focus must stay (comparing positions row-first would call it misplaced).
