@@ -236,7 +236,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             editor.TextDocument.SetText(TextSetOptions.None, string.Join('\r', Paragraphs));
             await Harness.Render();
             await Harness.Render(100);
-            var ink = MeasureDocument(plain, await SnapAsync(plain, "document"));
+            var ink = MeasureDocument(plain, await SnapAsync(plain, "document", assert: false), assert: false);
             Console.WriteLine($"# {Name} PlainRTL document ink (box-relative): {(ink is null ? "incomplete" : Describe(ink))}; view={ViewRect(plain)}");
         }
         finally
@@ -280,11 +280,11 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             ink is { Count: > 0 } && Math.Abs(inkEdge - target) <= InkTolerance, detail);
     }
 
-    private Ink[]? MeasureDocument(Side side, Snapshot snapshot)
+    private Ink[]? MeasureDocument(Side side, Snapshot snapshot, bool assert = true)
     {
         var doc = side.Editor.TextDocument;
         var view = TextView(side);
-        H.Check($"{Name}_{side.Label}_Document_TextViewFound", view is not null);
+        Verify(assert, $"{Name}_{side.Label}_Document_TextViewFound", view is not null, "ContentElement.Content");
         if (view is null) return null;
         double boxLeft = In(side, side.Box).Left;
         var interior = Interior(side);
@@ -313,7 +313,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             Console.WriteLine(Invariant($"# {Name} {side.Label} p{i}: ink={Rel(ink, boxLeft)}, getRect client={client} none={none} hit={hit}, ") +
                 Invariant($"getPoint head left={headLeft} right={headRight}, paragraphFormat rtl={format.RightToLeft} align={format.Alignment}"));
             bool measured = range.Text == Paragraphs[i] && client.Height > 0 && double.IsFinite(client.Y) && ink is { Count: > 0 };
-            H.Check($"{Name}_{side.Label}_Document_Paragraph{i}_Measured", measured,
+            Verify(assert, $"{Name}_{side.Label}_Document_Paragraph{i}_Measured", measured,
                 Invariant($"text={range.Text == Paragraphs[i]}, band={client.Y:F2}+{client.Height:F2}, ink={Rel(ink, boxLeft)}"));
             complete &= measured;
             if (ink is { } found) result[i] = found with { Left = found.Left - boxLeft, Right = found.Right - boxLeft };
@@ -358,10 +358,17 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             Math.Max(0, editor.Height - b.Top - b.Bottom));
     }
 
+    // The plain-editor probe only classifies, so its instrument outcomes are logged, never asserted.
+    private void Verify(bool assert, string name, bool ok, string detail)
+    {
+        if (assert) H.Check(name, ok, detail);
+        else Console.WriteLine($"# {name} (recorded, not asserted): {(ok ? "ok" : "not ok")} {detail}");
+    }
+
     private static Rect In(Side side, FrameworkElement element) =>
         element.TransformToVisual(side.Frame).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
-    private async Task<Snapshot> SnapAsync(Side side, string phase)
+    private async Task<Snapshot> SnapAsync(Side side, string phase, bool assert = true)
     {
         var root = side.Frame!;
         var rtb = new RenderTargetBitmap();
@@ -374,7 +381,7 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             Invariant($"scale={snapshot.ScaleX:F3}x{snapshot.ScaleY:F3}, rasterization={scale}, bytes={pixels.Length}");
         Console.WriteLine($"# {Name} {side.Label} {phase} snapshot: {detail}");
         // Precondition for every ink check: the bitmap covers exactly the frame at the device scale.
-        H.Check($"{Name}_{side.Label}_{phase.Replace(' ', '_')}_BitmapCoversFrame",
+        Verify(assert, $"{Name}_{side.Label}_{phase.Replace(' ', '_')}_BitmapCoversFrame",
             Math.Abs(snapshot.ScaleX - scale) <= 0.02 && Math.Abs(snapshot.ScaleY - scale) <= 0.02 &&
             pixels.Length >= rtb.PixelWidth * rtb.PixelHeight * 4, detail);
         return snapshot;
