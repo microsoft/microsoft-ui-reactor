@@ -14,7 +14,8 @@ namespace DemoScriptTool.App.Services;
 ///
 /// <para>
 /// All writes ALSO mirror to <see cref="System.Diagnostics.Debug.WriteLine(string)"/>
-/// so the existing dev-time inner loop (debugger Output / winapp devtools logs)
+/// so the existing dev-time inner loop (the debugger Output window, or
+/// <c>winapp run . --devtools on --debug-output</c>, which captures OutputDebugString)
 /// keeps working unchanged. Use <see cref="Write"/> instead of bare
 /// <c>Debug.WriteLine</c> in this app so events survive across runs without
 /// requiring an attached debugger.
