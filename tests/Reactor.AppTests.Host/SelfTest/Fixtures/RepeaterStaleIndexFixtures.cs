@@ -329,6 +329,70 @@ internal static class RepeaterStaleIndexFixtures
             new("FocusedSwappedThenScrolled", Swap2And3, Focus: true, ScrollAwayAfterChange: true));
     }
 
+    // A list inside an outer scroller that shows only part of it: the row focus moves to has to
+    // be fully visible in the outer scroller too, or focusing it scrolls the outer one.
+    internal class NestedScrollers_StaleRowReleased_NoOuterScrollJump(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var initial = Enumerable.Range(0, RowCount).ToList();
+            var changed = initial.ToList();
+            changed.Remove(195);
+            changed.Add(195);
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("Change", () => setPhase(1)),
+                    ScrollViewer(VStack(
+                        LazyVStack(phase == 0 ? initial : changed, k => k.ToString(), (k, _) => Button($"r{k}").Height(32)).Height(300)))
+                        .Height(160));
+            });
+            await Harness.Render();
+
+            var inner = H.FindControl<WinXC.ScrollViewer>(v => v.Content is WinXC.ItemsRepeater);
+            var outer = H.FindControl<WinXC.ScrollViewer>(v => v.Content is not WinXC.ItemsRepeater && inner is not null && IsDescendantOf(inner, v));
+            if (inner is null || outer is null)
+            {
+                H.Check("RepeaterStale_Nested_Found", false);
+                return;
+            }
+            H.Check("RepeaterStale_Nested_OuterClipsList", outer.ScrollableHeight > 0, $"outer scrollable {outer.ScrollableHeight:0}");
+
+            inner.ChangeView(null, inner.ScrollableHeight, null, disableAnimation: true);
+            H.Check("RepeaterStale_Nested_InnerAtEnd", await Harness.WaitFor(() => inner.VerticalOffset >= inner.ScrollableHeight - 1));
+            await Harness.Render();
+            var target = H.FindControl<Button>(b => b.Content as string == "r195");
+            H.Check("RepeaterStale_Nested_FocusTaken", target?.Focus(FocusState.Programmatic) == true);
+            await Harness.Render();
+            inner.ChangeView(null, 0, null, disableAnimation: true);
+            H.Check("RepeaterStale_Nested_InnerAtTop", await Harness.WaitFor(() => inner.VerticalOffset <= 0));
+            await Harness.Render();
+            if (target is null) return;
+            double outerBefore = outer.VerticalOffset, innerBefore = inner.VerticalOffset;
+
+            H.ClickButton("Change");
+            await Harness.Render();
+
+            var focused = FocusManager.GetFocusedElement(target.XamlRoot) as DependencyObject;
+            H.Check("RepeaterStale_Nested_FocusLeftStaleRow", !ReferenceEquals(focused, target),
+                $"focused '{(focused as Button)?.Content}'");
+            H.Check("RepeaterStale_Nested_NoScrollJump", Math.Abs(outer.VerticalOffset - outerBefore) <= 0.5 && Math.Abs(inner.VerticalOffset - innerBefore) <= 0.5,
+                $"outer offset {outerBefore:0} -> {outer.VerticalOffset:0}, inner offset {innerBefore:0} -> {inner.VerticalOffset:0}");
+
+            // Focus has to land where the user can see it: inside the outer scroller too.
+            var focusedBounds = focused is FrameworkElement fe && outer.Content is UIElement outerContent
+                ? fe.TransformToVisual(outerContent).TransformBounds(new global::Windows.Foundation.Rect(0, 0, fe.ActualWidth, fe.ActualHeight))
+                : default;
+            H.Check("RepeaterStale_Nested_NewFocusVisibleInOuter",
+                focused is FrameworkElement && focusedBounds.Top >= outer.VerticalOffset - 0.5
+                    && focusedBounds.Bottom <= outer.VerticalOffset + outer.ViewportHeight + 0.5,
+                $"focused bounds {focusedBounds.Top:0}..{focusedBounds.Bottom:0}, outer visible {outer.VerticalOffset:0}..{outer.VerticalOffset + outer.ViewportHeight:0}");
+        }
+    }
+
     // A horizontal stack whose rows sit at different heights (alternating top margins): a focused
     // row the reorder shifts along the stack is still in its right place, so focus must stay
     // (ordering by top edge first would call it misplaced).

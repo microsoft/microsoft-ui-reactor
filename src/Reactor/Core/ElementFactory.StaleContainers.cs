@@ -272,7 +272,7 @@ public sealed partial class ElementFactory<T>
 
         foreach (var (control, _) in candidates)
         {
-            if (control.Focus(state))
+            if (FocusWithoutScrolling(control, state))
                 return;
         }
 
@@ -281,9 +281,50 @@ public sealed partial class ElementFactory<T>
         {
             if (outside is UIElement element
                 && !IsDescendantOf(element, repeater)
-                && (!IsDescendantOf(element, viewport) || IsFullyInViewport(element, viewport))
-                && element.Focus(state))
+                && IsFullyInViewport(element, element as FrameworkElement ?? viewport)
+                && FocusWithoutScrolling(element, state))
                 return;
+        }
+    }
+
+    // The target was chosen because it's already fully visible, but focusing still has the
+    // scrollers around it bring it into view, with their own margins, so the list would still
+    // nudge. A ScrollViewer does that from its GotFocus handling, which WinUI raises after the
+    // focus call returns, so its BringIntoViewOnFocusChange stays off until a low-priority
+    // dispatcher pass, then gets its previous value back; other scrollers ask through the
+    // element's BringIntoViewRequested, which is handled for the duration of the call.
+    private static bool FocusWithoutScrolling(UIElement element, FocusState state)
+    {
+        List<(ScrollViewer Viewer, object Value)>? restore = null;
+        for (var node = VisualTreeHelper.GetParent(element); node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer viewer && viewer.BringIntoViewOnFocusChange)
+            {
+                (restore ??= new()).Add((viewer, viewer.ReadLocalValue(ScrollViewer.BringIntoViewOnFocusChangeProperty)));
+                viewer.BringIntoViewOnFocusChange = false;
+            }
+        }
+
+        global::Windows.Foundation.TypedEventHandler<UIElement, BringIntoViewRequestedEventArgs> suppress = (_, args) => args.Handled = true;
+        element.BringIntoViewRequested += suppress;
+        try { return element.Focus(state); }
+        finally
+        {
+            element.BringIntoViewRequested -= suppress;
+            if (restore is not null)
+            {
+                void Restore()
+                {
+                    foreach (var (viewer, value) in restore)
+                    {
+                        if (value == DependencyProperty.UnsetValue) viewer.ClearValue(ScrollViewer.BringIntoViewOnFocusChangeProperty);
+                        else viewer.SetValue(ScrollViewer.BringIntoViewOnFocusChangeProperty, value);
+                    }
+                }
+                var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                if (queue is null || !queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Restore))
+                    Restore();
+            }
         }
     }
 
@@ -298,21 +339,32 @@ public sealed partial class ElementFactory<T>
         return repeater;
     }
 
-    // Fully inside: focusing a partly clipped row would scroll it into view too.
+    // Fully inside: focusing a partly clipped row would scroll it into view too. A row has to be
+    // fully visible in every scroller around the list, not only the nearest: an outer scroller
+    // that clips the list would otherwise scroll when the row takes focus.
     private static bool IsFullyInViewport(UIElement element, FrameworkElement viewport)
     {
         if (element is not FrameworkElement fe || fe.Visibility != Visibility.Visible) return false;
 
+        if (viewport is not (ScrollViewer or ScrollView))
+        {
+            var bounds = fe.TransformToVisual(viewport).TransformBounds(new global::Windows.Foundation.Rect(0, 0, fe.ActualWidth, fe.ActualHeight));
+            if (bounds.Top < 0 || bounds.Bottom > viewport.ActualHeight || bounds.Left < 0 || bounds.Right > viewport.ActualWidth)
+                return false;
+        }
+
         // Inside a scroller, compare with the visible part of its content: the scroller's own
         // bounds also cover its padding and scroll bars, where a row is clipped.
-        if (viewport is ScrollViewer { Content: UIElement content } sv)
-            return Contains(fe, content, sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, sv.ZoomFactor);
-        if (viewport is ScrollView { Content: UIElement viewContent } view)
-            return Contains(fe, viewContent, view.HorizontalOffset, view.VerticalOffset, view.ViewportWidth, view.ViewportHeight, view.ZoomFactor);
-
-        var bounds = fe.TransformToVisual(viewport).TransformBounds(new global::Windows.Foundation.Rect(0, 0, fe.ActualWidth, fe.ActualHeight));
-        return bounds.Top >= 0 && bounds.Bottom <= viewport.ActualHeight
-            && bounds.Left >= 0 && bounds.Right <= viewport.ActualWidth;
+        for (DependencyObject? node = viewport; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer { Content: UIElement content } sv
+                && !Contains(fe, content, sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, sv.ZoomFactor))
+                return false;
+            if (node is ScrollView { Content: UIElement viewContent } view
+                && !Contains(fe, viewContent, view.HorizontalOffset, view.VerticalOffset, view.ViewportWidth, view.ViewportHeight, view.ZoomFactor))
+                return false;
+        }
+        return true;
     }
 
     // Offsets and viewport sizes are in zoomed units; content coordinates aren't.
