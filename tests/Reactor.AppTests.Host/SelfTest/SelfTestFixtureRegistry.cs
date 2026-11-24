@@ -86,6 +86,7 @@ internal static class SelfTestFixtureRegistry
         ("FlexLayout_ColumnWrap", static harness => new LayoutFixtures.FlexColumnWrap(harness)),
         ("Grid_RowColumnLayout", static harness => new LayoutFixtures.GridRowColumn(harness)),
         ("GridVsFlex_StarSizing", static harness => new LayoutFixtures.GridVsFlexStarSizing(harness)),
+        ("ToolkitConstrainedBox_MinMaxBounds", static harness => new ToolkitConstrainedBoxBoundsFixture(harness)),
         ("Flex_NestedRowInColumn", static harness => new FlexLayoutFixtures.FlexNestedRowInColumn(harness)),
         ("Flex_NestedColumnInRow", static harness => new FlexLayoutFixtures.FlexNestedColumnInRow(harness)),
         ("Flex_NestedDeep", static harness => new FlexLayoutFixtures.FlexNestedDeep(harness)),
