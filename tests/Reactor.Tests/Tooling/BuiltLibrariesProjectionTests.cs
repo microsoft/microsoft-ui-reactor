@@ -35,7 +35,7 @@ public sealed class BuiltLibrariesProjectionTests
         Assert.Equal(WinRTRuntime, refs["WinRT.Runtime"]);
     }
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the on-disk Location of Reactor.dll / Reactor.Advanced.dll to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the on-disk Location of Microsoft.UI.Reactor.dll / Microsoft.UI.Reactor.Advanced.dll to feed the metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test cannot run single-file and this host is not single-file-published. Behaviour-neutral.")]
     private static Dictionary<string, global::System.Version> ReferencedVersions(Type typeInAssembly)
     {
         var path = typeInAssembly.Assembly.Location;

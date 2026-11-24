@@ -151,7 +151,7 @@ public sealed class VersionSingleSourceTests
         // would silently stop the gate covering those pages.
         //
         // The other way a compile can exit 0 without regenerating — Phase 5.7
-        // bailing on a missing Reactor.xml / reference-map.yaml — is deliberately
+        // bailing on a missing Microsoft.UI.Reactor.xml / reference-map.yaml — is deliberately
         // NOT pinned here. It moved into `docs compile --ci` itself, where the
         // state lives, and is covered by ReferenceStalenessWiringTests. Grepping
         // the log for those messages failed open on a reword; the exit code does

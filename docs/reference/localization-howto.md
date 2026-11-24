@@ -11,7 +11,7 @@ The localization system has two compile-time parts:
 
 - **Runtime (`Reactor.Core.Localization`)** — `IntlAccessor`, `MessageCache`,
   `LocaleProviderElement`, `ReswResourceProvider`, etc. These live inside
-  `Reactor.dll` itself, under `Reactor/Core/Localization/`. If you already
+  `Microsoft.UI.Reactor.dll` itself, under `Reactor/Core/Localization/`. If you already
   reference `Reactor`, you have the runtime — there is no separate
   `Reactor.Localization` NuGet package.
 

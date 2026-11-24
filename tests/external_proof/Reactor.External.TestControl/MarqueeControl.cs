@@ -5,7 +5,7 @@ namespace Reactor.External.TestControl;
 
 /// <summary>
 /// Spec 047 §14 Phase 1 (1.16) — minimal external WinUI control authored
-/// outside Reactor.dll. Carries one value-bearing prop (<see cref="Caption"/>)
+/// outside Microsoft.UI.Reactor.dll. Carries one value-bearing prop (<see cref="Caption"/>)
 /// and one CLR event (<see cref="CaptionChanged"/>). The shape mirrors the
 /// invariants the V1 handler protocol must cover for an external author:
 /// programmatic write echo-suppression, custom-event subscription with

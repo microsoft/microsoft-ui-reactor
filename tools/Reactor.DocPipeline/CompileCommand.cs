@@ -563,7 +563,7 @@ internal static partial class CompileCommand
             else if (ci)
             {
                 // A null result means RunReferenceGeneration bailed on a missing
-                // input — no Reactor.xml, or no reference-map.yaml — having
+                // input — no Microsoft.UI.Reactor.xml, or no reference-map.yaml — having
                 // already said so on stdout. Locally that is a reasonable
                 // degradation: an author who hasn't built yet still gets their
                 // guide pages. Under --ci it is not. CI always builds, so a
@@ -583,7 +583,7 @@ internal static partial class CompileCommand
                     "Reference generation was skipped for want of an input (see above), so no page " +
                     "under docs/guide/reference was written. That is a failure in --ci mode: pass " +
                     "--skip-reference to skip the phase deliberately, or build src/Reactor so " +
-                    "Reactor.xml exists.");
+                    "Microsoft.UI.Reactor.xml exists.");
                 return 1;
             }
             if (hasErrors && ci)
@@ -946,7 +946,7 @@ internal static partial class CompileCommand
     }
 
     /// <summary>
-    /// Locate the most recently built <c>Reactor.xml</c> (see
+    /// Locate the most recently built <c>Microsoft.UI.Reactor.xml</c> (see
     /// <see cref="FindReactorXml"/>) and run the reference generator restricted
     /// to the Hooks category. Returns <c>null</c> when the XML doc file isn't on
     /// disk yet — typical on first compile before <c>dotnet build src/Reactor</c>
@@ -980,7 +980,7 @@ internal static partial class CompileCommand
         var choice = FindReactorXml(repoRoot);
         if (choice is null)
         {
-            Console.WriteLine("  (Reactor.xml not found — run `dotnet build src/Reactor` first)");
+            Console.WriteLine("  (Microsoft.UI.Reactor.xml not found — run `dotnet build src/Reactor` first)");
             return null;
         }
 
@@ -1058,7 +1058,7 @@ internal static partial class CompileCommand
     }
 
     /// <summary>
-    /// The <c>Reactor.xml</c> the reference generator reads, together with the
+    /// The <c>Microsoft.UI.Reactor.xml</c> the reference generator reads, together with the
     /// facts the operator needs to judge it: when it was written, and how many
     /// candidates it beat. <c>null</c> when <c>bin</c> is absent or holds no
     /// such file.
@@ -1122,7 +1122,7 @@ internal static partial class CompileCommand
     private const FileAttributes DefaultSkip = FileAttributes.Hidden | FileAttributes.System;
 
     /// <summary>
-    /// Every <c>Reactor.xml</c> under <c>src/Reactor/bin</c>, at any depth.
+    /// Every <c>Microsoft.UI.Reactor.xml</c> under <c>src/Reactor/bin</c>, at any depth.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1147,7 +1147,7 @@ internal static partial class CompileCommand
         var binDir = Path.Combine(repoRoot, "src", "Reactor", "bin");
         if (!Directory.Exists(binDir)) return Array.Empty<string>();
 
-        return Directory.EnumerateFiles(binDir, "Reactor.xml", new EnumerationOptions
+        return Directory.EnumerateFiles(binDir, "Microsoft.UI.Reactor.xml", new EnumerationOptions
         {
             RecurseSubdirectories = true,
             // A locked or permission-denied subtree is not this command's
@@ -1165,7 +1165,7 @@ internal static partial class CompileCommand
     }
 
     /// <summary>
-    /// Warn when the selected <c>Reactor.xml</c> predates the newest C# source
+    /// Warn when the selected <c>Microsoft.UI.Reactor.xml</c> predates the newest C# source
     /// under <c>src/Reactor</c>. Returns <c>null</c> when the XML is at least
     /// as new as every source file.
     /// </summary>
@@ -1191,7 +1191,7 @@ internal static partial class CompileCommand
     /// every doc app, and each one <c>ProjectReference</c>s
     /// <c>src/Reactor/Reactor.csproj</c> — which sets
     /// <c>GenerateDocumentationFile</c>. Phase 5.7 therefore finds a real
-    /// <c>Reactor.xml</c> and generates pages. What makes the warning quiet is
+    /// <c>Microsoft.UI.Reactor.xml</c> and generates pages. What makes the warning quiet is
     /// the ordering: <c>actions/checkout</c> writes the sources before that
     /// build runs, so the emitted XML always postdates every <c>.cs</c>.
     /// </para>
@@ -1212,7 +1212,7 @@ internal static partial class CompileCommand
 
         return new ReferenceGen.RefGenFinding(
             "REACTOR_DOC_REFGEN_W002",
-            $"Reactor.xml ({Stamp(xmlUtc)}) predates {Rel(repoRoot, sourcePath)} ({Stamp(sourceUtc)}) — " +
+            $"Microsoft.UI.Reactor.xml ({Stamp(xmlUtc)}) predates {Rel(repoRoot, sourcePath)} ({Stamp(sourceUtc)}) — " +
             "the reference pages under docs/guide/reference/ are being generated from a build that " +
             "is older than the source it documents, so an edited <summary> will not appear (and a " +
             "deleted one will come back). Run `dotnet build src/Reactor` and re-run this command.",

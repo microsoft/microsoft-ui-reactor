@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <RootNamespace>Microsoft.UI.Reactor.Advanced</RootNamespace>
-    <AssemblyName>Reactor.Advanced</AssemblyName>
+    <AssemblyName>Microsoft.UI.Reactor.Advanced</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Spec 062 §7 Track B (B1a): charting moved here from core. Its

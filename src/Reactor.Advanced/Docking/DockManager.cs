@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Docking;
 //    docs/specs/045-docking-windows-design.md §4.3 — committed surface
 //    docs/specs/tasks/045-docking-windows-implementation.md §1.3
 //
-//  These types live in Reactor.dll (the core) so that the Phase 2 native
+//  These types live in Microsoft.UI.Reactor.dll (the core) so that the Phase 2 native
 //  rewrite — which has no XAML dependency — can extend them in place when
 //  the Reactor.Docking.Xaml wrapper assembly is removed at §2.19.
 // ════════════════════════════════════════════════════════════════════════
