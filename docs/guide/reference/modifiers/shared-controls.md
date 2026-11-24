@@ -289,3 +289,28 @@ Declared in `ElementExtensions`.
 | Name | Type | Description |
 | --- | --- | --- |
 | `handler` | `Action<IReadOnlyList<int>>?` or `Action<string, int, int>?` or `Action<IReadOnlyList<T>>?` |  |
+
+## `TransformOrigin`
+
+Sets the pivot for `.Scale()` and `.Rotation()` as a fraction of the element's laid-out size: `(0.5f, 0.5f)` is the centre, `(0, 0)` the leading top corner. The pivot follows resizes and size animations, and `x` is flow-relative, so `0` is the right edge in a right-to-left layout. A `.CenterPoint()` on the same element is added as a pixel offset. Without this modifier the pivot is the `.CenterPoint()` value, or the leading top corner.
+
+**Grow from the centre on hover:** `Border(card).TransformOrigin(0.5f, 0.5f).InteractionStates(s => s.PointerOver(scale: 1.05f))`
+
+```csharp
+T TransformOrigin<T>(this T el, float x, float y) where T : Element
+```
+
+Declared in `ElementExtensions`.
+
+**Applies to:** any element.
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `x` | `float` |  |
+| `y` | `float` |  |
+
+**Remarks**
+
+Spec 066 §8. The pivot is an expression on the element's composition visual, so the modifier takes the visual (like the other transform modifiers). While `.LayoutAnimation()` animates the size, the pivot follows the animating size, not the final layout size.
