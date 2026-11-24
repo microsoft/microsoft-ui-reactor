@@ -5743,13 +5743,11 @@ public sealed partial class Reconciler : IDisposable
                 ? rs : null;
         if (state is not null) state.EchoSuppressScopeDepth++;
         // A setter's opacity write replaces a pending opacity keyframe, as a modifier's does (#1669).
-        var opacityCheck = state?.KeyframeOpacityCheck is not null ? control as UIElement : null;
-        double opacityBefore = opacityCheck?.Opacity ?? 0;
+        var opacityProbe = control is UIElement probed ? new KeyframeOpacityProbe(probed) : default;
         try
         {
             foreach (var setter in setters) setter(control);
-            if (opacityCheck is not null && global::System.Math.Abs(opacityCheck.Opacity - opacityBefore) > 1e-9)
-                CancelKeyframeOpacityCheck(state!);
+            opacityProbe.Complete();
         }
         // Spec 066 §9 row 1: name the modifier when WinUI rejects a facade write after the
         // handoff. The filter returns false, so the exception is unchanged.
@@ -6915,17 +6913,27 @@ public sealed partial class Reconciler : IDisposable
         {
             global::Windows.Foundation.IAsyncAction commit;
             try { commit = visual.Compositor.RequestCommitAsync(); }
-            catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException
-                or ObjectDisposedException or InvalidOperationException)
+            catch (Exception ex) when (IsTeardown(ex))
             {
                 CancelKeyframeOpacityCheck(state);
                 return; // No compositor (e.g. unit tests) or it is shutting down.
             }
             commit.Completed = (_, _) =>
             {
-                if (dispatcher.HasThreadAccess) Check();
-                else dispatcher.TryEnqueue(Check);
+                if (dispatcher.HasThreadAccess) SafeCheck();
+                else dispatcher.TryEnqueue(SafeCheck);
             };
+        }
+
+        // The check and the layout wait run from the dispatcher after the update returned, so an
+        // exception would end the app. An element or compositor torn down meanwhile drops the check.
+        static bool IsTeardown(Exception ex) => ex is global::System.Runtime.InteropServices.COMException
+            or ObjectDisposedException or InvalidOperationException or UnauthorizedAccessException;
+
+        void SafeCheck()
+        {
+            try { Check(); }
+            catch (Exception ex) when (IsTeardown(ex)) { CancelKeyframeOpacityCheck(state); }
         }
 
         // Off the tree or under a collapsed ancestor: XAML pushes when it first renders the
@@ -6935,7 +6943,8 @@ public sealed partial class Reconciler : IDisposable
             EventHandler<object>? onLayout = null;
             onLayout = (_, _) =>
             {
-                if (Owns(out _) && !IsRendered(fe)) return;
+                try { if (Owns(out _) && !IsRendered(fe)) return; }
+                catch (Exception ex) when (IsTeardown(ex)) { CancelKeyframeOpacityCheck(state); return; }
                 fe.LayoutUpdated -= onLayout;
                 if (ReferenceEquals(state.KeyframeOpacityLayoutHandler, onLayout))
                 {
@@ -7001,6 +7010,42 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     // Checks still pending, so an unmount with none to cancel pays no attached-state read.
     private static int s_pendingKeyframeOpacityChecks;
+
+    /// <summary>
+    /// Snapshots a control's opacity and the visual's Opacity animation around user code (setters,
+    /// <c>.OnMount</c>, <c>.OnUpdate</c>). A change to either is a deliberate opacity write, so it
+    /// cancels a pending keyframe restart as a modifier's write does (#1669). Free when none is pending.
+    /// </summary>
+    internal readonly struct KeyframeOpacityProbe
+    {
+        private readonly UIElement? _element;
+        private readonly ReactorState? _state;
+        private readonly double _opacity;
+        private readonly AnimationController? _controller;
+
+        internal KeyframeOpacityProbe(UIElement element)
+        {
+            if (Volatile.Read(ref s_pendingKeyframeOpacityChecks) == 0
+                || element.GetValue(ReactorAttached.StateProperty) is not ReactorState { KeyframeOpacityCheck: not null } state)
+            {
+                this = default;
+                return;
+            }
+            _element = element;
+            _state = state;
+            _opacity = element.Opacity;
+            // The keyframe already took the visual, so this has no handoff side effects.
+            _controller = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
+        }
+
+        internal void Complete()
+        {
+            if (_element is null || _state is not { KeyframeOpacityCheck: not null } state) return;
+            if (global::System.Math.Abs(_element.Opacity - _opacity) > 1e-9
+                || !Equals(ElementCompositionPreview.GetElementVisual(_element).TryGetAnimationController("Opacity"), _controller))
+                CancelKeyframeOpacityCheck(state);
+        }
+    }
 
     internal static void CancelKeyframeOpacityCheck(UIElement uie)
     {
@@ -8100,8 +8145,10 @@ public sealed partial class Reconciler : IDisposable
         // filter returns false, so the exception is unchanged.
         if (m.OnMountAction is not null && oldM is null)
         {
+            var opacityProbe = new KeyframeOpacityProbe(fe);
             try { m.OnMountAction(fe); }
             catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(fe, "'.OnMount(...)' callback")) { throw; }
+            opacityProbe.Complete();
         }
 
         // OnUpdateAction — the update-time counterpart, run on every in-place
@@ -8111,7 +8158,11 @@ public sealed partial class Reconciler : IDisposable
         // visual tree. Chart label a11y uses it to re-hide newly realized
         // focusable descendants that OnMountAction (mount-only) would miss (#162).
         if (m.OnUpdateAction is not null && oldM is not null)
+        {
+            var opacityProbe = new KeyframeOpacityProbe(fe);
             m.OnUpdateAction(fe);
+            opacityProbe.Complete();
+        }
 
         // OnUnmountAction — captured here (authoritative modifier set) so it fires
         // reliably at teardown regardless of the tagged element's identity. Keep the

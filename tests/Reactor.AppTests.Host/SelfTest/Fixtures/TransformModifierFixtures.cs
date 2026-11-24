@@ -622,12 +622,19 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             H.SetContent(null);
         }
 
+        foreach (var (scenario, replace) in new (string, Func<BorderElement, BorderElement>)[]
         {
-            // A setter's opacity write replaces the keyframe like a modifier's, so the check must not undo it.
+            ("OpacitySetterReplacesLoop", static e => e.Set(static b => b.Opacity = 0.6)),
+            ("VisualOpacitySetterReplacesLoop", static e => e.Set(static b => ElementCompositionPreview.GetElementVisual(b).Opacity = 0.6f)),
+            ("OnUpdateOpacityReplacesLoop", static e => e.OnUpdateAdd(static fe => fe.Opacity = 0.6)),
+        })
+        {
+            // A setter's or callback's opacity write replaces the keyframe like a modifier's, so the
+            // check must not undo it.
             using var reconciler = new Reconciler();
             var plain = Border(TextBlock("Setter Opacity"));
             var first = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
-            var second = first.Set(static b => b.Opacity = 0.6).Width(120);
+            var second = replace(first).Width(120);
             var control = (Border)reconciler.Mount(first, () => { })!;
             var visual = ElementCompositionPreview.GetElementVisual(control);
             int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests(control);
@@ -636,10 +643,27 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             await Harness.Render();
             await AfterNextCommit(visual);
             int restarts = Reconciler.KeyframeOpacityRestartsForTests(control) - restartsBefore;
-            H.Check("TransformKeyframes_OpacitySetterReplacesLoop", restarts == 0
-                && visual.TryGetAnimationController("Opacity") is null && Math.Abs(control.Opacity - 0.6) < 0.001,
-                $"restarts={restarts}, opacity={control.Opacity}");
+            H.Check("TransformKeyframes_" + scenario, restarts == 0
+                && visual.TryGetAnimationController("Opacity") is null,
+                $"restarts={restarts}, running={visual.TryGetAnimationController("Opacity") is not null}");
             reconciler.Update(second, plain, control, () => { });
+            H.SetContent(null);
+        }
+
+        {
+            // A Memo wrapper's .OnMount runs after its child armed the check, and its opacity write
+            // replaces the keyframe the same way.
+            using var reconciler = new Reconciler();
+            var memo = Memo("k", static () => Border(TextBlock("Memo OnMount Opacity")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse))
+                .OnMount(static fe => fe.Opacity = 0.6);
+            var control = (Border)reconciler.Mount(memo, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_MemoOnMountOpacityReplacesLoop", restarts == 0, $"restarts={restarts}");
+            reconciler.UnmountChild(control);
             H.SetContent(null);
         }
 
