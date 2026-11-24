@@ -97,6 +97,26 @@ internal static partial class MarkdownSelectionFixtures
             throw new InvalidOperationException("A Markdown selection scope never loaded its document.");
     }
 
+    // A state change inside a fixture's own host re-renders that host, and Harness.Render only
+    // awaits ReactorApp.PrimaryWindow's host, never one from H.CreateHost(), so these checks
+    // otherwise rely on dispatcher ordering. Drain the fixture host first, then poll the scope's
+    // membership (Refresh walks the live visual tree).
+    private static async Task<bool> WaitForMembership(Microsoft.UI.Reactor.Hosting.ReactorHost host,
+        MarkdownSelectionHost scope, string expected)
+    {
+        await host.WaitForIdleAsync();
+        return await Harness.WaitFor(() =>
+        {
+            scope.Refresh();
+            return scope.Document.Text == expected;
+        });
+    }
+
+    private static string MembershipState(MarkdownSelectionHost scope) =>
+        $"text={scope.Document.Text.Replace("\n", "\\n")}; loaded={scope.IsLoaded}; surfaces=" +
+        MarkdownSelectionHost.Descendants(scope).OfType<MarkdownSelectionMarker>()
+            .Count(marker => marker.Metadata.Role == SelectionRole.Surface);
+
     internal class IdleLayoutCost(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -416,15 +436,17 @@ internal static partial class MarkdownSelectionFixtures
             await WaitForLoadedScopes(H);
             var membershipHost = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             toggle(true);
-            await Harness.Render();
-            membershipHost.Refresh();
-            H.Check("MdSelection_ChildMountUpdatesMembership", membershipHost.Document.Text == "intro\ndetails");
+            H.Check("MdSelection_ChildMountUpdatesMembership",
+                await WaitForMembership(host, membershipHost, "intro\ndetails"),
+                MembershipState(membershipHost));
             toggle(false);
-            await Harness.Render();
-            membershipHost.Refresh();
-            H.Check("MdSelection_ChildUnmountUpdatesMembership", membershipHost.Document.Text == "intro");
+            H.Check("MdSelection_ChildUnmountUpdatesMembership",
+                await WaitForMembership(host, membershipHost, "intro"),
+                MembershipState(membershipHost));
             toggle(true);
-            await Harness.Render();
+            H.Check("MdSelection_ChildRemountRestoresMembership",
+                await WaitForMembership(host, membershipHost, "intro\ndetails"),
+                MembershipState(membershipHost));
             var ancestor = H.FindControl<Border>(border =>
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(border) == "MembershipAncestor")!;
             ancestor.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -443,7 +465,11 @@ internal static partial class MarkdownSelectionFixtures
             int parentRenders = equalOptions.ParentRenders;
             int childRenders = equalOptions.ChildRenders;
             equalOptions.Update(1);
-            await Harness.Render();
+            await host.WaitForIdleAsync();
+            // Gate on the parent's re-render only: the child-skip half below is a negative
+            // assertion, and the child would re-render in that same pass if it were going to.
+            await Harness.WaitFor(() => equalOptions.ParentRenders > parentRenders
+                && H.FindTextContaining("parent revision 1") is not null);
             var equalScope = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             H.Check("MdSelection_ValueEqualOptionsRetainSkippedChild",
                 childRenders > 0 && equalOptions.ChildRenders == childRenders
