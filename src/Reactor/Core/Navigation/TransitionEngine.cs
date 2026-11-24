@@ -232,8 +232,8 @@ internal static class TransitionEngine
         _elementGeneration.GetOrCreateValue(incoming).Value = generation;
         // The transition owns both pages' opacity now (it hides, fades and normalizes them), so a
         // keyframe restart waiting for XAML's opacity push must not show a page early (#1669).
-        Core.Reconciler.CancelKeyframeOpacityCheck(outgoing);
-        Core.Reconciler.CancelKeyframeOpacityCheck(incoming);
+        Core.Reconciler.CancelOpacityRestart(outgoing);
+        Core.Reconciler.CancelOpacityRestart(incoming);
         return generation;
     }
 
