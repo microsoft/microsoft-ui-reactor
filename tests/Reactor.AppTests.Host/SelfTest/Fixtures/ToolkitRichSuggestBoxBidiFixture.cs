@@ -18,9 +18,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <remarks>
 /// <para>Source predictions (Toolkit 39c45efe, WinUI release/2.2.0 fb389b88): the Toolkit
 /// <c>RichEditBox</c> template part sets no FlowDirection/TextAlignment/TextReadingOrder, so flow
-/// is inherited and alignment/reading order stay at WinUI's DetectFromContent; text placement is
-/// then decided by content, and FlowDirection only mirrors chrome (the asymmetric
-/// TextControlThemePadding). WinUI's <c>CTextBoxView::IsRightToLeft</c> is hard-coded false, so
+/// is inherited and alignment/reading order stay at WinUI's runtime defaults (recorded, not asserted:
+/// the investigation found DetectFromContent while the docs say Left); text placement is then decided
+/// by content, and FlowDirection only mirrors chrome (the asymmetric TextControlThemePadding). WinUI's <c>CTextBoxView::IsRightToLeft</c> is hard-coded false, so
 /// document rects live in an unmirrored text-view frame in both directions.</para>
 /// <para>Deliberately not asserted: empty-document caret side (follows the keyboard input
 /// language), ParagraphFormat.RightToLeft/Alignment (recorded only), and document coordinate
@@ -165,6 +165,21 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             ltrInset is { } l && rtlInset is { } r2 &&
             Near(l.Left, padding.Left + border.Left) && Near(l.Right, padding.Right + border.Right) &&
             Near(r2.Left, padding.Right + border.Right) && Near(r2.Right, padding.Left + border.Left), inset);
+
+        // The document rects above are only compared with each other, which a mirrored text view would
+        // not change. CTextBoxView reports LTR, so its local +X must run physically left-to-right in
+        // both flows; normalized bounds cannot show this, so transform the two local edges directly.
+        foreach (var side in sides)
+        {
+            var view = TextView(side);
+            var t = view?.TransformToVisual(null);
+            double start = t?.TransformPoint(new Point(0, 0)).X ?? double.NaN;
+            double end = t?.TransformPoint(new Point(view!.ActualWidth, 0)).X ?? double.NaN;
+            string orientation = Invariant($"type={view?.GetType().Name}, localStart->{start:F2}, localEnd->{end:F2}, width={view?.ActualWidth:F2}");
+            Console.WriteLine($"# {Name} {side.Label} text-view orientation: {orientation}");
+            H.Check($"{Name}_{side.Label}_TextView_PhysicallyLeftToRight",
+                view is not null && Near(end - start, view.ActualWidth) && view.ActualWidth > 2 * SpanTolerance, orientation);
+        }
     }
 
     private void CheckPlaceholder(Side side, string text, bool latin)
@@ -176,15 +191,17 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
         var block = Physical(p, new Rect(0, 0, p.ActualWidth, p.ActualHeight));
         var boxRect = Physical(side.Box, new Rect(0, 0, side.Box.ActualWidth, side.Box.ActualHeight));
         // Padding mirrors with flow: the physical left inset is Padding.Right under RTL.
-        bool rtlFlow = p.FlowDirection == FlowDirection.RightToLeft;
+        bool rtlFlow = side.Box.FlowDirection == FlowDirection.RightToLeft;
+        H.Check($"{Name}_{side.Label}_Placeholder_{Script(latin)}_InheritsFlow", p.FlowDirection == side.Box.FlowDirection,
+            $"root={side.Box.FlowDirection}, placeholder={p.FlowDirection}");
         double contentLeft = block.Left + (rtlFlow ? p.Padding.Right : p.Padding.Left);
         double contentRight = block.Right - (rtlFlow ? p.Padding.Left : p.Padding.Right);
         double edge = latin ? firstPhysical.Left : firstPhysical.Right;
         double target = latin ? contentLeft : contentRight;
-        string detail = Invariant(
-            $"text={Script(latin)}, flow={p.FlowDirection}, align={p.TextAlignment}, order={p.TextReadingOrder}, " +
-            $"firstLocal={first}, firstEdge={edge - boxRect.Left:F2}, content=[{contentLeft - boxRect.Left:F2},{contentRight - boxRect.Left:F2}], " +
-            $"block=[{block.Left - boxRect.Left:F2},{block.Right - boxRect.Left:F2}]");
+        string detail =
+            Invariant($"text={Script(latin)}, flow={p.FlowDirection}, align={p.TextAlignment}, order={p.TextReadingOrder}, ") +
+            Invariant($"firstLocal={first}, firstEdge={edge - boxRect.Left:F2}, content=[{contentLeft - boxRect.Left:F2},{contentRight - boxRect.Left:F2}], ") +
+            Invariant($"block=[{block.Left - boxRect.Left:F2},{block.Right - boxRect.Left:F2}]");
         Console.WriteLine($"# {Name} {side.Label} placeholder: {detail}");
         H.Check($"{Name}_{side.Label}_Placeholder_{Script(latin)}_{(latin ? "AtPhysicalLeft" : "AtPhysicalRight")}",
             first.Height > 0 && Math.Abs(edge - target) <= PlaceholderTolerance, detail);
@@ -205,8 +222,8 @@ internal sealed class ToolkitRichSuggestBoxBidiFixture(Harness h) : SelfTestFixt
             range.GetRect(PointOptions.None, out var none, out _);
             var format = range.ParagraphFormat;
             rects[i] = client;
-            report.Add(Invariant($"p{i}: text={(range.Text == Paragraphs[i])}, client={client}, none={none}, hit={hit}, " +
-                $"rtl={format.RightToLeft}, align={format.Alignment}"));
+            report.Add(Invariant($"p{i}: text={(range.Text == Paragraphs[i])}, client={client}, none={none}, hit={hit}, ") +
+                Invariant($"rtl={format.RightToLeft}, align={format.Alignment}"));
             H.Check($"{Name}_{side.Label}_Document_Paragraph{i}_Measured",
                 range.Text == Paragraphs[i] && client.Width > 0 && client.Height > 0 &&
                 double.IsFinite(client.Left) && double.IsFinite(client.Right), report[^1]);
