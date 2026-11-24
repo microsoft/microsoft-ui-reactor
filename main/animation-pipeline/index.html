@@ -3663,7 +3663,7 @@ another feature's key.</p>
 <tbody>
 <tr>
 <td><code>Offset</code></td>
-<td><code>.LayoutAnimation()</code>, then <code>.Animate(...)</code>, then <code>.TranslationTransition()</code>, then an ambient reorder move</td>
+<td><code>.LayoutAnimation()</code>, then <code>.Animate(...)</code>, then an ambient reorder move</td>
 </tr>
 <tr>
 <td><code>Size</code></td>
@@ -3688,20 +3688,17 @@ inside it both declare the same feature, the outer declaration wins, and
 removing it restores the inner one. A reorder animated by an ambient
 <code>Animations.Animate(...)</code> scope claims <code>Offset</code> below all of them.</p>
 <p>Removing a transition modifier removes its transition, so a later
-change of that property jumps instead of animating. While the visual
-hasn't been handed out, the transitions are WinUI's own XAML
-transitions (<code>UIElement.OpacityTransition</code> and its siblings). Once a
-compositor feature has taken the visual, WinUI refuses those properties,
-and the same transitions are installed as implicit keys instead.</p>
-<blockquote>
-<p><strong>Caveat:</strong> The reverse order still fails: a XAML transition blocks the handoff, so
-declaring <code>.OpacityTransition()</code>, <code>.ScaleTransition()</code>,
-<code>.RotationTransition()</code> or <code>.TranslationTransition()</code> on an element
-that mounts with <code>.LayoutAnimation()</code> or <code>.Animate(...)</code> in the same
-render throws (issue #1623). Add the transition on a later render, or
-wait for spec 066 layer 2, which moves every transition to the
-compositor.</p>
-</blockquote>
+change of that property jumps instead of animating. Reactor never sets
+WinUI's XAML transitions (<code>UIElement.OpacityTransition</code> and its
+siblings), which would block the handoff (#1623): the Opacity, Scale and
+Rotation transitions are implicit keys with WinUI's (0.8, 0, 0.2, 1)
+curve, and <code>.TranslationTransition()</code> claims no key at all, because an
+implicit <code>Translation</code> key never fires for a property-set write. Reactor
+animates its own <code>.Translation()</code> writes instead. On an update, the
+transitions are claimed and released before setters and modifiers
+write, so a value changed in the same render follows the new
+declaration. With the system's "Animation effects" setting off, no
+transition key is installed (spec 066 §5).</p>
 <h2 id="keyframe-authoring">Keyframe authoring<a class="headerlink" href="#keyframe-authoring" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">public</span><span class="w"> </span><span class="n">KeyframeBuilder</span><span class="w"> </span><span class="nf">At</span><span class="p">(</span><span class="kt">float</span><span class="w"> </span><span class="n">progress</span><span class="p">,</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="kt">float?</span><span class="w"> </span><span class="n">opacity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span><span class="w"> </span><span class="n">Vector3</span><span class="o">?</span><span class="w"> </span><span class="n">scale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">null</span><span class="p">,</span>

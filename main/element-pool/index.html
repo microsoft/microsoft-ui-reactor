@@ -3450,7 +3450,9 @@ property state into the next reader's mount.</p>
 <p>Taking a control's composition visual (<code>ElementCompositionPreview.GetElementVisual</code>)
 is permanent. Reactor takes it for <code>.Animate()</code>, <code>.Transition()</code>,
 <code>.InteractionStates()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>,
-<code>.ScrollLinked()</code> and the children of a <code>.Stagger()</code> panel. After that
+<code>.ScrollLinked()</code>, the implicit transitions (<code>.OpacityTransition()</code>,
+<code>.ScaleTransition()</code>, <code>.RotationTransition()</code>, <code>.TranslationTransition()</code>)
+and the children of a <code>.Stagger()</code> panel. After that
 WinUI refuses every write to the control's <code>Rotation</code>, <code>Scale</code>,
 <code>CenterPoint</code>, <code>RotationAxis</code> and <code>TransformMatrix</code> facades and to its
 XAML implicit transitions (<code>OpacityTransition</code> and friends), even an
@@ -3472,7 +3474,7 @@ identity write. So each type has two lanes:</p>
 <tr>
 <td>Visual</td>
 <td>Controls whose visual was taken, reset to a fresh control's pixels</td>
-<td>Only a built-in element whose chain, including a keyed <code>Memo</code> over it, takes the visual at mount (<code>.Animate()</code>, an enter <code>.Transition()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>, <code>.ScrollLinked()</code>) and carries no <code>.Set</code> setters or <code>.OnMount</code> callbacks</td>
+<td>Only a built-in element whose chain, including a keyed <code>Memo</code> over it, takes the visual at mount (<code>.Animate()</code>, an enter <code>.Transition()</code>, <code>.Keyframes()</code>, <code>.LayoutAnimation()</code>, <code>.ScrollLinked()</code>, an implicit transition other than <code>.BackgroundTransition()</code>) and carries no <code>.Set</code> setters or <code>.OnMount</code> callbacks</td>
 </tr>
 </tbody>
 </table>
@@ -3524,35 +3526,28 @@ trampoline state that drives Reactor's event dispatch:</p>
 <a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="p">}</span>
 <a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">lanes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">state</span><span class="o">?.</span><span class="n">VisualTaken</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="k">true</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">_visualPools</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">_pools</span><span class="p">;</span>
 <a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="c1">// Issue #1614: attaching an implicit transform transition permanently locks</span>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">    </span><span class="c1">// RenderTransform (nulling the transition does not release it), so such a control is</span>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">    </span><span class="c1">// no longer interchangeable with a fresh one. This is the fast path; the catch around</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">    </span><span class="c1">// CleanElement below is the backstop for a control whose transition was attached and</span>
-<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">    </span><span class="c1">// later removed.</span>
-<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">element</span><span class="p">.</span><span class="n">ScaleTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">RotationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span>
-<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">        </span><span class="o">||</span><span class="w"> </span><span class="n">element</span><span class="p">.</span><span class="n">TranslationTransition</span><span class="w"> </span><span class="k">is</span><span class="w"> </span><span class="k">not</span><span class="w"> </span><span class="k">null</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
-<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>
-<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">lanes</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">))</span>
-<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="w">        </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Stack</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
-<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a><span class="w">        </span><span class="n">lanes</span><span class="p">[</span><span class="n">type</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">;</span>
-<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>
-<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MaxPerType</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">lanes</span><span class="p">.</span><span class="n">TryGetValue</span><span class="p">(</span><span class="n">type</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">var</span><span class="w"> </span><span class="n">stack</span><span class="p">))</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">        </span><span class="n">stack</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Stack</span><span class="o">&lt;</span><span class="n">FrameworkElement</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">        </span><span class="n">lanes</span><span class="p">[</span><span class="n">type</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stack</span><span class="p">;</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stack</span><span class="p">.</span><span class="n">Count</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">MaxPerType</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
 </code></pre></div>
-<p>The path runs in six steps after the type check: lane choice from the
-<code>VisualTaken</code> marker (a navigation page is dropped here),
-transform-transition check, per-lane stack lookup, per-lane cap check
-(stop accepting at 32 instances), then — past the snippet boundary —
-the detach-from-parent dance and <code>CleanElement(...)</code> reset before the
-control finally pushes onto its lane. The transform-transition check
-exists because attaching <code>.ScaleTransition()</code>, <code>.RotationTransition()</code>
-or <code>.TranslationTransition()</code> locks the control's <code>RenderTransform</code>
-for good, even if the transition is later removed. If WinUI refuses a
-reset during <code>CleanElement</code> (a user <code>.Set</code> write can leave such a lock
-behind), the control is dropped instead. <code>CleanElement</code> also clears the
+<p>The path runs in five steps after the type check: lane choice from the
+<code>VisualTaken</code> marker (a navigation page is dropped here), per-lane
+stack lookup, per-lane cap check (stop accepting at 32 instances),
+then — past the snippet boundary — the detach-from-parent dance and
+<code>CleanElement(...)</code> reset before the control finally pushes onto its
+lane. Reactor never sets the XAML implicit transitions, but a user
+<code>.Set</code> can, so <code>CleanElement</code> clears them on a plain-lane control. Any
+of them (<code>OpacityTransition</code>, <code>ScaleTransition</code>, <code>RotationTransition</code>,
+<code>TranslationTransition</code>) locks the control's <code>RenderTransform</code> for good,
+even once removed, so WinUI then refuses the <code>RenderTransform</code> reset and
+the control is dropped instead. <code>CleanElement</code> also clears the
 theme transitions <code>.WithTransitions(...)</code> writes (<code>ChildrenTransitions</code>,
-<code>ChildTransitions</code>, <code>ContentTransitions</code>) in both lanes. The scratch-panel round-trip
+<code>ChildTransitions</code>, <code>ContentTransitions</code>) and a panel's
+<code>BackgroundTransition</code> in both lanes. The scratch-panel round-trip
 in <code>ForceDetach</code> is the load-bearing piece: WinUI's internal parent
 tracking can retain stale state that throws <code>COMException</code> when the
 control is later re-parented, and <code>_scratchPanel.Children.Add</code> +

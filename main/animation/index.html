@@ -1256,6 +1256,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#how-implicit-transitions-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Implicit Transitions Run
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How Implicit Transitions Run">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-transforms-back-and-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading transforms back and .Set(...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#layout-animation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3611,6 +3639,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#how-implicit-transitions-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How Implicit Transitions Run
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How Implicit Transitions Run">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-transforms-back-and-set" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading transforms back and .Set(...)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#layout-animation" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4182,6 +4238,47 @@ property animates independently:</p>
 opacity while <code>.ScaleTransition()</code> animates scale simultaneously. Set the
 target values (<code>.Opacity()</code>, <code>.Scale()</code>, <code>.Translation()</code>) and the
 transitions handle the animation for each property in parallel.</p>
+<h2 id="how-implicit-transitions-run">How Implicit Transitions Run<a class="headerlink" href="#how-implicit-transitions-run" title="Permanent link">&para;</a></h2>
+<p><code>.OpacityTransition()</code>, <code>.ScaleTransition()</code>, <code>.RotationTransition()</code> and
+<code>.TranslationTransition()</code> run on the element's composition visual, so they
+combine with <code>.Animate()</code>, <code>.LayoutAnimation()</code>, <code>.Transition()</code>,
+<code>.InteractionStates()</code> and <code>.Keyframes()</code> on the same element. They match
+WinUI's own implicit transitions:</p>
+<ul>
+<li><strong>Curve.</strong> The transition's duration (300 ms by default) with WinUI's
+  cubic-bezier (0.8, 0, 0.2, 1) ease, which starts and ends slowly.</li>
+<li><strong>Axes.</strong> A <code>Vector3Transition</code> passed to <code>.ScaleTransition()</code> or
+  <code>.TranslationTransition()</code> keeps its <code>Components</code> mask. With
+  <code>Components = Vector3TransitionComponents.X</code>, X animates and Y and Z jump.</li>
+<li><strong>Reduced motion.</strong> With the Windows "Animation effects" setting off, the
+  transitions don't animate and values jump, as WinUI's do. A change of the
+  setting takes effect the next time the element renders.</li>
+<li><strong>Precedence.</strong> An ambient <code>WithAnimation</code> curve wins, then <code>.Animate()</code> for
+  the properties its <code>AnimateProperty</code> flags name, then the transition.</li>
+<li><strong>Adding or removing one.</strong> A transition added or removed in a render
+  applies to the values that change in the same render.</li>
+</ul>
+<p><code>.TranslationTransition()</code> animates the values you set with <code>.Translation()</code>.
+It doesn't animate layout moves (a margin, alignment or sibling change), which
+is <code>.LayoutAnimation()</code>'s job, and it doesn't animate a <code>UIElement.Translation</code>
+that your own code writes.</p>
+<p><code>.BackgroundTransition()</code> stays WinUI's XAML <code>BrushTransition</code>, so it follows
+the same setting on its own.</p>
+<h3 id="reading-transforms-back-and-set">Reading transforms back and <code>.Set(...)</code><a class="headerlink" href="#reading-transforms-back-and-set" title="Permanent link">&para;</a></h3>
+<p>An element with one of the four transitions keeps its transforms on the
+composition visual. Two things follow:</p>
+<ul>
+<li><code>fe.Scale</code>, <code>fe.Rotation</code> and <code>fe.CenterPoint</code> read back identity for values
+  set with <code>.Scale()</code>, <code>.Rotation()</code> and <code>.CenterPoint()</code>. Read
+  <code>ElementCompositionPreview.GetElementVisual(fe).Scale</code> (or <code>RotationAngle</code>,
+  in radians, and <code>CenterPoint</code>) instead.</li>
+<li>WinUI rejects <code>.Set(fe =&gt; fe.Rotation = …)</code>, and the same for <code>Scale</code>,
+  <code>CenterPoint</code>, <code>RotationAxis</code>, <code>TransformMatrix</code>, <code>UIElement.StartAnimation</code>
+  and the XAML <code>*Transition</code> properties, once the visual is taken. Use
+  <code>.Rotation()</code>, <code>.Scale()</code>, <code>.CenterPoint()</code> and the transition modifiers
+  instead. Reactor logs a warning that names the modifier when that happens,
+  and the <code>REACTOR_ANIM_004</code> analyzer flags the <code>.Set</code> at build time.</li>
+</ul>
 <h2 id="layout-animation">Layout Animation<a class="headerlink" href="#layout-animation" title="Permanent link">&para;</a></h2>
 <p><code>.LayoutAnimation()</code> animates elements when their position changes due to
 layout reflow — items entering, leaving, or reordering in a <a href="../collections/">collection</a>:</p>
