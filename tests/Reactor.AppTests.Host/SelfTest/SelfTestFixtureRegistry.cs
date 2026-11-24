@@ -288,6 +288,7 @@ internal static class SelfTestFixtureRegistry
         ("RepeaterStale_FocusedRowListClearedWhileScrolledAway_FocusLeavesList", static harness => new RepeaterStaleIndexFixtures.FocusedRowListClearedWhileScrolledAway_FocusLeavesList(harness)),
         ("RepeaterStale_FocusedRowShiftedByMultiPositionMove_FocusStays", static harness => new RepeaterStaleIndexFixtures.FocusedRowShiftedByMultiPositionMove_FocusStays(harness)),
         ("RepeaterStale_FocusedRowMovedWhileWindowInactive_WaitsForActivation", static harness => new RepeaterStaleIndexFixtures.FocusedRowMovedWhileWindowInactive_WaitsForActivation(harness)),
+        ("RepeaterStale_ColumnFirstGrid_FocusedItemShiftedAcrossColumns_FocusStays", static harness => new RepeaterStaleIndexFixtures.ColumnFirstGrid_FocusedItemShiftedAcrossColumns_FocusStays(harness)),
         ("RepeaterStale_FocusedRowSwappedOnScreenThenScrolled_NoStaleRow", static harness => new RepeaterStaleIndexFixtures.FocusedRowSwappedOnScreenThenScrolled_NoStaleRow(harness)),
         ("VirtualListIdentity_ContentAndCallbacks", static harness => new VirtualListIdentityFixtures.ContentAndCallbacks(harness)),
         ("VirtualListIdentity_CountChanges", static harness => new VirtualListIdentityFixtures.CountChanges(harness)),

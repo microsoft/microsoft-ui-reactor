@@ -38,9 +38,6 @@ internal static class RepeaterStaleIndexFixtures
         bool ExpectFocusKept = false,
         bool ChangeWhileInactive = false);
 
-    [global::System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern nint GetForegroundWindow();
-
     private static Element Row(int key, int gen, bool composite)
     {
         var button = Button($"r{key} g{gen}").Height(32);
@@ -165,7 +162,7 @@ internal static class RepeaterStaleIndexFixtures
             otherWindow = new Window { Content = new TextBlock { Text = "other window" } };
             otherWindow.Activate();
             otherHwnd = WinRT.Interop.WindowNative.GetWindowHandle(otherWindow);
-            if (!await Harness.WaitFor(() => GetForegroundWindow() == otherHwnd))
+            if (!await Harness.WaitFor(() => ForegroundWindow.Get() == otherHwnd))
             {
                 // Only possible while this process holds the foreground (an interactive run).
                 h.Skip(Name("FocusDeferredWhileInactive"), "this process can't take the foreground here, so no window of it is active");
@@ -180,9 +177,10 @@ internal static class RepeaterStaleIndexFixtures
         if (otherWindow is not null && target is not null)
         {
             // Moving focus would activate the list's window, so it has to wait.
+            bool otherInForeground = ForegroundWindow.Get() == otherHwnd;
             h.Check(Name("FocusDeferredWhileInactive"),
-                ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target) && GetForegroundWindow() == otherHwnd,
-                $"foreground is the other window: {GetForegroundWindow() == otherHwnd}");
+                ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target) && otherInForeground,
+                $"foreground is the other window: {otherInForeground}");
             otherWindow.Close();
             h.Check(Name("FocusMovedAfterActivation"),
                 await Harness.WaitFor(() => !ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target), maxPasses: 40, perPassMs: 25));
@@ -329,5 +327,72 @@ internal static class RepeaterStaleIndexFixtures
     {
         public override Task RunAsync() => RepeaterStaleIndexFixtures.RunAsync(H,
             new("FocusedSwappedThenScrolled", Swap2And3, Focus: true, ScrollAwayAfterChange: true));
+    }
+
+    // A column-first grid fills each column before moving across. A focused item the reorder
+    // shifts from the bottom of one column to the top of the next is still in its right place,
+    // so focus must stay (comparing positions row-first would call it misplaced).
+    internal class ColumnFirstGrid_FocusedItemShiftedAcrossColumns_FocusStays(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var initial = Enumerable.Range(0, RowCount).ToList();
+            List<int>? changed = null;
+            var layout = new UniformGridLayout { Orientation = Orientation.Vertical, MinItemWidth = 100, MinItemHeight = 32 };
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                var repeaterElement = ItemsRepeater(phase == 0 || changed is null ? initial : changed, k => k.ToString(),
+                    (k, _) => Button($"r{k}").Width(100).Height(32)) with { Layout = layout };
+                return VStack(
+                    Button("Change", () => setPhase(1)),
+                    ScrollViewer(repeaterElement).Height(300).Set(sv =>
+                    {
+                        sv.HorizontalScrollMode = ScrollMode.Enabled;
+                        sv.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+                        sv.VerticalScrollMode = ScrollMode.Disabled;
+                        sv.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                    }));
+            });
+            await Harness.Render();
+
+            var repeater = H.FindControl<WinXC.ItemsRepeater>(_ => true);
+            var first = H.FindControl<Button>(b => b.Content as string == "r0");
+            if (repeater is null || first is null)
+            {
+                H.Check("RepeaterStale_ColumnGrid_Found", false);
+                return;
+            }
+
+            // The last item of the first column: the one before the first item of the second.
+            double firstColumn = first.TransformToVisual(repeater).TransformPoint(default).X;
+            int targetKey = initial.FirstOrDefault(k => H.FindControl<Button>(b => b.Content as string == $"r{k}") is { } b
+                && b.TransformToVisual(repeater).TransformPoint(default).X > firstColumn + 1, -1);
+            H.Check("RepeaterStale_ColumnGrid_HasSecondColumn", targetKey > 1, $"first key of column two: {targetKey}");
+            if (targetKey <= 1) return;
+            targetKey--;
+
+            var target = H.FindControl<Button>(b => b.Content as string == $"r{targetKey}")!;
+            H.Check("RepeaterStale_ColumnGrid_FocusTaken", target.Focus(FocusState.Programmatic));
+            await Harness.Render();
+
+            // Moving a later item to the front (a single Move, so the target is only shifted) puts
+            // the target at the top of column two.
+            changed = initial.ToList();
+            int later = targetKey + 5;
+            changed.Remove(later);
+            changed.Insert(0, later);
+            H.ClickButton("Change");
+            await Harness.Render();
+
+            double targetColumn = target.TransformToVisual(repeater).TransformPoint(default).X;
+            H.Check("RepeaterStale_ColumnGrid_TargetShiftedToSecondColumn", targetColumn > firstColumn + 1,
+                $"target column x {targetColumn:0}, first column x {firstColumn:0}");
+            H.Check("RepeaterStale_ColumnGrid_FocusKeptOnCorrectItem",
+                ReferenceEquals(FocusManager.GetFocusedElement(target.XamlRoot), target),
+                $"focused '{(FocusManager.GetFocusedElement(target.XamlRoot) as Button)?.Content}'");
+        }
     }
 }

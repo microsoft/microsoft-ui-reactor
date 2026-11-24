@@ -157,9 +157,12 @@ public sealed partial class ElementFactory<T>
         var next = expected + 1 < source.Count ? RealizedControl(repeater, source[expected + 1].Key) : null;
         if (previous is null && next is null) return false;
 
+        // A column-first grid fills down each column before moving across; every other layout
+        // Reactor hosts (stacks, row-first grids, lined flow) fills along rows.
+        bool columnFirst = repeater.Layout is UniformGridLayout { Orientation: Orientation.Vertical };
         var at = PositionIn(child, repeater);
-        return (previous is null || IsBefore(PositionIn(previous, repeater), at))
-            && (next is null || IsBefore(at, PositionIn(next, repeater)));
+        return (previous is null || IsBefore(PositionIn(previous, repeater), at, columnFirst))
+            && (next is null || IsBefore(at, PositionIn(next, repeater), columnFirst));
     }
 
     private UIElement? RealizedControl(ItemsRepeater repeater, string key)
@@ -168,9 +171,12 @@ public sealed partial class ElementFactory<T>
     private static global::Windows.Foundation.Point PositionIn(UIElement element, ItemsRepeater repeater)
         => element.TransformToVisual(repeater).TransformPoint(default);
 
-    // Reading order: by row, then along the row (a stack has one coordinate, a grid both).
-    private static bool IsBefore(global::Windows.Foundation.Point a, global::Windows.Foundation.Point b)
-        => a.Y < b.Y - 0.5 || (Math.Abs(a.Y - b.Y) <= 0.5 && a.X < b.X);
+    // Fill order: by row then along it, or by column then down it for a column-first grid (a
+    // stack has one coordinate, so either order works for it).
+    private static bool IsBefore(global::Windows.Foundation.Point a, global::Windows.Foundation.Point b, bool columnFirst)
+        => columnFirst
+            ? a.X < b.X - 0.5 || (Math.Abs(a.X - b.X) <= 0.5 && a.Y < b.Y)
+            : a.Y < b.Y - 0.5 || (Math.Abs(a.Y - b.Y) <= 0.5 && a.X < b.X);
 
     private ReactorWindow? _activationWindow;
 
@@ -191,17 +197,23 @@ public sealed partial class ElementFactory<T>
     }
 
     // A Reactor window re-runs the check when it's activated. Other hosts rely on the GotFocus
-    // that activation raises when it restores focus to the row (WatchFocusEntering).
+    // that activation raises when it restores focus to the row (WatchFocusEntering). The window
+    // can outlive the list, so its handler holds the factory and repeater weakly: a list that is
+    // unmounted, or whose factory is replaced, while the window waits isn't kept alive by it.
     private void WaitForActivation(ItemsRepeater repeater)
     {
         if (_activationWindow is not null) return;
         if (ReactorApp.FindWindowForXamlRoot(repeater.XamlRoot) is not { } window) return;
+        var self = new WeakReference<ElementFactory<T>>(this);
+        var list = new WeakReference<ItemsRepeater>(repeater);
         EventHandler handler = null!;
         handler = (_, _) =>
         {
             window.Activated -= handler;
-            _activationWindow = null;
-            ScheduleFocusedContainerCheck(repeater);
+            if (!self.TryGetTarget(out var factory)) return;
+            factory._activationWindow = null;
+            if (list.TryGetTarget(out var target) && ReferenceEquals(target.ItemTemplate, factory))
+                factory.ScheduleFocusedContainerCheck(target);
         };
         _activationWindow = window;
         window.Activated += handler;
