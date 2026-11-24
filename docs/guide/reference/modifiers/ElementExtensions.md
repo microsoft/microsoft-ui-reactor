@@ -389,6 +389,7 @@ public static AppBarButtonData Command(this AppBarButtonData el, Command command
 - [`ToolTip`](tooltips-and-flyouts.md#tooltip)
 - [`ToolTipPlacement`](tooltips-and-flyouts.md#tooltipplacement)
 - [`ToolTipPlacementTarget`](tooltips-and-flyouts.md#tooltipplacementtarget)
+- [`TransformOrigin`](shared-controls.md#transformorigin)
 - [`Transition`](animation.md#transition)
 - [`Translation`](appearance.md#translation)
 - [`TranslationTransition`](animation.md#translationtransition)

@@ -498,6 +498,12 @@ public PlacementMode? ToolTipPlacement  // get, init
 public ElementRef? ToolTipPlacementTargetRef  // get, init
 ```
 
+### `TransformOrigin`
+
+```csharp
+public Vector2? TransformOrigin  // get, init
+```
+
 ### `Translation`
 
 ```csharp

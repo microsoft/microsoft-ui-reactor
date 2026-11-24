@@ -78,6 +78,14 @@ public float? Rotation  // get, init
 public Vector3? Scale  // get, init
 ```
 
+### `TransformOrigin`
+
+The size-relative pivot of `.TransformOrigin(x, y)` (spec 066 §8).
+
+```csharp
+public Vector2? TransformOrigin  // get, init
+```
+
 ### `Translation`
 
 ```csharp

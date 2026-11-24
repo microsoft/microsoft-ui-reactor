@@ -144,6 +144,8 @@ Declared in `ElementExtensions`.
 
 ## `CenterPoint`
 
+Sets the pivot for `.Scale()` and `.Rotation()` in pixels from the element's leading top corner. Combined with [`TransformOrigin`](shared-controls.md#transformorigin), it is an offset added to the size-relative origin, like CSS `calc(50% + 10px)`.
+
 ```csharp
 T CenterPoint<T>(this T el, Vector3 center) where T : Element
 ```
