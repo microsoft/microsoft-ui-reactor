@@ -777,8 +777,8 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
-            // Removing the keyframe while the element waits under a collapsed parent detaches the
-            // pending layout handler instead of leaving it on the layout list.
+            // Removing the keyframe while the element waits under a collapsed parent detaches its wait,
+            // so the control isn't kept alive by a callback.
             using var reconciler = new Reconciler();
             var plain = Border(TextBlock("Cancelled Opacity Check"));
             var faded = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
@@ -788,12 +788,15 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             H.SetContent(host);
             await Harness.Render();
             await AfterNextCommit(visual);
-            static bool Pending(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
-                is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null };
-            bool armed = Pending(control);
+            // A collapsed wait watches the ancestor's Visibility, not every layout pass.
+            bool armed = Reconciler.KeyframeOpacityPendingForTests(control);
+            bool onLayout = Reconciler.KeyframeOpacityWaitsOnLayoutForTests(control);
+            int waitsBefore = Reconciler.KeyframeOpacityWaitsForTests;
             reconciler.Update(faded, plain.Opacity(0.4).Width(120), control, () => { });
-            H.Check("TransformKeyframes_CancelledOpacityCheckDetachesLayoutHandler", armed && !Pending(control),
-                $"armed={armed}, pending={Pending(control)}");
+            int detached = waitsBefore - Reconciler.KeyframeOpacityWaitsForTests;
+            H.Check("TransformKeyframes_CancelledOpacityCheckDetachesWait", armed && !onLayout && detached == 1
+                && !Reconciler.KeyframeOpacityPendingForTests(control),
+                $"armed={armed}, onLayout={onLayout}, detached={detached}, pending={Reconciler.KeyframeOpacityPendingForTests(control)}");
             host.Child = null;
             H.SetContent(null);
         }
@@ -830,8 +833,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 H.SetContent(host);
                 await Harness.Render();
                 await AfterNextCommit(visual);
-                static bool Waiting(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
-                    is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null } or Reconciler.ReactorState { KeyframeOpacityCheck: not null };
+                static bool Waiting(Border b) => Reconciler.KeyframeOpacityPendingForTests(b);
                 bool armed = Waiting(control);
                 if (detach) Reconciler.DetachReactorState(control);
                 else reconciler.Dispose();
@@ -854,8 +856,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             H.SetContent(host);
             await Harness.Render();
             await AfterNextCommit(visual);
-            static bool Waiting(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
-                is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null } or Reconciler.ReactorState { KeyframeOpacityCheck: not null };
+            static bool Waiting(Border b) => Reconciler.KeyframeOpacityPendingForTests(b);
             bool armed = Waiting(control);
             ElementPool.ExcludeFromPool(control);
             host.Child = null;
