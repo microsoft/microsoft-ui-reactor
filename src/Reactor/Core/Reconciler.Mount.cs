@@ -270,7 +270,7 @@ public sealed partial class Reconciler
         if (control is not null && element.ElementTransition is not null)
         {
             var (staggerIdx, staggerDly) = ConsumeStaggerIndex();
-            ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly);
+            ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly, this);
         }
 
         // Apply interaction states (.InteractionStates() modifier)
@@ -861,7 +861,7 @@ public sealed partial class Reconciler
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
-        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
+        // The fade takes the opacity channel, so a pending opacity restart must not replace it (#1669).
         CancelOpacityRestart(container);
 
         try

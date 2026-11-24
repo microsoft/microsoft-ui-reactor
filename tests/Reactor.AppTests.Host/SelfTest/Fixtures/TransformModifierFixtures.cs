@@ -967,7 +967,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
     // commits before RequestCommitAsync completes. The Render after lets the completion run.
     // A commit that times out or faults fails the fixture, so a no-restart check can't pass
     // only because the restart callback never ran.
-    private static async Task AfterNextCommit(Microsoft.UI.Composition.Visual visual)
+    internal static async Task AfterNextCommit(Microsoft.UI.Composition.Visual visual)
     {
         var commit = global::System.WindowsRuntimeSystemExtensions.AsTask(visual.Compositor.RequestCommitAsync());
         if (await Task.WhenAny(commit, Task.Delay(5000)) != commit)

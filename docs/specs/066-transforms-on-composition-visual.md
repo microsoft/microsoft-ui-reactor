@@ -143,6 +143,11 @@ Invariants:
    (not while it is off the tree or under a collapsed ancestor). An opacity keyframe started before that
    frame, next to `.Opacity(x)` or a style setter, would never play, so `ApplyKeyframeAnimations`
    restarts it once after that frame's commit unless a modifier or setter wrote the opacity in between (#1669).
+   An enter fade (`.Transition(Fade)`) starts at mount too, so it gets the same restart. Until the check
+   runs it hides the visual with `Visual.IsVisible`, which XAML doesn't push, so the frame that pushes
+   doesn't flash the element's opacity before the fade starts again from 0. The fade ends at the
+   element's own `UIElement.Opacity`, not 1: XAML pushes only a changed value, and a pooled renter whose
+   opacity equals its previous push gets no push at all, so a fade that ended at 1 would stay there (#1680).
 
 ## §4 Modifier behaviour
 

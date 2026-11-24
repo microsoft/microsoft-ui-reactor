@@ -352,7 +352,7 @@ public sealed partial class Reconciler
         // Target changed type). When the returned instance equals
         // `control`, set `result` to null so callers preserve identity.
         // A handler's own opacity write (a descriptor such as Button's IsDisabledFocusable dimming)
-        // replaces a pending keyframe restart as a modifier's does (#1669). Free when none is pending.
+        // replaces a pending opacity restart as a modifier's does (#1669). Free when none is pending.
         var opacityProbe = new OpacityRestartProbe(control);
         if (_v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
         {
