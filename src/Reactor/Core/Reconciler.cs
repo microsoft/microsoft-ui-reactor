@@ -1684,9 +1684,11 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Shared-control child roots with transform or opacity declarations to restore.
         internal List<(Element Parent, Element Target)>? ModifierTargets;
-        // The .Transition() a transparent keyed Memo declared over this control (#1663). The control's
-        // tag is the Memo's factory output, so the exit paths can't reach the Memo's own declaration
-        // through it. The outermost Memo that declares one owns the slot.
+        // The exit-bearing .Transition() a transparent keyed Memo declared over this control (#1663).
+        // The control's tag is the Memo's factory output, so the exit paths can't reach the Memo's
+        // own declaration through it. With nested keyed Memos the outermost one that declares an
+        // exit owns the slot; if it later drops its exit under the same key, an inner Memo's exit
+        // isn't restored, because the inner Memo isn't re-diffed while the outer key holds.
         internal Animation.ElementTransition? MemoTransition;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
@@ -5151,15 +5153,18 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// The <c>.Transition()</c> whose exit side plays when <paramref name="control"/> leaves the
-    /// tree, or null. A keyed Memo over the control is its outermost layer, so its exit comes
-    /// first; otherwise the mounted element's decorator chain is searched as before.
+    /// tree, or null. Layers are searched outermost first: a flyout decorator's chain (which
+    /// reaches a keyed Memo it wraps), then a keyed Memo over the control, then the tag's chain.
     /// </summary>
     private static ElementTransition? FindExitTransition(UIElement control)
     {
-        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState
-            { MemoTransition: { } memo } && memo.GetExitTransition() is not null)
-            return memo;
-        var transition = FindMountedElementValue(control, static element => element.ElementTransition);
+        if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState state) return null;
+        ElementTransition? transition = null;
+        if (state.DecoratorElement is not null)
+            transition = FindMountedElementValue(control, static element => element.ElementTransition);
+        if (transition is null && state.MemoTransition is { } memo) return memo;
+        if (transition is null && state.Element is { } tag)
+            transition = FindMountedElementValue(control, static element => element.ElementTransition, tag);
         return transition?.GetExitTransition() is not null ? transition : null;
     }
     /// <summary>

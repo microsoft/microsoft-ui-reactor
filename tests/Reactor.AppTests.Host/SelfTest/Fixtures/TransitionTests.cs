@@ -759,6 +759,12 @@ internal static class TransitionTests
         MemoExitAdded,
         /// <summary>The keyed Memo drops its exit on an update that keeps its key, so removal is immediate.</summary>
         MemoExitDropped,
+        /// <summary>An enter-only keyed Memo wraps a keyed Memo that declares the exit, on the same control.</summary>
+        MemoNested,
+        /// <summary>A flyout decorator with a fade exit wraps a keyed Memo with a scale exit: the outer flyout's fade plays.</summary>
+        FlyoutOverMemo,
+        /// <summary>As <see cref="Memo"/>, then the pooled control is rented by a plain element, whose removal is immediate.</summary>
+        MemoPooledReuse,
     }
 
     /// <summary>
@@ -769,14 +775,22 @@ internal static class TransitionTests
     /// </summary>
     internal sealed class WrapperExitTransition(Harness h, ExitWrapper wrapper) : SelfTestFixtureBase(h)
     {
+        private static readonly Animation.Transition FadeExit = Animation.Transition.Exit(Animation.Transition.Fade);
+
         private Element Target(bool exit)
         {
             var inner = Border(null).Width(100).Height(40);
-            Element Declare(Element e) => exit ? e.Transition(Animation.Transition.Exit(Animation.Transition.Fade), Curve.Linear(600)) : e;
+            Element Declare(Element e) => exit ? e.Transition(FadeExit, Curve.Linear(600)) : e;
             return wrapper switch
             {
                 ExitWrapper.Direct => Declare(inner),
                 ExitWrapper.Modified => new ModifiedElement(Declare(inner), new ElementModifiers { Margin = new Microsoft.UI.Xaml.Thickness(2) }),
+                ExitWrapper.MemoNested => Memo("outer", () => Declare(Memo("inner", () => inner)))
+                    .Transition(Animation.Transition.Enter(Animation.Transition.Fade), Curve.Linear(30)),
+                ExitWrapper.FlyoutOverMemo => Flyout(
+                        Memo("k", () => inner).Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("flyout"))
+                    .Transition(FadeExit, Curve.Linear(600)),
                 _ => Declare(Memo("k", () => inner)),
             };
         }
@@ -817,6 +831,9 @@ internal static class TransitionTests
                     $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
                 H.Check(name + "_FadeStarted", reconciler.IsExiting(control)
                     && ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Opacity") is not null);
+                if (wrapper is ExitWrapper.FlyoutOverMemo)
+                    H.Check(name + "_OuterExitWins",
+                        ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Scale") is null);
                 if (replace)
                     H.Check(name + "_ReplacementVisible", panel.Children.Count == 2
                         && panel.Children[0] is TextBlock { Text: "replacement" }
@@ -825,6 +842,19 @@ internal static class TransitionTests
                 var completed = await Harness.WaitFor(() => !reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
                 H.Check(name + "_ExitCompleted", completed && !panel.Children.Contains(control)
                     && panel.Children.Count == (replace ? 1 : 0));
+
+                if (wrapper is ExitWrapper.MemoPooledReuse)
+                {
+                    // The exit took the visual, so the pooled Border sits in the visual lane, which
+                    // a mount that takes the visual at mount (an enter transition) rents from.
+                    var plain = VStack(Border(null).Width(100).Height(40)
+                        .Transition(Animation.Transition.Enter(Animation.Transition.Fade), Curve.Linear(30)));
+                    reconciler.Update(next, plain, panel, static () => { });
+                    H.Check(name + "_Rented", panel.Children.Count == 1 && ReferenceEquals(panel.Children[0], control));
+                    reconciler.Update(plain, VStack(), panel, static () => { });
+                    H.Check(name + "_RenterRemovedAtOnce", !reconciler.IsExiting(control) && panel.Children.Count == 0,
+                        $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
+                }
             }
             finally
             {

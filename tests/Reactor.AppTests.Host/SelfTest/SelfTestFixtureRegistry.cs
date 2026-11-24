@@ -980,6 +980,9 @@ internal static class SelfTestFixtureRegistry
         ("Transition_WrapperExit_MemoReplaced", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoReplaced)),
         ("Transition_WrapperExit_MemoExitAdded", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoExitAdded)),
         ("Transition_WrapperExit_MemoExitDropped", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoExitDropped)),
+        ("Transition_WrapperExit_MemoNested", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoNested)),
+        ("Transition_WrapperExit_FlyoutOverMemo", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.FlyoutOverMemo)),
+        ("Transition_WrapperExit_MemoPooledReuse", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoPooledReuse)),
         // Animation system — WithAnimationAsync
         ("AsyncAnim_TaskCompletes", static harness => new AnimationAsyncTests.TaskCompletes(harness)),
         ("AsyncAnim_SequentialAwait", static harness => new AnimationAsyncTests.SequentialAwait(harness)),

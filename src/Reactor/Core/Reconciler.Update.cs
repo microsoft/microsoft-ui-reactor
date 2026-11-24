@@ -417,10 +417,14 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
-        // Mount recorded a keyed Memo's .Transition() on the control it shares (#1663); keep it
-        // current when the Memo declares, retimes or drops one under an unchanged key.
-        if (newEl is KeyedMemoElement && (oldEl.ElementTransition is not null || newEl.ElementTransition is not null))
-            GetOrCreateReactorState(target).MemoTransition = newEl.ElementTransition;
+        // Mount recorded a keyed Memo's exit on the control it shares (#1663); keep it current when
+        // the Memo declares, retimes or drops one under an unchanged key.
+        if (newEl is KeyedMemoElement)
+        {
+            bool newExit = newEl.ElementTransition?.GetExitTransition() is not null;
+            if (newExit || oldEl.ElementTransition?.GetExitTransition() is not null)
+                GetOrCreateReactorState(target).MemoTransition = newExit ? newEl.ElementTransition : null;
+        }
         // A nested update can replace the control or introduce its first
         // restorable inner declaration. Publish the edge before outer restoration.
         if (modifierParent is not null && (result is not null || mountedModifierTarget is null))
