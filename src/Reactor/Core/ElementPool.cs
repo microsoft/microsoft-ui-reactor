@@ -774,7 +774,7 @@ public sealed class ElementPool : IDisposable
         fe.Loaded -= OnRenterLoaded;
     }
 
-    private static bool IsInLiveTree(FrameworkElement fe)
+    internal static bool IsInLiveTree(FrameworkElement fe)
     {
         if (fe.XamlRoot?.Content is not { } root) return false;
         for (DependencyObject? node = fe; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))

@@ -138,7 +138,11 @@ Invariants:
    visual's implicit `Opacity` animation (Q4c). So static `.Opacity()` doesn't need the visual, and
    Reactor must not keep an independent opacity value on the visual. A later `UIElement.Opacity` write
    would replace it. Q4d did not test both write orders against both getters after a second commit, so
-   §12 adds that test before anything relies on a stronger equivalence.
+   §12 adds that test before anything relies on a stronger equivalence. The push also stops whatever
+   animation runs on the visual's `Opacity`, and it lands with the first frame that renders the element
+   (not while it is off the tree or under a collapsed ancestor). An opacity keyframe started before that
+   frame, next to `.Opacity(x)` or a style setter, would never play, so `ApplyKeyframeAnimations`
+   restarts it once after that frame's commit unless a modifier wrote the channel in between (#1669).
 
 ## §4 Modifier behaviour
 

@@ -6738,10 +6738,12 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// XAML writes a changed <see cref="UIElement.Opacity"/> (a local value, a style setter) to the
-    /// handed-out visual during its next frame, and that write stops whatever animation runs on the
-    /// visual's Opacity. A keyframe started before that frame, such as one mounted together with
-    /// <c>.Opacity(x)</c>, would never play. This checks once after the next commit, and restarts
-    /// the keyframe when its animation is gone while this entry still owns the channel (#1669).
+    /// handed-out visual when it next renders the element, and that write stops whatever animation
+    /// runs on the visual's Opacity. A keyframe started before that frame, such as one mounted
+    /// together with <c>.Opacity(x)</c>, would never play. Once the element renders, this checks
+    /// after the next commit and restarts the keyframe when its animation is gone while this entry
+    /// still owns the channel (#1669). A modifier write to the channel replaces the keyframe on
+    /// purpose and cancels the check.
     /// </summary>
     private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, string name,
         CompositionAnimation animation, AnimationController controller)
@@ -6764,27 +6766,37 @@ public sealed partial class Reconciler : IDisposable
             };
         }
 
+        bool Owns([global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Dictionary<string, AnimationController>? started)
+        {
+            started = null;
+            if (!Equals(state.KeyframeOpacityCheck, controller)
+                || !_keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+                || entry.Started is not { } current || !current.TryGetValue("Opacity", out var owned)
+                || !Equals(owned, controller))
+                return false;
+            started = current;
+            return true;
+        }
+
         void Check()
         {
-            if (!Equals(state.KeyframeOpacityCheck, controller)) return;
-            if (uie is FrameworkElement { IsLoaded: false } fe)
+            if (!Owns(out var started)) return;
+            if (uie is FrameworkElement fe && !IsRendered(fe))
             {
-                // Mounted off the tree: XAML's push comes with the first frame after it loads.
-                RoutedEventHandler? onLoaded = null;
-                onLoaded = (_, _) =>
+                // Off the tree or under a collapsed ancestor: XAML pushes when it first renders the
+                // element. Layout runs before that frame, as for the pool's renter sync.
+                EventHandler<object>? onLayout = null;
+                onLayout = (_, _) =>
                 {
-                    fe.Loaded -= onLoaded;
-                    RequestCheck();
+                    if (Owns(out _) && !IsRendered(fe)) return;
+                    fe.LayoutUpdated -= onLayout;
+                    if (Owns(out _)) RequestCheck();
                 };
-                fe.Loaded += onLoaded;
+                fe.LayoutUpdated += onLayout;
                 return;
             }
             state.KeyframeOpacityCheck = null;
             if (visual.TryGetAnimationController("Opacity") is not null) return;
-            if (!_keyframeTriggerValues.TryGetValue((uie, name), out var entry)
-                || entry.Started is not { } started || !started.TryGetValue("Opacity", out var owned)
-                || !Equals(owned, controller))
-                return;
             // A finite keyframe that simply finished is not restarted.
             if (animation is KeyFrameAnimation { IterationBehavior: AnimationIterationBehavior.Count } finite
                 && global::System.Diagnostics.Stopwatch.GetElapsedTime(startedAt) >= finite.Duration * finite.IterationCount)
@@ -6797,6 +6809,16 @@ public sealed partial class Reconciler : IDisposable
                 state.KeyframeChannelOwners[AnimateProperty.Opacity] = channelOwner with { DeferredController = restarted };
             KeyframeOpacityRestartsForTests++;
         }
+    }
+
+    // Loaded alone isn't proof: WinUI can skip it for a control re-added while its Unloaded is
+    // pending, and a collapsed ancestor keeps a loaded element out of the render walk.
+    private static bool IsRendered(FrameworkElement fe)
+    {
+        if (!fe.IsLoaded && !ElementPool.IsInLiveTree(fe)) return false;
+        for (DependencyObject? node = fe; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: not Visibility.Visible }) return false;
+        return true;
     }
 
     // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts restarts after a XAML opacity push.
