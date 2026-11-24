@@ -89,6 +89,7 @@ internal static class SelfTestFixtureRegistry
         ("ToolkitConstrainedBox_MinMaxBounds", static harness => new ToolkitConstrainedBoxBoundsFixture(harness)),
         ("ToolkitWrapPanel_VerticalOrientation", static harness => new ToolkitWrapPanelOrientationFixture(harness)),
         ("ToolkitStaggeredPanel_ShortestColumn", static harness => new ToolkitStaggeredPanelShortestColumnFixture(harness)),
+        ("Toolkit_RichSuggestBox_BidiGeometry", static harness => new ToolkitRichSuggestBoxBidiFixture(harness)),
         ("Flex_NestedRowInColumn", static harness => new FlexLayoutFixtures.FlexNestedRowInColumn(harness)),
         ("Flex_NestedColumnInRow", static harness => new FlexLayoutFixtures.FlexNestedColumnInRow(harness)),
         ("Flex_NestedDeep", static harness => new FlexLayoutFixtures.FlexNestedDeep(harness)),
