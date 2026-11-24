@@ -864,4 +864,56 @@ internal static class PoolLaneFixtures
             H.Check(p + "_OnlyCurrent", names is not null && names.SetEquals(["c"]), names is null ? "null" : string.Join(",", names));
         }
     }
+
+    /// <summary>
+    /// A <c>.Ref</c> declared on a layer that mounts no control of its own (a keyed <c>Memo</c>, a
+    /// legacy <see cref="ModifiedElement"/>, a flyout decorator) points at the control its child
+    /// mounted. Unmount clears it, so a pooled control an unrelated renter gets isn't still
+    /// referenced (#1659). The control's own ref is the positive control.
+    /// </summary>
+    internal sealed class WrapperRefs(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var cases = new (string Name, Func<ElementRef, Element> Build)[]
+            {
+                ("Own", static r => Target("A").Ref(r)),
+                ("KeyedMemo", static r => Memo("k", static () => Target("A")).Ref(r)),
+                ("NestedKeyedMemo", static r => Memo("outer", static () => Memo("inner", static () => Target("A"))).Ref(r)),
+                ("ModifiedElement", static r => new ModifiedElement(Target("A"), new ElementModifiers { Ref = r })),
+                ("Flyout", static r => Flyout(Target("A"), TextBlock("f")).Ref(r)),
+            };
+            foreach (var (name, build) in cases)
+            {
+                string p = "ElementPoolLanes_WrapperRefs_" + name;
+                using var lab = new Lab(H);
+                var r = new ElementRef();
+                var mounted = await lab.Show(build(r));
+                H.Check(p + "_RefSet", mounted is WinUI.Border && ReferenceEquals(r.Current, mounted),
+                    $"mounted={mounted?.GetType().Name} current={r.Current?.GetType().Name}");
+                await lab.Show(null);
+                H.Check(p + "_ClearedOnUnmount", r.Current is null, $"current={r.Current?.GetType().Name}");
+
+                var renter = await lab.Show(Target("B"));
+                // Only the flyout decorator's control might stay out of the pool; the rest must recycle
+                // for the renter step to reproduce the issue.
+                if (name != "Flyout")
+                    H.Check(p + "_Recycled", ReferenceEquals(renter, mounted));
+                H.Check(p + "_RenterNotReferenced", r.Current is null, $"current={r.Current?.GetType().Name}");
+            }
+
+            // A changed Memo key remounts: the ref moves to the replacement before the old control is
+            // unmounted, and that unmount must not clear it.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_KeyChange";
+                using var lab = new Lab(H);
+                var r = new ElementRef();
+                var first = await lab.Show(Memo("k1", static () => Target("A")).Ref(r));
+                var second = await lab.Show(Memo("k2", static () => Target("B")).Ref(r));
+                H.Check(p + "_Replaced", second is not null && !ReferenceEquals(first, second));
+                H.Check(p + "_RefFollowsReplacement", second is not null && ReferenceEquals(r.Current, second),
+                    $"current={(ReferenceEquals(r.Current, first) ? "old" : r.Current?.GetType().Name ?? "null")}");
+            }
+        }
+    }
 }

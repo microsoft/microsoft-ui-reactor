@@ -1684,6 +1684,11 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Shared-control child roots with transform or opacity declarations to restore.
         internal List<(Element Parent, Element Target)>? ModifierTargets;
+        // The .Ref cells the modifiers pointed at this control, whichever layer declared them: a
+        // layer that mounts no control (a keyed Memo, a ModifiedElement) isn't on the element
+        // chain unmount walks, so unmount clears these instead (#1659). An ElementRef, or a
+        // List<ElementRef> when layers declare different refs.
+        internal object? ProducerRefs;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
         // Properties written on the handed-out Visual by a modifier. Kept on native
@@ -4799,6 +4804,66 @@ public sealed partial class Reconciler : IDisposable
             if (current is null) break;
             CleanupElementStateForUnmount(control, current);
         }
+        ClearTrackedProducerRefs(control);
+    }
+
+    private static void TrackProducerRef(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        var state = GetOrCreateReactorState(control);
+        switch (state.ProducerRefs)
+        {
+            case null:
+                state.ProducerRefs = producerRef;
+                break;
+            case Microsoft.UI.Reactor.Input.ElementRef single when !ReferenceEquals(single, producerRef):
+                state.ProducerRefs = new List<Microsoft.UI.Reactor.Input.ElementRef>(2) { single, producerRef };
+                break;
+            case List<Microsoft.UI.Reactor.Input.ElementRef> list when !ContainsReference(list, producerRef):
+                list.Add(producerRef);
+                break;
+        }
+    }
+
+    private static void UntrackProducerRef(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        if (!TryGetReactorState(control, out var state)) return;
+        if (ReferenceEquals(state.ProducerRefs, producerRef))
+            state.ProducerRefs = null;
+        else if (state.ProducerRefs is List<Microsoft.UI.Reactor.Input.ElementRef> list)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (!ReferenceEquals(list[i], producerRef)) continue;
+                list.RemoveAt(i);
+                break;
+            }
+        }
+    }
+
+    private static bool ContainsReference(List<Microsoft.UI.Reactor.Input.ElementRef> list, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        foreach (var entry in list)
+            if (ReferenceEquals(entry, producerRef)) return true;
+        return false;
+    }
+
+    // Same rule as CleanupReferenceStateForUnmount: a ref an update already moved to a
+    // replacement control keeps it.
+    private static void ClearTrackedProducerRefs(FrameworkElement control)
+    {
+        if (!TryGetReactorState(control, out var state) || state.ProducerRefs is not { } refs) return;
+        state.ProducerRefs = null;
+        if (refs is Microsoft.UI.Reactor.Input.ElementRef single)
+            ClearProducerRefIfCurrent(control, single);
+        else
+            foreach (var producerRef in (List<Microsoft.UI.Reactor.Input.ElementRef>)refs)
+                ClearProducerRefIfCurrent(control, producerRef);
+    }
+
+    private static void ClearProducerRefIfCurrent(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        if (producerRef.Current is { } current && IsSameNativeElement(current, control))
+            producerRef.SetCurrent(null);
     }
 
     private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
@@ -7970,10 +8035,17 @@ public sealed partial class Reconciler : IDisposable
         var oldRef = oldM?.Ref;
         var newRef = m.Ref;
         if (oldRef is not null && !ReferenceEquals(oldRef, newRef))
+        {
             oldRef.SetCurrent(null);
+            UntrackProducerRef(fe, oldRef);
+        }
         if (newRef is not null)
         {
+            // Every write that points a ref at this control is recorded, so a ref already
+            // pointing here is already tracked and the steady-state update skips the DP read.
+            bool tracked = ReferenceEquals(newRef.Current, fe);
             newRef.SetCurrent(fe);
+            if (!tracked) TrackProducerRef(fe, newRef);
             AssertTypedRefMatch(newRef, fe);
         }
 

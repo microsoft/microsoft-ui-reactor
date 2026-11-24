@@ -207,6 +207,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
+  layers mount no control of their own, so the ref points at the control their child mounted, and
+  unmount only cleared refs declared on that control's own element and its decorators. The ref kept
+  pointing at the control after it left the tree, and after an unrelated element rented it from the
+  pool. Unmount now clears every ref the reconciler pointed at the control, whichever layer declared
+  it.
+
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after
