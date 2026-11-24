@@ -479,8 +479,11 @@ The builder supports `.Duration(ms)`, `.Loop()` for infinite repeat, and
 each keyframe, with `rotation` in degrees like `.Rotation()`. Keyframes run on the compositor — no managed-code
 involvement during playback.
 
-Changing `.Opacity(value)` during an opacity keyframe animation preserves its playback progress.
-The latest declared value takes effect when the loop is removed or the one-shot finishes.
+When the current keyframe entry animates opacity and its trigger stays the same,
+changing `.Opacity(value)` preserves playback progress. The latest declared value
+takes effect when the looping entry is removed or the one-shot finishes.
+If a new trigger replays the same name without an opacity track, subsequent
+`.Opacity(value)` updates can replace the previous opacity loop.
 
 ## Choreography
 

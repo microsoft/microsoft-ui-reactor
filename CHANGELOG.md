@@ -207,8 +207,9 @@ Conventions for contributors:
 
 ### Fixed
 
-- Changing `.Opacity()` preserves the progress of an opacity keyframe animation. Removing
-  a loop or finishing a one-shot applies the latest declared opacity (#1651, #1660).
+- Changing `.Opacity()` preserves playback progress when the current keyframe entry
+  animates opacity and its trigger stays the same. Removing the looping entry or
+  finishing a one-shot applies the latest declared opacity (#1651, #1660).
 
 - An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
