@@ -4769,6 +4769,9 @@ public sealed partial class Reconciler : IDisposable
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
         ElementPool.CancelOpacitySync(control);
+        // Whichever layer started a keyframe (a keyed Memo's isn't on this element chain), an
+        // unmounted control's pending opacity restart must go with it (#1669).
+        CancelKeyframeOpacityCheck(control);
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.
@@ -6765,6 +6768,7 @@ public sealed partial class Reconciler : IDisposable
         var state = GetOrCreateReactorState(uie);
         CancelKeyframeOpacityCheck(uie, state);
         state.KeyframeOpacityCheck = controller;
+        Interlocked.Increment(ref s_pendingKeyframeOpacityChecks);
         if (owner is not null)
         {
             state.KeyframeOpacityOwner = owner;
@@ -6857,14 +6861,22 @@ public sealed partial class Reconciler : IDisposable
     /// Drops a pending <see cref="RestartOpacityAfterXamlPush"/> check and detaches the layout
     /// handler it may be waiting on, so a control that never renders isn't kept on the layout list.
     /// </summary>
+    // Checks still pending, so an unmount with none to cancel pays no attached-state read.
+    private static int s_pendingKeyframeOpacityChecks;
+
     internal static void CancelKeyframeOpacityCheck(UIElement uie)
     {
+        if (Volatile.Read(ref s_pendingKeyframeOpacityChecks) == 0) return;
         if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState state) CancelKeyframeOpacityCheck(uie, state);
     }
 
     internal static void CancelKeyframeOpacityCheck(UIElement uie, ReactorState state)
     {
-        state.KeyframeOpacityCheck = null;
+        if (state.KeyframeOpacityCheck is not null)
+        {
+            state.KeyframeOpacityCheck = null;
+            Interlocked.Decrement(ref s_pendingKeyframeOpacityChecks);
+        }
         if (state.KeyframeOpacityOwner is { } owner)
         {
             state.KeyframeOpacityOwner = null;

@@ -756,6 +756,28 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 H.SetContent(null);
             }
         }
+
+        {
+            // A keyed Memo's keyframes aren't on the control's element chain, so unmounting a control
+            // kept out of the pool must still cancel its pending check.
+            using var reconciler = new Reconciler();
+            var memo = Memo("k", static () => Border(TextBlock("Memo Opacity Check"))).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var control = (Border)reconciler.Mount(memo, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            var host = new Border { Child = control, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            static bool Waiting(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
+                is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null } or Reconciler.ReactorState { KeyframeOpacityCheck: not null };
+            bool armed = Waiting(control);
+            ElementPool.ExcludeFromPool(control);
+            host.Child = null;
+            reconciler.UnmountChild(control);
+            H.Check("TransformKeyframes_MemoUnmountCancelsOpacityCheck", armed && !Waiting(control),
+                $"armed={armed}, waiting={Waiting(control)}");
+            H.SetContent(null);
+        }
     }
 
     // XAML pushes a changed UIElement.Opacity to the visual during a frame, and that frame
