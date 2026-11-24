@@ -1,3 +1,4 @@
+using System.CodeDom.Compiler;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Cli.Docs;
@@ -813,4 +814,30 @@ overrides:
         Assert.Equal("values_1", slugs.Add("Values"));
         Assert.Equal("values_2", slugs.Add("Values"));
     }
+
+    [Fact]
+    public void FromAssembly_SkipsXamlMarkupCompilerMembersOnly()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, typeof(XamlGeneratedMembersFixture).Assembly.GetName().Name + ".dll");
+        var model = ApiModel.FromAssembly(path);
+        var names = model.TypesByDocId["T:" + typeof(XamlGeneratedMembersFixture).FullName]
+            .Members.Select(m => m.Name).ToList();
+
+        Assert.DoesNotContain(nameof(XamlGeneratedMembersFixture.Connect), names);
+        Assert.Contains(nameof(XamlGeneratedMembersFixture.Authored), names);
+        Assert.Contains(nameof(XamlGeneratedMembersFixture.FromOtherGenerator), names);
+    }
+}
+
+/// <summary>Read from this test assembly's metadata by
+/// <see cref="ReferenceGenTests.FromAssembly_SkipsXamlMarkupCompilerMembersOnly"/>.</summary>
+public class XamlGeneratedMembersFixture
+{
+    public void Authored() { }
+
+    [GeneratedCode("Microsoft.UI.Xaml.Markup.Compiler", " 3.0.0.2606")]
+    public void Connect(int connectionId, object target) { }
+
+    [GeneratedCode("Reactor.Wrappers.Generator", "1.0.0.0")]
+    public void FromOtherGenerator() { }
 }
