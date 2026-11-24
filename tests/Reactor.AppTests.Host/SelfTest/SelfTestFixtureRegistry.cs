@@ -87,6 +87,8 @@ internal static class SelfTestFixtureRegistry
         ("Grid_RowColumnLayout", static harness => new LayoutFixtures.GridRowColumn(harness)),
         ("GridVsFlex_StarSizing", static harness => new LayoutFixtures.GridVsFlexStarSizing(harness)),
         ("ToolkitConstrainedBox_MinMaxBounds", static harness => new ToolkitConstrainedBoxBoundsFixture(harness)),
+        ("ToolkitWrapPanel_VerticalOrientation", static harness => new ToolkitWrapPanelOrientationFixture(harness)),
+        ("ToolkitStaggeredPanel_ShortestColumn", static harness => new ToolkitStaggeredPanelShortestColumnFixture(harness)),
         ("Flex_NestedRowInColumn", static harness => new FlexLayoutFixtures.FlexNestedRowInColumn(harness)),
         ("Flex_NestedColumnInRow", static harness => new FlexLayoutFixtures.FlexNestedColumnInRow(harness)),
         ("Flex_NestedDeep", static harness => new FlexLayoutFixtures.FlexNestedDeep(harness)),
@@ -301,6 +303,7 @@ internal static class SelfTestFixtureRegistry
         ("KeyedWrapper_KeyedMemo_GrowAndReverse", static harness => new KeyedWrapperChildrenFixtures.KeyedMemoChildren(harness)),
         ("KeyedWrapper_KeyedMemoInnerKey_GrowAndReverse", static harness => new KeyedWrapperChildrenFixtures.KeyedMemoInnerKeyChildren(harness)),
         ("Toolkit_HeaderedItemsControl_KeyedChildren", static harness => new ToolkitHeaderedItemsControlFixture(harness)),
+        ("Toolkit_MetadataControl_CommandParameter", static harness => new ToolkitMetadataCommandFixture(harness)),
         // A child whose update returns a new control is unmounted when it leaves a
         // single-child slot, as it is when it leaves a panel (SlotReplacementFixtures).
         ("SlotReplace_Border", static harness => new SlotReplacementFixtures.InBorder(harness)),
