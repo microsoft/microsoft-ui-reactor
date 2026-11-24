@@ -1299,7 +1299,21 @@ internal sealed class MetadataModelReader
     }
 
     private bool IsCompilerGenerated(CustomAttributeHandleCollection attrs) =>
-        FindAttribute(attrs, "System.Runtime.CompilerServices.CompilerGeneratedAttribute") is not null;
+        FindAttribute(attrs, "System.Runtime.CompilerServices.CompilerGeneratedAttribute") is not null
+        || IsXamlMarkupGenerated(attrs);
+
+    // The XAML markup compiler's output (Connect, GetBindingConnector, InitializeComponent)
+    // is plumbing, not API. Its <summary> also reaches the XML file in some builds and not
+    // others, so documenting it made the page depend on which build ran. Only this tool is
+    // matched: Reactor's own source generators mark real public API with GeneratedCode.
+    private bool IsXamlMarkupGenerated(CustomAttributeHandleCollection attrs)
+    {
+        if (FindAttribute(attrs, "System.CodeDom.Compiler.GeneratedCodeAttribute") is not { } ca) return false;
+        var blob = _md.GetBlobReader(ca.Value);
+        if (blob.Length < 3 || blob.ReadUInt16() != 1) return false;
+        try { return blob.ReadSerializedString() == "Microsoft.UI.Xaml.Markup.Compiler"; }
+        catch (BadImageFormatException) { return false; }
+    }
 
     private bool IsHidden(CustomAttributeHandleCollection attrs)
     {

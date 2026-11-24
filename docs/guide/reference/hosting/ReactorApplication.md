@@ -34,36 +34,6 @@ Also receives render errors an app's [`RenderErrorHandler`](../components/render
 
 ## Methods
 
-### `Connect`
-
-Connect()
-
-```csharp
-public void Connect(int connectionId, object target)
-```
-
-**Parameters**
-
-| Name | Type | Description |
-| --- | --- | --- |
-| `connectionId` | `int` |  |
-| `target` | `object` |  |
-
-### `GetBindingConnector`
-
-GetBindingConnector(int connectionId, object target)
-
-```csharp
-public IComponentConnector GetBindingConnector(int connectionId, object target)
-```
-
-**Parameters**
-
-| Name | Type | Description |
-| --- | --- | --- |
-| `connectionId` | `int` |  |
-| `target` | `object` |  |
-
 ### `GetXamlType`
 
 ```csharp
@@ -82,14 +52,6 @@ public IXamlType GetXamlType(Type type)
 
 ```csharp
 public XmlnsDefinition[] GetXmlnsDefinitions()
-```
-
-### `InitializeComponent`
-
-InitializeComponent()
-
-```csharp
-public void InitializeComponent()
 ```
 
 ### `OnLaunched`
