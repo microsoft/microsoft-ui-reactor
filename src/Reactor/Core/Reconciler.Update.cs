@@ -422,12 +422,16 @@ public sealed partial class Reconciler
         if (newEl is KeyedMemoElement)
         {
             bool newExit = newEl.ElementTransition?.GetExitTransition() is not null;
-            if (newExit || oldEl.ElementTransition?.GetExitTransition() is not null)
+            bool oldExit = oldEl.ElementTransition?.GetExitTransition() is not null;
+            if (newExit || oldExit)
             {
                 var memoState = GetOrCreateReactorState(target);
                 memoState.MemoTransition = newExit ? newEl.ElementTransition : null;
-                // No outer layer is updating this control, so a flyout on it sits inside the Memo.
-                memoState.MemoWrapsDecorator = newExit && modifierParent is null && memoState.DecoratorElement is not null;
+                // The layer order holds while the Memo keeps its exit (a resource refresh passes the
+                // same Memo as old and new). A new exit sits over a flyout on the control only when
+                // no outer layer is updating the control.
+                if (!newExit) memoState.MemoWrapsDecorator = false;
+                else if (!oldExit) memoState.MemoWrapsDecorator = modifierParent is null && memoState.DecoratorElement is not null;
             }
         }
         // A nested update can replace the control or introduce its first

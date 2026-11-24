@@ -277,10 +277,16 @@ public sealed partial class Reconciler
             {
                 var memoState = GetOrCreateReactorState(control);
                 memoState.MemoTransition = element.ElementTransition;
-                // A flyout inside the Memo has already recorded itself on the shared control.
+                // Layers mount inside out, so a flyout already recorded on the shared control is inside the Memo.
                 memoState.MemoWrapsDecorator = memoState.DecoratorElement is not null;
             }
         }
+
+        // A flyout that records itself after a keyed Memo's exit wraps that Memo.
+        if (IsFlyoutDecorator(element)
+            && control?.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoTransition: not null } wrappedMemo
+            && ReferenceEquals(wrappedMemo.DecoratorElement, element))
+            wrappedMemo.MemoWrapsDecorator = false;
 
         // Apply interaction states (.InteractionStates() modifier)
         if (control is not null && element.InteractionStates is not null)

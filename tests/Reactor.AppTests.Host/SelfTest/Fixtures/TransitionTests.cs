@@ -765,6 +765,8 @@ internal static class TransitionTests
         FlyoutOverMemo,
         /// <summary>A keyed Memo with a fade exit wraps a flyout whose target has a scale exit: the outer Memo's fade plays.</summary>
         MemoOverFlyout,
+        /// <summary>A flyout with a fade exit wraps a keyed Memo with a scale exit that wraps another flyout: the outermost fade plays.</summary>
+        FlyoutMemoFlyout,
         /// <summary>As <see cref="Memo"/>, then the pooled control is rented by a plain element, whose removal is immediate.</summary>
         MemoPooledReuse,
     }
@@ -797,6 +799,11 @@ internal static class TransitionTests
                         inner.Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
                         TextBlock("flyout")))
                     .Transition(FadeExit, Curve.Linear(memoMs)),
+                ExitWrapper.FlyoutMemoFlyout => Flyout(
+                        Memo("k", () => Flyout(inner, TextBlock("inner flyout")))
+                            .Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("outer flyout"))
+                    .Transition(FadeExit, Curve.Linear(600)),
                 _ => Declare(Memo("k", () => inner)),
             };
         }
@@ -838,7 +845,7 @@ internal static class TransitionTests
                     $"exiting={reconciler.IsExiting(control)} count={panel.Children.Count}");
                 H.Check(name + "_FadeStarted", reconciler.IsExiting(control)
                     && ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Opacity") is not null);
-                if (wrapper is ExitWrapper.FlyoutOverMemo or ExitWrapper.MemoOverFlyout)
+                if (wrapper is ExitWrapper.FlyoutOverMemo or ExitWrapper.MemoOverFlyout or ExitWrapper.FlyoutMemoFlyout)
                     H.Check(name + "_OuterExitWins",
                         ElementCompositionPreview.GetElementVisual(control).TryGetAnimationController("Scale") is null);
                 if (replace)
@@ -867,6 +874,53 @@ internal static class TransitionTests
             {
                 H.SetContent(null);
                 reconciler.UnmountChild(panel);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A resource refresh walks a keyed Memo's subtree, updating an inner Memo against itself.
+    /// The inner Memo still wraps the flyout afterwards, so its fade exit, not the flyout
+    /// target's scale exit, plays on removal (#1663).
+    /// </summary>
+    internal sealed class MemoExitAfterResourceRefresh(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var parent = new Border();
+            H.SetContent(parent);
+            using var host = new Hosting.ReactorHost(H.Window) { ContentTarget = parent };
+            using var isolation = ThemeResourceListeners.IsolateForTest(host);
+            bool show = true;
+            host.Mount(_ => VStack(show
+                ? Memo("outer", static () => Memo("inner", static () => Flyout(
+                        Border(null).Width(100).Height(40)
+                            .Transition(Animation.Transition.Exit(Animation.Transition.Scale(0.5f)), Curve.Linear(600)),
+                        TextBlock("flyout")))
+                    .Transition(Animation.Transition.Exit(Animation.Transition.Fade), Curve.Linear(600)))
+                : null));
+            await host.WaitForIdleAsync();
+            var panel = (StackPanel)parent.Child;
+            var control = panel.Children[0];
+            try
+            {
+                Theme.NotifyResourcesChanged();
+                await host.WaitForIdleAsync();
+                H.Check("MemoExitRefresh_RefreshKeptControl", panel.Children.Count == 1 && ReferenceEquals(panel.Children[0], control));
+
+                show = false;
+                host.RequestRender();
+                await host.WaitForIdleAsync();
+                var visual = ElementCompositionPreview.GetElementVisual(control);
+                H.Check("MemoExitRefresh_ExitInFlight", host.Reconciler.IsExiting(control) && panel.Children.Contains(control),
+                    $"exiting={host.Reconciler.IsExiting(control)} count={panel.Children.Count}");
+                H.Check("MemoExitRefresh_MemoFadeWins", visual.TryGetAnimationController("Opacity") is not null
+                    && visual.TryGetAnimationController("Scale") is null);
+                await Harness.WaitFor(() => !host.Reconciler.HasExitingControls, maxPasses: 40, perPassMs: 50);
+            }
+            finally
+            {
+                H.SetContent(null);
             }
         }
     }
