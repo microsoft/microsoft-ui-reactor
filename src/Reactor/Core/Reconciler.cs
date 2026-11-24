@@ -7633,11 +7633,9 @@ public sealed partial class Reconciler : IDisposable
         // curve isn't cancelled by the expression starting after it.
         if (m.TransformOrigin.HasValue && m.TransformOrigin != oldM?.TransformOrigin)
             TransformOriginBinding.Apply(fe, m.TransformOrigin.Value);
-        else if (!m.TransformOrigin.HasValue && oldM?.TransformOrigin.HasValue == true)
-        {
-            if (FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is { } owner)
-                TransformOriginBinding.Apply(fe, owner.Modifiers.TransformOrigin!.Value);
-        }
+        else if (!m.TransformOrigin.HasValue && oldM?.TransformOrigin.HasValue == true
+            && FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is { } originOwner)
+            TransformOriginBinding.Apply(fe, originOwner.Modifiers.TransformOrigin!.Value);
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
             AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
