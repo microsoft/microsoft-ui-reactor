@@ -326,6 +326,32 @@ internal sealed class TransformOriginFixture(Harness h, string scenario) : SelfT
             visual.Offset = new Vector3(target!.ActualOffset.X, target.ActualOffset.Y, 0);
             await CheckPose(name + "_Restored", lab, declared ? Expect(0, 20, degrees: 90) : Expect(0, 0, degrees: 90));
         }
+
+        // A .CenterPoint() write or curve on a page without an origin replaces DrillIn's expression; an
+        // origin added before navigation ends must start its own, or the pivot stops following the size.
+        Distinct(P + "_Navigation_DisplacedDiffersFromCentre", Expect(10, 0, degrees: 90), Expect(50, 20, degrees: 90));
+        Distinct(P + "_Navigation_TrackingDiffersFromStale", Expect(90, 20, degrees: 90, width: 160), Expect(60, 20, degrees: 90, width: 160));
+        foreach (bool animate in new[] { false, true })
+        {
+            string name = P + (animate ? "_Navigation_AnimatedCenterPoint" : "_Navigation_CenterPoint");
+            var offset = new Vector3(10, 0, 0);
+            using var lab = new Lab(H);
+            var target = await lab.Show(Target().Rotation(90));
+            var visual = ElementCompositionPreview.GetElementVisual(target!);
+            TransitionEngine.PrepareTransitionAnimations(target!, visual, target!, visual, new DrillInTransition());
+            await CheckPose(name + "_DrillInCentre", lab, Expect(50, 20, degrees: 90));
+            if (animate) AnimationScope.WithAnimation(Curve.Linear(50), () => lab.Set(Target().Rotation(90).CenterPoint(offset)));
+            else lab.Set(Target().Rotation(90).CenterPoint(offset));
+            await Harness.Render();
+            await CheckPose(name + "_Displaced", lab, Expect(10, 0, degrees: 90));
+            await lab.Show(Target().Rotation(90).CenterPoint(offset).TransformOrigin(0.5f, 0.5f));
+            await CheckPose(name + "_OriginAdded", lab, Expect(60, 20, degrees: 90));
+            TransitionEngine.NormalizeVisual(target!, visual);
+            visual.Offset = new Vector3(target!.ActualOffset.X, target.ActualOffset.Y, 0);
+            await lab.Show(Target(160).Rotation(90).CenterPoint(offset).TransformOrigin(0.5f, 0.5f));
+            visual.Offset = new Vector3(target.ActualOffset.X, target.ActualOffset.Y, 0);
+            await CheckPose(name + "_TracksSize", lab, Expect(90, 20, degrees: 90, width: 160));
+        }
     }
 
     // ── Oracles ─────────────────────────────────────────────────────────────

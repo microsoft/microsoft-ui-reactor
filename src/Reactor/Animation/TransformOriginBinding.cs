@@ -111,6 +111,16 @@ internal static class TransformOriginBinding
 
     /// <summary>Whether <c>NormalizeVisual</c> must leave the visual's <c>CenterPoint</c> to <see cref="Restore"/>.</summary>
     internal static bool OwnsCenterPoint(Visual visual) => IsBound(visual);
+
+    /// <summary>
+    /// A write or animation on the visual's own <c>CenterPoint</c> (a <c>.CenterPoint()</c> with no
+    /// origin, during DrillIn) replaced the pivot expression, so the next origin must start it again.
+    /// </summary>
+    internal static void Displaced(Reconciler.ReactorState? state)
+    {
+        if (state is not null) state.OriginExpressionRunning = false;
+    }
+
     /// <summary>
     /// Pool cleanup (§7.3 steps 1 and 4): the caller already stopped the visual's <c>CenterPoint</c>
     /// and wrote zero to it, and forgets the bookkeeping afterwards.

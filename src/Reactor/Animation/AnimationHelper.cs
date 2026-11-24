@@ -331,7 +331,10 @@ internal static class AnimationHelper
                     properties.StopAnimation(channel);
                     properties.InsertVector3(channel, Vector3.Zero);
                     break;
-                case "CenterPoint": visual.CenterPoint = Vector3.Zero; break;
+                case "CenterPoint":
+                    visual.CenterPoint = Vector3.Zero;
+                    TransformOriginBinding.Displaced(state);
+                    break;
             }
         }
         finally { visual.ImplicitAnimations = implicitAnimations; }
@@ -598,6 +601,7 @@ internal static class AnimationHelper
         var compositor = visual.Compositor;
         // Spec 066 §8.2: under a .TransformOrigin a CenterPoint curve animates the expression's offset.
         var animated = AnimatedChannel(visual, state, property, out var target);
+        if (property == "CenterPoint" && ReferenceEquals(animated, visual)) TransformOriginBinding.Displaced(state);
 
         switch (curve)
         {
@@ -734,7 +738,10 @@ internal static class AnimationHelper
                 visual.Properties.StopAnimation(TransformOriginBinding.OffsetProperty);
                 visual.Properties.InsertVector3(TransformOriginBinding.OffsetProperty, value);
                 break;
-            case "CenterPoint": visual.CenterPoint = value; break;
+            case "CenterPoint":
+                visual.CenterPoint = value;
+                TransformOriginBinding.Displaced(state);
+                break;
         }
         MarkCompositionWrite(state, property, value);
     }
