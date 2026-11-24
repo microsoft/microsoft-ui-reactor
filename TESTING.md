@@ -1102,8 +1102,8 @@ once, with a real fixture to pin the contract against.
 
 ### Scope and knobs
 
-The whole corpus runs under identity, split across two CI runners (the test step took 2m35s-3m07s
-per shard on hosted runners in 2026-09).
+The whole corpus runs under identity, split across three CI runners. With two runners, the test
+step took 2m35s-3m07s per shard on hosted runners in 2026-09.
 
 | Environment variable | Effect |
 |---|---|
