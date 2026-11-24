@@ -6855,6 +6855,11 @@ public sealed partial class Reconciler : IDisposable
     /// Drops a pending <see cref="RestartOpacityAfterXamlPush"/> check and detaches the layout
     /// handler it may be waiting on, so a control that never renders isn't kept on the layout list.
     /// </summary>
+    internal static void CancelKeyframeOpacityCheck(UIElement uie)
+    {
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState state) CancelKeyframeOpacityCheck(uie, state);
+    }
+
     internal static void CancelKeyframeOpacityCheck(UIElement uie, ReactorState state)
     {
         state.KeyframeOpacityCheck = null;

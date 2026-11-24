@@ -230,6 +230,10 @@ internal static class TransitionEngine
         var generation = global::System.Threading.Interlocked.Increment(ref _transitionGeneration);
         _elementGeneration.GetOrCreateValue(outgoing).Value = generation;
         _elementGeneration.GetOrCreateValue(incoming).Value = generation;
+        // The transition owns both pages' opacity now (it hides, fades and normalizes them), so a
+        // keyframe restart waiting for XAML's opacity push must not show a page early (#1669).
+        Core.Reconciler.CancelKeyframeOpacityCheck(outgoing);
+        Core.Reconciler.CancelKeyframeOpacityCheck(incoming);
         return generation;
     }
 

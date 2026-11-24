@@ -595,6 +595,23 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // A page transition owns its pages' opacity, so claiming one cancels a pending check
+            // that would otherwise show the incoming page before the transition does.
+            using var reconciler = new Reconciler();
+            var faded = Border(TextBlock("Incoming Page")).Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var control = (Border)reconciler.Mount(faded, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.ClaimForTransition(new Border(), control);
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_PageTransitionCancelsOpacityCheck", restarts == 0, $"restarts={restarts}");
+            reconciler.Update(faded, Border(TextBlock("Incoming Page")), control, () => { });
+            H.SetContent(null);
+        }
+
+        {
             // A setter's opacity write replaces the keyframe like a modifier's, so the check must not undo it.
             using var reconciler = new Reconciler();
             var plain = Border(TextBlock("Setter Opacity"));
