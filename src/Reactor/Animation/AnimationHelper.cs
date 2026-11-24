@@ -48,7 +48,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
-        if (flag == AnimateProperty.Opacity) state.KeyframeOpacityCheck = null;
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelKeyframeOpacityCheck(element, state);
         return state;
     }
 
@@ -166,7 +166,7 @@ internal static class AnimationHelper
         // A shared target can replace the deferred animation before its decorator plays.
         if (expectedController is not null && !Equals(expectedController, visual.TryGetAnimationController(CompositorPropertyName(property))))
         {
-            ClearCompositionOwnership(state, flag);
+            ClearCompositionOwnership(element, state, flag);
             return;
         }
         if (state.KeyframeChannelOwners?.TryGetValue(flag, out var owner) == true && owner.Entry.Definition.Loop
@@ -197,15 +197,15 @@ internal static class AnimationHelper
             }
         }
         finally { visual.ImplicitAnimations = implicitAnimations; }
-        ClearCompositionOwnership(state, flag);
+        ClearCompositionOwnership(element, state, flag);
     }
 
-    private static void ClearCompositionOwnership(Reconciler.ReactorState state, AnimateProperty flag)
+    private static void ClearCompositionOwnership(UIElement element, Reconciler.ReactorState state, AnimateProperty flag)
     {
         state.CompositionModifierProperties &= ~flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
-        if (flag == AnimateProperty.Opacity) state.KeyframeOpacityCheck = null;
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelKeyframeOpacityCheck(element, state);
     }
 
     /// <summary>

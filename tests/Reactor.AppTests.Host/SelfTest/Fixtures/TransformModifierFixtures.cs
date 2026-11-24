@@ -564,13 +564,17 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
             var control = (Border)reconciler.Mount(deferAnimated, () => { })!;
             control.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.65d) } };
             var visual = ElementCompositionPreview.GetElementVisual(control);
+            // XAML's first push of the styled opacity must not start .Animate()'s implicit
+            // Opacity animation in the keyframe's place: the restart count proves it was stopped.
+            int deferRestartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
             reconciler.Update(deferAnimated, deferWithOpacity, control, () => { });
             reconciler.Update(deferWithOpacity, loop, control, () => { });
             H.SetContent(control);
             await Harness.Render();
             await AfterNextCommit(visual);
             bool loopRestarted = visual.TryGetAnimationController("Opacity") is { } running
-                && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity"));
+                && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity"))
+                && Reconciler.KeyframeOpacityRestartsForTests - deferRestartsBefore == 1;
             // Only a decorator's shared target (KeyframeReleaseStage.BeforePlayback) compares the
             // deferred controller with the running one, so check the bookkeeping it reads directly.
             bool deferredFollows = control.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState
@@ -582,6 +586,47 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 && Math.Abs(visual.Opacity - 0.65f) < 0.001f,
                 $"restarted={loopRestarted}, deferredFollows={deferredFollows}, stopped={loopStopped}, opacity={visual.Opacity}");
             reconciler.Update(scaleOnly, deferTarget, control, () => { });
+            H.SetContent(null);
+        }
+
+        {
+            // Removing the keyframe while the element waits under a collapsed parent detaches the
+            // pending layout handler instead of leaving it on the layout list.
+            using var reconciler = new Reconciler();
+            var plain = Border(TextBlock("Cancelled Opacity Check"));
+            var faded = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse);
+            var control = (Border)reconciler.Mount(faded, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            var host = new Border { Child = control, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            static bool Pending(Border b) => b.GetValue(Reconciler.ReactorAttached.StateProperty)
+                is Reconciler.ReactorState { KeyframeOpacityLayoutHandler: not null };
+            bool armed = Pending(control);
+            reconciler.Update(faded, plain.Opacity(0.4).Width(120), control, () => { });
+            H.Check("TransformKeyframes_CancelledOpacityCheckDetachesLayoutHandler", armed && !Pending(control),
+                $"armed={armed}, pending={Pending(control)}");
+            host.Child = null;
+            H.SetContent(null);
+        }
+
+        {
+            // A scroll-linked opacity expression has no AnimationController, so the check must not
+            // read the channel as free and put the keyframe back over it.
+            using var reconciler = new Reconciler();
+            var viewer = new ScrollViewer();
+            var plain = Border(TextBlock("Scroll-linked Opacity"));
+            var linked = plain.Opacity(0.4).Keyframes("fade", 1, OpacityPulse).ScrollLinked(viewer, static b => b.FadeOut(0, 100));
+            var control = (Border)reconciler.Mount(linked, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            int restartsBefore = Reconciler.KeyframeOpacityRestartsForTests;
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests - restartsBefore;
+            H.Check("TransformKeyframes_ScrollLinkedOpacityNotReplaced", restarts == 0, $"restarts={restarts}");
+            reconciler.Update(linked, plain, control, () => { });
             H.SetContent(null);
         }
     }
