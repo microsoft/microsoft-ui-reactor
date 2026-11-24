@@ -57,21 +57,31 @@ public sealed partial class ElementFactory<T>
 
     // From the first Move, Remove or Reset on, check whenever focus moves onto a row. Focus
     // changes don't necessarily lay the list out, so the check runs from the dispatcher
-    // instead of LayoutUpdated, once per burst of focus changes.
+    // instead of LayoutUpdated, once per burst of focus changes. The repeater can outlive this
+    // factory (a replaced template), so the handler holds the factory weakly and unsubscribes
+    // itself once the factory is gone or no longer the repeater's template.
     private void WatchFocusEntering(ItemsRepeater repeater)
     {
         if (ReferenceEquals(_gotFocusRepeater, repeater)) return;
         if (_gotFocusRepeater is { } previous && _gotFocus is { } previousHandler)
             previous.GotFocus -= previousHandler;
-        RoutedEventHandler handler = (_, _) =>
+        var self = new WeakReference<ElementFactory<T>>(this);
+        RoutedEventHandler handler = null!;
+        handler = (_, _) =>
         {
-            if (_focusRunQueued || _focusCheck is not null) return;
+            if (!self.TryGetTarget(out var factory) || !ReferenceEquals(repeater.ItemTemplate, factory))
+            {
+                repeater.GotFocus -= handler;
+                return;
+            }
+            if (factory._focusRunQueued || factory._focusCheck is not null) return;
             var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             if (queue is null) return;
-            _focusRunQueued = queue.TryEnqueue(() =>
+            factory._focusRunQueued = queue.TryEnqueue(() =>
             {
-                _focusRunQueued = false;
-                RunFocusedContainerCheck(repeater);
+                if (!self.TryGetTarget(out var target)) return;
+                target._focusRunQueued = false;
+                target.RunFocusedContainerCheck(repeater);
             });
         };
         _gotFocusRepeater = repeater;
@@ -278,9 +288,27 @@ public sealed partial class ElementFactory<T>
     private static bool IsFullyInViewport(UIElement element, FrameworkElement viewport)
     {
         if (element is not FrameworkElement fe || fe.Visibility != Visibility.Visible) return false;
+
+        // Inside a scroller, compare with the visible part of its content: the scroller's own
+        // bounds also cover its padding and scroll bars, where a row is clipped.
+        if (viewport is ScrollViewer { Content: UIElement content } sv)
+            return Contains(fe, content, sv.HorizontalOffset, sv.VerticalOffset, sv.ViewportWidth, sv.ViewportHeight, sv.ZoomFactor);
+        if (viewport is ScrollView { Content: UIElement viewContent } view)
+            return Contains(fe, viewContent, view.HorizontalOffset, view.VerticalOffset, view.ViewportWidth, view.ViewportHeight, view.ZoomFactor);
+
         var bounds = fe.TransformToVisual(viewport).TransformBounds(new global::Windows.Foundation.Rect(0, 0, fe.ActualWidth, fe.ActualHeight));
         return bounds.Top >= 0 && bounds.Bottom <= viewport.ActualHeight
             && bounds.Left >= 0 && bounds.Right <= viewport.ActualWidth;
+    }
+
+    // Offsets and viewport sizes are in zoomed units; content coordinates aren't.
+    private static bool Contains(FrameworkElement fe, UIElement content, double offsetX, double offsetY, double width, double height, float zoom)
+    {
+        double scale = zoom > 0 ? zoom : 1;
+        var bounds = fe.TransformToVisual(content).TransformBounds(new global::Windows.Foundation.Rect(0, 0, fe.ActualWidth, fe.ActualHeight));
+        double left = offsetX / scale, top = offsetY / scale;
+        return bounds.Left >= left - 0.5 && bounds.Top >= top - 0.5
+            && bounds.Right <= left + width / scale + 0.5 && bounds.Bottom <= top + height / scale + 0.5;
     }
 
     private static bool IsDescendantOf(DependencyObject? node, DependencyObject ancestor)
