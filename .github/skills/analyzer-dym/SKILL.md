@@ -91,7 +91,7 @@ dotnet test tests/Reactor.Tests --filter-class "*AnalyzerTests*" -p:Platform=x64
 dotnet test tests/Reactor.Tests --filter-class "*CheckCommandTests*" -p:Platform=x64 -p:SkipSignaturesGen=true
 ```
 
-`-p:SkipSignaturesGen=true` avoids the `CS2012 …\intermediatexaml\Reactor.dll` build race;
+`-p:SkipSignaturesGen=true` avoids the `CS2012 …\intermediatexaml\Microsoft.UI.Reactor.dll` build race;
 `-p:Platform=x64` avoids the WinUI architecture failure. If you touched
 `RulePerformanceTests`/`CombinedStub`, run them explicitly with
 `--filter-class "*RulePerformanceTests*"` (they carry

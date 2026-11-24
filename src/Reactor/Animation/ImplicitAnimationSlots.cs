@@ -57,6 +57,31 @@ internal sealed class ImplicitAnimationClaims
 
     internal int Count => _claims.Count;
 
+    private List<(string Key, AnimationHelper.TransitionTiming Timing, object Animation)>? _transitions;
+
+    /// <summary>The transition animation last published for <paramref name="key"/>, with the timing it was built from.</summary>
+    internal (AnimationHelper.TransitionTiming Timing, object Animation)? PublishedTransition(string key)
+    {
+        if (_transitions is null) return null;
+        foreach (var entry in _transitions)
+            if (entry.Key == key) return (entry.Timing, entry.Animation);
+        return null;
+    }
+
+    internal void RememberTransition(string key, AnimationHelper.TransitionTiming timing, object animation)
+    {
+        ForgetTransition(key);
+        (_transitions ??= new(1)).Add((key, timing, animation));
+    }
+
+    /// <summary>Forgets the transition animation published for <paramref name="key"/>, or for every key when null.</summary>
+    internal void ForgetTransition(string? key)
+    {
+        if (_transitions is null) return;
+        if (key is null) _transitions.Clear();
+        else _transitions.RemoveAll(entry => entry.Key == key);
+    }
+
     internal void Add<TSink>(TSink sink, string key, ImplicitFeature feature, int slot, object value)
         where TSink : IImplicitAnimationSink
     {
@@ -154,14 +179,23 @@ internal sealed class ImplicitAnimationClaims
 /// removing one never drops another's key (#1625, #1626).
 /// </summary>
 /// <remarks>
-/// A transition claim holds the XAML transition object. It is written to the matching
-/// <c>UIElement.*Transition</c> property while the visual hasn't been handed out, and as a
-/// compositor animation on the visual afterwards, when WinUI refuses the XAML property. Spec 066
-/// layer 2 moves every transition to the visual. Every other claim holds a
+/// A transition claim holds the XAML transition object, which describes the duration and axis
+/// mask. Reactor never writes the <c>UIElement.*Transition</c> properties, because they block the
+/// handoff (#1623). It publishes a compositor animation with the XAML curve instead (spec 066 §5).
+/// The <see cref="TranslationKey"/> claim publishes nothing: an implicit <c>"Translation"</c> key
+/// never fires for a property-set write, so <c>AnimationHelper</c> reads the claim and animates
+/// Reactor's Translation writes itself (§5.3). Every other claim holds a
 /// <see cref="CompositionAnimation"/>, and its caller has already taken the visual.
 /// </remarks>
 internal static class ImplicitAnimationSlots
 {
+    /// <summary>The write-time <c>.TranslationTransition()</c> claim (spec 066 §5.3).</summary>
+    internal const string TranslationKey = "Translation";
+
+    /// <summary>The effective <c>.TranslationTransition()</c> on this control, or null.</summary>
+    internal static Vector3Transition? TranslationTransition(UIElement element)
+        => Claims(element)?.Effective(TranslationKey) as Vector3Transition;
+
     internal static void Claim(UIElement element, string key, ImplicitFeature feature, int slot, object value)
     {
         var state = Reconciler.GetOrCreateReactorState(element);
@@ -180,7 +214,7 @@ internal static class ImplicitAnimationSlots
         if (Claims(element) is { } claims) claims.FlushDeferred(new Sink(element, claims));
     }
 
-    /// <summary>Drops every claim and the keys they published on the visual. XAML transitions are left alone.</summary>
+    /// <summary>Drops every claim and the keys they published on the visual.</summary>
     internal static void ReleaseAll(UIElement element)
     {
         if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState { ImplicitClaims: { } claims } state)
@@ -202,12 +236,32 @@ internal static class ImplicitAnimationSlots
     {
         public void Insert(string key, object value)
         {
+            var visual = TakeVisual();
             if (value is not CompositionAnimation animation)
             {
-                if (!claims.PublishedToVisual && TrySetXamlTransition(element, key, value)) return;
-                animation = TransitionAnimation(key, value);
+                if (key == TranslationKey) return;
+                var timing = AnimationHelper.TransitionTiming.Of(value);
+                // A transition modifier builds a new transition object on every render. Keep the
+                // published animation while the timing is unchanged, with any .Stagger() delay on
+                // it, so a write in this update still starts staggered. The update refreshes that
+                // delay before the child writes (Reconciler.RefreshStaggerDelay), and removing the
+                // stagger clears it (Reconciler.ClearStaggerDelays).
+                if (claims.PublishedTransition(key) is { } published && published.Timing == timing
+                    && visual.ImplicitAnimations is { } current && current.TryGetValue(key, out var existing)
+                    && ReferenceEquals(existing, published.Animation))
+                    return;
+                animation = AnimationHelper.CreateTransitionAnimation(visual.Compositor, key, timing);
+                // A key published after the stagger delays were applied (a new channel, or a
+                // changed timing) starts with this child's current delay.
+                if (Reconciler.StaggerDelayOf(element) is { } delay && delay != TimeSpan.Zero
+                    && Array.IndexOf(Reconciler.StaggerChannels, key) >= 0)
+                    AnimationHelper.SetDelay(animation, delay);
+                claims.RememberTransition(key, timing, animation);
             }
-            var visual = TakeVisual();
+            else
+            {
+                claims.ForgetTransition(key);
+            }
             if (visual.ImplicitAnimations is { } collection)
             {
                 collection[key] = animation;
@@ -220,11 +274,8 @@ internal static class ImplicitAnimationSlots
 
         public void Remove(string key)
         {
-            if (!claims.PublishedToVisual)
-            {
-                TrySetXamlTransition(element, key, null);
-                return;
-            }
+            claims.ForgetTransition(key);
+            if (!claims.PublishedToVisual || key == TranslationKey) return;
             var visual = ElementCompositionPreview.GetElementVisual(element);
             if (visual.ImplicitAnimations is not { } collection) return;
             collection.Remove(key);
@@ -233,6 +284,7 @@ internal static class ImplicitAnimationSlots
 
         public void Clear()
         {
+            claims.ForgetTransition(null);
             if (claims.PublishedToVisual)
                 ElementCompositionPreview.GetElementVisual(element).ImplicitAnimations = null;
         }
@@ -243,39 +295,6 @@ internal static class ImplicitAnimationSlots
             var visual = AnimationHelper.GetElementVisual(element);
             claims.PublishedToVisual = true;
             return visual;
-        }
-
-        // The fallback keeps the transition's duration with a linear curve, as it did before
-        // spec 066. Layer 2 gives it the XAML curve.
-        private CompositionAnimation TransitionAnimation(string key, object transition)
-        {
-            var compositor = TakeVisual().Compositor;
-            if (transition is ScalarTransition scalar)
-                return AnimationHelper.CreateScalarImplicitAnimation(compositor, key, new LinearCurve(scalar.Duration));
-            return AnimationHelper.CreateVector3ImplicitAnimation(compositor, key, new LinearCurve(((Vector3Transition)transition).Duration));
-        }
-    }
-
-    /// <summary>
-    /// Writes (or clears, for null) the XAML transition behind <paramref name="key"/>. Returns false
-    /// when WinUI refuses it because the visual was handed out.
-    /// </summary>
-    private static bool TrySetXamlTransition(UIElement element, string key, object? transition)
-    {
-        try
-        {
-            switch (key)
-            {
-                case "Opacity": element.OpacityTransition = (ScalarTransition?)transition; break;
-                case "RotationAngle": element.RotationTransition = (ScalarTransition?)transition; break;
-                case "Scale": element.ScaleTransition = (Vector3Transition?)transition; break;
-                case "Offset": element.TranslationTransition = (Vector3Transition?)transition; break;
-            }
-            return true;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 }

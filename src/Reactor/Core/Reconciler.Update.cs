@@ -247,6 +247,7 @@ public sealed partial class Reconciler
             ModifierUpdate = (control, newEl, modifiers);
         var previousImplicitSlot = _implicitSlot;
         _implicitSlot = implicitSlot;
+        var previousUpdateStagger = _updateStagger;
         // Each control's outermost layer scopes the deferred releases of its whole chain.
         var previousImplicitDeferred = _implicitDeferred;
         if (modifierParent is null) _implicitDeferred = false;
@@ -314,6 +315,31 @@ public sealed partial class Reconciler
 
         if (control is FrameworkElement departingModifiers)
             ClearRemovedTransformModifiers(departingModifiers, oldModifiers, modifiers);
+
+        // Spec 066 §6.3: the transition policy (releases, new claims and the reduced-motion gate)
+        // runs before setters and modifier writes, so a value changed in the same reconcile moves
+        // as the new declaration says, and a removed transition doesn't animate it. A replaced
+        // control gets the transitions again below, as on mount.
+        bool transitionsApplied = true;
+        // The children's transition keys keep a stagger's delays across renders, so a dropped
+        // .Stagger() releases them before the children write this update's values.
+        if (oldEl.StaggerConfig is not null && newEl.StaggerConfig is null)
+            ClearStaggerDelays(control);
+        // A kept .Stagger() gives each child its delay at its new position before the child writes.
+        RefreshStaggerDelay(control);
+        if (newEl.StaggerConfig is { } stagger && !ReferenceEquals(_updateStagger?.Panel, control))
+            _updateStagger = new UpdateStaggerScope(control, stagger.Delay);
+        if (oldEl.ImplicitTransitions is not null || newEl.ImplicitTransitions is not null)
+        {
+            try { ApplyImplicitTransitions(control, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot); }
+            catch (UnauthorizedAccessException)
+            {
+                // User code blocked this control's visual. A decorator may be about to replace it,
+                // in which case the new control gets the transitions below; otherwise they apply
+                // again after the update and the error surfaces there.
+                transitionsApplied = false;
+            }
+        }
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -481,10 +507,9 @@ public sealed partial class Reconciler
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
             ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
 
-        // Apply transitions after update (re-applies when transition config changes). A
-        // transition the old element had is released here too, so the gate includes it (#1626).
-        // A replaced control is new to this layer: its inner layers just mounted it, so this layer
-        // claims as Mount does, at slot 0 above their claims (spec 066 §6.1).
+        // Theme transitions apply after the update. Implicit transitions already ran before the
+        // setters (spec 066 §6.3). A replaced control is new to this layer: its inner layers just
+        // mounted it, so this layer claims as Mount does, at slot 0 above their claims (§6.1).
         bool replacedControl = result is not null && !ReferenceEquals(result, control);
         // A layer on a replaced control numbers its claims as a Mount layer does, under a frame
         // newer than every outer layer's mark, so the layers above shift them in turn.
@@ -494,10 +519,15 @@ public sealed partial class Reconciler
             implicitSlot = 0;
             replacedFrame = ++_mountFrames;
             ShiftForwardedClaims(target, mountMark, layer: newEl, self: newEl, stampFrame: replacedFrame);
+            if (newEl.ImplicitTransitions is not null)
+                ApplyImplicitTransitions(target, null, newEl.ImplicitTransitions, implicitSlot);
         }
-        var previousTransitions = replacedControl ? null : oldEl.ImplicitTransitions;
-        if (previousTransitions is not null || newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
-            ApplyTransitions(target, previousTransitions, newEl.ImplicitTransitions, newEl.ThemeTransitions, implicitSlot);
+        else if (!transitionsApplied)
+        {
+            ApplyImplicitTransitions(target, oldEl.ImplicitTransitions, newEl.ImplicitTransitions, implicitSlot);
+        }
+        if (newEl.ThemeTransitions is not null)
+            ApplyThemeTransitions(target, newEl.ThemeTransitions);
 
         // Apply or clear Composition-layer layout animation
         if (newEl.LayoutAnimation is not null)
@@ -527,13 +557,6 @@ public sealed partial class Reconciler
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
             ApplyKeyframeAnimations(target, keyframes);
         }
-        else if (oldEl.KeyframeAnimations is not null)
-        {
-            // The keyframes took the visual, so facade transforms the setters wrote in this
-            // update must move to it, as the cleanup that used to run here did (#1641).
-            try { AnimationHelper.GetElementVisual(target); }
-            catch { /* No compositor (e.g. unit tests) */ }
-        }
         // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
         if (newEl.ScrollAnimation is not null)
             ApplyScrollAnimation(target, newEl.ScrollAnimation);
@@ -549,6 +572,7 @@ public sealed partial class Reconciler
         {
             ModifierUpdate = previousModifierUpdate;
             _implicitSlot = previousImplicitSlot;
+            _updateStagger = previousUpdateStagger;
             if (modifierParent is null)
             {
                 // An update that threw after a deferred release still restores the keys it held

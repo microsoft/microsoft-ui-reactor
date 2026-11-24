@@ -402,6 +402,7 @@ internal static class ModifierEventFixtures
     {
         public override async Task RunAsync()
         {
+            using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             var host = H.CreateHost();
             host.Mount(ctx =>
             {
@@ -426,8 +427,12 @@ internal static class ModifierEventFixtures
             await Harness.Render();
             var target = H.FindText("TransTarget");
             H.Check("Transition_Initial", target is not null);
-            H.Check("Transition_OpacityTransSet", target!.OpacityTransition is not null);
-            H.Check("Transition_TranslationSet", target!.TranslationTransition is not null);
+            // Spec 066 §5: compositor transitions, never the XAML properties. An Opacity key on the
+            // visual, and a write-time Translation claim.
+            var keys = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(target!).ImplicitAnimations;
+            H.Check("Transition_OpacityTransSet", target!.OpacityTransition is null && keys?.ContainsKey("Opacity") == true);
+            H.Check("Transition_TranslationSet", target!.TranslationTransition is null
+                && Microsoft.UI.Reactor.Animation.ImplicitAnimationSlots.TranslationTransition(target) is not null);
 
             H.ClickButton("UpdTrans");
             await Harness.Render();

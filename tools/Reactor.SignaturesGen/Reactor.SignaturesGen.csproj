@@ -16,7 +16,7 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <!-- Reflection-only build tool: it loads Reactor.dll and Reactor.Advanced.dll to emit reactor.api.txt
+    <!-- Reflection-only build tool: it loads Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll to emit reactor.api.txt
          and never creates a WinUI window, so it does not need the Windows App SDK
          runtime. Suppress the auto-generated bootstrap initializer, which otherwise
          runs at startup and throws DllNotFoundException for the native
@@ -53,8 +53,8 @@
     <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup Condition="'$(ReactorApiAot)' == 'true'">
-    <TrimmerRootAssembly Include="Reactor" />
-    <TrimmerRootAssembly Include="Reactor.Advanced" />
+    <TrimmerRootAssembly Include="Microsoft.UI.Reactor" />
+    <TrimmerRootAssembly Include="Microsoft.UI.Reactor.Advanced" />
   </ItemGroup>
 
   <!-- After build, run the generator with the repo root as argv[0] so the file

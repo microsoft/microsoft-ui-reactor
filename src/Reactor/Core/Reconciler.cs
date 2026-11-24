@@ -1698,12 +1698,23 @@ public sealed partial class Reconciler : IDisposable
         internal AnimateProperty DeferredModifierResets;
         // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
         internal Animation.ImplicitAnimationClaims? ImplicitClaims;
+        // The delay a parent's .Stagger() gives this child's implicit animations, so a key
+        // published after the delays were applied (a new or retimed transition) starts staggered.
+        internal TimeSpan? StaggerDelay;
         // Names this control holds keyframe trigger entries under, whichever layer declared them,
         // so the pool's visual reset drops exactly those (spec 066 §7.3 step 4).
         internal HashSet<string>? KeyframeNames;
         // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
         // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
         internal bool VisualTaken;
+        // Set by AnimationHelper.GetElementVisual once the handoff succeeded, unlike VisualTaken,
+        // which some features set ahead of it. WinUI then rejects facade writes, so the facades
+        // read identity and a later handoff returns this visual (the same instance for the
+        // control's lifetime) without asking WinUI again.
+        internal Microsoft.UI.Composition.Visual? HandedOutVisual;
+        // Reactor enabled translation on the handed-out visual for a declared Translation channel
+        // (spec 066 §4.3). The pool's visual reset disables it again and clears this.
+        internal bool TranslationEnabled;
         // A navigation transition's completion can still reach the control after it leaves the tree.
         internal bool PoolExcluded;
         // A connected-animation source: an excluded return still drops the element it hosted.
@@ -2837,11 +2848,21 @@ public sealed partial class Reconciler : IDisposable
         bool demand = element.AnimationConfig is not null || element.ElementTransition?.GetEnterTransition() is not null
             || element.KeyframeAnimations is not null
             || element.LayoutAnimation is not null || element.ScrollAnimation?.ScrollViewer is not null
+            || TakesVisual(element.ImplicitTransitions) || DeclaresTransform(modifiers)
             || (outer.Armed && outer.Transparent && outer.Demand);
         bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
             || (outer.Armed && outer.Blocked);
         return new(Armed: true, Transparent: element is KeyedMemoElement, demand, blocked, candidate);
     }
+
+    // Spec 066 layer 4: a transform modifier takes the visual at mount unless its value is the
+    // identity (§3 invariant 2). A rented control's facades read identity, and setters block the
+    // lane anyway, so the declared value decides.
+    private static bool DeclaresTransform(ElementModifiers? m)
+        => m is not null
+            && ((m.Scale is { } scale && scale != Vector3.One) || (m.Rotation is { } rotation && rotation != 0)
+                || (m.Translation is { } translation && translation != Vector3.Zero)
+                || (m.CenterPoint is { } center && center != Vector3.Zero));
 
     // The built-in element types whose handler rents a poolable control. Exact types: a record
     // derived from one may come with its own handler.
@@ -4583,8 +4604,14 @@ public sealed partial class Reconciler : IDisposable
     /// resource refresh), so the caller doesn't unmount it twice.
     /// </summary>
     internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
-        out bool unmountedByUpdate)
-        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
+        out bool unmountedByUpdate, int childIndex = -1)
+    {
+        // The child's new position among its panel's children, for a parent .Stagger() (RefreshStaggerDelay).
+        var previousIndex = _updatingChildIndex;
+        _updatingChildIndex = childIndex;
+        try { return UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate); }
+        finally { _updatingChildIndex = previousIndex; }
+    }
 
     /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
@@ -5703,6 +5730,12 @@ public sealed partial class Reconciler : IDisposable
         {
             foreach (var setter in setters) setter(control);
         }
+        // Spec 066 §9 row 1: name the modifier when WinUI rejects a facade write after the
+        // handoff. The filter returns false, so the exception is unchanged.
+        catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(control))
+        {
+            throw;
+        }
         finally
         {
             if (state is not null) state.EchoSuppressScopeDepth--;
@@ -5834,30 +5867,60 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT,
         ThemeTransitions? themeT, int slot = 0)
     {
-        if (implicitT is not null || previous is not null)
+        ApplyImplicitTransitions(uie, previous, implicitT, slot);
+        ApplyThemeTransitions(uie, themeT);
+    }
+
+    /// <summary>True when the transitions include one that runs on the composition visual (spec 066 §5).</summary>
+    internal static bool TakesVisual(ImplicitTransitions? transitions)
+        => transitions is not null && (transitions.Opacity is not null || transitions.Scale is not null
+            || transitions.Rotation is not null || transitions.Translation is not null);
+
+    /// <summary>
+    /// Spec 066 §5. Opacity, Scale and Rotation transitions are implicit keys on the composition
+    /// visual, and Translation a write-time animation, all with the XAML curve. Reactor never sets
+    /// the <c>UIElement.*Transition</c> properties, which would block the handoff (#1623).
+    /// Background stays a XAML transition (§5.6). Update runs this before setters and modifiers,
+    /// so a value changed in the same reconcile follows the new policy (§6.3).
+    /// </summary>
+    internal static void ApplyImplicitTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT, int slot)
+    {
+        if (implicitT is null && previous is null) return;
+
+        var current = implicitT;
+        if (TakesVisual(implicitT))
         {
-            // Once Reactor's claims live on the handed-out visual, a facade Translation that a
-            // setter wrote in this update must move to the visual, as the fallback path always did.
-            if (ImplicitAnimationSlots.PublishedToVisual(uie))
-                AnimationHelper.GetElementVisual(uie);
-            // XAML while the visual hasn't been handed out, a compositor key once WinUI refuses the
-            // XAML property (.Animate(), enter transitions, a previous owner via the pool).
-            // ImplicitAnimationSlots picks the path and shares the keys with the other features.
-            ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, implicitT?.Opacity, slot);
-            ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, implicitT?.Rotation, slot);
-            ApplyTransitionChannel(uie, "Scale", previous?.Scale, implicitT?.Scale, slot);
-            ApplyTransitionChannel(uie, "Offset", previous?.Translation, implicitT?.Translation, slot);
-            if (implicitT?.Background is not null)
-            {
-                switch (uie)
-                {
-                    case WinUI.Grid g: g.BackgroundTransition = implicitT.Background; break;
-                    case WinUI.StackPanel sp: sp.BackgroundTransition = implicitT.Background; break;
-                    case WinUI.ContentPresenter cp: cp.BackgroundTransition = implicitT.Background; break;
-                }
-            }
+            // The visual is taken even with animations off, so readback, the pool lane and the
+            // setters that throw don't depend on the system setting (§9 rows 1 and 2).
+            AnimationHelper.GetElementVisual(uie);
+            // XAML transitions honour "Animation effects" and composition animations don't, so
+            // with the setting off no key is installed and Translation writes jump (§5.5).
+            if (!global::Microsoft.UI.Reactor.Navigation.TransitionEngine.AnimationsEnabled) current = null;
         }
 
+        ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, current?.Opacity, slot);
+        ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, current?.Rotation, slot);
+        ApplyTransitionChannel(uie, "Scale", previous?.Scale, current?.Scale, slot);
+        ApplyTransitionChannel(uie, ImplicitAnimationSlots.TranslationKey, previous?.Translation, current?.Translation, slot);
+
+        if (implicitT?.Background is { } background)
+            SetBackgroundTransition(uie, background);
+        else if (previous?.Background is not null)
+            SetBackgroundTransition(uie, null);
+    }
+
+    private static void SetBackgroundTransition(UIElement uie, BrushTransition? transition)
+    {
+        switch (uie)
+        {
+            case WinUI.Grid g: g.BackgroundTransition = transition; break;
+            case WinUI.StackPanel sp: sp.BackgroundTransition = transition; break;
+            case WinUI.ContentPresenter cp: cp.BackgroundTransition = transition; break;
+        }
+    }
+
+    internal static void ApplyThemeTransitions(UIElement uie, ThemeTransitions? themeT)
+    {
         if (themeT?.Children is { } children)
         {
             var tc = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
@@ -5962,9 +6025,6 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ClearLayoutAnimation(UIElement uie, int slot = 0)
     {
-        // The layout animation took the visual. Taking it again moves a facade Translation that
-        // a setter wrote in this update onto it.
-        AnimationHelper.GetElementVisual(uie);
         ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
         ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
     }
@@ -6049,9 +6109,22 @@ public sealed partial class Reconciler : IDisposable
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var delay = staggerIndex > 0 ? TimeSpan.FromTicks(staggerDelay.Ticks * staggerIndex) : TimeSpan.Zero;
 
-        ApplyTransitionAnimations(uie, visual, compositor, enter, curve, isEnter: true, delay);
+        // The enter writes its start values straight to the visual. An implicit key on the same
+        // channel (a transition, .Animate()) would animate that write and the enter would start
+        // from where the element already is (spec 066 §6.1).
+        WithoutImplicitAnimations(visual, () => ApplyTransitionAnimations(uie, visual, compositor, enter, curve, isEnter: true, delay));
 
         batch.End();
+    }
+
+    /// <summary>Runs visual writes that must not fire the visual's implicit animation keys.</summary>
+    internal static void WithoutImplicitAnimations(Visual visual, Action write)
+    {
+        var implicitAnimations = visual.ImplicitAnimations;
+        if (implicitAnimations is null) { write(); return; }
+        visual.ImplicitAnimations = null;
+        try { write(); }
+        finally { visual.ImplicitAnimations = implicitAnimations; }
     }
 
     /// <summary>
@@ -6087,10 +6160,13 @@ public sealed partial class Reconciler : IDisposable
             // A control torn down with an ancestor mid-exit was already pooled, and the pool's
             // visual reset restored it (spec 066 §7.3). It may belong to another renter now.
             if (!EndExit(uie, exit)) return;
-            // Reset visual state after exit
-            visual.Opacity = 1;
-            visual.Offset = Vector3.Zero;
-            visual.Scale = Vector3.One;
+            // Reset visual state after exit, without animating it through an implicit key
+            WithoutImplicitAnimations(visual, () =>
+            {
+                visual.Opacity = 1;
+                visual.Offset = Vector3.Zero;
+                visual.Scale = Vector3.One;
+            });
             onComplete();
         };
     }
@@ -6372,11 +6448,15 @@ public sealed partial class Reconciler : IDisposable
             visual.StartAnimation("Scale", scaleAnim);
         }
 
-        if (values?.Translation.HasValue == true || newState == InteractionState.Normal)
+        // Translation only for a declared Translation channel (spec 066 §4.3): a state that moves it,
+        // or Normal after something enabled it. Enabling it otherwise would make WinUI ignore a
+        // facade Translation drag on the element (#1642).
+        if (values?.Translation.HasValue == true
+            || (newState == InteractionState.Normal && AnimationHelper.TranslationEnabled(uie)))
         {
             // Animate Translation, not Offset: on a XAML element's handoff visual, Offset is the
             // layout position, so animating it to zero pulls the element to its parent's origin.
-            ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+            AnimationHelper.EnableTranslation(uie, visual);
             var targetTranslation = values?.Translation ?? rest.Translation;
             var translationAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetTranslation, curve);
             visual.StartAnimation("Translation", translationAnim);
@@ -6545,6 +6625,69 @@ public sealed partial class Reconciler : IDisposable
     /// Applies stagger delays to an element's Visual's implicit animations.
     /// Called after layout/property animations are set up on children.
     /// </summary>
+    /// <summary>
+    /// Removes the delays <see cref="ApplyStaggerDelays"/> set on a panel's children. Update runs
+    /// it before the children update when the parent drops <c>.Stagger()</c>, so their writes in
+    /// that update start at once. Only the channels stagger delays are reset: a child's own
+    /// delayed animation on another key keeps its delay.
+    /// </summary>
+    internal static void ClearStaggerDelays(UIElement parent)
+    {
+        if (parent is not WinUI.Panel panel) return;
+        foreach (var child in panel.Children)
+        {
+            if (child.GetValue(ReactorAttached.StateProperty) is ReactorState state) state.StaggerDelay = null;
+            if (!ElementPool.IsVisualTaken(child)) continue;
+            SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(child), TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>The implicit animation keys <c>.Stagger()</c> delays.</summary>
+    internal static readonly string[] StaggerChannels = ["Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint"];
+
+    /// <summary>The stagger delay recorded for <paramref name="child"/>, or null when no parent staggers it.</summary>
+    internal static TimeSpan? StaggerDelayOf(UIElement child)
+        => (child.GetValue(ReactorAttached.StateProperty) as ReactorState)?.StaggerDelay;
+
+    private static void SetStaggerDelayOnKeys(Visual visual, TimeSpan delay)
+    {
+        if (visual.ImplicitAnimations is not { } keys) return;
+        foreach (var key in StaggerChannels)
+            SetDelayIfPresent(keys, key, delay);
+    }
+
+    private static void SetDelayIfPresent(ImplicitAnimationCollection keys, string key, TimeSpan delay)
+    {
+        if (keys.TryGetValue(key, out var animation) && animation is CompositionAnimation composition)
+            AnimationHelper.SetDelay(composition, delay);
+    }
+
+    /// <summary>A panel with <c>.Stagger()</c> whose update is reconciling its children.</summary>
+    private sealed record UpdateStaggerScope(UIElement Panel, TimeSpan Delay);
+
+    private UpdateStaggerScope? _updateStagger;
+
+    // The new index of the panel child being updated, set by child reconciliation; -1 elsewhere.
+    private int _updatingChildIndex = -1;
+
+    /// <summary>
+    /// Gives a child its stagger delay before it writes this update's values: the delay its
+    /// parent's current <c>.Stagger()</c> sets at its new position. Without it a write in this
+    /// update would start with the previous render's delay (a changed stagger or a reordered
+    /// child), and a newly published key with none. Every layer of the child sees the same
+    /// position, so wrapped children and repeated sibling records get their own delay.
+    /// </summary>
+    private void RefreshStaggerDelay(UIElement control)
+    {
+        if (_updateStagger is not { } stagger || _updatingChildIndex < 0) return;
+        var parent = (control as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(control);
+        if (!ReferenceEquals(parent, stagger.Panel)) return;
+        var delay = TimeSpan.FromTicks(stagger.Delay.Ticks * _updatingChildIndex);
+        GetOrCreateReactorState(control).StaggerDelay = delay;
+        if (ElementPool.IsVisualTaken(control))
+            SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(control), delay);
+    }
+
     internal static void ApplyStaggerDelays(UIElement parent, StaggerConfig config)
     {
         if (parent is not WinUI.Panel panel) return;
@@ -6553,20 +6696,9 @@ public sealed partial class Reconciler : IDisposable
         {
             var child = panel.Children[i];
             var visual = AnimationHelper.GetElementVisual(child);
-            if (visual.ImplicitAnimations is null) continue;
-
             var delay = TimeSpan.FromTicks(config.Delay.Ticks * i);
-            foreach (var key in new[] { "Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint" })
-            {
-                try
-                {
-                    var anim = visual.ImplicitAnimations[key];
-                    if (anim is KeyFrameAnimation kfa) kfa.DelayTime = delay;
-                    else if (anim is SpringScalarNaturalMotionAnimation ssa) ssa.DelayTime = delay;
-                    else if (anim is SpringVector3NaturalMotionAnimation sva) sva.DelayTime = delay;
-                }
-                catch { /* Key not present in collection — skip */ }
-            }
+            GetOrCreateReactorState(child).StaggerDelay = delay;
+            SetStaggerDelayOnKeys(visual, delay);
         }
     }
 
@@ -6673,7 +6805,7 @@ public sealed partial class Reconciler : IDisposable
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
                 // Translation, not Offset: Offset is the layout position on a XAML handoff visual (#1432)
-                ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+                AnimationHelper.EnableTranslation(uie, visual);
                 anim.Target = "Translation";
                 if (def.Loop) anim.IterationBehavior = AnimationIterationBehavior.Forever;
                 foreach (var kf in def.Keyframes)
@@ -6880,6 +7012,8 @@ public sealed partial class Reconciler : IDisposable
             state.KeyframeChannelOwners = null;
             state.DeferredModifierResets = default;
             state.ImplicitClaims = null;
+            state.StaggerDelay = null;
+            state.TranslationEnabled = false;
             if (state.KeyframeNames is { } names)
             {
                 foreach (var name in names) _keyframeTriggerValues.Remove((uie, name));
@@ -7236,6 +7370,44 @@ public sealed partial class Reconciler : IDisposable
         return null;
     }
 
+    private Func<UIElement, AnimateProperty, AnimationConfig?>? _channelAnimationLookup;
+
+    // Passed to AnimationHelper so a modifier write resolves its channel's .Animate() declaration
+    // over the whole shared-target chain (spec 066 §5.3, §6.1).
+    private Func<UIElement, AnimateProperty, AnimationConfig?> ChannelAnimationLookup => _channelAnimationLookup ??= FindChannelAnimation;
+
+    /// <summary>
+    /// The outermost <c>.Animate()</c> declaration in the shared-target chain updating
+    /// <paramref name="control"/> whose properties include <paramref name="channel"/>, walked the way
+    /// <see cref="FindRemainingModifierOwner"/> walks it: legacy wrappers, a handler's source target,
+    /// a decorator target, then the recorded shared-control edges. Null outside that update.
+    /// </summary>
+    private AnimationConfig? FindChannelAnimation(UIElement control, AnimateProperty channel)
+    {
+        if (!ReferenceEquals(ModifierUpdate.Control, control)) return null;
+        var root = ModifierUpdate.Root;
+        for (var depth = 0; root is not null && depth <= ReactorSourceMap.MaxDecoratorDepth; depth++)
+        {
+            while (true)
+            {
+                if (root.AnimationConfig is { } config && (config.Properties & channel) != 0) return config;
+                if (root is not ModifiedElement wrapped || depth++ > ReactorSourceMap.MaxDecoratorDepth) break;
+                root = wrapped.Inner;
+            }
+            var type = root.GetType();
+            Element? next = null;
+            if (_v1Handlers.TryGet(type, out var handler))
+                next = (handler as IV1SourceTargetResolver)?.GetSourceTarget(root);
+            else if (!_typeRegistry.ContainsKey(type))
+                next = ReactorSourceMap.DecoratorTarget(root);
+            if (next is null && control.GetValue(ReactorAttached.StateProperty) is ReactorState { ModifierTargets: { } targets })
+                foreach (var target in targets)
+                    if (ReferenceEquals(target.Parent, root)) { next = target.Target; break; }
+            root = next;
+        }
+        return null;
+    }
+
     private Element? GetRetainedModifierAnimationSource(FrameworkElement control, Element owner)
     {
         if (FindMountedElementValue(control, static e => e.AnimationConfig, owner) is not null) return owner;
@@ -7407,11 +7579,11 @@ public sealed partial class Reconciler : IDisposable
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);
@@ -7422,32 +7594,32 @@ public sealed partial class Reconciler : IDisposable
         // Update already released final removals before handlers ran. Here only
         // restore surviving declarations; a second reset would overwrite new setters.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
-            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Scale.HasValue && oldM?.Scale.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Scale.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
-            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Rotation.HasValue && oldM?.Rotation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Rotation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
-            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Translation.HasValue && oldM?.Translation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
-            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
@@ -7726,9 +7898,14 @@ public sealed partial class Reconciler : IDisposable
         // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
         ApplyDragDropHandlers(fe, oldM, m);
 
-        // OnMountAction — only run on initial mount (oldM is null)
+        // OnMountAction — only run on initial mount (oldM is null). Spec 066 §9 row 1: name the
+        // modifier when WinUI rejects a facade write the callback makes after the handoff; the
+        // filter returns false, so the exception is unchanged.
         if (m.OnMountAction is not null && oldM is null)
-            m.OnMountAction(fe);
+        {
+            try { m.OnMountAction(fe); }
+            catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(fe, "'.OnMount(...)' callback")) { throw; }
+        }
 
         // OnUpdateAction — the update-time counterpart, run on every in-place
         // update (oldM is not null) but never at mount. Runs after child

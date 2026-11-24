@@ -25,7 +25,7 @@ Example:
 > | Reactor.Localization.Generator.dll | 16.0 KB | 16.0 KB | +0 B (0.00%) | ≈ |
 > | Reactor.Wrappers.Abstractions.dll | 10.0 KB | 10.0 KB | +0 B (0.00%) | ≈ |
 > | Reactor.Wrappers.Generator.dll | 100 KB | 100 KB | +0 B (0.00%) | ≈ |
-> | Reactor.dll | 3.16 MB | 3.16 MB | +0 B (0.00%) | ≈ |
+> | Microsoft.UI.Reactor.dll | 3.16 MB | 3.16 MB | +0 B (0.00%) | ≈ |
 
 ## What is measured
 
@@ -46,10 +46,10 @@ frameworks, the largest uncompressed length is reported.
 Tracked packages (see `$targets` in `Measure-BuildMetrics.ps1`) and the DLLs they
 currently ship:
 
-- `Microsoft.UI.Reactor` → `Reactor.dll`, `Reactor.Wrappers.Abstractions.dll`,
+- `Microsoft.UI.Reactor` → `Microsoft.UI.Reactor.dll`, `Reactor.Wrappers.Abstractions.dll`,
   `Reactor.Analyzers.dll`, `Reactor.Wrappers.Generator.dll`,
   `Reactor.Localization.Generator.dll`
-- `Microsoft.UI.Reactor.Advanced` → `Reactor.Advanced.dll`
+- `Microsoft.UI.Reactor.Advanced` → `Microsoft.UI.Reactor.Advanced.dll`
 - `Microsoft.UI.Reactor.Devtools` → `Microsoft.UI.Reactor.Devtools.dll`
 
 Adding a package is a one-line entry in that `$targets` array (only `PkgKey`,

@@ -230,6 +230,66 @@ opacity while `.ScaleTransition()` animates scale simultaneously. Set the
 target values (`.Opacity()`, `.Scale()`, `.Translation()`) and the
 transitions handle the animation for each property in parallel.
 
+## How Implicit Transitions Run
+
+`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` and
+`.TranslationTransition()` run on the element's composition visual, so they
+combine with `.Animate()`, `.LayoutAnimation()`, `.Transition()`,
+`.InteractionStates()` and `.Keyframes()` on the same element. They match
+WinUI's own implicit transitions:
+
+- **Curve.** The transition's duration (300 ms by default) with WinUI's
+  cubic-bezier (0.8, 0, 0.2, 1) ease, which starts and ends slowly.
+- **Axes.** A `Vector3Transition` passed to `.ScaleTransition()` or
+  `.TranslationTransition()` keeps its `Components` mask. With
+  `Components = Vector3TransitionComponents.X`, X animates and Y and Z jump.
+- **Reduced motion.** With the Windows "Animation effects" setting off, the
+  transitions don't animate and values jump, as WinUI's do. A change of the
+  setting takes effect the next time the element renders.
+- **Precedence.** An ambient `WithAnimation` curve wins, then `.Animate()` for
+  the properties its `AnimateProperty` flags name, then the transition.
+- **Adding or removing one.** A transition added or removed in a render
+  applies to the values that change in the same render.
+
+`.TranslationTransition()` animates the values you set with `.Translation()`.
+It doesn't animate layout moves (a margin, alignment or sibling change), which
+is `.LayoutAnimation()`'s job, and it doesn't animate a `UIElement.Translation`
+that your own code writes.
+
+`.BackgroundTransition()` stays WinUI's XAML `BrushTransition`, so it follows
+the same setting on its own.
+
+### Reading transforms back and `.Set(...)`
+
+`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` write the
+element's composition visual, and so do the four transitions and every
+compositor feature on this page. A non-identity transform, a transition or a
+compositor feature takes the visual, and an identity value such as
+`.Scale(1)` on an untouched control doesn't. Once the visual is taken:
+
+- `fe.Scale`, `fe.Rotation` and `fe.CenterPoint` read back identity for values
+  set with `.Scale()`, `.Rotation()` and `.CenterPoint()`. Read
+  `ElementCompositionPreview.GetElementVisual(fe).Scale` (or `RotationAngle`,
+  in radians, and `CenterPoint`) instead.
+- WinUI rejects `.Set(fe => fe.Rotation = …)`, and the same for `Scale`,
+  `CenterPoint`, `RotationAxis`, `TransformMatrix`, `UIElement.StartAnimation`
+  and the XAML `*Transition` properties, and the same writes from `.OnMount(...)`.
+  Use `.Rotation()`, `.Scale()`, `.CenterPoint()` and the transition modifiers
+  instead. Reactor logs a warning that names the modifier when that happens,
+  and the `REACTOR_ANIM_004` analyzer flags the `.Set` at build time and
+  rewrites the simple cases.
+
+### Don't mix `fe.Translation` with `.Translation()`
+
+A drag that writes `fe.Translation` from a handler or an `ElementRef` keeps
+working next to `.Scale()`, `.Rotation()` and the other features, because
+Reactor enables translation on the visual only for a declared Translation
+channel: `.Translation()`, a `translation:` keyframe or an
+`.InteractionStates()` translation. On an element that declares one, WinUI
+ignores `fe.Translation` writes once the element has rendered. Either drive
+the position through `.Translation()` or write `fe.Translation` yourself, not
+both.
+
 ## Layout Animation
 
 `.LayoutAnimation()` animates elements when their position changes due to
