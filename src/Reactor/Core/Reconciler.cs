@@ -5715,7 +5715,7 @@ public sealed partial class Reconciler : IDisposable
         try
         {
             foreach (var setter in setters) setter(control);
-            if (opacityCheck is not null && opacityCheck.Opacity != opacityBefore)
+            if (opacityCheck is not null && global::System.Math.Abs(opacityCheck.Opacity - opacityBefore) > 1e-9)
                 CancelKeyframeOpacityCheck(opacityCheck, state!);
         }
         finally
@@ -6769,9 +6769,6 @@ public sealed partial class Reconciler : IDisposable
             owner._keyframeOpacityChecks[state] = uie;
         }
         var dispatcher = uie.DispatcherQueue;
-        // XAML's push replaces the visual's base value. A finite keyframe that ran out on its own
-        // leaves it alone, so only a changed base proves the push stopped it.
-        float baseAtStart = visual.Opacity;
         if (uie is FrameworkElement unrendered && !IsRendered(unrendered)) WaitForRender(unrendered);
         else RequestCheck();
 
@@ -6830,12 +6827,10 @@ public sealed partial class Reconciler : IDisposable
                 return;
             }
             CancelKeyframeOpacityCheck(uie, state);
+            // A keyframe that completed keeps its controller, and every deliberate stop (a modifier
+            // or setter write, removal, unmount) cancelled this check, so a missing controller
+            // means XAML's push stopped it, whether it loops or not.
             if (visual.TryGetAnimationController("Opacity") is not null) return;
-            // A finite keyframe that completed keeps its controller and returned above. This is the
-            // backstop for one stopped some other way: only a changed base proves XAML's push.
-            if (animation is KeyFrameAnimation { IterationBehavior: AnimationIterationBehavior.Count }
-                && visual.Opacity == baseAtStart)
-                return;
             visual.StartAnimation("Opacity", animation);
             if (visual.TryGetAnimationController("Opacity") is not { } restarted) return;
             started["Opacity"] = restarted;

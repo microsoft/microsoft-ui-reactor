@@ -571,6 +571,30 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         }
 
         {
+            // With the visual already taken, .Opacity(0.4) writes the visual too. The fade must
+            // still be playing after XAML's push, restarted or not.
+            using var reconciler = new Reconciler();
+            var plain = Border(TextBlock("Taken Visual Opacity Keyframe")).Animate(Curve.Linear(60000), AnimateProperty.Scale);
+            var faded = plain.Opacity(0.4).Keyframes("fade", 1, LongFade);
+            var control = (Border)reconciler.Mount(plain, () => { })!;
+            H.SetContent(control);
+            await Harness.Render();
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            await AfterNextCommit(visual);
+            bool taken = ElementPool.IsVisualTaken(control);
+            reconciler.Update(plain, faded, control, () => { });
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            var running = visual.TryGetAnimationController("Opacity");
+            int restarts = Reconciler.KeyframeOpacityRestartsForTests(control);
+            H.Check("TransformKeyframes_TakenVisualFiniteOpacityKeyframePlays", taken && running is not null
+                && Equals(running, Reconciler.KeyframeControllerForTests(control, "fade", "Opacity")),
+                $"taken={taken}, restarts={restarts}, running={running is not null}");
+            reconciler.Update(faded, plain, control, () => { });
+            H.SetContent(null);
+        }
+
+        {
             // A setter's opacity write replaces the keyframe like a modifier's, so the check must not undo it.
             using var reconciler = new Reconciler();
             var plain = Border(TextBlock("Setter Opacity"));
