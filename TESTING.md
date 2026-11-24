@@ -466,11 +466,11 @@ Selftests run against a real WinUI dispatcher: most user-visible work (template 
 
 | You want to… | Use | Why |
 |---|---|---|
-| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains the **shared harness host** (`ReactorApp.PrimaryWindow?.Host`) to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but only knows about the harness window. |
+| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains `ReactorApp.PrimaryWindow?.Host` to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but that host is not the one `H.CreateHost()` returns, even though both render into the harness window. |
 | Wait until a probe predicate against the live visual tree holds | `await Harness.WaitFor(() => H.FindText("Foo") is not null)` | Re-queries the predicate each pass against the current tree. The contention-proof alternative to a one-shot snapshot. Pass `maxPasses`/`perPassMs` to tune. **The predicate must re-query** — capturing a value from before the loop defeats it. |
 | Wait for a timer's cleanup to finish | A completion callback awaited with `Task.WaitAsync(timeout)` | Register before triggering the operation, signal after cleanup, and assert the actual state afterward. Report a timeout through `H.Check` rather than letting it escape. |
 | Check survival through a hold period or a refreshed deadline | An injected scheduler with captured callbacks; see [timer lifetime tests](#timer-lifetime-tests) | Elapsed time is the stimulus. Advance controlled schedules instead of waiting on a predicate that is already true. |
-| Drain an **isolated** `ReactorHost` (one you constructed with `new ReactorHost(myWindow)`, not `H.CreateHost()`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** your isolated one. Drive the isolated host directly. Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
+| Drain a fixture's own `ReactorHost` (from `H.CreateHost()`, or one you constructed with `new ReactorHost(myWindow)`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** yours. `H.CreateHost()` is a separate `new ReactorHost(window)`, so a state change inside it re-renders a host `Harness.Render()` never awaits. Drive that host directly, then poll the outcome with `Harness.WaitFor` (#1679 tracks making `Harness.Render` drain these hosts itself). Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
 
 **Anti-pattern — blind delays:**
 
@@ -478,7 +478,7 @@ Selftests run against a real WinUI dispatcher: most user-visible work (template 
 // ❌ Flaky: Task.Delay is a guess; it won't catch a slower runner.
 host.Mount(...);
 await Task.Delay(200);
-await Harness.Render();    // pumps the WRONG host if `host` is isolated
+await Harness.Render();    // pumps the WRONG host: `host` is the fixture's own
 var ctrl = FindFirst<MyControl>(window.Content);   // may be null on this pass
 ```
 
@@ -512,7 +512,7 @@ Rules of thumb:
 - **Converting a fixed delay to `WaitFor` is not a safe default — the remediation can itself be the vacuous one.** Because `WaitFor` establishes its predicate *at the moment it returns* and nothing more, the conversion is correct for an *eventual* assertion (false at t=0, converges) and silently vacuous for a *survival* assertion — "still visible", "still expanded" — which is true at t=0 and short-circuits at zero elapsed time. Before converting, ask: **if the predicate is true the instant `WaitFor` is called, does the next assertion still mean what I think it means?**
 - **Ask the same of a precondition `throw`.** Report-and-return when the fixture's other checks remain meaningful; throw loudly when the fixture is structurally invalid (a renamed reflection target) and they do not.
 - **Converting a gate can strip a settle a *later* assertion relied on.** If a following `H.Check` depended on the removed `Render(N)` rather than on its own wait, it will start failing. Give each check its own `WaitFor` instead of letting it inherit someone else's delay.
-- **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
+- **`host.WaitForIdleAsync()` for a fixture's own hosts.** If the fixture drives its own `ReactorHost` (from `H.CreateHost()` or `new ReactorHost(...)`), neither `Harness.Render` nor `Harness.WaitFor` knows about it.
 - **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
 
 ### Timer lifetime tests
