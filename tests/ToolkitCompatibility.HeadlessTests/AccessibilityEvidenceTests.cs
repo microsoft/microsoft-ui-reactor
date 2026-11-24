@@ -151,4 +151,50 @@ public sealed class AccessibilityEvidenceTests
         Assert.Throws<InvalidOperationException>(() =>
             new AccessibilityProfile(true, "", 1.5).RequireValid());
     }
+
+    [Fact]
+    public void DocumentTheme_RequiresDifferentBackgroundsOnlyOutsideStableHighContrast()
+    {
+        var standard = new AccessibilityProfile(false, "", 1);
+        var contrast = new AccessibilityProfile(true, "High Contrast Black", 1);
+        standard.RequireDocumentThemeResponse(standard, backgroundsEqual: false);
+        contrast.RequireDocumentThemeResponse(contrast, backgroundsEqual: true);
+        contrast.RequireDocumentThemeResponse(contrast, backgroundsEqual: false);
+        Assert.Throws<InvalidOperationException>(() =>
+            standard.RequireDocumentThemeResponse(standard, backgroundsEqual: true));
+        Assert.Throws<InvalidOperationException>(() =>
+            standard.RequireDocumentThemeResponse(contrast, backgroundsEqual: true));
+        Assert.Throws<InvalidOperationException>(() =>
+            contrast.RequireDocumentThemeResponse(contrast with { TextScaleFactor = 1.5 }, backgroundsEqual: true));
+    }
+
+    [Fact]
+    public void FixtureSizing_ContainsEveryLabelWithoutShrinkingGeometryFloors()
+    {
+        FixtureTextSize[] labels = [new(94.85712432861328, 25.82100486755371), new(108.2, 24), new(32, 42.1)];
+        var size = FixtureTextSize.FromMeasurements(labels);
+        Assert.Equal(new FixtureTextSize(109, 43), size);
+        Assert.Equal(109, size.WidthAtLeast(80));
+        Assert.Equal(109, size.WidthAtLeast(90));
+        Assert.Equal(43, size.HeightAtLeast(40));
+        Assert.Equal(60, size.HeightAtLeast(60));
+        Assert.Equal(150, size.WidthAtLeast(150));
+        foreach (var label in labels)
+            TextScalingMeasurements.RequireFits("Tile", size.WidthAtLeast(90), size.HeightAtLeast(40),
+                label.Width, label.Height);
+        Assert.Throws<TextScalingFailureException>(() =>
+            TextScalingMeasurements.RequireContained("Tile/Border", 0, 0, labels[0].Width, labels[0].Height, 90, 40));
+    }
+
+    [Theory]
+    [InlineData(0, 26)]
+    [InlineData(95, 0)]
+    [InlineData(double.NaN, 26)]
+    [InlineData(95, double.PositiveInfinity)]
+    public void FixtureSizing_RejectsInvalidOrEmptyNativeMeasurements(double width, double height)
+    {
+        Assert.Throws<InvalidOperationException>(() => FixtureTextSize.FromMeasurements([]));
+        Assert.Throws<InvalidOperationException>(() =>
+            FixtureTextSize.FromMeasurements([new(95, 26), new(width, height)]));
+    }
 }

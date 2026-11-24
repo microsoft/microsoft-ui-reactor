@@ -222,6 +222,28 @@ substituting a same-text sibling or passing an empty enumeration.
 | UniformGrid, WrapPanel, StaggeredPanel | Each label inside the six individually keyed initial tiles |
 | DockPanel | Each label inside the edge, bottom and last child |
 
+DockPanel, WrapPanel and StaggeredPanel size their fixture slots from natural
+native text measurements of both phases' labels at the current OS scale, keeping
+the original geometry as a minimum. This happens before creating the specimen,
+not as a retry after a failed containment assertion. WrapPanel retains four-to-two
+tiles per row and StaggeredPanel four-to-two columns; geometry assertions still
+check the resulting positions and remaining dock space. The full-text and
+ancestor-containment oracles, including their tolerances, are unchanged.
+
+The TabbedCommandBar sample still requires different Light/Dark document
+backgrounds outside high contrast. At a stable real OS high-contrast profile it
+allows both themes to resolve to the same brush, while still checking actual
+theme activation, document visibility, commands and profile stability. This is
+not an assertion that the brush matches a system color or is readable.
+
+The [05bc20dcc operator run](https://github.com/microsoft/microsoft-ui-reactor/issues/1602#issuecomment-7146671543)
+observed 24 non-camera high-contrast captures and eight passing 150% text checks.
+It also exposed the fixed-slot overflows and the high-contrast background-inequality
+assumption corrected above. Those historical failures are retained, not relabeled
+as passing evidence for the fixes. The captures were reviewed on a black matte,
+not as actual-host/background contrast evidence. Native acceptance of the changed
+fixture sizing and theme check needs a new explicitly approved settings run.
+
 The plain-text path accepts no inline collection or one equivalent Run with the
 TextBlock's text and effective typography (including WinUI's implicit Run for a
 string). Other inline/rich typography stays `blocked/not-implemented`; it is not

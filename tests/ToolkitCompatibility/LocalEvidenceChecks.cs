@@ -242,7 +242,7 @@ internal static class LocalEvidenceChecks
         Program.Results.Note("Declared text targets fit at the stable observed OS profile. Capture requires visual review; other text, long-content stress and scale-to-scale growth are not established.");
     }
 
-    private static AccessibilityProfile ReadAccessibilityProfile(string phase)
+    internal static AccessibilityProfile ReadAccessibilityProfile(string phase)
     {
         var settings = new AccessibilitySettings();
         bool highContrast = settings.HighContrast;

@@ -18,4 +18,11 @@ internal sealed record AccessibilityProfile(bool HighContrast, string HighContra
             throw new InvalidOperationException(
                 $"OS accessibility profile changed during capture/check; before={this}; after={after}.");
     }
+
+    internal void RequireDocumentThemeResponse(AccessibilityProfile after, bool backgroundsEqual)
+    {
+        RequireStable(after);
+        if (!HighContrast && backgroundsEqual)
+            throw new InvalidOperationException("Document background did not respond to Light/Dark outside OS high contrast.");
+    }
 }

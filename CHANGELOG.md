@@ -56,7 +56,9 @@ Conventions for contributors:
   OS-profile stability and separates high-contrast capture completion from the
   still-blocked actual-host appearance review. Unsupported shapes remain blocked;
   no desktop settings are changed, and runtime acceptance still requires an
-  approved host (issue #1602).
+  approved host. Panel fixture slots accommodate measured label sizes, and the
+  document theme check permits equal Light/Dark brushes under stable OS high
+  contrast without weakening text containment (issue #1602).
 
 - **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
   the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
