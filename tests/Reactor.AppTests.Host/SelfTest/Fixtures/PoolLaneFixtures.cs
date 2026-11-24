@@ -997,16 +997,6 @@ internal static class PoolLaneFixtures
     {
         private sealed record ThrowingEdgeElement(ElementRef<RefNode>? Target) : Element;
 
-        private static bool s_throwOnClear;
-
-        private static readonly Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode> ThrowingEdge =
-            new Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode>()
-            .Reference<RefNode>(get: static e => e.Target, set: static (c, t) =>
-            {
-                if (t is null && s_throwOnClear) throw new InvalidOperationException("boom");
-                c.Right = t;
-            });
-
         public override async Task RunAsync()
         {
             var cases = new (string Name, Func<ElementRef, Element> Build)[]
@@ -1115,16 +1105,39 @@ internal static class PoolLaneFixtures
             {
                 const string p = "ElementPoolLanes_WrapperRefs_ThrowingEdgeSetter";
                 using var reconciler = new Reconciler();
-                reconciler.RegisterHandler(new Core.V1Protocol.Descriptor.DescriptorHandler<ThrowingEdgeElement, RefNode>(ThrowingEdge));
+                bool throwOnClear = false;
+                var throwingEdge = new Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode>()
+                    .Reference<RefNode>(get: static e => e.Target, set: (c, t) =>
+                    {
+                        if (t is null && throwOnClear) throw new InvalidOperationException("boom");
+                        c.Right = t;
+                    });
+                reconciler.RegisterHandler(new Core.V1Protocol.Descriptor.DescriptorHandler<ThrowingEdgeElement, RefNode>(throwingEdge));
                 var r = new ElementRef();
                 var control = reconciler.Mount(new ThrowingEdgeElement(new ElementRef<RefNode>(new ElementRef())).Ref(r), static () => { });
                 bool threw = false;
-                s_throwOnClear = true;
+                throwOnClear = true;
                 try { if (control is not null) reconciler.UnmountChild(control); }
                 catch (InvalidOperationException) { threw = true; }
-                finally { s_throwOnClear = false; }
+                finally { throwOnClear = false; }
                 H.Check(p + "_Threw", control is RefNode && threw);
                 H.Check(p + "_OwnRefCleared", r.Current is null);
+            }
+
+            // Detaching or returning a control directly, without unmounting it, clears the refs too,
+            // so a retained or pooled control doesn't keep retired ref cells alive.
+            foreach (bool detach in new[] { true, false })
+            {
+                string p = "ElementPoolLanes_WrapperRefs_Direct" + (detach ? "Detach" : "Return");
+                using var reconciler = new Reconciler();
+                var r = new ElementRef();
+                var control = reconciler.Mount(Memo("k", static () => Target("A")).Ref(r), static () => { }) as FrameworkElement;
+                H.Check(p + "_RefSet", control is not null && ReferenceEquals(r.Current, control));
+                if (control is null) continue;
+                if (detach) Reconciler.DetachReactorState(control);
+                else reconciler.ReturnControl(control);
+                var tracked = (control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ProducerRefs;
+                H.Check(p + "_Cleared", r.Current is null && tracked is null, $"current={r.Current is not null} tracked={tracked is not null}");
             }
 
             // A changed Memo key remounts: the ref moves to the replacement before the old control is
