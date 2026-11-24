@@ -271,6 +271,10 @@ public sealed partial class Reconciler
         {
             var (staggerIdx, staggerDly) = ConsumeStaggerIndex();
             ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly);
+            // A keyed Memo shares its factory output's control and tag, so the exit paths read its
+            // declaration from the control's state (#1663).
+            if (element is KeyedMemoElement)
+                GetOrCreateReactorState(control).MemoTransition = element.ElementTransition;
         }
 
         // Apply interaction states (.InteractionStates() modifier)

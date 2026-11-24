@@ -974,6 +974,12 @@ internal static class SelfTestFixtureRegistry
         ("Transition_KeyedPassReadsEachControlAtMostOnce", static harness => new TransitionTests.KeyedPassReadsEachControlAtMostOnce(harness)),
         ("Transition_KeyedExitProbeLimitBoundary", static harness => new TransitionTests.KeyedExitProbeLimitBoundary(harness)),
         ("Transition_KeyedMapSkipArmsUseOwnControls", static harness => new TransitionTests.KeyedMapSkipArmsUseOwnControls(harness)),
+        ("Transition_WrapperExit_Direct", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.Direct)),
+        ("Transition_WrapperExit_Modified", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.Modified)),
+        ("Transition_WrapperExit_Memo", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.Memo)),
+        ("Transition_WrapperExit_MemoReplaced", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoReplaced)),
+        ("Transition_WrapperExit_MemoExitAdded", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoExitAdded)),
+        ("Transition_WrapperExit_MemoExitDropped", static harness => new TransitionTests.WrapperExitTransition(harness, TransitionTests.ExitWrapper.MemoExitDropped)),
         // Animation system — WithAnimationAsync
         ("AsyncAnim_TaskCompletes", static harness => new AnimationAsyncTests.TaskCompletes(harness)),
         ("AsyncAnim_SequentialAwait", static harness => new AnimationAsyncTests.SequentialAwait(harness)),

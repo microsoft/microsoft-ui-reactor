@@ -1684,6 +1684,10 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Shared-control child roots with transform or opacity declarations to restore.
         internal List<(Element Parent, Element Target)>? ModifierTargets;
+        // The .Transition() a transparent keyed Memo declared over this control (#1663). The control's
+        // tag is the Memo's factory output, so the exit paths can't reach the Memo's own declaration
+        // through it. The outermost Memo that declares one owns the slot.
+        internal Animation.ElementTransition? MemoTransition;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
         // Properties written on the handed-out Visual by a modifier. Kept on native
@@ -1989,6 +1993,7 @@ public sealed partial class Reconciler : IDisposable
                 if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(control);
                 state.DecoratorElement = null;
                 state.ModifierTargets = null;
+                state.MemoTransition = null;
             }
             return;
         }
@@ -2355,6 +2360,7 @@ public sealed partial class Reconciler : IDisposable
             state.Element = null;
             state.DecoratorElement = null;
             state.ModifierTargets = null;
+            state.MemoTransition = null;
             if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
         ClearPublishedSource(fe);
@@ -2442,6 +2448,7 @@ public sealed partial class Reconciler : IDisposable
         state.Element = null;
         state.DecoratorElement = null;
         state.ModifierTargets = null;
+        state.MemoTransition = null;
         if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
@@ -2949,6 +2956,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.Element = null;
                 rs.DecoratorElement = null;
                 rs.ModifierTargets = null;
+                rs.MemoTransition = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
@@ -5140,6 +5148,20 @@ public sealed partial class Reconciler : IDisposable
         exiting.Remove(control);
         return true;
     }
+
+    /// <summary>
+    /// The <c>.Transition()</c> whose exit side plays when <paramref name="control"/> leaves the
+    /// tree, or null. A keyed Memo over the control is its outermost layer, so its exit comes
+    /// first; otherwise the mounted element's decorator chain is searched as before.
+    /// </summary>
+    private static ElementTransition? FindExitTransition(UIElement control)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState
+            { MemoTransition: { } memo } && memo.GetExitTransition() is not null)
+            return memo;
+        var transition = FindMountedElementValue(control, static element => element.ElementTransition);
+        return transition?.GetExitTransition() is not null ? transition : null;
+    }
     /// <summary>
     /// Removes a child from its collection with exit transition support.
     /// If the child has an ElementTransition with an exit side, the removal is deferred
@@ -5148,9 +5170,9 @@ public sealed partial class Reconciler : IDisposable
     internal void RemoveChildWithExitTransition(IChildCollection children, int index)
     {
         var control = children.Get(index);
-        var transition = FindMountedElementValue(control, static element => element.ElementTransition);
+        var transition = FindExitTransition(control);
 
-        if (transition?.GetExitTransition() is not null)
+        if (transition is not null)
         {
             // Defer removal: play exit animation, then remove + pool on completion.
             var exit = new object();
@@ -5249,9 +5271,9 @@ public sealed partial class Reconciler : IDisposable
     internal bool ReplaceChildWithExitTransition(IChildCollection children, int index, UIElement newControl)
     {
         var oldControl = children.Get(index);
-        var transition = FindMountedElementValue(oldControl, static element => element.ElementTransition);
+        var transition = FindExitTransition(oldControl);
 
-        if (transition?.GetExitTransition() is not null)
+        if (transition is not null)
         {
             // KNOWN LIMITATION — connected animation does not compose with an exit
             // transition on the SAME element. UnmountAndPool (and therefore
