@@ -11,6 +11,12 @@ using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
+/// <summary>Tolerant float comparison for the transform readbacks (composition stores floats).</summary>
+internal static class FloatCheck
+{
+    public static bool Near(double actual, double expected) => Math.Abs(actual - expected) < 1e-4;
+}
+
 /// <summary>Set-to-unset updates on the same native control (#1001).</summary>
 internal sealed class TransformModifierFixture(Harness h, string mode, bool button = false, bool styled = false) : SelfTestFixtureBase(h)
 {
@@ -63,7 +69,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
             var visual = ElementCompositionPreview.GetElementVisual(target);
             H.Check(prefix + "_VisualTaken", ElementPool.IsVisualTaken(target));
             H.Check(prefix + "_ScaleApplied", visual.Scale == active.Modifiers!.Scale && target.Scale == Vector3.One);
-            H.Check(prefix + "_RotationApplied", Math.Abs(visual.RotationAngleInDegrees - 30) < 0.001 && target.Rotation == 0);
+            H.Check(prefix + "_RotationApplied", Math.Abs(visual.RotationAngleInDegrees - 30) < 0.001 && FloatCheck.Near(target.Rotation, 0));
             H.Check(prefix + "_TranslationApplied", visual.Properties.TryGetVector3("Translation", out var applied)
                 == Microsoft.UI.Composition.CompositionGetValueStatus.Succeeded && applied == active.Modifiers!.Translation);
             H.Check(prefix + "_CenterPointApplied", visual.CenterPoint == active.Modifiers!.CenterPoint && target.CenterPoint == Vector3.Zero);
@@ -93,7 +99,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
         {
             var visual = ElementCompositionPreview.GetElementVisual(target);
             H.Check(prefix + "_ScaleReset", visual.Scale == Vector3.One, $"scale={visual.Scale}");
-            H.Check(prefix + "_RotationReset", visual.RotationAngle == 0, $"rotation={visual.RotationAngle}");
+            H.Check(prefix + "_RotationReset", FloatCheck.Near(visual.RotationAngle, 0), $"rotation={visual.RotationAngle}");
             H.Check(prefix + "_TranslationReset", visual.Properties.TryGetVector3("Translation", out var reset)
                 == Microsoft.UI.Composition.CompositionGetValueStatus.Succeeded && reset == Vector3.Zero, $"translation={reset}");
             H.Check(prefix + "_CenterPointReset", visual.CenterPoint == Vector3.Zero, $"center={visual.CenterPoint}");
@@ -112,7 +118,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
                     H.Check(prefix + "_" + property + "ChannelRemoved", visual.ImplicitAnimations?.ContainsKey(property) != true);
             }
             H.Check(prefix + "_ScaleReset", visual.Scale == Vector3.One, $"scale={visual.Scale}");
-            H.Check(prefix + "_RotationReset", visual.RotationAngle == 0, $"rotation={visual.RotationAngle}");
+            H.Check(prefix + "_RotationReset", FloatCheck.Near(visual.RotationAngle, 0), $"rotation={visual.RotationAngle}");
             H.Check(prefix + "_TranslationReset", visual.Properties.TryGetVector3("Translation", out var translation)
                 == Microsoft.UI.Composition.CompositionGetValueStatus.Succeeded && translation == Vector3.Zero,
                 $"translation={translation}");
@@ -136,7 +142,7 @@ internal sealed class TransformModifierFixture(Harness h, string mode, bool butt
             H.Check(prefix + "_ReappliedOpacity", Math.Abs(visual.Opacity - 0.3) < 0.001);
             reconciler.Update(reapplied, empty, target, () => { });
             await Harness.Render();
-            H.Check(prefix + "_SecondReset", visual.Scale == Vector3.One && visual.RotationAngle == 0
+            H.Check(prefix + "_SecondReset", visual.Scale == Vector3.One && FloatCheck.Near(visual.RotationAngle, 0)
                 && visual.CenterPoint == Vector3.Zero
                 && visual.Properties.TryGetVector3("Translation", out translation)
                     == Microsoft.UI.Composition.CompositionGetValueStatus.Succeeded && translation == Vector3.Zero
@@ -180,7 +186,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 H.Check(name + "_NotPoolableBeforeUnset", ElementPool.IsVisualTaken(target));
                 reconciler.Update(after, plain, target, () => { });
                 await Harness.Render();
-                H.Check(name + "_Reset", visual.Scale == Vector3.One && visual.RotationAngle == 0
+                H.Check(name + "_Reset", visual.Scale == Vector3.One && FloatCheck.Near(visual.RotationAngle, 0)
                     && visual.CenterPoint == Vector3.Zero
                     && target.Translation == Vector3.Zero
                     && visual.TryGetAnimationController("Opacity") is null);
@@ -616,7 +622,7 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
             bool correct = property switch
             {
                 "Scale" => Effective.Scale(target) == new Vector3(expectedScale, expectedScale, 1),
-                "Rotation" => Effective.Rotation(target) == 30,
+                "Rotation" => FloatCheck.Near(Effective.Rotation(target), 30),
                 "Translation" => Effective.Translation(target) == new Vector3(16, 8, 0),
                 "CenterPoint" => Effective.CenterPoint(target) == new Vector3(20, 10, 0),
                 _ => Math.Abs(target.Opacity - 0.5) < 0.001,
@@ -629,8 +635,8 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
             if (wrapper != "Memo")
             {
                 reconciler.Update(after, Wrap(false), target, () => { });
-                H.Check(name + "_LastOwnerRemoved", Effective.Scale(target) == Vector3.One && Effective.Rotation(target) == 0
-                    && Effective.Translation(target) == Vector3.Zero && Effective.CenterPoint(target) == Vector3.Zero && target.Opacity == 1);
+                H.Check(name + "_LastOwnerRemoved", Effective.Scale(target) == Vector3.One && FloatCheck.Near(Effective.Rotation(target), 0)
+                    && Effective.Translation(target) == Vector3.Zero && Effective.CenterPoint(target) == Vector3.Zero && FloatCheck.Near(target.Opacity, 1));
             }
             H.SetContent(null);
         }
@@ -704,7 +710,7 @@ internal sealed class TransformModifierDecoratorFixture(Harness h) : SelfTestFix
             bool correct = property switch
             {
                 "Scale" => Effective.Scale(target) == new Vector3(expected, expected, 1),
-                "Rotation" => Effective.Rotation(target) == expected * 15,
+                "Rotation" => FloatCheck.Near(Effective.Rotation(target), expected * 15),
                 "Translation" => Effective.Translation(target) == new Vector3(expected * 8, expected * 4, 0),
                 _ => Effective.CenterPoint(target) == new Vector3(expected * 10, expected * 5, 0),
             };
