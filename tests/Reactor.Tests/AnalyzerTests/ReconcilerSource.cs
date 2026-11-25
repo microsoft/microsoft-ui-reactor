@@ -23,8 +23,9 @@ internal static class ReconcilerSource
     /// Static helper classes split out of the reconciler's partials (theme bindings, accessibility
     /// modifiers, modifier events, reference edges, gestures, drag-and-drop). Listed by name so a
     /// rename fails the existence assertion below instead of silently hiding methods from the gates.
+    /// <c>ReviewerManifestTests</c> reads the same list, so a new helper also has to join a reviewer batch.
     /// </summary>
-    private static readonly string[] HelperFiles =
+    internal static readonly string[] HelperFiles =
     [
         "AccessibilityApplier.cs",
         "DragDropDispatch.cs",

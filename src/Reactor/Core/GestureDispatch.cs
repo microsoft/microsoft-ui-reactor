@@ -151,24 +151,7 @@ internal static class GestureDispatch
         }
 
         // ── Drag-drop family (DragSource/DropTarget) ──
-        // Per-slot presence again: a DragSource removed while a DropTarget stays present
-        // (or vice-versa) is a transition, not an identity change. Routing it to the full
-        // handler is what makes ApplyDragDropHandlers' in-flight-drag guard reachable on a
-        // mid-drag source removal (the config-only arm would null state.Source directly,
-        // stranding the pending DropCompleted -> leak + suppressed OnEnd).
-        bool dragPresenceChanged =
-            (oldM?.DragSource is null) != (newM?.DragSource is null)
-            || (oldM?.DropTarget is null) != (newM?.DropTarget is null);
-        if (dragPresenceChanged)
-        {
-            DragDropDispatch.ApplyDragDropHandlers(fe, oldM, newM ?? _emptyModifiers);
-        }
-        else if ((newM?.DragSource is not null || newM?.DropTarget is not null)
-                 && DragDropDispatch._dndStates.TryGetValue(fe, out var ds))
-        {
-            ds.Source = newM!.DragSource;
-            ds.Target = newM.DropTarget;
-        }
+        DragDropDispatch.RefreshDragDropStateOnSkip(fe, oldM, newM);
     }
 
     /// <summary>
