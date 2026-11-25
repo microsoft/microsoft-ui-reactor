@@ -507,8 +507,10 @@ internal static class PoolLaneFixtures
 
             var renter = await lab.Show(Target("R").Keyframes("pulse", 1, Pulse));
             H.Check(p + "_Recycled", ReferenceEquals(renter, first));
-            H.Check(p + "_RenterPlays", renter is not null
-                && Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"));
+            // Return cleared the previous renter's local 0.4, so XAML pushes 1 to the visual on its
+            // next frame and stops this keyframe. The #1669 restart runs after a compositor commit.
+            H.Check(p + "_RenterPlays", renter is not null && await Harness.WaitForWithin(
+                () => Running(ElementCompositionPreview.GetElementVisual(renter), "Opacity"), 3000));
         }
     }
 
