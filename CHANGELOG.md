@@ -207,6 +207,16 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
+  `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders
+  again (issue #1702; follow-up to #1536, spec 014).** Each render rebuilds these declarations with
+  new arrays and WinUI objects, and the skip check compared those by reference, so such an element
+  always ran a full update. `.ScrollLinked()` also restarted its expressions every time. The
+  declarations now compare by value: keyframes, scroll expressions with the same `ScrollViewer`,
+  transition durations and settings, and solid brushes by color. A changed or removed declaration
+  still updates. An update for another reason no longer restarts unchanged scroll expressions,
+  unless the element also declares another animation.
+
 - **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
   layers mount no control of their own, so the ref points at the control their child mounted, and
   unmount only cleared refs declared on that control's own element and its decorators. The ref kept

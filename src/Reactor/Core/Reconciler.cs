@@ -7480,12 +7480,17 @@ public sealed partial class Reconciler : IDisposable
     //  Scroll-linked expression animation (.ScrollLinked() modifier)
     // ════════════════════════════════════════════════════════════════
 
+    // Test-only seam: counts ApplyScrollAnimation calls that started expressions, so a selftest
+    // can tell an unrelated update from one that restarted the scroll animation (issue #1702).
+    internal static int DebugScrollAnimationStarts;
+
     /// <summary>
     /// Applies scroll-linked expression animations to an element's Visual.
     /// </summary>
     internal static void ApplyScrollAnimation(UIElement uie, ScrollAnimationConfig config)
     {
         if (config.ScrollViewer is null) return;
+        DebugScrollAnimationStarts++;
         ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;

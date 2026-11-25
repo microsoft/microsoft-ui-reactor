@@ -19,7 +19,26 @@ public record InteractionStateValues(
     // Direct property set (pre-cached brush swap, ~1us)
     Brush? Background = null,
     Brush? Foreground = null,
-    Brush? BorderBrush = null);
+    Brush? BorderBrush = null)
+{
+    /// <summary>
+    /// Compares solid brushes by color and opacity, so brushes rebuilt on every render compare
+    /// equal (issue #1702). Other brushes compare by reference.
+    /// </summary>
+    public virtual bool Equals(InteractionStateValues? other)
+        => ReferenceEquals(this, other)
+            || (other is not null && EqualityContract == other.EqualityContract
+                && Opacity == other.Opacity && Scale == other.Scale && ScaleV == other.ScaleV
+                && Translation == other.Translation && Rotation == other.Rotation
+                && AnimationEquality.BrushesEqual(Background, other.Background)
+                && AnimationEquality.BrushesEqual(Foreground, other.Foreground)
+                && AnimationEquality.BrushesEqual(BorderBrush, other.BorderBrush));
+
+    /// <summary>Hashes the brushes' presence only, without reading the WinUI brushes.</summary>
+    public override int GetHashCode()
+        => HashCode.Combine(EqualityContract, Opacity, Scale, ScaleV, Translation, Rotation,
+            HashCode.Combine(Background is null, Foreground is null, BorderBrush is null));
+}
 
 /// <summary>
 /// Configuration for the .InteractionStates() modifier.

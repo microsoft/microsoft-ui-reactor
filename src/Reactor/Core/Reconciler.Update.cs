@@ -586,9 +586,16 @@ public sealed partial class Reconciler
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
             ApplyKeyframeAnimations(target, keyframes, this);
         }
-        // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
+        // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier).
+        // Expressions are stateless, so equal ones keep running across an unrelated update
+        // (issue #1702). Another animation on the element may have replaced one, so restart then.
         if (newEl.ScrollAnimation is not null)
-            ApplyScrollAnimation(target, newEl.ScrollAnimation);
+        {
+            if (replacedControl || !newEl.ScrollAnimation.Equals(oldEl.ScrollAnimation)
+                || keyframes is not null || newEl.InteractionStates is not null || newEl.LayoutAnimation is not null
+                || newEl.AnimationConfig is not null || newEl.ImplicitTransitions is not null)
+                ApplyScrollAnimation(target, newEl.ScrollAnimation);
+        }
         else if (oldEl.ScrollAnimation is not null)
             ClearScrollAnimation(target, oldEl.ScrollAnimation);
 

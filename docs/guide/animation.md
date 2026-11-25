@@ -30,11 +30,12 @@ Animation and transition configuration changes are also checked on each render,
 even when the element's other properties stay the same. For example, changing
 only `.LayoutAnimation()`'s duration updates the layout animation on the next render.
 
-Value-equivalent plain-data configurations such as `.Animate()` and
-`.LayoutAnimation()` can still skip updates. Native objects and arrays use
-reference equality: rebuilding `.OpacityTransition()`, `.WithTransitions()`,
-`.Keyframes()`, or `.ScrollLinked()` with fresh objects or arrays prevents
-skipping, even when the settings match.
+Unchanged declarations still skip updates, even though each render rebuilds
+them. `.Keyframes()` and `.ScrollLinked()` compare their keyframes and
+expressions, implicit transitions such as `.OpacityTransition()` compare their
+duration, `.WithTransitions()` compares each theme transition's settings, and
+`.InteractionStates()` compares solid brushes by color. Other brushes, and a
+`.ScrollLinked()` driven by a different `ScrollViewer`, still count as a change.
 
 ## Reference
 
