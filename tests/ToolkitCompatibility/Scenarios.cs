@@ -121,6 +121,8 @@ internal static class Scenarios
         double edgeHeight = fixtureText.HeightAtLeast(40);
         double bottomHeight = fixtureText.HeightAtLeast(60);
         double lastWidth = fixtureText.WidthAtLeast(50);
+        double rasterizationScale = name == "WrapPanel"
+            ? ReactorApp.PrimaryWindow!.NativeWindow.Content.XamlRoot.RasterizationScale : 1;
         Scenario scenario = name switch
         {
         "SettingsCard" => new(
@@ -329,14 +331,27 @@ internal static class Scenarios
             }),
         "WrapPanel" => new(
             p => WrapPanelElement.WrapPanel(horizontalSpacing: 0, verticalSpacing: 0,
-                children: Tiles(p, sized: true, textSize: fixtureText)).Width((p == 0 ? 4 : 2) * tileWidth),
+                children: Tiles(p, sized: true, textSize: fixtureText))
+                .Width(FixtureTextSize.WrapRowWidth(tileWidth, p == 0 ? 4 : 2, rasterizationScale)),
             (c, p) =>
             {
                 var panel = (Wct.WrapPanel)c;
                 Equal(panel.Children.Count, 6, "Children.Count");
-                var point = ((FrameworkElement)panel.Children[2]).TransformToVisual(panel)
-                    .TransformPoint(new Windows.Foundation.Point());
-                Near(point.Y, p == 0 ? 0 : fixtureText.HeightAtLeast(40), "third child reflow Y");
+                var first = (FrameworkElement)panel.Children[0];
+                Near(first.ActualWidth, tileWidth, "rounded tile width");
+                Near(first.ActualHeight, fixtureText.HeightAtLeast(40), "rounded tile height");
+                int columns = p == 0 ? 4 : 2;
+                Program.Results.Note($"Wrap fixture columns={columns}; panel-width={panel.ActualWidth}; " +
+                    $"tile={first.ActualWidth}x{first.ActualHeight}; rasterization-scale={rasterizationScale}");
+                for (int i = 0; i < panel.Children.Count; i++)
+                {
+                    var tile = (FrameworkElement)panel.Children[i];
+                    Near(tile.ActualWidth, first.ActualWidth, $"tile {i} width");
+                    Near(tile.ActualHeight, first.ActualHeight, $"tile {i} height");
+                    var point = tile.TransformToVisual(panel).TransformPoint(new Windows.Foundation.Point());
+                    Near(point.X, i % columns * first.ActualWidth, $"tile {i} reflow X");
+                    Near(point.Y, i / columns * first.ActualHeight, $"tile {i} reflow Y");
+                }
                 HasText(c, Label(p));
             }),
         "StaggeredPanel" => new(

@@ -226,8 +226,10 @@ DockPanel, WrapPanel and StaggeredPanel size their fixture slots from natural
 native text measurements of both phases' labels at the current OS scale, keeping
 the original geometry as a minimum. This happens before creating the specimen,
 not as a retry after a failed containment assertion. WrapPanel retains four-to-two
-tiles per row and StaggeredPanel four-to-two columns; geometry assertions still
-check the resulting positions and remaining dock space. The full-text and
+tiles per row, allowing for each child's independent display-pixel rounding plus
+one physical pixel at the row boundary. Every tile's row/column position is checked
+using the realized uniform tile dimensions. StaggeredPanel retains four-to-two
+columns; geometry assertions still check the resulting positions and remaining dock space. The full-text and
 ancestor-containment oracles, including their tolerances, are unchanged.
 
 The TabbedCommandBar sample still requires different Light/Dark document

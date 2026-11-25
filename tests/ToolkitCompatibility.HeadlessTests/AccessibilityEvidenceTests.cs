@@ -197,4 +197,29 @@ public sealed class AccessibilityEvidenceTests
         Assert.Throws<InvalidOperationException>(() =>
             FixtureTextSize.FromMeasurements([new(95, 26), new(width, height)]));
     }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void WrapWidth_FitsIndependentlyRoundedTilesButNotAnExtraColumn(int columns)
+    {
+        const double requestedTileWidth = 121;
+        const double actualTileWidth = 121.33333587646484;
+        double width = FixtureTextSize.WrapRowWidth(requestedTileWidth, columns, 1.5);
+        Assert.Equal((columns * 182d + 1) / 1.5, width);
+        Assert.True(columns * requestedTileWidth < columns * actualTileWidth);
+        Assert.True(width >= columns * actualTileWidth);
+        Assert.True(width < (columns + 1) * actualTileWidth);
+    }
+
+    [Theory]
+    [InlineData(0, 2, 1.5)]
+    [InlineData(121, 0, 1.5)]
+    [InlineData(121, 2, 0)]
+    [InlineData(121, 2, double.NaN)]
+    [InlineData(double.PositiveInfinity, 2, 1.5)]
+    public void WrapWidth_RejectsInvalidGeometry(double width, int columns, double scale)
+    {
+        Assert.Throws<InvalidOperationException>(() => FixtureTextSize.WrapRowWidth(width, columns, scale));
+    }
 }
