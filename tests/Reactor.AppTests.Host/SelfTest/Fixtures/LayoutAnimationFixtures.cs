@@ -129,77 +129,102 @@ internal static class LayoutAnimationFixtures
         }
     }
 
-    internal class LinearSizeProgress(Harness h) : SelfTestFixtureBase(h)
+    internal class LinearProgress(Harness h, bool animateSize) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
+            string channel = animateSize ? "Size" : "Offset";
+            string name = $"LayoutAnimation_Linear{channel}Progress";
             var config = new LayoutAnimationConfig
             {
                 Duration = TimeSpan.FromMinutes(1),
-                AnimateOffset = false,
-                AnimateSize = true,
+                AnimateOffset = !animateSize,
+                AnimateSize = animateSize,
             };
-            Element Stage(double width) =>
-                VStack(0, Border(null).Width(width).Height(40)
+
+            Element Stage(double left, double width)
+            {
+                var target = Border(null).Width(width).Height(40)
                     .HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Top)
-                    .LayoutAnimation(config))
-                    .Width(300).Height(100).Background("#FFFFFFFF")
+                    .Margin(left, 20, 0, 0).LayoutAnimation(config);
+                if (!animateSize)
+                    target = target.Background("#FFFF0000");
+                return VStack(0, target).Width(300).Height(100).Background("#FFFFFFFF")
                     .HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Top);
+            }
 
             using var reconciler = new Reconciler();
-            var initial = Stage(80);
+            var initial = Stage(20, 80);
+            var final = animateSize ? Stage(20, 160) : Stage(100, 80);
             var stage = (Panel)reconciler.Mount(initial, static () => { })!;
             var visual = ElementCompositionPreview.GetElementVisual(stage.Children[0]);
-            var compositor = visual.Compositor;
-            // XAML content has its final layout size. Draw the visual's animated Size separately.
-            using var sprite = compositor.CreateSpriteVisual();
-            using var brush = compositor.CreateColorBrush(Microsoft.UI.Colors.Red);
-            using var sizeExpression = compositor.CreateExpressionAnimation("target.Size");
-            sprite.Brush = brush;
-            sizeExpression.SetReferenceParameter("target", visual);
-            sprite.StartAnimation("Size", sizeExpression);
-            ElementCompositionPreview.SetElementChildVisual(stage, sprite);
-
-            async Task<double> ReadWidthAsync()
-            {
-                await TransformsMatrixRecorder.Frames(3);
-                var box = (await Snap.CaptureAsync(stage)).RedBox();
-                return box is { } bounds ? bounds.X1 - bounds.X0 : double.NaN;
-            }
 
             try
             {
                 H.SetContent(stage);
-                await Harness.Render();
-                await TransformsMatrixRecorder.Frames(3);
-                visual.StopAnimation("Size");
-
-                reconciler.Update(initial, Stage(160), stage, static () => { });
-                await Harness.Render();
-                await TransformsMatrixRecorder.Frames(3);
-                var controller = visual.TryGetAnimationController("Size");
-                H.Check("LayoutAnimation_LinearSizeProgress_Controller", controller is not null);
-                if (controller is null) return;
-
-                controller.Pause();
-                controller.Progress = 0;
-                double startWidth = await ReadWidthAsync();
-                controller.Progress = 0.5f;
-                double midWidth = await ReadWidthAsync();
-                controller.Progress = 1;
-                double endWidth = await ReadWidthAsync();
-
-                double span = endWidth - startWidth;
-                double progress = (midWidth - startWidth) / span;
-                H.Check("LayoutAnimation_LinearSizeProgress_Midpoint",
-                    span > 20 && Math.Abs(progress - 0.5) <= 0.06,
-                    $"start={startWidth:F1} mid={midWidth:F1} end={endWidth:F1} progress={progress:F2}");
+                if (animateSize)
+                {
+                    // XAML content has its final layout size. Draw the visual's animated Size separately.
+                    var compositor = visual.Compositor;
+                    using var sprite = compositor.CreateSpriteVisual();
+                    using var brush = compositor.CreateColorBrush(Microsoft.UI.Colors.Red);
+                    using var sizeExpression = compositor.CreateExpressionAnimation("target.Size");
+                    sprite.Brush = brush;
+                    sizeExpression.SetReferenceParameter("target", visual);
+                    sprite.StartAnimation("Size", sizeExpression);
+                    ElementCompositionPreview.SetElementChildVisual(stage, sprite);
+                    try { await CheckProgressAsync(); }
+                    finally { ElementCompositionPreview.SetElementChildVisual(stage, null); }
+                }
+                else
+                {
+                    await CheckProgressAsync();
+                }
             }
             finally
             {
-                ElementCompositionPreview.SetElementChildVisual(stage, null);
                 reconciler.UnmountChild(stage);
                 H.SetContent(null);
+            }
+
+            async Task CheckProgressAsync()
+            {
+                await Harness.Render();
+                await TransformsMatrixRecorder.Frames(3);
+                visual.StopAnimation(channel);
+
+                reconciler.Update(initial, final, stage, static () => { });
+                await Harness.Render();
+                await TransformsMatrixRecorder.Frames(3);
+                var controller = visual.TryGetAnimationController(channel);
+                H.Check(name + "_Controller", controller is not null);
+                if (controller is null) return;
+
+                controller.Pause();
+                double start = await ReadAtAsync(0);
+                double quarter = await ReadAtAsync(0.25f);
+                double midpoint = await ReadAtAsync(0.5f);
+                double end = await ReadAtAsync(1);
+                double span = end - start;
+                CheckSample("QuarterPoint", 0.25, quarter);
+                CheckSample("Midpoint", 0.5, midpoint);
+
+                async Task<double> ReadAtAsync(float time)
+                {
+                    controller.Progress = time;
+                    await TransformsMatrixRecorder.Frames(3);
+                    if ((await Snap.CaptureAsync(stage)).RedBox() is not { } bounds)
+                        return double.NaN;
+                    return animateSize ? bounds.X1 - bounds.X0 : bounds.X0;
+                }
+
+                void CheckSample(string sample, double time, double value)
+                {
+                    double progress = (value - start) / span;
+                    H.Check(name + "_" + sample,
+                        span > 20 && Math.Abs(progress - time) <= 0.06,
+                        $"t={time:F2} start={start:F1} value={value:F1} end={end:F1} progress={progress:F2}");
+                }
             }
         }
     }
