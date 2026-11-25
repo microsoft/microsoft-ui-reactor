@@ -231,14 +231,20 @@ internal enum SkipEquality
 internal enum WriteEquality { Value, Reference }
 
 // What CleanElement does for one (slot, poolable receiver arm). Declared, never derived (§6.2).
-internal enum PoolReset { ClearValue, WriteDefault, NotReset }
+internal enum PoolReset { None, ClearValue, WriteDefault, NotReset }
+
+// Which consumers a receiver row feeds. The three reaches differ today: Foreground is applied to
+// Control/TextBlock, themed on RichTextBlock too, and CleanElement clears RichTextBlock.Foreground
+// (ElementPool.cs:618). A row can be theme- or pool-only without widening the plain apply path.
+[Flags] internal enum ReceiverRole { Apply = 1, Theme = 2, Pool = 4 }
 
 internal sealed class ModifierReceiver
 {
     public string Type;          // "Microsoft.UI.Xaml.Controls.Control"
     public string Property;      // "Padding"
     public string DpOwner;       // "Microsoft.UI.Xaml.Controls.Control" → Control.PaddingProperty
-    public PoolReset Pool;       // what CleanElement does on this arm
+    public ReceiverRole Roles;   // Apply | Theme | Pool
+    public PoolReset Pool;       // what CleanElement does on this arm (rows with the Pool role)
     public string PoolDefault;   // WriteDefault only: "14" for TextBlock.FontSize (ElementPool.cs:587-601)
     public string PoolReason;    // NotReset and WriteDefault require a reason
 }
@@ -254,11 +260,14 @@ internal sealed class ModifierSlot
     public bool IsReferenceType;
     public ModifierFamily Family;
     public ApplyShape Shape;
-    public ModifierReceiver[] Receivers;       // ordered; empty for Behavior
-    public string[] ThemeReceivers;            // ThemeRef overload reach, when it differs (§6.4)
+    public ModifierReceiver[] Receivers;       // ordered per role; empty for Behavior
     public string AttachedOwner;               // row D
     public string Converter;                   // row C: a static method in ModifierConverters
-    public string[] CompositeFields;           // row E: "MarginInlineStart", "MarginInlineEnd"
+    public string CompositeFamily;             // row E: the apply family this field feeds, e.g.
+                                               // "Border" for both BorderThickness (Visual,
+                                               // Thickness?) and BorderInlineStart (Layout,
+                                               // Thickness?). Each field is its own slot with
+                                               // its own bucket, type and analyzer facts.
     public string HandCodedMethod;             // rows E/F: the Reconciler method that owns the arm
     public SkipEquality Skip; public string SkipReason;
     public WriteEquality Write;
@@ -269,7 +278,8 @@ internal sealed class ModifierSlot
     public string[] AnalyzerPoolResetGate;     // today's assignability-derived list, pinned (§4.5)
     // Composition metadata (spec 066). Two independent facts, see §6.2.
     public bool RestorableOwner;               // HasRestorableModifier: presence records a shared edge
-    public bool TakesVisualAtMount;            // DeclaresTransform / VisualOwningModifiers
+    public bool TakesVisualAtMount;            // DeclaresTransform, and the five transform rows of
+                                               // VisualOwningModifiers (§6.2)
     public string IdentityValue;               // with TakesVisualAtMount: the value that does not
 }
 
@@ -280,11 +290,16 @@ internal static partial class ModifierSchema
     {
         Simple("RequestedTheme", Layout, "Microsoft.UI.Xaml.ElementTheme", Family.Theme)
             .OnFrameworkElement(pool: NotReset("not cleared by CleanElement today")),
-        Composite("Margin", Layout, Thickness, Family.Box,
-            fields: new[] { "MarginInlineStart", "MarginInlineEnd" }, method: "ApplyMarginFamily").OnFrameworkElement(),
-        Composite("Padding", Layout, Thickness, Family.Box,
-            fields: new[] { "PaddingInlineStart", "PaddingInlineEnd" }, method: "ApplyPaddingFamily")
+        // One composite family = one apply call, fed by several slots, each with full metadata.
+        CompositeFamily("Margin", target: "Margin", method: "ApplyMarginFamily").OnFrameworkElement(),
+        Composite("Margin", Layout, Thickness, Family.Box, family: "Margin"),
+        Composite("MarginInlineStart", Layout, "double", Family.Box, family: "Margin"),
+        Composite("MarginInlineEnd", Layout, "double", Family.Box, family: "Margin"),
+        CompositeFamily("Padding", target: "Padding", method: "ApplyPaddingFamily")
             .On(Control, Border, StackPanel, Grid, RelativePanel, TextBlock),
+        Composite("Padding", Layout, Thickness, Family.Box, family: "Padding"),
+        Composite("PaddingInlineStart", Layout, "double", Family.Box, family: "Padding")
+            .Analyzer(gateOnlyReason: "Reactor-only BiDi logical modifier; folds into the Padding write …"),
         Simple("Width", Layout, "double", Family.Size).OnFrameworkElement(),
         // … Height … MaxHeight, HorizontalAlignment, VerticalAlignment, then the content-alignment
         // pair on Control (Reconciler.Modifiers.cs:368-379) …
@@ -297,7 +312,13 @@ internal static partial class ModifierSchema
         // … tooltips, flyouts …
         Simple("IsEnabled", Root, "bool", Family.ControlState).On(Control)
             .Analyzer(controlGate: null, gateOnlyReason: "WinUI declares IsEnabled on Control only …"),
-        // … CornerRadius, BorderBrush, BorderThickness, Background, Foreground …
+        // … CornerRadius, BorderBrush, the Border family (BorderThickness in Visual,
+        //   BorderInlineStart in Layout), Background …
+        Simple("Foreground", Visual, Brush, Family.Brush)
+            .On(Control, TextBlock)                              // Apply | Pool (ClearValue)
+            .Theme(RichTextBlock)                                // Theme only, no plain write
+            .Pool(RichTextBlock, ClearValue)                     // Pool only (ElementPool.cs:618)
+            .Equality(skip: BrushValue, write: Reference),
         Attached("AutomationName", Root, "string", Family.Automation,
             owner: "Microsoft.UI.Xaml.Automation.AutomationProperties", property: "Name"),
         // … AutomationId, IsDragRegion, ElementSoundMode (fluent "SoundMode"), HeadingLevel, …
@@ -311,8 +332,9 @@ internal static partial class ModifierSchema
 Rules the schema enforces about itself (unit tests over the data, §10.1):
 
 - **Completeness, per bucket.** Every instance property of `LayoutModifiers`, `VisualModifiers`
-  and `AccessibilityModifiers`, public or internal, is exactly one slot of that bucket or one
-  composite field. Every root property of `ElementModifiers`, public or internal (so
+  and `AccessibilityModifiers`, public or internal, is exactly one slot of that bucket. A
+  composite field such as `BorderInlineStart` is a slot like any other, in its own bucket, with
+  its own type and analyzer facts. Its `CompositeFamily` only says which apply call consumes it. Every root property of `ElementModifiers`, public or internal (so
   `OnUpdateAction` counts), is one `Root` slot. Every `Layout` / `Visual` slot has a root shim of
   the same name and type on `ElementModifiers`, because the fluent methods write through the shims.
   The `Layout`, `Visual` and `Accessibility` container properties are excluded by name. The check
@@ -430,7 +452,7 @@ copied in verbatim. What changes is where they live, not how they are computed:
 |---|---|---|
 | `ModifierInfo.ControlGate` | `AnalyzerControlGate` on the slot | `Every_ControlGate_Matches_The_Types_ApplyModifiers_Writes_To`, now reading the slot |
 | `ModifierTable.GateOnlyInReconciler` | slots with a `GateOnlyInReconcilerReason` | `Every_ApplyModifiers_ControlGate_Is_Declared_Or_Explicitly_Recorded`, both directions |
-| `ModifierInfo.ThemeControlGate` | `ThemeReceivers` | `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` until layer 2 |
+| `ModifierInfo.ThemeControlGate` | receivers with the `Theme` role | `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` until layer 2 |
 | `ModifierInfo.PoolResetGate` | `AnalyzerPoolResetGate` | `Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection`, unchanged, kept through every layer |
 | `ModifierTable.PoolableTypeNames` | a schema list | `Analyzer_Poolable_Type_Mirror_Matches_ElementPool` until layer 5 generates `PoolableTypes` from it |
 
@@ -487,13 +509,25 @@ suppression scope and it targets only the DPs the hand-written arms target. A sc
 the second fact permanent once descriptors expose their target DP (§13, Q3).
 
 Precedence with descriptor props is unchanged: modifier-after-prop, so a modifier wins over an
-element-record prop writing the same DP (spec 047 §6.2). Two descriptors consume a common modifier
-themselves, `RichTextBlockElement` reading `Padding` (`NoOpModifierAnalyzer.cs:159-163`) and
-`BorderElement` releasing `Background` (`MarkBackgroundRemovalHandled`). The schema records both as
-`DescriptorOwned` entries so `REACTOR_MOD_003` and `AppliedModifierMap` stop treating them as
-special cases. The descriptor-hook scan in
+element-record prop writing the same DP (spec 047 §6.2). Two descriptors touch a common modifier
+themselves, and they do **not** share one contract today:
+
+- `RichTextBlockElement`'s descriptor reads the `Padding` modifier and writes it. That is an
+  analyzer exception: `NoOpModifierAnalyzer.DescriptorAppliedModifiers` lists only
+  `RichTextBlockElement|Padding` (`NoOpModifierAnalyzer.cs:159-163`), yet
+  `AppliedModifierMap.PaddingOwner` still returns null for `RichTextBlock`.
+- `BorderElement`'s descriptor coordinates the `Background` *removal* with `ApplyModifiers`
+  (`MarkBackgroundRemovalHandled`, `keepRemovedBackground`). That is apply-path coordination only.
+  The descriptor-hook scan deliberately excludes Border's record-owned `Background`
+  (`ModifierTableIntegrityTests.cs:1046-1080`), and no analyzer exception exists for it.
+
+So the schema keeps per-consumer facts instead of one `DescriptorOwned` flag: an
+`AnalyzerDescriptorException` list that reproduces `DescriptorAppliedModifiers` exactly, and a
+`RemovalCoordinatedBy` note on `Background` that only the apply path reads. `AppliedModifierMap`'s
+output is unchanged. Making it report `RichTextBlock.Padding` would be a diagnostic correction and
+ships separately. The descriptor-hook scan in
 `ModifierTableIntegrityTests.Descriptor_Applied_Common_Modifiers_Match_The_Analyzer_Exception_List`
-stays as the check that the list is complete.
+stays as the check that the exception list is complete.
 
 ### §6.2 Pooling
 
@@ -529,8 +563,12 @@ and the schema keeps them apart:
 
 - `DeclaresTransform` (`Reconciler.Pooling.cs:128-133`) asks whether a transform takes the visual
   at mount: five fields, each compared with its identity value. `Opacity` is not one of them.
-  `ModifierTable.VisualOwningModifiers` (`ModifierTable.cs:725`) is the analyzer's view of the same
-  question. Both come from `TakesVisualAtMount` + `IdentityValue`.
+  It comes from `TakesVisualAtMount` + `IdentityValue`. `ModifierTable.VisualOwningModifiers`
+  (`ModifierTable.cs:725-749`) holds the same five transform rows, but also `Animate`,
+  `InteractionStates`, `Transition`, `Keyframes`, the layout and scroll animations and the four
+  implicit transitions, which are not common modifiers. Layer 6 generates only the five transform
+  rows and leaves the rest hand-written, and a snapshot of the full key set is added before layer
+  6 so the `REACTOR_ANIM_004` checks on the other rows can't be dropped.
 - `HasRestorableModifier` (`Reconciler.Modifiers.cs:101-106`) asks whether a shared target must
   record its edge: six fields by presence, including `Opacity`. It comes from `RestorableOwner`.
 
@@ -550,10 +588,12 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305`). The
-schema's `ThemeReceivers` states it once, and layer 2 generates `GetDependencyPropertyName`'s
-modifier rows from it. `PaneBackground` (SplitView) is not a common modifier and stays
-hand-written.
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305`). In the
+schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
+the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
+`Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared
+on pool return, `ElementPool.cs:618`), expressed as `Pool`-role rows. `PaneBackground` (SplitView)
+is not a common modifier and stays hand-written.
 
 ### §6.5 Interaction states and caption names
 
@@ -655,7 +695,7 @@ it can.
 | `CleanElement_Releases_Every_Modifier_Backed_Dependency_Property`, `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement`, `Every_Pool_Reset_Modifier_Is_Cleared_By_CleanElement`, `PoolResetSetConsistencyTests`, `Issue1193PoolResetCoverageTests` | **Kept through every layer.** They read `CleanElementScan`, which layer 5 widens to follow the generated helper in the same PR (§4.3). They stay the independent check that the declared `PoolReset` values match what the pool really does. |
 | `Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection` | **Kept, unchanged.** It is the assignability oracle for `AnalyzerPoolResetGate` (§4.5). |
 | `Analyzer_Poolable_Type_Mirror_Matches_ElementPool` | Deleted in layer 5, when `ElementPool.PoolableTypes` and `ModifierTable.PoolableTypeNames` are both generated from the schema list. |
-| `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` | Deleted in layer 2, when both sides are generated from `ThemeReceivers`. |
+| `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` | Deleted in layer 2, when both sides are generated from the `Theme`-role receivers. |
 | `AppliedModifierMap_*` owner-resolution tests (`tests/Reactor.Tests/Diagnostics/ReactorDiagnosticsComponentsTests.cs:689-886`) | **Kept** as tests of the generated map. Its completeness becomes the §10.1 schema completeness test. |
 | `Descriptor_Applied_Common_Modifiers_Match_The_Analyzer_Exception_List` | **Kept**. It scans descriptor hooks, which the schema does not own. |
 | `ModifierGateProseParityTests` | **Kept**, compares the skill prose against the schema instead of `ModifierTable`. |
@@ -715,7 +755,7 @@ close the §14 class of bug immediately.
 One fixture family, `ModifierMatrix_*`, checks every row A–D slot against an **expected matrix that
 is frozen as literal data in the fixture**, captured in layer 1 from the hand-written
 `ApplyModifiers` and `CleanElement`. The matrix lists, per slot, the receiver control types, one
-non-receiver control type, and the expected pool reset. It does **not** read the schema. A fixture
+non-receiver control type for gated slots, and the expected pool reset. It does **not** read the schema. A fixture
 that took both its inputs and its expected outcomes from the schema could not detect a wrong
 schema, and a receiver dropped from the schema would just turn into a "non-receiver" that passes.
 The schema only supplies the typed probes (§8). A schema test then checks that schema and matrix
@@ -734,10 +774,13 @@ For every (slot, receiver) the fixture mounts a representative concrete control 
    value for `ClearValue`, the declared value for `WriteDefault` (`TextBlock.FontSize` = 14), and
    the previous renter's value for `NotReset` (`RequestedTheme`). The last one is a known gap
    pinned on purpose, not endorsed (the `ModifierPoolClearValueOnRent` shape, `:999`);
-6. on the non-receiver control, which must declare a DP of the same name that the modifier
-   deliberately does not reach (for example `ContentPresenter.Padding` / `CornerRadius` /
+6. for **gated** slots only, on a non-receiver control that declares a DP of the same name the
+   modifier deliberately does not reach (for example `ContentPresenter.Padding` / `CornerRadius` /
    `Foreground`, or `RichTextBlock.Foreground` on the plain brush path), `ReadLocalValue` stays
-   `UnsetValue`. A non-receiver without the DP cannot fail and does not count.
+   `UnsetValue`. Ungated slots (`Width` on every `FrameworkElement`, attached `AutomationName`)
+   have no such control, because any control with the DP is already a receiver, so the matrix
+   records "no negative case" for them. A non-receiver without the DP cannot fail and does not
+   count.
 
 The fixture is written in **layer 1, against the hand-written code**, and must be green there
 before any arm is generated. It is the characterization test that makes the later layers safe.
@@ -769,7 +812,7 @@ revertible on its own.
 | 3a–3e | Generate rows A–D one family per PR, each arm at its existing position: sizing and alignment; automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, content alignment, `CornerRadius`, `Foreground`); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
 | 4 | Composite families: the generated `ApplyModifiers` calls the hand-written resolvers. Only their receivers move to the schema. | `Reconciler.Modifiers.cs` | same |
 | 5 | Generate `PoolableTypes` and a `CleanModifierBackedProperties` helper from each receiver's declared `PoolReset`. `ElementPool` becomes `partial`, and `CleanElementScan` follows the helper in the same PR. | `ElementPool.cs` | pool selftests, every `CleanElementScan` consumer unchanged and green |
-| 6 | Composition metadata: generate `DeclaresTransform` and `VisualOwningModifiers` from `TakesVisualAtMount`, and `HasRestorableModifier`'s field list from `RestorableOwner`. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs`, analyzer | `ModifierTransform_*`, visual-lane selftests |
+| 6 | Composition metadata: generate `DeclaresTransform` and the five transform rows of `VisualOwningModifiers` from `TakesVisualAtMount` (the other rows stay hand-written, guarded by a full key-set snapshot added first), and `HasRestorableModifier`'s field list from `RestorableOwner`. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs`, analyzer | `ModifierTransform_*`, visual-lane selftests, `VisualOwningModifiers` snapshot |
 | 7 | `AccessibilityModifiers` / `ApplyAccessibilityModifiers` get the layer 2–3 treatment for their 11 mechanical fields. `LabeledBy` and the ref fields stay hand-coded. | `Reconciler.Accessibility.cs` | same as 3 |
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
