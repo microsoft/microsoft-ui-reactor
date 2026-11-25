@@ -25,7 +25,7 @@ Parallelized code review of the Reactor framework using specialized Claude Code 
 ```
 tools/reviewer/
   README.md               — This file
-  manifest.json           — All in-scope files, categories, batch assignments (91 batches)
+  manifest.json           — All in-scope files, categories, batch assignments (97 batches)
   run-review.ps1          — Main orchestrator: runs agents in parallel, consolidates
   manager-review.ps1      — Interactive manager workflow: approve/decline each finding
   apply-fixes.ps1         — Hands approved findings to AI for implementation
@@ -94,7 +94,7 @@ repo root, prompts with only the files that exist, and writes
 ```
 
 naming any path that did not resolve. A stale path is reported as a shortfall
-rather than aborting the run, because killing 91 batches over one bad entry
+rather than aborting the run, because killing 97 batches over one bad entry
 would trade a reporting problem for an availability one. `ReviewerManifestTests`
 is the strict check; it fails the build instead.
 
@@ -174,7 +174,7 @@ The implementation agent:
 
 ## Scope
 
-**Included** (477 files across 91 batches, 630 entries — a file may appear in
+**Included** (503 files across 97 batches, 671 entries — a file may appear in
 several batches so different agents can review it from different angles):
 - `src/Reactor/` — Core framework (reconciler, elements, hosting, flex, yoga, animation, property grid)
 - `src/Reactor.Advanced/` — Charting/D3 and Markdown

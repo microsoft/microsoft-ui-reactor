@@ -456,7 +456,7 @@ public class ModifierUnsetClearValueTests
             "them — no type-gated clear, and no ungated `fe.ClearValue(…)` either — so the value " +
             "stays pinned on the control forever once the modifier is dropped from the chain " +
             $"(issue #986): [{string.Join(", ", unreleased)}]. Restore the unset arm. If you " +
-            "reached this after resolving a Reconciler.cs merge conflict, the resolution dropped " +
+            "reached this after resolving a Reconciler.Modifiers.cs merge conflict, the resolution dropped " +
             "the whole arm — reapply it rather than deleting the write.");
 
         Assert.True(
@@ -466,7 +466,7 @@ public class ModifierUnsetClearValueTests
             "stays pinned on that control type forever (issue #986): " +
             $"[{string.Join(", ", offenders)}]. Add the matching " +
             "`else if (fe is WinUI.<Type> v) v.ClearValue(WinUI.<Type>.<Prop>Property);` " +
-            "branch to the unset arm. If you reached this after resolving a Reconciler.cs " +
+            "branch to the unset arm. If you reached this after resolving a Reconciler.Modifiers.cs " +
             "merge conflict, the conflict resolution dropped the clear branch — reapply it " +
             "rather than deleting the write.");
     }
@@ -541,17 +541,13 @@ public class ModifierUnsetClearValueTests
             .Select(entry => entry.Method)
             .ToHashSet(StringComparer.Ordinal);
 
-        var methods = ReconcilerRoot.Value
-            .DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .Where(method => scanned.Contains(method.Identifier.Text))
-            .ToList();
+        var methods = ReconcilerSource.Methods(scanned);
 
         Assert.True(
             methods.Count > 0,
             $"None of the scanned methods ({string.Join(", ", scanned)}) were found in " +
-            "Reconciler.cs, so the receiver-blind clear scan would report every property as " +
-            "never released.");
+            "the Reconciler partial files, so the receiver-blind clear scan would report every " +
+            "property as never released.");
 
         return methods
             .SelectMany(method => ReadClearedPropertyNames(method, variable: null))
@@ -1234,26 +1230,12 @@ public class ModifierUnsetClearValueTests
             .Select(reset => (reset.Owner ?? reset.Receiver) + "." + reset.Property)
             .ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>Reconciler.cs, parsed once per test run rather than once per helper call.</summary>
-    private static readonly Lazy<SyntaxNode> ReconcilerRoot = new(() =>
-    {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Reconciler.cs");
-        Assert.True(File.Exists(file), $"Reconciler.cs not found at {file}");
-        return CSharpSyntaxTree.ParseText(File.ReadAllText(file)).GetRoot();
-    });
-
     /// <summary>Every <c>if</c> statement in the named reconciler method(s).</summary>
     private static List<IfStatementSyntax> ReadIfStatements(string methodName)
     {
-        var methods = ReconcilerRoot.Value
-            .DescendantNodes()
-            .OfType<MethodDeclarationSyntax>()
-            .Where(method => method.Identifier.Text == methodName)
-            .ToList();
+        var methods = ReconcilerSource.Methods(methodName);
 
-        Assert.True(methods.Count > 0, $"No {methodName} method found in Reconciler.cs");
+        Assert.True(methods.Count > 0, $"No {methodName} method found in the Reconciler partial files");
 
         return methods
             .SelectMany(method => method.DescendantNodes().OfType<IfStatementSyntax>())
