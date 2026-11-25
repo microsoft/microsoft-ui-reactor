@@ -396,10 +396,13 @@ assembly:
 
 ```csharp
 // Program.cs of an app that keeps devtools in its AOT build.
-AppContext.SetSwitch("Reactor.DevtoolsSupport", true);
 ReactorDevtools.EnsureRegistered();
 ReactorApp.Run<App>("Hello World AOT Devtools On", width: 480, height: 240);
 ```
+
+Set the switch in the project file, not with `AppContext.SetSwitch` in code.
+An AOT build replaces the switch with the project file value at compile time,
+so a call at run time has no effect.
 
 To turn the switch on for one build without editing the project, pass
 `-p:ReactorDiagnostics=true`. It also turns on source maps.
