@@ -177,13 +177,16 @@ internal sealed class Harness
     }
 
     // Hosts the current fixture built with CreateHost, which Render drains alongside the
-    // primary window's host (issue #1679). Weak, so a fixture asserting that a host is
-    // collected still can. Scoped to one fixture: the harness never disposes these hosts,
+    // primary window's host (issue #1679). Weak, so the tracker never roots a host a fixture
+    // disposed. Scoped to one fixture: the harness never disposes these hosts,
     // so a process-wide list would make every Render wait on every earlier fixture's host.
     private static readonly List<WeakReference<ReactorHost>> s_createdHosts = new();
 
     /// <summary>Stops <see cref="Render"/> waiting on hosts from the previous fixture.</summary>
     internal static void ForgetCreatedHosts() => s_createdHosts.Clear();
+
+    /// <summary>Entries currently tracked for <see cref="Render"/>, live or not.</summary>
+    internal static int TrackedCreatedHostCount => s_createdHosts.Count;
 
     /// <summary>The hosts <see cref="Render"/> drains: the primary window's, plus this fixture's live CreateHost hosts.</summary>
     private static List<ReactorHost> HostsToDrain()

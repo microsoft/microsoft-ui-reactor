@@ -21,6 +21,11 @@ internal static class HarnessRenderFixtures
     {
         public override async Task RunAsync()
         {
+            // The runner forgets the previous fixture's hosts. Meaningful in a corpus run, where
+            // earlier fixtures leave their never-disposed CreateHost hosts alive.
+            H.Check("HarnessRender_StartsWithNoTrackedHosts", Harness.TrackedCreatedHostCount == 0,
+                $"tracked={Harness.TrackedCreatedHostCount}");
+
             var host = H.CreateHost();
             Action<int>? setCount = null;
             int renders = 0;
