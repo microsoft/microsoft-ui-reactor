@@ -225,6 +225,15 @@ Conventions for contributors:
   until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
   honoured too.
 
+- An enter fade (`.Transition(Transition.Fade)`, and the default enter under
+  `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
+  style setter) now fades in, and ends at that opacity instead of 1.
+  XAML writes the element's opacity to the visual when it first renders it, which stopped the fade,
+  so `Border(...).Opacity(0.4).Transition(Transition.Fade)` snapped to 0.4. A pooled control that
+  gets no such write faded to 1 and stayed there. Reactor now restarts the fade once after that
+  first frame, keeping the element hidden until then, unless a modifier or `.Set(...)` changed the
+  opacity in between (spec 066 §3, issue #1680).
+
 - An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
   XAML writes that value to the visual when it first renders it, which stopped the animation, so

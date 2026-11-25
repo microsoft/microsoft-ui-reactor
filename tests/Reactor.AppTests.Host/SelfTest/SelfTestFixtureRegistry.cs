@@ -1084,6 +1084,7 @@ internal static class SelfTestFixtureRegistry
         ("AnimCombo_EaseTargeted", static harness => new AnimationCombinationTests.AnimateEaseTargeted(harness)),
         ("AnimCombo_LayoutAlone", static harness => new AnimationCombinationTests.LayoutAnimAlone(harness)),
         ("AnimCombo_FadeEnter", static harness => new AnimationCombinationTests.TransitionFadeEnter(harness)),
+        ("EnterFade_OpacityPush", static harness => new EnterFadeOpacityFixture(harness)),
         ("AnimCombo_InteractionSetup", static harness => new AnimationCombinationTests.InteractionStatesSetup(harness)),
         ("AnimCombo_KeyframesOnMount", static harness => new AnimationCombinationTests.KeyframesOnMount(harness)),
         ("AnimCombo_KeyframesTranslationChannel", static harness => new AnimationCombinationTests.KeyframesTranslationChannel(harness)),
