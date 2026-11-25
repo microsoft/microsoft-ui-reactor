@@ -1,6 +1,8 @@
 using Microsoft.UI.Reactor.Charting;
 using Microsoft.UI.Reactor.Charting.Accessibility;
+using Microsoft.UI.Reactor.Core;
 using Xunit;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Tests;
 
@@ -12,6 +14,41 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class D3ChartsTests
 {
+    [Theory]
+    [InlineData(12.5, 37.25, 12.5, 37.25)]
+    [InlineData(-2, 8, 0, 8)]
+    [InlineData(8, -2, 8, 0)]
+    [InlineData(0, 0, 0, 0)]
+    [InlineData(double.NaN, 8, double.NaN, 8)]
+    [InlineData(8, double.NaN, 8, double.NaN)]
+    [InlineData(double.PositiveInfinity, double.NegativeInfinity, double.PositiveInfinity, 0)]
+    public void D3Rect_Preserves_Dimensions_Position_And_Defaults(
+        double width, double height, double expectedWidth, double expectedHeight)
+    {
+        var actual = D3Charts.D3Rect(-7.5, 13.25, width, height);
+        var expected = Rectangle().Width(expectedWidth).Height(expectedHeight);
+
+        Assert.Equal(expected, actual with { Attached = null });
+        Assert.Single(actual.Attached!);
+        Assert.Equal(new CanvasAttached(-7.5, 13.25), actual.GetAttached<CanvasAttached>());
+    }
+
+    [Theory]
+    [InlineData(3.5)]
+    [InlineData(0)]
+    [InlineData(-3.5)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void D3Circle_Preserves_Diameter_Center_And_Defaults(double radius)
+    {
+        var actual = D3Charts.D3Circle(-7.5, 13.25, radius);
+        var expected = Ellipse().Width(radius * 2).Height(radius * 2);
+
+        Assert.Equal(expected, actual with { Attached = null });
+        Assert.Single(actual.Attached!);
+        Assert.Equal(new CanvasAttached(-7.5 - radius, 13.25 - radius), actual.GetAttached<CanvasAttached>());
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Fmt — number formatting for axis labels and data annotations
     // ════════════════════════════════════════════════════════════════

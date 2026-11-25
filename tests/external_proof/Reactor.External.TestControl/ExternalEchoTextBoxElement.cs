@@ -16,7 +16,7 @@ namespace Reactor.External.TestControl;
 //   * [WrapControlled("Text", Deferred = true)]    →  route it through the
 //     DEFERRED echo channel, whose generated trampoline gates on the PUBLIC
 //     ReactorBinding.ShouldSuppressEcho primitive. If that primitive were still
-//     internal, THIS assembly (no InternalsVisibleTo from Reactor.dll) would not
+//     internal, THIS assembly (no InternalsVisibleTo from Microsoft.UI.Reactor.dll) would not
 //     compile — so a green build is the proof the read-side ABI gap is closed.
 //   * RegisterAssembly = false                     →  EchoTextBox is a pure-code
 //     control with no IXamlMetadataProvider; skip the RegisterControlAssembly

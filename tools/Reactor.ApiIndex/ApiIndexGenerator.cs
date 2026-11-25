@@ -1,5 +1,5 @@
 // Reactor.ApiIndex — builds the text of skills/reactor.api.txt by reflecting over
-// the built Reactor.dll and optional Reactor.Advanced.dll. The output is a flat, alphabetized signatures index meant
+// the built Microsoft.UI.Reactor.dll and optional Microsoft.UI.Reactor.Advanced.dll. The output is a flat, alphabetized signatures index meant
 // to be loaded by AI agents in lieu of grepping src/Reactor/**/*.cs to verify a
 // factory, modifier, hook, or public-type member signature. One line per symbol;
 // no prose.
@@ -26,7 +26,7 @@ namespace Microsoft.UI.Reactor.ApiIndex;
 public static class ApiIndexGenerator
 {
     // Every entry point below reflects over the whole public surface of the built
-    // Reactor.dll and Reactor.Advanced.dll (GetExportedTypes / GetMembers / GetType-by-name)
+    // Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll (GetExportedTypes / GetMembers / GetType-by-name)
     // to emit reactor.api.txt.
     // The tool's entire purpose is to enumerate exactly what the trimmer would remove, so it is
     // inherently trim-unsafe: under trimming the metadata it reads gets pruned. It is a
@@ -38,7 +38,7 @@ public static class ApiIndexGenerator
     // discovery + reflection-invoke only — no runtime codegen — as the successful rooted AOT
     // publish confirms.)
     const string ReflectionJustification =
-        "Reflects over the entire public surface of the built Reactor.dll and Reactor.Advanced.dll to emit reactor.api.txt; " +
+        "Reflects over the entire public surface of the built Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll to emit reactor.api.txt; " +
         "enumerates exactly what the trimmer would remove. Build-time-only generator — not AOT-published except via the opt-in ReactorApiAot proof.";
 
     // Single source of truth for the index text. Program.cs (the apphost) and the

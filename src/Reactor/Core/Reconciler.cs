@@ -492,6 +492,48 @@ public sealed partial class Reconciler : IDisposable
     // Test-only: the tally must be closed between entries, or every child reconcile pays for it.
     internal bool PerfTallyOpenForTests => _perfTally;
 
+    /// <summary>
+    /// Counts controls this reconciler created, updated, removed or moved toward the open perf
+    /// <c>ComponentRender</c> spans' <c>changes</c> (<see cref="Diagnostics.ComponentPerfTally"/>).
+    /// One static gate read when nobody listens.
+    /// </summary>
+    [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    internal static void CountPerfChanges(uint count = 1)
+    {
+        if (Diagnostics.ReactorPerfTrace.ComponentEnabled)
+            Diagnostics.ComponentPerfTally.AddChanges(count);
+    }
+
+    /// <summary>
+    /// Whether an in-place update changed what the control shows, for the perf <c>changes</c>
+    /// count. <paramref name="shallowEqual"/> is <see cref="Element.ShallowEquals"/> of the two
+    /// elements, which <see cref="Update"/> already computed. Counts a change when the effective
+    /// modifiers differ in anything but callback identity
+    /// (<see cref="Element.ModifiersVisiblyEqual"/>), or the element's own properties differ.
+    /// Own properties ignore a container's or items host's children and items, which report
+    /// their own edits: <see cref="Element.OwnPropsEqual"/> (the reconcile-highlight overlay's
+    /// rule) plus the attached layout, theme bindings, resource overrides and animations it does
+    /// not read (<see cref="Element.ExtrasEqual"/>). A type neither comparison knows counts as
+    /// changed. A keyed <c>Memo</c> whose key held keeps its control (its inner update, if any,
+    /// counts itself).
+    /// </summary>
+    internal static bool PerfUpdateChanged(Element oldEl, Element newEl,
+        ElementModifiers? oldModifiers, ElementModifiers? modifiers, bool shallowEqual)
+    {
+        if (!Element.ModifiersVisiblyEqual(oldModifiers, modifiers)) return true;
+        if (shallowEqual) return false;
+        // Only a keyed Memo's factory output is stable under its key; the wrapper's own extras
+        // (theme bindings, overrides, attached values) are applied on every update.
+        if (oldEl is KeyedMemoElement && newEl is KeyedMemoElement) return !Element.ExtrasEqual(oldEl, newEl);
+        if (Element.OwnPropsEqual(oldEl, newEl) && Element.ExtrasEqual(oldEl, newEl)) return false;
+        // ShallowEquals also compares the element's own modifiers, callbacks included. The
+        // effective modifiers are visibly equal (checked above), so when they differ in identity
+        // only, compare the rest of the element without them.
+        return ReferenceEquals(oldEl.Modifiers, newEl.Modifiers)
+            || Element.ModifiersEqual(oldEl.Modifiers, newEl.Modifiers)
+            || !Element.ShallowEquals(oldEl, newEl with { Modifiers = oldEl.Modifiers });
+    }
+
     private struct PerfEdits
     {
         public uint Inserted, Removed, Moved, Replaced;
@@ -566,6 +608,28 @@ public sealed partial class Reconciler : IDisposable
             typeof(Reconciler),
             new PropertyMetadata(null));
 
+    // Stamped on an app base Style: the id that keys the themed Styles built BasedOn it.
+    private static readonly DependencyProperty ReactorBaseStyleIdProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorBaseStyleId",
+            typeof(int),
+            typeof(Reconciler),
+            new PropertyMetadata(0));
+
+    private static int _nextBaseStyleId;
+
+    // Themed Styles built BasedOn an app Style, keyed "baseId#" + BuildCacheKey. Bounded: a base
+    // Style created on every render gets a new id each time, so on reaching the cap the cache
+    // starts over rather than staying full of entries no render asks for again.
+    private const int BasedStyleCacheCap = 256;
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _basedStyleCache = new();
+
+    // Ids of app base Styles a themed Style could not be built on (a TargetType that is not a
+    // base of the control's WinUI type, such as a Style for an app subclass). Remembered so later
+    // renders skip straight to the unbased Style instead of failing the same way each time.
+    // Bounded and reset like _basedStyleCache.
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<int, byte> _incompatibleBaseStyleIds = new();
+
     /// <summary>
     /// Builds a deterministic cache key for a style based on its target type and
     /// the set of ThemeRef bindings. Keys are sorted by property name so that
@@ -574,15 +638,36 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static string BuildCacheKey(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
-        // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal
+        // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal. A resource
+        // key may itself contain '|' or '=' (they are quoted in the setter), so those and the
+        // escape character are backslash-escaped: otherwise { Background = "A|Foreground=B" }
+        // and { Background = "A", Foreground = "B" } would share a key and a cached Style.
         var sortedKeys = bindings.Keys.ToArray();
         Array.Sort(sortedKeys, StringComparer.Ordinal);
         var sb = new global::System.Text.StringBuilder(targetType);
         foreach (var key in sortedKeys)
         {
-            sb.Append('|').Append(key).Append('=').Append(bindings[key].ResourceKey);
+            sb.Append('|');
+            AppendCacheKeyPart(sb, key);
+            sb.Append('=');
+            AppendCacheKeyPart(sb, bindings[key].ResourceKey);
         }
         return sb.ToString();
+    }
+
+    private static void AppendCacheKeyPart(global::System.Text.StringBuilder sb, string? part)
+    {
+        if (part is null) return;
+        if (part.AsSpan().IndexOfAny('\\', '|', '=') < 0)
+        {
+            sb.Append(part);
+            return;
+        }
+        foreach (var c in part)
+        {
+            if (c is '\\' or '|' or '=') sb.Append('\\');
+            sb.Append(c);
+        }
     }
 
     /// <summary>
@@ -590,7 +675,16 @@ public sealed partial class Reconciler : IDisposable
     /// memory cleanup — not a correctness requirement since {ThemeResource}
     /// setters are live-resolved by WinUI.
     /// </summary>
-    internal static void ClearStyleCache() => _styleCache.Clear();
+    internal static void ClearStyleCache()
+    {
+        _styleCache.Clear();
+        _basedStyleCache.Clear();
+        _incompatibleBaseStyleIds.Clear();
+    }
+
+    // Test seam: whether Reactor's themed-Style ownership marker is set on a control.
+    internal static bool HasThemeStyleMarkerForTests(FrameworkElement fe)
+        => fe.GetValue(ReactorAppliedThemeStyleProperty) is Style;
 
 
     /// <summary>
@@ -1590,15 +1684,65 @@ public sealed partial class Reconciler : IDisposable
         internal Element? DecoratorElement;
         // Shared-control child roots with transform or opacity declarations to restore.
         internal List<(Element Parent, Element Target)>? ModifierTargets;
+        // The .Ref cells the modifiers pointed at this control, whichever layer declared them: a
+        // layer that mounts no control (a keyed Memo, a ModifiedElement) isn't on the element
+        // chain unmount walks, so unmount clears these instead (#1659). An ElementRef, or a
+        // List<ElementRef> when layers declare different refs.
+        internal object? ProducerRefs;
+        // The exit-bearing .Transition() a transparent keyed Memo declared over this control (#1663).
+        // The control's tag is the Memo's factory output, so the exit paths can't reach the Memo's
+        // own declaration through it. With nested keyed Memos the outermost one that declares an
+        // exit owns the slot; if it later drops its exit under the same key, an inner Memo's exit
+        // isn't restored, because the inner Memo isn't re-diffed while the outer key holds.
+        internal Animation.ElementTransition? MemoTransition;
+        // The keyed Memo owning MemoTransition wraps the flyout decorator in DecoratorElement, rather
+        // than the flyout wrapping the Memo, so its exit comes before the decorator chain's.
+        internal bool MemoWrapsDecorator;
         // Nested flyout updates share their target control. Only the outermost patches its native flyout.
         internal int ActiveFlyoutUpdates;
         // Properties written on the handed-out Visual by a modifier. Kept on native
         // attached state so a replacement WinRT wrapper cannot lose cleanup ownership.
         internal AnimateProperty CompositionModifierProperties;
+        // The transform the modifiers last wrote to the handed-out Visual. Interaction states
+        // and Transition.Scale return to it, whichever element or wrapper declared it.
+        internal TransformRest? TransformRest;
         // Track the entry that took over each modifier's Visual channel so
         // removing one named animation can release its deferred reset.
         internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
         internal AnimateProperty DeferredModifierResets;
+        // A keyframe opacity restart waiting for XAML's push (#1669). Allocated only while one is
+        // pending, so a control that never has one pays a single reference.
+        internal KeyframeOpacityCheckState? KeyframeOpacity;
+        // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
+        internal Animation.ImplicitAnimationClaims? ImplicitClaims;
+        // The delay a parent's .Stagger() gives this child's implicit animations, so a key
+        // published after the delays were applied (a new or retimed transition) starts staggered.
+        internal TimeSpan? StaggerDelay;
+        // Names this control holds keyframe trigger entries under, whichever layer declared them,
+        // so the pool's visual reset drops exactly those (spec 066 §7.3 step 4).
+        internal HashSet<string>? KeyframeNames;
+        // Set by every AnimationHelper.GetElementVisual and never cleared: the handoff is permanent,
+        // and ElementPool picks the control's lane from it (spec 066 §7.2, #1643).
+        internal bool VisualTaken;
+        // Set by AnimationHelper.GetElementVisual once the handoff succeeded, unlike VisualTaken,
+        // which some features set ahead of it. WinUI then rejects facade writes, so the facades
+        // read identity and a later handoff returns this visual (the same instance for the
+        // control's lifetime) without asking WinUI again.
+        internal Microsoft.UI.Composition.Visual? HandedOutVisual;
+        // Reactor enabled translation on the handed-out visual for a declared Translation channel
+        // (spec 066 §4.3). The pool's visual reset disables it again and clears this.
+        internal bool TranslationEnabled;
+        // The .TransformOrigin pivot expression runs on the handed-out visual's CenterPoint (spec 066
+        // §8.2), started by an origin or by navigation's DrillIn. The pool's visual reset stops it.
+        internal bool OriginExpressionRunning;
+        // A navigation transition's completion can still reach the control after it leaves the tree.
+        internal bool PoolExcluded;
+        // A connected-animation source: an excluded return still drops the element it hosted.
+        internal bool ReleaseWhenExcluded;
+        // Set while a visual-lane renter waits to get its XAML opacity on the visual (ElementPool).
+        internal EventHandler<object>? OpacitySyncLayoutHandler;
+        // The visual offset the pool's reset wrote, so the renter's sync can tell a later write from it.
+        internal global::System.Numerics.Vector3? PoolResetOffset;
         internal ElementTheme? RealizationTheme;
         public ModifierEventHandlerState? Modifiers;
         // Native identity keeps teardown alive when WinRT replaces a collected managed wrapper.
@@ -1862,6 +2006,8 @@ public sealed partial class Reconciler : IDisposable
                 if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(control);
                 state.DecoratorElement = null;
                 state.ModifierTargets = null;
+                state.MemoTransition = null;
+                state.MemoWrapsDecorator = false;
             }
             return;
         }
@@ -2098,8 +2244,9 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// True when the element carries any reactive reference modifier — the imperative
     /// <c>.Ref</c> producer slot, an <c>XYFocus*</c> edge, or an accessibility
-    /// relationship edge. Such elements must be tagged so the unmount path can find the
-    /// element and clear the producer ref / tear the edges down (CR-001).
+    /// relationship edge. Such elements are tagged so the unmount path reaches them (CR-001).
+    /// The producer ref itself is cleared from the refs <c>ApplyModifiers</c> recorded on the
+    /// control's <see cref="ReactorState"/>, whichever layer declared it (#1659).
     /// </summary>
     private static bool HasReferenceModifiers(Element element)
     {
@@ -2228,6 +2375,9 @@ public sealed partial class Reconciler : IDisposable
             state.Element = null;
             state.DecoratorElement = null;
             state.ModifierTargets = null;
+            state.MemoTransition = null;
+            state.MemoWrapsDecorator = false;
+            if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
         }
         ClearPublishedSource(fe);
     }
@@ -2306,6 +2456,7 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
+        ClearTrackedProducerRefs(fe);
         TeardownReferenceEdges(fe);
         // A detached component wrapper must stop answering for its ComponentRendered id
         // (both directions), like the unmount path does before pooling.
@@ -2314,6 +2465,11 @@ public sealed partial class Reconciler : IDisposable
         state.Element = null;
         state.DecoratorElement = null;
         state.ModifierTargets = null;
+        state.MemoTransition = null;
+        state.MemoWrapsDecorator = false;
+        if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
+        // A pending keyframe opacity restart holds a layout handler and its reconciler (#1669).
+        CancelKeyframeOpacityCheck(state);
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
         state.Modifiers?.ClearCurrentHandlers();
@@ -2551,6 +2707,7 @@ public sealed partial class Reconciler : IDisposable
         ArgumentNullException.ThrowIfNull(handler);
         EnsureRegistrableElementType(typeof(TElement), typeof(TControl), "RegisterHandler");
         _v1Handlers.Add(typeof(TElement), new V1Protocol.V1HandlerAdapter<TElement, TControl>(handler));
+        (_externalHandlerTypes ??= new()).Add(typeof(TElement));
     }
 
     /// <summary>
@@ -2577,6 +2734,7 @@ public sealed partial class Reconciler : IDisposable
         // EnsureRegistrableElementType — reuse it.
         EnsureRegistrableElementType(typeof(TBase), typeof(TControl), "RegisterHandlerForDerivedTypes");
         _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1HandlerAdapter<TBase, TControl>(handler));
+        (_externalHandlerBaseTypes ??= new()).Add(typeof(TBase));
     }
 
     /// <summary>
@@ -2652,16 +2810,122 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     public T RentControl<T>(PoolPolicy<T>? policy = null, Func<T>? factory = null) where T : class, new()
     {
+        // The lane belongs to the first control a mount rents, never to a later one.
+        bool visualLane = _rentContext.VisualLane;
+        _rentContext = _rentContext with { Armed = false };
         // Default = poolable; only skip the pool when the policy explicitly opts out.
         bool poolable = policy?.IsPoolable != false;
         if (poolable && typeof(FrameworkElement).IsAssignableFrom(typeof(T)))
         {
-            var rented = _pool.TryRent(typeof(T));
-            if (rented is T t) return t;
+            var rented = _pool.TryRent(typeof(T), visualLane);
+            if (rented is T t)
+            {
+                // Armed once the mount succeeds (Mount), so a mount that throws leaves no subscription.
+                if (visualLane && ElementPool.IsVisualTaken(rented)) _visualLaneRental = rented;
+                return t;
+            }
         }
         return factory is not null ? factory() : new T();
     }
 
+    // Spec 066 §7.2: which pool lane the control the current mount rents may come from.
+    private PoolRentContext _rentContext;
+
+    // The visual-lane control the current mount rented, whose load-time sync starts once the mount succeeds.
+    private FrameworkElement? _visualLaneRental;
+
+    // Element types (exact, or a base of them) registered on this reconciler by app code. Their
+    // handlers may write facades.
+    private HashSet<Type>? _externalHandlerTypes;
+    private List<Type>? _externalHandlerBaseTypes;
+
+    /// <summary>
+    /// Whether <paramref name="elementType"/> may mount through an app handler, which could write a
+    /// facade that throws on a visual-lane control (spec 066 §7.2). Covers per-host registrations,
+    /// derived-type registrations and global overrides of a built-in.
+    /// </summary>
+    private bool MayUseAppHandler(Type elementType)
+    {
+        if (_externalHandlerTypes?.Contains(elementType) == true || V1Protocol.ControlRegistry.IsContested(elementType))
+            return true;
+        if (_externalHandlerBaseTypes is { } bases)
+            foreach (var b in bases)
+                if (b.IsAssignableFrom(elementType)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Spec 066 §7.2. A mount may rent from the visual lane only when it declares a feature that
+    /// takes the visual (<i>demand</i>), and nothing in the chain over the control can write a
+    /// facade that throws on a taken visual but works on a fresh control: no setters or mount
+    /// callbacks (<i>blocked</i>), and a built-in handler (<i>candidate</i>). Demand also comes
+    /// from a transparent keyed <c>Memo</c> over the element. A setter or callback anywhere above
+    /// a mount that hasn't rented yet blocks it. Anything unknown takes the plain lane.
+    /// </summary>
+    internal readonly record struct PoolRentContext(bool Armed, bool Transparent, bool Demand, bool Blocked, bool Candidate)
+    {
+        public bool VisualLane => Armed && Candidate && Demand && !Blocked;
+    }
+
+    internal static PoolRentContext ForMount(Element element, ElementModifiers? modifiers, PoolRentContext outer)
+    {
+        bool candidate = VisualLaneTypes.Contains(element.GetType());
+        bool setters = candidate && HasSetters(element);
+        // ModifierTable.VisualOwningModifiers (spec 066 §9.1), for the layers landed so far, when the
+        // feature takes the visual at mount. InteractionStates takes it on the first state change,
+        // an exit-only transition on removal, and a scroll link without a ScrollViewer never, so a
+        // fresh control keeps writable facades until then and those don't count.
+        bool demand = element.AnimationConfig is not null || element.ElementTransition?.GetEnterTransition() is not null
+            || element.KeyframeAnimations is not null
+            || element.LayoutAnimation is not null || element.ScrollAnimation?.ScrollViewer is not null
+            || TakesVisual(element.ImplicitTransitions) || DeclaresTransform(modifiers)
+            || (outer.Armed && outer.Transparent && outer.Demand);
+        bool blocked = setters || modifiers is { OnMountAction: not null } or { OnUpdateAction: not null }
+            || (outer.Armed && outer.Blocked);
+        return new(Armed: true, Transparent: element is KeyedMemoElement, demand, blocked, candidate);
+    }
+
+    // Spec 066 layer 4: a transform modifier takes the visual at mount unless its value is the
+    // identity (§3 invariant 2). A rented control's facades read identity, and setters block the
+    // lane anyway, so the declared value decides. Layer 5: so does a .TransformOrigin other than
+    // (0, 0), which starts its expression at mount.
+    private static bool DeclaresTransform(ElementModifiers? m)
+        => m is not null
+            && ((m.Scale is { } scale && scale != Vector3.One) || (m.Rotation is { } rotation && rotation != 0)
+                || (m.Translation is { } translation && translation != Vector3.Zero)
+                || (m.CenterPoint is { } center && center != Vector3.Zero)
+                || (m.TransformOrigin is { } origin && origin != Vector2.Zero));
+
+    // The built-in element types whose handler rents a poolable control. Exact types: a record
+    // derived from one may come with its own handler.
+    private static readonly HashSet<Type> VisualLaneTypes =
+    [
+        typeof(BorderElement), typeof(StackElement), typeof(GridElement), typeof(CanvasElement),
+        typeof(TextBlockElement), typeof(RichTextBlockElement), typeof(ScrollViewerElement),
+        typeof(ViewboxElement), typeof(ProgressElement), typeof(ProgressRingElement),
+        typeof(ImageElement), typeof(InfoBadgeElement), typeof(ButtonElement), typeof(TextBoxElement),
+        typeof(ToggleSwitchElement),
+    ];
+
+    private static bool HasSetters(Element element) => element switch
+    {
+        BorderElement e => e.Setters.Length > 0,
+        StackElement e => e.Setters.Length > 0,
+        GridElement e => e.Setters.Length > 0,
+        CanvasElement e => e.Setters.Length > 0,
+        TextBlockElement e => e.Setters.Length > 0,
+        RichTextBlockElement e => e.Setters.Length > 0,
+        ScrollViewerElement e => e.Setters.Length > 0,
+        ViewboxElement e => e.Setters.Length > 0,
+        ProgressElement e => e.Setters.Length > 0,
+        ProgressRingElement e => e.Setters.Length > 0,
+        ImageElement e => e.Setters.Length > 0,
+        InfoBadgeElement e => e.Setters.Length > 0,
+        ButtonElement e => e.Setters.Length > 0,
+        TextBoxElement e => e.Setters.Length > 0,
+        ToggleSwitchElement e => e.Setters.Length > 0,
+        _ => true,
+    };
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.5) — return a control to its per-type pool,
     /// after running the Q18 reset contract:
@@ -2687,6 +2951,7 @@ public sealed partial class Reconciler : IDisposable
             if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs)
             {
                 if (rs.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
+                ClearTrackedProducerRefs(fe);
                 TeardownReferenceEdges(fe);
                 rs.Modifiers?.ClearCurrentHandlers();
                 // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
@@ -2712,6 +2977,8 @@ public sealed partial class Reconciler : IDisposable
                 rs.Element = null;
                 rs.DecoratorElement = null;
                 rs.ModifierTargets = null;
+                rs.MemoTransition = null;
+                rs.MemoWrapsDecorator = false;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
             fe.ClearValue(FrameworkElement.DataContextProperty);
@@ -3593,11 +3860,11 @@ public sealed partial class Reconciler : IDisposable
     /// component's inclusive cost, including the WinUI controls its subtree creates.
     /// </summary>
     private static Diagnostics.ReactorPerfTrace.ComponentSpan BeginPerfComponentSpan(
-        ComponentNode node, Element element, string reason)
+        ComponentNode node, Element element, string reason, bool memoMiss = false)
     {
         if (!Diagnostics.ReactorPerfTrace.ComponentEnabled) return default;
         return Diagnostics.ReactorPerfTrace.ComponentSpan.Begin(
-            (ulong)node.EnsureDiagnosticId(), PerfComponentName(node, element), reason, element.CallSite);
+            (ulong)node.EnsureDiagnosticId(), PerfComponentName(node, element), reason, element.CallSite, memoMiss);
     }
 
     /// <summary>
@@ -3843,6 +4110,9 @@ public sealed partial class Reconciler : IDisposable
         // Set when the reason classification below already read the event's gate, so
         // the render path reuses it instead of checking a second time.
         bool? traceEnabled = null;
+        // A memo gate (class props / ShouldUpdate, Memo dependencies) was evaluated: a render that
+        // follows is a memo miss on the perf provider, a skip a memo hit.
+        bool memoGated = false;
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -3874,6 +4144,7 @@ public sealed partial class Reconciler : IDisposable
 
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !propsChanged && !contextChanged;
+                memoGated = true;
                 // Props components: a props change wins, else it was the context.
                 // Propless components (ShouldUpdate() true or a context change): the
                 // context wins, else nothing could skip it.
@@ -3895,6 +4166,7 @@ public sealed partial class Reconciler : IDisposable
                     : oldDeps is null || newDeps is null || !RenderContext.DepsEqual(oldDeps, newDeps);
                 bool contextChanged = HasConsumedContextChanged(node);
                 skipRender = !depsChanged && !contextChanged;
+                memoGated = true;
                 memoReason = depsChanged
                     ? Diagnostics.ComponentRenderTrace.Reasons.Props
                     : Diagnostics.ComponentRenderTrace.Reasons.Context;
@@ -3911,6 +4183,10 @@ public sealed partial class Reconciler : IDisposable
 
             if (skipRender)
             {
+                // A memo hit on the perf provider (the render it saved is not a span).
+                if (Diagnostics.ReactorPerfTrace.ComponentEnabled)
+                    Diagnostics.ReactorPerfTrace.ComponentSkip((ulong)node.EnsureDiagnosticId(), PerfComponentName(node, newEl));
+
                 // Still update the element reference (modifiers may have changed on the ComponentElement itself)
                 node.Element = newEl;
 
@@ -3938,7 +4214,8 @@ public sealed partial class Reconciler : IDisposable
         // Perf span: Render(), effects and the subtree reconcile below (closes on every exit).
         using var perfSpan = Diagnostics.ReactorPerfTrace.ComponentEnabled
             ? BeginPerfComponentSpan(node, newEl, Diagnostics.ComponentRenderTrace.ClassifyUpdate(
-                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason))
+                forcedRender, HotReloadService.WithinUpdatePass || _hotReloadRetryActive, selfTriggered, memoReason),
+                memoMiss: memoGated)
             : default;
 
         // Pass the component's own wrapped rerender to children so that child state
@@ -4282,11 +4559,13 @@ public sealed partial class Reconciler : IDisposable
             if (!_perfTally)
             {
                 ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
+                CountPerfMoves(childCollection);
                 return;
             }
             // Only the enclosing Reconcile span's edit tally wants this container's counts.
             try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
             finally { _perfEdits.Add(childCollection); }
+            CountPerfMoves(childCollection);
             return;
         }
         if (traceSource)
@@ -4307,6 +4586,15 @@ public sealed partial class Reconciler : IDisposable
             if (_perfTally)
                 _perfEdits.Add(childCollection);
         }
+        CountPerfMoves(childCollection);
+    }
+
+    // A repositioned child is a change the mount and unmount counts do not see (inserts,
+    // removals and replacements mount or unmount a control, which counts it).
+    private static void CountPerfMoves(PanelChildCollection childCollection)
+    {
+        if (childCollection.MoveCount != 0)
+            CountPerfChanges(childCollection.MoveCount);
     }
 
     /// <summary>
@@ -4351,8 +4639,14 @@ public sealed partial class Reconciler : IDisposable
     /// resource refresh), so the caller doesn't unmount it twice.
     /// </summary>
     internal UIElement? UpdateChildTracked(Element oldEl, Element newEl, UIElement control, Action requestRerender,
-        out bool unmountedByUpdate)
-        => UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate);
+        out bool unmountedByUpdate, int childIndex = -1)
+    {
+        // The child's new position among its panel's children, for a parent .Stagger() (RefreshStaggerDelay).
+        var previousIndex = _updatingChildIndex;
+        _updatingChildIndex = childIndex;
+        try { return UpdateSlotChild(oldEl, newEl, control, requestRerender, out unmountedByUpdate); }
+        finally { _updatingChildIndex = previousIndex; }
+    }
 
     /// <summary>
     /// Unmounts a child control. Public so registered type handlers can unmount children.
@@ -4398,6 +4692,7 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountRecursive(UIElement control)
     {
         if (SkipOrTrackIsolatedTeardown(control)) return;
+        CountPerfChanges();
         NoteUnmountDuringSlotUpdate(control);
         EndExit(control);
         CancelPostLayoutSweep(control);
@@ -4523,6 +4818,12 @@ public sealed partial class Reconciler : IDisposable
 
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
+        ElementPool.CancelOpacitySync(control);
+        // Whichever layer started a keyframe (a keyed Memo's isn't on this element chain), an
+        // unmounted control's pending opacity restart must go with it (#1669).
+        CancelKeyframeOpacityCheck(control);
+        // Before the reference-edge teardown below, which runs user setters that can throw.
+        ClearTrackedProducerRefs(control);
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.
@@ -4535,25 +4836,89 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    private static void TrackProducerRef(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        var state = GetOrCreateReactorState(control);
+        switch (state.ProducerRefs)
+        {
+            case null:
+                state.ProducerRefs = producerRef;
+                break;
+            case Microsoft.UI.Reactor.Input.ElementRef single when !ReferenceEquals(single, producerRef):
+                state.ProducerRefs = new List<Microsoft.UI.Reactor.Input.ElementRef>(2) { single, producerRef };
+                break;
+            case List<Microsoft.UI.Reactor.Input.ElementRef> list when !ContainsReference(list, producerRef):
+                list.Add(producerRef);
+                break;
+        }
+    }
+
+    private static void UntrackProducerRef(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        if (!TryGetReactorState(control, out var state)) return;
+        if (ReferenceEquals(state.ProducerRefs, producerRef))
+            state.ProducerRefs = null;
+        else if (state.ProducerRefs is List<Microsoft.UI.Reactor.Input.ElementRef> list)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (!ReferenceEquals(list[i], producerRef)) continue;
+                list.RemoveAt(i);
+                break;
+            }
+        }
+    }
+
+    private static bool ContainsReference(List<Microsoft.UI.Reactor.Input.ElementRef> list, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        foreach (var entry in list)
+            if (ReferenceEquals(entry, producerRef)) return true;
+        return false;
+    }
+
+    // Clear a ref only while it still names this control. When an update replaces a control,
+    // ApplyModifiers points the ref at the replacement before the caller unmounts the old
+    // control, and the ref must keep it.
+    private static void ClearTrackedProducerRefs(FrameworkElement control)
+    {
+        if (!TryGetReactorState(control, out var state) || state.ProducerRefs is not { } refs) return;
+        state.ProducerRefs = null;
+        if (refs is Microsoft.UI.Reactor.Input.ElementRef single)
+        {
+            ClearProducerRefIfCurrent(control, single);
+            return;
+        }
+        // Outside a Reconcile commit, clearing a ref dispatches CurrentChanged synchronously and
+        // can throw. Clear the rest first, so one throwing subscriber can't strand another ref.
+        global::System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
+        foreach (var producerRef in (List<Microsoft.UI.Reactor.Input.ElementRef>)refs)
+        {
+            try { ClearProducerRefIfCurrent(control, producerRef); }
+            catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
+            {
+                failure ??= global::System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex);
+            }
+        }
+        failure?.Throw();
+    }
+
+    private static void ClearProducerRefIfCurrent(FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef producerRef)
+    {
+        if (producerRef.Current is { } current && IsSameNativeElement(current, control))
+            producerRef.SetCurrent(null);
+    }
+
     private static void CleanupElementStateForUnmount(FrameworkElement control, Element? element)
     {
+        // A control kept out of the pool isn't reused, and a connected-animation source keeps its
+        // hover brushes for the snapshot WinUI takes on the next frame.
         if (element?.InteractionStates is not null)
-            ClearInteractionStates(control);
+            ClearInteractionStates(control,
+                restoreBrushes: control.GetValue(ReactorAttached.StateProperty) is not ReactorState { PoolExcluded: true });
         if (element?.KeyframeAnimations is not null)
             ClearKeyframeAnimations(control, element.KeyframeAnimations);
         if (element?.ScrollAnimation is not null)
             ClearScrollAnimation(control, element.ScrollAnimation);
-        CleanupReferenceStateForUnmount(control, element);
-    }
-
-    private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
-    {
-        // Clear the producer ref only while it still names this control. When an update
-        // replaces a control, ApplyModifiers points the element's ref at the replacement
-        // before the caller unmounts the old control, and the ref must keep it.
-        if (element?.Modifiers?.Ref is { } producerRef && producerRef.Current is { } current
-            && IsSameNativeElement(current, control))
-            producerRef.SetCurrent(null);
     }
 
     // Two managed wrappers can front one native element (see ReactorAttached.StateProperty), so
@@ -4813,11 +5178,13 @@ public sealed partial class Reconciler : IDisposable
     // Controls still in a child collection only while their exit transition plays (removal is
     // deferred to its completion). ChildReconciler steps past them: they belong to no element of
     // the old child list, so they would otherwise misalign it with the collection.
-    private HashSet<UIElement>? _exitingControls;
+    // Each exit is keyed to a token, so a completion that outlived its exit (the control was torn
+    // down with an ancestor, pooled and possibly rented again) can tell it is no longer current.
+    private Dictionary<UIElement, object>? _exitingControls;
 
     internal bool HasExitingControls => _exitingControls is { Count: > 0 };
 
-    internal bool IsExiting(UIElement control) => _exitingControls?.Contains(control) == true;
+    internal bool IsExiting(UIElement control) => _exitingControls?.ContainsKey(control) == true;
 
     // Up to this many in-flight exits, probing the collection once per exit beats reading it.
     // A probe is one native IndexOf (a pointer scan, no managed allocation); a read is a
@@ -4836,22 +5203,58 @@ public sealed partial class Reconciler : IDisposable
         if (_exitingControls is not { Count: > 0 } exiting) return false;
         if (exiting.Count <= ExitProbeLimit)
         {
-            foreach (var control in exiting)
+            foreach (var control in exiting.Keys)
                 if (children.IndexOf(control) >= 0) return true;
             return false;
         }
         int count = children.Count;
         for (int i = 0; i < count; i++)
-            if (exiting.Contains(children.Get(i))) return true;
+            if (exiting.ContainsKey(children.Get(i))) return true;
         return false;
     }
 
-    private void BeginExit(UIElement control) => (_exitingControls ??= new()).Add(control);
+    // An exit animation starts now; the removal (and its unmount count) comes after it, outside the pass.
+    private void BeginExit(UIElement control, object exit)
+    {
+        CountPerfChanges();
+        (_exitingControls ??= new())[control] = exit;
+    }
 
     private void EndExit(UIElement control)
     {
         if (_exitingControls is { Count: > 0 } exiting)
             exiting.Remove(control);
+    }
+
+    // Ends the exit only while it is still the control's current one. A control torn down with
+    // an ancestor mid-exit already ended it and may be back in the pool, possibly rented again.
+    private bool EndExit(UIElement control, object exit)
+    {
+        if (_exitingControls is not { Count: > 0 } exiting
+            || !exiting.TryGetValue(control, out var current) || !ReferenceEquals(current, exit))
+            return false;
+        exiting.Remove(control);
+        return true;
+    }
+
+    /// <summary>
+    /// The <c>.Transition()</c> whose exit side plays when <paramref name="control"/> leaves the
+    /// tree, or null. Layers are searched outermost first: a keyed Memo wrapping a flyout
+    /// decorator, else the decorator's chain (which reaches a keyed Memo it wraps), then a keyed
+    /// Memo over the control, then the tag's chain.
+    /// </summary>
+    private static ElementTransition? FindExitTransition(UIElement control)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is not ReactorState state) return null;
+        if (state.MemoTransition is { } outerMemo && (state.DecoratorElement is null || state.MemoWrapsDecorator))
+            return outerMemo;
+        ElementTransition? transition = null;
+        if (state.DecoratorElement is not null)
+            transition = FindMountedElementValue(control, static element => element.ElementTransition);
+        if (transition is null && state.MemoTransition is { } memo) return memo;
+        if (transition is null && state.Element is { } tag)
+            transition = FindMountedElementValue(control, static element => element.ElementTransition, tag);
+        return transition?.GetExitTransition() is not null ? transition : null;
     }
     /// <summary>
     /// Removes a child from its collection with exit transition support.
@@ -4861,15 +5264,15 @@ public sealed partial class Reconciler : IDisposable
     internal void RemoveChildWithExitTransition(IChildCollection children, int index)
     {
         var control = children.Get(index);
-        var transition = FindMountedElementValue(control, static element => element.ElementTransition);
+        var transition = FindExitTransition(control);
 
-        if (transition?.GetExitTransition() is not null)
+        if (transition is not null)
         {
             // Defer removal: play exit animation, then remove + pool on completion.
-            BeginExit(control);
+            var exit = new object();
+            BeginExit(control, exit);
             ApplyExitTransition(control, transition, () =>
             {
-                EndExit(control);
                 // Find current index — it may have shifted if earlier items were removed.
                 for (int i = 0; i < children.Count; i++)
                 {
@@ -4880,7 +5283,7 @@ public sealed partial class Reconciler : IDisposable
                     }
                 }
                 UnmountAndPool(control);
-            });
+            }, exit);
             return;
         }
 
@@ -4890,10 +5293,10 @@ public sealed partial class Reconciler : IDisposable
         // best-effort: if Composition throws we fall through to the
         // synchronous remove below.
         var ambient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+        object? ambientExit = null;
         if (ambient is { HasEffect: true }
-            && TryApplyAmbientExit(control, ambient.Kind, onComplete: () =>
+            && TryApplyAmbientExit(control, ambient.Kind, ambientExit = new object(), onComplete: () =>
             {
-                EndExit(control);
                 for (int i = 0; i < children.Count; i++)
                 {
                     if (ReferenceEquals(children.Get(i), control))
@@ -4905,7 +5308,7 @@ public sealed partial class Reconciler : IDisposable
                 UnmountAndPool(control);
             }))
         {
-            BeginExit(control);
+            BeginExit(control, ambientExit);
             return;
         }
 
@@ -4922,17 +5325,16 @@ public sealed partial class Reconciler : IDisposable
     /// the request (headless / disposed contexts) so the caller falls back
     /// to synchronous removal.
     /// </summary>
-    private static bool TryApplyAmbientExit(UIElement control, AnimationKind kind, Action onComplete)
+    private bool TryApplyAmbientExit(UIElement control, AnimationKind kind, object exit, Action onComplete)
     {
         var curve = Microsoft.UI.Reactor.Core.Internal.AnimationKindMap.ToCurve(kind);
         if (curve is null) return false;
 
+        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(control);
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(control);
-            // As ApplyExitTransition: a control whose visual was handed out must not be pooled
-            // (and so cannot be re-rented while its fade, and the removal after it, is pending).
-            ElementPool.MarkCompositorTainted(control);
+            var visual = AnimationHelper.GetElementVisual(control);
             var compositor = visual.Compositor;
             var batch = compositor.CreateScopedBatch(global::Microsoft.UI.Composition.CompositionBatchTypes.Animation);
             var anim = Microsoft.UI.Reactor.Animation.AnimationHelper.CreateScalarTargetAnimation(compositor, 0f, curve);
@@ -4940,6 +5342,9 @@ public sealed partial class Reconciler : IDisposable
             batch.End();
             batch.Completed += (_, _) =>
             {
+                // As ApplyExitTransition: the pool's visual reset already restored a control
+                // whose exit ended early, and it may belong to another renter now.
+                if (!EndExit(control, exit)) return;
                 // Reset opacity so a recycled element doesn't reappear
                 // invisible if it gets re-mounted later.
                 visual.Opacity = 1f;
@@ -4962,9 +5367,9 @@ public sealed partial class Reconciler : IDisposable
     internal bool ReplaceChildWithExitTransition(IChildCollection children, int index, UIElement newControl)
     {
         var oldControl = children.Get(index);
-        var transition = FindMountedElementValue(oldControl, static element => element.ElementTransition);
+        var transition = FindExitTransition(oldControl);
 
-        if (transition?.GetExitTransition() is not null)
+        if (transition is not null)
         {
             // KNOWN LIMITATION — connected animation does not compose with an exit
             // transition on the SAME element. UnmountAndPool (and therefore
@@ -4985,10 +5390,10 @@ public sealed partial class Reconciler : IDisposable
             // It will be positioned by layout but the animation (fade/slide) makes
             // it visually leave. We insert it right after the replacement.
             children.Insert(index + 1, oldControl);
-            BeginExit(oldControl);
+            var exit = new object();
+            BeginExit(oldControl, exit);
             ApplyExitTransition(oldControl, transition, () =>
             {
-                EndExit(oldControl);
                 for (int i = 0; i < children.Count; i++)
                 {
                     if (ReferenceEquals(children.Get(i), oldControl))
@@ -4998,7 +5403,7 @@ public sealed partial class Reconciler : IDisposable
                     }
                 }
                 UnmountAndPool(oldControl);
-            });
+            }, exit);
             return true;
         }
 
@@ -5021,6 +5426,7 @@ public sealed partial class Reconciler : IDisposable
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
         if (SkipOrTrackIsolatedTeardown(control)) return;
+        CountPerfChanges();
         NoteUnmountDuringSlotUpdate(control);
         // A control torn down with an ancestor while still fading out is no longer exiting.
         EndExit(control);
@@ -5443,9 +5849,18 @@ public sealed partial class Reconciler : IDisposable
             && fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs
                 ? rs : null;
         if (state is not null) state.EchoSuppressScopeDepth++;
+        // A setter's opacity write replaces a pending opacity keyframe, as a modifier's does (#1669).
+        var opacityProbe = control is UIElement probed ? new KeyframeOpacityProbe(probed) : default;
         try
         {
             foreach (var setter in setters) setter(control);
+            opacityProbe.Complete();
+        }
+        // Spec 066 §9 row 1: name the modifier when WinUI rejects a facade write after the
+        // handoff. The filter returns false, so the exception is unchanged.
+        catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(control))
+        {
+            throw;
         }
         finally
         {
@@ -5569,40 +5984,69 @@ public sealed partial class Reconciler : IDisposable
     private static string? ContentCaption(Element? content, string? fallback)
         => content is null ? fallback : ExtractElementCaption(content);
 
-    internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? implicitT, ThemeTransitions? themeT)
+    /// <summary>
+    /// Applies the implicit and theme transitions a layer declares. <paramref name="previous"/> is
+    /// what the same layer declared on the last render; a channel it had and
+    /// <paramref name="implicitT"/> lacks is released (#1626). <paramref name="slot"/> is the
+    /// layer's depth in the shared-target chain (spec 066 §6.1).
+    /// </summary>
+    internal static void ApplyTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT,
+        ThemeTransitions? themeT, int slot = 0)
     {
-        if (implicitT is not null)
+        ApplyImplicitTransitions(uie, previous, implicitT, slot);
+        ApplyThemeTransitions(uie, themeT);
+    }
+
+    /// <summary>True when the transitions include one that runs on the composition visual (spec 066 §5).</summary>
+    internal static bool TakesVisual(ImplicitTransitions? transitions)
+        => transitions is not null && (transitions.Opacity is not null || transitions.Scale is not null
+            || transitions.Rotation is not null || transitions.Translation is not null);
+
+    /// <summary>
+    /// Spec 066 §5. Opacity, Scale and Rotation transitions are implicit keys on the composition
+    /// visual, and Translation a write-time animation, all with the XAML curve. Reactor never sets
+    /// the <c>UIElement.*Transition</c> properties, which would block the handoff (#1623).
+    /// Background stays a XAML transition (§5.6). Update runs this before setters and modifiers,
+    /// so a value changed in the same reconcile follows the new policy (§6.3).
+    /// </summary>
+    internal static void ApplyImplicitTransitions(UIElement uie, ImplicitTransitions? previous, ImplicitTransitions? implicitT, int slot)
+    {
+        if (implicitT is null && previous is null) return;
+
+        var current = implicitT;
+        if (TakesVisual(implicitT))
         {
-            try
-            {
-                if (implicitT.Opacity is not null)
-                    uie.OpacityTransition = implicitT.Opacity;
-                if (implicitT.Rotation is not null)
-                    uie.RotationTransition = implicitT.Rotation;
-                if (implicitT.Scale is not null)
-                    uie.ScaleTransition = implicitT.Scale;
-                if (implicitT.Translation is not null)
-                    uie.TranslationTransition = implicitT.Translation;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // WinUI blocks XAML implicit transition APIs once GetElementVisual()
-                // has been called on the element (e.g., from .Animate(), enter transitions,
-                // or a previous owner via the pool). Fall back to compositor implicit
-                // animations which always work.
-                ApplyTransitionsViaCompositor(uie, implicitT);
-            }
-            if (implicitT.Background is not null)
-            {
-                switch (uie)
-                {
-                    case WinUI.Grid g: g.BackgroundTransition = implicitT.Background; break;
-                    case WinUI.StackPanel sp: sp.BackgroundTransition = implicitT.Background; break;
-                    case WinUI.ContentPresenter cp: cp.BackgroundTransition = implicitT.Background; break;
-                }
-            }
+            // The visual is taken even with animations off, so readback, the pool lane and the
+            // setters that throw don't depend on the system setting (§9 rows 1 and 2).
+            AnimationHelper.GetElementVisual(uie);
+            // XAML transitions honour "Animation effects" and composition animations don't, so
+            // with the setting off no key is installed and Translation writes jump (§5.5).
+            if (!global::Microsoft.UI.Reactor.Navigation.TransitionEngine.AnimationsEnabled) current = null;
         }
 
+        ApplyTransitionChannel(uie, "Opacity", previous?.Opacity, current?.Opacity, slot);
+        ApplyTransitionChannel(uie, "RotationAngle", previous?.Rotation, current?.Rotation, slot);
+        ApplyTransitionChannel(uie, "Scale", previous?.Scale, current?.Scale, slot);
+        ApplyTransitionChannel(uie, ImplicitAnimationSlots.TranslationKey, previous?.Translation, current?.Translation, slot);
+
+        if (implicitT?.Background is { } background)
+            SetBackgroundTransition(uie, background);
+        else if (previous?.Background is not null)
+            SetBackgroundTransition(uie, null);
+    }
+
+    private static void SetBackgroundTransition(UIElement uie, BrushTransition? transition)
+    {
+        switch (uie)
+        {
+            case WinUI.Grid g: g.BackgroundTransition = transition; break;
+            case WinUI.StackPanel sp: sp.BackgroundTransition = transition; break;
+            case WinUI.ContentPresenter cp: cp.BackgroundTransition = transition; break;
+        }
+    }
+
+    internal static void ApplyThemeTransitions(UIElement uie, ThemeTransitions? themeT)
+    {
         if (themeT?.Children is { } children)
         {
             var tc = new Microsoft.UI.Xaml.Media.Animation.TransitionCollection();
@@ -5627,67 +6071,37 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    /// <summary>
-    /// Fallback: applies XAML-style implicit transitions via compositor ImplicitAnimationCollection
-    /// when the XAML API is blocked by a prior GetElementVisual() call.
-    /// </summary>
-    private static void ApplyTransitionsViaCompositor(UIElement uie, ImplicitTransitions implicitT)
+    private static void ApplyTransitionChannel(UIElement uie, string key, object? previous, object? current, int slot)
     {
-        ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
-        var compositor = visual.Compositor;
-        var implicitAnimations = visual.ImplicitAnimations ?? compositor.CreateImplicitAnimationCollection();
-
-        if (implicitT.Opacity is not null)
-        {
-            var dur = implicitT.Opacity.Duration;
-            implicitAnimations["Opacity"] = AnimationHelper.CreateScalarImplicitAnimation(
-                compositor, "Opacity", new Animation.LinearCurve(dur));
-        }
-        if (implicitT.Rotation is not null)
-        {
-            var dur = implicitT.Rotation.Duration;
-            implicitAnimations["RotationAngle"] = AnimationHelper.CreateScalarImplicitAnimation(
-                compositor, "RotationAngle", new Animation.LinearCurve(dur));
-        }
-        if (implicitT.Scale is not null)
-        {
-            var dur = implicitT.Scale.Duration;
-            implicitAnimations["Scale"] = AnimationHelper.CreateVector3ImplicitAnimation(
-                compositor, "Scale", new Animation.LinearCurve(dur));
-        }
-        if (implicitT.Translation is not null)
-        {
-            var dur = implicitT.Translation.Duration;
-            implicitAnimations["Offset"] = AnimationHelper.CreateVector3ImplicitAnimation(
-                compositor, "Offset", new Animation.LinearCurve(dur));
-        }
-
-        visual.ImplicitAnimations = implicitAnimations;
+        if (current is not null)
+            ImplicitAnimationSlots.Claim(uie, key, ImplicitFeature.Transition, slot, current);
+        else if (previous is not null)
+            ImplicitAnimationSlots.Release(uie, key, ImplicitFeature.Transition, slot);
     }
 
     /// <summary>
     /// Sets up Composition-layer implicit animations on the element's Visual so that
     /// layout-driven Offset (and optionally Size) changes animate smoothly.
     /// Runs entirely on the Composition thread — zero managed-code callbacks during animation.
+    /// The keys are claimed through <see cref="ImplicitAnimationSlots"/>, so the element's
+    /// transitions and <c>.Animate()</c> keys survive (#1625).
     /// </summary>
-    internal static void ApplyLayoutAnimation(UIElement uie, LayoutAnimationConfig config)
+    internal static void ApplyLayoutAnimation(UIElement uie, LayoutAnimationConfig config, int slot = 0)
     {
-        ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        ElementPool.MarkVisualTaken(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
-
-        var implicitAnimations = compositor.CreateImplicitAnimationCollection();
 
         if (config.AnimateOffset)
         {
+            CompositionAnimation offset;
             if (config.UseSpring)
             {
                 var spring = compositor.CreateSpringVector3Animation();
                 spring.DampingRatio = config.DampingRatio;
                 spring.Period = TimeSpan.FromSeconds(config.Period);
                 spring.Target = "Offset";
-                implicitAnimations["Offset"] = spring;
+                offset = spring;
             }
             else
             {
@@ -5695,19 +6109,25 @@ public sealed partial class Reconciler : IDisposable
                 anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
                 anim.Duration = config.Duration;
                 anim.Target = "Offset";
-                implicitAnimations["Offset"] = anim;
+                offset = anim;
             }
+            ImplicitAnimationSlots.Claim(uie, "Offset", ImplicitFeature.Layout, slot, offset);
+        }
+        else
+        {
+            ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
         }
 
         if (config.AnimateSize)
         {
+            CompositionAnimation size;
             if (config.UseSpring)
             {
                 var spring = compositor.CreateSpringVector2Animation();
                 spring.DampingRatio = config.DampingRatio;
                 spring.Period = TimeSpan.FromSeconds(config.Period);
                 spring.Target = "Size";
-                implicitAnimations["Size"] = spring;
+                size = spring;
             }
             else
             {
@@ -5715,22 +6135,24 @@ public sealed partial class Reconciler : IDisposable
                 anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
                 anim.Duration = config.Duration;
                 anim.Target = "Size";
-                implicitAnimations["Size"] = anim;
+                size = anim;
             }
+            ImplicitAnimationSlots.Claim(uie, "Size", ImplicitFeature.Layout, slot, size);
         }
-
-        visual.ImplicitAnimations = implicitAnimations;
+        else
+        {
+            ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
+        }
     }
 
     /// <summary>
-    /// Clears Composition-layer implicit animations from an element's Visual.
-    /// Called when an element previously had LayoutAnimation but no longer does
-    /// (e.g., after a state change removes the modifier, or a pooled control is reused).
+    /// Releases the layout animation keys a layer claimed. Called when an element previously
+    /// had LayoutAnimation but no longer does. Keys other features claim stay (#1625).
     /// </summary>
-    internal static void ClearLayoutAnimation(UIElement uie)
+    internal static void ClearLayoutAnimation(UIElement uie, int slot = 0)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
-        visual.ImplicitAnimations = null;
+        ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Layout, slot);
+        ImplicitAnimationSlots.Release(uie, "Size", ImplicitFeature.Layout, slot);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -5738,58 +6160,55 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Creates ImplicitAnimationCollection entries on the element's composition Visual
-    /// for the targeted properties using the specified Curve. Merges with existing
-    /// layout animation entries (Offset/Size) to avoid overwriting each other.
+    /// Claims implicit animation keys on the element's composition Visual for the targeted
+    /// properties using the specified Curve. A layout animation keeps Offset while it's declared,
+    /// and <c>.Animate()</c> wins Opacity, Scale and RotationAngle over a transition (spec 066 §6.1).
     /// </summary>
-    internal static void ApplyPropertyAnimation(UIElement uie, AnimationConfig config, LayoutAnimationConfig? layoutConfig)
+    internal static void ApplyPropertyAnimation(UIElement uie, AnimationConfig config, int slot = 0)
     {
-        ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        ElementPool.MarkVisualTaken(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
-
-        // Start from existing implicit animations (layout may have set Offset/Size)
-        // or create a new collection
-        var implicitAnimations = visual.ImplicitAnimations ?? compositor.CreateImplicitAnimationCollection();
 
         var props = config.Properties;
         var curve = config.Curve;
 
         if (props.HasFlag(AnimateProperty.Opacity))
-            implicitAnimations["Opacity"] = AnimationHelper.CreateScalarImplicitAnimation(compositor, "Opacity", curve);
+            ImplicitAnimationSlots.Claim(uie, "Opacity", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateScalarImplicitAnimation(compositor, "Opacity", curve));
 
         if (props.HasFlag(AnimateProperty.Offset))
-        {
-            // Only add Offset if layout animation hasn't already claimed it
-            if (layoutConfig is null || !layoutConfig.AnimateOffset)
-                implicitAnimations["Offset"] = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
-        }
+            ImplicitAnimationSlots.Claim(uie, "Offset", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve));
 
         if (props.HasFlag(AnimateProperty.Scale))
-            implicitAnimations["Scale"] = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Scale", curve);
+            ImplicitAnimationSlots.Claim(uie, "Scale", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Scale", curve));
 
         if (props.HasFlag(AnimateProperty.Rotation))
-            implicitAnimations["RotationAngle"] = AnimationHelper.CreateScalarImplicitAnimation(compositor, "RotationAngle", curve);
+            ImplicitAnimationSlots.Claim(uie, "RotationAngle", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateScalarImplicitAnimation(compositor, "RotationAngle", curve));
 
         if (props.HasFlag(AnimateProperty.CenterPoint))
-            implicitAnimations["CenterPoint"] = AnimationHelper.CreateVector3ImplicitAnimation(compositor, "CenterPoint", curve);
-
-        visual.ImplicitAnimations = implicitAnimations;
+            ImplicitAnimationSlots.Claim(uie, "CenterPoint", ImplicitFeature.Animate, slot,
+                AnimationHelper.CreateVector3ImplicitAnimation(compositor, "CenterPoint", curve));
     }
 
     /// <summary>
-    /// Removes the specified implicit property animation channels.
+    /// Releases the specified <c>.Animate()</c> channels a layer claimed. A key another feature
+    /// still claims stays, with that feature's animation. Update calls this before setters run, so
+    /// a claim that takes over a released key returns only at
+    /// <see cref="ImplicitAnimationSlots.FlushDeferred"/>, after the setters' writes.
     /// </summary>
-    internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties)
+    internal static void ClearPropertyAnimation(UIElement uie, AnimateProperty properties, int slot = 0)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
-        if (visual.ImplicitAnimations is not { } animations) return;
-        if (properties.HasFlag(AnimateProperty.Opacity)) animations.Remove("Opacity");
-        if (properties.HasFlag(AnimateProperty.Offset)) animations.Remove("Offset");
-        if (properties.HasFlag(AnimateProperty.Scale)) animations.Remove("Scale");
-        if (properties.HasFlag(AnimateProperty.Rotation)) animations.Remove("RotationAngle");
-        if (properties.HasFlag(AnimateProperty.CenterPoint)) animations.Remove("CenterPoint");
-        visual.ImplicitAnimations = animations.Count == 0 ? null : animations;
+        // .Animate() took the visual; taking it again keeps the facade migration this path always ran.
+        AnimationHelper.GetElementVisual(uie);
+        if (properties.HasFlag(AnimateProperty.Opacity)) ImplicitAnimationSlots.Release(uie, "Opacity", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Offset)) ImplicitAnimationSlots.Release(uie, "Offset", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Scale)) ImplicitAnimationSlots.Release(uie, "Scale", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.Rotation)) ImplicitAnimationSlots.Release(uie, "RotationAngle", ImplicitFeature.Animate, slot, deferRestore: true);
+        if (properties.HasFlag(AnimateProperty.CenterPoint)) ImplicitAnimationSlots.Release(uie, "CenterPoint", ImplicitFeature.Animate, slot, deferRestore: true);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -5803,9 +6222,9 @@ public sealed partial class Reconciler : IDisposable
     {
         var enter = transition.GetEnterTransition();
         if (enter is null) return;
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
 
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var curve = transition.Curve ?? Curve.Ease(300, Easing.Decelerate);
 
@@ -5816,21 +6235,40 @@ public sealed partial class Reconciler : IDisposable
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var delay = staggerIndex > 0 ? TimeSpan.FromTicks(staggerDelay.Ticks * staggerIndex) : TimeSpan.Zero;
 
-        ApplyTransitionAnimations(uie, visual, compositor, enter, curve, isEnter: true, delay);
+        // The enter writes its start values straight to the visual. An implicit key on the same
+        // channel (a transition, .Animate()) would animate that write and the enter would start
+        // from where the element already is (spec 066 §6.1).
+        WithoutImplicitAnimations(visual, () => ApplyTransitionAnimations(uie, visual, compositor, enter, curve, isEnter: true, delay));
 
         batch.End();
     }
 
+    /// <summary>Runs visual writes that must not fire the visual's implicit animation keys.</summary>
+    internal static void WithoutImplicitAnimations(Visual visual, Action write)
+    {
+        var implicitAnimations = visual.ImplicitAnimations;
+        if (implicitAnimations is null) { write(); return; }
+        visual.ImplicitAnimations = null;
+        try { write(); }
+        finally { visual.ImplicitAnimations = implicitAnimations; }
+    }
+
     /// <summary>
     /// Applies exit transition before unmount: animates out, then invokes onComplete to remove/pool.
+    /// <paramref name="onComplete"/> runs only while <paramref name="exit"/> is still the control's
+    /// current exit (see <see cref="BeginExit"/>).
     /// </summary>
-    internal void ApplyExitTransition(UIElement uie, ElementTransition transition, Action onComplete, int staggerIndex = 0, TimeSpan staggerDelay = default)
+    internal void ApplyExitTransition(UIElement uie, ElementTransition transition, Action onComplete, object exit, int staggerIndex = 0, TimeSpan staggerDelay = default)
     {
-        var exit = transition.GetExitTransition();
-        if (exit is null) { onComplete(); return; }
-        ElementPool.MarkCompositorTainted(uie);
+        var exitTransition = transition.GetExitTransition();
+        if (exitTransition is null)
+        {
+            if (EndExit(uie, exit)) onComplete();
+            return;
+        }
+        ElementPool.MarkVisualTaken(uie);
 
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var curve = transition.Curve ?? Curve.Ease(300, Easing.Decelerate);
 
@@ -5840,15 +6278,21 @@ public sealed partial class Reconciler : IDisposable
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var delay = staggerIndex > 0 ? TimeSpan.FromTicks(staggerDelay.Ticks * staggerIndex) : TimeSpan.Zero;
 
-        ApplyTransitionAnimations(uie, visual, compositor, exit, curve, isEnter: false, delay);
+        ApplyTransitionAnimations(uie, visual, compositor, exitTransition, curve, isEnter: false, delay);
 
         batch.End();
         batch.Completed += (_, _) =>
         {
-            // Reset visual state after exit
-            visual.Opacity = 1;
-            visual.Offset = Vector3.Zero;
-            visual.Scale = Vector3.One;
+            // A control torn down with an ancestor mid-exit was already pooled, and the pool's
+            // visual reset restored it (spec 066 §7.3). It may belong to another renter now.
+            if (!EndExit(uie, exit)) return;
+            // Reset visual state after exit, without animating it through an implicit key
+            WithoutImplicitAnimations(visual, () =>
+            {
+                visual.Opacity = 1;
+                visual.Offset = Vector3.Zero;
+                visual.Scale = Vector3.One;
+            });
             onComplete();
         };
     }
@@ -5887,7 +6331,9 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyFadeTransition(UIElement uie, Compositor compositor, Curve curve, bool isEnter, TimeSpan delay)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        // The fade owns the opacity channel now, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         if (isEnter)
         {
             visual.Opacity = 0;
@@ -5932,16 +6378,20 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyScaleTransition(UIElement uie, Visual visual, Compositor compositor, float from, Curve curve, bool isEnter, TimeSpan delay)
     {
+        // Scale relative to the element's own .Scale(). The visual's Scale getter returns the
+        // last assigned value, which after an enter is its start value, so it is not the rest.
+        var rest = RestTransformOf(uie).Scale;
+        var scaled = new Vector3(rest.X * from, rest.Y * from, rest.Z);
         if (isEnter)
         {
-            visual.Scale = new Vector3(from, from, 1f);
-            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, Vector3.One, curve);
+            visual.Scale = scaled;
+            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, rest, curve);
             if (delay > TimeSpan.Zero) AnimationHelper.SetDelay(anim, delay);
             visual.StartAnimation("Scale", anim);
         }
         else
         {
-            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, new Vector3(from, from, 1f), curve);
+            var anim = AnimationHelper.CreateVector3TargetAnimation(compositor, scaled, curve);
             if (delay > TimeSpan.Zero) AnimationHelper.SetDelay(anim, delay);
             visual.StartAnimation("Scale", anim);
         }
@@ -5967,12 +6417,28 @@ public sealed partial class Reconciler : IDisposable
             TransitionToState(uie, tracker, isOver ? InteractionState.PointerOver : InteractionState.Normal);
     }
 
+    // Test-only: drives a press / release (back to PointerOver) without synthesizing pointer input.
+    internal static void SimulatePressedForTests(UIElement uie, bool isPressed)
+    {
+        if (_interactionTrackers.TryGetValue(uie, out var tracker))
+            TransitionToState(uie, tracker, isPressed ? InteractionState.Pressed : InteractionState.PointerOver);
+    }
+
     private sealed class InteractionStateTracker
     {
         public InteractionState CurrentState;
         public InteractionStatesConfig Config = null!;
-        public Brush? NormalBackground;
-        public Brush? NormalForeground;
+        // Background/Foreground: the raw local value (DependencyProperty.UnsetValue when there was
+        // none) a state restores when it ends, captured when the state first writes over the
+        // property. With no local value the property is cleared, so a {ThemeResource} Style
+        // setter or the default style shows again. Active* is the brush the state wrote:
+        // anything else there when the state ends came from another writer and stands.
+        public object? NormalBackground;
+        public Brush? ActiveBackground;
+        public bool BackgroundOverrideApplied;
+        public object? NormalForeground;
+        public Brush? ActiveForeground;
+        public bool ForegroundOverrideApplied;
         public Brush? NormalBorderBrush;
         public bool NormalBorderBrushHasLocalValue;
         public bool BorderBrushOverrideApplied;
@@ -5986,29 +6452,11 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static void ApplyInteractionStates(UIElement uie, InteractionStatesConfig config)
     {
-        ElementPool.MarkCompositorTainted(uie);
+        ElementPool.MarkVisualTaken(uie);
         if (!_interactionTrackers.TryGetValue(uie, out var tracker))
         {
             tracker = new InteractionStateTracker();
             _interactionTrackers[uie] = tracker;
-
-            // Capture normal brush values
-            if (uie is FrameworkElement fe)
-            {
-                tracker.NormalBackground = fe switch
-                {
-                    WinUI.Panel p => p.Background,
-                    WinUI.Control c => c.Background,
-                    WinUI.Border b => b.Background,
-                    _ => null,
-                };
-                tracker.NormalForeground = fe switch
-                {
-                    WinUI.Control c => c.Foreground,
-                    TextBlock tb => tb.Foreground,
-                    _ => null,
-                };
-            }
 
             // Register handlers
             uie.PointerEntered += OnInteractionPointerEntered;
@@ -6026,9 +6474,15 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Removes InteractionStates from an element, unregistering handlers and clearing state.
     /// </summary>
-    internal static void ClearInteractionStates(UIElement uie)
+    internal static void ClearInteractionStates(UIElement uie, bool restoreBrushes = false)
     {
-        if (!_interactionTrackers.Remove(uie)) return;
+        if (!_interactionTrackers.Remove(uie, out var tracker)) return;
+
+        // A control unmounted mid-hover still carries the state's brushes. Put the normal ones back,
+        // so a pooled control does not hand a hover color to its next renter. Not on an update that
+        // drops the states: ApplyModifiers has already written that update's brushes.
+        if (restoreBrushes && uie is FrameworkElement fe)
+            ApplyInteractionBrushes(fe, tracker, values: null);
 
         uie.PointerEntered -= OnInteractionPointerEntered;
         uie.PointerExited -= OnInteractionPointerExited;
@@ -6102,89 +6556,183 @@ public sealed partial class Reconciler : IDisposable
             _ => null, // Normal
         };
 
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
 
-        // Compositor properties — animate via Visual
+        // Normal returns the transforms to the values the element's modifiers wrote, not to
+        // identity, so a hover-out does not discard them (#1613). The visual was taken above,
+        // so a facade transform has already moved and been recorded.
+        var rest = RestTransformOf(uie);
+
+        // Compositor properties — animate via Visual. The state takes the opacity channel, so a
+        // pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(uie);
         var targetOpacity = values?.Opacity ?? 1.0f;
         var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetOpacity, curve);
         visual.StartAnimation("Opacity", opacityAnim);
 
         if (values?.Scale.HasValue == true || values?.ScaleV.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetScale = values?.ScaleV ?? (values?.Scale.HasValue == true ? new Vector3(values.Scale.Value, values.Scale.Value, 1f) : Vector3.One);
+            var targetScale = values?.ScaleV ?? (values?.Scale is { } uniform ? new Vector3(uniform, uniform, 1f) : rest.Scale);
             var scaleAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetScale, curve);
             visual.StartAnimation("Scale", scaleAnim);
         }
 
-        if (values?.Translation.HasValue == true || newState == InteractionState.Normal)
+        // Translation only for a declared Translation channel (spec 066 §4.3): a state that moves it,
+        // or Normal after something enabled it. Enabling it otherwise would make WinUI ignore a
+        // facade Translation drag on the element (#1642).
+        if (values?.Translation.HasValue == true
+            || (newState == InteractionState.Normal && AnimationHelper.TranslationEnabled(uie)))
         {
             // Animate Translation, not Offset: on a XAML element's handoff visual, Offset is the
             // layout position, so animating it to zero pulls the element to its parent's origin.
-            ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
-            var targetTranslation = values?.Translation ?? Vector3.Zero;
+            AnimationHelper.EnableTranslation(uie, visual);
+            var targetTranslation = values?.Translation ?? rest.Translation;
             var translationAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, targetTranslation, curve);
             visual.StartAnimation("Translation", translationAnim);
         }
 
         if (values?.Rotation.HasValue == true || newState == InteractionState.Normal)
         {
-            var targetRotation = values?.Rotation ?? 0f;
+            var targetRotation = float.DegreesToRadians(values?.Rotation ?? rest.RotationDegrees);
             var rotationAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetRotation, curve);
             visual.StartAnimation("RotationAngle", rotationAnim);
         }
 
-        // Brush properties — direct set
         if (uie is FrameworkElement fe)
+            ApplyInteractionBrushes(fe, tracker, values);
+    }
+
+    /// <summary>
+    /// Brush properties — direct set. When a state ends, what the property held before the
+    /// state wrote over it comes back: an explicit local brush is restored, and a property
+    /// with no local value is cleared, so a ThemeRef's {ThemeResource} Style setter takes over
+    /// again instead of a brush captured earlier that would pin the theme it had then.
+    /// <paramref name="values"/> null is the Normal state.
+    /// </summary>
+    private static void ApplyInteractionBrushes(FrameworkElement fe, InteractionStateTracker tracker, InteractionStateValues? values)
+    {
+        var backgroundProperty = fe switch
         {
-            var bg = values?.Background ?? tracker.NormalBackground;
-            if (bg is not null)
-            {
-                if (fe is WinUI.Panel p) p.Background = bg;
-                else if (fe is WinUI.Control c) c.Background = bg;
-                else if (fe is WinUI.Border b) b.Background = bg;
-            }
+            WinUI.Panel => WinUI.Panel.BackgroundProperty,
+            WinUI.Control => WinUI.Control.BackgroundProperty,
+            WinUI.Border => WinUI.Border.BackgroundProperty,
+            _ => null,
+        };
+        if (backgroundProperty is not null)
+            ApplyInteractionBrush(fe, backgroundProperty, values?.Background,
+                ref tracker.NormalBackground, ref tracker.ActiveBackground, ref tracker.BackgroundOverrideApplied);
 
-            var fg = values?.Foreground ?? tracker.NormalForeground;
-            if (fg is not null)
-            {
-                if (fe is WinUI.Control c) c.Foreground = fg;
-                else if (fe is TextBlock tb) tb.Foreground = fg;
-            }
+        var foregroundProperty = fe switch
+        {
+            WinUI.Control => WinUI.Control.ForegroundProperty,
+            TextBlock => TextBlock.ForegroundProperty,
+            _ => null,
+        };
+        if (foregroundProperty is not null)
+            ApplyInteractionBrush(fe, foregroundProperty, values?.Foreground,
+                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
 
-            var borderProperty = fe switch
+        var borderProperty = fe switch
+        {
+            WinUI.Control => WinUI.Control.BorderBrushProperty,
+            WinUI.Border => WinUI.Border.BorderBrushProperty,
+            WinUI.Grid => WinUI.Grid.BorderBrushProperty,
+            WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
+            WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
+            _ => null,
+        };
+        if (borderProperty is not null)
+        {
+            if (values?.BorderBrush is { } borderBrush)
             {
-                WinUI.Control => WinUI.Control.BorderBrushProperty,
-                WinUI.Border => WinUI.Border.BorderBrushProperty,
-                WinUI.Grid => WinUI.Grid.BorderBrushProperty,
-                WinUI.StackPanel => WinUI.StackPanel.BorderBrushProperty,
-                WinUI.RelativePanel => WinUI.RelativePanel.BorderBrushProperty,
-                _ => null,
-            };
-            if (borderProperty is not null)
+                if (!tracker.BorderBrushOverrideApplied)
+                {
+                    // Capture the latest normal value before applying an override.
+                    tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
+                    tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
+                    tracker.BorderBrushOverrideApplied = true;
+                }
+                fe.SetValue(borderProperty, borderBrush);
+            }
+            else if (tracker.BorderBrushOverrideApplied)
             {
-                if (values?.BorderBrush is { } borderBrush)
-                {
-                    if (!tracker.BorderBrushOverrideApplied)
-                    {
-                        // Capture the latest normal value before applying an override.
-                        tracker.NormalBorderBrush = (Brush?)fe.GetValue(borderProperty);
-                        tracker.NormalBorderBrushHasLocalValue = fe.ReadLocalValue(borderProperty) != DependencyProperty.UnsetValue;
-                        tracker.BorderBrushOverrideApplied = true;
-                    }
-                    fe.SetValue(borderProperty, borderBrush);
-                }
-                else if (tracker.BorderBrushOverrideApplied)
-                {
-                    if (tracker.NormalBorderBrushHasLocalValue)
-                        fe.SetValue(borderProperty, tracker.NormalBorderBrush);
-                    else
-                        fe.ClearValue(borderProperty);
-                    tracker.BorderBrushOverrideApplied = false;
-                }
+                if (tracker.NormalBorderBrushHasLocalValue)
+                    fe.SetValue(borderProperty, tracker.NormalBorderBrush);
+                else
+                    fe.ClearValue(borderProperty);
+                tracker.BorderBrushOverrideApplied = false;
             }
         }
     }
+
+    /// <summary>
+    /// Writes an interaction state's <paramref name="stateBrush"/> over <paramref name="dp"/>,
+    /// or, once no state sets it, puts back what the property held when the state took it
+    /// over: the captured local brush, or no local value at all. A property no state touched,
+    /// or one another writer replaced the state's brush on, is left alone.
+    /// </summary>
+    private static void ApplyInteractionBrush(
+        FrameworkElement fe, DependencyProperty dp, Brush? stateBrush,
+        ref object? normalLocal, ref Brush? activeBrush, ref bool overrideApplied)
+    {
+        if (stateBrush is not null)
+        {
+            // Capture on the first override, and again if another writer replaced the state's
+            // brush while a state was active (a re-render setting a new .Background): that value
+            // is what the element now carries, so it is what leaving the states puts back.
+            if (!overrideApplied || !ReferenceEquals(fe.ReadLocalValue(dp), activeBrush))
+            {
+                // A binding is kept as its Binding, read through the typed GetBindingExpression:
+                // the raw local value does not reliably project as a BindingExpression under
+                // NativeAOT, so testing it with `is` would lose the binding there.
+                var local = fe.ReadLocalValue(dp);
+                normalLocal = local is null or Brush || ReferenceEquals(local, DependencyProperty.UnsetValue)
+                    ? local
+                    : (object?)fe.GetBindingExpression(dp)?.ParentBinding ?? local;
+                overrideApplied = true;
+            }
+            fe.SetValue(dp, stateBrush);
+            activeBrush = stateBrush;
+            return;
+        }
+
+        if (!overrideApplied)
+            return;
+        var normal = normalLocal;
+        var active = activeBrush;
+        normalLocal = null;
+        activeBrush = null;
+        overrideApplied = false;
+        if (!ReferenceEquals(fe.ReadLocalValue(dp), active))
+            return;
+        // A local brush (or local null) is written back, and a binding the state wrote over is set
+        // again from its Binding, so it keeps following its source. No local value clears the
+        // property to what styles supply.
+        if (normal is null or Brush)
+            fe.SetValue(dp, normal);
+        else if (normal is Microsoft.UI.Xaml.Data.BindingBase binding)
+            fe.SetBinding(dp, binding);
+        else
+            fe.ClearValue(dp);
+    }
+
+    /// <summary>The transform modifier values last written to an element's handed-out Visual.</summary>
+    internal sealed class TransformRest
+    {
+        public Vector3 Scale = Vector3.One;
+        public Vector3 Translation;
+        public float RotationDegrees;
+        // The static .CenterPoint() value; the origin expression's offset while an origin is active.
+        public Vector3 CenterPoint;
+        // The active .TransformOrigin(), or null when the pivot is the static CenterPoint (spec 066 §8.2).
+        public Vector2? Origin;
+    }
+
+    private static TransformRest RestTransformOf(UIElement uie)
+        => (uie.GetValue(ReactorAttached.StateProperty) as ReactorState)?.TransformRest ?? IdentityRest;
+
+    private static readonly TransformRest IdentityRest = new();
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {
@@ -6211,6 +6759,69 @@ public sealed partial class Reconciler : IDisposable
     /// Applies stagger delays to an element's Visual's implicit animations.
     /// Called after layout/property animations are set up on children.
     /// </summary>
+    /// <summary>
+    /// Removes the delays <see cref="ApplyStaggerDelays"/> set on a panel's children. Update runs
+    /// it before the children update when the parent drops <c>.Stagger()</c>, so their writes in
+    /// that update start at once. Only the channels stagger delays are reset: a child's own
+    /// delayed animation on another key keeps its delay.
+    /// </summary>
+    internal static void ClearStaggerDelays(UIElement parent)
+    {
+        if (parent is not WinUI.Panel panel) return;
+        foreach (var child in panel.Children)
+        {
+            if (child.GetValue(ReactorAttached.StateProperty) is ReactorState state) state.StaggerDelay = null;
+            if (!ElementPool.IsVisualTaken(child)) continue;
+            SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(child), TimeSpan.Zero);
+        }
+    }
+
+    /// <summary>The implicit animation keys <c>.Stagger()</c> delays.</summary>
+    internal static readonly string[] StaggerChannels = ["Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint"];
+
+    /// <summary>The stagger delay recorded for <paramref name="child"/>, or null when no parent staggers it.</summary>
+    internal static TimeSpan? StaggerDelayOf(UIElement child)
+        => (child.GetValue(ReactorAttached.StateProperty) as ReactorState)?.StaggerDelay;
+
+    private static void SetStaggerDelayOnKeys(Visual visual, TimeSpan delay)
+    {
+        if (visual.ImplicitAnimations is not { } keys) return;
+        foreach (var key in StaggerChannels)
+            SetDelayIfPresent(keys, key, delay);
+    }
+
+    private static void SetDelayIfPresent(ImplicitAnimationCollection keys, string key, TimeSpan delay)
+    {
+        if (keys.TryGetValue(key, out var animation) && animation is CompositionAnimation composition)
+            AnimationHelper.SetDelay(composition, delay);
+    }
+
+    /// <summary>A panel with <c>.Stagger()</c> whose update is reconciling its children.</summary>
+    private sealed record UpdateStaggerScope(UIElement Panel, TimeSpan Delay);
+
+    private UpdateStaggerScope? _updateStagger;
+
+    // The new index of the panel child being updated, set by child reconciliation; -1 elsewhere.
+    private int _updatingChildIndex = -1;
+
+    /// <summary>
+    /// Gives a child its stagger delay before it writes this update's values: the delay its
+    /// parent's current <c>.Stagger()</c> sets at its new position. Without it a write in this
+    /// update would start with the previous render's delay (a changed stagger or a reordered
+    /// child), and a newly published key with none. Every layer of the child sees the same
+    /// position, so wrapped children and repeated sibling records get their own delay.
+    /// </summary>
+    private void RefreshStaggerDelay(UIElement control)
+    {
+        if (_updateStagger is not { } stagger || _updatingChildIndex < 0) return;
+        var parent = (control as FrameworkElement)?.Parent ?? VisualTreeHelper.GetParent(control);
+        if (!ReferenceEquals(parent, stagger.Panel)) return;
+        var delay = TimeSpan.FromTicks(stagger.Delay.Ticks * _updatingChildIndex);
+        GetOrCreateReactorState(control).StaggerDelay = delay;
+        if (ElementPool.IsVisualTaken(control))
+            SetStaggerDelayOnKeys(ElementCompositionPreview.GetElementVisual(control), delay);
+    }
+
     internal static void ApplyStaggerDelays(UIElement parent, StaggerConfig config)
     {
         if (parent is not WinUI.Panel panel) return;
@@ -6218,21 +6829,10 @@ public sealed partial class Reconciler : IDisposable
         for (int i = 0; i < panel.Children.Count; i++)
         {
             var child = panel.Children[i];
-            var visual = ElementCompositionPreview.GetElementVisual(child);
-            if (visual.ImplicitAnimations is null) continue;
-
+            var visual = AnimationHelper.GetElementVisual(child);
             var delay = TimeSpan.FromTicks(config.Delay.Ticks * i);
-            foreach (var key in new[] { "Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint" })
-            {
-                try
-                {
-                    var anim = visual.ImplicitAnimations[key];
-                    if (anim is KeyFrameAnimation kfa) kfa.DelayTime = delay;
-                    else if (anim is SpringScalarNaturalMotionAnimation ssa) ssa.DelayTime = delay;
-                    else if (anim is SpringVector3NaturalMotionAnimation sva) sva.DelayTime = delay;
-                }
-                catch { /* Key not present in collection — skip */ }
-            }
+            GetOrCreateReactorState(child).StaggerDelay = delay;
+            SetStaggerDelayOnKeys(visual, delay);
         }
     }
 
@@ -6241,9 +6841,12 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name).
+    /// Tracks previous trigger values for keyframe animations, keyed by (UIElement, name),
+    /// and the controller of each channel the entry started, by compositor property. An
+    /// unchanged trigger skips playback, so the started channels can differ from the entry's
+    /// latest definition.
     /// </summary>
-    private static readonly Dictionary<(UIElement, string), object?> _keyframeTriggerValues = new();
+    private static readonly Dictionary<(UIElement, string), (object? Trigger, Dictionary<string, AnimationController>? Started)> _keyframeTriggerValues = new();
 
     internal readonly record struct KeyframeChannelOwner(
         KeyframeEntry[] Scope, KeyframeEntry Entry, AnimationController? DeferredController = null);
@@ -6269,18 +6872,20 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Checks trigger values and starts keyframe animations when they change.
     /// </summary>
-    internal static void ApplyKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
+    internal static void ApplyKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, Reconciler? owner = null)
     {
-        ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        ElementPool.MarkVisualTaken(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
+        var names = Reconciler.GetOrCreateReactorState(uie).KeyframeNames ??= new(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
             var key = (uie, entry.Name);
             bool hasPrevious = _keyframeTriggerValues.TryGetValue(key, out var previous);
-            bool changed = KeyframeTriggerChanged(hasPrevious, previous, entry.Trigger);
-            _keyframeTriggerValues[key] = entry.Trigger;
+            bool changed = KeyframeTriggerChanged(hasPrevious, previous.Trigger, entry.Trigger);
+            _keyframeTriggerValues[key] = (entry.Trigger, previous.Started);
+            names.Add(entry.Name);
             if (!changed) continue;
 
             var def = entry.Definition;
@@ -6334,7 +6939,7 @@ public sealed partial class Reconciler : IDisposable
                 var anim = compositor.CreateVector3KeyFrameAnimation();
                 anim.Duration = def.Duration;
                 // Translation, not Offset: Offset is the layout position on a XAML handoff visual (#1432)
-                ElementCompositionPreview.SetIsTranslationEnabled(uie, true);
+                AnimationHelper.EnableTranslation(uie, visual);
                 anim.Target = "Translation";
                 if (def.Loop) anim.IterationBehavior = AnimationIterationBehavior.Forever;
                 foreach (var kf in def.Keyframes)
@@ -6361,27 +6966,342 @@ public sealed partial class Reconciler : IDisposable
                 foreach (var kf in def.Keyframes)
                 {
                     if (!kf.Rotation.HasValue) continue;
+                    var radians = float.DegreesToRadians(kf.Rotation.Value);
                     if (kf.Easing.HasValue)
                     {
                         var e = kf.Easing.Value;
                         var easing = compositor.CreateCubicBezierEasingFunction(new Vector2(e.X1, e.Y1), new Vector2(e.X2, e.Y2));
-                        anim.InsertKeyFrame(kf.Progress, kf.Rotation.Value, easing);
+                        anim.InsertKeyFrame(kf.Progress, radians, easing);
                     }
                     else
-                        anim.InsertKeyFrame(kf.Progress, kf.Rotation.Value);
+                        anim.InsertKeyFrame(kf.Progress, radians);
                 }
                 group.Add(anim);
             }
 
             // Start the animation group via Visual
+            var started = previous.Started ?? new Dictionary<string, AnimationController>(4);
             foreach (CompositionAnimation anim in group)
+            {
                 visual.StartAnimation(anim.Target, anim);
+                if (visual.TryGetAnimationController(anim.Target) is { } controller)
+                {
+                    started[anim.Target] = controller;
+                    if (anim.Target == "Opacity")
+                        RestartOpacityAfterXamlPush(uie, visual, entry.Name, anim, controller, owner);
+                }
+            }
+            _keyframeTriggerValues[key] = (entry.Trigger, started);
 
             if (properties != default && uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
                 TrackKeyframeChannelOwners(state, properties & state.CompositionModifierProperties,
                     new KeyframeChannelOwner(entries, entry));
         }
     }
+
+    /// <summary>
+    /// XAML writes a changed <see cref="UIElement.Opacity"/> (a local value, a style setter) to the
+    /// handed-out visual when it next renders the element, and that write stops whatever animation
+    /// runs on the visual's Opacity. A keyframe started before that frame, such as one mounted
+    /// together with <c>.Opacity(x)</c>, would never play. Once the element renders, this checks
+    /// after the next commit and restarts the keyframe when its animation is gone while this entry
+    /// still owns the channel (#1669). A modifier or setter write to the opacity replaces the
+    /// keyframe on purpose and cancels the check, and so does disposing <paramref name="owner"/>.
+    /// </summary>
+    private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, string name,
+        CompositionAnimation animation, AnimationController controller, Reconciler? owner)
+    {
+        var state = GetOrCreateReactorState(uie);
+        CancelKeyframeOpacityCheck(state);
+        var check = new KeyframeOpacityCheckState(controller);
+        state.KeyframeOpacity = check;
+        Interlocked.Increment(ref s_pendingKeyframeOpacityChecks);
+        if (owner is not null)
+        {
+            check.Owner = owner;
+            (owner._keyframeOpacityChecks ??= new()).Add(state);
+        }
+        var dispatcher = uie.DispatcherQueue;
+        if (uie is FrameworkElement unrendered && !IsRendered(unrendered)) WaitForRender(unrendered);
+        else RequestCheck();
+
+        void RequestCheck()
+        {
+            global::Windows.Foundation.IAsyncAction commit;
+            try { commit = visual.Compositor.RequestCommitAsync(); }
+            catch (Exception ex) when (IsTeardown(ex))
+            {
+                Drop();
+                return; // No compositor (e.g. unit tests) or it is shutting down.
+            }
+            // Always queued: Completed runs inline when the commit already finished, which can be
+            // before ApplyKeyframeAnimations publishes the entry's started controllers.
+            commit.Completed = (_, _) => dispatcher.TryEnqueue(SafeCheck);
+        }
+
+        // The check and the waits run from the dispatcher after the update returned, so an
+        // exception would end the app. An element or compositor torn down meanwhile drops the check.
+        static bool IsTeardown(Exception ex) => ex is global::System.Runtime.InteropServices.COMException
+            or ObjectDisposedException or InvalidOperationException or UnauthorizedAccessException;
+
+        // Drops this check only: a newer one may have replaced it on the state already.
+        void Drop()
+        {
+            if (ReferenceEquals(state.KeyframeOpacity, check)) CancelKeyframeOpacityCheck(state);
+            else check.DetachWait();
+        }
+
+        void SafeCheck()
+        {
+            try { Check(); }
+            catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+        }
+
+        // XAML pushes when it first renders the element. Under a collapsed ancestor in the live tree
+        // nothing renders until that ancestor's Visibility changes, so watch it (and Loaded and
+        // Unloaded, for a move to another parent) rather than every layout pass. Off the tree, wait for layout, as
+        // the pool's renter sync does.
+        void WaitForRender(FrameworkElement fe)
+        {
+            if (!ReferenceEquals(state.KeyframeOpacity, check)) return;
+            check.DetachWait();
+            if (CollapsedAncestor(fe) is { } hidden && (fe.IsLoaded || ElementPool.IsInLiveTree(fe)))
+            {
+                check.Hidden = hidden;
+                check.VisibilityToken = hidden.RegisterPropertyChangedCallback(UIElement.VisibilityProperty,
+                    (_, _) => Resume(fe));
+                check.WaitTarget = fe;
+                check.LoadedHandler = (_, _) => Resume(fe);
+                fe.Loaded += check.LoadedHandler;
+                // A move to a visible parent in the same turn can skip Loaded while Unloaded is
+                // pending (ElementPool.SyncOpacityWhenLoaded), but that Unloaded still comes.
+                check.UnloadedHandler = (_, _) => Resume(fe);
+                fe.Unloaded += check.UnloadedHandler;
+                KeyframeOpacityWaitsForTests++;
+                return;
+            }
+            WaitForLayout(fe);
+        }
+
+        void Resume(FrameworkElement fe)
+        {
+            try
+            {
+                if (!Owns(out _)) { Drop(); return; }
+                // Already rendering (an Unloaded can arrive after the frame that pushed, with no
+                // layout pass left to wait for): check after the next commit. Otherwise wait for layout.
+                if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                else WaitForLayout(fe);
+            }
+            catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+        }
+
+        void WaitForLayout(FrameworkElement fe)
+        {
+            check.DetachWait();
+            EventHandler<object>? onLayout = null;
+            onLayout = (_, _) =>
+            {
+                try
+                {
+                    if (!Owns(out _)) { Drop(); return; }
+                    if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                    // Laid out but now in the live tree under a collapsed ancestor: watch that instead.
+                    else if (fe.IsLoaded || ElementPool.IsInLiveTree(fe)) WaitForRender(fe);
+                }
+                catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+            };
+            check.LayoutHandler = onLayout;
+            check.WaitTarget = fe;
+            fe.LayoutUpdated += onLayout;
+            KeyframeOpacityWaitsForTests++;
+        }
+
+        bool Owns([global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Dictionary<string, AnimationController>? started)
+        {
+            started = null;
+            if (!ReferenceEquals(state.KeyframeOpacity, check)
+                || !_keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+                || entry.Started is not { } current || !current.TryGetValue("Opacity", out var owned)
+                || !Equals(owned, controller))
+                return false;
+            started = current;
+            return true;
+        }
+
+        void Check()
+        {
+            if (!Owns(out var started)) return;
+            if (uie is FrameworkElement fe && !IsRendered(fe))
+            {
+                WaitForRender(fe);
+                return;
+            }
+            CancelKeyframeOpacityCheck(state);
+            // A keyframe that completed keeps its controller, and every deliberate stop (a modifier
+            // or setter write, removal, unmount) cancelled this check, so a missing controller
+            // means XAML's push stopped it, whether it loops or not.
+            if (visual.TryGetAnimationController("Opacity") is not null) return;
+            visual.StartAnimation("Opacity", animation);
+            if (visual.TryGetAnimationController("Opacity") is not { } restarted) return;
+            started["Opacity"] = restarted;
+            if (state.KeyframeChannelOwners?.TryGetValue(AnimateProperty.Opacity, out var channelOwner) == true
+                && Equals(channelOwner.DeferredController, controller))
+                state.KeyframeChannelOwners[AnimateProperty.Opacity] = channelOwner with { DeferredController = restarted };
+            s_keyframeOpacityRestartsForTests.GetOrCreateValue(uie).Value++;
+        }
+    }
+
+    /// <summary>A pending <see cref="RestartOpacityAfterXamlPush"/> check and whatever it waits on.</summary>
+    internal sealed class KeyframeOpacityCheckState(AnimationController controller)
+    {
+        internal readonly AnimationController Controller = controller;
+        // The reconciler that registered the check, so its disposal can cancel it.
+        internal Reconciler? Owner;
+        // What the check waits on until the element renders: layout while off the tree, or a
+        // collapsed ancestor's Visibility (and the element's Loaded) while in the tree.
+        internal FrameworkElement? WaitTarget;
+        internal EventHandler<object>? LayoutHandler;
+        internal RoutedEventHandler? LoadedHandler;
+        internal RoutedEventHandler? UnloadedHandler;
+        internal UIElement? Hidden;
+        internal long VisibilityToken;
+
+        internal void DetachWait()
+        {
+            if (WaitTarget is { } fe)
+            {
+                if (LayoutHandler is { } onLayout) { fe.LayoutUpdated -= onLayout; KeyframeOpacityWaitsForTests--; }
+                if (LoadedHandler is { } onLoaded) fe.Loaded -= onLoaded;
+                if (UnloadedHandler is { } onUnloaded) fe.Unloaded -= onUnloaded;
+            }
+            if (Hidden is { } hidden)
+            {
+                hidden.UnregisterPropertyChangedCallback(UIElement.VisibilityProperty, VisibilityToken);
+                KeyframeOpacityWaitsForTests--;
+            }
+            WaitTarget = null;
+            LayoutHandler = null;
+            LoadedHandler = null;
+            UnloadedHandler = null;
+            Hidden = null;
+        }
+    }
+
+    // Loaded alone isn't proof: WinUI can skip it for a control re-added while its Unloaded is
+    // pending, and a collapsed ancestor keeps a loaded element out of the render walk.
+    private static bool IsRendered(FrameworkElement fe)
+        => (fe.IsLoaded || ElementPool.IsInLiveTree(fe)) && CollapsedAncestor(fe) is null;
+
+    private static UIElement? CollapsedAncestor(FrameworkElement fe)
+    {
+        for (DependencyObject? node = fe; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: not Visibility.Visible } hidden) return hidden;
+        return null;
+    }
+
+    // Checks still pending, so an unmount with none to cancel pays no attached-state read.
+    private static int s_pendingKeyframeOpacityChecks;
+
+    /// <summary>
+    /// Snapshots a control's opacity and the visual's Opacity value and animation around user code (setters,
+    /// <c>.OnMount</c>, <c>.OnUpdate</c>). A change to either is a deliberate opacity write, so it
+    /// cancels a pending keyframe restart as a modifier's write does (#1669). Free when none is pending.
+    /// </summary>
+    internal readonly struct KeyframeOpacityProbe
+    {
+        private readonly UIElement? _element;
+        private readonly ReactorState? _state;
+        private readonly KeyframeOpacityCheckState? _check;
+        private readonly double _opacity;
+        private readonly AnimationController? _controller;
+        private readonly float _visualOpacity;
+
+        internal KeyframeOpacityProbe(UIElement element)
+        {
+            if (Volatile.Read(ref s_pendingKeyframeOpacityChecks) == 0
+                || element.GetValue(ReactorAttached.StateProperty) is not ReactorState { KeyframeOpacity: not null } state)
+            {
+                this = default;
+                return;
+            }
+            _element = element;
+            _state = state;
+            _check = state.KeyframeOpacity;
+            _opacity = element.Opacity;
+            // The keyframe already took the visual, so this has no handoff side effects.
+            var visual = ElementCompositionPreview.GetElementVisual(element);
+            _controller = visual.TryGetAnimationController("Opacity");
+            _visualOpacity = visual.Opacity;
+        }
+
+        internal void Complete()
+        {
+            // A nested update (a decorator's target) may have armed a newer check meanwhile. Its
+            // keyframe is what changed the controller, so it stays.
+            if (_element is null || _state is not { } state || !ReferenceEquals(state.KeyframeOpacity, _check)) return;
+            var visual = ElementCompositionPreview.GetElementVisual(_element);
+            // The visual's base value counts too: once XAML's push stopped the keyframe, a write to the
+            // visual leaves no controller to compare.
+            if (global::System.Math.Abs(_element.Opacity - _opacity) > 1e-9
+                || !Equals(visual.TryGetAnimationController("Opacity"), _controller)
+                || global::System.Math.Abs(visual.Opacity - _visualOpacity) > 1e-6f)
+                CancelKeyframeOpacityCheck(state);
+        }
+    }
+
+    internal static void CancelKeyframeOpacityCheck(UIElement uie)
+    {
+        if (Volatile.Read(ref s_pendingKeyframeOpacityChecks) == 0) return;
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState state) CancelKeyframeOpacityCheck(state);
+    }
+
+    /// <summary>
+    /// Drops a pending <see cref="RestartOpacityAfterXamlPush"/> check and detaches whatever it waits
+    /// on, so a control that never renders isn't kept alive by a layout or property callback.
+    /// </summary>
+    internal static void CancelKeyframeOpacityCheck(ReactorState state)
+    {
+        if (state.KeyframeOpacity is not { } check) return;
+        state.KeyframeOpacity = null;
+        Interlocked.Decrement(ref s_pendingKeyframeOpacityChecks);
+        check.Owner?._keyframeOpacityChecks?.Remove(state);
+        check.DetachWait();
+    }
+
+    // Pending opacity restart checks by control, so disposal (which drops the tree without
+    // unmounting it) can cancel them and detach their waits. Created by the first one.
+    private HashSet<ReactorState>? _keyframeOpacityChecks;
+
+    private void CancelKeyframeOpacityChecks()
+    {
+        if (_keyframeOpacityChecks is not { Count: > 0 } checks) return;
+        foreach (var state in new List<ReactorState>(checks))
+            CancelKeyframeOpacityCheck(state);
+        checks.Clear();
+    }
+
+    // Test-only seams (InternalsVisibleTo Reactor.AppTests.Host), kept out of ReactorState so
+    // product controls don't carry them: restarts per control, and the waits attached right now.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, global::System.Runtime.CompilerServices.StrongBox<int>>
+        s_keyframeOpacityRestartsForTests = new();
+
+    internal static int KeyframeOpacityRestartsForTests(UIElement uie)
+        => s_keyframeOpacityRestartsForTests.TryGetValue(uie, out var count) ? count.Value : 0;
+
+    internal static int KeyframeOpacityWaitsForTests;
+
+    internal static bool KeyframeOpacityPendingForTests(UIElement uie)
+        => uie.GetValue(ReactorAttached.StateProperty) is ReactorState { KeyframeOpacity: not null };
+
+    internal static bool KeyframeOpacityWaitsOnLayoutForTests(UIElement uie)
+        => uie.GetValue(ReactorAttached.StateProperty) is ReactorState { KeyframeOpacity.LayoutHandler: not null };
+
+    // Test-only seam, same visibility: the controller the named entry started on a compositor property,
+    // so a fixture can tell its keyframe from another animation on the same channel.
+    internal static AnimationController? KeyframeControllerForTests(UIElement uie, string name, string property)
+        => _keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+            && entry.Started?.TryGetValue(property, out var controller) == true ? controller : null;
 
     private static void TrackKeyframeChannelOwners(ReactorState state, AnimateProperty channels, KeyframeChannelOwner owner)
     {
@@ -6420,7 +7340,8 @@ public sealed partial class Reconciler : IDisposable
             {
                 var nameKey = owner.Entry.Name;
                 var key = (uie, nameKey);
-                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var trigger);
+                bool hasTrigger = _keyframeTriggerValues.TryGetValue(key, out var triggerState);
+                var trigger = triggerState.Trigger;
                 bool retained = false;
                 bool replayed = false;
                 // Playback reads and advances the trigger for every matching entry in order.
@@ -6441,7 +7362,11 @@ public sealed partial class Reconciler : IDisposable
                         return;
                     }
                 }
-                if (!retained) _keyframeTriggerValues.Remove(key);
+                if (!retained)
+                {
+                    _keyframeTriggerValues.Remove(key);
+                    state.KeyframeNames?.Remove(nameKey);
+                }
                 else if (!replayed)
                 {
                     owners[property] = owner with { Scope = current };
@@ -6455,24 +7380,101 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
+    // ownedOnly stops only the channels whose running animation is still the one these entries
+    // started. A retained control passes true, so removing keyframes doesn't stop an animation
+    // another feature started on that channel. Unmount passes false and stops every channel a
+    // keyframe can animate. Entries whose name is in retained stay, and their playback decides
+    // what keeps running.
+    internal static void ClearKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, bool ownedOnly = false,
+        KeyframeEntry[]? retained = null)
     {
+        Visual? owner = null;
+        bool noCompositor = false;
         foreach (var entry in entries)
-            _keyframeTriggerValues.Remove((uie, entry.Name));
+        {
+            if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
+            if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)) continue;
+            if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState reactorState)
+            {
+                reactorState.KeyframeNames?.Remove(entry.Name);
+                if (state.Started?.TryGetValue("Opacity", out var opacity) == true
+                    && Equals(reactorState.KeyframeOpacity?.Controller, opacity))
+                    CancelKeyframeOpacityCheck(reactorState);
+            }
+            if (!ownedOnly || noCompositor || state.Started is not { } started)
+                continue;
+            // Started controllers mean the visual was already handed out. Look it up without
+            // moving facade transforms, which the caller does after the handler's setters.
+            try { owner ??= ElementCompositionPreview.GetElementVisual(uie); }
+            catch { noCompositor = true; continue; }
+            foreach (var (property, controller) in started)
+                StopKeyframeTarget(owner, property, controller);
+        }
+        if (ownedOnly) return;
 
         // Stop composition animations so they don't keep running on pooled/unmounted controls.
-        // We stop all four possible targets since KeyframeAnimationDef doesn't track which
-        // targets were started — StopAnimation is a no-op if no animation is running on that property.
+        // StopAnimation is a no-op on an existing property with no running animation.
+        Visual visual;
+        try { visual = AnimationHelper.GetElementVisual(uie); }
+        catch { return; /* No compositor (e.g. unit tests) */ }
+
+        // Each stop is independent, so one failure can't leave a later channel running (#1641).
+        StopKeyframeTarget(visual, "Opacity");
+        StopKeyframeTarget(visual, "Scale");
+        // Translation is a property-set entry that exists only once translation was enabled.
+        // StopAnimation on a missing entry throws ArgumentException (spec 066 §7.3 step 1).
+        if (visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded)
+            StopKeyframeTarget(visual, "Translation");
+        StopKeyframeTarget(visual, "RotationAngle");
+    }
+
+    private static void StopKeyframeTarget(Visual visual, string property, AnimationController? owned = null)
+    {
         try
         {
-            var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(uie);
-            visual.StopAnimation("Opacity");
-            visual.StopAnimation("Scale");
-            visual.StopAnimation("Translation");
-            visual.StopAnimation("RotationAngle");
+            if (owned is null || Equals(visual.TryGetAnimationController(property), owned))
+                visual.StopAnimation(property);
         }
-        catch { /* No compositor (e.g. unit tests) */ }
+        catch { /* One failed stop must not skip the others. */ }
     }
+
+    private static bool HasKeyframeEntry(KeyframeEntry[] entries, string name)
+    {
+        foreach (var entry in entries)
+            if (entry.Name == name) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Spec 066 §7.3 step 4: drops the composition bookkeeping of a control whose visual was
+    /// reset for the pool, so the next renter starts without the previous renter's ownership.
+    /// Keyframe trigger entries go by the names the control recorded, so a layer unmount didn't
+    /// reach (a keyed <c>Memo</c> over the control) leaves none behind.
+    /// </summary>
+    internal static void ForgetCompositionState(UIElement uie)
+    {
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            state.CompositionModifierProperties = default;
+            state.TransformRest = null;
+            state.KeyframeChannelOwners = null;
+            state.DeferredModifierResets = default;
+            CancelKeyframeOpacityCheck(state);
+            state.ImplicitClaims = null;
+            state.StaggerDelay = null;
+            state.TranslationEnabled = false;
+            state.OriginExpressionRunning = false;
+            if (state.KeyframeNames is { } names)
+            {
+                foreach (var name in names) _keyframeTriggerValues.Remove((uie, name));
+                state.KeyframeNames = null;
+            }
+        }
+        ClearInteractionStates(uie, restoreBrushes: true);
+    }
+
+    private static KeyframeEntry[]? WithSharedKeyframes(KeyframeEntry[]? own, KeyframeEntry[]? shared)
+        => shared is null || ReferenceEquals(own, shared) ? own : own is null ? shared : [.. own, .. shared];
 
     // ════════════════════════════════════════════════════════════════
     //  Scroll-linked expression animation (.ScrollLinked() modifier)
@@ -6484,13 +7486,16 @@ public sealed partial class Reconciler : IDisposable
     internal static void ApplyScrollAnimation(UIElement uie, ScrollAnimationConfig config)
     {
         if (config.ScrollViewer is null) return;
-        ElementPool.MarkCompositorTainted(uie);
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        ElementPool.MarkVisualTaken(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var scrollPropertySet = ElementCompositionPreview.GetScrollViewerManipulationPropertySet(config.ScrollViewer);
 
         foreach (var expr in config.Expressions)
         {
+            // An expression has no AnimationController, so a pending keyframe restart would
+            // read the channel as free and replace it (#1669).
+            if (expr.Property == "Opacity") CancelKeyframeOpacityCheck(GetOrCreateReactorState(uie));
             var animation = compositor.CreateExpressionAnimation(expr.Expression);
             animation.SetReferenceParameter("scroll", scrollPropertySet);
             visual.StartAnimation(expr.Property, animation);
@@ -6499,7 +7504,7 @@ public sealed partial class Reconciler : IDisposable
 
     internal static void ClearScrollAnimation(UIElement uie, ScrollAnimationConfig config)
     {
-        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        var visual = AnimationHelper.GetElementVisual(uie);
         foreach (var expr in config.Expressions)
             visual.StopAnimation(expr.Property);
     }
@@ -6596,6 +7601,9 @@ public sealed partial class Reconciler : IDisposable
             ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(key, control);
             _preparedConnectedAnimationKeys.Add(key);
             ConnectedAnimationFrameGate.Prepared(key);
+            // WinUI captures the source at the next frame, so the pool must not reset or rent it first.
+            // Its return still drops the element it hosted, so a callback can't reach the old component.
+            ElementPool.ExcludeFromPool(control, releaseOnReturn: true);
         }
         catch (global::System.Runtime.InteropServices.COMException ex) when (Diagnostics.HResults.IsTeardownReentry(ex.HResult))
         {
@@ -6752,7 +7760,7 @@ public sealed partial class Reconciler : IDisposable
     {
         static bool Declares(ElementModifiers? modifiers) => modifiers?.Visual is { } v
             && (v.Opacity.HasValue || v.Scale.HasValue || v.Rotation.HasValue
-                || v.Translation.HasValue || v.CenterPoint.HasValue);
+                || v.Translation.HasValue || v.CenterPoint.HasValue || v.TransformOrigin.HasValue);
 
         while (target is ModifiedElement wrapped)
         {
@@ -6815,6 +7823,44 @@ public sealed partial class Reconciler : IDisposable
         return null;
     }
 
+    private Func<UIElement, AnimateProperty, AnimationConfig?>? _channelAnimationLookup;
+
+    // Passed to AnimationHelper so a modifier write resolves its channel's .Animate() declaration
+    // over the whole shared-target chain (spec 066 §5.3, §6.1).
+    private Func<UIElement, AnimateProperty, AnimationConfig?> ChannelAnimationLookup => _channelAnimationLookup ??= FindChannelAnimation;
+
+    /// <summary>
+    /// The outermost <c>.Animate()</c> declaration in the shared-target chain updating
+    /// <paramref name="control"/> whose properties include <paramref name="channel"/>, walked the way
+    /// <see cref="FindRemainingModifierOwner"/> walks it: legacy wrappers, a handler's source target,
+    /// a decorator target, then the recorded shared-control edges. Null outside that update.
+    /// </summary>
+    private AnimationConfig? FindChannelAnimation(UIElement control, AnimateProperty channel)
+    {
+        if (!ReferenceEquals(ModifierUpdate.Control, control)) return null;
+        var root = ModifierUpdate.Root;
+        for (var depth = 0; root is not null && depth <= ReactorSourceMap.MaxDecoratorDepth; depth++)
+        {
+            while (true)
+            {
+                if (root.AnimationConfig is { } config && (config.Properties & channel) != 0) return config;
+                if (root is not ModifiedElement wrapped || depth++ > ReactorSourceMap.MaxDecoratorDepth) break;
+                root = wrapped.Inner;
+            }
+            var type = root.GetType();
+            Element? next = null;
+            if (_v1Handlers.TryGet(type, out var handler))
+                next = (handler as IV1SourceTargetResolver)?.GetSourceTarget(root);
+            else if (!_typeRegistry.ContainsKey(type))
+                next = ReactorSourceMap.DecoratorTarget(root);
+            if (next is null && control.GetValue(ReactorAttached.StateProperty) is ReactorState { ModifierTargets: { } targets })
+                foreach (var target in targets)
+                    if (ReferenceEquals(target.Parent, root)) { next = target.Target; break; }
+            root = next;
+        }
+        return null;
+    }
+
     private Element? GetRetainedModifierAnimationSource(FrameworkElement control, Element owner)
     {
         if (FindMountedElementValue(control, static e => e.AnimationConfig, owner) is not null) return owner;
@@ -6837,6 +7883,10 @@ public sealed partial class Reconciler : IDisposable
         if (old?.CenterPoint.HasValue == true && current?.CenterPoint.HasValue != true
             && FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is null)
             AnimationHelper.ResetCompositionModifier(control, "CenterPoint");
+        // After CenterPoint, so the restored static pivot is the remaining offset.
+        if (old?.TransformOrigin.HasValue == true && current?.TransformOrigin.HasValue != true
+            && FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is null)
+            TransformOriginBinding.Deactivate(control);
     }
 
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
@@ -6986,11 +8036,11 @@ public sealed partial class Reconciler : IDisposable
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);
@@ -7001,32 +8051,40 @@ public sealed partial class Reconciler : IDisposable
         // Update already released final removals before handlers ran. Here only
         // restore surviving declarations; a second reset would overwrite new setters.
         if (m.Scale.HasValue && m.Scale != oldM?.Scale)
-            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "Scale", m.Scale.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Scale.HasValue && oldM?.Scale.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Scale.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "Scale", owner.Modifiers.Scale!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.Rotation.HasValue && m.Rotation != oldM?.Rotation)
-            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimate(fe, "Rotation", m.Rotation.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Rotation.HasValue && oldM?.Rotation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Rotation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimate(fe, "Rotation", owner.Modifiers.Rotation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.Translation.HasValue && m.Translation != oldM?.Translation)
-            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "Translation", m.Translation.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.Translation.HasValue && oldM?.Translation.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Translation.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "Translation", owner.Modifiers.Translation!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
+        // Before CenterPoint (spec 066 §8.2): an origin that starts here takes the current offset,
+        // and a CenterPoint change in the same render then writes or animates that offset, so a
+        // curve isn't cancelled by the expression starting after it.
+        if (m.TransformOrigin.HasValue && m.TransformOrigin != oldM?.TransformOrigin)
+            TransformOriginBinding.Apply(fe, m.TransformOrigin.Value);
+        else if (!m.TransformOrigin.HasValue && oldM?.TransformOrigin.HasValue == true
+            && FindRemainingModifierOwner(static m => m.TransformOrigin.HasValue) is { } originOwner)
+            TransformOriginBinding.Apply(fe, originOwner.Modifiers.TransformOrigin!.Value);
         if (m.CenterPoint.HasValue && m.CenterPoint != oldM?.CenterPoint)
-            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe));
+            AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", m.CenterPoint.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
         else if (!m.CenterPoint.HasValue && oldM?.CenterPoint.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.CenterPoint.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), respectPropertyFlags: true);
+                AnimationHelper.SetOrAnimateVector3(fe, "CenterPoint", owner.Modifiers.CenterPoint!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
         }
         if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
             fe.Visibility = m.IsVisible.Value ? Visibility.Visible : Visibility.Collapsed;
@@ -7305,9 +8363,16 @@ public sealed partial class Reconciler : IDisposable
         // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
         ApplyDragDropHandlers(fe, oldM, m);
 
-        // OnMountAction — only run on initial mount (oldM is null)
+        // OnMountAction — only run on initial mount (oldM is null). Spec 066 §9 row 1: name the
+        // modifier when WinUI rejects a facade write the callback makes after the handoff; the
+        // filter returns false, so the exception is unchanged.
         if (m.OnMountAction is not null && oldM is null)
-            m.OnMountAction(fe);
+        {
+            var opacityProbe = new KeyframeOpacityProbe(fe);
+            try { m.OnMountAction(fe); }
+            catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(fe, "'.OnMount(...)' callback")) { throw; }
+            opacityProbe.Complete();
+        }
 
         // OnUpdateAction — the update-time counterpart, run on every in-place
         // update (oldM is not null) but never at mount. Runs after child
@@ -7316,7 +8381,11 @@ public sealed partial class Reconciler : IDisposable
         // visual tree. Chart label a11y uses it to re-hide newly realized
         // focusable descendants that OnMountAction (mount-only) would miss (#162).
         if (m.OnUpdateAction is not null && oldM is not null)
+        {
+            var opacityProbe = new KeyframeOpacityProbe(fe);
             m.OnUpdateAction(fe);
+            opacityProbe.Complete();
+        }
 
         // OnUnmountAction — captured here (authoritative modifier set) so it fires
         // reliably at teardown regardless of the tagged element's identity. Keep the
@@ -7350,9 +8419,16 @@ public sealed partial class Reconciler : IDisposable
         var oldRef = oldM?.Ref;
         var newRef = m.Ref;
         if (oldRef is not null && !ReferenceEquals(oldRef, newRef))
+        {
             oldRef.SetCurrent(null);
+            UntrackProducerRef(fe, oldRef);
+        }
         if (newRef is not null)
         {
+            // Every write that points a ref at this control is recorded, so a ref already
+            // pointing here is already tracked and the steady-state update skips the DP read.
+            // Record it before SetCurrent, whose CurrentChanged dispatch can throw.
+            if (!ReferenceEquals(newRef.Current, fe)) TrackProducerRef(fe, newRef);
             newRef.SetCurrent(fe);
             AssertTypedRefMatch(newRef, fe);
         }
@@ -8174,35 +9250,67 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Applies ThemeRef bindings by setting properties through WinUI's {ThemeResource}
-    /// mechanism. Builds a local Style with ThemeResource setters and applies it to the
-    /// element. WinUI then handles theme-reactive resolution natively — the live
-    /// {ThemeResource} Style setter re-resolves on the control's effective-theme change,
-    /// which tracks the per-element/inherited <c>ActualTheme</c> (an ancestor
-    /// <c>RequestedTheme</c> override included), not just the app-level theme. This native
-    /// self-heal is why a ThemeBindings-only element is safe to structurally skip
-    /// (#758; empirically verified in <c>ThemeBindingsSkipSelfHealFixtures</c> across
-    /// immediate and inherited ancestor <c>RequestedTheme</c> toggles). Contrast a
-    /// <c>ResourceOverrides.ThemeRef</c>, which resolves to a CONCRETE brush at reconcile
-    /// and does NOT self-heal (so it stays theme-sensitive for the skip gate).
+    /// Applies <see cref="ThemeRef"/> bindings as a synthesized <c>{ThemeResource}</c>-driven
+    /// Style. Spec 047 §14 Phase 1 (1.3), promoted from private (per audit
+    /// existing-api-surface.md); provisional API, see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    /// <summary>
-    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
-    /// existing-api-surface.md). Applies <see cref="ThemeRef"/> bindings as
-    /// a synthesized <c>{ThemeResource}</c>-driven Style. Provisional API;
-    /// see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
+    /// <remarks>
+    /// <para>WinUI handles theme-reactive resolution natively: the live <c>{ThemeResource}</c>
+    /// Style setter re-resolves on the control's effective-theme change, which tracks the
+    /// per-element/inherited <c>ActualTheme</c> (an ancestor <c>RequestedTheme</c> override
+    /// included), not just the app-level theme. This native self-heal is why a
+    /// ThemeBindings-only element is safe to structurally skip (#758; empirically verified in
+    /// <c>ThemeBindingsSkipSelfHealFixtures</c> across immediate and inherited ancestor
+    /// <c>RequestedTheme</c> toggles). Contrast a <c>ResourceOverrides.ThemeRef</c>, which
+    /// resolves to a CONCRETE brush at reconcile and does NOT self-heal (so it stays
+    /// theme-sensitive for the skip gate).</para>
+    /// <para>A Style already on the control is kept: the themed Style is built <c>BasedOn</c>
+    /// it, and calling this again re-wraps the same base rather than chaining another level.
+    /// When that base cannot be a <c>BasedOn</c> of the control's WinUI type (a Style whose
+    /// <c>TargetType</c> is an app subclass), the themed Style replaces it, as before Styles
+    /// were kept, and a warning is logged once. Failures are logged, never thrown.</para>
+    /// </remarks>
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
-        var targetType = GetStyleTargetType(fe);
+        // A Style the app put on the control (a .Set setter, .ApplyStyle, a named-style fluent
+        // such as .AccentButton(), a typography factory such as Title(...)) is kept: the themed
+        // Style is built BasedOn it rather than replacing it. When fe.Style is the themed Style
+        // Reactor wrote last time, its base is its BasedOn, so re-applying never chains another
+        // level. BasedOn cannot bring back an implicit (keyless) style, but an explicit Style
+        // had already replaced that.
+        var authorBase = ResolveAuthorBaseStyle(fe);
+        int? authorBaseId = authorBase is null ? null : GetOrStampBaseStyleId(authorBase);
+        if (authorBaseId is { } knownId && _incompatibleBaseStyleIds.ContainsKey(knownId))
+        {
+            authorBase = null;
+            authorBaseId = null;
+        }
+        var baseStyle = authorBase ?? GetRequiredFrameworkBaseStyle(fe);
+        int? baseId = authorBase is not null ? authorBaseId
+            : baseStyle is not null ? GetOrStampBaseStyleId(baseStyle) : null;
+
+        // BasedOn requires the base's TargetType to equal or be a base of the derived one. A
+        // Style the control accepted targets its type or a base of it, which for any WinUI type
+        // is a base of the control's first WinUI type. The loose mapping is kept when there is
+        // no base, so those Styles stay shared across control types.
+        var targetType = baseStyle is null ? GetStyleTargetType(fe) : GetExactStyleTargetType(fe);
         if (targetType is null) return;
 
         var cacheKey = BuildCacheKey(targetType, bindings);
+        string? basedCacheKey = baseId is { } id
+            ? id.ToString(global::System.Globalization.CultureInfo.InvariantCulture) + "#" + cacheKey
+            : null;
 
         // Cache hit: reuse the previously compiled Style
-        if (_styleCache.TryGetValue(cacheKey, out var cachedStyle))
+        if (baseStyle is null && _styleCache.TryGetValue(cacheKey, out var cachedStyle))
         {
-            ApplyStyleToElement(fe, cachedStyle);
+            ApplyStyleToElement(fe, cachedStyle, null);
+            return;
+        }
+        if (basedCacheKey is not null && _basedStyleCache.TryGetValue(basedCacheKey, out var cachedBasedStyle))
+        {
+            if (!TryApplyBasedStyle(fe, cachedBasedStyle, baseStyle!))
+                RetryWithoutAuthorBase(fe, bindings, authorBase, authorBaseId);
             return;
         }
 
@@ -8212,29 +9320,294 @@ public sealed partial class Reconciler : IDisposable
         {
             var dp = GetDependencyPropertyName(fe, property);
             if (dp is null) continue;
-            var escapedResourceKey = global::System.Security.SecurityElement.Escape(themeRef.ResourceKey);
-            setters.Append($"<Setter Property='{dp}' Value='{{ThemeResource {escapedResourceKey}}}'/>");
+            if (FormatThemeResourceReference(themeRef.ResourceKey) is not { } reference)
+            {
+                WarnUnrepresentableThemeKey(property, themeRef.ResourceKey);
+                continue;
+            }
+            setters.Append("<Setter Property='").Append(dp).Append("' Value=\"").Append(reference).Append("\"/>");
         }
 
-        if (setters.Length == 0) return;
+        // No property can be bound (every key was unrepresentable): take off a themed Style a
+        // previous render applied, so a property whose key just became unrepresentable is left
+        // unset rather than keeping the old brush. The app's own Style is restored, not cleared.
+        if (setters.Length == 0)
+        {
+            ClearThemeBindings(fe);
+            return;
+        }
 
+        Style style;
         try
         {
             var xaml =
                 $"<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='{targetType}'>" +
                 setters.ToString() +
                 "</Style>";
-            var style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
-            _styleCache.TryAdd(cacheKey, style);
-            ApplyStyleToElement(fe, style);
+            style = (Style)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
+            if (baseStyle is not null)
+                style.BasedOn = baseStyle;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // A parse failure (for example a resource key WinUI can't find) says nothing about the
+            // base: BasedOn is only validated when the Style is applied. So the base is not marked
+            // incompatible here, and a corrected key on a later render still builds on it.
+            Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                "ApplyThemeBindings",
+                ex);
+            return;
+        }
+
+        if (baseStyle is null)
+        {
+            _styleCache.TryAdd(cacheKey, style);
+            try
+            {
+                ApplyStyleToElement(fe, style, null);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+            {
+                Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                    "ApplyThemeBindings",
+                    ex);
+            }
+            return;
+        }
+
+        if (!TryApplyBasedStyle(fe, style, baseStyle))
+        {
+            RetryWithoutAuthorBase(fe, bindings, authorBase, authorBaseId);
+            return;
+        }
+
+        // Styles built for a base are cached per base identity. A base Style created anew on every
+        // render gets a new id each time, so on reaching the cap the cache starts over instead of
+        // staying full of entries nothing asks for again. Without an id the Style is built per
+        // apply, which is still correct.
+        if (basedCacheKey is not null)
+        {
+            if (_basedStyleCache.Count >= BasedStyleCacheCap)
+                _basedStyleCache.Clear();
+            _basedStyleCache.TryAdd(basedCacheKey, style);
+        }
+    }
+
+    /// <summary>
+    /// Applies a themed Style built BasedOn <paramref name="baseStyle"/>. WinUI validates
+    /// BasedOn only when the Style is applied, so a base whose TargetType is not a base of the
+    /// control's WinUI type fails here. The control is then put back on
+    /// <paramref name="baseStyle"/> when it accepts that write, and the failure is logged.
+    /// </summary>
+    private static bool TryApplyBasedStyle(FrameworkElement fe, Style style, Style baseStyle)
+    {
+        try
+        {
+            ApplyStyleToElement(fe, style, baseStyle);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
                 "ApplyThemeBindings",
                 ex);
+            try
+            {
+                // The write that failed may have been this same one (a loaded SplitView rejects
+                // most Styles), so the rollback is guarded too: nothing here may escape into
+                // reconcile.
+                if (!ReferenceEquals(fe.Style, baseStyle))
+                    fe.Style = baseStyle;
+                fe.ClearValue(ReactorAppliedThemeStyleProperty);
+            }
+            catch (Exception rollbackEx) when (rollbackEx is not OutOfMemoryException and not StackOverflowException)
+            {
+                Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.SwallowedError(
+                    Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+                    "ApplyThemeBindings",
+                    rollbackEx);
+            }
+            return false;
         }
+    }
+
+    /// <summary>
+    /// After a themed Style could not be built on the app's <paramref name="authorBase"/>,
+    /// remembers that base as incompatible and applies the ThemeRefs without it, which replaces
+    /// the app's Style as Reactor did before Styles were kept. Without an id (the base rejected
+    /// the stamp) nothing can be remembered, so the app's Style is left as it is instead of
+    /// failing again on every render.
+    /// </summary>
+    private static void RetryWithoutAuthorBase(
+        FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings, Style? authorBase, int? authorBaseId)
+    {
+        if (authorBase is null || authorBaseId is not { } id)
+            return;
+        if (_incompatibleBaseStyleIds.Count >= BasedStyleCacheCap)
+            _incompatibleBaseStyleIds.Clear();
+        if (!_incompatibleBaseStyleIds.TryAdd(id, 0))
+            return;
+        WarnIncompatibleBaseStyle(fe);
+        ApplyThemeBindings(fe, bindings);
+    }
+
+    private static void WarnIncompatibleBaseStyle(FrameworkElement fe)
+    {
+        if (!Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
+            return;
+        Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+            Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+            "ApplyThemeBindings",
+            $"A ThemeRef on a {fe.GetType().Name} cannot keep the control's Style, because the Style's TargetType " +
+            "is not a WinUI type the control derives from, so the themed Style replaces it. Target the WinUI " +
+            "base type in that Style, or set the brush in the Style itself.");
+    }
+
+    /// <summary>
+    /// The Style the app put on <paramref name="fe"/>, or null when it has none. When
+    /// <c>fe.Style</c> is the themed Style Reactor applied, that is the base it was built on.
+    /// </summary>
+    private static Style? ResolveAuthorBaseStyle(FrameworkElement fe)
+    {
+        if (fe.Style is not { } current)
+            return null;
+        if (fe.GetValue(ReactorAppliedThemeStyleProperty) is Style owned && ReferenceEquals(current, owned))
+            return owned.BasedOn;
+        return current;
+    }
+
+    /// <summary>
+    /// For a control that cannot take a Style that doesn't carry its default look, that
+    /// default Style, so the themed Style is built on it like on an author base. A loaded
+    /// <c>SplitView</c> fails with E_INVALIDARG on any write to <c>Style</c> (an empty Style, or
+    /// clearing it) unless the new Style is BasedOn <c>DefaultSplitViewStyle</c>, which also makes
+    /// <see cref="ClearThemeBindings"/> restore that Style rather than clear it.
+    /// </summary>
+    private static Style? GetRequiredFrameworkBaseStyle(FrameworkElement fe)
+        => fe is WinUI.SplitView
+            && ResourceLookup.TryFind<Style>(Application.Current?.Resources, "DefaultSplitViewStyle", out var style)
+            ? style
+            : null;
+
+    /// <summary>
+    /// The name of the first WinUI type in <paramref name="fe"/>'s type hierarchy, which XAML
+    /// can resolve in the default namespace. Null for a control with no WinUI ancestor type.
+    /// </summary>
+    private static string? GetExactStyleTargetType(FrameworkElement fe)
+    {
+        for (var type = fe.GetType(); type is not null; type = type.BaseType)
+        {
+            if (type.Namespace is { } ns && ns.StartsWith("Microsoft.UI.Xaml", StringComparison.Ordinal))
+                return type.Name;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A process-unique id stamped on <paramref name="style"/>, which keys the Styles built
+    /// BasedOn it. Stored as an attached DP on the Style itself rather than in a table keyed by
+    /// the managed wrapper, which WinUI can hand out more than once for the same native object.
+    /// Null when the Style rejects the write.
+    /// </summary>
+    private static int? GetOrStampBaseStyleId(Style style)
+    {
+        try
+        {
+            if (style.GetValue(ReactorBaseStyleIdProperty) is int id && id != 0)
+                return id;
+            var next = global::System.Threading.Interlocked.Increment(ref _nextBaseStyleId);
+            style.SetValue(ReactorBaseStyleIdProperty, next);
+            return next;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The value of a <c>{ThemeResource}</c> setter for <paramref name="resourceKey"/>, escaped
+    /// for an XML attribute, or null when the key cannot be written in a markup extension: it
+    /// is empty, contains both quote characters, or contains characters an XML attribute does
+    /// not keep as they are (tab, carriage return, line feed, or characters XML does not allow).
+    /// </summary>
+    /// <remarks>
+    /// The key is quoted, so commas, braces, '=' and spaces survive markup-extension parsing.
+    /// Inside the quotes a backslash escapes the next character, so it is doubled. A backslash
+    /// does not escape the quote character itself, so a key containing ' is quoted with ".
+    /// Shared with the ThemeRef probe (<see cref="ThemeResourceProbe"/>).
+    /// </remarks>
+    internal static string? FormatThemeResourceReference(string? resourceKey)
+    {
+        if (string.IsNullOrEmpty(resourceKey) || !IsWritableAsAttribute(resourceKey)) return null;
+
+        bool hasSingle = resourceKey.Contains('\'');
+        if (hasSingle && resourceKey.Contains('"')) return null;
+        char quote = hasSingle ? '"' : '\'';
+        var reference = "{ThemeResource " + quote + resourceKey.Replace("\\", "\\\\") + quote + "}";
+        return global::System.Security.SecurityElement.Escape(reference);
+    }
+
+    // XML 1.0 characters, minus tab, CR and LF, which an attribute value would turn into spaces.
+    // Checked by hand rather than with XmlConvert, which would root System.Xml in every app that
+    // uses a ThemeRef.
+    private static bool IsWritableAsAttribute(string value)
+    {
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (c < '\u0020' || c is '\uFFFE' or '\uFFFF')
+                return false;
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                    return false;
+                i++;
+            }
+            else if (char.IsLowSurrogate(c))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // A ThemeRef is applied on every render, so one bad key would warn on every render. Warn once
+    // per key; past the cap, or for an overlong key, keep warning without remembering, so a
+    // data-driven caller cannot retain unbounded strings and a typo is never hidden.
+    private const int WarnedThemeKeysCap = 256;
+    private const int MaxWarnedThemeKeyChars = 256;
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, byte> _warnedThemeKeys = new();
+
+    private static void WarnUnrepresentableThemeKey(string property, string? resourceKey)
+    {
+        var key = resourceKey ?? string.Empty;
+        if (_warnedThemeKeys.ContainsKey(key)
+            || !Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.IsWarningEnabled)
+            return;
+        var bounded = key.Length <= MaxWarnedThemeKeyChars;
+        if (bounded && _warnedThemeKeys.Count < WarnedThemeKeysCap && !_warnedThemeKeys.TryAdd(key, 0))
+            return;
+
+        // Spec 044 §6.2.1: a resource key may go on the ETW payload, length-bounded. Control
+        // characters (the reason a key may be rejected) are shown escaped so the warning stays
+        // on one line.
+        var shown = bounded ? key : string.Concat(key.AsSpan(0, MaxWarnedThemeKeyChars), "…");
+        var safe = new global::System.Text.StringBuilder(shown.Length);
+        foreach (var c in shown)
+        {
+            if (c < '\u0020') safe.Append("\\u").Append(((int)c).ToString("X4", global::System.Globalization.CultureInfo.InvariantCulture));
+            else safe.Append(c);
+        }
+        Microsoft.UI.Reactor.Core.Diagnostics.DiagnosticLog.Warning(
+            Microsoft.UI.Reactor.Core.Diagnostics.LogCategory.Theme,
+            "ApplyThemeBindings",
+            $"ThemeRef key '{safe}' for {property} cannot be written as a {{ThemeResource}} reference (it is empty, " +
+            "contains both quote characters, or contains a tab, line break or character XML does not allow), so " +
+            $"{property} is left unset. Rename the resource key, or resolve it with ThemeRef.Resolve and pass the Brush.");
     }
 
     /// <summary>
@@ -8247,11 +9620,11 @@ public sealed partial class Reconciler : IDisposable
     /// <para>Ownership is tracked via the
     /// <c>ReactorAppliedThemeStyleProperty</c> attached DP, which stores the
     /// Style instance we wrote on the most recent <see cref="ApplyThemeBindings"/>
-    /// call. <see cref="DependencyObject.ClearValue(DependencyProperty)"/>
-    /// on <see cref="FrameworkElement.StyleProperty"/> fires only when
-    /// <c>fe.Style</c> still references the same instance — preserving an
-    /// author Setter (e.g. <c>.Set(c =&gt; c.Style = mine)</c>) that may have
-    /// replaced our Style in between.</para>
+    /// call. The Style is dropped only when <c>fe.Style</c> still references the
+    /// same instance — preserving an author Setter (e.g.
+    /// <c>.Set(c =&gt; c.Style = mine)</c>) that may have replaced our Style in
+    /// between. When the themed Style was built <c>BasedOn</c> the app's own
+    /// Style, that base is restored instead of clearing <c>Style</c>.</para>
     ///
     /// <para>This avoids per-FrameworkElement tracking via
     /// <c>ConditionalWeakTable</c> (fragile under RCW churn) and is robust to
@@ -8263,7 +9636,13 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAppliedThemeStyleProperty) is not Style ownedStyle)
             return;
         if (ReferenceEquals(fe.Style, ownedStyle))
-            fe.ClearValue(FrameworkElement.StyleProperty);
+        {
+            // Hand the control back to the app's own Style when the themed one was built on it.
+            if (ownedStyle.BasedOn is { } baseStyle)
+                fe.Style = baseStyle;
+            else
+                fe.ClearValue(FrameworkElement.StyleProperty);
+        }
         fe.ClearValue(ReactorAppliedThemeStyleProperty);
     }
 
@@ -8273,13 +9652,22 @@ public sealed partial class Reconciler : IDisposable
     /// element's current effective theme (which may have changed due to a parent's
     /// <see cref="FrameworkElement.RequestedTheme"/> override).
     /// </summary>
-    private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle)
+    private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle, Style? baseStyle)
     {
         // Clearing first forces WinUI to process the subsequent set as a
         // genuine change, re-resolving {ThemeResource} values. Without this,
-        // re-applying the same cached Style reference is a no-op.
-        if (fe.Style is not null)
+        // re-applying the same cached Style reference is a no-op. With an app
+        // base Style, step through the base instead of null: dropping to the
+        // default style would swap a Template the base sets and rebuild it.
+        if (baseStyle is not null)
+        {
+            if (!ReferenceEquals(fe.Style, baseStyle))
+                fe.Style = baseStyle;
+        }
+        else if (fe.Style is not null)
+        {
             fe.Style = null;
+        }
         fe.Style = cachedStyle;
 
         // Track ownership for the symmetric ClearThemeBindings path (issue
@@ -8297,6 +9685,7 @@ public sealed partial class Reconciler : IDisposable
         WinUI.Button => "Button",
         WinUI.TextBox => "TextBox",
         TextBlock => "TextBlock",
+        WinUI.SplitView => "SplitView",
         WinUI.ContentControl => "ContentControl",
         WinUI.Panel => "Panel",
         WinUI.Control => "Control",
@@ -8307,11 +9696,13 @@ public sealed partial class Reconciler : IDisposable
     {
         if (property == "Background" && (fe is WinUI.Panel || fe is WinUI.Control || fe is WinUI.Border))
             return "Background";
-        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock))
+        if (property == "Foreground" && (fe is WinUI.Control || fe is TextBlock || fe is WinUI.RichTextBlock))
             return "Foreground";
         if (property == "BorderBrush" && (fe is WinUI.Control || fe is WinUI.Border
             || fe is WinUI.Grid || fe is WinUI.StackPanel || fe is WinUI.RelativePanel))
             return "BorderBrush";
+        if (property == "PaneBackground" && fe is WinUI.SplitView)
+            return "PaneBackground";
         return null;
     }
 
@@ -8942,6 +10333,7 @@ public sealed partial class Reconciler : IDisposable
             node.Cache?.Clear();
         }
         _navigationHostNodes.Clear();
+        CancelKeyframeOpacityChecks();
         _pool.Clear();
         // The tree is dropped without unmounting, so a TitleBar this (ReactorHostControl)
         // reconciler registered with its containing window would otherwise stay registered

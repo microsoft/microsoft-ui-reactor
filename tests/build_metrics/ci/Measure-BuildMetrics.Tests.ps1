@@ -109,10 +109,10 @@ try {
 
     # A single-TFM, single-DLL package returns exactly that entry's length.
     $single = Join-Path $tmp 'single.nupkg'
-    New-Nupkg -Path $single -Entries ([ordered]@{ 'lib/net10.0/Reactor.Advanced.dll' = 33792 })
+    New-Nupkg -Path $single -Entries ([ordered]@{ 'lib/net10.0/Microsoft.UI.Reactor.Advanced.dll' = 33792 })
     $singleAsms = @(Get-NupkgAssemblies -NupkgPath $single)
     Assert-Equal 1 $singleAsms.Count 'single-DLL package -> one row'
-    Assert-Equal 'Reactor.Advanced.dll' $singleAsms[0].Name 'single-DLL package -> correct name'
+    Assert-Equal 'Microsoft.UI.Reactor.Advanced.dll' $singleAsms[0].Name 'single-DLL package -> correct name'
     Assert-Equal 33792 $singleAsms[0].Bytes 'single-TFM assembly size'
 
     # No shipped DLLs -> empty array.

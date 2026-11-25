@@ -116,6 +116,20 @@ public class ModifierUnsetClearValueTests
             // Reactor's own pool/element-identity slot, not a value any Style supplies.
             // Nulling it is the point; there is no styled value to fall back to.
             ["Tag"] = "framework-internal element-identity slot, never style-provided",
+            // Issue #1614: the facade transforms are plain properties, not DPs, so there is no
+            // ClearValue to call and no Style can supply them. Assigning identity is the reset.
+            ["Rotation"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["Scale"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["Translation"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["CenterPoint"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["RotationAxis"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            ["TransformMatrix"] = "facade transform; not a DependencyProperty, so identity assignment is the reset",
+            // Issue #1624: the XAML implicit transitions have no DependencyProperty either, and only
+            // a user .Set leaves one now (spec 066 §5). Null is a fresh control's value.
+            ["OpacityTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
+            ["ScaleTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
+            ["RotationTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
+            ["TranslationTransition"] = "implicit transition; not a DependencyProperty, so null assignment is the reset",
         };
 
     /// <summary>
@@ -170,6 +184,12 @@ public class ModifierUnsetClearValueTests
             .Select(call => call.ArgumentList.Arguments[1].Expression)
             .OfType<LiteralExpressionSyntax>()
             .Select(literal => literal.Token.ValueText).ToHashSet(StringComparer.Ordinal);
+        // Spec 066 §8.2: .TransformOrigin's early release is the binding's inactive state.
+        if (ReadIfStatements("ClearRemovedTransformModifiers").Any(statement =>
+                statement.Condition.ToString().Contains("TransformOrigin", StringComparison.Ordinal)
+                && statement.Statement.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>()
+                    .Any(call => call.Expression.ToString() == "TransformOriginBinding.Deactivate")))
+            facadeResets.Add("TransformOrigin");
         var inert = ReadUnsetArms()
             .Where(entry => !entry.Arm.DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
@@ -185,6 +205,10 @@ public class ModifierUnsetClearValueTests
                     && call.ArgumentList.Arguments.Count >= 3
                     && call.ArgumentList.Arguments[1].Expression is LiteralExpressionSyntax literal
                     && literal.Token.ValueText == entry.Modifier)))
+            .Where(entry => !(entry.Method == "ApplyModifiers" && entry.Modifier == "TransformOrigin"
+                && facadeResets.Contains(entry.Modifier)
+                && entry.Arm.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                    .Any(call => call.Expression.ToString() == "TransformOriginBinding.Apply")))
             .Select(entry => entry.Method + "." + entry.Modifier)
             .ToList();
 
@@ -726,6 +750,22 @@ public class ModifierUnsetClearValueTests
         // TextBlock is a Padding receiver in ModifierTable's control gate. It predates #985
         // (it arrived with #950) but lived past the switch where no scanner reached it.
         "TextBlock.Padding",
+        // Issue #1662 — the rest of what ApplyModifiers writes to a poolable receiver and clears
+        // only on a set → unset transition. RichTextBlock's Foreground is its element property,
+        // cleared on unset by its descriptor, and pooled so a raw rent gets a fresh control too.
+        "Control.Foreground",
+        "Control.FontFamily",
+        "Control.FontSize",
+        "Control.FontWeight",
+        "Control.TabIndex",
+        "Control.ElementSoundMode",
+        "TextBlock.Foreground",
+        "RichTextBlock.Foreground",
+        "UIElement.XYFocusKeyboardNavigation",
+        "UIElement.TabFocusNavigation",
+        // No modifier writes Clip, so it breaks this list's modifier rule: only a .Set writes it,
+        // and no mount writes it back (#1662).
+        "UIElement.Clip",
     ];
 
     [Fact]

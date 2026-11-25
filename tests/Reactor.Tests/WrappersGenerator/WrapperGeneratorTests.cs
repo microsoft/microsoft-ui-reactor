@@ -1804,7 +1804,7 @@ public partial record FakeControlElement;
         // Regression guard (CS0436): the wrapper-authoring attributes are hosted in
         // Reactor.Wrappers.Abstractions, so the generator must NOT also emit its own
         // copy via RegisterPostInitializationOutput. When it did, the internal copy
-        // leaked from Reactor.dll through InternalsVisibleTo into friend assemblies
+        // leaked from Microsoft.UI.Reactor.dll through InternalsVisibleTo into friend assemblies
         // that ALSO run the generator (e.g. Reactor.AppTests.Host), where the locally
         // generated copy collided with the imported one — failing Release builds under
         // TreatWarningsAsErrors. (The attribute resolves here from the referenced

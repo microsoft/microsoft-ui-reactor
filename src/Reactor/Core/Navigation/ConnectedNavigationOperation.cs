@@ -53,15 +53,15 @@ internal sealed class ConnectedNavigationOperation : IDisposable
         _key = key;
         _complete = complete;
         _generation = TransitionEngine.ClaimForTransition(outgoing, incoming);
-        Core.ElementPool.MarkCompositorTainted(outgoing);
-        Core.ElementPool.MarkCompositorTainted(incoming);
+        Core.ElementPool.ExcludeFromPool(outgoing);
+        Core.ElementPool.ExcludeFromPool(incoming);
         // A previous slide/drill-in may still own compositor properties or
         // hit-test suppression on a page now reused by this navigation.
-        TransitionEngine.NormalizeVisual(ElementCompositionPreview.GetElementVisual(outgoing));
-        TransitionEngine.NormalizeVisual(ElementCompositionPreview.GetElementVisual(incoming));
+        TransitionEngine.NormalizeVisual(outgoing);
+        TransitionEngine.NormalizeVisual(incoming);
         TransitionEngine.ClearHitTestSuppression(outgoing);
         TransitionEngine.ClearHitTestSuppression(incoming);
-        ElementCompositionPreview.GetElementVisual(incoming).Opacity = 0;
+        TransitionEngine.SetOpacityNow(incoming, 0);
         var sources = Collect(reconciler, outgoing);
         var targets = Collect(reconciler, incoming);
         var source = FindUnique(sources, key, out _);
@@ -99,8 +99,8 @@ internal sealed class ConnectedNavigationOperation : IDisposable
             var nativeKey = "Reactor.Navigation." + global::System.Threading.Interlocked.Increment(ref s_nextId);
             // Materialize and retain composition nodes before preparing. These
             // controls must not return to the pool after direct compositor access.
-            ElementCompositionPreview.GetElementVisual(source);
-            Core.ElementPool.MarkCompositorTainted(source);
+            global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(source);
+            Core.ElementPool.ExcludeFromPool(source);
             _animation = ConnectedAnimationService.GetForCurrentView().PrepareToAnimate(nativeKey, source);
             NativeAnimationKey = nativeKey;
             _animation.Configuration = mode == NavigationMode.Pop
@@ -188,8 +188,8 @@ internal sealed class ConnectedNavigationOperation : IDisposable
                 && ReferenceEquals(destination.XamlRoot, _outgoing.XamlRoot)
                 && _animation is { } animation)
             {
-                ElementCompositionPreview.GetElementVisual(destination);
-                Core.ElementPool.MarkCompositorTainted(destination);
+                global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(destination);
+                Core.ElementPool.ExcludeFromPool(destination);
                 if (!animation.TryStart(destination))
                 {
                     if (--_framesRemaining == 0) Finish(fallback: true);
@@ -218,12 +218,12 @@ internal sealed class ConnectedNavigationOperation : IDisposable
 
     private void StartPageAnimation()
     {
-        var outgoing = ElementCompositionPreview.GetElementVisual(_outgoing);
-        var incoming = ElementCompositionPreview.GetElementVisual(_incoming);
+        var outgoing = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(_outgoing);
+        var incoming = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(_incoming);
         _outgoingSuppression = TransitionEngine.SuppressHitTesting(_outgoing);
         if (_pageTransition is SlideTransition)
             _incomingSuppression = TransitionEngine.SuppressHitTesting(_incoming);
-        TransitionEngine.PrepareTransitionAnimations(incoming.Compositor, outgoing, incoming, _pageTransition);
+        TransitionEngine.PrepareTransitionAnimations(_outgoing, outgoing, _incoming, incoming, _pageTransition);
         var batch = incoming.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         _pageAnimationBatch = batch;
         batch.Completed += OnPageAnimationCompleted;
@@ -281,7 +281,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
             {
                 if (TransitionEngine.StillOwns(_incoming, _generation))
                 {
-                    TransitionEngine.NormalizeVisual(ElementCompositionPreview.GetElementVisual(_incoming));
+                    TransitionEngine.NormalizeVisual(_incoming);
                 }
                 TransitionEngine.RestoreHitTesting(_incoming, _incomingSuppression);
                 _complete();
@@ -294,7 +294,7 @@ internal sealed class ConnectedNavigationOperation : IDisposable
                 TransitionEngine.RestoreHitTesting(_outgoing, _outgoingSuppression);
                 if (TransitionEngine.StillOwns(_outgoing, _generation))
                 {
-                    TransitionEngine.NormalizeVisual(ElementCompositionPreview.GetElementVisual(_outgoing));
+                    TransitionEngine.NormalizeVisual(_outgoing);
                 }
             }
         }

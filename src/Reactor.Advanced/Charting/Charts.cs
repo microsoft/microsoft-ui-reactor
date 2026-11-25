@@ -339,8 +339,8 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         double plotWidth = _width - _marginLeft - _marginRight;
         double plotHeight = _height - _marginTop - _marginBottom;
 
-        var (xMin, xMax) = D3Extent.Extent(data, XAccessor);
-        var (yMin, yMax) = D3Extent.Extent(data, YAccessor);
+        var (xMin, xMax) = FiniteExtent(data, XAccessor);
+        var (yMin, yMax) = FiniteExtent(data, YAccessor);
         var xScale = new LinearScale([xMin, xMax], [plotLeft, plotLeft + plotWidth]).Nice();
         var yScale = new LinearScale([yMin, yMax], [plotTop + plotHeight, plotTop]).Nice();
 
@@ -404,28 +404,47 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         };
     }
 
+    // D3Extent skips NaN but keeps ±Infinity (as d3.extent does), and one infinite sample would
+    // stretch the domain so far that every point maps to a non-finite coordinate. Domains come
+    // from finite samples only; the invalid rows stay in the data and FiniteDefined gaps them.
+    private static (double min, double max) FiniteExtent(IEnumerable<T> data, Func<T, double> accessor) =>
+        D3Extent.Extent(data, d => accessor(d) is var v && double.IsFinite(v) ? v : double.NaN);
+
+    // Non-finite samples, and points that map to a non-finite coordinate, become gaps, as with
+    // D3's line.defined; otherwise the path markup is rejected and nothing is drawn. The raw values
+    // are checked too: a constant domain maps every input, ±Infinity included, to the range midpoint.
+    // Internal for unit tests.
+    internal Func<T, int, bool> FiniteDefined(LinearScale xScale, LinearScale yScale) =>
+        (d, _) => XAccessor(d) is var x && YAccessor(d) is var y
+            && double.IsFinite(x) && double.IsFinite(y)
+            && double.IsFinite(xScale.Map(x)) && double.IsFinite(yScale.Map(y));
+
     private Element[] RenderLine(IReadOnlyList<T> data, LinearScale xScale, LinearScale yScale)
     {
         return [D3LinePath(data,
             d => xScale.Map(XAccessor(d)),
             d => yScale.Map(YAccessor(d)),
-            stroke: Brush(_stroke), strokeWidth: _strokeWidth)];
+            stroke: Brush(_stroke), strokeWidth: _strokeWidth,
+            defined: FiniteDefined(xScale, yScale))];
     }
 
     private Element[] RenderArea(IReadOnlyList<T> data, LinearScale xScale, LinearScale yScale,
         double plotTop, double plotHeight)
     {
         double baseline = plotTop + plotHeight;
-        return [
-            D3AreaPath(data,
-                d => xScale.Map(XAccessor(d)),
+        var defined = FiniteDefined(xScale, yScale);
+        var area = AreaGenerator.Create(
+                (T d) => xScale.Map(XAccessor(d)),
                 _ => baseline,
-                d => yScale.Map(YAccessor(d)),
-                fill: Brush(_fill, _fillOpacity)),
+                d => yScale.Map(YAccessor(d)))
+            .SetDefined(defined);
+        return [
+            D3Path(area.Generate(data), fill: Brush(_fill, _fillOpacity)),
             D3LinePath(data,
                 d => xScale.Map(XAccessor(d)),
                 d => yScale.Map(YAccessor(d)),
-                stroke: Brush(_stroke), strokeWidth: _strokeWidth),
+                stroke: Brush(_stroke), strokeWidth: _strokeWidth,
+                defined: defined),
         ];
     }
 
@@ -444,7 +463,6 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     }
 
     internal static SolidColorBrush ColorToBrush(string color) { var c = D3Color.Parse(color); return new SolidColorBrush(global::Windows.UI.Color.FromArgb((byte)(c.Opacity * 255), c.R, c.G, c.B)); }
-    internal static Geometry ParsePathData(string pathData) => PathDataParser.Parse(pathData);
 
     // ── IChartAccessibilityData ──────────────────────────────────────
 
@@ -479,8 +497,8 @@ public sealed class ChartElement<T> : IChartAccessibilityData
         {
             if (Data.Count == 0) return [];
 
-            var (xMin, xMax) = D3Extent.Extent(Data, XAccessor);
-            var (yMin, yMax) = D3Extent.Extent(Data, YAccessor);
+            var (xMin, xMax) = FiniteExtent(Data, XAccessor);
+            var (yMin, yMax) = FiniteExtent(Data, YAccessor);
 
             return [
                 new ChartAxisDescriptor(ChartAxisType.X, _xAxisLabel, xMin, xMax, _xUnits),

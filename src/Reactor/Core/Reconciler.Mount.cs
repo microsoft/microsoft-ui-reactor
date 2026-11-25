@@ -48,6 +48,7 @@ public sealed partial class Reconciler
         // A direct Mount from outside is an outermost frame for render-error propagation
         // (issue #1291), like a top-level Reconcile; recursive mounts just count.
         using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Mount, element);
+        int mountFrame = ++_mountFrames;
         // Where this mount's completed roots start, while an ErrorBoundary records them.
         int boundaryRootsStart = _boundaryMountRoots?.Count ?? -1;
 
@@ -81,6 +82,11 @@ public sealed partial class Reconciler
         if (pushedStagger)
             PushStaggerScope(element.StaggerConfig!.Delay);
         var prevReconcilingElement = _reconcilingElement;
+        var outerRent = _rentContext;
+        _rentContext = ForMount(element, modifiers, outerRent);
+        var outerVisualLaneRental = _visualLaneRental;
+        _visualLaneRental = null;
+        FrameworkElement? visualLaneRental = null;
         try
         {
         // The innermost element being mounted owns any virtualized-host context capture
@@ -102,17 +108,24 @@ public sealed partial class Reconciler
         // _v1Handlers on first hit so arm 1 catches it next time.
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
+            // A keyed Memo is transparent only through the built-in arm 4. A handler registered for
+            // one is app code that may write a facade on the control its child rents.
+            if ((_rentContext.Candidate && MayUseAppHandler(element.GetType())) || _rentContext.Transparent)
+                _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = v1Entry.Mount(element, requestRerender, this);
             ownsControl = v1Entry.OwnsControl(element);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
         {
+            _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = reg.Mount(element, requestRerender, this);
             registeredType = true;
         }
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
+            if ((_rentContext.Candidate && MayUseAppHandler(element.GetType())) || _rentContext.Transparent)
+                _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = v1Entry.Mount(element, requestRerender, this);
             ownsControl = v1Entry.OwnsControl(element);
         }
@@ -148,6 +161,17 @@ public sealed partial class Reconciler
         if (control is not null)
         {
             DebugUIElementsCreated++;
+            // Count only a control created for this element: a transparent keyed Memo, a
+            // flyout decorator wrapping its target, or a RegisterType callback forwarding a
+            // child hands back a control its inner Mount already counted. Forwarding is only
+            // detectable while source publishing is on; guarded inline (as below) so ILC folds
+            // the publisher out of a build without Reactor.DevtoolsSupport.
+            if (Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (ownsControl || registeredType
+                    && !(global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                        && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && ForwardsAnotherElement(control, element))))
+                Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep
@@ -220,9 +244,15 @@ public sealed partial class Reconciler
         if (element.ResourceOverrides is not null && control is FrameworkElement resFe)
             ApplyResourceOverrides(resFe, null, element.ResourceOverrides, _ambientRequestedTheme);
 
+        // A transparent layer (a keyed Memo, a flyout over its target) mounts over the control its
+        // inner element just claimed implicit keys on. Those claims move one slot inward, so the
+        // outermost layer is slot 0, as Update counts it (spec 066 §6.1).
+        if (control is not null)
+            ShiftForwardedClaims(control, mountFrame, layer: element);
+
         // Apply transitions after mounting (runs after .Set() callbacks)
         if (control is not null && (element.ImplicitTransitions is not null || element.ThemeTransitions is not null))
-            ApplyTransitions(control, element.ImplicitTransitions, element.ThemeTransitions);
+            ApplyTransitions(control, null, element.ImplicitTransitions, element.ThemeTransitions);
 
         // Apply Composition-layer layout animation (implicit Offset/Size animation on Visual)
         if (control is not null && element.LayoutAnimation is not null)
@@ -230,14 +260,33 @@ public sealed partial class Reconciler
 
         // Apply compositor property animation (.Animate() modifier)
         if (control is not null && element.AnimationConfig is not null)
-            ApplyPropertyAnimation(control, element.AnimationConfig, element.LayoutAnimation);
+            ApplyPropertyAnimation(control, element.AnimationConfig);
+
+        if (control is not null && (element.ImplicitTransitions is not null || element.LayoutAnimation is not null
+            || element.AnimationConfig is not null))
+            StampImplicitClaims(control, mountFrame, element);
 
         // Apply enter transition (.Transition() modifier)
         if (control is not null && element.ElementTransition is not null)
         {
             var (staggerIdx, staggerDly) = ConsumeStaggerIndex();
             ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly);
+            // A keyed Memo shares its factory output's control and tag, so the exit paths read its
+            // declaration from the control's state (#1663).
+            if (element is KeyedMemoElement && element.ElementTransition.GetExitTransition() is not null)
+            {
+                var memoState = GetOrCreateReactorState(control);
+                memoState.MemoTransition = element.ElementTransition;
+                // Layers mount inside out, so a flyout already recorded on the shared control is inside the Memo.
+                memoState.MemoWrapsDecorator = memoState.DecoratorElement is not null;
+            }
         }
+
+        // A flyout that records itself after a keyed Memo's exit wraps that Memo.
+        if (IsFlyoutDecorator(element)
+            && control?.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoTransition: not null } wrappedMemo
+            && ReferenceEquals(wrappedMemo.DecoratorElement, element))
+            wrappedMemo.MemoWrapsDecorator = false;
 
         // Apply interaction states (.InteractionStates() modifier)
         if (control is not null && element.InteractionStates is not null)
@@ -245,7 +294,7 @@ public sealed partial class Reconciler
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (control is not null && element.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(control, element.KeyframeAnimations);
+            ApplyKeyframeAnimations(control, element.KeyframeAnimations, this);
 
         // Apply scroll-linked expression animations (.ScrollLinked() modifier)
         if (control is not null && element.ScrollAnimation is not null)
@@ -263,6 +312,9 @@ public sealed partial class Reconciler
         finally
         {
             _reconcilingElement = prevReconcilingElement;
+            _rentContext = outerRent;
+            visualLaneRental = _visualLaneRental;
+            _visualLaneRental = outerVisualLaneRental;
             if (pushedStagger)
                 PopStaggerScope();
             if (ctxCount > 0)
@@ -271,6 +323,7 @@ public sealed partial class Reconciler
         }
 
         NoteMountCompleted(boundaryRootsStart, control);
+        if (visualLaneRental is not null) ElementPool.SyncOpacityWhenLoaded(visualLaneRental);
         if (control is not null && _modifierMountParent is not null
             && ReferenceEquals(prevReconcilingElement, _modifierMountParent))
             (_modifierMounts ??= []).Add((control, modifierTarget));
@@ -823,10 +876,12 @@ public sealed partial class Reconciler
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
+        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(container);
 
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+            var visual = AnimationHelper.GetElementVisual(container);
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the

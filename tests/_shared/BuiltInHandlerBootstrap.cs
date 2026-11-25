@@ -17,7 +17,7 @@
 // can never drift out of sync with production.
 //
 // Using a `[ModuleInitializer]` here (rooted in the *test* assembly) is allowed:
-// the spec only forbids `[ModuleInitializer]` in the shipping `Reactor.dll`,
+// the spec only forbids `[ModuleInitializer]` in the shipping `Microsoft.UI.Reactor.dll`,
 // where it would unconditionally root every handler and defeat trimming.
 
 using System;

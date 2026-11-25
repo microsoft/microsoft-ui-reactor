@@ -271,6 +271,8 @@ internal static class SelfTestRunner
         // before they can be re-enabled under AOT. --
         "Issue142_CustomControlPrivateDp_Renders",
         "Issue142_ThirdPartyControlPrivateDp_Renders",
+        // Mounts the same third-party control, so it needs the same provider.
+        "ThemeRefStyle_ThirdPartyStyleFallsBack",
 
         // Same root cause, for this host's own compiled page: ReactorApplication finds
         // the host's generated XamlMetaDataProvider only by reflecting over the entry
@@ -532,6 +534,9 @@ internal static class SelfTestRunner
                         bool crashed = false;
                         try
                         {
+                            // Each fixture's Render waits on its own CreateHost hosts, not on
+                            // the never-disposed hosts every earlier fixture left behind.
+                            Harness.ForgetCreatedHosts();
                             var fixture = SelfTestFixtureRegistry.Create(fixtureName, harness);
                             if (fixture is null)
                             {

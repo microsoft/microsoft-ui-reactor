@@ -50,7 +50,7 @@ public class DocAppGateWiringTests
     [Fact]
     public void Every_Doc_App_Is_Reachable_From_The_Traversal_Project()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var appsDir = AppsDir(repoRoot);
 
         var onDisk = Directory
@@ -113,7 +113,7 @@ public class DocAppGateWiringTests
     [Fact]
     public void Doc_Apps_Import_The_Consumer_Analyzer_Bundle()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var propsPath = RepoPath(repoRoot, AppsRelative, "Directory.Build.props");
 
         var props = XDocument.Load(propsPath);
@@ -198,7 +198,7 @@ public class DocAppGateWiringTests
     [Fact]
     public void No_Doc_App_Suppresses_A_Reactor_Rule()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var appsDir = AppsDir(repoRoot);
 
         var offenders = new List<string>();
@@ -242,7 +242,7 @@ public class DocAppGateWiringTests
     [Fact]
     public void Allowed_Suppressions_Are_All_Still_Used()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var appsDir = AppsDir(repoRoot);
 
         var stale = new List<string>();
@@ -333,7 +333,7 @@ public class DocAppGateWiringTests
     [Fact]
     public void Suppression_Scan_Actually_Reads_The_Doc_Apps()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var appsDir = AppsDir(repoRoot);
 
         var sources = Directory
@@ -378,7 +378,7 @@ public class DocAppGateWiringTests
     [Fact]
     public void Ci_Runs_The_Doc_Snippet_Gate()
     {
-        var repoRoot = FindRepoRoot();
+        var repoRoot = TestRepo.Root;
         var ci = File.ReadAllLines(RepoPath(repoRoot, ".github/workflows/ci.yml"));
 
         var job = JobBlock(ci, "docs-snippet-gate");
@@ -460,16 +460,4 @@ public class DocAppGateWiringTests
 
     /// <summary>The doc-app corpus root, assembled through <see cref="RepoPath"/>.</summary>
     private static string AppsDir(string repoRoot) => RepoPath(repoRoot, AppsRelative);
-
-    private static string FindRepoRoot()
-    {
-        var dir = Directory.GetCurrentDirectory();
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Join(dir, "Reactor.slnx")) || Directory.Exists(Path.Join(dir, ".git")))
-                return dir;
-            dir = Path.GetDirectoryName(dir);
-        }
-        throw new InvalidOperationException("Reactor repo root not found from test cwd.");
-    }
 }

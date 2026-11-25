@@ -24,16 +24,15 @@ internal static class TransitionEngine
         NavigationTransition transition, NavigationMode mode,
         Action onComplete)
     {
-        var outVisual = ElementCompositionPreview.GetElementVisual(outgoing);
-        var inVisual = ElementCompositionPreview.GetElementVisual(incoming);
+        var outVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(outgoing);
+        var inVisual = global::Microsoft.UI.Reactor.Animation.AnimationHelper.GetElementVisual(incoming);
 
-        // GetElementVisual permanently costs an element the XAML implicit-transition APIs
-        // (OpacityTransition, ScaleTransition, …), so ElementPool refuses to pool anything it
-        // has been called on. Record that here as every Reconciler call site does — a navigation
-        // page is often a Border or Grid, which are poolable, so without this a page whose
-        // visual we animated could be handed to a later renter that needs those APIs.
-        Core.ElementPool.MarkCompositorTainted(outgoing);
-        Core.ElementPool.MarkCompositorTainted(incoming);
+        // A navigation's completion can still reach both pages after they leave the tree (it
+        // unmounts or caches the outgoing one and normalizes both visuals), so neither may go
+        // back to the pool, where a later renter could be handed a control that completion then
+        // tears down. Page roots are often Borders or Grids, which are poolable.
+        Core.ElementPool.ExcludeFromPool(outgoing);
+        Core.ElementPool.ExcludeFromPool(incoming);
 
         var compositor = outVisual.Compositor;
         var suppressesHitTesting = transition is SlideTransition;
@@ -70,8 +69,8 @@ internal static class TransitionEngine
             // predecessor's ownership above, nothing else will take the outgoing page out of
             // whatever state its interrupted animation left it in — and NavigationCacheMode can
             // hand that control back as a later page.
-            NormalizeVisual(inVisual);
-            NormalizeVisual(outVisual);
+            NormalizeVisual(incoming, inVisual);
+            NormalizeVisual(outgoing, outVisual);
 
             // Same reasoning for hit testing. A slide that is still in flight suppressed both of
             // its pages, and one of them can be a page this swap is about to show — navigating
@@ -87,8 +86,8 @@ internal static class TransitionEngine
         }
 
         // Reset stale compositor properties from previous animations
-        inVisual.Offset = Vector3.Zero;
-        inVisual.Scale = Vector3.One;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = Vector3.Zero);
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = Vector3.One);
 
         HitTestSuppression? outgoingSuppression = null;
         HitTestSuppression? incomingSuppression = null;
@@ -109,7 +108,7 @@ internal static class TransitionEngine
             ClearHitTestSuppression(incoming);
         }
 
-        PrepareTransitionAnimations(compositor, outVisual, inVisual, transition);
+        PrepareTransitionAnimations(outgoing, outVisual, incoming, inVisual, transition);
 
         var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
 
@@ -123,7 +122,7 @@ internal static class TransitionEngine
             if (StillOwns(incoming, generation))
             {
                 // Finalize: ensure incoming is fully visible
-                NormalizeVisual(inVisual);
+                NormalizeVisual(incoming, inVisual);
             }
             if (suppressesHitTesting)
             {
@@ -157,7 +156,7 @@ internal static class TransitionEngine
                 // a transition that is already running.
                 if (StillOwns(outgoing, generation))
                 {
-                    NormalizeVisual(outVisual);
+                    NormalizeVisual(outgoing, outVisual);
                 }
 
                 batch.Dispose();
@@ -169,12 +168,12 @@ internal static class TransitionEngine
     }
 
     internal static void PrepareTransitionAnimations(
-        Compositor compositor, Visual outVisual, Visual inVisual, NavigationTransition transition)
+        UIElement outgoing, Visual outVisual, UIElement incoming, Visual inVisual, NavigationTransition transition)
     {
         if (transition is not DrillInTransition) return;
         // Persistent expressions must not become part of a finite animation batch.
-        BindCenterPointToVisualSize(compositor, outVisual);
-        BindCenterPointToVisualSize(compositor, inVisual);
+        Animation.TransformOriginBinding.BindCentre(outgoing, outVisual);
+        Animation.TransformOriginBinding.BindCentre(incoming, inVisual);
     }
 
     internal static void StartTransitionAnimations(
@@ -205,8 +204,8 @@ internal static class TransitionEngine
                 break;
             default:
                 // Shared-element-only navigation still swaps the surrounding pages.
-                outVisual.Opacity = 0;
-                inVisual.Opacity = 1;
+                Core.Reconciler.WithoutImplicitAnimations(outVisual, () => outVisual.Opacity = 0);
+                Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Opacity = 1);
                 break;
         }
     }
@@ -231,6 +230,10 @@ internal static class TransitionEngine
         var generation = global::System.Threading.Interlocked.Increment(ref _transitionGeneration);
         _elementGeneration.GetOrCreateValue(outgoing).Value = generation;
         _elementGeneration.GetOrCreateValue(incoming).Value = generation;
+        // The transition owns both pages' opacity now (it hides, fades and normalizes them), so a
+        // keyframe restart waiting for XAML's opacity push must not show a page early (#1669).
+        Core.Reconciler.CancelKeyframeOpacityCheck(outgoing);
+        Core.Reconciler.CancelKeyframeOpacityCheck(incoming);
         return generation;
     }
 
@@ -330,14 +333,34 @@ internal static class TransitionEngine
     }
 
     /// <summary>
-    /// Stops the animations this engine starts and returns the visual to its resting state.
+    /// Stops the animations this engine starts and returns the visual to its resting state. The
+    /// reset doesn't fire the page's implicit keys (an <c>.OpacityTransition()</c> on its root).
+    /// A <c>.TransformOrigin()</c> the page declares gets its pivot expression back (spec 066 §8.2).
     /// </summary>
-    internal static void NormalizeVisual(Visual visual)
+    internal static void NormalizeVisual(UIElement page)
+        => NormalizeVisual(page, Animation.AnimationHelper.GetElementVisual(page));
+
+    /// <inheritdoc cref="NormalizeVisual(UIElement)"/>
+    internal static void NormalizeVisual(UIElement page, Visual visual)
     {
         ReleaseAnimatedProperties(visual);
-        visual.Opacity = 1;
-        visual.Offset = Vector3.Zero;
-        visual.Scale = Vector3.One;
+        Core.Reconciler.WithoutImplicitAnimations(visual, () =>
+        {
+            visual.Opacity = 1;
+            visual.Offset = Vector3.Zero;
+            visual.Scale = Vector3.One;
+        });
+        Animation.TransformOriginBinding.Restore(page, visual);
+    }
+
+    /// <summary>
+    /// Hides a page at once, without fading it through an implicit Opacity key the page declares
+    /// (spec 066 §5: <c>.OpacityTransition()</c> is a key on the visual).
+    /// </summary>
+    internal static void SetOpacityNow(UIElement page, float opacity)
+    {
+        var visual = Animation.AnimationHelper.GetElementVisual(page);
+        Core.Reconciler.WithoutImplicitAnimations(visual, () => visual.Opacity = opacity);
     }
 
     /// <summary>
@@ -360,7 +383,9 @@ internal static class TransitionEngine
     /// DrillIn can lose ownership of a page to a Slide or an instant swap and never run its own
     /// cleanup, so whichever transition ends up owning the page has to be the one that clears
     /// it — otherwise a live animation leaks onto a control that <c>NavigationCacheMode</c> may
-    /// hand back later.
+    /// hand back later. Since spec 066 layer 5 that expression is the <c>.TransformOrigin</c> binding,
+    /// so a bound visual keeps it here and <see cref="NormalizeVisual(UIElement, Visual)"/> hands it to
+    /// <c>TransformOriginBinding.Restore</c>, which releases it unless the page declares an origin.
     /// </para>
     /// </remarks>
     private static void ReleaseAnimatedProperties(Visual visual)
@@ -368,7 +393,8 @@ internal static class TransitionEngine
         visual.StopAnimation("Opacity");
         visual.StopAnimation("Offset");
         visual.StopAnimation("Scale");
-        visual.StopAnimation("CenterPoint");
+        // A bound pivot expression stays: TransformOriginBinding.Restore writes into it or releases it.
+        if (!Animation.TransformOriginBinding.OwnsCenterPoint(visual)) visual.StopAnimation("CenterPoint");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -488,7 +514,7 @@ internal static class TransitionEngine
         outVisual.StartAnimation("Opacity", outFade);
 
         // Incoming: slide in + fade in
-        inVisual.Offset = inStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = inStart);
 
         var inOffset = compositor.CreateVector3KeyFrameAnimation();
         inOffset.InsertKeyFrame(0f, inStart);
@@ -563,7 +589,7 @@ internal static class TransitionEngine
         outOffset.Duration = HorizontalSlideExitDuration;
         outVisual.StartAnimation("Offset", outOffset);
 
-        inVisual.Offset = plan.InStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = plan.InStart);
         var inOffset = compositor.CreateVector3KeyFrameAnimation();
         inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
         inOffset.Duration = HorizontalSlideEntranceDuration;
@@ -594,7 +620,7 @@ internal static class TransitionEngine
         }
         else
         {
-            inVisual.Offset = offset;
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = offset);
             var inOffset = compositor.CreateVector3KeyFrameAnimation();
             inOffset.InsertKeyFrame(
                 (float)(VerticalSlideHandoffTime.TotalMilliseconds / VerticalSlideDuration.TotalMilliseconds),
@@ -673,7 +699,7 @@ internal static class TransitionEngine
             outFade.Duration = EntranceExitDuration;
             outVisual.StartAnimation("Opacity", outFade);
 
-            inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0);
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = new Vector3(0, EntranceTranslationOffset, 0));
             var inOffset = compositor.CreateVector3KeyFrameAnimation();
             inOffset.InsertKeyFrame(1f, Vector3.Zero, inEasing);
             inOffset.Duration = EntranceDuration;
@@ -799,7 +825,7 @@ internal static class TransitionEngine
         outFade.Duration = plan.OutOpacityDuration;
         outVisual.StartAnimation("Opacity", outFade);
 
-        inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f);
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = new Vector3(plan.InStartScale, plan.InStartScale, 1f));
 
         var inScale = compositor.CreateVector3KeyFrameAnimation();
         inScale.InsertKeyFrame(1f, Vector3.One, inScaleEasing);
@@ -814,14 +840,6 @@ internal static class TransitionEngine
 
     internal static bool UsesWinUIDrillInSpecification(DrillInTransition drill) =>
         drill.Duration is null;
-
-    private static void BindCenterPointToVisualSize(Compositor compositor, Visual visual)
-    {
-        var centerPoint = compositor.CreateExpressionAnimation(
-            "Vector3(target.Size.X / 2, target.Size.Y / 2, 0)");
-        centerPoint.SetReferenceParameter("target", visual);
-        visual.StartAnimation("CenterPoint", centerPoint);
-    }
 
     private static void RunCustomDrillIn(
         Compositor compositor, Visual outVisual, Visual inVisual,
@@ -855,7 +873,7 @@ internal static class TransitionEngine
         else
         {
             // Forward: incoming scales up from 0.85 + fades in, outgoing fades out
-            inVisual.Scale = new Vector3(0.85f, 0.85f, 1f);
+            Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Scale = new Vector3(0.85f, 0.85f, 1f));
 
             var inScale = compositor.CreateVector3KeyFrameAnimation();
             inScale.InsertKeyFrame(0f, new Vector3(0.85f, 0.85f, 1f));
@@ -906,7 +924,7 @@ internal static class TransitionEngine
         outVisual.StartAnimation("Opacity", outFade);
 
         // Incoming: spring offset + fade
-        inVisual.Offset = inStart;
+        Core.Reconciler.WithoutImplicitAnimations(inVisual, () => inVisual.Offset = inStart);
 
         var inSpring = compositor.CreateSpringVector3Animation();
         inSpring.DampingRatio = spring.DampingRatio;

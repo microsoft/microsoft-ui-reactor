@@ -1,7 +1,7 @@
 // Spec 038 Phase-1 ship gate: comprehensive Reactor stubs for tuning runs.
 //
 // The corpus's `before.text` is real, restoreable Reactor C# but we deliberately
-// don't load Reactor.dll into the test compilation (TestCompilation.Create
+// don't load Microsoft.UI.Reactor.dll into the test compilation (TestCompilation.Create
 // excludes Reactor / WinUI assemblies). To run the SymbolSuggester semantically
 // we need stub types covering the surface used in the corpus.
 //

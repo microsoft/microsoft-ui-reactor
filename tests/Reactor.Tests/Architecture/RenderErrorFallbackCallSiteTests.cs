@@ -19,9 +19,9 @@ namespace Microsoft.UI.Reactor.Tests.Architecture;
 /// <see cref="RenderErrorDispatch"/>'s "no handler / handler returned null" branches.
 /// <para>
 /// Nothing in the language enforces that: <c>ErrorFallback.BuildPanel</c> /
-/// <c>BuildElement</c> are reachable from anywhere in <c>Reactor.dll</c> and from every
-/// <c>InternalsVisibleTo</c> friend. This test reads the IL of <c>Reactor.dll</c> and
-/// <c>Reactor.Advanced.dll</c> and fails if any type other than
+/// <c>BuildElement</c> are reachable from anywhere in <c>Microsoft.UI.Reactor.dll</c> and from every
+/// <c>InternalsVisibleTo</c> friend. This test reads the IL of <c>Microsoft.UI.Reactor.dll</c> and
+/// <c>Microsoft.UI.Reactor.Advanced.dll</c> and fails if any type other than
 /// <see cref="RenderErrorDispatch"/> (or its compiler-generated nested types) calls or
 /// takes a delegate to either builder. A new caller should route through the dispatch
 /// instead, or — if it is genuinely a "no handler configured" path — be added here with

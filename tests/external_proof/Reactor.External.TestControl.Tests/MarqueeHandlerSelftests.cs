@@ -31,7 +31,7 @@ public class MarqueeHandlerSelftests
     {
         var reconciler = new Reconciler();
         // Public RegisterHandler API — author surface only. Compiles
-        // because Reactor.dll exposes IElementHandler, MountContext,
+        // because Microsoft.UI.Reactor.dll exposes IElementHandler, MountContext,
         // ReactorBinding<T>, and ChildrenStrategy as public types.
         reconciler.RegisterHandler<MarqueeElement, MarqueeControl>(new MarqueeHandler());
         // No exception means the registry accepted the external handler

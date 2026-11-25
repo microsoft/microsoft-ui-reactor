@@ -111,7 +111,9 @@ internal sealed class ReactorListState
     internal bool HasDefaultPositionalKeys { get; set; }
 
     /// <summary>
-    /// Set whenever <see cref="Source"/> changes structurally; cleared by the reconciler's
+    /// Set whenever <see cref="Source"/> changes structurally; read only by the ListView /
+    /// GridView path (the ItemsRepeater factory reads <see cref="PinnedIndicesMayBeStale"/>).
+    /// Cleared by the reconciler's
     /// realized-container pass, which then checks the containers after the next layout pass
     /// that lays the list out (<see cref="PostLayoutSweep"/>): that pass can park a container
     /// offscreen without raising its recycle <c>ContainerContentChanging</c>.
@@ -133,10 +135,24 @@ internal sealed class ReactorListState
     /// </summary>
     internal Microsoft.UI.Xaml.RoutedEventHandler? LoadedWatch { get; set; }
 
-    public ReactorListState() => Source.CollectionChanged += (_, _) =>
+    /// <summary>
+    /// Set by a <c>Move</c>, <c>Remove</c> or <c>Reset</c> on <see cref="Source"/>; read only by
+    /// the <c>ItemsRepeater</c> factory (<see cref="StructureChanged"/> is the ListView/GridView
+    /// counterpart, and also covers <c>Add</c> / <c>Replace</c>). An <c>ItemsRepeater</c> doesn't
+    /// update its element indices for a <c>Move</c> at all, and keeps a focused element that is
+    /// already in its pinned pool at its old index across a <c>Remove</c> or <c>Reset</c>
+    /// (spec 042 §4 "ItemsRepeater specifics", microsoft/microsoft-ui-xaml#12659). Cleared by the factory when it
+    /// schedules its post-layout check of the focused container.
+    /// </summary>
+    internal bool PinnedIndicesMayBeStale { get; set; }
+
+    public ReactorListState() => Source.CollectionChanged += (_, e) =>
     {
         StructureChanged = true;
         HasDefaultPositionalKeys = false;
+        if (e.Action is not (global::System.Collections.Specialized.NotifyCollectionChangedAction.Add
+            or global::System.Collections.Specialized.NotifyCollectionChangedAction.Replace))
+            PinnedIndicesMayBeStale = true;
     };
 
     /// <summary>

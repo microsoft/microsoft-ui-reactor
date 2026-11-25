@@ -503,6 +503,21 @@ public abstract record Element
     /// Returns true only when the two elements are provably identical for rendering purposes.
     /// Conservative: returns false for unknown element types.
     /// </summary>
+    /// <summary>
+    /// Whether two elements carry equal extras that <see cref="OwnPropsEqual"/> does not read:
+    /// animations, attached layout values (grid row, canvas position, flex), theme bindings and
+    /// resource overrides. Context values are left out: a provider change re-renders its
+    /// consumers, which report their own changes. For the perf provider's <c>changes</c> count.
+    /// </summary>
+    internal static bool ExtrasEqual(Element a, Element b)
+    {
+        if (a.Extensions is null && b.Extensions is null) return true;
+        return (a.Extensions?.Animations ?? default).Equals(b.Extensions?.Animations ?? default)
+            && AttachedEqual(a.Attached, b.Attached)
+            && ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)
+            && ResourceOverridesEqual(a.ResourceOverrides, b.ResourceOverrides);
+    }
+
     internal static bool ShallowEquals(Element a, Element b)
     {
         if (ReferenceEquals(a, b)) return true;
@@ -692,7 +707,7 @@ public abstract record Element
             // re-allocations cause every WinUI Path/Line property to be reassigned.
             (PathElement pa, PathElement pb) =>
                 string.Equals(pa.PathDataString, pb.PathDataString, StringComparison.Ordinal)
-                && (pa.PathDataString is not null || ReferenceEquals(pa.Data, pb.Data))
+                && ReferenceEquals(pa.Data, pb.Data)
                 && BrushesEqual(pa.Fill, pb.Fill)
                 && BrushesEqual(pa.Stroke, pb.Stroke)
                 && pa.StrokeThickness == pb.StrokeThickness
@@ -907,7 +922,10 @@ public abstract record Element
                 && SettersEqual(fa.Setters, fb.Setters),
 
             (CanvasElement ca, CanvasElement cb) =>
-                SettersEqual(ca.Setters, cb.Setters),
+                ca.Width == cb.Width
+                && ca.Height == cb.Height
+                && BrushesEqual(ca.Background, cb.Background)
+                && SettersEqual(ca.Setters, cb.Setters),
 
             (WrapGridElement wa, WrapGridElement wb) =>
                 wa.Orientation == wb.Orientation
@@ -978,12 +996,16 @@ public abstract record Element
                 && ca.PlaceholderText == cb.PlaceholderText
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
+                && ca.Description == cb.Description
+                && ca.MaxDropDownHeight.Equals(cb.MaxDropDownHeight)
                 && SettersEqual(ca.Setters, cb.Setters),
 
             (ListViewElement la, ListViewElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
                 && la.SelectionMode == lb.SelectionMode
                 && la.Header == lb.Header
+                && ReferenceEquals(la.ItemContainerStyle, lb.ItemContainerStyle)
+                && la.IncrementalLoadingTrigger == lb.IncrementalLoadingTrigger
                 && SettersEqual(la.Setters, lb.Setters),
 
             (GridViewElement ga, GridViewElement gb) =>
@@ -1243,9 +1265,29 @@ public abstract record Element
     /// the skip.
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
+        => ModifiersEqualCore(a, b, visibleOnly: false);
+
+    /// <summary>
+    /// Like <see cref="ModifiersEqual"/>, but only for what the control shows: callback
+    /// slots (routed handlers, <c>.Ref</c>, <c>.OnUnmount</c>, <c>.OnUpdate</c>) are ignored,
+    /// and a flyout or rich tooltip compares by presence only (its content is reconciled
+    /// when it opens). For the perf provider's <c>changes</c> count (issue #1538), where a
+    /// fresh per-render closure must not make a render look productive.
+    /// </summary>
+    internal static bool ModifiersVisiblyEqual(ElementModifiers? a, ElementModifiers? b)
+        => ModifiersEqualCore(a, b, visibleOnly: true);
+
+    private static bool ModifiersEqualCore(ElementModifiers? a, ElementModifiers? b, bool visibleOnly)
     {
         if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
+        if (a is null || b is null)
+        {
+            if (!visibleOnly) return false;
+            // A side without modifiers shows the defaults, so a callback-only bucket added or
+            // removed is no visible change.
+            a ??= _emptyModifiers;
+            b ??= _emptyModifiers;
+        }
 
         // #159 — hoist the Layout/Visual sub-record reads once instead of
         // dereferencing a.Layout?.X / a.Visual?.X ~20 times through the shim
@@ -1288,11 +1330,15 @@ public abstract record Element
             // were ignored entirely. Gesture / drag-drop slots are deliberately
             // NOT compared here (see ModifierCallbacksEqual) so behavior matches
             // the historical diff exactly.
-            && ModifierCallbacksEqual(a, b)
+            && (visibleOnly || ModifierCallbacksEqual(a, b))
             // Skip RichToolTip, AttachedFlyout, ContextFlyout — rare, conservative false
-            && a.RichToolTip is null && b.RichToolTip is null
-            && a.AttachedFlyout is null && b.AttachedFlyout is null
-            && a.ContextFlyout is null && b.ContextFlyout is null
+            && (visibleOnly
+                ? (a.RichToolTip is null) == (b.RichToolTip is null)
+                    && (a.AttachedFlyout is null) == (b.AttachedFlyout is null)
+                    && (a.ContextFlyout is null) == (b.ContextFlyout is null)
+                : a.RichToolTip is null && b.RichToolTip is null
+                    && a.AttachedFlyout is null && b.AttachedFlyout is null
+                    && a.ContextFlyout is null && b.ContextFlyout is null)
             // Accessibility Tier 1
             && a.HeadingLevel == b.HeadingLevel
             && a.IsDragRegion == b.IsDragRegion
@@ -1307,7 +1353,7 @@ public abstract record Element
             // Imperative ref slot (.Ref). A ref-only change (add/remove/swap)
             // must force Update so ApplyModifiers clears the old cell and sets the
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
-            && ReferenceEquals(a.Ref, b.Ref)
+            && (visibleOnly || ReferenceEquals(a.Ref, b.Ref))
             // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
             // latest OnUnmountAction (ReactorState.UnmountAction) on every non-skip
             // Update, and that captured delegate is what fires at unmount — so a
@@ -1319,7 +1365,7 @@ public abstract record Element
             // both null ⇒ equal (no teardown either render ⇒ zero skip-rate cost for
             // plain leaves), a reference-stable teardown still skips, a fresh closure
             // forces Update so the latest teardown is registered.
-            && ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction)
+            && (visibleOnly || ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction))
             // Imperative update slot (.OnUpdateAdd), for the same reason as OnUnmountAction
             // above: it is DEFINED to run on every in-place update, and this skip path is
             // the one thing that can make that false — a skipped element never reaches
@@ -1328,7 +1374,7 @@ public abstract record Element
             // unchanged in the common case, and a reference-stable action (the static
             // method group chart labels use) still skips. Only an added/removed/changed
             // action declines — which is exactly when the caller needs the callback.
-            && ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction)
+            && (visibleOnly || ReferenceEquals(a.OnUpdateAction, b.OnUpdateAction))
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
@@ -1344,6 +1390,7 @@ public abstract record Element
     // against a set one without allocating (and without 20+ null-conditional shims).
     private static readonly LayoutModifiers _emptyLayout = new();
     private static readonly VisualModifiers _emptyVisual = new();
+    private static readonly ElementModifiers _emptyModifiers = new();
 
     /// <summary>
     /// Compare the Visual buckets by value. Brush fields (Background / Foreground /
@@ -1363,6 +1410,7 @@ public abstract record Element
             && a.Rotation == b.Rotation
             && a.Translation == b.Translation
             && a.CenterPoint == b.CenterPoint
+            && a.TransformOrigin == b.TransformOrigin
             && BrushesEqual(a.Background, b.Background)
             && BrushesEqual(a.Foreground, b.Foreground)
             && BrushesEqual(a.BorderBrush, b.BorderBrush);
@@ -2201,6 +2249,11 @@ public record ElementModifiers
         get => Visual?.CenterPoint;
         init => Visual = Visual is null ? new VisualModifiers { CenterPoint = value } : Visual with { CenterPoint = value };
     }
+    public global::System.Numerics.Vector2? TransformOrigin
+    {
+        get => Visual?.TransformOrigin;
+        init => Visual = Visual is null ? new VisualModifiers { TransformOrigin = value } : Visual with { TransformOrigin = value };
+    }
     public bool? IsVisible
     {
         get => Layout?.IsVisible;
@@ -2550,6 +2603,8 @@ public record VisualModifiers
     public float? Rotation { get; init; }
     public global::System.Numerics.Vector3? Translation { get; init; }
     public global::System.Numerics.Vector3? CenterPoint { get; init; }
+    /// <summary>The size-relative pivot of <c>.TransformOrigin(x, y)</c> (spec 066 §8).</summary>
+    public global::System.Numerics.Vector2? TransformOrigin { get; init; }
 
     /// <summary>
     /// Merge <paramref name="other"/> into this record, preferring
@@ -2568,6 +2623,7 @@ public record VisualModifiers
         Rotation = other.Rotation ?? Rotation,
         Translation = other.Translation ?? Translation,
         CenterPoint = other.CenterPoint ?? CenterPoint,
+        TransformOrigin = other.TransformOrigin ?? TransformOrigin,
     };
 }
 
@@ -5065,11 +5121,13 @@ public partial record SplitViewElement(
             },
         });
         return d
-            .OneWayConditional(
-                get:         static e => e.PaneBackground,
-                set:         static (c, v) => c.PaneBackground = v!,
-                shouldWrite: static e => e.PaneBackground is not null,
-                comparer:    SplitViewBrushReferenceComparer.Instance)
+            // Clearing a removed brush (rather than leaving it, as OneWayConditional does) lets a
+            // `.PaneBackground(ThemeRef)` that replaces it show through the themed Style.
+            .OneWay(
+                get:      static e => e.PaneBackground is { } b ? Optional<Brush?>.Of(b) : Optional<Brush?>.Unset,
+                set:      static (c, v) => c.PaneBackground = v!,
+                dp:       WinUI.SplitView.PaneBackgroundProperty,
+                comparer: SplitViewBrushReferenceComparer.Instance)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitViewEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.SplitView, object>>(
                 subscribe:        static (c, h) => c.PaneOpening += h,
@@ -7088,8 +7146,8 @@ public partial record LineElement() : Element
 public partial record LineElement;
 
 // Spec 058 §15 (P5.23) — Shape leaf. Fill/Stroke/StrokeThickness/RenderTransform/line caps/join/
-// miter/offset auto-map. Bespoke in Customize: Data (3-strategy .Imperative: XamlReader → pre-built
-// Geometry → PathDataParser; PathDataString + Data), FillRule (propagated onto the inner
+// miter/offset auto-map. Bespoke in Customize: Data (.Imperative: native path-markup converter →
+// pre-built Geometry; PathDataString + Data), FillRule (propagated onto the inner
 // PathGeometry), StrokeDashArray (DoubleCollection — unsupported value type). Replaces PathDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinShapes.Path))]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Data")]
@@ -7104,9 +7162,10 @@ public partial record PathElement() : Element
     /// </summary>
     public Geometry? Data { get; init; }
     /// <summary>
-    /// The original SVG path data string. When set, geometry is parsed lazily by the reconciler —
-    /// only when mounting or when the string changes between renders. This avoids expensive
-    /// PathDataParser.Parse + COM Geometry creation on every tree build.
+    /// The path markup string (SVG / XAML path syntax). When set, geometry is converted lazily by the
+    /// reconciler with WinUI's native path-markup converter — only when mounting or when the string
+    /// changes between renders — so no COM Geometry is created on every tree build. Markup the platform
+    /// rejects (for example a NaN coordinate) falls back to <see cref="Data"/>, or draws nothing.
     /// </summary>
     public string? PathDataString { get; init; }
     public Brush? Fill { get; init; }
@@ -7130,7 +7189,7 @@ public partial record PathElement() : Element
     public FillRule FillRule { get; init; } = FillRule.EvenOdd;
     internal Action<WinShapes.Path>[] Setters { get; init; } = [];
 
-    // Data has two source surfaces (pre-built Geometry vs SVG string) + 3-way branching that the
+    // Data has two source surfaces (pre-built Geometry vs SVG string) + a fallback between them that the
     // value-comparer fast path can't express; FillRule writes onto the inner PathGeometry (gated on
     // the LIVE control's Data); StrokeDashArray is a DoubleCollection. Verbatim from the descriptor.
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<PathElement, WinShapes.Path> Customize(
@@ -7139,9 +7198,11 @@ public partial record PathElement() : Element
                 mount: static (c, e) => WriteData(c, e),
                 update: static (c, oldEl, newEl) =>
                 {
-                    bool pathChanged = newEl.PathDataString is null
-                        ? newEl.Data is not null
-                        : !string.Equals(newEl.PathDataString, oldEl.PathDataString, global::System.StringComparison.Ordinal);
+                    // D3Path no longer pre-builds Data, so a Data reference change is a real
+                    // caller change (including a fallback swap under unchanged markup).
+                    bool pathChanged =
+                        !string.Equals(newEl.PathDataString, oldEl.PathDataString, global::System.StringComparison.Ordinal)
+                        || !ReferenceEquals(newEl.Data, oldEl.Data);
                     if (!pathChanged) return;
                     WriteData(c, newEl);
                 })
@@ -7156,65 +7217,22 @@ public partial record PathElement() : Element
                 set:         static (c, v) => c.StrokeDashArray = v,
                 shouldWrite: static e => e.StrokeDashArray is not null);
 
+    // PathDataString goes through the native path-markup converter. If the platform rejects it,
+    // a caller-supplied Data is used instead; with neither, the path is cleared so it draws nothing
+    // (PathMarkup.TryConvert has already logged why). The element's FillRule is re-applied to every
+    // new geometry: the FillRule entry below only writes when FillRule itself changes.
     private static void WriteData(WinShapes.Path c, PathElement e)
     {
-        global::System.Exception? xamlReaderError = null;
-        string? attemptedXaml = null;
-
-        if (e.PathDataString is { Length: > 0 } pds)
+        var geometry = PathMarkup.TryConvert(e.PathDataString) ?? e.Data;
+        try { c.Data = geometry; }
+        catch (global::System.Exception ex)
         {
-            try
-            {
-                var safe = global::System.Net.WebUtility.HtmlEncode(pds);
-                attemptedXaml =
-                    "<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\""
-                    + safe + "\" />";
-                if (global::Microsoft.UI.Xaml.Markup.XamlReader.Load(attemptedXaml) is WinShapes.Path loaded
-                    && loaded.Data is not null)
-                {
-                    c.Data = loaded.Data;
-                    return;
-                }
-            }
-            catch (global::System.Exception ex)
-            {
-                xamlReaderError = ex;
-            }
+            throw new global::System.ArgumentException(
+                $"Path.Data rejected by WinUI. PathDataString={e.PathDataString ?? "(null)"}; "
+                + $"DataType={geometry?.GetType().Name}; inner={ex.Message}.", ex);
         }
-
-        if (e.Data is not null)
-        {
-            try { c.Data = e.Data; }
-            catch (global::System.Exception ex)
-            {
-                var xamlNote = xamlReaderError is not null
-                    ? $" XamlReader.Load also failed: {xamlReaderError.GetType().Name}: {xamlReaderError.Message}. Attempted XAML: {attemptedXaml}"
-                    : " (XamlReader.Load returned non-Path or wasn't attempted)";
-                throw new global::System.ArgumentException(
-                    $"Path.Data rejected by WinUI. PathDataString={e.PathDataString ?? "(null)"}; "
-                    + $"DataType={e.Data.GetType().Name}; inner={ex.Message}.{xamlNote}", ex);
-            }
-            return;
-        }
-
-        if (e.PathDataString is { Length: > 0 } pdsFallback)
-        {
-            global::System.Exception? parserError = null;
-            try { c.Data = PathDataParser.Parse(pdsFallback); }
-            catch (global::System.Exception ex) { parserError = ex; }
-
-            if (parserError is not null)
-            {
-                var xamlNote = xamlReaderError is not null
-                    ? $"XamlReader.Load failed: {xamlReaderError.GetType().Name}: {xamlReaderError.Message}. Attempted XAML: {attemptedXaml}. "
-                    : "XamlReader.Load returned non-Path. ";
-                throw new global::System.ArgumentException(
-                    $"Could not mount PathElement from PathDataString='{pdsFallback}'. "
-                    + xamlNote
-                    + $"PathDataParser.Parse also failed: {parserError.GetType().Name}: {parserError.Message}.",
-                    parserError);
-            }
-        }
+        if (geometry is global::Microsoft.UI.Xaml.Media.PathGeometry pg && pg.FillRule != e.FillRule)
+            pg.FillRule = e.FillRule;
     }
 }
 

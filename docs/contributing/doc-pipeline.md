@@ -160,11 +160,37 @@ dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic archit
 dotnet run --project tools/Reactor.DocPipeline -- new-diagram architecture-overview overview
 ```
 
-### Which `Reactor.xml` the reference phase reads
+For `render-diagrams --topic` and the first argument to `new-diagram`, use the
+name of a top-level directory under `docs/_pipeline/diagrams`, such as
+`architecture-overview`. Both commands report an error on stderr and return
+exit code `1` if the topic is rooted or normalizes to a path outside that
+directory. Before creating the topic directory, `new-diagram` verifies that
+the ID is relative and that the resulting `.mmd` path stays inside the topic.
+
+### Running the doc pipeline tests
+
+Run the xUnit suite from the repository root.
+
+```powershell
+dotnet test tests/Reactor.DocPipeline.Tests/Reactor.DocPipeline.Tests.csproj -p:Platform=x64
+```
+
+Tests that read files from the checkout use [`TestRepo.Root`](../../tests/Reactor.DocPipeline.Tests/TestRepo.cs).
+It calls the shared [`RepoRootFinder`](../../src/Reactor.Cli/Pack/RepoRootFinder.cs),
+which walks up from `AppContext.BaseDirectory` until it finds a directory containing
+`src/Reactor/Reactor.csproj`. This selects the worktree containing the test output
+even when the process working directory is in a sibling checkout.
+
+[`TestRepoTests`](../../tests/Reactor.DocPipeline.Tests/TestRepoTests.cs) verifies
+this behavior by switching to a temporary directory with its own
+`src/Reactor/Reactor.csproj` and checking that `TestRepo.Root` still selects the
+checkout containing the test output.
+
+### Which `Microsoft.UI.Reactor.xml` the reference phase reads
 
 Phase 5.7 generates `docs/guide/reference/**` from the XML doc comments the C#
 compiler emits, so it needs a *built* `src/Reactor`. It reads the **most recently
-written** `Reactor.xml` anywhere under `src/Reactor/bin` — configuration plays no
+written** `Microsoft.UI.Reactor.xml` anywhere under `src/Reactor/bin` — configuration plays no
 part in the choice, and neither does the directory layout, so flat
 `bin/<config>/<tfm>/`, platform-stamped `bin/<arch>/<config>/<tfm>/` and
 RID-nested publish outputs are all candidates. The one thing it won't descend
@@ -177,7 +203,7 @@ It prints what it picked:
 
 ```
 ═══ Phase 5.7: Reference ═══
-  XML: src/Reactor/bin/x64/Release/net10.0-windows10.0.22621.0/Reactor.xml (2026-08-01T19:45:14Z, newest of 3 candidate(s))
+  XML: src/Reactor/bin/x64/Release/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.xml (2026-08-01T19:45:14Z, newest of 3 candidate(s))
 ```
 
 Read that line if a regenerated reference page disagrees with the source you just
@@ -194,11 +220,11 @@ separately: the phase compares the chosen XML against the newest `.cs` under
 with [`REACTOR_DOC_REFGEN_W002`](#6-snippet--image--diagram-error-codes) when the
 source is newer. Run `dotnet build src/Reactor` and compile again.
 
-If no `Reactor.xml` exists at all, **a local compile** skips reference generation
+If no `Microsoft.UI.Reactor.xml` exists at all, **a local compile** skips reference generation
 rather than failing, printing:
 
 ```
-  (Reactor.xml not found — run `dotnet build src/Reactor` first)
+  (Microsoft.UI.Reactor.xml not found — run `dotnet build src/Reactor` first)
 ```
 
 That degradation is deliberate: on a first compile you should still get your
@@ -623,7 +649,7 @@ reference-generation codes.
 | `REACTOR_DOC_SHOT_002`     | Manifest screenshot id ends in the reserved `-thumb` suffix without `kind: catalog-thumb`. Matched against the whole id, so a dotted id (`widget.v2-thumb`) is caught too |
 | `REACTOR_DOC_REGISTRY_W001`| Registry rule maps to a category with no `guide-pages`     |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
-| `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* The `Reactor.xml` the reference phase selected is older than the newest `.cs` under `src/Reactor`, so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run `dotnet build src/Reactor` and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds `src/Reactor` (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-reactorxml-the-reference-phase-reads) |
+| `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* The `Microsoft.UI.Reactor.xml` the reference phase selected is older than the newest `.cs` under `src/Reactor`, so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run `dotnet build src/Reactor` and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds `src/Reactor` (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-microsoftuireactorxml-the-reference-phase-reads) |
 
 ## 7. Quarterly tier audit (spec 041 §5.4)
 
@@ -845,18 +871,18 @@ is the defect it was added to fix, one level up.
 
 There is a third way a compile can exit 0 without regenerating, and it is
 **not** checked here on purpose. Phase 5.7 prints its header and then bails when
-`Reactor.xml` or `reference-map.yaml` is missing (see *Which `Reactor.xml` the
+`Microsoft.UI.Reactor.xml` or `reference-map.yaml` is missing (see *Which `Microsoft.UI.Reactor.xml` the
 reference phase reads*), leaving ~117 reference pages unwritten. The pipeline's
 `compile --ci` now **returns non-zero** for that, so the compile step catches it
 and the gate never sees it. The first version of this gate grepped stdout for
-`Reactor.xml not found` instead, which was both the wrong owner and the wrong
+`Microsoft.UI.Reactor.xml not found` instead, which was both the wrong owner and the wrong
 direction of failure: reword the message in `CompileCommand.cs` and the grep
 silently stops matching — it fails *open*. `ReferenceStalenessWiringTests` pins
 the exit code, in both the `--ci` and the local direction, so the contract is a
 test rather than a string.
 
 Note the asymmetry that makes this correct rather than merely stricter: locally,
-a missing `Reactor.xml` is the first-compile case and still just skips with a
+a missing `Microsoft.UI.Reactor.xml` is the first-compile case and still just skips with a
 message, because an author who hasn't built yet should still get their guide
 pages. Under `--ci` there is no such case — CI always builds.
 

@@ -226,8 +226,8 @@ foreach ($runtimeName in $Runtime) {
             }
             if ($consumerProvenance -and $runtimeName -eq 'jit' -and
                 $effective.PublishTrimmed -ne 'true' -and $effective.PublishReadyToRun -ne 'true' -and
-                (Get-FileHash (Join-Path $layout 'Reactor.dll') -Algorithm SHA256).Hash -ne $consumerProvenance.reactorAssemblySha256) {
-                throw 'Published Reactor.dll differs from the assembly inside the prepared nupkg.'
+                (Get-FileHash (Join-Path $layout 'Microsoft.UI.Reactor.dll') -Algorithm SHA256).Hash -ne $consumerProvenance.reactorAssemblySha256) {
+                throw 'Published Microsoft.UI.Reactor.dll differs from the assembly inside the prepared nupkg.'
             }
             @(Get-ChildItem $layout -Recurse -File | Where-Object Extension -In @('.exe', '.dll', '.pri', '.xbf') |
                 ForEach-Object {

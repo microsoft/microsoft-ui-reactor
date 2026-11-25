@@ -385,7 +385,7 @@ internal static class ChildReconciler
         if (reconciler.CanUpdate(oldEl, newEl))
         {
             existingControl ??= children.Get(i);
-            var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+            var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate, childIndex: i);
             if (replacement is not null)
             {
                 // Child type changed at runtime — replace in place
@@ -675,7 +675,7 @@ internal static class ChildReconciler
             if (panelIdx < childCount)
             {
                 existingControl ??= map.ControlAt(prefixLen);
-                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate, childIndex: prefixLen);
                 if (replacement is not null)
                 {
                     if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
@@ -729,7 +729,7 @@ internal static class ChildReconciler
             if (panelIdx >= 0 && panelIdx < childCount)
             {
                 existingControl ??= map.ControlAt(oldIdx);
-                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate);
+                var replacement = reconciler.UpdateChildTracked(oldEl, newEl, existingControl, requestRerender, out var unmountedByUpdate, childIndex: newIdx);
                 if (replacement is not null)
                 {
                     if (!unmountedByUpdate) reconciler.UnmountChild(existingControl);
@@ -826,19 +826,35 @@ internal static class ChildReconciler
             // must default to false for the unmatched-removal pass below.
             global::System.Array.Clear(matched, 0, oldMidLen);
 
-            // Build old key → index map
+            // Unkeyed children match by absolute position; they need no synthetic string
+            // unless an explicit key can collide with the legacy fallback namespace.
+            bool legacyFallback = false;
             for (int i = 0; i < oldMidLen; i++)
             {
-                var key = GetKey(oldChildren[oldStart + i], oldStart + i);
+                var key = oldChildren[oldStart + i].Key;
+                if (key is null) continue;
                 oldKeyMap[key] = i;
+                legacyFallback |= key.StartsWith("__pos_", StringComparison.Ordinal);
+            }
+            if (legacyFallback)
+            {
+                // Preserve last-wins shadowing even though CanUpdate later rejects
+                // keyed/unkeyed and runtime-type mismatches.
+                oldKeyMap.Clear();
+                for (int i = 0; i < oldMidLen; i++)
+                    oldKeyMap[GetKey(oldChildren[oldStart + i], oldStart + i)] = i;
             }
 
             // Map new keys to old indices
             for (int i = 0; i < newMidLen; i++)
             {
-                var key = GetKey(newChildren[newStart + i], newStart + i);
-                if (oldKeyMap.TryGetValue(key, out int oldIdx) &&
-                    reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChildren[newStart + i]))
+                var newChild = newChildren[newStart + i];
+                var key = legacyFallback ? GetKey(newChild, newStart + i) : newChild.Key;
+                int oldIdx = newStart + i - oldStart;
+                bool found = key is not null
+                    ? oldKeyMap.TryGetValue(key, out oldIdx)
+                    : (uint)oldIdx < (uint)oldMidLen;
+                if (found && reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChild))
                 {
                     newToOld[i] = oldIdx;
                     matched[oldIdx] = true;
@@ -1114,7 +1130,8 @@ internal static class ChildReconciler
                 _newChildren[_newStart + newIdx],
                 existing,
                 _requestRerender,
-                out var unmountedByUpdate);
+                out var unmountedByUpdate,
+                childIndex: _newStart + newIdx);
             if (replacement is not null)
             {
                 if (!unmountedByUpdate) _reconciler.UnmountChild(existing);
@@ -1351,12 +1368,11 @@ internal static class ChildReconciler
         if (curve is null) return;
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(ctrl);
-            var compositor = visual.Compositor;
-            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(compositor, "Offset", curve);
-            var coll = compositor.CreateImplicitAnimationCollection();
-            coll["Offset"] = anim;
-            visual.ImplicitAnimations = coll;
+            var visual = Animation.AnimationHelper.GetElementVisual(ctrl);
+            var anim = Animation.AnimationHelper.CreateVector3ImplicitAnimation(visual.Compositor, "Offset", curve);
+            // A declared layout, .Animate() or transition Offset key wins over the ambient move,
+            // and the element's other keys stay (spec 066 §6).
+            Animation.ImplicitAnimationSlots.Claim(ctrl, "Offset", Animation.ImplicitFeature.Move, 0, anim);
         }
         catch
         {

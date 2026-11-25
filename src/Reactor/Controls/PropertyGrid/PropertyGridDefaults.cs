@@ -48,19 +48,19 @@ public static class PropertyGridDefaults
     =>
         FlexRow(
             Button(isExpanded ? "\u25BC" : "\u25B6", () => onExpandedChanged(!isExpanded))
-                .Width(24).Height(24),
+                .Size(24, 24),
             TextBlock($"[{index}]").Flex(basis: 40, shrink: 0),
             TextBlock(summary).Flex(grow: 1),
             onMoveUp is not null
-                ? Button("\u25B2", onMoveUp).Width(28).Height(28)
+                ? Button("\u25B2", onMoveUp).Size(28, 28)
                     .AutomationName($"Move item {index} up")
                 : null,
             onMoveDown is not null
-                ? Button("\u25BC", onMoveDown).Width(28).Height(28)
+                ? Button("\u25BC", onMoveDown).Size(28, 28)
                     .AutomationName($"Move item {index} down")
                 : null,
             onRemove is not null
-                ? Button("\u2715", onRemove).Width(28).Height(28)
+                ? Button("\u2715", onRemove).Size(28, 28)
                     .AutomationName($"Remove item {index}")
                 : null
         ) with { AlignItems = FlexAlign.Center, ColumnGap = 4 };

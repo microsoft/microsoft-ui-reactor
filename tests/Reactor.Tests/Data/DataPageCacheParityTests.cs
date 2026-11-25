@@ -7,7 +7,7 @@ namespace Microsoft.UI.Reactor.Tests.Data;
 
 /// <summary>
 /// Instantiates the legacy <see cref="DataPageCache{T}"/> and the hook-based
-/// <see cref="UseDataSourceExtensions"/> pipeline against the same
+/// <see cref="DataSourceResourceExtensions"/> pipeline against the same
 /// <see cref="IDataSource{T}"/> and asserts they report observably identical
 /// behaviour across the invariants that DataGrid depends on.
 /// </summary>

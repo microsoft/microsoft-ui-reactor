@@ -66,4 +66,25 @@ public class VisualModifiersTests
         var b = new VisualModifiers { Opacity = 0.6 };
         Assert.NotEqual(a, b);
     }
+
+    // Spec 066 §8: .TransformOrigin is its own field next to the pixel .CenterPoint offset.
+    [Fact]
+    public void TransformOrigin_Merges_Keeps_CenterPoint_And_Later_Call_Wins()
+    {
+        var el = Factories.Border(null).CenterPoint(new Vector3(10, 0, 0)).TransformOrigin(0.5f, 0.5f).TransformOrigin(1f, 0f);
+        Assert.Equal(new Vector2(1f, 0f), el.Modifiers!.TransformOrigin);
+        Assert.Equal(new Vector3(10, 0, 0), el.Modifiers.CenterPoint);
+
+        var merged = new VisualModifiers { TransformOrigin = new Vector2(0.5f, 0.5f) }.Merge(new VisualModifiers { Rotation = 30 });
+        Assert.Equal(new Vector2(0.5f, 0.5f), merged.TransformOrigin);
+    }
+
+    [Fact]
+    public void TransformOrigin_Change_Or_Removal_Is_Not_Skip_Equal()
+    {
+        var centre = new ElementModifiers { TransformOrigin = new Vector2(0.5f, 0.5f) };
+        Assert.True(Element.ModifiersEqual(centre, new ElementModifiers { TransformOrigin = new Vector2(0.5f, 0.5f) }));
+        Assert.False(Element.ModifiersEqual(centre, new ElementModifiers { TransformOrigin = new Vector2(0f, 0.5f) }));
+        Assert.False(Element.ModifiersEqual(centre, new ElementModifiers()));
+    }
 }
