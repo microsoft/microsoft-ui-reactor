@@ -776,7 +776,11 @@ non-receiver control type for gated slots where one exists (with a recorded reas
 doesn't), and the expected pool reset. It does **not** read the schema. A fixture
 that took both its inputs and its expected outcomes from the schema could not detect a wrong
 schema, and a receiver dropped from the schema would just turn into a "non-receiver" that passes.
-The schema only supplies the typed probes (§8). A schema test then checks that schema and matrix
+The schema only supplies the typed probes (§8). Because the probes and the generated writer come
+from the same schema, a wrong target in the schema would be written *and* read back from the
+wrong DP, and still pass. So the frozen matrix also records, per (slot, receiver), the literal DP
+it expects (`"Control.PaddingProperty"`), and the fixture asserts that each probe's DP identifier
+is that one before using it. A schema test then checks that schema and matrix
 agree, so a deliberate behaviour change has to edit both and is visible in review.
 
 For every (slot, receiver) the fixture mounts a representative concrete control and checks:
