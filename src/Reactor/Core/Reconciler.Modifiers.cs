@@ -499,7 +499,7 @@ public sealed partial class Reconciler
         // BorderBrush / BorderThickness (Control, Border, and concrete panels)
         if (!ReferenceEquals(m.BorderBrush, oldM?.BorderBrush)
             && _reconcilingElement?.InteractionStates is not null
-            && _interactionTrackers.TryGetValue(fe, out var borderTracker)
+            && GetCompositionState(fe)?.InteractionTracker is { } borderTracker
             && borderTracker.BorderBrushOverrideApplied)
         {
             // Keep the active interaction brush while updating what hover-out restores.

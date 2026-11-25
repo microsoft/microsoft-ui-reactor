@@ -169,6 +169,29 @@ public class AnimationBugTests
     }
 
     [Fact]
+    public void Reconciler_Keeps_No_Unsynchronized_Static_Table_Keyed_By_Control()
+    {
+        // Hosts can run on separate UI threads, so per-control animation state (interaction
+        // trackers, keyframe triggers) lives on the control's CompositionState rather than in a
+        // process-wide Dictionary keyed by UIElement, which two threads could race on.
+        static bool MentionsControl(Type type)
+            => typeof(DependencyObject).IsAssignableFrom(type)
+                || (type.IsGenericType && type.GetGenericArguments().Any(MentionsControl));
+
+        var offenders = typeof(Reconciler)
+            .GetFields(global::System.Reflection.BindingFlags.Static
+                | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Public)
+            .Where(f => typeof(global::System.Collections.IEnumerable).IsAssignableFrom(f.FieldType)
+                && f.FieldType.IsGenericType && MentionsControl(f.FieldType)
+                && f.FieldType.GetGenericTypeDefinition() != typeof(global::System.Runtime.CompilerServices.ConditionalWeakTable<,>)
+                && f.FieldType.GetGenericTypeDefinition() != typeof(global::System.Collections.Concurrent.ConcurrentDictionary<,>))
+            .Select(f => $"{f.Name}: {f.FieldType}")
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void GotFocus_Handler_Signature_Matches_RoutedEvent()
     {
         var method = typeof(Reconciler).GetMethod("OnInteractionGotFocus",

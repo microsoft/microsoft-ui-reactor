@@ -860,7 +860,7 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
                 && Reconciler.OpacityRestartsForTests(control) - deferRestartsBefore == 1;
             // Only a decorator's shared target (KeyframeReleaseStage.BeforePlayback) compares the
             // deferred controller with the running one, so check the bookkeeping it reads directly.
-            bool deferredFollows = control.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState
+            bool deferredFollows = Reconciler.GetCompositionState(control) is
                 { KeyframeChannelOwners: { } owners } && owners.TryGetValue(AnimateProperty.Opacity, out var owner)
                 && owner.DeferredController is { } deferred && Equals(deferred, visual.TryGetAnimationController("Opacity"));
             reconciler.Update(loop, scaleOnly, control, () => { });
@@ -1400,7 +1400,7 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
                 var flag = property == "Opacity" ? AnimateProperty.Opacity : AnimateProperty.Offset;
                 var state = target.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
                 H.Check(name + "_NativeOwnershipSurvives", state is not null
-                    && ReferenceEquals(state, tracked.State) && (state.CompositionModifierProperties & flag) != 0);
+                    && ReferenceEquals(state, tracked.State) && (state.Composition?.ModifierProperties & flag) != 0);
                 var visual = ElementCompositionPreview.GetElementVisual(target);
                 H.Check(name + "_AnimationStillRunning", visual.TryGetAnimationController(property) is not null);
 
@@ -1415,7 +1415,7 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
 
                 reconciler.Update(direct, plain, target, () => { });
                 H.Check(name + "_OwnershipReleasedButTaintRemains", state is not null
-                    && (state.CompositionModifierProperties & flag) == 0
+                    && (state.Composition?.ModifierProperties & flag) == 0
                     && ElementPool.IsVisualTaken(target));
             }
             finally { H.SetContent(null); }
