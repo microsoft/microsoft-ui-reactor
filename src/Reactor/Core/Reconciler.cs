@@ -6262,7 +6262,7 @@ public sealed partial class Reconciler : IDisposable
         // since a style's opacity may arrive between mount and the first frame.
         CompositionAnimation EnterFade()
         {
-            var anim = AnimationHelper.CreateScalarTargetAnimation(compositor, (float)uie.Opacity, curve);
+            var anim = AnimationHelper.CreateScalarTargetAnimation(compositor, RestOpacityOf(uie), curve);
             if (delay > TimeSpan.Zero) AnimationHelper.SetDelay(anim, delay);
             return anim;
         }
@@ -6646,12 +6646,24 @@ public sealed partial class Reconciler : IDisposable
         public Vector3 CenterPoint;
         // The active .TransformOrigin(), or null when the pivot is the static CenterPoint (spec 066 §8.2).
         public Vector2? Origin;
+        // The .Opacity() modifier's value while Reactor writes it to the visual, or null.
+        public float? Opacity;
     }
 
     private static TransformRest RestTransformOf(UIElement uie)
         => (uie.GetValue(ReactorAttached.StateProperty) as ReactorState)?.TransformRest ?? IdentityRest;
 
     private static readonly TransformRest IdentityRest = new();
+
+    /// <summary>
+    /// The opacity an element rests at: the <c>.Opacity()</c> modifier's value while Reactor owns the
+    /// visual's opacity (an animated modifier writes only the visual), otherwise <see cref="UIElement.Opacity"/>
+    /// (a local value or a style's).
+    /// </summary>
+    internal static float RestOpacityOf(UIElement uie)
+        => uie.GetValue(ReactorAttached.StateProperty) is ReactorState { TransformRest.Opacity: { } opacity } state
+            && (state.CompositionModifierProperties & AnimateProperty.Opacity) != 0
+                ? opacity : (float)uie.Opacity;
 
     private static InteractionStateValues? MergePressed(InteractionStateValues? pointerOver, InteractionStateValues? pressed)
     {

@@ -78,16 +78,22 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             H.SetContent(null);
         }
         // A style's opacity, set after mount, is the target the restarted fade ends at. The default
-        // opacity is the control: no push, so no restart, and the fade ends at 1.
-        // With .Animate() on Opacity and a style applied after mount, the fade still ends at the
-        // style's opacity: XAML pushes it, and the restart reads the target again.
-        foreach (var (scenario, styled, animate) in new[] { ("Styled", true, false), ("Default", false, false), ("AnimateStyled", true, true) })
+        // opacity is the control: no push, so no restart, and the fade ends at 1. With .Animate() on
+        // Opacity and a style applied after mount, the fade still ends at the style's opacity: XAML
+        // pushes it, and the restart reads the target again. An animated .Opacity(0.4) writes only
+        // the visual, leaving UIElement.Opacity at 1 and nothing for XAML to push, so the fade has
+        // to take the modifier's value as its target.
+        foreach (var (scenario, faded, styled, expected, expectedRestarts) in new (string, Element, bool, float, int)[]
+        {
+            ("Styled", Faded(null, 150), true, 0.65f, 1),
+            ("Default", Faded(null, 150), false, 1f, 0),
+            ("AnimateStyled", Border(TextBlock("Enter Fade")).Animate(Curve.Linear(1), AnimateProperty.Opacity)
+                .Transition(Animation.Transition.Fade, Curve.Linear(150)), true, 0.65f, 1),
+            ("AnimatedModifier", Border(TextBlock("Enter Fade")).Opacity(0.4).Animate(Curve.Linear(1), AnimateProperty.Opacity)
+                .Transition(Animation.Transition.Fade, Curve.Linear(150)), false, 0.4f, 0),
+        })
         {
             using var reconciler = new Reconciler();
-            var faded = animate
-                ? Border(TextBlock("Enter Fade")).Animate(Curve.Linear(1), AnimateProperty.Opacity)
-                    .Transition(Animation.Transition.Fade, Curve.Linear(150))
-                : Faded(null, 150);
             var control = (Border)reconciler.Mount(faded, () => { })!;
             if (styled) control.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.65d) } };
             var visual = ElementCompositionPreview.GetElementVisual(control);
@@ -96,10 +102,9 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             await Harness.Render();
             await AfterNextCommit(visual);
             int restarts = Reconciler.OpacityRestartsForTests(control);
-            float expected = styled ? 0.65f : 1f;
             int frames = await Settle(visual, expected);
             // The base value reads the fade's end only once it finished: it started from 0.
-            H.Check($"EnterFade_{scenario}EndsAtOwnOpacity", restarts == (styled ? 1 : 0) && visual.IsVisible
+            H.Check($"EnterFade_{scenario}EndsAtOwnOpacity", restarts == expectedRestarts && visual.IsVisible
                 && Math.Abs(visual.Opacity - expected) < 0.001f,
                 $"restarts={restarts}, visible={visual.IsVisible}, opacity={visual.Opacity}, expected={expected}, frames={frames}");
             H.SetContent(null);
