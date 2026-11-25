@@ -109,7 +109,7 @@ session's default sub-agent model (Claude, not host-verified; neither family
 under test) and graded every finding against the frozen source without access
 to the run-to-model map.
 
-| Model | Reference defects found per review (c1–c4, two reviews each) | Total | Mean credits/review | Mean wall time/review |
+| Model | Reference defects found per review (c1–c4, two reviews each) | Total | Mean credits/review (all 10) | Mean wall time/review (all 10) |
 |-------|-------------------------------------------------------------|-------|---------------------|------------------|
 | GPT-6.2 Sol | c1 3, 3 · c2 1, 1 · c3 3, 3 · c4 1, 1 | 16/30 | 33.0 (27–38) | 69 s (54–89) |
 | Gemini 4 Carbon | c1 3, 2 · c2 2, 2 · c3 3, 1 · c4 2, 1 | 16/30 | 219.3 (154–320) | 1,847 s (1,473–2,932) |

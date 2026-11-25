@@ -34,8 +34,8 @@ intended clean control, two reviews each. Both found 16 of 30 reference defect
 opportunities. Sol did it at about one-seventh the credits and one-twenty-fifth
 the wall time (`medium` effort, concurrent runs), while Carbon found defects
 Sol missed in three of the five snapshots, including a regression in the
-control. Eight reviews per model are still a small sample, not a
-repository-wide ranking.
+control. Ten reviews per model (eight on the labeled snapshots, two on the
+control) are still a small sample, not a repository-wide ranking.
 
 ### Runtime selection
 
