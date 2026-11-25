@@ -73,6 +73,11 @@ Conventions for contributors:
 
 ### Changed
 
+- ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
+  ("Date & time"), every card has an image, the nav uses WinUI Gallery's category glyphs, and
+  page titles use the regular title weight. Category keys, deep-link slugs and the search index
+  are unchanged.
+
 - **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
   visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
   the first time it is written, so the transforms use one channel whether or not a compositor
