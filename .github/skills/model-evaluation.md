@@ -5,7 +5,7 @@ dedicated benchmarking package. Use the [model-selection policy](README.md#model
 for ordinary work; the procedure below is only for an explicitly requested
 comparison, not an instruction to spend credits whenever a skill runs.
 
-## What we measured
+## 2026-11-05 single-PR comparison
 
 The November 2026 experiment reviewed a frozen, pre-fix state of
 [PR #1444](https://github.com/microsoft/microsoft-ui-reactor/pull/1444).
@@ -27,7 +27,7 @@ Earlier 30-credit trials were mostly budget-censored. A subsequent single
 150-credit trial per model returned three complete reports and one partial Opus
 report. Those conditions are not pooled with the uncapped repetitions.
 
-## Five-repeat results
+### Five-repeat results
 
 Each outcome counts only the **three frozen runtime defects**, not all useful
 findings. Runs are in repetition order, not sorted to favor the best outcome.
@@ -75,6 +75,75 @@ The calibration record preserves its original scoring for auditability; its
 partial Opus response is not a completed-review comparison. Raw traces and
 credentials are not published. Recorded credits exclude the coordinating
 conversation and are not a settled billing invoice.
+
+## 2026-11-24 multi-PR comparison
+
+GPT-6.2 Sol and Gemini 4 Carbon shipped after the single-PR study, so this run
+asked whether they hold up across several PRs instead of repeats of one. The
+user chose the two models, two reviews per model per snapshot, `medium`
+reasoning and a 4,500-credit ceiling. There was no GPT-6.1 Sol arm, so any
+comparison with 6.1 is indirect: different PRs, effort and rubric revision.
+
+The archived runner was reused unchanged except for two recorded additions: a
+per-case comparison base, and a schema normalization for coverage written as
+`covered: true/false` and findings written as `description`/`impact` instead
+of `evidence`. Every review ran in a fresh Copilot CLI 1.0.115 home with only
+`view`, `glob` and `grep`, no Git history and no PR threads, using the current
+`pr-review` dimension fragments as the rubric. All 20 reviews completed,
+passed model-identity, input-hash and tool-isolation checks, and matched the
+JSON contract.
+
+| Case | Snapshot | Known runtime defects |
+|------|----------|-----------------------|
+| c1 | [#1636](https://github.com/microsoft/microsoft-ui-reactor/pull/1636) pre-fix head `b6d499f283d21926604089235a105a0e74494325` | 3: Style cache key collision, stale themed Style when no setters remain, ancestor target type dropping ThemeRefs |
+| c2 | [#1631](https://github.com/microsoft/microsoft-ui-reactor/pull/1631) pre-fix head `b1a0cd64a23921cf764cec124ee8a5af24ad2119` | 4: stuck caret suppression, scrollbar press clears selection, Shift+drag anchor jump, click count reset while streaming |
+| c3 | [#1686](https://github.com/microsoft/microsoft-ui-reactor/pull/1686) pre-fix head `fd1b5e2bf3f93e0a60a1d3f85ebea389100d047a` | 6: three focus-recovery gaps, plus three latent defects flagged on a later commit but present here |
+| c4 | [#1682](https://github.com/microsoft/microsoft-ui-reactor/pull/1682) pre-fix head `25a3027489527c1c14311049ff17b3c772059884` | 2: undetached `LayoutUpdated` handler, recovery overwriting a scroll-linked opacity expression |
+| c5 | [#1552](https://github.com/microsoft/microsoft-ui-reactor/pull/1552) merged head `741f045cb27fd7c7c8807ca4537522bd00727214` | 0: clean control (no post-review correctness fixes found) |
+
+Labels came from review threads on each pre-fix state and the repair commits
+in the same PR. They were frozen before any model ran and kept outside the
+reviewers' folders. Five blind adjudicators, one per case, ran on the
+session's default sub-agent model (Claude, not host-verified; neither family
+under test) and graded every finding against the frozen source without access
+to the run-to-model map.
+
+| Model | Reference defects found per review (c1–c4, two reviews each) | Total | Mean credits/review | Mean time/review |
+|-------|-------------------------------------------------------------|-------|---------------------|------------------|
+| GPT-6.2 Sol | c1 3, 3 · c2 1, 1 · c3 3, 3 · c4 1, 1 | 16/30 | 33.0 (27–38) | 69 s (54–89) |
+| Gemini 4 Carbon | c1 3, 2 · c2 2, 2 · c3 3, 1 · c4 2, 1 | 16/30 | 219.3 (154–320) | 1,847 s (1,473–2,932) |
+
+- **Different misses.** Every label Sol found, Carbon also found at least
+  once. Carbon additionally found the caret-suppression bug (c2, 2/2) and the
+  scroll-linked opacity overwrite (c4, 1/2). Sol was the more repeatable of the
+  two (c1 and c3 identical across both reviews). Neither model found the
+  scrollbar or click-count bugs in c2, c3's off-screen focus target, or two of
+  c3's three latent defects.
+- **Clean control.** The control was not clean. Both Carbon reviews found that
+  #1552's record equality on `AnimationExtras` compares freshly allocated
+  transition and keyframe arrays by reference, so `.Keyframes()`,
+  `.ScrollLinked()` and `.OpacityTransition()` elements never skip on
+  re-render and scroll expressions restart every render. The adjudicator
+  verified this, and it is still present on `main`. Sol's control findings
+  were all real but pre-existing, so out of scope.
+- **Precision.** Of findings judged supported, unsupported or out of scope,
+  Sol had 41/54 supported with 4 unsupported, and Carbon had 42/50 with 3
+  unsupported. Both models produced 25–26 supported findings outside the
+  reference, so recall against the labels understates useful output.
+- **Output contract.** The separate one-run calibration (225-credit cap) had a
+  Carbon review that ignored the JSON coverage field, which motivated the
+  normalization. Its 190-credit cost on the smallest case also showed that cap
+  would censor Carbon, so the main run used a 450-credit cap. The calibration
+  spent 248 credits; the 20 main reviews spent 2,523.
+
+Read this as: 6.2 Sol is a sound cheap primary and the best cost/consistency
+baseline measured, and Carbon earns its cost as a different-family second
+opinion, not as a primary. Two reviews per model per case cannot separate the
+models' recall; one control is not a false-positive rate; the labels lean
+toward what hosted Copilot review flagged; and `medium` is a shared setting
+name, not equal compute. Security and packaging still have no positive labels.
+Evidence (configuration, reference, masked reviews and adjudications) was kept
+local to the coordinating session and is not committed.
 
 ## Running another comparison
 
