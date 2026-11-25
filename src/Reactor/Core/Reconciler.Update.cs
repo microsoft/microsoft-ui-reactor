@@ -365,8 +365,8 @@ public sealed partial class Reconciler
         }
 
         // A handler's own opacity write (a descriptor such as Button's IsDisabledFocusable dimming)
-        // replaces a pending keyframe restart as a modifier's does (#1669). Free when none is pending.
-        var opacityProbe = new KeyframeOpacityProbe(control);
+        // replaces a pending opacity restart as a modifier's does (#1669). Free when none is pending.
+        var opacityProbe = new OpacityRestartProbe(control);
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,

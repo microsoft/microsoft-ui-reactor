@@ -450,6 +450,41 @@ public sealed class GalleryDeepLinkTests
         Assert.StartsWith(GalleryRoutes.UriPrefix, GalleryRoutes.UriForTag(AnyControlTag), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void EveryRegistryCardImage_Exists()
+    {
+        // ControlInfo.ImagePath is composed at runtime, so the page asset lint can't see it.
+        // A typo'd file name renders a blank card with no error.
+        var imagesDir = Path.Join(RepoRoot(), "samples", "ReactorGallery", "Assets", "ControlImages");
+        var missing = ControlRegistry.All
+            .Where(c => !File.Exists(Path.Join(imagesDir, c.ImageFile)))
+            .Select(c => $"{c.Tag}: {c.ImageFile}")
+            .ToArray();
+
+        Assert.NotEmpty(ControlRegistry.All);
+        Assert.Empty(missing);
+    }
+
+    [Theory]
+    [InlineData("Basic Input", "Basic input")]
+    [InlineData("Date and Time", "Date & time")]
+    [InlineData("Dialogs and Flyouts", "Dialogs & flyouts")]
+    [InlineData("Menus and Toolbars", "Menus & toolbars")]
+    [InlineData("Status and Info", "Status & info")]
+    [InlineData("Layout", "Layout")]
+    public void CategoryDisplayName_UsesSentenceCaseLabels(string category, string label)
+    {
+        Assert.Equal(label, ControlRegistry.CategoryDisplayName(category));
+    }
+
+    [Fact]
+    public void EveryCategory_HasItsOwnGlyph()
+    {
+        const string Fallback = "\uE71D";
+        Assert.Equal(Fallback, ControlRegistry.CategoryGlyph("Not a category"));
+        Assert.All(ControlRegistry.Categories, c => Assert.NotEqual(Fallback, ControlRegistry.CategoryGlyph(c)));
+    }
+
     static string RepoRoot()
     {
         var dir = AppContext.BaseDirectory;
