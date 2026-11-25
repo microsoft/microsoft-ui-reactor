@@ -245,18 +245,19 @@ internal static class Phase4WindowingFixtures
             var win = await OpenAndSettle(spec);
             try
             {
-                // Issue #927. Windows can refuse a runtime HWND_TOPMOST from a process that is not
-                // in the foreground: SetWindowPos returns TRUE, but WM_WINDOWPOSCHANGING arrives
-                // with the insert-after rewritten to a non-topmost window the test window is
-                // already below, so nothing moves and the bit stays clear. Measured with the
-                // workstation locked (LockApp in the foreground) during long local full runs. An
-                // immediate retry, a raw SetWindowPos without SWP_NOACTIVATE, HWND_TOP followed by
-                // HWND_TOPMOST, and OverlappedPresenter.IsAlwaysOnTop all fail the same way, so it
-                // is OS policy rather than Reactor or WinUI. A freshly launched process usually
-                // still gets its way, which is why the fixture never failed in isolation, and CI
-                // runners are never locked. When the bit doesn't follow, the fixture issues the
-                // same call itself: if that is refused too, the environment can't measure this
-                // and both halves skip; if it takes, Reactor failed to apply the level.
+                // Issue #927. Windows can refuse a runtime HWND_TOPMOST: SetWindowPos returns TRUE,
+                // but WM_WINDOWPOSCHANGING arrives with the insert-after rewritten to a non-topmost
+                // window the test window is already below, so nothing moves and the bit stays
+                // clear. Measured with the workstation locked (LockApp in the foreground) late in
+                // long local full runs. An immediate retry, a raw SetWindowPos without
+                // SWP_NOACTIVATE, HWND_TOP followed by HWND_TOPMOST, and
+                // OverlappedPresenter.IsAlwaysOnTop all fail the same way, so it is OS policy
+                // rather than Reactor or WinUI. A freshly launched process in the same session
+                // still got topmost, which matches the fixture never failing in isolation. It has
+                // not been seen in CI. When the bit doesn't follow, the fixture issues the same
+                // call itself. It skips only when that is refused too and another process owns
+                // the foreground; any other mismatch fails. Reactor never reapplies a refused
+                // level, which is tracked in #1707.
                 //
                 // Earlier, refuted hypotheses: a too-short wait, the secondary window's host not
                 // being awaited (a real gap, fixed below), and Z-order churn from leaked Floating
@@ -288,11 +289,14 @@ internal static class Phase4WindowingFixtures
                     // Read before the probe below, which sets the bit when the OS allows it.
                     bool bitSet = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
                     bool specTookUpdate = win.Spec.Level == WindowLevel.AlwaysOnTop;
-                    if (specTookUpdate && !bitSet && !OsGrantsTopmost(win))
+                    bool osGranted = true, foregroundIsSelf = false;
+                    if (!bitSet) osGranted = OsGrantsTopmost(win, out foregroundIsSelf);
+                    if (ShouldSkipRefusedTopmost(specTookUpdate, bitSet, osGranted, foregroundIsSelf))
                     {
                         const string reason =
-                            "Windows refused HWND_TOPMOST for this non-foreground process (a direct " +
-                            "SetWindowPos was refused too), so the runtime flip can't be observed";
+                            "issue #927: Windows refused HWND_TOPMOST while another process owned the " +
+                            "foreground (a direct SetWindowPos was refused too), so the runtime flip " +
+                            "can't be observed";
                         H.Skip("WindowLevel_RuntimeFlip_Topmost", reason);
                         // The bit never got set, so the Normal half would pass without testing anything.
                         H.Skip("WindowLevel_RuntimeFlip_Normal", reason);
@@ -332,7 +336,7 @@ internal static class Phase4WindowingFixtures
     /// <item><description><b>spec stale</b> — the Update never reached Reactor's own state, so
     /// the fault is upstream of the native apply entirely.</description></item>
     /// <item><description><b>spec updated, bit still wrong</b> — Reactor accepted it but
-    /// SetWindowPos was coalesced away or never issued.</description></item>
+    /// SetWindowPos was never issued, or was issued with the wrong insert-after.</description></item>
     /// <item><description><b>spec updated, bit now CORRECT</b> — it landed after the poll
     /// exhausted. That is a lost wakeup / late apply, not a missing one, and it is the one case a
     /// longer budget would actually have fixed.</description></item>
@@ -354,8 +358,8 @@ internal static class Phase4WindowingFixtures
         return ("apply-missing",
             "Reactor's spec DID take the update, but the native bit still has not followed — " +
             "Reactor's SetWindowPos apply is the suspect (never issued, or issued with the wrong " +
-            "insert-after). For the Topmost half, a direct SetWindowPos from the fixture did take, " +
-            "so this is not the OS refusing a non-foreground process.");
+            "insert-after). For the Topmost half, the fixture's own SetWindowPos, issued after the " +
+            "poll, did take, or this process owned the foreground.");
     }
 
     /// <summary>
@@ -384,12 +388,26 @@ internal static class Phase4WindowingFixtures
     }
 
     /// <summary>
-    /// Issues the same <c>SetWindowPos(HWND_TOPMOST)</c> Reactor does and reports whether the bit
-    /// took. False means Windows refused the request for this process, so a clear bit says
-    /// nothing about Reactor. Leaves the window topmost when it succeeds.
+    /// Pure skip-or-fail decision for the Topmost half once the poll gave up, split out so
+    /// <see cref="WindowLevelVerdictBranches"/> can cover it without reproducing the refusal.
+    /// Skips only when Reactor's spec took the update, the bit is still clear, the fixture's own
+    /// SetWindowPos was refused too, and another process owns the foreground. Every other
+    /// combination is a Reactor failure.
     /// </summary>
-    private static bool OsGrantsTopmost(ReactorWindow win)
+    internal static bool ShouldSkipRefusedTopmost(
+        bool specTookUpdate, bool bitSet, bool osGranted, bool foregroundIsSelf)
+        => specTookUpdate && !bitSet && !osGranted && !foregroundIsSelf;
+
+    /// <summary>
+    /// Issues the same <c>SetWindowPos(HWND_TOPMOST)</c> Reactor does and reports whether the bit
+    /// took. False means Windows refused the request for this process. Leaves the window topmost
+    /// when it succeeds.
+    /// </summary>
+    /// <param name="foregroundIsSelf">Whether this process owned the foreground at probe time.</param>
+    private static bool OsGrantsTopmost(ReactorWindow win, out bool foregroundIsSelf)
     {
+        _ = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out uint foregroundPid);
+        foregroundIsSelf = foregroundPid == (uint)Environment.ProcessId;
         nint hwnd = Hwnd(win);
         bool ok = Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0,
             Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
@@ -397,16 +415,17 @@ internal static class Phase4WindowingFixtures
         bool granted = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
         Console.WriteLine(
             $"# WindowLevel_RuntimeFlip OS probe (issue #927): direct SetWindowPos(HWND_TOPMOST) " +
-            $"returned {ok} (error {error}), WS_EX_TOPMOST {(granted ? "set" : "still clear")}");
+            $"returned {ok} (error {error}), WS_EX_TOPMOST {(granted ? "set" : "still clear")}, " +
+            $"foreground pid {foregroundPid}, this pid {Environment.ProcessId}");
         return granted;
     }
 
     /// <summary>
-    /// Exhaustively covers the three-way verdict in <see cref="LevelMismatchVerdict"/>. That
-    /// branch only executes when <c>WindowLevel_RuntimeFlip</c> actually fails, so without this
-    /// fixture the diagnostic a future triager will act on is never exercised in CI. Four checks
-    /// cover the whole 2x2 input domain, so collapsing any branch into another fails at least
-    /// one of them.
+    /// Exhaustively covers the three-way verdict in <see cref="LevelMismatchVerdict"/> and the
+    /// skip decision in <see cref="ShouldSkipRefusedTopmost"/>. Both only execute when
+    /// <c>WindowLevel_RuntimeFlip</c> doesn't see the bit follow, so without this fixture they
+    /// are never exercised in CI. The verdict checks cover the whole 2x2 input domain, and the
+    /// skip checks pin the one skipping combination plus each single-input flip away from it.
     /// </summary>
     internal class WindowLevelVerdictBranches(Harness h) : SelfTestFixtureBase(h)
     {
@@ -425,6 +444,17 @@ internal static class Phase4WindowingFixtures
 
             H.Check("WindowLevelVerdict_ApplyMissing",
                 LevelMismatchVerdict(specTookUpdate: true, bitNowCorrect: false).Tag == "apply-missing");
+
+            H.Check("WindowLevelSkip_RefusedWhileBackgroundSkips",
+                ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsSelf: false));
+            H.Check("WindowLevelSkip_SpecStaleFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: false, bitSet: false, osGranted: false, foregroundIsSelf: false));
+            H.Check("WindowLevelSkip_LateApplyFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: true, osGranted: false, foregroundIsSelf: false));
+            H.Check("WindowLevelSkip_OsGrantedFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: true, foregroundIsSelf: false));
+            H.Check("WindowLevelSkip_RefusedInForegroundFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsSelf: true));
 
             return Task.CompletedTask;
         }
@@ -449,6 +479,12 @@ internal static class Phase4WindowingFixtures
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        public static extern nint GetForegroundWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
         public static nint GetWindowLongPtr(nint hWnd, int nIndex)
             => IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : GetWindowLong32(hWnd, nIndex);
