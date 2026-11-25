@@ -8,8 +8,6 @@ Each factory method returns an element record. Call them through `using static M
 
 ## `Component`
 
-Embed a Component class as a child element. Usage: Component\<MyWidget\>()
-
 ```csharp
 ComponentElement Component<T>() where T : Component, new()
 ComponentElement<TProps> Component<T, TProps>(TProps props) where T : Component<TProps>, new()
@@ -39,8 +37,6 @@ Element Empty()
 **Returns:** [`Element`](../elements/Element.md).
 
 ## `ErrorBoundary`
-
-Wraps a child subtree in an error boundary with a static fallback element.
 
 ```csharp
 ErrorBoundaryElement ErrorBoundary(Element child, Element fallback)
@@ -104,10 +100,6 @@ VStack(
 | [`ArgumentNullException`](https://learn.microsoft.com/dotnet/api/system.argumentnullexception) | `render` is `null`. |
 
 ## `ForEach`
-
-Map a list to elements (like .map() in React JSX): ForEach(items, item =\> TextBlock(item.Name))
-
-When `T` implements [`IReactorKeyed`](../components/IReactorKeyed.md), each projected element is keyed from `item.Key` unless the projection already set one, so the reconciler matches rows by identity instead of by position.
 
 ```csharp
 Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render)
@@ -181,8 +173,6 @@ ComponentElement<LocaleProviderElement> LocaleProvider(string locale, Element ch
 | `pseudoLocalize` | `bool` | `false` |  |
 
 ## `Memo`
-
-Define a memoized inline function component. Skips re-render when dependencies haven't changed. Empty deps array = render once + own state changes only. Non-empty = re-render when any dep changes. Usage: Memo(ctx =\> TextBlock("stable"), someProp, otherProp)
 
 ```csharp
 MemoElement Memo(Func<RenderContext, Element> render, params object?[] dependencies)

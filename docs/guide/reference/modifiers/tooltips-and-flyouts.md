@@ -8,14 +8,17 @@ Modifiers are extension methods that return a changed copy of the element, so yo
 
 ## `ToolTip`
 
-Text tooltip with an explicit `ToolTipService.Placement`. Usage: `Button("Save", onSave).ToolTip("Save (Ctrl+S)", PlacementMode.Right)`
-
 ```csharp
 T ToolTip<T>(this T el, string tip) where T : Element
 T ToolTip<T>(this T el, string tip, PlacementMode placement) where T : Element
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `ToolTip<T>(T, string)` |  |
+| `ToolTip<T>(T, string, PlacementMode)` | Text tooltip with an explicit `ToolTipService.Placement`. Usage: `Button("Save", onSave).ToolTip("Save (Ctrl+S)", PlacementMode.Right)` |
 
 **Applies to:** any element.
 
@@ -98,14 +101,17 @@ Declared in `ElementExtensions`.
 
 ## `WithToolTip`
 
-Rich (Element content) tooltip with an explicit `ToolTipService.Placement`.
-
 ```csharp
 T WithToolTip<T>(this T el, Element tooltip) where T : Element
 T WithToolTip<T>(this T el, Element tooltip, PlacementMode placement) where T : Element
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `WithToolTip<T>(T, Element)` |  |
+| `WithToolTip<T>(T, Element, PlacementMode)` | Rich (Element content) tooltip with an explicit `ToolTipService.Placement`. |
 
 **Applies to:** any element.
 

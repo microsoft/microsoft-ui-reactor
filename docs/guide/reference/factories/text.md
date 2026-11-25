@@ -112,12 +112,15 @@ Reactor-original convenience wrapper — there is no WinUI control named `Headin
 
 ## `Hyperlink`
 
-Issue #479 — clickable inline hyperlink: fires `onClick` on click and suppresses platform navigation. Use for in-flow interactive fragments (open a flyout, enter edit mode) inside a virtualized list of [`RichTextBlock`](#richtextblock) rows where giving each fragment its own `UIElement` would be too heavy.
-
 ```csharp
 RichTextHyperlink Hyperlink(string text, Action onClick)
 RichTextHyperlink Hyperlink(string text, Uri navigateUri)
 ```
+
+| Overload | Description |
+| --- | --- |
+| `Hyperlink(string, Action)` | Issue #479 — clickable inline hyperlink: fires `onClick` on click and suppresses platform navigation. Use for in-flow interactive fragments (open a flyout, enter edit mode) inside a virtualized list of [`RichTextBlock`](#richtextblock) rows where giving each fragment its own `UIElement` would be too heavy. |
+| `Hyperlink(string, Uri)` |  |
 
 **Returns:** [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink).
 
@@ -130,8 +133,6 @@ RichTextHyperlink Hyperlink(string text, Uri navigateUri)
 | `navigateUri` | `Uri` |  |
 
 ## `InlineUI`
-
-Issue #480 — embeds a Reactor `child` element inline inside a [`RichTextBlock`](#richtextblock). Mirrors WinUI's `InlineUIContainer`. The child is reconciled as any other Reactor element — descendant hooks, event wiring, and pooling all work as expected. Re-renders use the incremental update path: structurally compatible inlines are mutated in place and embedded children retain their WinUI control identity (Slider drag, focus, and animation state survive). Only structural changes (paragraph count change, inline type change, Route A↔B swap) fall back to a full block rebuild.
 
 ```csharp
 RichTextInlineUIContainer InlineUI(Element child)
@@ -167,8 +168,6 @@ RichTextParagraph Paragraph(params RichTextInline[] inlines)
 | `inlines` | [`RichTextInline[]`](../controls/rich-text.md#richtextinline) |  |
 
 ## `RichTextBlock`
-
-Creates a [`RichTextBlockElement`](../elements/text.md#richtextblockelement) from an array of typed paragraphs. Each paragraph contains a sequence of inline runs / hyperlinks / line breaks built with [`Paragraph`](#paragraph), [`Run`](#run), and [`Hyperlink`](#hyperlink).
 
 ```csharp
 RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs)

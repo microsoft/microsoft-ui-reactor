@@ -20,10 +20,17 @@ Namespace: `Microsoft.UI.Reactor.Hosting`. Inherits from [`ContentControl`](http
 
 ### `ReactorHostControl`
 
+#### `ReactorHostControl()`
+
 Creates an empty host. This is the constructor XAML uses (`<reactor:ReactorHostControl ... />`); set [`ReactorHostControl.ComponentType`](#componenttype) or [`ReactorHostControl.ComponentFactory`](#componentfactory), or call `Mount`, to give it a root.
 
 ```csharp
 public ReactorHostControl()
+```
+
+#### `ReactorHostControl(Component?, ILogger?)`
+
+```csharp
 public ReactorHostControl(Component? component = null, ILogger? logger = null)
 ```
 

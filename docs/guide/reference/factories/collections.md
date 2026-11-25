@@ -8,8 +8,6 @@ Each factory method returns an element record. Call them through `using static M
 
 ## `FlipView`
 
-[`IReactorKeyed`](../components/IReactorKeyed.md)-typed overload of [`FlipView`](#flipview); `KeySelector` defaults to `t => t.Key`. (spec 042 §5)
-
 ```csharp
 FlipViewElement FlipView(params Element[] items)
 TemplatedFlipViewElement<T> FlipView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) where T : IReactorKeyed
@@ -45,8 +43,6 @@ TemplatedFlipViewElement<T> FlipView<T>(IReadOnlyList<T> items, Func<T, string> 
 Reactor-original — see [`ListView`](#listview) for the templated-peer naming rationale. (spec 039 §0.3)
 
 ## `GridView`
-
-[`IReactorKeyed`](../components/IReactorKeyed.md)-typed overload of [`GridView`](#gridview); `KeySelector` defaults to `t => t.Key`. (spec 042 §5)
 
 ```csharp
 GridViewElement GridView(params Element[] items)
@@ -100,8 +96,6 @@ ItemContainerElement ItemContainer(Element? child)
 
 ## `ItemsRepeater`
 
-[`IReactorKeyed`](../components/IReactorKeyed.md)-typed overload of [`ItemsRepeater`](#itemsrepeater); `KeySelector` defaults to `t => t.Key`.
-
 ```csharp
 ItemsRepeaterElement<T> ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) where T : IReactorKeyed
 ItemsRepeaterElement<T> ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder)
@@ -140,8 +134,6 @@ ItemsViewElement<T> ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySele
 
 ## `LazyHStack`
 
-[`IReactorKeyed`](../components/IReactorKeyed.md)-typed overload of [`LazyHStack`](#lazyhstack); `KeySelector` defaults to `t => t.Key`. (spec 042 §5)
-
 ```csharp
 LazyHStackElement<T> LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) where T : IReactorKeyed
 LazyHStackElement<T> LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder)
@@ -167,8 +159,6 @@ LazyHStackElement<T> LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySe
 Reactor-original — see [`LazyVStack`](#lazyvstack) for the naming rationale. (spec 039 §0.3)
 
 ## `LazyVStack`
-
-[`IReactorKeyed`](../components/IReactorKeyed.md)-typed overload of [`LazyVStack`](#lazyvstack); `KeySelector` defaults to `t => t.Key`. (spec 042 §5)
 
 ```csharp
 LazyVStackElement<T> LazyVStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) where T : IReactorKeyed
@@ -213,8 +203,6 @@ ListBoxElement ListBox(string[] items, Optional<int> selectedIndex = default, Ac
 | `onSelectedIndexChanged` | `Action<int>?` | `null` |  |
 
 ## `ListView`
-
-Creates a typed, data-driven [`TemplatedListViewElement<T>`](../elements/collections.md#templatedlistviewelementt) for items that implement [`IReactorKeyed`](../components/IReactorKeyed.md). The `KeySelector` defaults to `t => t.Key` so call sites can omit it. (spec 042 §5)
 
 ```csharp
 ListViewElement ListView(params Element[] items)
@@ -312,8 +300,6 @@ TreeViewNodeData TreeNode(string content, params TreeViewNodeData[] children)
 | `children` | [`TreeViewNodeData[]`](../controls/collection-items.md#treeviewnodedata) |  |
 
 ## `TreeView`
-
-[`IReactorKeyed`](../components/IReactorKeyed.md)-typed overload of [`TreeView`](#treeview); `KeySelector` defaults to `t => t.Key` so call sites can omit it. (spec 042 §5)
 
 ```csharp
 TreeViewElement TreeView(params TreeViewNodeData[] nodes)

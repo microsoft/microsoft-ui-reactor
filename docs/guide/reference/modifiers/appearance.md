@@ -30,8 +30,6 @@ Declared in `ElementExtensions`.
 
 ## `Backdrop`
 
-Sets the system backdrop on the hosting window using a built-in [`BackdropKind`](../theming/enums.md#backdropkind) selector.
-
 ```csharp
 T Backdrop<T>(this T el, BackdropKind kind) where T : Element
 T Backdrop<T>(this T el, Func<SystemBackdrop?> factory) where T : Element
@@ -54,8 +52,6 @@ Declared in `BackdropExtensions`.
 | `factory` | `Func<SystemBackdrop?>` |  |
 
 ## `Background`
-
-Sets the background from a WinUI theme resource. Resolves at render time and adapts when the theme changes (Light ↔ Dark). Usage: `VStack(children).Background(Theme.CardBackground)`
 
 ```csharp
 T Background<T>(this T el, ThemeRef theme) where T : Element
@@ -183,8 +179,6 @@ Declared in `ElementExtensions`.
 | `bottomLeft` | `double` |  |
 
 ## `Foreground`
-
-Sets the foreground from a WinUI theme resource on [`Control`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.control), [`TextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.textblock), or [`RichTextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.richtextblock). WinUI updates the brush when the element's effective theme changes. For example, `RichTextBlock("Hello").Foreground(Theme.PrimaryText)`.
 
 ```csharp
 RichTextBlockElement Foreground(this RichTextBlockElement el, Brush brush)
@@ -348,8 +342,6 @@ Declared in `ElementExtensions`.
 | `z` | `float` |  |
 
 ## `WithBorder`
-
-Sets the border from a WinUI theme resource. Resolves at render time and adapts when the theme changes (Light ↔ Dark). Usage: `VStack(children).WithBorder(Theme.CardStroke)`
 
 ```csharp
 T WithBorder<T>(this T el, ThemeRef theme, double thickness = 1) where T : Element

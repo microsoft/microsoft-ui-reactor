@@ -147,8 +147,6 @@ Declared in `ElementExtensions`.
 
 ## `OnDoubleTap`
 
-Zero-argument convenience overload for double-tap. Equivalent to `.OnDoubleTapped((_, _) => handler())`.
-
 ```csharp
 T OnDoubleTap<T>(this T el, Action handler) where T : Element
 T OnDoubleTap<T>(this T el, Action<Point> handler) where T : Element
@@ -241,8 +239,6 @@ Declared in `ElementExtensions`.
 
 ## `OnDragStart`
 
-Raw drag source — the caller builds the [`DragData`](../input/drag-and-drop.md#dragdata) directly. Useful when advertising multiple formats at once (Phase 6b) or attaching additional metadata.
-
 ```csharp
 T OnDragStart<T>(this T el, Func<DragData> getData, DragOperations? allowedOperations = null, Action<DragEndContext>? onEnd = null) where T : Element
 T OnDragStart<T, TPayload>(this T el, Func<TPayload> getPayload, DragOperations? allowedOperations = null, Action<DragEndContext>? onEnd = null) where T : Element
@@ -267,8 +263,6 @@ Declared in `ElementExtensions`.
 | `getPayload` | `Func<TPayload>` |  |  |
 
 ## `OnDrop`
-
-Raw drop handler — receives the full [`DragTargetArgs`](../input/drag-and-drop.md#dragtargetargs) so multi-format targets can inspect available formats and accept operation manually.
 
 ```csharp
 T OnDrop<T>(this T el, Action<DragTargetArgs> onDrop, DragOperations acceptedOps = DragOperations.All) where T : Element
@@ -356,8 +350,6 @@ Declared in `ElementExtensions`.
 | `handler` | `Action<object, KeyRoutedEventArgs>` |  |
 
 ## `OnLongPress`
-
-Zero-argument convenience overload for long-press. Use when you don't need the gesture snapshot (Position, Duration, Phase). Fires exactly ONCE per recognized long-press, at the moment it triggers ([`GesturePhase.Began`](../input/gestures.md#values)) — not again on release ([`GesturePhase.Ended`](../input/gestures.md#values)) or cancel. The underlying `OnTriggered` contract fires Began then Ended/Cancelled; a phase-agnostic convenience action must filter to Began or it double-fires. (This was previously masked when a per-render capturing action went stale across a skipped render — both calls became idempotent; the skip-path closure refresh in #721 exposed it, so the filter makes the single-fire contract explicit.)
 
 ```csharp
 T OnLongPress<T>(this T el, Action onTriggered, TimeSpan? minimumDuration = null, double cancelDistance = 10, bool enableMouseEmulation = false) where T : Element

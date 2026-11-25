@@ -134,12 +134,12 @@ public string Message(MessageKey key, IDictionary<string, object>? args = null)
 | `key` | [`MessageKey`](MessageKey.md) |  |  |
 | `args` | `IDictionary<string, object>?` | `null` |  |
 
-#### `Message(MessageKey, (string Name, object Value), (string Name, object Value)[])`
+#### `Message(MessageKey, (string Name, object? Value), (string Name, object? Value)[])`
 
 Compact tuple-args overload for the common case of formatting a single message with a handful of ICU placeholders. Builds a plain [`Dictionary`](https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2) in-place — no reflection, AOT-safe.
 
 ```csharp
-public string Message(MessageKey key, (string Name, object Value) arg1, params (string Name, object Value)[] more)
+public string Message(MessageKey key, (string Name, object? Value) arg1, params (string Name, object? Value)[] more)
 ```
 
 **Parameters**
@@ -147,8 +147,8 @@ public string Message(MessageKey key, (string Name, object Value) arg1, params (
 | Name | Type | Description |
 | --- | --- | --- |
 | `key` | [`MessageKey`](MessageKey.md) |  |
-| `arg1` | `(string Name, object Value)` |  |
-| `more` | `(string Name, object Value)[]` |  |
+| `arg1` | `(string Name, object? Value)` |  |
+| `more` | `(string Name, object? Value)[]` |  |
 
 **Remarks**
 
@@ -183,12 +183,12 @@ public Element RichMessage(MessageKey key, IDictionary<string, object>? args = n
 
 The .resw value uses XML-like tags: "Click \<link\>here\</link\> to read the \<bold\>docs\</bold\>." Tags are mapped via the `tags` dictionary. Unrecognized tags are rendered as plain text (tag markers stripped). Nested tags are not supported — only the outermost tag is processed.
 
-#### `RichMessage(MessageKey, (string Name, object Value), (string Name, object Value)[])`
+#### `RichMessage(MessageKey, (string Name, object? Value), (string Name, object? Value)[])`
 
 Compact tuple-args overload of the dict-based `RichMessage` — same allocation profile as the tuple-args `Message` overload. Tags must be supplied via the dict-based overload; this variant is for the common case where the developer just wants the formatted text. Null-valued tuples are dropped (see the tuple-args `Message` remarks).
 
 ```csharp
-public Element RichMessage(MessageKey key, (string Name, object Value) arg1, params (string Name, object Value)[] more)
+public Element RichMessage(MessageKey key, (string Name, object? Value) arg1, params (string Name, object? Value)[] more)
 ```
 
 **Parameters**
@@ -196,5 +196,5 @@ public Element RichMessage(MessageKey key, (string Name, object Value) arg1, par
 | Name | Type | Description |
 | --- | --- | --- |
 | `key` | [`MessageKey`](MessageKey.md) |  |
-| `arg1` | `(string Name, object Value)` |  |
-| `more` | `(string Name, object Value)[]` |  |
+| `arg1` | `(string Name, object? Value)` |  |
+| `more` | `(string Name, object? Value)[]` |  |

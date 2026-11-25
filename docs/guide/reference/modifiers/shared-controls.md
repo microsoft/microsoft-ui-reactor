@@ -46,8 +46,6 @@ Declared in `ElementExtensions`.
 
 ## `Closed`
 
-Wires the closed handler. Receives the `ContentDialogResult` indicating which button dismissed the dialog. Passing `null` clears.
-
 ```csharp
 ContentDialogElement Closed(this ContentDialogElement el, Action<ContentDialogResult>? handler)
 FlyoutElement Closed(this FlyoutElement el, Action? handler)
@@ -76,8 +74,6 @@ Declared in `ElementExtensions`.
 
 ## `Content`
 
-Custom rich content rendered below the message (overload to the message string).
-
 ```csharp
 InfoBarElement Content(this InfoBarElement el, Element content)
 TitleBarElement Content(this TitleBarElement el, Element content)
@@ -100,8 +96,6 @@ Declared in `ElementExtensions`.
 
 ## `IconSource`
 
-Custom icon source (overrides the severity-default icon).
-
 ```csharp
 InfoBarElement IconSource(this InfoBarElement el, IconData icon)
 TeachingTipElement IconSource(this TeachingTipElement el, IconData icon)
@@ -123,8 +117,6 @@ Declared in `ElementExtensions`.
 | `icon` | [`IconData`](../controls/icons.md#icondata) |  |
 
 ## `IsCheckedChanged`
-
-Wires the two-state checked-changed handler. Passing `null` clears.
 
 ```csharp
 CheckBoxElement IsCheckedChanged(this CheckBoxElement el, Action<bool>? handler)
@@ -152,8 +144,6 @@ Declared in `ElementExtensions`.
 
 ## `IsPaneOpen`
 
-Controlled pane state: sets `IsPaneOpen` and wires the matching change handler in one call. The handler is required because the control opens and closes its own pane (light dismiss, adaptive display-mode changes on resize) — driving `IsPaneOpen` from state without feeding those changes back leaves the state stale, so the next toggle writes a value the control already holds and appears to do nothing (issue #916). Use the `IsPaneOpen` initializer directly only for a pane whose state the app never changes.
-
 ```csharp
 NavigationViewElement IsPaneOpen(this NavigationViewElement el, bool isPaneOpen, Action<bool> onPaneOpenChanged)
 SplitViewElement IsPaneOpen(this SplitViewElement el, bool isPaneOpen, Action<bool> onPaneOpenChanged)
@@ -176,8 +166,6 @@ Declared in `ElementExtensions`.
 | `onPaneOpenChanged` | `Action<bool>` |  |
 
 ## `ItemInvoked`
-
-Wires the item-invoked handler, which also fires when the already-selected item is re-invoked. Receives the item's tag, or [`NavigationViewElement.SettingsTag`](../elements/navigation.md#navigationviewelement) for the settings item. Passing `null` clears.
 
 ```csharp
 NavigationViewElement ItemInvoked(this NavigationViewElement el, Action<string?>? handler)
@@ -204,8 +192,6 @@ Declared in `ElementExtensions`.
 | `handler` | `Action<string?>?` or `Action<TreeViewNodeData>?` or `Action<T>?` |  |
 
 ## `PaneOpenChanged`
-
-Wires the pane-open-state-changed handler. Fires for pane changes the app never requested (light dismiss, adaptive display-mode changes) as well as the echo of a programmatic `IsPaneOpen` write — feed the value back into the state that drives `IsPaneOpen` to keep controlled pane state in sync. Passing `null` clears.
 
 ```csharp
 NavigationViewElement PaneOpenChanged(this NavigationViewElement el, Action<bool>? handler)
@@ -257,8 +243,6 @@ Declared in `ElementExtensions`.
 | `handler` | `Action<int>?` |  |
 
 ## `SelectionChanged`
-
-Wires the multi-select snapshot handler (see [`SelectionChanged`](#selectionchanged)).
 
 ```csharp
 GridViewElement SelectionChanged(this GridViewElement el, Action<IReadOnlyList<int>>? handler)

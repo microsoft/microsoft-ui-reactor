@@ -18,8 +18,6 @@ Declared in `ElementExtensions`.
 
 ## `CharacterSpacing`
 
-Extra spacing between characters, in units of 1/1000em.
-
 ```csharp
 RichTextBlockElement CharacterSpacing(this RichTextBlockElement el, int spacing)
 RichTextHyperlink CharacterSpacing(this RichTextHyperlink link, int spacing)
@@ -29,6 +27,14 @@ TextBlockElement CharacterSpacing(this TextBlockElement el, int spacing)
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `CharacterSpacing(RichTextBlockElement, int)` | Extra spacing between characters, in units of 1/1000em. |
+| `CharacterSpacing(RichTextHyperlink, int)` |  |
+| `CharacterSpacing(RichTextParagraph, int)` |  |
+| `CharacterSpacing(RichTextRun, int)` |  |
+| `CharacterSpacing(TextBlockElement, int)` | Extra spacing between characters, in units of 1/1000em. |
 
 **Applies to:** [`RichTextBlockElement`](../elements/text.md#richtextblockelement), [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink), [`RichTextParagraph`](../controls/rich-text.md#richtextparagraph), [`RichTextRun`](../controls/rich-text.md#richtextrun), [`TextBlockElement`](../elements/text.md#textblockelement).
 
@@ -56,8 +62,6 @@ Declared in `ElementExtensions`.
 
 ## `FontFamily`
 
-Sets the font family on any FrameworkElement that supports it (Control, TextBlock). For TextBlockElement-specific chaining that preserves the TextBlockElement return type, use the TextBlockElement.FontFamily() overload instead.
-
 ```csharp
 RichTextBlockElement FontFamily(this RichTextBlockElement el, FontFamily family)
 RichTextBlockElement FontFamily(this RichTextBlockElement el, string family)
@@ -72,6 +76,18 @@ T FontFamily<T>(this T el, string family) where T : Element
 
 Declared in `ElementExtensions`.
 
+| Overload | Description |
+| --- | --- |
+| `FontFamily(RichTextBlockElement, FontFamily)` |  |
+| `FontFamily(RichTextBlockElement, string)` |  |
+| `FontFamily(RichTextHyperlink, string)` |  |
+| `FontFamily(RichTextParagraph, string)` |  |
+| `FontFamily(RichTextRun, string)` |  |
+| `FontFamily(TextBlockElement, FontFamily)` |  |
+| `FontFamily(TextBlockElement, string)` |  |
+| `FontFamily<T>(T, FontFamily)` |  |
+| `FontFamily<T>(T, string)` | Sets the font family on any FrameworkElement that supports it (Control, TextBlock). For TextBlockElement-specific chaining that preserves the TextBlockElement return type, use the TextBlockElement.FontFamily() overload instead. |
+
 **Applies to:** any element, [`RichTextBlockElement`](../elements/text.md#richtextblockelement), [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink), [`RichTextParagraph`](../controls/rich-text.md#richtextparagraph), [`RichTextRun`](../controls/rich-text.md#richtextrun), [`TextBlockElement`](../elements/text.md#textblockelement).
 
 **Parameters**
@@ -81,10 +97,6 @@ Declared in `ElementExtensions`.
 | `family` | `FontFamily` or `string` |  |
 
 ## `FontSize`
-
-Sets the root font size on a [`RichTextBlockElement`](../elements/text.md#richtextblockelement).
-
-This overload is required, not sugar. Without it `.FontSize(n)` on a `RichTextBlockElement` binds the generic `FontSize<T>` modifier, which routes through `ElementModifiers` — and `ApplyModifiers` writes FontSize only to a `Control` or a `TextBlock`. `RichTextBlock` is neither, so the call would compile and silently do nothing. Mirrors the sibling `FontFamily`/`FontWeight`/`FontStyle` overloads, which set the record property and reach the control through the generated descriptor's auto-map.
 
 ```csharp
 RichTextBlockElement FontSize(this RichTextBlockElement el, double size)
@@ -155,8 +167,6 @@ Declared in `ElementExtensions`.
 
 ## `FontWeight`
 
-Sets the font weight on any FrameworkElement that supports it (Control, TextBlock).
-
 ```csharp
 RichTextBlockElement FontWeight(this RichTextBlockElement el, FontWeight weight)
 RichTextHyperlink FontWeight(this RichTextHyperlink link, FontWeight weight)
@@ -166,6 +176,14 @@ T FontWeight<T>(this T el, FontWeight weight) where T : Element
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `FontWeight(RichTextBlockElement, FontWeight)` |  |
+| `FontWeight(RichTextHyperlink, FontWeight)` |  |
+| `FontWeight(RichTextParagraph, FontWeight)` |  |
+| `FontWeight(RichTextRun, FontWeight)` |  |
+| `FontWeight<T>(T, FontWeight)` | Sets the font weight on any FrameworkElement that supports it (Control, TextBlock). |
 
 **Applies to:** any element, [`RichTextBlockElement`](../elements/text.md#richtextblockelement), [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink), [`RichTextParagraph`](../controls/rich-text.md#richtextparagraph), [`RichTextRun`](../controls/rich-text.md#richtextrun).
 
@@ -265,8 +283,6 @@ Declared in `ElementExtensions`.
 
 ## `LineHeight`
 
-Line height in pixels (overrides the WinUI proportional default).
-
 ```csharp
 RichTextBlockElement LineHeight(this RichTextBlockElement el, double height)
 RichTextParagraph LineHeight(this RichTextParagraph paragraph, double height)
@@ -307,8 +323,6 @@ Declared in `ElementExtensions`.
 | `strategy` | `LineStackingStrategy` |  |
 
 ## `MaxLines`
-
-Maximum number of lines before trimming. `0` = no limit.
 
 ```csharp
 RichTextBlockElement MaxLines(this RichTextBlockElement el, int maxLines)
@@ -368,14 +382,17 @@ Declared in `ElementExtensions`.
 
 ## `SelectionHighlightColor`
 
-Brush used to render the selection highlight.
-
 ```csharp
 RichEditBoxElement SelectionHighlightColor(this RichEditBoxElement el, SolidColorBrush brush)
 RichTextBlockElement SelectionHighlightColor(this RichTextBlockElement el, SolidColorBrush brush)
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `SelectionHighlightColor(RichEditBoxElement, SolidColorBrush)` | Brush used to render the selection highlight. |
+| `SelectionHighlightColor(RichTextBlockElement, SolidColorBrush)` |  |
 
 **Applies to:** [`RichEditBoxElement`](../elements/input.md#richeditboxelement), [`RichTextBlockElement`](../elements/text.md#richtextblockelement).
 
@@ -396,8 +413,6 @@ Declared in `ElementExtensions`.
 **Applies to:** [`TextBlockElement`](../elements/text.md#textblockelement).
 
 ## `TextAlignment`
-
-Horizontal alignment of text within the block.
 
 ```csharp
 RichTextBlockElement TextAlignment(this RichTextBlockElement el, TextAlignment alignment)
@@ -425,8 +440,6 @@ Declared in `ElementExtensions`.
 
 ## `TextDecorations`
 
-Underline / strikethrough decorations. Combine with bitwise OR.
-
 ```csharp
 RichTextBlockElement TextDecorations(this RichTextBlockElement el, TextDecorations decorations)
 RichTextHyperlink TextDecorations(this RichTextHyperlink link, TextDecorations decorations)
@@ -436,6 +449,14 @@ TextBlockElement TextDecorations(this TextBlockElement el, TextDecorations decor
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `TextDecorations(RichTextBlockElement, TextDecorations)` |  |
+| `TextDecorations(RichTextHyperlink, TextDecorations)` |  |
+| `TextDecorations(RichTextParagraph, TextDecorations)` |  |
+| `TextDecorations(RichTextRun, TextDecorations)` |  |
+| `TextDecorations(TextBlockElement, TextDecorations)` | Underline / strikethrough decorations. Combine with bitwise OR. |
 
 **Applies to:** [`RichTextBlockElement`](../elements/text.md#richtextblockelement), [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink), [`RichTextParagraph`](../controls/rich-text.md#richtextparagraph), [`RichTextRun`](../controls/rich-text.md#richtextrun), [`TextBlockElement`](../elements/text.md#textblockelement).
 
@@ -496,14 +517,17 @@ Declared in `ElementExtensions`.
 
 ## `TextTrimming`
 
-How overflowing text is truncated.
-
 ```csharp
 RichTextBlockElement TextTrimming(this RichTextBlockElement el, TextTrimming trimming)
 TextBlockElement TextTrimming(this TextBlockElement el, TextTrimming trimming)
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `TextTrimming(RichTextBlockElement, TextTrimming)` | How overflowing text is truncated. |
+| `TextTrimming(TextBlockElement, TextTrimming)` |  |
 
 **Applies to:** [`RichTextBlockElement`](../elements/text.md#richtextblockelement), [`TextBlockElement`](../elements/text.md#textblockelement).
 
@@ -515,8 +539,6 @@ Declared in `ElementExtensions`.
 
 ## `TextWrapping`
 
-How text wraps within the editor.
-
 ```csharp
 RichEditBoxElement TextWrapping(this RichEditBoxElement el, TextWrapping wrapping = (TextWrapping)2)
 TextBlockElement TextWrapping(this TextBlockElement el, TextWrapping wrapping = (TextWrapping)2)
@@ -524,6 +546,12 @@ TextBoxElement TextWrapping(this TextBoxElement el, TextWrapping wrapping = (Tex
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `TextWrapping(RichEditBoxElement, TextWrapping)` | How text wraps within the editor. |
+| `TextWrapping(TextBlockElement, TextWrapping)` |  |
+| `TextWrapping(TextBoxElement, TextWrapping)` |  |
 
 **Applies to:** [`RichEditBoxElement`](../elements/input.md#richeditboxelement), [`TextBlockElement`](../elements/text.md#textblockelement), [`TextBoxElement`](../elements/input.md#textboxelement).
 

@@ -298,14 +298,14 @@ public static Transition Exit(Transition exit)
 #### `Scale`
 
 ```csharp
-public static Transition Scale(float from = 0.8500000238418579f)
+public static Transition Scale(float from = 0.85f)
 ```
 
 **Parameters**
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `from` | `float` | `0.8500000238418579f` |  |
+| `from` | `float` | `0.85f` |  |
 
 #### `Slide`
 

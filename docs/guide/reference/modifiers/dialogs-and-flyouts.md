@@ -135,8 +135,6 @@ Declared in `ElementExtensions`.
 
 ## `Opened`
 
-Wires the opened handler (fires after the dialog finishes opening). Passing `null` clears.
-
 ```csharp
 ContentDialogElement Opened(this ContentDialogElement el, Action? handler)
 FlyoutElement Opened(this FlyoutElement el, Action? handler)

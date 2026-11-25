@@ -58,15 +58,15 @@ public static Curve Linear(int durationMs)
 Spring natural motion. DampingRatio 0=undamped, 1=critically damped.
 
 ```csharp
-public static Curve Spring(float dampingRatio = 0.800000011920929f, float period = 0.05000000074505806f)
+public static Curve Spring(float dampingRatio = 0.8f, float period = 0.05f)
 ```
 
 **Parameters**
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `dampingRatio` | `float` | `0.800000011920929f` |  |
-| `period` | `float` | `0.05000000074505806f` |  |
+| `dampingRatio` | `float` | `0.8f` |  |
+| `period` | `float` | `0.05f` |  |
 
 ## `EaseCurve`
 

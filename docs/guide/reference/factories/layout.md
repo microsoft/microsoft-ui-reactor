@@ -83,8 +83,6 @@ ExpanderElement Expander(string header, Element content, Optional<bool> isExpand
 
 ## `Flex`
 
-Creates a Yoga-based flexbox container ([`FlexElement`](../elements/layout.md#flexelement)). Default direction is [`FlexDirection.Row`](../layout/flex-enums.md#values_1).
-
 ```csharp
 FlexElement Flex(params Element?[] children)
 FlexElement Flex(FlexDirection direction, params Element?[] children)
@@ -179,8 +177,6 @@ Spec 033 §1. Use [`GridSize.Auto`](../layout/GridSize.md#auto) / [`GridSize.Sta
 | [`ArgumentNullException`](https://learn.microsoft.com/dotnet/api/system.argumentnullexception) | Thrown when `columns` or `rows` is null. |
 
 ## `HStack`
-
-Creates a horizontal [`StackElement`](../elements/layout.md#stackelement) (WinUI `StackPanel` with [`Orientation.Horizontal`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.orientation.horizontal)). Default `Spacing` is 8 — see [`StackElement.Spacing`](../elements/layout.md#stackelement).
 
 ```csharp
 StackElement HStack(params Element?[] children)
@@ -318,8 +314,6 @@ SplitViewElement SplitView(Element? pane = null, Element? content = null)
 
 ## `Thick`
 
-Creates a uniform Thickness. Shorthand for new Thickness(uniform).
-
 ```csharp
 Thickness Thick(double uniform)
 Thickness Thick(double horizontal, double vertical)
@@ -364,8 +358,6 @@ GridElement UniformGrid(Orientation orientation, params Element?[] items)
 | `items` | [`Element?[]`](../elements/Element.md) |  |
 
 ## `VStack`
-
-Creates a vertical [`StackElement`](../elements/layout.md#stackelement) (WinUI `StackPanel` with [`Orientation.Vertical`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.orientation.vertical)). Default `Spacing` is 8 — see [`StackElement.Spacing`](../elements/layout.md#stackelement).
 
 ```csharp
 StackElement VStack(params Element?[] children)

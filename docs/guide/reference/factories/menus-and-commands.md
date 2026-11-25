@@ -23,12 +23,15 @@ KeyboardAcceleratorData Accelerator(VirtualKey key, VirtualKeyModifiers modifier
 
 ## `AppBarButton`
 
-Creates an AppBarButton driven by a Command. Maps Label, Icon, Execute, Accelerator, IsEnabled, AccessKey, and Description.
-
 ```csharp
 AppBarButtonData AppBarButton(Command command)
 AppBarButtonData AppBarButton(string label, Action? onClick = null, string? icon = null)
 ```
+
+| Overload | Description |
+| --- | --- |
+| `AppBarButton(Command)` | Creates an AppBarButton driven by a Command. Maps Label, Icon, Execute, Accelerator, IsEnabled, AccessKey, and Description. |
+| `AppBarButton(string, Action?, string?)` |  |
 
 **Returns:** [`AppBarButtonData`](../controls/menu-items.md#appbarbuttondata).
 
@@ -178,8 +181,6 @@ MenuFlyoutElement MenuFlyout(Element target, params MenuFlyoutItemBase[] items)
 | `items` | [`MenuFlyoutItemBase[]`](../controls/menu-items.md#menuflyoutitembase) |  |
 
 ## `MenuItem`
-
-Creates a MenuFlyoutItem driven by a Command. Maps Label → Text, Icon, Execute → OnClick, Accelerator, IsEnabled, AccessKey.
 
 ```csharp
 MenuFlyoutItemData MenuItem(Command command)

@@ -137,8 +137,6 @@ PipsPagerElement PipsPager(int numberOfPages, Optional<int> selectedPageIndex = 
 
 ## `Pivot`
 
-Creates a pivot whose selected index is controlled only when `selectedIndex` has a value.
-
 ```csharp
 PivotElement Pivot(params PivotItemData[] items)
 PivotElement Pivot(Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
@@ -227,8 +225,6 @@ TabViewItemData Tab(string header, Element content)
 | `content` | [`Element`](../elements/Element.md) |  |
 
 ## `TabView`
-
-Creates a tab view whose selected index is controlled only when `selectedIndex` has a value.
 
 ```csharp
 TabViewElement TabView(params TabViewItemData[] tabs)

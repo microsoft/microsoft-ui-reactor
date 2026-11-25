@@ -8,8 +8,6 @@ Modifiers are extension methods that return a changed copy of the element, so yo
 
 ## `Canvas`
 
-Sets Canvas attached properties (left, top) on this element. Only meaningful when the element is a child of a Canvas.
-
 ```csharp
 T Canvas<T>(this T el, double left = 0, double top = 0) where T : Element
 T Canvas<T>(this T el, double left, double top, double anchorX, double anchorY) where T : Element

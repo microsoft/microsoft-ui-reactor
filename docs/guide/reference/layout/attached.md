@@ -240,11 +240,10 @@ Namespace: `Microsoft.UI.Reactor.Core`.
 
 #### `GridDefinition`
 
-Construct a [`GridDefinition`](#griddefinition) from the strongly-typed [`GridSize`](GridSize.md) form. Track strings are produced via [`GridSize.ToString`](GridSize.md) using `CultureInfo.InvariantCulture`. Spec 033 §1.
+##### `GridDefinition(GridSize[], GridSize[])`
 
 ```csharp
 public GridDefinition(GridSize[] Columns, GridSize[] Rows)
-public GridDefinition(string[] columns, string[] rows)
 ```
 
 **Parameters**
@@ -253,6 +252,19 @@ public GridDefinition(string[] columns, string[] rows)
 | --- | --- | --- |
 | `Columns` | [`GridSize[]`](GridSize.md) |  |
 | `Rows` | [`GridSize[]`](GridSize.md) |  |
+
+##### `GridDefinition(string[], string[])`
+
+Construct a [`GridDefinition`](#griddefinition) from the strongly-typed [`GridSize`](GridSize.md) form. Track strings are produced via [`GridSize.ToString`](GridSize.md) using `CultureInfo.InvariantCulture`. Spec 033 §1.
+
+```csharp
+public GridDefinition(string[] columns, string[] rows)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
 | `columns` | `string[]` |  |
 | `rows` | `string[]` |  |
 

@@ -254,8 +254,6 @@ MailFolder("Inbox").ItemStatus("3 unread")
 
 ## `LabeledBy`
 
-Associates this element with a labelling element through a reactive ElementRef.
-
 ```csharp
 T LabeledBy<T>(this T el, ElementRef target) where T : Element
 T LabeledBy<T>(this T el, string labelAutomationId) where T : Element

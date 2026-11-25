@@ -43,8 +43,6 @@ Declared in `ElementExtensions`.
 
 ## `Click`
 
-Wires a click handler (sets [`ButtonElement.OnClick`](../elements/buttons.md#buttonelement)). Passing `null` clears any existing handler.
-
 ```csharp
 ButtonElement Click(this ButtonElement el, Action? handler)
 HyperlinkButtonElement Click(this HyperlinkButtonElement el, Action? handler)
@@ -70,8 +68,6 @@ Declared in `ElementExtensions`.
 | `handler` | `Action?` |  |
 
 ## `Command`
-
-Binds a [`Command`](../input/Command.md) to a custom-content [`ButtonElement`](../elements/buttons.md#buttonelement) by lifting it onto the typed [`ButtonElement.Command`](../elements/buttons.md#buttonelement) property (issues #133, #153, unified in #637). The reconciler invokes Execute/ExecuteAsync on click, folds the command's [`Command.IsEnabled`](../input/Command.md#isenabled) into the IsEnabled descriptor entry (re-applied when the command's derived enabled state changes — field-aware, not on every render — and coexisting with `.IsDisabledFocusable()`'s coercion), and flows Description / Accelerator / AccessKey — all field-aware, with no per-render [`ButtonElement.Setters`](../elements/buttons.md#buttonelement) lambda. Pairs with `Button(content)` so icon-plus-label buttons auto-disable like the `Button(Command)` factory. The modifier makes the command fully take over: any [`ButtonElement.OnClick`](../elements/buttons.md#buttonelement) already on the element is cleared so the command — not a stale click handler — dispatches (issue #637; matches the pre-#637 modifier, and the `Button(Command)` factory which builds the element with no `OnClick`). A raw `.Set(...)` setter runs after the command metadata and therefore overrides it.
 
 ```csharp
 ButtonElement Command(this ButtonElement el, Command command)

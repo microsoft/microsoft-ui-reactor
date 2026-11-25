@@ -116,8 +116,6 @@ Declared in `ElementExtensions`.
 
 ## `BackButtonVisible`
 
-Sets the visibility of NavigationView's built-in back button (`NavigationView.IsBackButtonVisible`).
-
 ```csharp
 NavigationViewElement BackButtonVisible(this NavigationViewElement el, NavigationViewBackButtonVisible visible)
 NavigationViewElement BackButtonVisible(this NavigationViewElement el, bool visible)
@@ -366,8 +364,6 @@ Declared in `ElementExtensions`.
 Applies both halves — the native caption (`AppWindow.TitleBar.PreferredHeightOption`) and, for [`WindowTitleBarHeight.Tall`](../hosting/window-options.md#values_12), the control's own 48 DIP height, which the WinUI `TitleBar` control does not derive from the caption. An explicit `.Height(...)` on this element still wins. [`WindowSpec.TitleBarHeight`](../hosting/WindowSpec.md#titlebarheight), when set, wins over this.
 
 ## `Icon`
-
-Sets the icon shown in the leading slot. Pass a [`SymbolIconData`](../controls/icons.md#symbolicondata), [`FontIconData`](../controls/icons.md#fonticondata), [`ImageIconData`](../controls/icons.md#imageicondata), or [`BitmapIconData`](../controls/icons.md#bitmapicondata).
 
 ```csharp
 TitleBarElement Icon(this TitleBarElement el, IconData icon)
@@ -729,8 +725,6 @@ Declared in `ElementExtensions`.
 | `title` | `string` |  |
 
 ## `PaneToggleButtonVisible`
-
-Shows or hides NavigationView's built-in pane-toggle ("hamburger") button (`NavigationView.IsPaneToggleButtonVisible`).
 
 ```csharp
 NavigationViewElement PaneToggleButtonVisible(this NavigationViewElement el, bool visible)
@@ -1113,8 +1107,6 @@ Declared in `ElementExtensions`.
 | `enabled` | `bool` | `true` |  |
 
 ## `WithNavigation`
-
-Auto-syncs this TitleBar's back button with a NavigationHandle: sets `IsBackButtonVisible` and `IsBackButtonEnabled` from `CanGoBack`, and wires `OnBackRequested` to `GoBack`.
 
 ```csharp
 TitleBarElement WithNavigation<TRoute>(this TitleBarElement el, NavigationHandle<TRoute> nav)

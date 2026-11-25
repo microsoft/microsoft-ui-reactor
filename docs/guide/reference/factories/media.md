@@ -62,8 +62,6 @@ FontIconData FontIcon(string glyph, string? fontFamily = null, double? fontSize 
 
 ## `Icon`
 
-Creates a standalone icon element from an [`IconData`](../controls/icons.md#icondata) instance.
-
 ```csharp
 IconElement Icon(IconData data)
 IconElement Icon(Symbol symbol)
