@@ -45,9 +45,10 @@ seam".
 | 6 | Diagnostics | `AppliedModifierMap.Entries` (`src/Reactor/Core/Diagnostics/AppliedModifierMap.cs:82`) | modifier → owning WinUI property per control type |
 | 7 | ThemeRef path | `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568`) | which receivers a `ThemeRef` brush overload reaches |
 | 8 | Pool reset | `ElementPool.CleanElement` (`ElementPool.cs:279`), `PoolableTypes` (`:79`) | which modifier-backed DPs are cleared on pool return, on which receivers |
-| 9 | Visual lane / restore | `DeclaresTransform` (`Reconciler.Pooling.cs:128`), `HasRestorableModifier` (`Reconciler.Modifiers.cs:101`) | which visual fields take the composition visual, and their identity values |
+| 9 | Visual lane / restore | `DeclaresTransform` (`Reconciler.Pooling.cs:128`), `HasRestorableModifier` (`Reconciler.Modifiers.cs:101`), `ModifierTable.VisualOwningModifiers` (`ModifierTable.cs:725`) | three *different* sets: five transforms that take the visual at mount when not identity, six presence-checked fields (adds `Opacity`) that make a shared target record its edge, and the analyzer's visual-owning list |
 | 10 | Analyzer | `ModifierTable` (`src/Reactor.Analyzers/ModifierTable.cs:278`), `GateOnlyInReconciler` (`:612`), `NoOpModifierAnalyzer.DescriptorAppliedModifiers` (`NoOpModifierAnalyzer.cs:159`) | receiver gates, theme gates, pool-reset gates, poolable type names |
 | 11 | Agent skill prose | `plugins/reactor/skills/reactor-build-and-check/SKILL.md` | the `REACTOR_MOD_003` gate list, in English |
+| 12 | Caption default | `UpdateDefaultAutomationName` call after `ApplyModifiers` (`Reconciler.Update.cs:523-529`) | an unset `AutomationName` falls back to a caption-derived local name |
 
 The receiver list for `Padding` alone (`Control`, `Border`, `StackPanel`, `Grid`, `RelativePanel`,
 `TextBlock`) appears in **eight** places: the write chain (`Reconciler.Modifiers.cs:332-337`), the
@@ -97,8 +98,9 @@ never write a default. Modifiers are the last large hand-written diff in the rec
   target property and DP owner per receiver, clear policy, theme receivers, skip equality, write
   equality, merge policy, ordering phase, composition channel. Nothing else restates these.
 - **G2. Derive, don't police.** Apply arms, unset arms, skip equality, `Merge`, `AppliedModifierMap`,
-  the `ThemeRef` DP map, the modifier half of `CleanElement`, and the analyzer's derived gates
-  come from the declaration.
+  the `ThemeRef` DP map and the modifier half of `CleanElement` come from the declaration. The
+  analyzer's gates live in the declaration too, as declared facts, because they are not a function
+  of the apply receivers (§4.5).
 - **G3. Zero hot-path cost.** The derived apply code has the same shape as today's: straight-line
   diff guards, `is` type tests, direct property sets. No delegates, closures, boxing or
   allocations are introduced on `ApplyModifiers`.
@@ -137,12 +139,17 @@ Read from `ApplyModifiers` (`Reconciler.Modifiers.cs:237-780`). The unset-arm fl
 | D | Attached | `AutomationName`, `AutomationId`, `HeadingLevel` (`AutomationProperties`), `IsDragRegion` (`TitleBar`), `ToolTipPlacement` (`ToolTipService`) | static `SetX(fe, v)` and `ClearValue(Owner.XProperty)` |
 | E | Composite | `Margin` + `MarginInlineStart/End`; `Padding` + `PaddingInlineStart/End`; `BorderThickness` + `BorderInlineStart` | several fields resolve, against `FlowDirection` and the previous overlay (#965), to one DP |
 | F | Hand-coded with cross-system state | `Opacity`, `Scale`, `Rotation`, `Translation`, `CenterPoint`, `TransformOrigin` (composition, remaining-owner restore, spec 066); `BorderBrush` (interaction-state tracker, `:499-507`); `Background` (`keepRemovedBackground`, `:581`); `ToolTip` / `RichToolTip`, `AttachedFlyout`, `ContextFlyout` (mount child elements) | real logic, not a table row |
-| G | Behaviour, not a property write | 20 routed-event handlers, 4 gestures, 2 drag-drop configs, `OnMountAction`, `OnUpdateAction`, `OnUnmountAction`, `Ref`, the four `XYFocus*Ref`, `ToolTipPlacementTargetRef`, `OnAccessKeyDisplayRequested`, `Backdrop` (read by the host) | these still need merge and skip-equality declarations |
-| H | Accessibility sub-record | the 12 `AccessibilityModifiers` fields | same A/D shapes inside `ApplyAccessibilityModifiers` |
+| G | Behaviour, not a property write | 20 routed-event handlers, 4 gestures, 2 drag-drop configs, `OnMountAction`, `OnUpdateAction` (internal), `OnUnmountAction`, `Ref`, the four `XYFocus*Ref`, `ToolTipPlacementTargetRef`, `OnAccessKeyDisplayRequested`, `Backdrop` (read by the host) | these still need merge and skip-equality declarations |
+| H | Accessibility sub-record | 16 `AccessibilityModifiers` fields (`Element.cs:2636`), 12 arms in `ApplyAccessibilityModifiers` | 11 fields are A/D shapes. `LabeledBy` is row F (deferred `FindByAutomationId` plus `Loaded` resolution with `PendingLabeledBy` state, `Reconciler.Accessibility.cs:224` onward). `LabeledByRef`, `DescribedByRefs`, `FlowsToRefs` and `FlowsFromRefs` are row G (reference edges) |
 
-Rows A–D are 24 of the property-writing modifiers on the main bag, and all of them are mechanical.
+Rows A–D are 29 of the property-writing modifiers on the main bag, and all of them are mechanical.
 Row E is mechanical around one hand-written resolver per family. Row F is not mechanical and this
 spec does not pretend it is.
+
+Two row A/D members carry exceptions the schema has to state, not derive. `RequestedTheme` has a
+set and an unset arm but `CleanElement` never clears it on pool return, and `AutomationName` on a
+captioned control is replaced by a caption-derived local name right after `ApplyModifiers` runs
+(`Reconciler.Update.cs:523-529`), so "unset leaves no local value" is not true for it.
 
 ---
 
@@ -152,35 +159,45 @@ spec does not pretend it is.
 
 ```mermaid
 flowchart LR
-    S["ModifierSchema.cs<br/>(data only, netstandard2.0)"]
-    T["tools/Reactor.ModifierGen"]
+    S["ModifierSchema.cs<br/>(data only, compiled into Reactor.Analyzers)"]
+    T["tools/Reactor.ModifierGen<br/>(emitter)"]
     G1["Reconciler.Modifiers.Generated.cs"]
     G2["Element.Modifiers.Generated.cs<br/>(ModifiersEqual, Merge)"]
     G3["AppliedModifierMap.Generated.cs"]
     G4["ElementPool.Generated.cs<br/>(modifier clears, layer 5)"]
     A["Reactor.Analyzers<br/>ModifierTable"]
     X["Reactor.Tests<br/>freshness + schema invariants"]
-    S --> T
+    S --> A
+    A -. ProjectReference .-> T
     T --> G1 & G2 & G3 & G4
-    S -. linked source .-> A
-    S -. linked source .-> X
-    T -. emitter linked .-> X
+    T -. ProjectReference .-> X
+    A -. ProjectReference .-> X
 ```
 
 1. **A schema file** declares every modifier as plain data: strings, enums and arrays. It is
-   `netstandard2.0`-safe, so it compiles into the analyzer as well as everywhere else (§4.2).
+   `netstandard2.0`-safe and compiles into exactly one assembly, the analyzer (§4.2).
 2. **A generator tool** reads the schema and emits checked-in C# into `src/Reactor` (§4.3).
 3. **A freshness test** in `Reactor.Tests` runs the same emitter in-process and byte-compares its
-   output against the checked-in files, the way the search index is gated today (`AGENTS.md`,
-   "ReactorGallery search index").
-4. **The analyzer** links the schema file and derives its gates from it (§4.5).
+   output against the checked-in files, the way `SearchIndexGeneratorTests` gates the search index
+   today (`AGENTS.md`, "ReactorGallery search index").
+4. **The analyzer** derives its gates from the schema it already contains (§4.5).
 
 ### §4.2 The schema
 
 Location: `src/Reactor.Analyzers/Modifiers/ModifierSchema.cs`. The analyzer owns it because the
-analyzer is the strictest consumer (`netstandard2.0`, no Reactor reference). The tool and
-`Reactor.Tests` link it with `<Compile Include="…" Link="…" />`, the same pattern
-`Reactor.Wrappers.Generator.csproj:31` uses for `SourceMapShared.cs`.
+analyzer is the strictest consumer (`netstandard2.0`, no Reactor reference). The file is compiled
+into the analyzer only. It is **not** linked into other projects. `Reactor.Tests` already
+references `Reactor.Analyzers` and sees its internals (`Reactor.Analyzers.csproj:44`,
+`InternalsVisibleTo Reactor.Tests`), so a linked copy would define every schema type twice and
+fail the Release build with CS0436. Instead:
+
+- `tools/Reactor.ModifierGen` takes a `ProjectReference` on `Reactor.Analyzers`, and the analyzer
+  adds `InternalsVisibleTo` for the tool.
+- `Reactor.Tests` takes a `ProjectReference` on the tool, as it does on `tools/Reactor.SearchIndex`
+  and `tools/Reactor.ApiIndex` today, and the tool grants `InternalsVisibleTo` to `Reactor.Tests`
+  for its emitter.
+
+Every schema type then has one definition, the analyzer's.
 
 Illustrative shape (names are not final):
 
@@ -189,33 +206,53 @@ namespace Microsoft.UI.Reactor.Analyzers.Modifiers;
 
 internal enum ModifierBucket { Root, Layout, Visual, Accessibility }
 
-// Contiguous blocks in apply order. §5 lists them and the constraints between them.
-internal enum ModifierPhase { Theme, Box, Size, Alignment, Composition, Visibility, ToolTip, Flyout,
+// A grouping label for migration PRs and for readers. Not an apply block: today's arms interleave
+// families (§5), so apply order is the array order, never the phase order.
+internal enum ModifierFamily { Theme, Box, Size, Alignment, Composition, Visibility, ToolTip, Flyout,
     ControlState, Border, Brush, Automation, Focus, Accessibility, Typography, Behavior, Lifecycle }
 
 internal enum ApplyShape { Simple, Converted, Attached, Composite, HandCoded, Behavior }
 
-// How the shallow-skip gate compares the field (ModifiersEqualCore).
-internal enum SkipEquality { Value, BrushValue, FontFamilyValue, Reference, PresenceOnly, NotCompared }
+// How the shallow-skip gate compares the field (ModifiersEqualCore and ModifiersVisiblyEqual).
+internal enum SkipEquality
+{
+    Value,             // the bucket's current comparison: record Equals for Layout/Accessibility
+                       // (NaN == NaN), == for Visual and root fields (NaN != NaN)
+    BrushValue,        // BrushesEqual (Element.cs:1197)
+    FontFamilyValue,   // FontFamiliesEqual (Element.cs:1221)
+    Reference,
+    BlocksSkipWhenSet, // full mode: equal only when both sides are null; visible mode: presence
+                       // only. RichToolTip, AttachedFlyout, ContextFlyout (Element.cs:1332-1338)
+    NotCompared,       // requires a reason
+}
 
 // How the apply arm decides a field changed. Brushes and FontFamily are compared by reference
 // here today but by value in the skip gate (§6.6), and the schema has to say both.
 internal enum WriteEquality { Value, Reference }
+
+// What CleanElement does for one (slot, poolable receiver arm). Declared, never derived (§6.2).
+internal enum PoolReset { ClearValue, WriteDefault, NotReset }
 
 internal sealed class ModifierReceiver
 {
     public string Type;          // "Microsoft.UI.Xaml.Controls.Control"
     public string Property;      // "Padding"
     public string DpOwner;       // "Microsoft.UI.Xaml.Controls.Control" → Control.PaddingProperty
+    public PoolReset Pool;       // what CleanElement does on this arm
+    public string PoolDefault;   // WriteDefault only: "14" for TextBlock.FontSize (ElementPool.cs:587-601)
+    public string PoolReason;    // NotReset and WriteDefault require a reason
 }
 
 internal sealed class ModifierSlot
 {
-    public string Name;                        // record property, and the fluent modifier name
+    public string Name;                        // record property name (ElementModifiers / bucket)
+    public string[] FluentNames;               // public modifier names; defaults to { Name }.
+                                               // ElementSoundMode → "SoundMode", AttachedFlyout →
+                                               // "WithFlyout", RichToolTip → "WithToolTip", …
     public ModifierBucket Bucket;
     public string ClrType;                     // "Microsoft.UI.Xaml.Thickness"
     public bool IsReferenceType;
-    public ModifierPhase Phase;
+    public ModifierFamily Family;
     public ApplyShape Shape;
     public ModifierReceiver[] Receivers;       // ordered; empty for Behavior
     public string[] ThemeReceivers;            // ThemeRef overload reach, when it differs (§6.4)
@@ -223,34 +260,47 @@ internal sealed class ModifierSlot
     public string Converter;                   // row C: a static method in ModifierConverters
     public string[] CompositeFields;           // row E: "MarginInlineStart", "MarginInlineEnd"
     public string HandCodedMethod;             // rows E/F: the Reconciler method that owns the arm
-    public SkipEquality Skip; public string SkipReason;   // reason required for NotCompared
+    public SkipEquality Skip; public string SkipReason;
     public WriteEquality Write;
     public bool CallbackSlot;                  // ignored by ModifiersVisiblyEqual
-    public bool GateInherent;                  // §4.5: DP exists only on the sole receiver
-    public string CompositionChannel;          // row F: AnimateProperty name, spec 066
-    public string IdentityValue;               // row F: value that does not take the visual
+    // Analyzer editorial facts (§4.5). Not derived from Receivers.
+    public string[] AnalyzerControlGate;       // null where the analyzer deliberately has no gate
+    public string GateOnlyInReconcilerReason;  // non-null puts the slot in GateOnlyInReconciler
+    public string[] AnalyzerPoolResetGate;     // today's assignability-derived list, pinned (§4.5)
+    // Composition metadata (spec 066). Two independent facts, see §6.2.
+    public bool RestorableOwner;               // HasRestorableModifier: presence records a shared edge
+    public bool TakesVisualAtMount;            // DeclaresTransform / VisualOwningModifiers
+    public string IdentityValue;               // with TakesVisualAtMount: the value that does not
 }
 
 internal static partial class ModifierSchema
 {
+    // Array order IS apply order, and layer 0 pins it to today's ApplyModifiers line order.
     internal static readonly ModifierSlot[] Slots =
     {
-        Simple("RequestedTheme", Layout, "Microsoft.UI.Xaml.ElementTheme", Phase.Theme).OnFrameworkElement(),
-        Composite("Margin", Layout, Thickness, Phase.Box,
+        Simple("RequestedTheme", Layout, "Microsoft.UI.Xaml.ElementTheme", Family.Theme)
+            .OnFrameworkElement(pool: NotReset("not cleared by CleanElement today")),
+        Composite("Margin", Layout, Thickness, Family.Box,
             fields: new[] { "MarginInlineStart", "MarginInlineEnd" }, method: "ApplyMarginFamily").OnFrameworkElement(),
-        Composite("Padding", Layout, Thickness, Phase.Box,
+        Composite("Padding", Layout, Thickness, Family.Box,
             fields: new[] { "PaddingInlineStart", "PaddingInlineEnd" }, method: "ApplyPaddingFamily")
             .On(Control, Border, StackPanel, Grid, RelativePanel, TextBlock),
-        Simple("Width", Layout, "double", Phase.Size).OnFrameworkElement(),
-        // … Height … MaxHeight, alignments …
-        Simple("IsEnabled", Root, "bool", Phase.ControlState).On(Control).GateInherent(),
-        Converted("IsVisible", Layout, "bool", Phase.Visibility, property: "Visibility", converter: "ToVisibility"),
-        Attached("AutomationName", Root, "string", Phase.Automation,
+        Simple("Width", Layout, "double", Family.Size).OnFrameworkElement(),
+        // … Height … MaxHeight, HorizontalAlignment, VerticalAlignment, then the content-alignment
+        // pair on Control (Reconciler.Modifiers.cs:368-379) …
+        HandCoded("Opacity", Visual, "double", Family.Composition, method: "ApplyOpacityModifier")
+            .RestorableOwner(),                                         // not TakesVisualAtMount
+        HandCoded("Scale", Visual, "System.Numerics.Vector3", Family.Composition, method: "ApplyScaleModifier")
+            .RestorableOwner().TakesVisualAtMount(identity: "Vector3.One"),
+        // … Rotation, Translation, TransformOrigin, CenterPoint …
+        Converted("IsVisible", Layout, "bool", Family.Visibility, property: "Visibility", converter: "ToVisibility"),
+        // … tooltips, flyouts …
+        Simple("IsEnabled", Root, "bool", Family.ControlState).On(Control)
+            .Analyzer(controlGate: null, gateOnlyReason: "WinUI declares IsEnabled on Control only …"),
+        // … CornerRadius, BorderBrush, BorderThickness, Background, Foreground …
+        Attached("AutomationName", Root, "string", Family.Automation,
             owner: "Microsoft.UI.Xaml.Automation.AutomationProperties", property: "Name"),
-        HandCoded("Opacity", Visual, "double", Phase.Composition, method: "ApplyOpacityModifier")
-            .Composition(channel: "Opacity", identity: "1"),
-        HandCoded("BorderBrush", Visual, Brush, Phase.Border, method: "ApplyBorderBrushModifier")
-            .On(Control, Border, Grid, StackPanel, RelativePanel).Equality(skip: BrushValue, write: Reference),
+        // … AutomationId, IsDragRegion, ElementSoundMode (fluent "SoundMode"), HeadingLevel, …
         Behavior("OnMountAction").NotCompared("fires once at mount (oldM is null); a later change is inert"),
         Behavior("OnPointerPressed").Equality(skip: Reference).Callback(),
         // …
@@ -260,15 +310,22 @@ internal static partial class ModifierSchema
 
 Rules the schema enforces about itself (unit tests over the data, §10.1):
 
-- Every public settable property of `ElementModifiers`, `LayoutModifiers`, `VisualModifiers` and
-  `AccessibilityModifiers` is exactly one slot, or one slot's `CompositeFields` entry. Checked by
-  reflection in `Reactor.Tests`, so a new record field with no declaration fails the build of the
-  test suite rather than shipping half-wired.
-- `NotCompared` requires a reason. That makes "this field does not block the skip" a decision
-  someone wrote down, not an omission (§14).
-- Every receiver type and DP owner resolves to a real type with a real `XProperty` (checked by
-  reflection in `Reactor.Tests`; `typeof` of a WinUI projection type is safe headless).
-- Phase order is monotonic in array order, and the explicit constraints in §5 hold.
+- **Completeness, per bucket.** Every instance property of `LayoutModifiers`, `VisualModifiers`
+  and `AccessibilityModifiers`, public or internal, is exactly one slot of that bucket or one
+  composite field. Every root property of `ElementModifiers`, public or internal (so
+  `OnUpdateAction` counts), is one `Root` slot. Every `Layout` / `Visual` slot has a root shim of
+  the same name and type on `ElementModifiers`, because the fluent methods write through the shims.
+  The `Layout`, `Visual` and `Accessibility` container properties are excluded by name. The check
+  is a reflection test, so a field with no declaration fails the test run before it ships
+  half-wired.
+- **Reasons are mandatory** for `NotCompared`, `PoolReset.NotReset`, `PoolReset.WriteDefault` and
+  `GateOnlyInReconcilerReason`. "This field does not block the skip" becomes a decision someone
+  wrote down, not an omission (§14).
+- **Receivers resolve.** Every receiver type and DP owner resolves to a real type with a real
+  `XProperty` (reflection in `Reactor.Tests`; `typeof` of a WinUI projection type is safe
+  headless).
+- **Order is pinned.** The array order equals the order of arms in today's `ApplyModifiers`, read
+  once in layer 0 and frozen as a literal list in the test, plus the explicit §5 constraints.
 
 ### §4.3 Generated code, checked in
 
@@ -276,12 +333,12 @@ Rules the schema enforces about itself (unit tests over the data, §10.1):
 
 | Output | Replaces | Layer |
 |---|---|---|
-| `src/Reactor/Core/Reconciler.Modifiers.Generated.cs` | rows A–D arms of `ApplyModifiers`, the call sites of rows E–F in phase order | 3 |
+| `src/Reactor/Core/Reconciler.Modifiers.Generated.cs` | rows A–D arms of `ApplyModifiers` at their current positions, and the call sites of rows E–F | 3 |
 | `src/Reactor/Core/Element.Modifiers.Generated.cs` | `ModifiersEqualCore`, `VisualModifiersEqual`, the three `Merge` bodies | 2 |
 | `src/Reactor/Core/Diagnostics/AppliedModifierMap.Generated.cs` | `AppliedModifierMap.Entries` and its owner helpers | 2 |
 | `src/Reactor/Core/Reconciler.ThemeBindings.Generated.cs` | `GetDependencyPropertyName` | 2 |
-| `src/Reactor/Core/ElementPool.Generated.cs` | the modifier-backed clears in `CleanElement`, and `PoolableTypes` | 5 |
-| `src/Reactor/Core/Reconciler.Pooling.Generated.cs` | `DeclaresTransform`, `HasRestorableModifier`'s field list | 6 |
+| `src/Reactor/Core/ElementPool.Generated.cs` | a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls, emitted from each receiver's declared `PoolReset` (§6.2) | 5 |
+| `src/Reactor/Core/Reconciler.Pooling.Generated.cs` | `DeclaresTransform` (from `TakesVisualAtMount`) and `HasRestorableModifier`'s field list (from `RestorableOwner`) | 6 |
 
 The emitter writes the code a careful human writes today. For a row A slot:
 
@@ -315,16 +372,22 @@ Generated files are named `Reconciler.*.cs` on purpose. `ReconcilerSource`
 (`tests/Reactor.Tests/AnalyzerTests/ReconcilerSource.cs:19-33`) parses every `Reconciler.*.cs`, so
 the existing Roslyn drift tests keep running against the generated arms throughout the migration
 (§9). That is the main reason this spec prefers checked-in output over an in-build source
-generator (§12.3).
+generator (§12.3). The same care applies to the pool: `CleanElementScan` reads only `CleanElement`
+in `ElementPool.cs` (`CleanElementScan.cs:371-379`), so layer 5 widens it to follow the
+`CleanModifierBackedProperties` call into `ElementPool.Generated.cs` in the same PR, and
+`ElementPool` (`ElementPool.cs:20`, `public sealed class`) becomes `partial`.
 
 ### §4.4 What stays hand-written
 
 - **Fluent extensions.** They are public API with overloads, defaults, docs and `[Obsolete]`
-  shims. The schema test asserts that each slot has at least one generic
-  `T Name<T>(this T el, …)` in `ElementExtensions` (the check
-  `ModifierTableIntegrityTests.DeclaredGenericModifiers` already does by reflection).
-- **Record declarations.** The properties, shims and XML docs stay in `Element.cs`. The records
-  become `partial` so `Merge` can be generated.
+  shims. The schema test asserts that every non-behaviour slot has at least one generic
+  `T Name<T>(this T el, …)` for each of its `FluentNames` (the reflection
+  `ModifierTableIntegrityTests.DeclaredGenericModifiers` already does). Slot names never become
+  analyzer suggestions: `ModifierInfo.Modifier` stays the fluent name, so `REACTOR_MOD_002` can't
+  start suggesting a `.ElementSoundMode(...)` that does not exist.
+- **Record declarations and root shims.** The properties, shims and XML docs stay in `Element.cs`.
+  The records become `partial` so `Merge` can be generated. The shims are mechanical and could be
+  generated later, but they carry public docs, so they stay hand-written in this spec.
 - **Rows E and F bodies.** `ApplyMarginFamily`, `ApplyPaddingFamily`, `ApplyBorderThicknessFamily`,
   the composition-channel methods, the tooltip / flyout arms, events, gestures, drag-drop and
   lifecycle callbacks. The generated `ApplyModifiers` calls them at their declared positions.
@@ -338,33 +401,58 @@ generator (§12.3).
 `ModifierTable` keeps its editorial content: `DeliberatelyExcluded` with reasons, the attached
 table, the type-specific `elementTypes` rows, and the `poolReset` severity choice, which is an
 editorial claim and not a derived fact (`ModifierTable.cs:466-482` documents why `IsHitTestVisible`
-and the fonts stay `REACTOR_MOD_002` per #1195 even though `CleanElement` clears them). What it
-stops hand-copying:
+and the fonts stay `REACTOR_MOD_002` per #1195 even though `CleanElement` clears them).
 
-| Analyzer fact | Derived from |
-|---|---|
-| `ModifierInfo.ControlGate` | slot receivers, unless `GateInherent` (then `null`) |
-| `ModifierTable.GateOnlyInReconciler` | slots with `GateInherent`, plus composite fields, with their reason strings moved into the schema |
-| `ModifierInfo.ThemeControlGate` | `ThemeReceivers` when it differs from the receivers |
-| `ModifierInfo.PoolResetGate` | receivers ∩ the schema's poolable types, when narrower than the receivers |
-| `ModifierTable.PoolableTypeNames` | the schema's poolable types (layer 5 makes `ElementPool.PoolableTypes` generated from the same list) |
+The analyzer's gates are *not* a function of the apply receivers, and this spec does not pretend
+they are. Four examples from today's table:
 
-`GateInherent` is the one new concept. Today `IsEnabled` and the content-alignment pair are
-`Control`-gated in `ApplyModifiers` but carry a `null` gate in the analyzer, because in the `.Set`
-direction WinUI only declares those DPs on `Control` (`ModifierTable.cs:612-620`). That fact lives
-in two hand-maintained places, a `null` and a `GateOnlyInReconciler` row. The schema states it
-once.
+- `IsEnabled` is `Control`-gated in `ApplyModifiers` but has a `null` analyzer gate, because in the
+  `.Set` direction WinUI declares the DP on `Control` only. It is in `GateOnlyInReconciler`.
+- `TabIndex` and `ElementSoundMode` are in `GateOnlyInReconciler` for different reasons, "WinUI
+  also declares TabIndex on UIElement" and "there is no .ElementSoundMode modifier"
+  (`ModifierTable.cs:612-627`).
+- The content-alignment pair is `Control`-gated with a `null` analyzer gate, yet it is
+  *deliberately absent* from `GateOnlyInReconciler`, because the gate reader cannot attribute a
+  bare `if (fe is Control …)` to a property and the converse check requires every row to name a gate
+  the reader finds (`ModifierTable.cs:598-611`).
+- `PoolResetGate` is an assignability fact, not a name intersection. The pool recycles `Button`,
+  `TextBox` and `ToggleSwitch` but not `Control`, while `CleanElement` clears through a `Control`
+  arm. `ModifierUnsetClearValueTests.cs:882-889` and `:1053-1067` derive the gate from the
+  receivers `CleanElementScan` finds resetting, closed under assignability. A string intersection
+  of receivers and poolable names would drop pooled Buttons from `Padding`, empty `IsEnabled` and
+  narrow `Background` to `Border`.
 
-`ModifierTable` computes its derived arrays once in its static constructor. That is a one-time
-allocation per analyzer load, the same order of cost as the dictionaries it builds today.
+So the schema carries these as **declared analyzer facts** on each slot
+(`AnalyzerControlGate`, `GateOnlyInReconcilerReason`, `AnalyzerPoolResetGate`), with today's values
+copied in verbatim. What changes is where they live, not how they are computed:
+
+| Analyzer fact | Source after layer 1 | Still verified by |
+|---|---|---|
+| `ModifierInfo.ControlGate` | `AnalyzerControlGate` on the slot | `Every_ControlGate_Matches_The_Types_ApplyModifiers_Writes_To`, now reading the slot |
+| `ModifierTable.GateOnlyInReconciler` | slots with a `GateOnlyInReconcilerReason` | `Every_ApplyModifiers_ControlGate_Is_Declared_Or_Explicitly_Recorded`, both directions |
+| `ModifierInfo.ThemeControlGate` | `ThemeReceivers` | `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` until layer 2 |
+| `ModifierInfo.PoolResetGate` | `AnalyzerPoolResetGate` | `Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection`, unchanged, kept through every layer |
+| `ModifierTable.PoolableTypeNames` | a schema list | `Analyzer_Poolable_Type_Mirror_Matches_ElementPool` until layer 5 generates `PoolableTypes` from it |
+
+Layer 1 also adds a literal snapshot test of every derived gate array and of the
+`GateOnlyInReconciler` key set, captured from today's `ModifierTable`, in both directions (§10.1).
+Analyzer tests cover only selected modifiers, so that snapshot is what proves the move changed no
+diagnostic.
+
+`ModifierTable` builds its dictionaries from the schema once in its static constructor. That is a
+one-time allocation per analyzer load, the same order of cost as the dictionaries it builds today.
 
 ---
 
 ## §5 Ordering
 
 Order inside `ApplyModifiers` is behaviour. The schema's array order **is** the emitted order, and
-layer 0 (§11) pins today's order before anything is generated. The phases and the constraints
-between them, each traced to the code that depends on it:
+layer 0 (§11) pins today's order before anything is generated. Families are labels, not blocks:
+today's arms interleave them (`IsEnabled` at `Reconciler.Modifiers.cs:476` but `ElementSoundMode`
+at `:624` after `IsDragRegion`, `TabIndex` at `:645` between `IsHitTestVisible` and `AccessKey`,
+the content-alignment pair inside the alignment run at `:368-379`), so a layer 3 PR emits each
+migrated arm *at its existing position*, never as a contiguous family block. The constraints that
+make today's order load-bearing, each traced to the code that depends on it:
 
 | Constraint | Why | Source |
 |---|---|---|
@@ -378,11 +466,11 @@ between them, each traced to the code that depends on it:
 | event, gesture, drag-drop wiring after property writes | handlers see the applied state | `Reconciler.Modifiers.cs:701-709` |
 | `OnMountAction` / `OnUpdateAction` after every property write | the callback observes a fully applied control, under `OpacityRestartProbe` | `:712-735` |
 | `Ref` then reference edges last | a ref points at a fully applied control; edges may resolve against it | `:763-779` |
+| caption-derived `AutomationName` after `ApplyModifiers` | an unset name falls back to the caption | `Reconciler.Update.cs:523-529` |
 
-Phases are coarse blocks. Within a block the schema keeps today's line order exactly, because
-"probably independent" is not something a behaviour-preserving refactor gets to assume. Reordering
-inside a block, for example to group by receiver, is a follow-up with its own perf data, not part
-of this spec.
+Beyond these, the schema keeps today's line order exactly, because "probably independent" is not
+something a behaviour-preserving refactor gets to assume. Reordering arms, for example to group by
+receiver, is a follow-up with its own perf data, not part of this spec.
 
 ---
 
@@ -409,23 +497,45 @@ stays as the check that the list is complete.
 
 ### §6.2 Pooling
 
-The pool contract is: `CleanElement` returns a control to its fresh state with `ClearValue`
-(`ElementPool.cs:296-300`), and mount calls `ApplyModifiers(fe, null, m)`, so no unset arm ever
-runs at mount. The generated code keeps both halves. It never emits a clear when `oldM` is null,
-and in layer 5 the modifier half of `CleanElement` is generated from *receivers ∩ poolable types*,
-which is the intersection `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement` derives
-today. The non-modifier resets in `CleanElement` (tag, refresh snapshots, event handlers, theme
-bindings, facades, transitions, `Clip`, `FlowDirection`, `RenderTransform`) stay hand-written.
+The pool contract is: `CleanElement` returns a control to the state the next renter expects, and
+mount calls `ApplyModifiers(fe, null, m)`, so no unset arm ever runs at mount. The generated apply
+code keeps the second half by never emitting a clear when `oldM` is null.
+
+The first half is **not** "`ClearValue` every modifier DP on every poolable receiver", and layer 5
+must not generate it as if it were. Today's `CleanElement` has deliberate exceptions:
+
+- `TextBlock.FontSize` is reset with `tb.FontSize = 14`, not `ClearValue`, because the DP inherits
+  and a clear would let a recycled `TextBlock` pick up an ancestor's size (`ElementPool.cs:587-601`).
+- `RequestedTheme` has a set and an unset arm in `ApplyModifiers` but no clear in `CleanElement`.
+- Resets run through base-type arms (`Control`, `Panel`) while the pool recycles exact types
+  (`Button`, `Grid`, …), so which receivers are reset is an assignability fact
+  (`ModifierUnsetClearValueTests.cs:882-889`).
+
+So each receiver declares its `PoolReset` (`ClearValue`, `WriteDefault` with the value, or
+`NotReset` with a reason), with today's behaviour copied in. Layer 5 emits exactly those
+declarations into a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls at the
+point its modifier clears sit today, and widens `CleanElementScan` to follow that call (§4.3). The
+non-modifier resets in `CleanElement` (tag, refresh snapshots, event handlers, theme bindings,
+facades, transitions, `Clip`, `FlowDirection`, `RenderTransform`) stay hand-written. Whether
+`RequestedTheme` *should* be reset on pool return is a behaviour question for its own issue, not
+for this migration.
 
 Event wiring on poolable controls goes through the one-time trampoline and
 `ReactorState.ControlEventState` survives rent and return (issue #114). Row G slots are declared
 for merge and equality only. Their apply code is untouched.
 
-The visual lane (spec 066 §7) depends on `DeclaresTransform` (`Reconciler.Pooling.cs:128-133`)
-knowing which visual fields take the composition visual and what their identity values are. The
-schema's `CompositionChannel` and `IdentityValue` carry exactly that, so layer 6 can generate it
-together with `HasRestorableModifier`'s field list (`Reconciler.Modifiers.cs:101-106`), which today
-is a second copy of the same five-field set.
+The visual lane (spec 066 §7) and the remaining-owner bookkeeping read **different** field sets,
+and the schema keeps them apart:
+
+- `DeclaresTransform` (`Reconciler.Pooling.cs:128-133`) asks whether a transform takes the visual
+  at mount: five fields, each compared with its identity value. `Opacity` is not one of them.
+  `ModifierTable.VisualOwningModifiers` (`ModifierTable.cs:725`) is the analyzer's view of the same
+  question. Both come from `TakesVisualAtMount` + `IdentityValue`.
+- `HasRestorableModifier` (`Reconciler.Modifiers.cs:101-106`) asks whether a shared target must
+  record its edge: six fields by presence, including `Opacity`. It comes from `RestorableOwner`.
+
+Deriving both from one flag would make `.Opacity(0.5)` visual-lane demand in `ForMount`, which is
+a behaviour change. Layer 6 generates each list from its own flag.
 
 ### §6.3 Shared targets and remaining owners
 
@@ -445,11 +555,17 @@ schema's `ThemeReceivers` states it once, and layer 2 generates `GetDependencyPr
 modifier rows from it. `PaneBackground` (SplitView) is not a common modifier and stays
 hand-written.
 
-### §6.5 Interaction states
+### §6.5 Interaction states and caption names
 
 `BorderBrush` defers to the interaction tracker when a state override is active
 (`Reconciler.Modifiers.cs:499-507`, `Reconciler.InteractionStates.cs:69-70`). That stays a
 hand-coded arm. Only its receivers and equality come from the schema.
+
+`AutomationName` is a row D slot, but on a captioned control its unset arm is immediately followed
+by a caption-derived local name (`Reconciler.Update.cs:523-529`, `UpdateDefaultAutomationName`).
+The generated arm is identical to today's, and the caption step stays where it is, after
+`ApplyModifiers`. Tests that assert "unset leaves no local value" exclude captioned controls for
+this slot (§10.2).
 
 ### §6.6 Equality: skip gate vs apply arm
 
@@ -467,8 +583,9 @@ it implicit. Unifying them is a perf question for a later change (§13, Q5).
 
 `ApplyModifiers` runs on every mount of an element with modifiers and on every update the shallow
 skip declines (`Reconciler.Update.cs:150-156`, `:491`). That includes the common grid case where a
-cell's text changed but its modifiers did not: `ModifiersEqual` is evaluated only when
-`ShallowEquals` holds, so a props change runs every arm.
+cell's text changed but its modifiers did not: `ShallowEquals` compares the modifiers first
+(`Element.cs:525`) and then fails on the changed prop, so the skip declines and every arm runs even
+though the modifiers are equal.
 
 Today each arm is two nullable compares and a branch, inlined in one method. A runtime
 interpreter, one `PropEntry`-style object per slot like `ControlDescriptor` uses, would add an
@@ -513,6 +630,11 @@ m.Layout)` skips the whole layout block), passing the already computed skip-gate
   activates a WinUI factory. The schema therefore names DPs as strings, never as
   `DependencyProperty` values, so it is constructible in every consumer. Only the generated code
   touches real DPs, at the same points the hand-written code does.
+- The §10.2 selftest runs in the NativeAOT selftest shards too (`Reactor.AppTests.Host.csproj:23-24`,
+  `PublishAot` under `PublishAotInternal`), where reflection over string names is trimmed. The tool
+  therefore also emits a typed probe table for the fixture (typed `with` setters, getters and
+  `XProperty` references per slot and receiver) into the host project, so the fixture needs no
+  reflection and no AOT skip.
 
 ---
 
@@ -524,22 +646,25 @@ it can.
 
 | Test | After the migration |
 |---|---|
-| `Every_ControlGate_Matches_The_Types_ApplyModifiers_Writes_To` | **Retargeted in layer 1**, compares the schema against `ApplyModifiers`. **Deleted in layer 3** for migrated families: the gate and the write come from one list. |
-| `Every_ApplyModifiers_ControlGate_Is_Declared_Or_Explicitly_Recorded` | Becomes a schema test: every `GateInherent` slot is in `GateOnlyInReconciler`, by construction. |
+| `Every_ControlGate_Matches_The_Types_ApplyModifiers_Writes_To` | **Retargeted in layer 1** to compare the slot's `AnalyzerControlGate` against `ApplyModifiers`. Kept while any gated arm is hand-written. For generated arms its job (an independent receiver oracle) moves to the frozen receiver matrix in §10.2, which does not read the schema. |
+| `Every_ApplyModifiers_ControlGate_Is_Declared_Or_Explicitly_Recorded` | **Kept**, both directions, reading the slots' `AnalyzerControlGate` and `GateOnlyInReconcilerReason`. |
 | `Every_Unset_Arm_Clears_The_Dependency_Property` | **Kept** and keeps running, because the generated file is a `Reconciler.*.cs` and `ScannedMethods` gains the generated method names. For rows A–D it becomes a check of the emitter's single unset template. Rows E–F keep relying on it. |
 | `Every_Unset_Arm_Actually_Resets_Something`, `Every_Diff_Guarded_Modifier_Has_An_Unset_Arm` | **Kept**, same reason. The per-method floors (`ModifierUnsetClearValueTests.cs:60-63`) are re-read from the assertion message as arms move between methods, as the file's own comment instructs. |
+| `ModifierTableIntegrityTests.ReadApplyModifierControlGates` (reads only the method named `ApplyModifiers`) and the global `pairs >= 24` / `actualGates.Count >= 8` floors | **Retargeted in layer 0** to the extracted per-family methods, with a population check (§10.1) so a later method is never silently unscanned. |
 | `Every_Type_Gated_Write_Has_A_Matching_Type_Gated_Clear` | Redundant for rows A–D once generated. Kept for rows E–F. |
-| `CleanElement_Releases_Every_Modifier_Backed_Dependency_Property`, `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement`, `Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection` | **Layer 5** derives both sides from the schema, so these collapse into one schema test. `CleanElementScan` narrows to the hand-written non-modifier resets, which still need it. |
-| `Analyzer_Poolable_Type_Mirror_Matches_ElementPool` | Deleted in layer 5. Both lists are the schema's. |
-| `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` | Deleted in layer 2. Both are generated. |
+| `CleanElement_Releases_Every_Modifier_Backed_Dependency_Property`, `Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement`, `Every_Pool_Reset_Modifier_Is_Cleared_By_CleanElement`, `PoolResetSetConsistencyTests`, `Issue1193PoolResetCoverageTests` | **Kept through every layer.** They read `CleanElementScan`, which layer 5 widens to follow the generated helper in the same PR (§4.3). They stay the independent check that the declared `PoolReset` values match what the pool really does. |
+| `Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection` | **Kept, unchanged.** It is the assignability oracle for `AnalyzerPoolResetGate` (§4.5). |
+| `Analyzer_Poolable_Type_Mirror_Matches_ElementPool` | Deleted in layer 5, when `ElementPool.PoolableTypes` and `ModifierTable.PoolableTypeNames` are both generated from the schema list. |
+| `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` | Deleted in layer 2, when both sides are generated from `ThemeReceivers`. |
 | `AppliedModifierMap_*` owner-resolution tests (`tests/Reactor.Tests/Diagnostics/ReactorDiagnosticsComponentsTests.cs:689-886`) | **Kept** as tests of the generated map. Its completeness becomes the §10.1 schema completeness test. |
 | `Descriptor_Applied_Common_Modifiers_Match_The_Analyzer_Exception_List` | **Kept**. It scans descriptor hooks, which the schema does not own. |
 | `ModifierGateProseParityTests` | **Kept**, compares the skill prose against the schema instead of `ModifierTable`. |
 | `ModifierGateIdentifierTests` / `ModifierGateSource` | Shrinks with the number of places that still need a text matcher. Likely deleted once `ModifierTable.cs` no longer declares gate arrays by name. |
 | Attached-property and type-specific `ModifierTable` checks | **Kept**. Those rows are editorial (§4.5). |
 
-New checks replace what is deleted (§10). The net effect is fewer lines that re-derive copies and
-more checks that run real controls.
+New checks are added before anything they guard is generated (§10). The net effect is fewer lines
+that re-derive copies and more checks that run real controls. No oracle is deleted in the same PR
+that changes what it checks.
 
 ---
 
@@ -547,20 +672,38 @@ more checks that run real controls.
 
 ### §10.1 Schema invariants (headless, `Reactor.Tests`)
 
-- **Completeness.** Reflection over the four modifier records: every public settable property is
-  exactly one slot or one composite field, and vice versa.
+- **Completeness.** As stated in §4.2: per bucket, public and internal, shims checked, container
+  properties excluded.
 - **Merge round trip.** For every slot, `a.Merge(b)` carries `b`'s value when set and keeps `a`'s
   when `b` is unset. Sample values per CLR type come from a small table in the test.
-- **Skip equality.** For every slot not marked `NotCompared`, two bags differing only in that slot
-  compare unequal under `ModifiersEqual`, and `ModifiersVisiblyEqual` agrees unless the slot is a
-  callback. This is the check that would have caught `IsDragRegion` (spec 059), `OnUpdateAction`
-  (#976) and `XYFocusKeyboardNavigation` (§14).
+- **Skip equality, both directions.** For each `SkipEquality` kind, and for every slot of that
+  kind, assert the expected result under both `ModifiersEqual` and `ModifiersVisiblyEqual` for
+  four pairs: null vs set, set vs a different value, set vs the same instance, and set vs a fresh
+  but value-equal instance. The "equal" rows matter as much as the "unequal" ones: a comparer that
+  always says "changed" passes an unequal-only test while silently collapsing the skip rate.
+  `BlocksSkipWhenSet` slots expect "unequal" for same-instance pairs in full mode and presence-only
+  in visible mode, as today. This is the check that would have caught `IsDragRegion` (spec 059),
+  `OnUpdateAction` (#976) and `XYFocusKeyboardNavigation` (§14).
+- **Brushes and fonts are not headless.** Headless tests cannot construct a `Brush` or a
+  `FontFamily` (`ElementModifiersCoverageTests.cs` records the FontFamily limit). `Background`,
+  `Foreground`, `BorderBrush` and `FontFamily` are excluded from the headless merge and equality
+  tests by name, and a selftest covers them (fresh-but-equal brushes and fonts under
+  `ModifiersEqual`), so "every slot" stays true across the two tiers.
 - **Receivers resolve.** Every receiver type, DP owner and `XProperty` name exists (`typeof` and
   static-property lookup by reflection, no activation).
-- **Fluent coverage.** Every non-behaviour slot has a generic fluent modifier.
-- **Ordering.** Phase monotonicity and the explicit §5 constraints.
-- **Freshness.** The emitter, linked into the test project, regenerates every output in memory and
-  byte-compares it with the checked-in file. Regenerate with
+- **Fluent coverage.** Every non-behaviour slot has a generic fluent modifier for each of its
+  `FluentNames`.
+- **Ordering.** The array order equals a literal list of today's arm order, captured in layer 0,
+  and the explicit §5 constraints hold.
+- **Analyzer parity snapshot (layer 1).** Every derived `ModifierInfo` gate array and the
+  `GateOnlyInReconciler` key set equal a literal snapshot of today's `ModifierTable`, in both
+  directions. A wrongly declared null gate would otherwise pass the existing gate tests, which skip
+  null gates.
+- **Scan population (layer 0).** Every reconciler method that takes an `ElementModifiers`-shaped
+  `oldM` / `m` pair appears in `ModifierUnsetClearValueTests.ScannedMethods` and in the gate
+  reader's method set, so splitting `ApplyModifiers` can never leave a method unscanned.
+- **Freshness.** The emitter, reached through the tool's `ProjectReference` (§4.2), regenerates
+  every output in memory and byte-compares it with the checked-in file. Regenerate with
   `dotnet run --project tools/Reactor.ModifierGen`.
 
 The completeness, merge and skip-equality tests do not need the schema to exist. Layer 0 adds them
@@ -569,23 +712,39 @@ close the §14 class of bug immediately.
 
 ### §10.2 Table-driven selftest (`Reactor.AppTests.Host`)
 
-One fixture family, `ModifierSchema_*`, iterates the schema and, for every row A–D slot × every
-receiver, mounts a representative concrete control and checks:
+One fixture family, `ModifierMatrix_*`, checks every row A–D slot against an **expected matrix that
+is frozen as literal data in the fixture**, captured in layer 1 from the hand-written
+`ApplyModifiers` and `CleanElement`. The matrix lists, per slot, the receiver control types, one
+non-receiver control type, and the expected pool reset. It does **not** read the schema. A fixture
+that took both its inputs and its expected outcomes from the schema could not detect a wrong
+schema, and a receiver dropped from the schema would just turn into a "non-receiver" that passes.
+The schema only supplies the typed probes (§8). A schema test then checks that schema and matrix
+agree, so a deliberate behaviour change has to edit both and is visible in review.
+
+For every (slot, receiver) the fixture mounts a representative concrete control and checks:
 
 1. set → the control reports the value;
 2. change → the new value;
-3. unset → `ReadLocalValue` is `DependencyProperty.UnsetValue` (the #952 contract, behaviourally);
+3. unset → `ReadLocalValue` is `DependencyProperty.UnsetValue` (the #952 contract, behaviourally),
+   except `AutomationName` on a captioned control, which expects the caption-derived name
+   (`Reconciler.Update.cs:523-529`);
 4. a style-provided value is visible again after unset (the `ModifierStyleUnsetRestore` shape,
    `tests/Reactor.AppTests.Host/SelfTest/Fixtures/ModifierEventFixtures.cs:784`);
-5. on a poolable receiver, a rented control carries no local value from the previous renter (the
-   `ModifierPoolClearValueOnRent` shape, `:999`);
-6. on a non-receiver control type, the modifier writes nothing.
+5. on a poolable receiver, a rented control matches the matrix's expected pool reset: no local
+   value for `ClearValue`, the declared value for `WriteDefault` (`TextBlock.FontSize` = 14), and
+   the previous renter's value for `NotReset` (`RequestedTheme`). The last one is a known gap
+   pinned on purpose, not endorsed (the `ModifierPoolClearValueOnRent` shape, `:999`);
+6. on the non-receiver control, which must declare a DP of the same name that the modifier
+   deliberately does not reach (for example `ContentPresenter.Padding` / `CornerRadius` /
+   `Foreground`, or `RichTextBlock.Foreground` on the plain brush path), `ReadLocalValue` stays
+   `UnsetValue`. A non-receiver without the DP cannot fail and does not count.
 
-This fixture is written in **layer 1, against the hand-written code**, and must be green there
+The fixture is written in **layer 1, against the hand-written code**, and must be green there
 before any arm is generated. It is the characterization test that makes the later layers safe.
-Its key oracles are mutation-checked once (turn one generated clear into a default write and
-confirm step 3 fails; drop one receiver and confirm step 1 fails for it). Per the repo memory on
-mutation testing, revert with `git restore`, not a backup copy, so MSBuild sees the change.
+Its key oracles are mutation-checked in layer 1 against the hand-written arms: delete one
+`else if (fe is WinUI.T …)` write branch and confirm step 1 fails for that receiver, and turn one
+`ClearValue` into a default write and confirm step 3 fails. Per the repo memory on mutation
+testing, revert with `git restore`, not a backup copy, so MSBuild sees the change.
 
 Fixtures are registered once in `SelfTestFixtureRegistry.Registrations`.
 
@@ -604,19 +763,19 @@ revertible on its own.
 
 | Layer | Change | Product code touched | Gate |
 |---|---|---|---|
-| 0 | Behaviour-preserving extraction of `ApplyModifiers` into per-family private methods in today's order (proposed separately). Merge round-trip and skip-equality completeness tests against the hand-written records. Fix §14 in its own PR. | refactor only, plus the §14 fix | existing suites, new headless tests |
-| 1 | Add `ModifierSchema.cs` and the generator tool emitting nothing yet. Schema invariant tests. Retarget `Every_ControlGate_Matches_…` to schema vs `ApplyModifiers`. Add the §10.2 selftest against hand-written code. Analyzer derives `ControlGate`, `ThemeControlGate`, `GateOnlyInReconciler` from the schema, with the analyzer test suite proving identical diagnostics. | analyzer only | analyzer tests unchanged, new selftest green |
-| 2 | Generate the cold consumers: `ModifiersEqual(Core)`, `VisualModifiersEqual`, the three `Merge` bodies, `AppliedModifierMap`, `GetDependencyPropertyName`'s modifier rows. Records become `partial`. | `Element.cs`, diagnostics, theme bindings | freshness test, perf-compare |
-| 3a–3e | Generate rows A–D one family per PR: sizing and alignment; automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, content alignment, `CornerRadius`, `Foreground`); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
+| 0 | Behaviour-preserving extraction of `ApplyModifiers` into per-family private methods in today's order (proposed separately). Retarget the gate reader and `ScannedMethods` to the extracted methods, with the scan-population check. Freeze today's arm order as a literal list. Merge round-trip and two-way skip-equality tests against the hand-written records. Fix §14 in its own PR. | refactor only, plus the §14 fix | existing suites, new headless tests |
+| 1 | Add `ModifierSchema.cs` and the generator tool, emitting only the typed probe table. Schema invariant tests. Retarget `Every_ControlGate_Matches_…` to the slots' `AnalyzerControlGate`. Add the §10.2 matrix selftest against hand-written code and mutation-check it. Analyzer builds `ControlGate`, `ThemeControlGate`, `GateOnlyInReconciler` and `PoolResetGate` from the slots' declared values, proven identical by the literal parity snapshot. | analyzer only | parity snapshot, analyzer tests unchanged, new selftest green |
+| 2 | Generate the cold consumers: `ModifiersEqual(Core)`, `VisualModifiersEqual`, the three `Merge` bodies, `AppliedModifierMap`, `GetDependencyPropertyName`'s modifier rows. Records become `partial`. | `Element.cs`, diagnostics, theme bindings | freshness test, two-way skip-equality test, perf-compare |
+| 3a–3e | Generate rows A–D one family per PR, each arm at its existing position: sizing and alignment; automation, focus and tier-1 accessibility; typography; control state (`IsEnabled`, `ElementSoundMode`, `TabIndex`, content alignment, `CornerRadius`, `Foreground`); visibility and tooltip placement. | `Reconciler.Modifiers.cs` | §10.2 selftest, unset-arm scans, perf-compare |
 | 4 | Composite families: the generated `ApplyModifiers` calls the hand-written resolvers. Only their receivers move to the schema. | `Reconciler.Modifiers.cs` | same |
-| 5 | Generate `PoolableTypes` and the modifier half of `CleanElement`. Analyzer derives `PoolResetGate` and `PoolableTypeNames`. | `ElementPool.cs` | pool selftests, `CleanElementScan` narrowed |
-| 6 | Composition metadata: generate `DeclaresTransform` and `HasRestorableModifier`'s field list. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs` | `ModifierTransform_*`, visual-lane selftests |
-| 7 | `AccessibilityModifiers` / `ApplyAccessibilityModifiers` get the layer 2–3 treatment. | `Reconciler.Accessibility.cs` | same as 3 |
+| 5 | Generate `PoolableTypes` and a `CleanModifierBackedProperties` helper from each receiver's declared `PoolReset`. `ElementPool` becomes `partial`, and `CleanElementScan` follows the helper in the same PR. | `ElementPool.cs` | pool selftests, every `CleanElementScan` consumer unchanged and green |
+| 6 | Composition metadata: generate `DeclaresTransform` and `VisualOwningModifiers` from `TakesVisualAtMount`, and `HasRestorableModifier`'s field list from `RestorableOwner`. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs`, analyzer | `ModifierTransform_*`, visual-lane selftests |
+| 7 | `AccessibilityModifiers` / `ApplyAccessibilityModifiers` get the layer 2–3 treatment for their 11 mechanical fields. `LabeledBy` and the ref fields stay hand-coded. | `Reconciler.Accessibility.cs` | same as 3 |
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
-row, add the record property, add the fluent overload, run `tools/Reactor.ModifierGen`". The
-contributor guide `docs/guide/extending-reactor-controls.md` gains a short "common modifiers" note
-at the same time.
+row, add the bucket property and its root shim, add the fluent overload, run
+`tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short
+"common modifiers" note at the same time, edited in its `docs/_pipeline/templates` source.
 
 **Stop points.** Layers 0 and 1 are worth landing even if nothing after them does: layer 0 closes
 the §14 bug class, and layer 1 gives the analyzer one source and adds the behavioural selftest.
@@ -663,11 +822,18 @@ change to the declaration.
 
 ### §12.4 Attributes on the record properties as the declaration
 
-`[Modifier(Phase.Box)] [Receiver(typeof(WinUI.Control))] public Thickness? Padding { get; init; }`.
-Keeps the declaration next to the field, which is attractive. Rejected because the analyzer
-cannot read attributes from an assembly it does not reference, so a second copy for the analyzer
-would come back. It would also put internal attribute metadata on public records, which the API
-index would have to filter.
+`[Modifier(Family.Box)] [Receiver(typeof(WinUI.Control))] public Thickness? Padding { get; init; }`.
+Keeps the declaration next to the field, which is attractive. The analyzer *could* read such
+attributes, because it runs on consumer compilations that reference Reactor and already resolves
+Reactor symbols and attributes (`CombinedSizeModifierAnalyzer.cs:64`,
+`UIThreadAffinityAnalyzer.cs:408`). Rejected for the costs that come with that:
+
+- the analyzer would rebuild its gate tables from symbols on every compilation, instead of one
+  static table per analyzer load;
+- the generator tool would have to read the attributes through reflection over a built Reactor or
+  through Roslyn metadata, which makes regeneration a two-pass build;
+- receivers would become `typeof(...)` arguments in internal attribute metadata on public records,
+  which the API index would have to filter.
 
 ### §12.5 Generate the fluent extensions too
 
@@ -686,9 +852,10 @@ bucket design that keeps the common case to one or two small records.
 ## §13 Open questions
 
 1. **Schema location.** `src/Reactor.Analyzers/Modifiers/` (owned by the strictest consumer, as
-   proposed) or a neutral `src/Shared/` folder. Either works with linked source.
-2. **Accessibility in scope for v1?** Layer 7 is optional. Its 12 arms are the same shapes, so it
-   is cheap, but the spec can ship without it.
+   proposed) or a separate small `netstandard2.0` data project the analyzer references and packs.
+   The second avoids `InternalsVisibleTo` for the tool but adds a DLL to the analyzer package.
+2. **Accessibility in scope for v1?** Layer 7 is optional. Its 11 mechanical fields have the same
+   shapes as rows A and D, so it is cheap, but the spec can ship without it.
 3. **Descriptor target DPs.** Descriptors do not expose the DP a `PropEntry` writes. Exposing it
    would let a schema test prove that no modifier targets a controlled prop (§6.1). Worth a small
    descriptor change, or is the current invariant documented enough?
@@ -701,6 +868,8 @@ bucket design that keeps the common case to one or two small records.
 7. **Interaction with the parallel `ApplyModifiers` extraction.** Layer 0 assumes that refactor
    lands first, or is folded into layer 0. The schema's method names for rows E–F should match
    whatever names it picks.
+8. **Pool reset gaps.** `RequestedTheme` is not cleared on pool return today (§6.2). The matrix
+   pins it as-is. Should it get its own issue?
 
 ---
 
