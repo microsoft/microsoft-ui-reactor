@@ -215,17 +215,24 @@ public class LayoutModifiersTests
         Assert.Equal(firstWriteBytes, Measure(() => fresh.Width(120)));
     }
 
+    // GetAllocatedBytesForCurrentThread can over-count, never under-count, while other
+    // threads allocate from the shared heap, as they do in the parallel suite (issue #1704).
+    // The minimum of a few passes is the exact cost. An extra record shows in every pass.
     private static long Measure(Func<TestElement> build)
     {
         var sink = new TestElement[256];
         for (var i = 0; i < sink.Length; i++)
             sink[i] = build();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < sink.Length; i++)
-            sink[i] = build();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        var min = long.MaxValue;
+        for (var pass = 0; pass < 5; pass++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < sink.Length; i++)
+                sink[i] = build();
+            min = Math.Min(min, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
         GC.KeepAlive(sink);
-        return allocated;
+        return min;
     }
 
     private sealed record TestElement(string Label) : Element;
