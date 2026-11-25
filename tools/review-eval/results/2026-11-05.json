@@ -1,0 +1,1136 @@
+{
+  "schema_version": 1,
+  "description": "Sanitized Reactor review eval: final reports and measurements only; no raw reasoning, credentials, invocation paths, or CLI home contents.",
+  "protocol": {
+    "name": "Reactor full-context budget calibration",
+    "source_pr": "https://github.com/microsoft/microsoft-ui-reactor/pull/1444",
+    "base": "74791562c11792f7c0e2dd875f1e82b94d70b397",
+    "cases": [
+      {
+        "id": "c2",
+        "revision": "80acfb6c6c3dd78f660a36a4948989b0752b0007",
+        "text_files": 3118,
+        "sha256": "2fc42ae66a1c83fe37201a9a90cc4649add4489120847f74afe731797cefe17a"
+      }
+    ],
+    "models": [
+      "claude-opus-5.5",
+      "claude-sonnet-5.5",
+      "gpt-6.1-sol",
+      "gpt-6-astra"
+    ],
+    "repetitions": 1,
+    "reasoning_effort": "high",
+    "seed": 20261105,
+    "max_runs": 4,
+    "credits_per_run": 150,
+    "total_credits": 600,
+    "timeout_seconds": 900,
+    "source_paths": [
+      "AGENTS.md",
+      "README.md",
+      "CHANGELOG.md",
+      "TESTING.md",
+      "src",
+      "tests",
+      "docs",
+      "skills",
+      "plugins/reactor/skills",
+      "Directory.Build.props",
+      "Directory.Build.targets",
+      "Directory.Packages.props",
+      "global.json",
+      "Reactor.slnx",
+      "nuget.config"
+    ],
+    "budget_authorization": {
+      "overall_ceiling": 1200,
+      "prior_completed_run_credits": 407.34001,
+      "prior_unmetered_run": "review-eval/runs/r13; interrupted startup, empty event stream, no final usage export",
+      "new_run_allocation": 600,
+      "unallocated_headroom": 192.65999,
+      "note": "User approved four full-context reviews at up to 150 credits each. Headroom is not proof of the interrupted run's charge; all CLI limits remain soft."
+    },
+    "limits": [
+      "Separate calibration experiment, not an extension of the 30-credit condition.",
+      "Same source snapshot and review rubric as c2 in the first experiment.",
+      "One PR snapshot and one sample per model cannot establish superiority.",
+      "Budget-limited runs are censored, not zero-finding reviews.",
+      "Security and packaging have no positive reference labels in this case."
+    ],
+    "schedule": [
+      {
+        "id": "r01",
+        "case": "c2",
+        "model": "gpt-6-astra",
+        "repetition": 1
+      },
+      {
+        "id": "r02",
+        "case": "c2",
+        "model": "claude-opus-5.5",
+        "repetition": 1
+      },
+      {
+        "id": "r03",
+        "case": "c2",
+        "model": "gpt-6.1-sol",
+        "repetition": 1
+      },
+      {
+        "id": "r04",
+        "case": "c2",
+        "model": "claude-sonnet-5.5",
+        "repetition": 1
+      }
+    ],
+    "prompt": "Review the proposed Reactor change in change.diff. The corresponding post-change source snapshot is under source. Read source\\AGENTS.md for repository context and review-rubric.txt for the seven review dimensions and required final JSON format. Source coverage is described in source-scope.json; files outside that export are not evidence of missing repository files. Inspect supporting code as needed. Do not inspect parent directories, other cases, Git history, reviews, or evaluation metadata. Stay within this working directory. Do not edit files. Return the final review, not a plan.",
+    "rubric_sha256": "ce437fcb6ace21abac421ff65244e36b6f7f6120c1a59238b1dcc06ed3539608",
+    "prepared_from": "a61657ff404c180464061912b0c02d4a4560492a"
+  },
+  "reference": {
+    "schema_version": 1,
+    "frozen_before_model_runs": true,
+    "source_pr": "https://github.com/microsoft/microsoft-ui-reactor/pull/1444",
+    "case_meanings": {
+      "c1": "After runtime fixes, before oracle/documentation fixes",
+      "c2": "Before runtime fixes",
+      "c3": "After both fix commits"
+    },
+    "label_basis": "Historical review, source inspection and matching fix patches. No WinUI regression or mutation test has been rerun locally for this experiment.",
+    "scoring": {
+      "matching": "Match the specific mechanism and affected path, not keywords or a broad request for more tests. Deduplicate findings by root cause. One finding may match multiple labels only if it explains each mechanism separately.",
+      "primary_metrics": [
+        "Recall of the three known runtime defects, separately from test-oracle/documentation recall",
+        "Precision of adjudicated unique findings",
+        "False positives against known-fixed counterparts",
+        "Unresolved findings reported separately, with precision bounds rather than silently treated as false",
+        "Repeat agreement by label and by unsupported finding",
+        "Acceptable severity classification",
+        "Observed AI credits, tokens, elapsed time and completion rate"
+      ],
+      "new_findings": "A finding absent from this reference is unjudged, not automatically false. Verify it against the frozen source and record a written disposition before scoring.",
+      "fixed_control": "c3 is a control for these labels only. Merged does not mean bug-free.",
+      "severity": "Accept the specified severity range; count critical overstatement separately.",
+      "blinding": "Export findings under opaque run IDs before adjudication. The coordinator knows the experimental design, so this is not independent human-blind adjudication.",
+      "limitations": [
+        "Snapshots from one PR are correlated; repeats do not create independent PR samples.",
+        "No model-level statistical superiority claim from this pilot.",
+        "Security and packaging have no seeded/reference-positive labels in this case.",
+        "Historical author mutation claims corroborate labels but are not new local reproductions.",
+        "No comparison to unavailable legacy model IDs is claimed.",
+        "One combined seven-lens primary review is not the former seven-agent workflow.",
+        "High effort is a shared setting name, not identical compute across providers."
+      ]
+    },
+    "labels": [
+      {
+        "id": "R1",
+        "category": "runtime",
+        "dimension": "correctness",
+        "present_in": [
+          "c2"
+        ],
+        "fixed_in": [
+          "c1",
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+        "mechanism": "The Opened lambda captures reconciler and lifetime and is never detached. An externally retained native dialog retains the disposed host/reconciler after ShowAsync completes.",
+        "required_evidence": "Identify the newly captured reconciler/lifetime and missing unsubscription after ShowAsync, with the retained-native-dialog lifetime consequence.",
+        "fix_commit": "dbcec359118c42eba12810fd68ec7a85c592b0bc",
+        "review_comment_id": 4426046038
+      },
+      {
+        "id": "R2",
+        "category": "runtime",
+        "dimension": "correctness",
+        "present_in": [
+          "c2"
+        ],
+        "fixed_in": [
+          "c1",
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+        "mechanism": "Disposal during dialog-content mount drains existing components, but mounting later siblings can still run effects. The retired branch clears dialog.Content before finally can unmount that completed subtree, orphaning those later effect cleanups.",
+        "required_evidence": "Describe disposal from a content setter followed by an effectful sibling, and why dropping rather than unmounting the completed subtree leaks cleanup.",
+        "fix_commit": "dbcec359118c42eba12810fd68ec7a85c592b0bc",
+        "review_comment_id": 4426046104
+      },
+      {
+        "id": "R3",
+        "category": "runtime",
+        "dimension": "correctness",
+        "present_in": [
+          "c2"
+        ],
+        "fixed_in": [
+          "c1",
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+        "mechanism": "Disposal from a replacement-content setter can retire the lifetime while UpdateContentDialog is in progress. Both content replacement paths resume and can reattach content to the disposed dialog, notably while native closing is deferred.",
+        "required_evidence": "Identify the live-update/replacement path and the need to check retirement after reentrant mount/update and clean abandoned replacements.",
+        "fix_commit": "dbcec359118c42eba12810fd68ec7a85c592b0bc",
+        "review_comment_id": 4426046140
+      },
+      {
+        "id": "T1",
+        "category": "oracle",
+        "dimension": "test-coverage",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+        "mechanism": "No fixture exercises ShowContentDialog's entry guard after disposal has started. A second sibling dialog can open after the first dialog setter disposes its host if that guard is removed.",
+        "required_evidence": "Distinguish a second dialog entering ShowContentDialog from later children inside the first dialog; specify an observable second creation/native Opened signal.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053503,
+        "historical_mutation_evidence": "Reply 4447006656 reports second setters=1/native Opened=1 when removing the entry guard."
+      },
+      {
+        "id": "T2",
+        "category": "oracle",
+        "dimension": "test-coverage",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "src/Reactor/Hosting/ReactorHost.cs",
+        "mechanism": "WindowHost does not throw during root cleanup; ThrowingRoot uses ReactorHostControl, not ReactorHost. Removing ReactorHost's early RetireContentDialogs call is therefore not distinguished by these tests.",
+        "required_evidence": "Name the two host types and why a throwing root cleanup bypasses later disposal in the window host; propose the window-host throwing-cleanup regression.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053510,
+        "historical_mutation_evidence": "Reply 4447006688 reports failing close/detach assertions when the early window-host retirement call is removed."
+      },
+      {
+        "id": "T3",
+        "category": "oracle",
+        "dimension": "test-coverage",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "tests/Reactor.AppTests.Host/SelfTest/Fixtures/ContentDialogDisposeEdgeFixtures.cs",
+        "mechanism": "PendingShow's zero element callback count does not prove the late Opened hide guard ran: retirement clears the anchor tag, so the callback remains zero even with that guard removed. A pending native show can also be cancelled before Opened.",
+        "required_evidence": "Explain the tag-clearing confound and require native Opened to actually occur before checking the hide/detach effect, or an equivalent isolated late-open test.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053516,
+        "historical_mutation_evidence": "Reply 4447006660 reports that LateOpened isolates the guard and fails close/detach assertions when it is removed."
+      },
+      {
+        "id": "T4",
+        "category": "oracle",
+        "dimension": "test-coverage",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "tests/Reactor.AppTests.Host/SelfTest/Fixtures/ContentDialogDisposeEdgeFixtures.cs",
+        "mechanism": "BeforeShow can still pass without the post-setter retirement guard: a later Opened guard hides the dialog, the element callback stays zero and content is already detached. The one-frame open-dialog probe can miss the transient native show.",
+        "required_evidence": "Identify the masking late-hide path and require a native Opened counter to remain zero, not just the element callback or final detached state.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053534,
+        "historical_mutation_evidence": "Reply 4447006666 reports native Opened=1 without the guard while the original callback/detachment assertions still passed."
+      },
+      {
+        "id": "T5",
+        "category": "oracle",
+        "dimension": "test-coverage",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "tests/Reactor.AppTests.Host/SelfTest/Fixtures/ContentDialogDisposeEdgeFixtures.cs",
+        "mechanism": "Deferred and DeferredUnmount discard the native dialog and only clear H.Content in finally. If deferred-open behavior regresses, an open modal can remain on the shared XamlRoot and contaminate subsequent dialog fixtures.",
+        "required_evidence": "Identify the failure-path cleanup gap in these deferred fixtures and the shared-root/one-dialog consequence; require retaining and hiding/waiting for the native dialog.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053524
+      },
+      {
+        "id": "D1",
+        "category": "documentation",
+        "dimension": "docs-and-samples",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "medium",
+          "high"
+        ],
+        "file": "CHANGELOG.md",
+        "mechanism": "The guide and ContentDialogElement XML docs do not document the new silent host/reconciler-disposal behavior and deferred-open cancellation. Changelog-only coverage is insufficient for authors relying on OnClosed for state reset.",
+        "required_evidence": "Tie the docs gap to OnClosed suppression on disposal and/or cancellation without OnOpened; identify guide/XML documentation rather than generic requests for docs.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053494
+      },
+      {
+        "id": "D2",
+        "category": "documentation",
+        "dimension": "docs-and-samples",
+        "present_in": [
+          "c1",
+          "c2"
+        ],
+        "fixed_in": [
+          "c3"
+        ],
+        "acceptable_severities": [
+          "low",
+          "medium"
+        ],
+        "file": "CHANGELOG.md",
+        "mechanism": "The new disposal entry cites spec 047 section 4.5, which does not provide the claimed disposal contract.",
+        "required_evidence": "Verify the referenced section is absent or about a different subject; this is a factual citation defect, not merely a preference for a different link.",
+        "fix_commit": "1bcb4c6498bde619ad5f297611d803c809e91eff",
+        "review_comment_id": 4427053482
+      }
+    ]
+  },
+  "results": {
+    "name": "Reactor full-context budget calibration",
+    "source_pr": "https://github.com/microsoft/microsoft-ui-reactor/pull/1444",
+    "base": "74791562c11792f7c0e2dd875f1e82b94d70b397",
+    "cases": [
+      {
+        "id": "c2",
+        "revision": "80acfb6c6c3dd78f660a36a4948989b0752b0007",
+        "text_files": 3118,
+        "sha256": "2fc42ae66a1c83fe37201a9a90cc4649add4489120847f74afe731797cefe17a"
+      }
+    ],
+    "reasoning_effort": "high",
+    "credits_per_run": 150,
+    "reference_sha256": "3d32c6abbe29627330e6381f74e7abc1fa45fe3b4cd7f0e6224c0ed425e0082d",
+    "known_ai_credits": 396.83209,
+    "unmetered_runs": [],
+    "runs": [
+      {
+        "id": "r01",
+        "case": "c2",
+        "model": "gpt-6-astra",
+        "repetition": 1,
+        "status": "completed",
+        "review_valid": true,
+        "ai_credits": 147.5129,
+        "elapsed_seconds": 156.156,
+        "soft_cap_exceeded": false,
+        "model_verified": true,
+        "adjudication": {
+          "supported": 1,
+          "unsupported": 0,
+          "out_of_scope": 0,
+          "duplicate": 0,
+          "unresolved": 0,
+          "known_labels_found": [
+            "R1"
+          ],
+          "novel_supported": 0,
+          "precision_judged": 1.0,
+          "precision_lower_bound": 1.0,
+          "precision_upper_bound": 1.0,
+          "severity_acceptable": 1,
+          "severity_judged": 1
+        },
+        "runtime": {
+          "found": 1,
+          "reference_count": 3
+        },
+        "oracle": {
+          "found": 0,
+          "reference_count": 5
+        },
+        "documentation": {
+          "found": 0,
+          "reference_count": 2
+        }
+      },
+      {
+        "id": "r02",
+        "case": "c2",
+        "model": "claude-opus-5.5",
+        "repetition": 1,
+        "status": "completed",
+        "review_valid": true,
+        "ai_credits": 161.88812,
+        "elapsed_seconds": 605.672,
+        "soft_cap_exceeded": true,
+        "model_verified": true,
+        "adjudication": {
+          "supported": 0,
+          "unsupported": 1,
+          "out_of_scope": 1,
+          "duplicate": 0,
+          "unresolved": 1,
+          "known_labels_found": [],
+          "novel_supported": 0,
+          "precision_judged": 0.0,
+          "precision_lower_bound": 0.0,
+          "precision_upper_bound": 0.3333333333333333,
+          "severity_acceptable": 0,
+          "severity_judged": 0
+        },
+        "runtime": {
+          "found": 0,
+          "reference_count": 3
+        },
+        "oracle": {
+          "found": 0,
+          "reference_count": 5
+        },
+        "documentation": {
+          "found": 0,
+          "reference_count": 2
+        }
+      },
+      {
+        "id": "r03",
+        "case": "c2",
+        "model": "gpt-6.1-sol",
+        "repetition": 1,
+        "status": "completed",
+        "review_valid": true,
+        "ai_credits": 43.76153,
+        "elapsed_seconds": 216.703,
+        "soft_cap_exceeded": false,
+        "model_verified": true,
+        "adjudication": {
+          "supported": 2,
+          "unsupported": 0,
+          "out_of_scope": 0,
+          "duplicate": 0,
+          "unresolved": 0,
+          "known_labels_found": [
+            "R1",
+            "R2"
+          ],
+          "novel_supported": 0,
+          "precision_judged": 1.0,
+          "precision_lower_bound": 1.0,
+          "precision_upper_bound": 1.0,
+          "severity_acceptable": 2,
+          "severity_judged": 2
+        },
+        "runtime": {
+          "found": 2,
+          "reference_count": 3
+        },
+        "oracle": {
+          "found": 0,
+          "reference_count": 5
+        },
+        "documentation": {
+          "found": 0,
+          "reference_count": 2
+        }
+      },
+      {
+        "id": "r04",
+        "case": "c2",
+        "model": "claude-sonnet-5.5",
+        "repetition": 1,
+        "status": "completed",
+        "review_valid": true,
+        "ai_credits": 43.66954,
+        "elapsed_seconds": 209.468,
+        "soft_cap_exceeded": false,
+        "model_verified": true,
+        "adjudication": {
+          "supported": 0,
+          "unsupported": 0,
+          "out_of_scope": 2,
+          "duplicate": 0,
+          "unresolved": 3,
+          "known_labels_found": [],
+          "novel_supported": 0,
+          "precision_judged": 0.0,
+          "precision_lower_bound": 0.0,
+          "precision_upper_bound": 0.6,
+          "severity_acceptable": 0,
+          "severity_judged": 0
+        },
+        "runtime": {
+          "found": 0,
+          "reference_count": 3
+        },
+        "oracle": {
+          "found": 0,
+          "reference_count": 5
+        },
+        "documentation": {
+          "found": 0,
+          "reference_count": 2
+        }
+      }
+    ],
+    "limitations": [
+      "Snapshots from one PR are correlated; repeats do not create independent PR samples.",
+      "No model-level statistical superiority claim from this pilot.",
+      "Security and packaging have no seeded/reference-positive labels in this case.",
+      "Historical author mutation claims corroborate labels but are not new local reproductions.",
+      "No comparison to unavailable legacy model IDs is claimed.",
+      "One combined seven-lens primary review is not the former seven-agent workflow.",
+      "High effort is a shared setting name, not identical compute across providers."
+    ]
+  },
+  "reviews_and_adjudications": [
+    {
+      "model": "gpt-6-astra",
+      "case": "c2",
+      "final_review": {
+        "findings": [
+          {
+            "file": "src\\Reactor\\Core\\V1Protocol\\OverlayLifecycle.cs",
+            "line_start": 334,
+            "line_end": 341,
+            "dimension": "correctness",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "The Opened handler retains the owning host after dialog teardown",
+            "evidence": "The changed handler captures both reconciler and lifetime. Neither StopTracking (lines 79\u201383) nor ShowContentDialogCore's finally unsubscribes it. Consequently, retaining a closed dialog through .Set retains its reconciler and host: ReactorHostControl assigns itself to the reconciler's ThemeAnchor and Owner and installs host-capturing delegates (ReactorHostControl.cs:241\u2013253). Clearing the dialog's content and tags does not break this new reference chain, so a disposed host removed from the window remains alive while the captured dialog is retained.",
+            "recommendation": "Store the Opened delegate and unsubscribe it in ShowContentDialogCore's finally, preserving the guard until a pending show completes. Add a lifetime regression fixture that retains the closed native dialog while verifying that its disposed, detached host can be collected."
+          }
+        ],
+        "coverage": [
+          {
+            "dimension": "security",
+            "status": "reviewed",
+            "notes": "Inspected the diff; no new external-input, process, filesystem, network, or credential surface."
+          },
+          {
+            "dimension": "correctness",
+            "status": "reviewed",
+            "notes": "Traced deferred opens, retirement, native show completion, ordinary unmount, theme detachment, and both host disposal paths."
+          },
+          {
+            "dimension": "api-ergonomics",
+            "status": "reviewed",
+            "notes": "Changes preserve public signatures; inspected disposal and callback behavior."
+          },
+          {
+            "dimension": "alternative-solution",
+            "status": "reviewed",
+            "notes": "Compared lifetime tracking with existing overlay ownership, theme binding, and unmount helpers."
+          },
+          {
+            "dimension": "test-coverage",
+            "status": "reviewed",
+            "notes": "Statically inspected new disposal fixtures, registry wiring, existing dialog lifecycle coverage, and panel identity assertions. Tests were not executed."
+          },
+          {
+            "dimension": "docs-and-samples",
+            "status": "reviewed",
+            "notes": "Checked changelog and testing guidance against implementation, dialog guide templates, and relevant shipped skills."
+          },
+          {
+            "dimension": "packaging",
+            "status": "not_applicable",
+            "notes": "No dependency, package manifest, public API signature, generator, or agent-kit packaging changes."
+          }
+        ]
+      },
+      "adjudications": [
+        {
+          "finding": 0,
+          "verdict": "supported",
+          "labels": [
+            "R1"
+          ],
+          "reason": "Matches the pre-frozen retained-dialog leak. In c2, OverlayLifecycle.cs:334-341 captures reconciler/lifetime and its finally never detaches Opened. Reconciler.Owner is a strong property (Reconciler.cs:58), and host callbacks/theme anchor also retain the host. The dbcec359 repair changes this to a named handler detached in finally."
+        }
+      ],
+      "strict_schema_compliance": true,
+      "schema_normalizations": [],
+      "tool_names": [
+        "glob",
+        "rg",
+        "view"
+      ],
+      "tool_calls": 37,
+      "token_details": {
+        "input": {
+          "tokenCount": 30
+        },
+        "cache_read": {
+          "tokenCount": 311879
+        },
+        "cache_write": {
+          "tokenCount": 61720
+        },
+        "output": {
+          "tokenCount": 7829
+        }
+      }
+    },
+    {
+      "model": "claude-sonnet-5.5",
+      "case": "c2",
+      "final_review": {
+        "findings": [
+          {
+            "file": "src/Reactor/Core/Reconciler.cs",
+            "line_start": 7921,
+            "line_end": 7930,
+            "dimension": "correctness",
+            "severity": "low",
+            "confidence": "low",
+            "title": "RetireContentDialogs is unguarded and runs before any user cleanup, so one throwing Hide() can abort disposal",
+            "evidence": "RetireContentDialogs sets IsDisposingContentDialogs = true, then calls lifetime.Retire() in a plain foreach with no try/catch. Retire() calls dialog.Hide() and mutates the WinUI ContentDialog (Content, tags). Both hosts now call it first in Dispose(), and DisposeCollectingPropagation calls it before ForgetComponentDiagnostics and the cleanup loop. If any WinUI call throws (a COM error on a dialog in a bad state), the remaining lifetimes are not retired. The flag is already set, so a second call returns early and never retries. Effect cleanups, navigation teardown, and registry/theme unregistration are skipped. The patch's own comment says cleanup 'can throw', but this new step is the one placed ahead of the existing exception-collection machinery (issue #1291).",
+            "recommendation": "Wrap each Retire() in try/catch and feed failures into the existing pendingPropagation/RenderErrorHandler path, or at least guarantee the rest of Dispose still runs. Add a fixture where Hide() fails."
+          },
+          {
+            "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+            "line_start": 335,
+            "line_end": 342,
+            "dimension": "correctness",
+            "severity": "low",
+            "confidence": "low",
+            "title": "Unsupported claim about native ShowAsync queueing, with an unverified timing-dependent mitigation",
+            "evidence": "The comment 'Hide before Opened need not cancel a queued native ShowAsync' asserts WinUI behavior, and the Opened handler re-calls Hide() on that basis. No in-repo source, test, or docs establish the claim. Retire() has already called Hide(), so this second Hide() runs only when that first call was ineffective. Only the PendingShow fixture touches this path, and it asserts end state after a fixed Render(100) delay.",
+            "recommendation": "Cite the in-repo evidence for the queued-ShowAsync behavior, or reword the comment as a defensive guard. Make the PendingShow fixture deterministic by waiting on the Closed/unloaded condition rather than sleeping."
+          },
+          {
+            "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+            "line_start": 203,
+            "line_end": 215,
+            "dimension": "test-coverage",
+            "severity": "medium",
+            "confidence": "medium",
+            "title": "Multi-lifetime paths introduced by the new bookkeeping are not exercised",
+            "evidence": "ShowContentDialog now creates a new ContentDialogLifetime per rising edge and retires any prior pending one. s_liveDialogs.AddOrUpdate can overwrite an older, still-closing dialog's entry. Retire() then relies on ReferenceEquals(live.Lifetime, this) to avoid clearing the newer dialog's state. The eight new fixtures cover a single lifetime per anchor. None covers (a) re-open while the previous dialog is still closing, followed by host disposal, (b) a pending deferral replaced by a second rising edge, or (c) IsOpen toggled false while deferred, followed by disposal. There is also no non-UI unit test of the lifetime state machine, and none for the changed ShouldStartDeferredDialog gating.",
+            "recommendation": "Add a selftest that reopens during a Closing deferral and then disposes, asserting both dialogs are hidden and no OnClosed fires. Add one for a pending-then-replaced deferral, and a unit test of Retire/StopTracking set membership."
+          },
+          {
+            "file": "tests/Reactor.AppTests.Host/SelfTest/Fixtures/ContentDialogDisposeFixture.cs",
+            "line_start": 74,
+            "line_end": 78,
+            "dimension": "test-coverage",
+            "severity": "low",
+            "confidence": "high",
+            "title": "Leftover debug output and stale 'baseline failure' rescue framing in a committed fixture",
+            "evidence": "The fixture prints a '# DialogDispose before rescue: ...' Console.WriteLine diagnostic, and the finally comment says 'the baseline failure cannot strand a modal dialog'. Both are scaffolding from reproducing the bug, not assertions. They add noisy selftest output and describe a pre-fix state that no longer exists.",
+            "recommendation": "Remove the Console.WriteLine. Reword the finally comment as plain cleanup, or fold the values into H.Check messages."
+          },
+          {
+            "file": "TESTING.md",
+            "line_start": 139,
+            "line_end": 146,
+            "dimension": "docs-and-samples",
+            "severity": "low",
+            "confidence": "medium",
+            "title": "Native-identity guidance placed under the wrong heading, and the panel-fixture change is unrelated and unrecorded",
+            "evidence": "The new paragraph about comparing ReactorState instead of RuntimeHelpers.GetHashCode is inserted under '### Mutation checks must prove the mutation ran', directly before that section's own text. It has nothing to do with mutation checks. The PanelDescriptorMigrationFixtures rewrite (GC.Collect, ReactorState identity) is unrelated to ContentDialog disposal. The CHANGELOG entry only covers dialogs.",
+            "recommendation": "Move the paragraph to a section on identity or flakiness checks, or to a new subsection. Split the panel-fixture change into its own PR, or mention it in the changelog or PR description."
+          }
+        ],
+        "coverage": [
+          {
+            "dimension": "security",
+            "status": "reviewed",
+            "notes": "No process launching, paths, deserialization, network, or secrets in the diff. No findings."
+          },
+          {
+            "dimension": "correctness",
+            "status": "reviewed",
+            "notes": "Traced Retire, StopTracking, TryTakeLiveContentDialog, the deferred Loaded path, and the ShowContentDialogCore finally block against ContentDialogHandler.Unmount and DisposeCollectingPropagation. Ownership and double-cleanup logic looks consistent; two low-confidence notes above."
+          },
+          {
+            "dimension": "api-ergonomics",
+            "status": "not_applicable",
+            "notes": "Only internal members were added. No public API or DSL changes."
+          },
+          {
+            "dimension": "alternative-solution",
+            "status": "reviewed",
+            "notes": "A per-reconciler lifetime set is reasonable given that terminal disposal skips tree unmount. No simpler alternative found that preserves the 'no OnClosed, no double cleanup' semantics."
+          },
+          {
+            "dimension": "test-coverage",
+            "status": "reviewed",
+            "notes": "Eight selftest fixtures were added and registered. Gaps are in multi-lifetime and re-open scenarios. Tests were not run."
+          },
+          {
+            "dimension": "docs-and-samples",
+            "status": "reviewed",
+            "notes": "The CHANGELOG entry is present. The TESTING.md placement issue is noted. Did not inspect other docs for ContentDialog lifecycle statements."
+          },
+          {
+            "dimension": "packaging",
+            "status": "not_applicable",
+            "notes": "No packaging, skill, or agent-kit surfaces are touched."
+          }
+        ]
+      },
+      "adjudications": [
+        {
+          "finding": 0,
+          "verdict": "unresolved",
+          "labels": [],
+          "reason": "The conditional control-flow observation is correct: RetireContentDialogs runs before later disposal cleanup and does not catch native failures. However, the proposed COM-error/bad-state trigger is not demonstrated for a supported UI-thread disposal sequence. ContentDialogThemeBinding.Dispose only detaches a handler (lines 76-81). Keep the native-exception hypothesis unresolved rather than declaring it a true defect or false positive without a WinUI reproduction."
+        },
+        {
+          "finding": 1,
+          "verdict": "unresolved",
+          "labels": [],
+          "reason": "This does not identify T3's tag-clearing confound or require a native Opened positive control. PendingShow already awaits ContentDialogProbe.WaitForNoneOpen after Render(100), so replacing the sleep with a closing wait is not the claimed missing behavior. Whether the native queueing statement itself lacks adequate evidence remains a documentation/oracle hypothesis; no reference-label credit is awarded."
+        },
+        {
+          "finding": 2,
+          "verdict": "unresolved",
+          "labels": [],
+          "reason": "Not T1: the finding asks for reopen/multiple-lifetime scenarios, not a second dialog entering after host disposal. Its assertion of no ShouldStartDeferredDialog unit tests is contradicted by five tests in FlyoutAttachmentTests.cs:482-518, and the predicate body at OverlayLifecycle.cs:283-284 is unchanged. The remaining multi-lifetime coverage suggestion could still be useful, but a concrete additional failure or mutation oracle was not established. Retain the mixed finding as unresolved, not as a confirmed defect."
+        },
+        {
+          "finding": 3,
+          "verdict": "out_of_scope",
+          "labels": [],
+          "reason": "A diagnostic-output/comment-polish request, excluded by the frozen Team Lead Test. ContentDialogDisposeFixture.cs:74-78 deliberately records native state before the finally rescue at lines 90-100; this helps distinguish natural retirement from cleanup masking a regression. No incorrect behavior is identified."
+        },
+        {
+          "finding": 4,
+          "verdict": "out_of_scope",
+          "labels": [],
+          "reason": "Heading placement and splitting the panel-fixture changes are editorial/scope preferences, not a demonstrated defect under the frozen review contract. TESTING.md:141-146 contains accurate identity guidance; the finding does not show that the guidance or assertions are wrong. It is not D1 or D2."
+        }
+      ],
+      "strict_schema_compliance": false,
+      "schema_normalizations": [
+        "Dimension 'Security' -> 'security'",
+        "Dimension 'Correctness & edge-case' -> 'correctness'",
+        "Dimension 'API & DSL ergonomics' -> 'api-ergonomics'",
+        "Dimension 'Alternative-solution' -> 'alternative-solution'",
+        "Dimension 'Test coverage' -> 'test-coverage'",
+        "Dimension 'Docs & samples sync' -> 'docs-and-samples'",
+        "Dimension 'Packaging & agent-kit impact' -> 'packaging'",
+        "Dimension 'Correctness & edge-case' -> 'correctness'",
+        "Dimension 'Correctness & edge-case' -> 'correctness'",
+        "Dimension 'Test coverage' -> 'test-coverage'",
+        "Dimension 'Test coverage' -> 'test-coverage'",
+        "Dimension 'Docs & samples sync' -> 'docs-and-samples'"
+      ],
+      "tool_names": [
+        "grep",
+        "view"
+      ],
+      "tool_calls": 17,
+      "token_details": {
+        "input": {
+          "tokenCount": 856
+        },
+        "cache_read": {
+          "tokenCount": 246484
+        },
+        "cache_write": {
+          "tokenCount": 57638
+        },
+        "output": {
+          "tokenCount": 26624
+        }
+      }
+    },
+    {
+      "model": "gpt-6.1-sol",
+      "case": "c2",
+      "final_review": {
+        "findings": [
+          {
+            "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+            "line_start": 334,
+            "line_end": 341,
+            "dimension": "correctness",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "Retained native dialogs now retain their owning hosts",
+            "evidence": "The new Opened delegate captures both reconciler and lifetime. StopTracking only removes the lifetime from its owner's set (line 83), and the completion finally (lines 374\u2013395) never unsubscribes this delegate. A native dialog retained through .Set therefore retains its reconciler after closing or disposal. ReactorHostControl assigns itself to that reconciler's Owner and RenderErrorHandlerProvider (ReactorHostControl.cs:249\u2013253), so the disposed host remains reachable even after Content and element tags are cleared.",
+            "recommendation": "Keep a removable Opened handler and unsubscribe it in ShowContentDialogCore's terminal finally, retaining the queued-open protection until ShowAsync finishes. Add a selftest retaining the closed native dialog while checking that its disposed host can be collected."
+          },
+          {
+            "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+            "line_start": 367,
+            "line_end": 371,
+            "dimension": "correctness",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "Canceled pre-show mounts can strand effects created after disposal",
+            "evidence": "Consider a dialog body whose first child's OnMount calls host.Dispose(), followed by an effectful component sibling. Disposal clears _componentNodes (Reconciler.cs:7965), but panel mounting continues through subsequent children (V1HandlerAdapter.cs:273\u2013282). The later component is registered and its effects run (Reconciler.Mount.cs:902\u2013923). This new retired branch then clears Content and returns, so the finally's content-dependent UnmountChild never cleans that sibling. Subsequent host.Dispose() calls short-circuit. The BeforeShow fixture only disposes from the dialog setter after mounting a plain TextBlock, so it misses this resource leak.",
+            "recommendation": "Abort further dialog-body mounting after retirement, or roll back nodes and effects created after the disposal sweep before discarding the body. Extend BeforeShow with disposal from an early child's OnMount and a later effectful sibling, asserting no surviving subscription."
+          }
+        ],
+        "coverage": [
+          {
+            "dimension": "security",
+            "status": "reviewed",
+            "notes": "Checked changed lifecycle code; no new external-input, process, network, or credential surface."
+          },
+          {
+            "dimension": "correctness",
+            "status": "reviewed",
+            "notes": "Inspected deferred opens, retirement, native completion, host disposal, child mounting, and cleanup."
+          },
+          {
+            "dimension": "api-ergonomics",
+            "status": "reviewed",
+            "notes": "Reviewed disposal and callback behavior; public DSL signatures remain unchanged."
+          },
+          {
+            "dimension": "alternative-solution",
+            "status": "reviewed",
+            "notes": "Compared lifetime tracking with existing overlay ownership and attached-state conventions."
+          },
+          {
+            "dimension": "test-coverage",
+            "status": "reviewed",
+            "notes": "Read disposal fixtures, registrations, existing lifecycle fixtures, and panel identity assertions; no tests executed."
+          },
+          {
+            "dimension": "docs-and-samples",
+            "status": "reviewed",
+            "notes": "Checked changelog, testing guidance, dialog templates, and relevant shipped skills."
+          },
+          {
+            "dimension": "packaging",
+            "status": "reviewed",
+            "notes": "Checked project context; no dependency, packaging, target-framework, or public API changes."
+          }
+        ]
+      },
+      "adjudications": [
+        {
+          "finding": 0,
+          "verdict": "supported",
+          "labels": [
+            "R1"
+          ],
+          "reason": "Matches the pre-frozen retained-dialog leak, with the missing unsubscription and host-retention chain established in the c2 source and repaired by dbcec359."
+        },
+        {
+          "finding": 1,
+          "verdict": "supported",
+          "labels": [
+            "R2"
+          ],
+          "reason": "Matches the pre-frozen residual-subtree effect leak. The proposed OnMount trigger is equivalent to the original setter trigger: Reconciler.cs:6358-6360 invokes OnMountAction synchronously during each child's mount. Later siblings can therefore mount after disposal clears the component set. OverlayLifecycle.cs:367-371 then drops Content before finally can unmount that subtree. The dbcec359 repair and MountSiblingAfterDisposal fixture address exactly this mechanism."
+        }
+      ],
+      "strict_schema_compliance": true,
+      "schema_normalizations": [],
+      "tool_names": [
+        "glob",
+        "rg",
+        "view"
+      ],
+      "tool_calls": 56,
+      "token_details": {
+        "input": {
+          "tokenCount": 42
+        },
+        "cache_read": {
+          "tokenCount": 695788
+        },
+        "cache_write": {
+          "tokenCount": 93733
+        },
+        "output": {
+          "tokenCount": 13362
+        }
+      }
+    },
+    {
+      "model": "claude-opus-5.5",
+      "case": "c2",
+      "final_review": {
+        "findings": [
+          {
+            "file": "TESTING.md",
+            "line_start": 139,
+            "line_end": 147,
+            "dimension": "docs-and-samples",
+            "severity": "low",
+            "confidence": "high",
+            "title": "Native-identity guidance inserted under the wrong heading, splitting the mutation-check section",
+            "evidence": "The new paragraph sits directly under `### Mutation checks must prove the mutation ran` (line 139). The section's original first paragraph, `Before interpreting a green mutation run...`, now follows it. The new text is about selftest control identity (ReactorState vs RuntimeHelpers.GetHashCode), not about checking that a mutation ran. A reader of the mutation-testing section first gets unrelated identity advice, and the identity rule has no heading of its own, so it is hard to find from the 'When to write which test' material.",
+            "recommendation": "Move the paragraph to its own subsection, for example `### Native control identity in selftests`, placed before `### Mutation checks must prove the mutation ran`, and leave the mutation section starting with its original paragraph."
+          },
+          {
+            "file": "src/Reactor/Core/V1Protocol/OverlayLifecycle.cs",
+            "line_start": 59,
+            "line_end": 59,
+            "dimension": "alternative-solution",
+            "severity": "low",
+            "confidence": "medium",
+            "title": "New per-anchor ConditionalWeakTable instead of the attached-state store",
+            "evidence": "`s_pendingDialogs = new ConditionalWeakTable<FrameworkElement, ContentDialogLifetime>()` adds a second weak table keyed by the managed wrapper of the placeholder anchor. The same diff's CHANGELOG (spec 047 \u00a73 entry) and its TESTING.md note both say managed wrappers can be collected while the native control survives, which is why per-element state was moved to native attached state. Today the entry works only because `ContentDialogLifetime` strongly captures `anchor` and the reconciler's `ContentDialogLifetimes` set roots that lifetime. If the set membership changes, the lookups in `TryTakeLiveContentDialog`/`ShowContentDialog` would silently miss.",
+            "recommendation": "Keep the pending lifetime in the anchor's `ReactorAttached.StateProperty` / ReactorState, or add a comment saying the strong anchor reference in `ContentDialogLifetime` is load-bearing for this CWT."
+          },
+          {
+            "file": "src/Reactor/Hosting/ReactorHostControl.cs",
+            "line_start": 1465,
+            "line_end": 1467,
+            "dimension": "correctness",
+            "severity": "low",
+            "confidence": "low",
+            "title": "Dialog retirement runs before the guarded cleanup scope, so a throw aborts all disposal after `_disposed = true`",
+            "evidence": "`_reconciler.RetireContentDialogs()` runs right after `_disposed = true` and outside `RenderErrorDispatch.EnterPropagationScope()`. `Retire()` calls `Theme?.Dispose()`, `dialog.Content = null` and `dialog.Hide()` on native objects. If any of these throws (for example, a dialog whose XamlRoot or window is already torn down), `ThemeResourceListeners.Unregister`, every effect cleanup, and `DisposeCollectingPropagation` are skipped. A second Dispose is then a no-op. `IsDisposingContentDialogs` is already true, so the remaining lifetimes are never retired either. ReactorHost.cs line 1562 has the same issue. Before this change, nothing could throw at that point.",
+            "recommendation": "Make retirement best-effort: wrap each `lifetime.Retire()` in try/catch and feed failures into the same pending-propagation and RenderErrorHandler path as other cleanup failures, so the rest of disposal always runs."
+          }
+        ],
+        "coverage": [
+          {
+            "dimension": "security",
+            "status": "reviewed",
+            "notes": "The diff touches only in-process dialog lifecycle, host disposal and selftests. It adds no process launch, file IO, network, deserialization or codegen."
+          },
+          {
+            "dimension": "correctness",
+            "status": "reviewed",
+            "notes": "Traced ContentDialogLifetime through these paths: Retire/StopTracking/DetachLoaded, the deferred Loaded path, re-open while pending or closing, TryTakeLiveContentDialog from ContentDialogHandler.Unmount, the ShowContentDialogCore finally/ownsClose logic, and Reconciler/host Dispose ordering. Content cleanups stay in the DisposeCollectingPropagation batch. I found no double-unmount or OnClosed leak."
+          },
+          {
+            "dimension": "api-ergonomics",
+            "status": "not_applicable",
+            "notes": "All additions are internal; there is no public DSL, modifier, analyzer or CLI change."
+          },
+          {
+            "dimension": "alternative-solution",
+            "status": "reviewed",
+            "notes": "Compared the new pending-dialog CWT with the existing s_liveDialogs and the attached-state guidance."
+          },
+          {
+            "dimension": "test-coverage",
+            "status": "incomplete",
+            "notes": "I reviewed 8 new registered selftests: public host, window host, standalone reconciler, deferred, deferred-unmount, pending-show, closing, throwing-root and before-show. I also reviewed the rewritten PanelDescriptor identity fixtures. I could not confirm that VStack realizes as WinXC.StackPanel, which the new PDM_Stack_Swap_OrderChanged check assumes. No tests were run."
+          },
+          {
+            "dimension": "docs-and-samples",
+            "status": "incomplete",
+            "notes": "The CHANGELOG Fixed entry is under [Unreleased]. The TESTING.md placement issue is reported above. I could not locate spec 047 \u00a74.5 text to verify the CHANGELOG's 'semantics unchanged' citation."
+          },
+          {
+            "dimension": "packaging",
+            "status": "not_applicable",
+            "notes": "No csproj, package, agent-kit or build-wiring changes. The new code uses no reflection or AOT-sensitive APIs."
+          }
+        ]
+      },
+      "adjudications": [
+        {
+          "finding": 0,
+          "verdict": "out_of_scope",
+          "labels": [],
+          "reason": "The paragraph is indeed under the mutation-check heading, but moving it is an editorial organization preference. No incorrect instruction or substantive behavioral consequence is demonstrated, so it is excluded by the frozen high-signal review contract, consistently with P2 finding 4."
+        },
+        {
+          "finding": 1,
+          "verdict": "unsupported",
+          "labels": [],
+          "reason": "The finding overlooks an explicit local exception. OverlayLifecycle.cs:44-53 explains why rare feature-local native associations use side tables rather than adding slots to every ReactorState. The lifetime strongly captures the anchor and is rooted by ContentDialogLifetimes (lines 61-64 and 211-212); the finding itself concedes the current invariant holds. A hypothetical future membership change is not a defect in this snapshot. This exposes tension between the broad rubric rule and documented local prior art."
+        },
+        {
+          "finding": 2,
+          "verdict": "unresolved",
+          "labels": [],
+          "reason": "Same unresolved native-exception hypothesis as P2 finding 0. The early-call position and idempotency flags are real, but no supported sequence that makes the cited native operations throw has been demonstrated. The conditional hypothesis is not credited as a confirmed runtime defect, and agreement between two reports does not establish it."
+        }
+      ],
+      "strict_schema_compliance": true,
+      "schema_normalizations": [],
+      "tool_names": [
+        "grep",
+        "view"
+      ],
+      "tool_calls": 24,
+      "token_details": {
+        "input": {
+          "tokenCount": 1032
+        },
+        "cache_read": {
+          "tokenCount": 451591
+        },
+        "cache_write": {
+          "tokenCount": 52391
+        },
+        "output": {
+          "tokenCount": 63124
+        }
+      }
+    }
+  ],
+  "initial_budget_calibration": {
+    "runs": [
+      {
+        "id": "r01",
+        "case": "c2",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "review_valid": true,
+        "review_schema_exact": true,
+        "ai_credits": 26.04881
+      },
+      {
+        "id": "r02",
+        "case": "c2",
+        "model": "gpt-6-astra",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 31.1233
+      },
+      {
+        "id": "r03",
+        "case": "c2",
+        "model": "claude-sonnet-5.5",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 35.42298
+      },
+      {
+        "id": "r04",
+        "case": "c2",
+        "model": "claude-opus-5.5",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 36.86732
+      },
+      {
+        "id": "r05",
+        "case": "c3",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "review_valid": true,
+        "review_schema_exact": true,
+        "ai_credits": 30.13242
+      },
+      {
+        "id": "r06",
+        "case": "c3",
+        "model": "claude-opus-5.5",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 36.22564
+      },
+      {
+        "id": "r07",
+        "case": "c3",
+        "model": "claude-sonnet-5.5",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 30.74225
+      },
+      {
+        "id": "r08",
+        "case": "c3",
+        "model": "gpt-6-astra",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 45.42855
+      },
+      {
+        "id": "r09",
+        "case": "c1",
+        "model": "claude-opus-5.5",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 33.17092
+      },
+      {
+        "id": "r10",
+        "case": "c1",
+        "model": "claude-sonnet-5.5",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 31.25803
+      },
+      {
+        "id": "r11",
+        "case": "c1",
+        "model": "gpt-6.1-sol",
+        "status": "completed",
+        "review_valid": true,
+        "review_schema_exact": true,
+        "ai_credits": 27.22324
+      },
+      {
+        "id": "r12",
+        "case": "c1",
+        "model": "gpt-6-astra",
+        "status": "budget_exhausted",
+        "review_valid": false,
+        "review_schema_exact": null,
+        "ai_credits": 43.69655
+      }
+    ],
+    "known_ai_credits": 407.34001,
+    "usable_reports": 3,
+    "budget_censored_reports": 9,
+    "unmetered_runs": [
+      "r13"
+    ],
+    "correction": "All completed runs were reprocessed with explicit dimension-heading normalization. The initial condition still has only three usable reports and nine budget-censored/incomplete reports. The format-only correction applies to Sonnet in the separate 150-credit calibration, not to this condition."
+  },
+  "combined_known_review_run_credits": 804.1721,
+  "accounting_limitations": [
+    "Original r13 startup has no final usage export.",
+    "Coordinator conversation usage is not included.",
+    "CLI accounting is not a settled billing invoice."
+  ]
+}
