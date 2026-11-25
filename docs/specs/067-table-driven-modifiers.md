@@ -322,7 +322,7 @@ internal static partial class ModifierSchema
         // … CornerRadius, BorderBrush, the Border family (BorderThickness in Visual,
         //   BorderInlineStart in Layout), Background …
         Simple("Foreground", Visual, Brush, Family.Brush)
-            .On(Control, TextBlock)                              // Apply | Pool (ClearValue)
+            .On(Control, TextBlock, roles: Apply | Theme | Pool) // plain write, ThemeRef, ClearValue
             .Theme(RichTextBlock)                                // Theme only, no plain write
             .Pool(RichTextBlock, ClearValue)                     // Pool only (ElementPool.cs:618)
             .Equality(skip: BrushValue, write: Reference),
@@ -750,8 +750,15 @@ that changes what it checks.
   directions. A wrongly declared null gate would otherwise pass the existing gate tests, which skip
   null gates.
 - **Scan population (layer 0).** Every reconciler method that takes an `ElementModifiers`-shaped
-  `oldM` / `m` pair appears in `ModifierUnsetClearValueTests.ScannedMethods` and in the gate
-  reader's method set, so splitting `ApplyModifiers` can never leave a method unscanned.
+  `oldM` / `m` pair is either in `ModifierUnsetClearValueTests.ScannedMethods` and the gate
+  reader's method set, or on an explicit exclusion list with a reason. The extracted
+  property-writing families are scanned. Behaviour and reference-wiring methods
+  (`ApplyEventHandlers`, `ApplyGestureHandlers`, `ApplyDragDropHandlers`,
+  `ApplyModifierReferenceEdges`) are excluded by name, because their unset arms deliberately assign
+  values such as `false` (`Reconciler.Gestures.cs:312-318`, `Reconciler.DragDrop.cs:89-91,
+  123-125`) and the unset scanner would reject unchanged behaviour. A new method has to land in one
+  list or the other, so splitting `ApplyModifiers` can never leave a property-writing method
+  unscanned.
 - **Freshness.** The emitter, reached through the tool's `ProjectReference` (§4.2), regenerates
   every output in memory and byte-compares it with the checked-in file. Regenerate with
   `dotnet run --project tools/Reactor.ModifierGen`.
