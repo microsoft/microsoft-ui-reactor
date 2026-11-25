@@ -1156,14 +1156,18 @@ internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFix
             var playing = pulse.Opacity(0.4);
             reconciler.Update(seed, playing, target, () => { });
             await Harness.Render();
-            H.Check("OpacityLoop_FlyoutLoopStarted", visual.TryGetAnimationController("Opacity") is not null);
+            var loop = visual.TryGetAnimationController("Opacity");
+            H.Check("OpacityLoop_FlyoutLoopStarted", loop is not null);
             reconciler.Update(playing, pulse, target, () => { });
             await Harness.Render();
-            // Clearing .Opacity(0.4) makes XAML push 1 to the visual on its next frame, which also stops
-            // the loop. Let it land first: pushed later, it would overwrite the child's .Set below.
+            // Clearing .Opacity(0.4) makes XAML push 1 to the visual on its next frame, which stops the
+            // loop. Let it land first: pushed later, it would overwrite the child's .Set below. The push
+            // has landed once the loop is gone, or once a pending #1669 check restarted it.
             H.Check("OpacityLoop_FlyoutXamlPushLanded", await Harness.WaitForWithin(
-                () => visual.TryGetAnimationController("Opacity") is null && visual.Opacity == 1f, 3000),
-                $"visual={visual.Opacity}");
+                () => !Reconciler.OpacityRestartPendingForTests(target)
+                    && (visual.TryGetAnimationController("Opacity") is { } current
+                        ? !Equals(current, loop) : visual.Opacity == 1f), 3000),
+                $"visual={visual.Opacity} ctrl={visual.TryGetAnimationController("Opacity") is not null} restarts={Reconciler.OpacityRestartsForTests(target)}");
 
             var updatedChild = child.Set(static control => ElementCompositionPreview.GetElementVisual(control).Opacity = 0.7f);
             var replay = Flyout(updatedChild, menu).Keyframes("pulse", 2, k => k.Loop().Duration(60000).At(1, rotation: 90));
