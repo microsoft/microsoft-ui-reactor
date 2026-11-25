@@ -12,9 +12,9 @@ IMPORTANT: WinUI's Frame.Navigate requires pages to have XAML metadata (IXamlTyp
 
 The correct pattern for Reactor pages in Frame navigation:
 
-\1. Create a minimal .xaml file for the page: \<Page x:Class="MyApp.Pages.ButtonPage" ... /\>
+1\. Create a minimal .xaml file for the page: \<Page x:Class="MyApp.Pages.ButtonPage" ... /\>
 
-\2. In the code-behind, use PageHelper to mount the component:
+2\. In the code-behind, use PageHelper to mount the component:
 
 public sealed partial class ButtonPage: Page \{ private ReactorHostControl? _host;
 

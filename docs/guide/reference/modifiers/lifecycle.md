@@ -115,8 +115,6 @@ Declared in `ContextExtensions`.
 
 ## `Ref`
 
-Binds this element to an imperative [`ElementRef`](../input/element-refs.md#elementref). Obtain the ref from `ctx.UseElementFocus()` (or construct one manually) and use [`FocusManager.Focus`](../input/FocusManager.md#focus) to imperatively focus the referenced element after mount.
-
 ```csharp
 T Ref<T>(this T el, ElementRef target) where T : Element
 T Ref<T, TElement>(this T el, ElementRef<TElement> target) where T : Element where TElement : FrameworkElement
@@ -149,8 +147,6 @@ return TextBox(value, setValue).Ref(inputRef);
 ```
 
 ## `WithKey`
-
-Assigns a stable reconciliation key. Reuses the element when it already holds the same string reference; otherwise returns an immutable copy.
 
 ```csharp
 T WithKey<T>(this T el, string key) where T : Element

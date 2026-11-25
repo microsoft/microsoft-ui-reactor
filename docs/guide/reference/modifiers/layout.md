@@ -128,8 +128,6 @@ Declared in `ElementExtensions`.
 
 ## `PaneBackground`
 
-Pane background bound to a WinUI theme resource (light/dark adaptive). Resolves via the same ThemeBindings pipeline that powers `Background(ThemeRef)`.
-
 ```csharp
 SplitViewElement PaneBackground(this SplitViewElement el, ThemeRef theme)
 SplitViewElement PaneBackground(this SplitViewElement el, Brush brush)
@@ -271,8 +269,6 @@ Declared in `ElementExtensions`.
 | `offset` | `double` |  |
 
 ## `ViewChanged`
-
-Wires the view-changed handler on the modern [`ScrollViewElement`](../elements/layout.md#scrollviewelement). The modern control reports only settled values. Passing `null` clears.
 
 ```csharp
 ScrollViewElement ViewChanged(this ScrollViewElement el, Action? handler)

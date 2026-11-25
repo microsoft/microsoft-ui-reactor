@@ -8,13 +8,17 @@ Each factory method returns an element record. Call them through `using static M
 
 ## `Button`
 
-Creates a Button driven by a Command. Maps Label → Content; the command's Execute/ExecuteAsync is invoked on click and its IsEnabled / Description / Accelerator / AccessKey are applied by the reconciler from the typed [`ButtonElement.Command`](../elements/buttons.md#buttonelement) property (issues #153, #637) — no per-render Setters array or lambda is allocated, and a bare `new ButtonElement(cmd.Label) { Command = cmd }` record-init behaves identically.
-
 ```csharp
 ButtonElement Button(Command command)
 ButtonElement Button(Element content, Action? onClick = null)
 ButtonElement Button(string label, Action? onClick = null)
 ```
+
+| Overload | Description |
+| --- | --- |
+| `Button(Command)` | Creates a Button driven by a Command. Maps Label → Content; the command's Execute/ExecuteAsync is invoked on click and its IsEnabled / Description / Accelerator / AccessKey are applied by the reconciler from the typed [`ButtonElement.Command`](../elements/buttons.md#buttonelement) property (issues #153, #637) — no per-render Setters array or lambda is allocated, and a bare `new ButtonElement(cmd.Label) { Command = cmd }` record-init behaves identically. |
+| `Button(Element, Action?)` |  |
+| `Button(string, Action?)` |  |
 
 **Returns:** [`ButtonElement`](../elements/buttons.md#buttonelement).
 
@@ -29,12 +33,15 @@ ButtonElement Button(string label, Action? onClick = null)
 
 ## `DropDownButton`
 
-Creates a drop-down button with declarative content.
-
 ```csharp
 DropDownButtonElement DropDownButton(Element content, Element? flyout = null)
 DropDownButtonElement DropDownButton(string label, Element? flyout = null)
 ```
+
+| Overload | Description |
+| --- | --- |
+| `DropDownButton(Element, Element?)` | Creates a drop-down button with declarative content. |
+| `DropDownButton(string, Element?)` |  |
 
 **Returns:** [`DropDownButtonElement`](../elements/buttons.md#dropdownbuttonelement).
 
@@ -47,8 +54,6 @@ DropDownButtonElement DropDownButton(string label, Element? flyout = null)
 | `label` | `string` |  |  |
 
 ## `HyperlinkButton`
-
-Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute → Click. For external navigation, chain [`NavigateUri`](../modifiers/buttons.md#navigateuri): `HyperlinkButton(cmd).NavigateUri(new Uri("https://..."))`.
 
 ```csharp
 HyperlinkButtonElement HyperlinkButton(Command command)
@@ -75,8 +80,6 @@ HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, 
 
 ## `RepeatButton`
 
-Creates a RepeatButton driven by a Command. Click auto-repeats while held.
-
 ```csharp
 RepeatButtonElement RepeatButton(Command command)
 RepeatButtonElement RepeatButton(Element content, Action? onClick = null)
@@ -101,8 +104,6 @@ RepeatButtonElement RepeatButton(string label, Action? onClick = null)
 | `label` | `string` |  |  |
 
 ## `SplitButton`
-
-Creates a SplitButton driven by a Command for the primary action. The flyout (dropdown portion) is independent and supplied separately.
 
 ```csharp
 SplitButtonElement SplitButton(Command command, Element? flyout = null)
@@ -130,8 +131,6 @@ SplitButtonElement SplitButton(string label, Action? onClick = null, Element? fl
 
 ## `ThreeStateToggleButton`
 
-Creates a three-state toggle button with declarative content.
-
 ```csharp
 ToggleButtonElement ThreeStateToggleButton(Element content, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null)
 ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null)
@@ -154,8 +153,6 @@ ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = nu
 | `label` | `string` |  |  |
 
 ## `ToggleButton`
-
-Creates a ToggleButton driven by a Command. The command fires on each toggle (both check and uncheck) — per the spec's "Option A" semantics. Use the `isChecked` parameter to seed the initial state.
 
 ```csharp
 ToggleButtonElement ToggleButton(Command command, bool isChecked = false)
@@ -182,8 +179,6 @@ ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bo
 | `label` | `string` |  |  |
 
 ## `ToggleSplitButton`
-
-Creates a ToggleSplitButton driven by a Command (fires on each toggle).
 
 ```csharp
 ToggleSplitButtonElement ToggleSplitButton(Command command, Optional<bool> isChecked = default, Element? flyout = null)

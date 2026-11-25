@@ -198,15 +198,15 @@ Supplying `duration`, `easing`, or `distance` switches to Reactor's customizable
 Spring-physics slide transition. A Reactor extension with no WinUI counterpart, so it keeps a horizontal default rather than following [`NavigationTransition.Slide`](#slide)'s vertical one.
 
 ```csharp
-public static NavigationTransition Spring(float dampingRatio = 0.6000000238418579f, float period = 0.07999999821186066f, SlideDirection direction = SlideDirection.FromRight)
+public static NavigationTransition Spring(float dampingRatio = 0.6f, float period = 0.08f, SlideDirection direction = SlideDirection.FromRight)
 ```
 
 **Parameters**
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `dampingRatio` | `float` | `0.6000000238418579f` |  |
-| `period` | `float` | `0.07999999821186066f` |  |
+| `dampingRatio` | `float` | `0.6f` |  |
+| `period` | `float` | `0.08f` |  |
 | `direction` | [`SlideDirection`](#slidedirection) | `SlideDirection.FromRight` |  |
 
 ### Fields

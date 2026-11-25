@@ -104,8 +104,6 @@ Declared in `ShowErrorsExtension`.
 
 ## `Validate`
 
-Attaches validators to this element. The element's value will be validated against the provided validators, with results pushed to the nearest ValidationContext.
-
 ```csharp
 T Validate<T>(this T el, string fieldName, params IValidator[] validators) where T : Element
 T Validate<T>(this T el, string fieldName, object? value, params IValidator[] validators) where T : Element
@@ -129,8 +127,6 @@ Declared in `ValidateExtensions`.
 | `value` | `object?` |  |
 
 ## `ValidateAsync`
-
-Attaches async validators to this element (in addition to any sync validators).
 
 ```csharp
 T ValidateAsync<T>(this T el, string fieldName, params IAsyncValidator[] asyncValidators) where T : Element

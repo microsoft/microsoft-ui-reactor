@@ -45,7 +45,7 @@ public static string? GetAutomationName(string? label)
 Gets the text to display in the description/error area. When errors are present and should be shown, returns error text. Otherwise returns the description text.
 
 ```csharp
-public static (string Text, bool IsError) GetDescriptionOrError(ValidationContext? ctx, string? fieldName, string? description, ShowWhen showWhen, bool submitAttempted = false)
+public static (string? Text, bool IsError) GetDescriptionOrError(ValidationContext? ctx, string? fieldName, string? description, ShowWhen showWhen, bool submitAttempted = false)
 ```
 
 **Parameters**

@@ -75,8 +75,6 @@ CalendarViewElement CalendarView()
 
 ## `CheckBox`
 
-Creates a check box with declarative content.
-
 ```csharp
 CheckBoxElement CheckBox(Optional<bool?> isChecked, Action<bool>? onIsCheckedChanged, Element content)
 CheckBoxElement CheckBox(Optional<bool?> isChecked = default, Action<bool>? onIsCheckedChanged = null, string? label = null)
@@ -116,8 +114,6 @@ ColorPickerElement ColorPicker(Optional<Color> color = default, Action<Color>? o
 | `onColorChanged` | `Action<Color>?` | `null` |  |
 
 ## `ComboBox`
-
-Creates a [`ComboBoxElement`](../elements/input.md#comboboxelement) from element items. `selectedIndex` is taken as-is — pass [`Optional.Unset`](../components/Optional.md#unset) for uncontrolled, or any int (implicit `int → Optional<int>`) for controlled. Both trailing args are required (rather than defaulted) to disambiguate from the `string[]` overload — `string` has an implicit conversion to `Element`, so a collection-expression call like `ComboBox(["A","B"], selectedIndex: 0)` would otherwise resolve to either.
 
 ```csharp
 ComboBoxElement ComboBox(Element[] itemElements, Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged)
@@ -220,8 +216,6 @@ PasswordBoxElement PasswordBox(Optional<string> password = default, Action<strin
 | `placeholderText` | `string?` | `null` |  |
 
 ## `RadioButton`
-
-Creates a radio button with declarative content.
 
 ```csharp
 RadioButtonElement RadioButton(Element content, Optional<bool> isChecked = default, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
@@ -336,8 +330,6 @@ TextBoxElement TextBox(Optional<string> value = default, Action<string>? onChang
 | `header` | `string?` | `null` |  |
 
 ## `ThreeStateCheckBox`
-
-Creates a three-state check box with declarative content.
 
 ```csharp
 CheckBoxElement ThreeStateCheckBox(Optional<bool?> checkedState, Action<bool?>? onCheckedStateChanged, Element content)

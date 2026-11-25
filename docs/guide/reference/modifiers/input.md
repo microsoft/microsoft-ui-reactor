@@ -26,14 +26,17 @@ Declared in `ElementExtensions`.
 
 ## `AcceptsReturn`
 
-Whether Enter inserts a newline (vs committing input).
-
 ```csharp
 RichEditBoxElement AcceptsReturn(this RichEditBoxElement el, bool accepts = true)
 TextBoxElement AcceptsReturn(this TextBoxElement el, bool accepts = true)
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `AcceptsReturn(RichEditBoxElement, bool)` | Whether Enter inserts a newline (vs committing input). |
+| `AcceptsReturn(TextBoxElement, bool)` |  |
 
 **Applies to:** [`RichEditBoxElement`](../elements/input.md#richeditboxelement), [`TextBoxElement`](../elements/input.md#textboxelement).
 
@@ -80,8 +83,6 @@ Declared in `ElementExtensions`.
 | `caption` | `string` |  |
 
 ## `Changed`
-
-Wires the text-changed handler. Passing `null` clears.
 
 ```csharp
 MaskedTextBoxElement Changed(this MaskedTextBoxElement el, Action<string>? handler)
@@ -213,8 +214,6 @@ Declared in `ElementExtensions`.
 
 ## `DateChanged`
 
-Wires the date-changed handler. Receives null when the user clears the selection. Passing `null` as the handler clears it.
-
 ```csharp
 CalendarDatePickerElement DateChanged(this CalendarDatePickerElement el, Action<DateTimeOffset?>? handler)
 DatePickerElement DateChanged(this DatePickerElement el, Action<DateTimeOffset>? handler)
@@ -272,8 +271,6 @@ Declared in `ElementExtensions`.
 | `format` | `string` |  |
 
 ## `Description`
-
-Help text rendered below the box.
 
 ```csharp
 ComboBoxElement Description(this ComboBoxElement el, string description)
@@ -403,8 +400,6 @@ Declared in `ElementExtensions`.
 
 ## `Focus`
 
-Registers this NumberBox with a FocusManager for programmatic focus control.
-
 ```csharp
 NumberBoxElement Focus(this NumberBoxElement el, FocusManager fm, string fieldName, bool autoFocus = false)
 TextBoxElement Focus(this TextBoxElement el, FocusManager fm, string fieldName, bool autoFocus = false)
@@ -429,8 +424,6 @@ Declared in `FocusExtensions`.
 
 ## `Header`
 
-Optional label rendered above the box.
-
 ```csharp
 AutoSuggestBoxElement Header(this AutoSuggestBoxElement el, string header)
 ComboBoxElement Header(this ComboBoxElement el, string header)
@@ -441,6 +434,15 @@ ToggleSwitchElement Header(this ToggleSwitchElement el, string header)
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `Header(AutoSuggestBoxElement, string)` | Optional label rendered above the box. |
+| `Header(ComboBoxElement, string)` |  |
+| `Header(PasswordBoxElement, string)` | Optional label rendered above the box. |
+| `Header(SliderElement, string)` |  |
+| `Header(TextBoxElement, string)` |  |
+| `Header(ToggleSwitchElement, string)` |  |
 
 **Applies to:** [`AutoSuggestBoxElement`](../elements/input.md#autosuggestboxelement), [`ComboBoxElement`](../elements/input.md#comboboxelement), [`PasswordBoxElement`](../elements/input.md#passwordboxelement), [`SliderElement`](../elements/input.md#sliderelement), [`TextBoxElement`](../elements/input.md#textboxelement), [`ToggleSwitchElement`](../elements/input.md#toggleswitchelement).
 
@@ -597,8 +599,6 @@ Declared in `ElementExtensions`.
 
 ## `IsReadOnly`
 
-Sets whether the RatingControl is read-only.
-
 ```csharp
 RatingControlElement IsReadOnly(this RatingControlElement el, bool readOnly = true)
 TextBoxElement IsReadOnly(this TextBoxElement el, bool readOnly = true)
@@ -711,8 +711,6 @@ Declared in `ElementExtensions`.
 | `height` | `double` |  |
 
 ## `MaxLength`
-
-Maximum number of characters allowed. `0` = no limit.
 
 ```csharp
 PasswordBoxElement MaxLength(this PasswordBoxElement el, int maxLength)
@@ -855,8 +853,6 @@ Declared in `ElementExtensions`.
 **Applies to:** [`TextBoxElement`](../elements/input.md#textboxelement).
 
 ## `Orientation`
-
-Layout direction of the picker.
 
 ```csharp
 DatePickerElement Orientation(this DatePickerElement el, Orientation orientation)
@@ -1039,8 +1035,6 @@ Declared in `ElementExtensions`.
 | `max` | `double` |  |
 
 ## `ReadOnly`
-
-Sets whether the RatingControl is read-only.
 
 ```csharp
 RatingControlElement ReadOnly(this RatingControlElement el, bool readOnly = true)
@@ -1339,8 +1333,6 @@ Declared in `ElementExtensions`.
 | `mode` | `NumberBoxValidationMode` |  |
 
 ## `ValueChanged`
-
-Wires the value-changed handler. Passing `null` clears.
 
 ```csharp
 NumberBoxElement ValueChanged(this NumberBoxElement el, Action<double>? handler)

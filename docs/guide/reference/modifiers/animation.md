@@ -139,8 +139,6 @@ Declared in `ElementExtensions`.
 
 ## `LayoutAnimation`
 
-Enables smooth layout animation: when WinUI repositions this element (e.g., list reorder, grid reflow), it animates from the old position to the new position via the Composition layer. Default duration: 300ms. Elements should have stable keys (.WithKey()) for the reconciler to match them across reorders.
-
 ```csharp
 T LayoutAnimation<T>(this T el) where T : Element
 T LayoutAnimation<T>(this T el, LayoutAnimationConfig config) where T : Element
@@ -242,7 +240,7 @@ Declared in `ElementExtensions`.
 Enables layout animation with spring physics for a natural, bouncy feel.
 
 ```csharp
-T SpringLayoutAnimation<T>(this T el, float dampingRatio = 0.6000000238418579f, float period = 0.07999999821186066f) where T : Element
+T SpringLayoutAnimation<T>(this T el, float dampingRatio = 0.6f, float period = 0.08f) where T : Element
 ```
 
 Declared in `ElementExtensions`.
@@ -253,8 +251,8 @@ Declared in `ElementExtensions`.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `dampingRatio` | `float` | `0.6000000238418579f` |  |
-| `period` | `float` | `0.07999999821186066f` |  |
+| `dampingRatio` | `float` | `0.6f` |  |
+| `period` | `float` | `0.08f` |  |
 
 ## `Stagger`
 

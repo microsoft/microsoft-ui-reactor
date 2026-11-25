@@ -8,8 +8,6 @@ Each factory method returns an element record. Call them through `using static M
 
 ## `FormField`
 
-Creates an auto-wired FormField from a FieldDescriptor. Resolves the editor from TypeRegistry, sets label/description from the descriptor, detects required from validators, and wires validation.
-
 ```csharp
 FormFieldElement FormField(FieldDescriptor field, object value, Action<object> onChange, TypeRegistry? registry = null)
 FormFieldElement FormField(Element content, string? label = null, bool required = false, string? description = null, string? fieldName = null, ShowWhen showWhen = ShowWhen.WhenTouched)
@@ -82,8 +80,6 @@ Declared in `ValidationRuleDsl`.
 | `severity` | [`Severity`](../validation/enums.md#severity) | `Severity.Error` |  |
 
 ## `ValidationVisualizer`
-
-Creates a custom validation visualizer with a render function.
 
 ```csharp
 ValidationVisualizerElement ValidationVisualizer(Func<IReadOnlyList<ValidationMessage>, Element> render, Element content, Severity? severityFilter = null, ShowWhen showWhen = ShowWhen.Always)

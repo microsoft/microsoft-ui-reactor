@@ -8,8 +8,6 @@ Modifiers are extension methods that return a changed copy of the element, so yo
 
 ## `Expanding`
 
-Wires the expanding handler. Passing `null` clears.
-
 ```csharp
 TreeViewElement Expanding(this TreeViewElement el, Action<TreeViewNodeData>? handler)
 TemplatedTreeViewElement<T> Expanding<T>(this TemplatedTreeViewElement<T> el, Action<T>? handler)
@@ -51,8 +49,6 @@ Declared in `ElementExtensions`.
 
 ## `ItemClick`
 
-Wires the item-click handler (requires `IsItemClickEnabled`). Passing `null` clears.
-
 ```csharp
 GridViewElement ItemClick(this GridViewElement el, Action<int>? handler)
 ListViewElement ItemClick(this ListViewElement el, Action<int>? handler)
@@ -78,8 +74,6 @@ Declared in `ElementExtensions`.
 | `handler` | `Action<int>?` or `Action<T>?` |  |
 
 ## `ItemContainerStyle`
-
-Style applied to each generated `GridViewItem` container.
 
 ```csharp
 GridViewElement ItemContainerStyle(this GridViewElement el, Style style)

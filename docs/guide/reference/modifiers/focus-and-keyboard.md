@@ -32,8 +32,6 @@ Button("File", onClick).AccessKey("F")
 
 ## `AccessKeyDisplayRequested`
 
-Handler for UIElement.AccessKeyDisplayRequested — fires when the access-key bubble should appear (e.g., user pressed Alt). Use to customize the visual.
-
 ```csharp
 T AccessKeyDisplayRequested<T>(this T el, Action handler) where T : Element
 T AccessKeyDisplayRequested<T>(this T el, Action<UIElement, AccessKeyDisplayRequestedEventArgs> handler) where T : Element
@@ -108,14 +106,17 @@ Declared in `FocusExtensions`.
 
 ## `IsTabStop`
 
-Sets UIElement.IsTabStop — whether the element participates in Tab navigation. Works on any element type (Panel, Control, etc.) in WinUI 3.
-
 ```csharp
 RichTextHyperlink IsTabStop(this RichTextHyperlink link, bool isTabStop = true)
 T IsTabStop<T>(this T el, bool isTabStop = true) where T : Element
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `IsTabStop(RichTextHyperlink, bool)` |  |
+| `IsTabStop<T>(T, bool)` | Sets UIElement.IsTabStop — whether the element participates in Tab navigation. Works on any element type (Panel, Control, etc.) in WinUI 3. |
 
 **Applies to:** any element, [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink).
 
@@ -132,8 +133,6 @@ Border(content).IsTabStop(false)
 ```
 
 ## `OnAccessKeyDisplayRequested`
-
-Handler for UIElement.AccessKeyDisplayRequested — fires when the access-key bubble should appear (e.g., user pressed Alt). Use to customize the visual.
 
 ```csharp
 T OnAccessKeyDisplayRequested<T>(this T el, Action handler) where T : Element
@@ -175,14 +174,17 @@ Declared in `ElementExtensions`.
 
 ## `TabIndex`
 
-Sets Control.TabIndex — Tab order position. Lower values receive focus first.
-
 ```csharp
 RichTextHyperlink TabIndex(this RichTextHyperlink link, int tabIndex)
 T TabIndex<T>(this T el, int index) where T : Element
 ```
 
 Declared in `ElementExtensions`.
+
+| Overload | Description |
+| --- | --- |
+| `TabIndex(RichTextHyperlink, int)` |  |
+| `TabIndex<T>(T, int)` | Sets Control.TabIndex — Tab order position. Lower values receive focus first. |
 
 **Applies to:** any element, [`RichTextHyperlink`](../controls/rich-text.md#richtexthyperlink).
 

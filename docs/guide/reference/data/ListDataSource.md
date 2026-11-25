@@ -14,10 +14,24 @@ Namespace: `Microsoft.UI.Reactor.Data.Providers`.
 
 ### `ListDataSource`
 
-For subclasses that manage their own item list.
+#### `ListDataSource(IEnumerable<T>, Func<T, RowKey>)`
 
 ```csharp
 public ListDataSource(IEnumerable<T> items, Func<T, RowKey> getRowKey)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `items` | `IEnumerable<T>` |  |
+| `getRowKey` | `Func<T, RowKey>` |  |
+
+#### `ListDataSource(List<T>, Func<T, RowKey>, bool)`
+
+For subclasses that manage their own item list.
+
+```csharp
 protected ListDataSource(List<T> items, Func<T, RowKey> getRowKey, bool directReference)
 ```
 
@@ -25,7 +39,7 @@ protected ListDataSource(List<T> items, Func<T, RowKey> getRowKey, bool directRe
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `items` | `IEnumerable<T>` or `List<T>` |  |
+| `items` | `List<T>` |  |
 | `getRowKey` | `Func<T, RowKey>` |  |
 | `directReference` | `bool` |  |
 
