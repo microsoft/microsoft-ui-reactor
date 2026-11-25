@@ -11,10 +11,10 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 /// <summary>
-/// The source of the <c>Reconciler</c> partial class (<c>src/Reactor/Core/Reconciler.cs</c> and
-/// every <c>Reconciler.*.cs</c>), parsed once per test run. Gates that read a reconciler method's
-/// body look it up across all the partial files, so moving a method between them doesn't break
-/// the gate.
+/// The source of the <c>Reconciler</c> partial class (every <c>Reconciler.cs</c> /
+/// <c>Reconciler.*.cs</c> under <c>src/Reactor/Core</c>, subfolders included), parsed once per
+/// test run. Gates that read a reconciler method's body look it up across all the partial files,
+/// so moving a method between them doesn't break the gate.
 /// </summary>
 internal static class ReconcilerSource
 {
@@ -23,7 +23,7 @@ internal static class ReconcilerSource
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
         var dir = Path.Join(root!, "src", "Reactor", "Core");
-        var files = Directory.EnumerateFiles(dir, "*.cs")
+        var files = Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
             .Where(file => Path.GetFileName(file) is var name
                 && (name == "Reconciler.cs" || name.StartsWith("Reconciler.", StringComparison.Ordinal)))
             .OrderBy(file => file, StringComparer.Ordinal)

@@ -24,6 +24,10 @@ namespace Microsoft.UI.Reactor.Core;
 // Reconciler partial: Element type / handler registration (RegisterType, RegisterHandler, TypeRegistration).
 public sealed partial class Reconciler
 {
+    // ════════════════════════════════════════════════════════════════════
+    //  Extensible type registry (Feature 1: RegisterType API)
+    // ════════════════════════════════════════════════════════════════════
+
     /// <summary>
     /// Registers a custom element type so the reconciler knows how to mount, update, and unmount it.
     /// Registered types take priority over built-in types.

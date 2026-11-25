@@ -141,8 +141,6 @@ public sealed partial class Reconciler
         => content is null ? fallback : ExtractElementCaption(content);
 
     // ════════════════════════════════════════════════════════════════
-    //  Declarative event handler management
-    // ════════════════════════════════════════════════════════════════
     //  Accessibility modifiers (Tier 2/3 sub-record)
     // ════════════════════════════════════════════════════════════════
 

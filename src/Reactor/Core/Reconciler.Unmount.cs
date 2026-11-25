@@ -545,6 +545,12 @@ public sealed partial class Reconciler
         return null;
     }
 
+    /// <summary>
+    /// Unmounts and returns all descendants + root to the pool.
+    /// Call AFTER the root has been detached from the visual tree.
+    /// Collects all controls first, then pools bottom-up so DetachFromParent
+    /// removes children before parents clear their collections.
+    /// </summary>
     internal void UnmountAndPool(UIElement control)
     {
         var toPool = new List<FrameworkElement>();

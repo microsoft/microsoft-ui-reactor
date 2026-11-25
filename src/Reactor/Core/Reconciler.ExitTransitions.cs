@@ -24,12 +24,6 @@ namespace Microsoft.UI.Reactor.Core;
 // Reconciler partial: Exit-transition bookkeeping for controls removed from a child collection.
 public sealed partial class Reconciler
 {
-    /// <summary>
-    /// Unmounts and returns all descendants + root to the pool.
-    /// Call AFTER the root has been detached from the visual tree.
-    /// Collects all controls first, then pools bottom-up so DetachFromParent
-    /// removes children before parents clear their collections.
-    /// </summary>
     // Controls still in a child collection only while their exit transition plays (removal is
     // deferred to its completion). ChildReconciler steps past them: they belong to no element of
     // the old child list, so they would otherwise misalign it with the collection.

@@ -931,8 +931,4 @@ public sealed partial class Reconciler
     // unsafe managed-FE-keyed CWT (Button, TextBox, Image, ScrollViewer) and
     // ModifierEventHandlerState (ToggleSwitch); issue #114 unified everything onto
     // ModifierEventHandlerState.
-
-    // ════════════════════════════════════════════════════════════════════
-    //  Extensible type registry (Feature 1: RegisterType API)
-    // ════════════════════════════════════════════════════════════════════
 }

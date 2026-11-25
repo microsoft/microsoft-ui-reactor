@@ -92,8 +92,8 @@ public sealed partial class Reconciler
     /// payload (e.g. <c>ToggleSwitchEventPayload</c>). The payload survives
     /// pool rent/return cycles so trampolines wired once per control lifetime
     /// stay alive (mirrors the legacy <c>ModifierEventHandlerState</c> "stable
-    /// trampoline + mutable Current* slot" pattern documented in
-    /// <c>Reconciler.cs:3266-3289</c>). Authors of built-in ports use this
+    /// trampoline + mutable Current* slot" pattern documented on
+    /// <see cref="ModifierEventHandlerState"/>). Authors of built-in ports use this
     /// instead of <see cref="V1Protocol.ReactorBinding{TElement}.OnCustomEvent"/>
     /// for the seven audited control-intrinsic events — see
     /// <c>ControlEventPayloads.cs</c>.
@@ -151,6 +151,8 @@ public sealed partial class Reconciler
         return null;
     }
 
+    // ════════════════════════════════════════════════════════════════
+    //  Declarative event handler management
     // ════════════════════════════════════════════════════════════════
 
     /// <summary>
