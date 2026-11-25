@@ -56,6 +56,7 @@ internal static class Scenarios
         yield return "light-dark-render-capture";
         yield return "rtl-render-capture";
         yield return "high-contrast-render-capture";
+        yield return "high-contrast-appearance-review";
         yield return "os-text-scaling";
         yield return name switch
         {
@@ -112,6 +113,16 @@ internal static class Scenarios
 
     internal static Scenario Create(string name)
     {
+        var fixtureText = name is "DockPanel" or "WrapPanel" or "StaggeredPanel"
+            ? MeasureFixtureLabels() : default;
+        double tileWidth = fixtureText.WidthAtLeast(90);
+        double columnWidth = fixtureText.WidthAtLeast(100);
+        double edgeWidth = fixtureText.WidthAtLeast(80);
+        double edgeHeight = fixtureText.HeightAtLeast(40);
+        double bottomHeight = fixtureText.HeightAtLeast(60);
+        double lastWidth = fixtureText.WidthAtLeast(50);
+        double rasterizationScale = name == "WrapPanel"
+            ? ReactorApp.PrimaryWindow!.NativeWindow.Content.XamlRoot.RasterizationScale : 1;
         Scenario scenario = name switch
         {
         "SettingsCard" => new(
@@ -296,11 +307,11 @@ internal static class Scenarios
         "DockPanel" => new(
             p => DockPanelElement.DockPanel(lastChildFill: p == 0, children:
                 [
-                    (p == 0 ? Border(Child(p)).Width(80) : Border(Child(p)).Height(40))
+                    (p == 0 ? Border(Child(p)).Width(edgeWidth) : Border(Child(p)).Height(edgeHeight))
                         .WithKey("edge").Set(b => Wct.DockPanel.SetDock(b, p == 0 ? Wct.Dock.Left : Wct.Dock.Top)),
-                    Border(TextBlock("bottom")).Height(60).WithKey("bottom")
+                    Border(TextBlock("bottom")).Height(bottomHeight).WithKey("bottom")
                         .Set(b => Wct.DockPanel.SetDock(b, Wct.Dock.Bottom)),
-                    (p == 0 ? Border(TextBlock("last")) : Border(TextBlock("last")).Width(50)).WithKey("last")
+                    (p == 0 ? Border(TextBlock("last")) : Border(TextBlock("last")).Width(lastWidth)).WithKey("last")
                 ]).Size(400, 240),
             (c, p) =>
             {
@@ -310,37 +321,51 @@ internal static class Scenarios
                 var edge = (FrameworkElement)dock.Children[0];
                 var last = (FrameworkElement)dock.Children[2];
                 Equal(Wct.DockPanel.GetDock(edge), p == 0 ? Wct.Dock.Left : Wct.Dock.Top, "attached Dock");
-                Near(edge.ActualWidth, p == 0 ? 80 : 400, "docked edge width");
-                Near(edge.ActualHeight, p == 0 ? 240 : 40, "docked edge height");
-                Near(last.ActualWidth, p == 0 ? 320 : 50, "last-child width");
-                Near(last.ActualHeight, p == 0 ? 180 : 140, "last-child height");
+                Near(edge.ActualWidth, p == 0 ? edgeWidth : 400, "docked edge width");
+                Near(edge.ActualHeight, p == 0 ? 240 : edgeHeight, "docked edge height");
+                Near(last.ActualWidth, p == 0 ? 400 - edgeWidth : lastWidth, "last-child width");
+                Near(last.ActualHeight, p == 0 ? 240 - bottomHeight : 240 - bottomHeight - edgeHeight, "last-child height");
                 Near(Microsoft.UI.Xaml.Controls.Primitives.LayoutInformation.GetLayoutSlot(last).Width,
-                    p == 0 ? 320 : 50, "last-child allocated width");
+                    p == 0 ? 400 - edgeWidth : lastWidth, "last-child allocated width");
                 HasText(c, Label(p));
             }),
         "WrapPanel" => new(
             p => WrapPanelElement.WrapPanel(horizontalSpacing: 0, verticalSpacing: 0,
-                children: Tiles(p, sized: true)).Width(p == 0 ? 360 : 180),
+                children: Tiles(p, sized: true, textSize: fixtureText))
+                .Width(FixtureTextSize.WrapRowWidth(tileWidth, p == 0 ? 4 : 2, rasterizationScale)),
             (c, p) =>
             {
                 var panel = (Wct.WrapPanel)c;
                 Equal(panel.Children.Count, 6, "Children.Count");
-                var point = ((FrameworkElement)panel.Children[2]).TransformToVisual(panel)
-                    .TransformPoint(new Windows.Foundation.Point());
-                Near(point.Y, p == 0 ? 0 : 40, "third child reflow Y");
+                var first = (FrameworkElement)panel.Children[0];
+                Near(first.ActualWidth, tileWidth, "rounded tile width");
+                Near(first.ActualHeight, fixtureText.HeightAtLeast(40), "rounded tile height");
+                int columns = p == 0 ? 4 : 2;
+                Program.Results.Note($"Wrap fixture columns={columns}; panel-width={panel.ActualWidth}; " +
+                    $"tile={first.ActualWidth}x{first.ActualHeight}; rasterization-scale={rasterizationScale}");
+                for (int i = 0; i < panel.Children.Count; i++)
+                {
+                    var tile = (FrameworkElement)panel.Children[i];
+                    Near(tile.ActualWidth, first.ActualWidth, $"tile {i} width");
+                    Near(tile.ActualHeight, first.ActualHeight, $"tile {i} height");
+                    var point = tile.TransformToVisual(panel).TransformPoint(new Windows.Foundation.Point());
+                    Near(point.X, i % columns * first.ActualWidth, $"tile {i} reflow X");
+                    Near(point.Y, i / columns * first.ActualHeight, $"tile {i} reflow Y");
+                }
                 HasText(c, Label(p));
             }),
         "StaggeredPanel" => new(
-            p => StaggeredPanelElement.StaggeredPanel(desiredColumnWidth: p == 0 ? 100 : 200,
-                columnSpacing: 0, rowSpacing: 0, children: Tiles(p, sized: true, staggered: true)).Size(400, 300),
+            p => StaggeredPanelElement.StaggeredPanel(desiredColumnWidth: (p == 0 ? 1 : 2) * columnWidth,
+                columnSpacing: 0, rowSpacing: 0, children: Tiles(p, sized: true, staggered: true, textSize: fixtureText))
+                .Size(4 * columnWidth, 300),
             (c, p) =>
             {
                 var panel = (Wct.StaggeredPanel)c;
                 Equal(panel.Children.Count, 6, "Children.Count");
-                Equal(panel.DesiredColumnWidth, p == 0 ? 100d : 200d, "DesiredColumnWidth");
+                Equal(panel.DesiredColumnWidth, (p == 0 ? 1 : 2) * columnWidth, "DesiredColumnWidth");
                 var point = ((FrameworkElement)panel.Children[2]).TransformToVisual(panel)
                     .TransformPoint(new Windows.Foundation.Point());
-                Near(point.Y, p == 0 ? 0 : 60, "third child column reflow Y");
+                Near(point.Y, p == 0 ? 0 : fixtureText.HeightAtLeast(60), "third child column reflow Y");
                 HasText(c, Label(p));
             }),
         "SwitchPresenter" => new(
@@ -400,13 +425,26 @@ internal static class Scenarios
         });
     }
 
-    private static Element[] Tiles(int phase, bool sized = false, bool staggered = false) =>
+    private static FixtureTextSize MeasureFixtureLabels()
+    {
+        string[] labels = [Label(0), Label(1), "bottom", "last", .. Enumerable.Range(1, 6).Select(i => $"tile-{i}")];
+        return FixtureTextSize.FromMeasurements(labels.Select(label =>
+        {
+            // Same default typography as the fixture's TextBlock, measured at the real OS scale.
+            var text = new TextBlock { Text = label, IsTextScaleFactorEnabled = true };
+            text.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            Program.Results.Note($"fixture label='{label}'; natural-size={text.DesiredSize}");
+            return new FixtureTextSize(text.DesiredSize.Width, text.DesiredSize.Height);
+        }));
+    }
+
+    private static Element[] Tiles(int phase, bool sized = false, bool staggered = false, FixtureTextSize textSize = default) =>
         (phase == 0 ? new[] { 0, 1, 2, 3, 4, 5 } : new[] { 2, 0, 6, 1, 3, 4 })
         .Select(i =>
         {
             Element tile = Border(TextBlock(i == 0 ? Label(phase) : $"tile-{i}")).WithKey($"tile-{i}");
             double height = staggered ? new[] { 60, 120, 90, 70, 110, 80, 100 }[i] : 40;
-            return sized ? tile.Size(90, height) : tile;
+            return sized ? tile.Size(textSize.WidthAtLeast(90), textSize.HeightAtLeast(height)) : tile;
         }).ToArray();
 
     private static Scenario ImageCropper()
