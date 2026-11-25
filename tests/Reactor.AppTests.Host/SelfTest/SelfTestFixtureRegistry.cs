@@ -118,6 +118,13 @@ internal static class SelfTestFixtureRegistry
         ("ConditionalRendering_Toggle", static harness => new DynamicFixtures.ConditionalToggle(harness)),
         ("Markdown_HeadingsAndFormatting", static harness => new MarkdownFixtures.HeadingsAndFormatting(harness)),
         ("Markdown_Selection_SemanticMessage", static harness => new MarkdownSelectionFixtures.SemanticMessage(harness)),
+        ("Markdown_Selection_ClippingGeometry", static harness => new MarkdownSelectionClippingFixtures(harness)),
+        ("Markdown_Selection_ClippingSpacing", static harness => new MarkdownSelectionClippingFixtures(
+            harness, MarkdownSelectionClippingCase.Spacing)),
+        ("Markdown_Selection_ClippingGuards", static harness => new MarkdownSelectionClippingFixtures(
+            harness, MarkdownSelectionClippingCase.Guards)),
+        ("Markdown_Selection_ClippingTransformsAndScroll", static harness => new MarkdownSelectionClippingFixtures(
+            harness, MarkdownSelectionClippingCase.TransformsAndScroll)),
         ("Markdown_Selection_IdleLayoutCost", static harness => new MarkdownSelectionFixtures.IdleLayoutCost(harness)),
         ("Markdown_Selection_LifecycleAndStreaming", static harness => new MarkdownSelectionFixtures.LifecycleAndStreaming(harness)),
         ("Markdown_Selection_RangeChildren", static harness => new MarkdownSelectionFixtures.RangeChildren(harness)),
@@ -2349,6 +2356,7 @@ internal static class SelfTestFixtureRegistry
         ("ElementPoolLanes_ConnectedSource", static harness => new PoolLaneFixtures.ConnectedSource(harness)),
         ("ElementPoolLanes_KeyframeNames", static harness => new PoolLaneFixtures.KeyframeNames(harness)),
         ("ElementPoolLanes_MemoAppHandler", static harness => new PoolLaneFixtures.MemoAppHandler(harness)),
+        ("ElementPoolLanes_WrapperRefs", static harness => new PoolLaneFixtures.WrapperRefs(harness)),
         ("ElementPoolLanes_RenterLocals", static harness => new PoolLaneFixtures.RenterLocals(harness)),
         ("ControlledOptionalCustomerRepro", static harness => new ControlledOptionalCustomerRepro.Execution(harness)),
         ("ControlledOptionalSelectionFamily", static harness => new ControlledOptionalSelectionFamilyFixture.Execution(harness)),

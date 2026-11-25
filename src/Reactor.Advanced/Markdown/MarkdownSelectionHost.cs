@@ -71,6 +71,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
     internal bool IsTrackingLayout => _trackingLayout;
     internal bool HasPendingNativePress => _nativePressOwner is not null;
     internal int CachedCharacterCount => _characterRects.Count;
+    internal int CachedGlyphCount => _glyphRects.Count;
     internal int LayoutPassCount { get; private set; }
     internal int MembershipCheckCount { get; private set; }
     internal int SegmentReadCount { get; private set; }
@@ -1260,9 +1261,29 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             if (entry.End <= Document.Start || entry.Start >= Document.End) continue;
             var surfaceBounds = Intersect(SurfaceBounds((MarkdownSelectionMarker)entry.Identity), viewport);
             if (surfaceBounds.Width <= 0 || surfaceBounds.Height <= 0) continue;
+            // For a single LTR character, WinUI resolves forward(i) and backward(i+1)
+            // from the same normalized cell's left/right edges. Adjacent forward and
+            // backward carets need NOT coincide (for example with negative spacing).
+            bool canSkipRight =
+                _segments.TryGetValue((MarkdownSelectionMarker)entry.Identity, out var segments) &&
+                segments is [var segment] && segment.Identity is Run { FlowDirection: FlowDirection.LeftToRight } &&
+                segment.Text == entry.Text && segment.Text.All(character => character is >= ' ' and <= '~') &&
+                segment.Owner is RichTextBlock { FlowDirection: FlowDirection.LeftToRight } rich &&
+                rich.Blocks.Count == 1 && rich.Blocks[0] is Paragraph { Inlines.Count: 1 } paragraph &&
+                ReferenceEquals(paragraph.Inlines[0], segment.Identity) &&
+                IsPositiveAxisAligned(Transform(rich));
             for (int offset = Math.Max(Document.Start, entry.Start); offset < Math.Min(Document.End, entry.End);)
             {
                 int next = Document.MoveGrapheme(offset, 1);
+                if (canSkipRight && next < entry.End &&
+                    _characterRects.TryGetValue(offset, out var start) &&
+                    _characterRects.TryGetValue(next, out var following) &&
+                    start.X > viewport.Right && following.X > viewport.Right &&
+                    Math.Abs(start.Y - following.Y) < .5)
+                {
+                    offset = Math.Max(offset + 1, next);
+                    continue;
+                }
                 var rect = Intersect(GlyphBounds(offset, next), viewport);
                 if (rect.Width > 0 && rect.Height > 0)
                 {
@@ -1293,6 +1314,10 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             if (Canvas.GetTop(shape) != rect.Y) Canvas.SetTop(shape, rect.Y);
         }
     }
+
+    // Sampling three points cannot establish monotonicity for a perspective transform.
+    private static bool IsPositiveAxisAligned(GeneralTransform transform) =>
+        transform is MatrixTransform { Matrix: { M11: > 0, M12: 0, M21: 0, M22: > 0 } };
 
     internal void Select(int start, int end)
     {
