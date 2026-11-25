@@ -25,7 +25,7 @@ public class TransformsMatrixTests
     public void Matrix_HasEveryTransformTransitionFeatureTriple_Once()
     {
         int triples = Enum.GetValues<TransformAxis>().Length * Enum.GetValues<TransitionAxis>().Length * Enum.GetValues<FeatureAxis>().Length;
-        Assert.Equal(378, triples);
+        Assert.Equal(432, triples);
         Assert.Equal(triples, Matrix.Count);
         Assert.Equal(triples, Matrix.Select(c => c.Id).Distinct().Count());
     }
@@ -89,6 +89,20 @@ public class TransformsMatrixTests
         // Translation adds after the pivot; a lone CenterPoint moves nothing.
         Assert.Equal(new Box(140, 160, 240, 200), CompositionModel.Bounds(Pose.Identity with { Translation = new Vector3(20, 10, 0) }, rtl: false));
         Assert.Equal(CompositionModel.Bounds(Pose.Identity, false), CompositionModel.Bounds(Pose.Identity with { CenterPoint = new Vector3(50, 20, 0) }, false));
+    }
+
+    [Fact]
+    public void Bounds_TransformOrigin_IsSizeRelative_AndAddsTheCenterPointOffset()
+    {
+        // Spec 066 §8: pivot = Size × origin + CenterPoint. The centre of the 100×40 target is (50,20).
+        var scaled = Pose.Identity with { Scale = new Vector3(2, 2, 1) };
+        Assert.Equal(new Box(70, 130, 270, 210), CompositionModel.Bounds(scaled with { Origin = new Vector2(0.5f, 0.5f) }, rtl: false));
+        Assert.Equal(CompositionModel.Bounds(scaled with { CenterPoint = new Vector3(60, 20, 0) }, false),
+            CompositionModel.Bounds(scaled with { Origin = new Vector2(0.5f, 0.5f), CenterPoint = new Vector3(10, 0, 0) }, false));
+        // Off-centre: 40% across pivots at x = 40, and RTL mirrors it (x is flow-relative).
+        var offCentre = scaled with { Origin = new Vector2(0.4f, 0.5f) };
+        Assert.True(CompositionModel.Bounds(offCentre, rtl: false).Near(new Box(80, 130, 280, 210), 1e-3));
+        Assert.True(CompositionModel.Bounds(offCentre, rtl: true).Near(new Box(120, 130, 320, 210), 1e-3));
     }
 
     [Fact]

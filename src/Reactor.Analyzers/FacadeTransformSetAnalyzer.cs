@@ -213,11 +213,13 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
 
         // A transform modifier with a constant identity value doesn't take the visual (spec 066 §3
         // invariant 2), unless this .Set writes the same facade: the identity write then still
-        // takes it, to override the setter's value.
+        // takes it, to override the setter's value. A transform a later call of the same modifier
+        // replaces doesn't count either: only the last one applies.
         var written = new HashSet<string>(candidates.Select(static c => c.Name), System.StringComparer.Ordinal);
         var owningModifier = FindChainModifier(invocation, model, ct, ModifierTable.VisualOwningModifiers.ContainsKey,
             skip: link => DuplicateAtomicModifierAnalyzer.GetFluentMethodName(link) is { } name
-                && !written.Contains(name) && IsIdentityTransform(link, name, model, ct));
+                && ((IsTransformName(name) && IsOverridden(link, name, model, ct))
+                    || (!written.Contains(name) && IsIdentityTransform(link, name, model, ct))));
         var hasTranslationModifier = FindChainModifier(invocation, model, ct, static n => n == TranslationName) is not null;
         if (owningModifier is null && !hasTranslationModifier)
             return;
@@ -249,10 +251,17 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             // The chain already has the modifier, so it owns the channel and the write is dead.
             var existingModifier = info.Modifier is { } own
                 && FindChainModifier(invocation, model, ct, n => n == own) is not null;
+            // Under a .TransformOrigin, .CenterPoint() is a pixel offset added to the size-relative
+            // pivot (spec 066 §8.1), so rewriting an absolute pivot to it would move the pivot.
+            var originOwnsPivot = name == "CenterPoint"
+                && FindChainModifier(invocation, model, ct, static n => n == "TransformOrigin",
+                    skip: link => IsOverridden(link, "TransformOrigin", model, ct)
+                        || IsIdentityTransform(link, "TransformOrigin", model, ct)) is not null;
             var properties = ImmutableDictionary<string, string?>.Empty;
             if (assignment is not null
                 && info.Modifier is { } modifier
                 && !existingModifier
+                && !originOwnsPivot
                 && IsFixable(invocation, setAccess, lambda, paramName, assignment, modifier, model, ct))
             {
                 properties = properties.Add(FixModifierKey, modifier);
@@ -267,6 +276,8 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 name == StartAnimationName ? "call" : "write",
                 existingModifier
                     ? "Remove the write or merge the value into the existing '." + info.Modifier + "(...)' call"
+                    : originOwnsPivot
+                    ? "Remove the write: '.TransformOrigin(...)' owns the pivot, and '.CenterPoint(...)' next to it is a pixel offset added to that origin"
                     : info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
                     && assignment is not null && IsNullValue(assignment.Right)
                     ? "Remove it: an element without '." + transitionModifier + "(...)' has no such transition, so there is nothing to clear"
@@ -326,9 +337,9 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// True when <paramref name="link"/> is <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c> or
-    /// <c>.CenterPoint</c> with only constant identity arguments: every number 1 for <c>.Scale</c>
-    /// and 0 for the others, or <c>Vector3.One</c> / <c>Vector3.Zero</c>.
+    /// True when <paramref name="link"/> is <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c>,
+    /// <c>.CenterPoint</c> or <c>.TransformOrigin</c> with only constant identity arguments: every
+    /// number 1 for <c>.Scale</c> and 0 for the others, or <c>Vector3.One</c> / <c>Vector3.Zero</c>.
     /// </summary>
     private static bool IsIdentityTransform(InvocationExpressionSyntax link, string name, SemanticModel model, CancellationToken ct)
     {
@@ -337,7 +348,7 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         switch (name)
         {
             case "Scale": identity = 1; vector = "One"; break;
-            case "Rotation" or TranslationName or "CenterPoint": identity = 0; vector = "Zero"; break;
+            case "Rotation" or TranslationName or "CenterPoint" or "TransformOrigin": identity = 0; vector = "Zero"; break;
             default: return false;
         }
         var arguments = link.ArgumentList.Arguments;
@@ -361,6 +372,31 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
             return false;
         }
         return true;
+    }
+
+    private static bool IsTransformName(string name) =>
+        name is "Scale" or "Rotation" or TranslationName or "CenterPoint" or "TransformOrigin";
+
+    /// <summary>
+    /// True when a later call of the same modifier on <paramref name="link"/>'s own element replaces
+    /// it, so only that later value applies (the fluent "later call wins" rule).
+    /// </summary>
+    private static bool IsOverridden(InvocationExpressionSyntax link, string name, SemanticModel model, CancellationToken ct)
+    {
+        var elementType = model.GetTypeInfo(link, ct).Type;
+        SyntaxNode current = link;
+        while (current.Parent is MemberAccessExpressionSyntax access
+               && access.Expression == current
+               && access.Parent is InvocationExpressionSyntax outer
+               && SymbolEqualityComparer.Default.Equals(model.GetTypeInfo(outer, ct).Type, elementType))
+        {
+            // Only Reactor's own modifier replaces it, not an app helper that shares the name.
+            if (DuplicateAtomicModifierAnalyzer.GetFluentMethodName(outer) == name
+                && IsReactorExtension(model.GetSymbolInfo(outer, ct).Symbol))
+                return true;
+            current = outer;
+        }
+        return false;
     }
 
     private static bool IsReactorExtension(ISymbol? symbol)

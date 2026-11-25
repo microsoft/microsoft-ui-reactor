@@ -229,6 +229,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
         if (control is FrameworkElement realizedElement)
             Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
         _keyByControl[control] = key;
+        _controlByKey[key] = control;
         _lastElementByControl[control] = element;
         if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;
 

@@ -489,6 +489,8 @@ internal static class ModifierTable
             // generic modifier and write nothing. The RichTextBlockElement overloads are what
             // make the suggestion sound on that receiver — FontSize's was added alongside this
             // table for exactly that reason.
+            // CleanElement resets these four on Control and TextBlock (#1662), and they stay MOD_002
+            // per #1195, like the content-alignment pair: the next mount re-applies a .Set write.
             { "FontFamily", new ModifierInfo("FontFamily", controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontSize",   new ModifierInfo("FontSize",   controlGate: ControlOrTextBlock, elementTypes: TextOrRichTextBlock) },
             { "FontWeight", new ModifierInfo("FontWeight", controlGate: ControlOrTextBlock, elementTypes: RichTextBlockOnly) },
@@ -743,6 +745,8 @@ internal static class ModifierTable
             ["Rotation"] = "AnimationHelper.SetOrAnimate writes Visual.RotationAngle, taking the visual unless the value is 0.",
             ["Translation"] = "AnimationHelper.SetOrAnimateVector3 enables translation and writes the visual's Translation, taking the visual unless the value is zero.",
             ["CenterPoint"] = "AnimationHelper.SetOrAnimateVector3 writes Visual.CenterPoint, taking the visual unless the value is zero.",
+            // Spec 066 layer 5: an origin other than (0, 0) starts its pivot expression on the visual at mount.
+            ["TransformOrigin"] = "TransformOriginBinding.Apply starts the pivot expression on Visual.CenterPoint, taking the visual unless the origin is (0, 0).",
         };
 
     // ── Attached properties ──────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-# Spec 066 §12.1: the full transforms validation matrix (378 cases, the pool soak and the platform
+# Spec 066 §12.1: the full transforms validation matrix (432 cases, the pool soak and the platform
 # probes), checked against the behaviour ledger committed in
 # tests/Reactor.AppTests.Host/SelfTest/Baselines/transforms-ledger.json.
 #
