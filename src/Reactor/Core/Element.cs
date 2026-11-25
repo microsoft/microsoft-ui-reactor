@@ -1410,6 +1410,7 @@ public abstract record Element
             && a.Rotation == b.Rotation
             && a.Translation == b.Translation
             && a.CenterPoint == b.CenterPoint
+            && a.TransformOrigin == b.TransformOrigin
             && BrushesEqual(a.Background, b.Background)
             && BrushesEqual(a.Foreground, b.Foreground)
             && BrushesEqual(a.BorderBrush, b.BorderBrush);
@@ -2248,6 +2249,11 @@ public record ElementModifiers
         get => Visual?.CenterPoint;
         init => Visual = Visual is null ? new VisualModifiers { CenterPoint = value } : Visual with { CenterPoint = value };
     }
+    public global::System.Numerics.Vector2? TransformOrigin
+    {
+        get => Visual?.TransformOrigin;
+        init => Visual = Visual is null ? new VisualModifiers { TransformOrigin = value } : Visual with { TransformOrigin = value };
+    }
     public bool? IsVisible
     {
         get => Layout?.IsVisible;
@@ -2597,6 +2603,8 @@ public record VisualModifiers
     public float? Rotation { get; init; }
     public global::System.Numerics.Vector3? Translation { get; init; }
     public global::System.Numerics.Vector3? CenterPoint { get; init; }
+    /// <summary>The size-relative pivot of <c>.TransformOrigin(x, y)</c> (spec 066 §8).</summary>
+    public global::System.Numerics.Vector2? TransformOrigin { get; init; }
 
     /// <summary>
     /// Merge <paramref name="other"/> into this record, preferring
@@ -2615,6 +2623,7 @@ public record VisualModifiers
         Rotation = other.Rotation ?? Rotation,
         Translation = other.Translation ?? Translation,
         CenterPoint = other.CenterPoint ?? CenterPoint,
+        TransformOrigin = other.TransformOrigin ?? TransformOrigin,
     };
 }
 

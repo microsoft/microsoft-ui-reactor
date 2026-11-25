@@ -103,10 +103,10 @@ public class ReferenceStalenessWiringTests
 
         Assert.Equal(0, exitCode);
         Assert.Contains(
-            "XML: src/Reactor/bin/x64/Release/net10.0-windows10.0.22621.0/Reactor.xml " +
+            "XML: src/Reactor/bin/x64/Release/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.xml " +
             "(2026-08-01T19:28:00Z, newest of 2 candidate(s))",
             output);
-        Assert.DoesNotContain("bin/x64/Debug/net10.0-windows10.0.22621.0/Reactor.xml", output);
+        Assert.DoesNotContain("bin/x64/Debug/net10.0-windows10.0.22621.0/Microsoft.UI.Reactor.xml", output);
     }
 
     /// <summary>
@@ -123,13 +123,13 @@ public class ReferenceStalenessWiringTests
         var (exitCode, output) = repo.CompileWithReferenceLocally();
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Reactor.xml not found", output);
+        Assert.Contains("Microsoft.UI.Reactor.xml not found", output);
         Assert.DoesNotContain("REACTOR_DOC_REFGEN_W002", output);
     }
 
     /// <summary>
     /// Issue #1052. Under <c>--ci</c> the same missing input is a failure, not a
-    /// degradation: CI always builds, so no <c>Reactor.xml</c> means the run is
+    /// degradation: CI always builds, so no <c>Microsoft.UI.Reactor.xml</c> means the run is
     /// not the run that was asked for, and the ~117 pages under
     /// <c>docs/guide/reference/</c> are silently left at whatever was committed.
     /// </summary>
@@ -144,7 +144,7 @@ public class ReferenceStalenessWiringTests
     /// </para>
     /// <para>
     /// The gate used to re-derive this by grepping stdout for
-    /// <c>Reactor.xml not found</c>. That failed <em>open</em>: reword the
+    /// <c>Microsoft.UI.Reactor.xml not found</c>. That failed <em>open</em>: reword the
     /// message in <c>CompileCommand</c> and the grep silently stops matching.
     /// The exit code is the contract now, and this test is what pins it — the
     /// pair with the local case above is what shows it is <c>--ci</c> doing the
@@ -160,7 +160,7 @@ public class ReferenceStalenessWiringTests
         var (exitCode, output) = repo.CompileWithReference();
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("Reactor.xml not found", output);
+        Assert.Contains("Microsoft.UI.Reactor.xml not found", output);
         Assert.Contains("Reference generation was skipped for want of an input", output);
         // The compile must not claim success on the way out — that string is
         // the freshness gate's own precondition.
@@ -169,7 +169,7 @@ public class ReferenceStalenessWiringTests
 
     /// <summary>
     /// The second missing input Phase 5.7 bails on. Same contract, different
-    /// cause — asserting only the <c>Reactor.xml</c> case would leave this one
+    /// cause — asserting only the <c>Microsoft.UI.Reactor.xml</c> case would leave this one
     /// free to regress back to a silent exit 0.
     /// </summary>
     [Fact]
@@ -281,13 +281,13 @@ public class ReferenceStalenessWiringTests
         }
 
         /// <summary>
-        /// Writes a routable <c>Reactor.xml</c> at
+        /// Writes a routable <c>Microsoft.UI.Reactor.xml</c> at
         /// <c>src/Reactor/bin/&lt;layout&gt;/</c>. The member is under
         /// <c>Hooks</c> because Phase 5.7 restricts generation to that category,
         /// so anything else would produce zero pages and exercise less.
         /// </summary>
         public string PlantXml(string layout, DateTime writeUtc) =>
-            Write(Path.Join("src", "Reactor", "bin", Native(layout)), "Reactor.xml",
+            Write(Path.Join("src", "Reactor", "bin", Native(layout)), "Microsoft.UI.Reactor.xml",
                 """
                 <?xml version="1.0"?>
                 <doc>

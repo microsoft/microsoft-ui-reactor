@@ -1,8 +1,8 @@
 // Authoring attributes for Reactor.Wrappers.Generator.
 //
 // These were previously emitted into every consuming compilation by the source
-// generator via RegisterPostInitializationOutput. Because Reactor.dll runs the
-// generator too, the (internal) generated copies landed in Reactor.dll and then
+// generator via RegisterPostInitializationOutput. Because Microsoft.UI.Reactor.dll runs the
+// generator too, the (internal) generated copies landed in Microsoft.UI.Reactor.dll and then
 // leaked through InternalsVisibleTo into friend assemblies that ALSO run the
 // generator (e.g. Reactor.AppTests.Host), where the locally generated copy
 // collided with the imported one — CS0436, which fails Release builds under

@@ -382,7 +382,7 @@ internal sealed class CompilationLoader
 
                 foreach (var asset in compile.EnumerateObject())
                 {
-                    var rel = asset.Name; // e.g. "ref/net10.0/Reactor.dll"
+                    var rel = asset.Name; // e.g. "ref/net10.0/Microsoft.UI.Reactor.dll"
                     if (rel.EndsWith("_._", StringComparison.Ordinal)) continue; // empty marker
                     if (!rel.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) continue;
 

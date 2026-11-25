@@ -6,7 +6,7 @@ namespace Reactor.External.TestControl;
 
 /// <summary>
 /// Issue #206 — a Slider-shaped external WinUI control authored outside
-/// Reactor.dll. Carries one numeric value-bearing prop (<see cref="Value"/>)
+/// Microsoft.UI.Reactor.dll. Carries one numeric value-bearing prop (<see cref="Value"/>)
 /// and one CLR change event (<see cref="ValueChanged"/>). It mirrors the
 /// canonical value-bearing shape the issue calls out (<c>Slider.Value</c> /
 /// <c>NumberBox.Value</c>): a programmatic write to <see cref="Value"/> raises

@@ -19,7 +19,10 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// WinUI rejects writes to the <c>UIElement</c> transform facades. A <c>.Set</c> setter re-runs
 /// on every update, so a facade write there throws after the handoff. <c>RotationAxis</c>,
 /// <c>TransformMatrix</c> and the XAML transition properties also block the handoff itself on
-/// mount (#1613, #1623). The trigger set is <see cref="ModifierTable.VisualOwningModifiers"/>.
+/// mount (#1613, #1623). The trigger set is <see cref="ModifierTable.VisualOwningModifiers"/>. A
+/// transform modifier with a constant identity value (<c>.Scale(1)</c>, <c>.Rotation(0)</c>) doesn't
+/// take the visual and doesn't count, unless the <c>.Set</c> writes that same facade: the identity
+/// write then takes the visual to override the setter (spec 066 §3 invariant 2).
 /// </para>
 /// <para>
 /// <c>UIElement.Translation</c> is different: it stays writable after the handoff, so it is only
@@ -208,7 +211,15 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         var model = context.SemanticModel;
         var ct = context.CancellationToken;
 
-        var owningModifier = FindChainModifier(invocation, model, ct, ModifierTable.VisualOwningModifiers.ContainsKey);
+        // A transform modifier with a constant identity value doesn't take the visual (spec 066 §3
+        // invariant 2), unless this .Set writes the same facade: the identity write then still
+        // takes it, to override the setter's value. A transform a later call of the same modifier
+        // replaces doesn't count either: only the last one applies.
+        var written = new HashSet<string>(candidates.Select(static c => c.Name), System.StringComparer.Ordinal);
+        var owningModifier = FindChainModifier(invocation, model, ct, ModifierTable.VisualOwningModifiers.ContainsKey,
+            skip: link => DuplicateAtomicModifierAnalyzer.GetFluentMethodName(link) is { } name
+                && ((IsTransformName(name) && IsOverridden(link, name, model, ct))
+                    || (!written.Contains(name) && IsIdentityTransform(link, name, model, ct))));
         var hasTranslationModifier = FindChainModifier(invocation, model, ct, static n => n == TranslationName) is not null;
         if (owningModifier is null && !hasTranslationModifier)
             return;
@@ -237,9 +248,20 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 continue;
 
             var info = FacadeMembers[name];
+            // The chain already has the modifier, so it owns the channel and the write is dead.
+            var existingModifier = info.Modifier is { } own
+                && FindChainModifier(invocation, model, ct, n => n == own) is not null;
+            // Under a .TransformOrigin, .CenterPoint() is a pixel offset added to the size-relative
+            // pivot (spec 066 §8.1), so rewriting an absolute pivot to it would move the pivot.
+            var originOwnsPivot = name == "CenterPoint"
+                && FindChainModifier(invocation, model, ct, static n => n == "TransformOrigin",
+                    skip: link => IsOverridden(link, "TransformOrigin", model, ct)
+                        || IsIdentityTransform(link, "TransformOrigin", model, ct)) is not null;
             var properties = ImmutableDictionary<string, string?>.Empty;
             if (assignment is not null
                 && info.Modifier is { } modifier
+                && !existingModifier
+                && !originOwnsPivot
                 && IsFixable(invocation, setAccess, lambda, paramName, assignment, modifier, model, ct))
             {
                 properties = properties.Add(FixModifierKey, modifier);
@@ -252,7 +274,11 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
                 (name == StartAnimationName ? "calls 'UIElement." : "writes 'UIElement.") + name + "'",
                 owningModifier,
                 name == StartAnimationName ? "call" : "write",
-                info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
+                existingModifier
+                    ? "Remove the write or merge the value into the existing '." + info.Modifier + "(...)' call"
+                    : originOwnsPivot
+                    ? "Remove the write: '.TransformOrigin(...)' owns the pivot, and '.CenterPoint(...)' next to it is a pixel offset added to that origin"
+                    : info.Modifier is { } transitionModifier && name.EndsWith("Transition", System.StringComparison.Ordinal)
                     && assignment is not null && IsNullValue(assignment.Right)
                     ? "Remove it: an element without '." + transitionModifier + "(...)' has no such transition, so there is nothing to clear"
                     : info.Advice));
@@ -268,7 +294,8 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         SemanticModel model,
         CancellationToken ct,
         System.Func<string, bool> isMatch,
-        bool requireReactorExtension = true)
+        bool requireReactorExtension = true,
+        System.Func<InvocationExpressionSyntax, bool>? skip = null)
     {
         // The walk stays on links that return the .Set's own element type. A wrapper such as
         // .Semantics() returns a different element, and the modifiers past it belong to that
@@ -305,7 +332,71 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         bool Matches(InvocationExpressionSyntax link) =>
             DuplicateAtomicModifierAnalyzer.GetFluentMethodName(link) is { } name
             && isMatch(name)
-            && (!requireReactorExtension || IsReactorExtension(model.GetSymbolInfo(link, ct).Symbol));
+            && (!requireReactorExtension || IsReactorExtension(model.GetSymbolInfo(link, ct).Symbol))
+            && (skip is null || !skip(link));
+    }
+
+    /// <summary>
+    /// True when <paramref name="link"/> is <c>.Scale</c>, <c>.Rotation</c>, <c>.Translation</c>,
+    /// <c>.CenterPoint</c> or <c>.TransformOrigin</c> with only constant identity arguments: every
+    /// number 1 for <c>.Scale</c> and 0 for the others, or <c>Vector3.One</c> / <c>Vector3.Zero</c>.
+    /// </summary>
+    private static bool IsIdentityTransform(InvocationExpressionSyntax link, string name, SemanticModel model, CancellationToken ct)
+    {
+        double identity;
+        string vector;
+        switch (name)
+        {
+            case "Scale": identity = 1; vector = "One"; break;
+            case "Rotation" or TranslationName or "CenterPoint" or "TransformOrigin": identity = 0; vector = "Zero"; break;
+            default: return false;
+        }
+        var arguments = link.ArgumentList.Arguments;
+        if (arguments.Count == 0)
+            return false;
+        foreach (var value in arguments.Select(static argument => argument.Expression))
+        {
+            if (model.GetConstantValue(value, ct) is { HasValue: true, Value: { } constant }
+                && constant is int or long or float or double or decimal)
+            {
+                if (System.Convert.ToDouble(constant, System.Globalization.CultureInfo.InvariantCulture) != identity)
+                    return false;
+                continue;
+            }
+            if (model.GetSymbolInfo(value, ct).Symbol is { IsStatic: true } symbol
+                && symbol is IPropertySymbol or IFieldSymbol
+                && symbol.Name == vector
+                && symbol.ContainingType is { Name: "Vector3" } type
+                && type.ContainingNamespace?.ToDisplayString() == "System.Numerics")
+                continue;
+            return false;
+        }
+        return true;
+    }
+
+    private static bool IsTransformName(string name) =>
+        name is "Scale" or "Rotation" or TranslationName or "CenterPoint" or "TransformOrigin";
+
+    /// <summary>
+    /// True when a later call of the same modifier on <paramref name="link"/>'s own element replaces
+    /// it, so only that later value applies (the fluent "later call wins" rule).
+    /// </summary>
+    private static bool IsOverridden(InvocationExpressionSyntax link, string name, SemanticModel model, CancellationToken ct)
+    {
+        var elementType = model.GetTypeInfo(link, ct).Type;
+        SyntaxNode current = link;
+        while (current.Parent is MemberAccessExpressionSyntax access
+               && access.Expression == current
+               && access.Parent is InvocationExpressionSyntax outer
+               && SymbolEqualityComparer.Default.Equals(model.GetTypeInfo(outer, ct).Type, elementType))
+        {
+            // Only Reactor's own modifier replaces it, not an app helper that shares the name.
+            if (DuplicateAtomicModifierAnalyzer.GetFluentMethodName(outer) == name
+                && IsReactorExtension(model.GetSymbolInfo(outer, ct).Symbol))
+                return true;
+            current = outer;
+        }
+        return false;
     }
 
     private static bool IsReactorExtension(ISymbol? symbol)
@@ -411,10 +502,10 @@ public sealed class FacadeTransformSetAnalyzer : DiagnosticAnalyzer
         if (FindChainModifier(setInvocation, model, ct, static n => n == "Animate") is not null)
             return false;
 
-        // Modifiers run after setters, so an earlier same-name modifier currently wins. Moving
-        // the value into a later modifier call would make it win instead.
-        if (setAccess.Expression is InvocationExpressionSyntax receiver
-            && DuplicateAtomicModifierAnalyzer.CollectSameNameOccurrences(receiver, modifier).Count > 0)
+        // The same modifier anywhere on the chain owns the channel already. An earlier one wins today
+        // (modifiers run after setters), so moving the value into a later call would make it win
+        // instead, and next to a later one the moved call would be dead code: remove the write.
+        if (FindChainModifier(setInvocation, model, ct, n => n == modifier) is not null)
         {
             return false;
         }

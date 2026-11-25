@@ -540,7 +540,8 @@ internal static class CompositorTransitionFixtures
 
     /// <summary>
     /// §9 row 2: an element with a transition keeps its transforms on the visual, so the facade getters
-    /// read identity. The positive control has no transition and reads the facade (layer 4 changes it).
+    /// read identity. Since layer 4 so does an element with only transforms. The positive control is
+    /// a facade value a setter wrote, which the getters do read.
     /// </summary>
     internal sealed class Readback(Harness h) : TransitionFixture(h, "CompositorTransitions_Readback")
     {
@@ -551,7 +552,11 @@ internal static class CompositorTransitionFixtures
             H.Check(Name + "_VisualHoldsValue", Visual.Scale == new Vector3(2, 2, 1) && Math.Abs(Visual.RotationAngleInDegrees - 30) < 0.01f,
                 $"scale={Visual.Scale} rotation={Visual.RotationAngleInDegrees}");
             await Mount(Target().Scale(2).Rotation(30));
-            H.Check(Name + "_PositiveControl_PlainReadsFacade", Control.Scale == new Vector3(2, 2, 1) && Near(Control.Rotation, 30));
+            H.Check(Name + "_TransformOnly_FacadeIdentity", Control.Scale == Vector3.One && Near(Control.Rotation, 0),
+                $"scale={Control.Scale} rotation={Control.Rotation}");
+            // Positive control: the oracle sees a facade value that user code wrote.
+            await Mount(Target().Set(static b => b.Scale = new Vector3(2, 2, 1)));
+            H.Check(Name + "_PositiveControl_SetterReadsFacade", Control.Scale == new Vector3(2, 2, 1), $"scale={Control.Scale}");
         }
     }
 
@@ -730,7 +735,7 @@ internal static class CompositorTransitionFixtures
 
             TransitionEngine.SetOpacityNow(Control, 0);
             H.Check(Name + "_HideIsImmediate", !Running(visual) && Near(visual.Opacity, 0), $"running={Running(visual)} opacity={visual.Opacity}");
-            TransitionEngine.NormalizeVisual(visual);
+            TransitionEngine.NormalizeVisual(Control, visual);
             H.Check(Name + "_ResetIsImmediate", !Running(visual) && Near(visual.Opacity, 1), $"running={Running(visual)} opacity={visual.Opacity}");
             H.Check(Name + "_KeyKept", visual.ImplicitAnimations?.ContainsKey("Opacity") == true);
         }

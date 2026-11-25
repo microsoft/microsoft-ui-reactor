@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.Tests.Elements;
 /// are required to carry an XML <c>&lt;remarks&gt;</c> element explaining the
 /// deviation. The remarks were added in Phase 6.2.
 ///
-/// This test loads the doc-comment XML emitted next to <c>Reactor.dll</c> and
+/// This test loads the doc-comment XML emitted next to <c>Microsoft.UI.Reactor.dll</c> and
 /// asserts each named factory has a non-empty <c>&lt;remarks&gt;</c> entry.
 /// Failures are collected so adding/renaming several factories surfaces every
 /// missing remark in one shot.
@@ -148,10 +148,10 @@ public class NamingAlignmentGuardTests
         return text.Length > 0;
     }
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Reactor.dll's on-disk Location to locate the doc-XML emitted alongside it — the assertion below already fails loudly on an empty path. IL3000 only affects single-file publish; this host is not single-file-published. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Microsoft.UI.Reactor.dll's on-disk Location to locate the doc-XML emitted alongside it — the assertion below already fails loudly on an empty path. IL3000 only affects single-file publish; this host is not single-file-published. Behaviour-neutral.")]
     private static XDocument LoadDocXml()
     {
-        // The doc XML is emitted alongside Reactor.dll by GenerateDocumentationFile.
+        // The doc XML is emitted alongside Microsoft.UI.Reactor.dll by GenerateDocumentationFile.
         var reactorAsm = typeof(Element).Assembly;
         var dllPath = reactorAsm.Location;
         Assert.False(string.IsNullOrEmpty(dllPath),
@@ -160,7 +160,7 @@ public class NamingAlignmentGuardTests
         var xmlPath = Path.ChangeExtension(dllPath, ".xml");
         if (!File.Exists(xmlPath))
             throw new FileNotFoundException(
-                $"Reactor doc-comment XML not found next to Reactor.dll. " +
+                $"Reactor doc-comment XML not found next to Microsoft.UI.Reactor.dll. " +
                 $"Expected: {xmlPath}. Ensure <GenerateDocumentationFile> is enabled.");
 
         return XDocument.Load(xmlPath);
