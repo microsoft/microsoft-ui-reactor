@@ -359,7 +359,7 @@ internal static class Phase4WindowingFixtures
             "Reactor's spec DID take the update, but the native bit still has not followed — " +
             "Reactor's SetWindowPos apply is the suspect (never issued, or issued with the wrong " +
             "insert-after). For the Topmost half, the fixture's own SetWindowPos, issued after the " +
-            "poll, did take, or this process owned the foreground.");
+            "poll, did take, or no foreign foreground owner could be confirmed.");
     }
 
     /// <summary>
@@ -414,17 +414,15 @@ internal static class Phase4WindowingFixtures
     /// <param name="foregroundIsForeign">See <see cref="IsForeignForeground"/>, measured at probe time.</param>
     private static bool OsGrantsTopmost(ReactorWindow win, out bool foregroundIsForeign)
     {
-        nint foregroundHwnd = Native.GetForegroundWindow();
+        nint foregroundHwnd = Native.ForegroundWindow();
         uint foregroundPid = 0;
         uint lookupThreadId = foregroundHwnd == 0
             ? 0
-            : Native.GetWindowThreadProcessId(foregroundHwnd, out foregroundPid);
+            : Native.WindowProcessId(foregroundHwnd, out foregroundPid);
         foregroundIsForeign = IsForeignForeground(
             foregroundHwnd, lookupThreadId, foregroundPid, (uint)Environment.ProcessId);
         nint hwnd = Hwnd(win);
-        bool ok = Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0,
-            Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
-        int error = ok ? 0 : Marshal.GetLastWin32Error();
+        bool ok = Native.MakeTopmost(hwnd, out int error);
         bool granted = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
         Console.WriteLine(
             $"# WindowLevel_RuntimeFlip OS probe (issue #927): direct SetWindowPos(HWND_TOPMOST) " +
@@ -498,20 +496,33 @@ internal static class Phase4WindowingFixtures
         public const long WS_EX_APPWINDOW = 0x00040000;
         public const long WS_EX_TOPMOST = 0x00000008;
         public const uint GW_HWNDNEXT = 2;
-        public const uint SWP_NOSIZE = 0x0001;
-        public const uint SWP_NOMOVE = 0x0002;
-        public const uint SWP_NOACTIVATE = 0x0010;
-        public static readonly nint HWND_TOPMOST = -1;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private static readonly nint HWND_TOPMOST = -1;
+
+        // Same call and flags as ReactorWindow.ApplyWindowLevel(AlwaysOnTop).
+        public static bool MakeTopmost(nint hWnd, out int error)
+        {
+            bool ok = SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            error = ok ? 0 : Marshal.GetLastWin32Error();
+            return ok;
+        }
+
+        public static nint ForegroundWindow() => GetForegroundWindow();
+
+        public static uint WindowProcessId(nint hWnd, out uint processId)
+            => GetWindowThreadProcessId(hWnd, out processId);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+        private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
         [DllImport("user32.dll")]
-        public static extern nint GetForegroundWindow();
+        private static extern nint GetForegroundWindow();
 
         [DllImport("user32.dll", SetLastError = true)]
-        public static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
+        private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
         public static nint GetWindowLongPtr(nint hWnd, int nIndex)
             => IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : GetWindowLong32(hWnd, nIndex);
