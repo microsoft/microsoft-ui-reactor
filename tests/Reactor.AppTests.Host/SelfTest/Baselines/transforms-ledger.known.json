@@ -1,7 +1,5 @@
 {
   "known": [
-    { "case": "*.*.TransitionExit", "dims": "*wrapper=Memo*user=None*", "step": "unmount", "part": "active", "issue": "#1663", "note": "An exit .Transition() declared on a keyed Memo does not play when the Memo is removed, so the control is gone at once. Other user dims are attributed by their own rules." },
-    { "case": "{None,Identity,Scale,Rotation,CenterPoint,ScaleRotationCenter,TransformOrigin}.*.TransitionExit", "dims": "*wrapper=Memo*user=TranslationDrag*", "step": "unmount", "part": "active", "issue": "#1663", "note": "An exit .Transition() declared on a keyed Memo does not play when the Memo is removed, so the control is gone at once. The same with a facade Translation drag, which since layer 4 no longer changes the outcome; Translation.* drag cases are §9 row 3's." },
     { "case": "*", "dims": "*user=SetFacade*", "part": "*", "issue": "§9 row 1", "note": "A .Set facade Scale write mixed with modifiers or features: the setter re-runs and clobbers the declared value or is migrated by the handoff, and throws once the visual is taken." },
     { "case": "Translation.*.*", "dims": "*user=TranslationDrag*", "part": "*", "issue": "§9 row 3", "note": "A facade Translation drag mixed with .Translation(): since spec 066 layer 4 the modifier enables translation on the visual, after which WinUI ignores the drag once the element has rendered." }
   ]

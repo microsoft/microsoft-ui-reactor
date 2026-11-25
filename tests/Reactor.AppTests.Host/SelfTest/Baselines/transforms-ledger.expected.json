@@ -17,6 +17,6 @@
     {"case": "*.*.Keyframes", "step": "{addFeature,removeModifier}", "field": "model", "before": "opacity", "after": "ok", "reason": "fixes #1660: completing a one-shot restores the declared opacity"},
     {"case": "*.*.Keyframes", "step": "{addFeature,removeModifier}", "field": "model", "before": "pose,opacity", "after": "pose", "reason": "fixes #1660: completing a one-shot restores the declared opacity"},
     {"case": "*.*.Keyframes", "step": "{addFeature,removeModifier}", "field": "opacity", "before": "1.00", "after": "0.80", "reason": "fixes #1660: completing a one-shot restores the declared opacity"},
-    {"case": "*.*.Keyframes", "step": "{addFeature,mount}", "field": "running", "before": "Opacity", "after": "-", "reason": "fixes #1660: completing a one-shot releases its opacity controller"}
+    {"case": "*.*.Keyframes", "step": "{addFeature,mount,removeModifier}", "field": "running", "before": "Opacity", "after": "-", "reason": "fixes #1660: completing a one-shot releases its opacity controller"}
   ]
 }

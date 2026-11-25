@@ -990,4 +990,172 @@ internal static class PoolLaneFixtures
             H.Check(p + "_OnlyCurrent", names is not null && names.SetEquals(["c"]), names is null ? "null" : string.Join(",", names));
         }
     }
+
+    /// <summary>
+    /// A <c>.Ref</c> declared on a layer that mounts no control of its own (a keyed <c>Memo</c>, a
+    /// legacy <see cref="ModifiedElement"/>, a flyout decorator) points at the control its child
+    /// mounted. Unmount clears it, so a pooled control an unrelated renter gets isn't still
+    /// referenced (#1659). The control's own ref is the positive control.
+    /// </summary>
+    internal sealed class WrapperRefs(Harness h) : SelfTestFixtureBase(h)
+    {
+        private sealed record ThrowingEdgeElement(ElementRef<RefNode>? Target) : Element;
+
+        public override async Task RunAsync()
+        {
+            var cases = new (string Name, Func<ElementRef, Element> Build)[]
+            {
+                ("Own", static r => Target("A").Ref(r)),
+                ("KeyedMemo", static r => Memo("k", static () => Target("A")).Ref(r)),
+                ("NestedKeyedMemo", static r => Memo("outer", static () => Memo("inner", static () => Target("A"))).Ref(r)),
+                ("ModifiedElement", static r => new ModifiedElement(Target("A"), new ElementModifiers { Ref = r })),
+                ("Flyout", static r => Flyout(Target("A"), TextBlock("f")).Ref(r)),
+            };
+            foreach (var (name, build) in cases)
+            {
+                string p = "ElementPoolLanes_WrapperRefs_" + name;
+                using var lab = new Lab(H);
+                var r = new ElementRef();
+                var mounted = await lab.Show(build(r));
+                H.Check(p + "_RefSet", mounted is WinUI.Border && ReferenceEquals(r.Current, mounted),
+                    $"mounted={mounted?.GetType().Name} current={r.Current?.GetType().Name}");
+                await lab.Show(null);
+                H.Check(p + "_ClearedOnUnmount", r.Current is null, $"current={r.Current?.GetType().Name}");
+
+                var renter = await lab.Show(Target("B"));
+                // Only the flyout decorator's control might stay out of the pool; the rest must recycle
+                // for the renter step to reproduce the issue.
+                if (name != "Flyout")
+                    H.Check(p + "_Recycled", ReferenceEquals(renter, mounted));
+                H.Check(p + "_RenterNotReferenced", r.Current is null, $"current={r.Current?.GetType().Name}");
+            }
+
+            // Two layers that mount no control, each with its own ref: the control holds both.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_TwoLayers";
+                using var lab = new Lab(H);
+                ElementRef outer = new(), inner = new();
+                var mounted = await lab.Show(Memo("outer", () => Memo("inner", static () => Target("A")).Ref(inner)).Ref(outer));
+                H.Check(p + "_RefsSet", mounted is not null && ReferenceEquals(outer.Current, mounted)
+                    && ReferenceEquals(inner.Current, mounted),
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+                await lab.Show(null);
+                H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
+            // Updates on a wrapper layer: an unchanged ref stays tracked, a swapped one is dropped.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_Update";
+                using var lab = new Lab(H);
+                ElementRef r = new(), swapped = new();
+                static Element Wrapped(string text, ElementRef r) => new ModifiedElement(Target(text), new ElementModifiers { Ref = r });
+                var mounted = await lab.Show(Wrapped("A", r));
+                var updated = await lab.Show(Wrapped("A2", r));
+                H.Check(p + "_PatchedInPlace", mounted is not null && ReferenceEquals(updated, mounted));
+                H.Check(p + "_RefKept", mounted is not null && ReferenceEquals(r.Current, mounted));
+                await lab.Show(Wrapped("A3", swapped));
+                var tracked = (mounted?.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ProducerRefs;
+                H.Check(p + "_SwapClearsOld", r.Current is null && mounted is not null && ReferenceEquals(swapped.Current, mounted));
+                H.Check(p + "_SwapUntracks", ReferenceEquals(tracked, swapped), tracked?.GetType().Name ?? "null");
+                await lab.Show(null);
+                H.Check(p + "_ClearedOnUnmount", swapped.Current is null);
+                var renter = await lab.Show(Target("B"));
+                H.Check(p + "_Recycled", ReferenceEquals(renter, mounted));
+                H.Check(p + "_RenterNotReferenced", swapped.Current is null && r.Current is null);
+            }
+
+            // A direct Mount runs outside a Reconcile commit, so the ref's CurrentChanged dispatches
+            // synchronously and can throw after Current was set. Unmount must still clear the ref.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingDispatch";
+                using var reconciler = new Reconciler();
+                var r = new ElementRef();
+                Action<FrameworkElement?> boom = static v => { if (v is not null) throw new InvalidOperationException("boom"); };
+                r.CurrentChanged += boom;
+                bool threw = false;
+                try { reconciler.Mount(Memo("k", static () => Target("A")).Ref(r), static () => { }); }
+                catch (InvalidOperationException) { threw = true; }
+                r.CurrentChanged -= boom;
+                var control = r.Current;
+                H.Check(p + "_Threw", threw && control is WinUI.Border);
+                if (control is not null) reconciler.UnmountChild(control);
+                H.Check(p + "_ClearedOnUnmount", r.Current is null);
+            }
+
+            // Two tracked refs, each with a subscriber that throws when its ref is cleared: unmount
+            // clears both and still reports the failure.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingClear";
+                using var reconciler = new Reconciler();
+                ElementRef outer = new(), inner = new();
+                Action<FrameworkElement?> boom = static v => { if (v is null) throw new InvalidOperationException("boom"); };
+                var control = reconciler.Mount(Memo("outer", () => Memo("inner", static () => Target("A")).Ref(inner)).Ref(outer),
+                    static () => { });
+                outer.CurrentChanged += boom;
+                inner.CurrentChanged += boom;
+                bool threw = false;
+                try { if (control is not null) reconciler.UnmountChild(control); }
+                catch (InvalidOperationException) { threw = true; }
+                outer.CurrentChanged -= boom;
+                inner.CurrentChanged -= boom;
+                H.Check(p + "_Threw", control is not null && threw);
+                H.Check(p + "_BothCleared", outer.Current is null && inner.Current is null,
+                    $"outer={outer.Current is not null} inner={inner.Current is not null}");
+            }
+
+            // Unmount runs user-supplied reference setters with null, and one can throw. The
+            // control's own ref is still cleared.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_ThrowingEdgeSetter";
+                using var reconciler = new Reconciler();
+                bool throwOnClear = false;
+                var throwingEdge = new Core.V1Protocol.Descriptor.ControlDescriptor<ThrowingEdgeElement, RefNode>()
+                    .Reference<RefNode>(get: static e => e.Target, set: (c, t) =>
+                    {
+                        if (t is null && throwOnClear) throw new InvalidOperationException("boom");
+                        c.Right = t;
+                    });
+                reconciler.RegisterHandler(new Core.V1Protocol.Descriptor.DescriptorHandler<ThrowingEdgeElement, RefNode>(throwingEdge));
+                var r = new ElementRef();
+                var control = reconciler.Mount(new ThrowingEdgeElement(new ElementRef<RefNode>(new ElementRef())).Ref(r), static () => { });
+                bool threw = false;
+                throwOnClear = true;
+                try { if (control is not null) reconciler.UnmountChild(control); }
+                catch (InvalidOperationException) { threw = true; }
+                finally { throwOnClear = false; }
+                H.Check(p + "_Threw", control is RefNode && threw);
+                H.Check(p + "_OwnRefCleared", r.Current is null);
+            }
+
+            // Detaching or returning a control directly, without unmounting it, clears the refs too,
+            // so a retained or pooled control doesn't keep retired ref cells alive.
+            foreach (bool detach in new[] { true, false })
+            {
+                string p = "ElementPoolLanes_WrapperRefs_Direct" + (detach ? "Detach" : "Return");
+                using var reconciler = new Reconciler();
+                var r = new ElementRef();
+                var control = reconciler.Mount(Memo("k", static () => Target("A")).Ref(r), static () => { }) as FrameworkElement;
+                H.Check(p + "_RefSet", control is not null && ReferenceEquals(r.Current, control));
+                if (control is null) continue;
+                if (detach) Reconciler.DetachReactorState(control);
+                else reconciler.ReturnControl(control);
+                var tracked = (control.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState)?.ProducerRefs;
+                H.Check(p + "_Cleared", r.Current is null && tracked is null, $"current={r.Current is not null} tracked={tracked is not null}");
+            }
+
+            // A changed Memo key remounts: the ref moves to the replacement before the old control is
+            // unmounted, and that unmount must not clear it.
+            {
+                const string p = "ElementPoolLanes_WrapperRefs_KeyChange";
+                using var lab = new Lab(H);
+                var r = new ElementRef();
+                var first = await lab.Show(Memo("k1", static () => Target("A")).Ref(r));
+                var second = await lab.Show(Memo("k2", static () => Target("B")).Ref(r));
+                H.Check(p + "_Replaced", second is not null && !ReferenceEquals(first, second));
+                H.Check(p + "_RefFollowsReplacement", second is not null && ReferenceEquals(r.Current, second),
+                    $"current={(ReferenceEquals(r.Current, first) ? "old" : r.Current?.GetType().Name ?? "null")}");
+            }
+        }
+    }
 }
