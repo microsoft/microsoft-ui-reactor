@@ -60,9 +60,10 @@ Component.Render() → Element tree (records)
 
 ### Reconciler is split across partial classes
 
-- `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
+- `Reconciler.cs` — orchestration: the `Reconcile` entry, component rendering, child reconciliation, `CanUpdate`
 - `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
 - `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
+- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `InteractionStates`, `ThemeBindings`, `Events`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
 
 ### Hooks follow React rules
 
