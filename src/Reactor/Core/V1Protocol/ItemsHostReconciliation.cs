@@ -106,8 +106,8 @@ internal static class ItemsHostReconciliation
                         reconciler.DebugElementsSkipped++;
                         if ((child.HasCallbacks
                                 || Reconciler.IsFlyoutDecorator(child)
-                                || Reconciler.HasGestureOrDragSlots(oldChild.Modifiers)
-                                || Reconciler.HasGestureOrDragSlots(child.Modifiers)
+                                || GestureDispatch.HasGestureOrDragSlots(oldChild.Modifiers)
+                                || GestureDispatch.HasGestureOrDragSlots(child.Modifiers)
                                 || Reconciler.CallSiteChangedOnSkip(oldChild, child))
                             && existing is FrameworkElement fe)
                         {

@@ -188,7 +188,7 @@ public sealed partial class Reconciler
             {
                 if (rs.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
                 ClearTrackedProducerRefs(fe);
-                TeardownReferenceEdges(fe);
+                ReferenceEdgeWiring.TeardownReferenceEdges(fe);
                 rs.Modifiers?.ClearCurrentHandlers();
                 // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
                 // payloads (ToggleSwitch / Slider / TextBox / Button / ...)

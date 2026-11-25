@@ -286,13 +286,13 @@ public sealed class ElementPool : IDisposable
         // pool return so a pooled control can't fire the previous component's
         // captured rerender closure into the next mount. The underlying
         // trampoline subscription stays attached — that's intentional, see
-        // the comment block in Reconciler.Events.cs above ModifierEventHandlerState.
+        // the comment block in ModifierEvents.cs above ModifierEventHandlerState.
         Reconciler.ClearCurrentEventHandlers(fe);
         fe.Tag = null;
         // Resources keys the previous renter's .Resources(...) overrides wrote. Mount applies
         // overrides only for an element that declares some, so without this a renter that
         // declares none would inherit them. Keys set outside Reactor are left alone.
-        Reconciler.RemoveManagedResourceKeys(fe);
+        ThemeBindingApplier.RemoveManagedResourceKeys(fe);
         // Reset via ClearValue, not by assigning the DP default: a local value outranks
         // every Style setter, so writing e.g. HorizontalAlignment.Stretch would hand the
         // next renter a control that can never show its default style's alignment
@@ -359,7 +359,7 @@ public sealed class ElementPool : IDisposable
         // pooled control holds no reference to the previous renter's themed
         // Style. Gated on Style being non-null so non-themed controls (the
         // common case) skip the redundant COM call.
-        Reconciler.ClearThemeBindings(fe);
+        ThemeBindingApplier.ClearThemeBindings(fe);
         if (fe.Style is not null)
             fe.ClearValue(FrameworkElement.StyleProperty);
 

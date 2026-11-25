@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// <c>Control</c>, or <c>Border</c>, and a <c>Rectangle</c> is a
 /// <c>Microsoft.UI.Xaml.Shapes.Shape</c>. Shapes are painted with <c>Fill</c>/<c>Stroke</c>. The
 /// <c>ThemeRef</c> overload drops through a second, independent copy of the same allow-list in
-/// <c>Reconciler.GetDependencyPropertyName</c>, so every <c>Background</c> overload is affected.
+/// <c>ThemeBindingApplier.GetDependencyPropertyName</c>, so every <c>Background</c> overload is affected.
 /// </para>
 /// <para>
 /// This is the reverse direction of <see cref="PoolResetSetAnalyzer"/>'s <c>REACTOR_MOD_002</c>:

@@ -840,7 +840,7 @@ public class ModifierTableIntegrityTests
     private static readonly HashSet<string> ElementSpecificThemeProperties = new(StringComparer.Ordinal) { "PaneBackground" };
 
     /// <summary>
-    /// Property name → the WinUI type names <c>Reconciler.GetDependencyPropertyName</c> will emit a
+    /// Property name → the WinUI type names <c>ThemeBindingApplier.GetDependencyPropertyName</c> will emit a
     /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. The method's body is a
     /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
     /// branch's string comparison names the property and the type tests are the gate.

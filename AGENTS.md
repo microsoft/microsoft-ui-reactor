@@ -63,7 +63,8 @@ Component.Render() → Element tree (records)
 - `Reconciler.cs` — orchestration: the `Reconcile` entry, component rendering, child reconciliation, `CanUpdate`
 - `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
 - `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
-- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `InteractionStates`, `ThemeBindings`, `Events`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
+- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `InteractionStates`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
+- Stateless per-control helpers live in standalone `internal static` classes beside the reconciler, so they cannot reach its private state: `ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents` (event trampolines, `ModifierEventHandlerState`, control event payloads), `ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`. Public entry points that predate the split (`ApplyThemeBindings`, `ApplyResourceOverrides`, `Apply`/`UpdateDefaultAutomationName`) stay on `Reconciler` as forwarders in `Reconciler.StaticForwarders.cs`. Source-parsing gates find these files through `tests/Reactor.Tests/AnalyzerTests/ReconcilerSource.cs`, so add a new helper file there too
 
 ### Hooks follow React rules
 

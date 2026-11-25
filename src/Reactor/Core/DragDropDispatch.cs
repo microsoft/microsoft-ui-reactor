@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Core;
 
-public sealed partial class Reconciler
+internal static class DragDropDispatch
 {
     /// <summary>
     /// Per-element drag-and-drop dispatch state (spec 027 Tier 6 / Phase 6a).
@@ -31,7 +31,7 @@ public sealed partial class Reconciler
         public DragEventHandler? DropTrampoline;
     }
 
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, DragDropState> _dndStates = new();
+    internal static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, DragDropState> _dndStates = new();
 
     private static DragDropState GetOrCreateDndState(FrameworkElement fe)
     {
@@ -49,7 +49,7 @@ public sealed partial class Reconciler
     internal static DragDropState? DebugTryGetDndState(FrameworkElement fe)
         => _dndStates.TryGetValue(fe, out var state) ? state : null;
 
-    private static void ApplyDragDropHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    internal static void ApplyDragDropHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         if (m.DragSource is null && m.DropTarget is null
             && oldM?.DragSource is null && oldM?.DropTarget is null)

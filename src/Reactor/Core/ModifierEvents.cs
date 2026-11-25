@@ -21,8 +21,8 @@ using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 
 namespace Microsoft.UI.Reactor.Core;
 
-// Reconciler partial: Control and modifier event subscription: V1 binding shims, control event payloads, Ensure*Subscribed trampolines.
-public sealed partial class Reconciler
+// Control and modifier event subscription: V1 binding shims, control event payloads, Ensure*Subscribed trampolines.
+internal static class ModifierEvents
 {
     // ════════════════════════════════════════════════════════════════════
     //  Internal binding shims for V1 ReactorBinding<TElement> (1.6)
@@ -73,7 +73,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal static void AnchorCustomEventTrampoline(FrameworkElement fe, Delegate trampoline)
     {
-        var state = GetOrCreateReactorState(fe);
+        var state = Reconciler.GetOrCreateReactorState(fe);
         if (state.ControlEventState is not ControlEventStateBox box
             || box.HandlerType != typeof(V1Protocol.CustomEventAnchorPayload))
         {
@@ -100,7 +100,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal static T GetOrCreateControlEventPayload<T>(FrameworkElement fe) where T : class, new()
     {
-        var state = GetOrCreateReactorState(fe);
+        var state = Reconciler.GetOrCreateReactorState(fe);
         if (state.ControlEventState is ControlEventStateBox existing
             && existing.HandlerType == typeof(T))
         {
@@ -127,7 +127,7 @@ public sealed partial class Reconciler
     /// </summary>
     internal static T? TryGetControlEventPayload<T>(FrameworkElement fe) where T : class
     {
-        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state
+        if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
             && state.ControlEventState is ControlEventStateBox box
             && box.HandlerType == typeof(T))
         {
@@ -138,10 +138,10 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Issue #207 — payload accessor for trampolines that already hold the
-    /// control's <see cref="ReactorState"/> (read once via
-    /// <see cref="TryGetReactorState"/>), avoiding a second attached-DP read.
+    /// control's <see cref="Reconciler.ReactorState"/> (read once via
+    /// <see cref="Reconciler.TryGetReactorState"/>), avoiding a second attached-DP read.
     /// </summary>
-    internal static T? TryGetControlEventPayload<T>(ReactorState state) where T : class
+    internal static T? TryGetControlEventPayload<T>(Reconciler.ReactorState state) where T : class
     {
         if (state.ControlEventState is ControlEventStateBox box
             && box.HandlerType == typeof(T))
@@ -155,105 +155,13 @@ public sealed partial class Reconciler
     //  Declarative event handler management
     // ════════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Tracks the currently-attached event handlers on a FrameworkElement so they
-    /// can be detached before new ones are attached. Stored as the element's Tag
-    /// (or alongside it in a wrapper if Tag is already used for pool identity).
-    /// </summary>
-    /// <summary>
-    /// Per-element handler state. Holds the <b>current</b> user delegate for each event
-    /// plus a bit tracking whether the stable trampoline has been attached yet. The
-    /// trampoline reads from the mutable <c>Current*</c> field when it fires, so updating
-    /// a handler just swaps the field — no WinUI subscribe/unsubscribe churn.
-    /// </summary>
-    internal sealed class ModifierEventHandlerState
-    {
-        // Current user handlers (mutable; null means "no-op")
-        public Action<object, SizeChangedEventArgs>? CurrentSizeChanged;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerPressed;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerMoved;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerReleased;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerEntered;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerExited;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerCanceled;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerCaptureLost;
-        public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerWheelChanged;
-        public Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? CurrentTapped;
-        public Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? CurrentDoubleTapped;
-        public Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? CurrentRightTapped;
-        public Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? CurrentHolding;
-        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentKeyDown;
-        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentKeyUp;
-        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentPreviewKeyDown;
-        public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentPreviewKeyUp;
-        public Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CurrentCharacterReceived;
-        public Action<object, RoutedEventArgs>? CurrentGotFocus;
-        public Action<object, RoutedEventArgs>? CurrentLostFocus;
-        public Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? CurrentAccessKeyDisplayRequested;
-
-        // Stable trampoline delegates — captured for reference-equality detach (never used)
-        // and to prevent GC collection of the compiler-generated closure.
-        public SizeChangedEventHandler? SizeChangedTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerPressedTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerMovedTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerReleasedTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerEnteredTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerExitedTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCanceledTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCaptureLostTrampoline;
-        public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerWheelChangedTrampoline;
-        public Microsoft.UI.Xaml.Input.TappedEventHandler? TappedTrampoline;
-        public Microsoft.UI.Xaml.Input.DoubleTappedEventHandler? DoubleTappedTrampoline;
-        public Microsoft.UI.Xaml.Input.RightTappedEventHandler? RightTappedTrampoline;
-        public Microsoft.UI.Xaml.Input.HoldingEventHandler? HoldingTrampoline;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyDownTrampoline;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyUpTrampoline;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyDownTrampoline;
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyUpTrampoline;
-        public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
-        public RoutedEventHandler? GotFocusTrampoline;
-        public RoutedEventHandler? LostFocusTrampoline;
-        public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
-
-        /// <summary>
-        /// Null out every Current* user delegate so trampolines already attached
-        /// on the native event source become no-ops. Trampoline delegate fields
-        /// are left intact — they're rooted by WinUI's subscription list and
-        /// can't be detached here without access to the native element.
-        /// </summary>
-        public void ClearCurrentHandlers()
-        {
-            CurrentSizeChanged = null;
-            CurrentPointerPressed = null;
-            CurrentPointerMoved = null;
-            CurrentPointerReleased = null;
-            CurrentPointerEntered = null;
-            CurrentPointerExited = null;
-            CurrentPointerCanceled = null;
-            CurrentPointerCaptureLost = null;
-            CurrentPointerWheelChanged = null;
-            CurrentTapped = null;
-            CurrentDoubleTapped = null;
-            CurrentRightTapped = null;
-            CurrentHolding = null;
-            CurrentKeyDown = null;
-            CurrentKeyUp = null;
-            CurrentPreviewKeyDown = null;
-            CurrentPreviewKeyUp = null;
-            CurrentCharacterReceived = null;
-            CurrentGotFocus = null;
-            CurrentLostFocus = null;
-            CurrentAccessKeyDisplayRequested = null;
-        }
-    }
-
     // ModifierEventHandlerState lives on the ReactorState wrapper attached to the
     // native DependencyObject via ReactorAttached.StateProperty. That keys
     // on native identity, so two RCWs pointing at the same element share one
     // ModifierEventHandlerState and one set of trampolines — fixing issue #86.
     private static ModifierEventHandlerState GetOrCreateModifierState(FrameworkElement fe)
     {
-        var state = GetOrCreateReactorState(fe);
+        var state = Reconciler.GetOrCreateReactorState(fe);
         return state.Modifiers ??= new ModifierEventHandlerState();
     }
 
@@ -280,7 +188,7 @@ public sealed partial class Reconciler
             || m.OnTapped is not null || m.OnDoubleTapped is not null || m.OnRightTapped is not null || m.OnHolding is not null;
     }
 
-    private static void ApplyEventHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    internal static void ApplyEventHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         // Fast path: nothing to do
         if (!HasAnyEventHandler(m) && !HasAnyEventHandler(oldM)) return;
@@ -661,5 +569,97 @@ public sealed partial class Reconciler
             fe.AccessKeyDisplayRequested += state.AccessKeyDisplayRequestedTrampoline;
             Diagnostics.ReactorEventSource.Log.EventTrampolineAttached("AccessKeyDisplayRequested", fe.GetType().Name);
         }
+    }
+}
+
+/// <summary>
+/// Tracks the currently-attached event handlers on a FrameworkElement so they
+/// can be detached before new ones are attached. Stored as the element's Tag
+/// (or alongside it in a wrapper if Tag is already used for pool identity).
+/// </summary>
+/// <summary>
+/// Per-element handler state. Holds the <b>current</b> user delegate for each event
+/// plus a bit tracking whether the stable trampoline has been attached yet. The
+/// trampoline reads from the mutable <c>Current*</c> field when it fires, so updating
+/// a handler just swaps the field — no WinUI subscribe/unsubscribe churn.
+/// </summary>
+internal sealed class ModifierEventHandlerState
+{
+    // Current user handlers (mutable; null means "no-op")
+    public Action<object, SizeChangedEventArgs>? CurrentSizeChanged;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerPressed;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerMoved;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerReleased;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerEntered;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerExited;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerCanceled;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerCaptureLost;
+    public Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? CurrentPointerWheelChanged;
+    public Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? CurrentTapped;
+    public Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? CurrentDoubleTapped;
+    public Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? CurrentRightTapped;
+    public Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? CurrentHolding;
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentKeyDown;
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentKeyUp;
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentPreviewKeyDown;
+    public Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? CurrentPreviewKeyUp;
+    public Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CurrentCharacterReceived;
+    public Action<object, RoutedEventArgs>? CurrentGotFocus;
+    public Action<object, RoutedEventArgs>? CurrentLostFocus;
+    public Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? CurrentAccessKeyDisplayRequested;
+
+    // Stable trampoline delegates — captured for reference-equality detach (never used)
+    // and to prevent GC collection of the compiler-generated closure.
+    public SizeChangedEventHandler? SizeChangedTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerPressedTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerMovedTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerReleasedTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerEnteredTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerExitedTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCanceledTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerCaptureLostTrampoline;
+    public Microsoft.UI.Xaml.Input.PointerEventHandler? PointerWheelChangedTrampoline;
+    public Microsoft.UI.Xaml.Input.TappedEventHandler? TappedTrampoline;
+    public Microsoft.UI.Xaml.Input.DoubleTappedEventHandler? DoubleTappedTrampoline;
+    public Microsoft.UI.Xaml.Input.RightTappedEventHandler? RightTappedTrampoline;
+    public Microsoft.UI.Xaml.Input.HoldingEventHandler? HoldingTrampoline;
+    public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyDownTrampoline;
+    public Microsoft.UI.Xaml.Input.KeyEventHandler? KeyUpTrampoline;
+    public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyDownTrampoline;
+    public Microsoft.UI.Xaml.Input.KeyEventHandler? PreviewKeyUpTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
+    public RoutedEventHandler? GotFocusTrampoline;
+    public RoutedEventHandler? LostFocusTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
+
+    /// <summary>
+    /// Null out every Current* user delegate so trampolines already attached
+    /// on the native event source become no-ops. Trampoline delegate fields
+    /// are left intact — they're rooted by WinUI's subscription list and
+    /// can't be detached here without access to the native element.
+    /// </summary>
+    public void ClearCurrentHandlers()
+    {
+        CurrentSizeChanged = null;
+        CurrentPointerPressed = null;
+        CurrentPointerMoved = null;
+        CurrentPointerReleased = null;
+        CurrentPointerEntered = null;
+        CurrentPointerExited = null;
+        CurrentPointerCanceled = null;
+        CurrentPointerCaptureLost = null;
+        CurrentPointerWheelChanged = null;
+        CurrentTapped = null;
+        CurrentDoubleTapped = null;
+        CurrentRightTapped = null;
+        CurrentHolding = null;
+        CurrentKeyDown = null;
+        CurrentKeyUp = null;
+        CurrentPreviewKeyDown = null;
+        CurrentPreviewKeyUp = null;
+        CurrentCharacterReceived = null;
+        CurrentGotFocus = null;
+        CurrentLostFocus = null;
+        CurrentAccessKeyDisplayRequested = null;
     }
 }
