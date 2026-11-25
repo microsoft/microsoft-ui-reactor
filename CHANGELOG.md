@@ -217,6 +217,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- `.LayoutAnimation()` uses linear easing for position and optional size changes in
+  non-spring mode (#1652).
+
 - **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
   layers mount no control of their own, so the ref points at the control their child mounted, and
   unmount only cleared refs declared on that control's own element and its decorators. The ref kept

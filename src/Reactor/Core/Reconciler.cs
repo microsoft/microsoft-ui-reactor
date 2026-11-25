@@ -6106,7 +6106,7 @@ public sealed partial class Reconciler : IDisposable
             else
             {
                 var anim = compositor.CreateVector3KeyFrameAnimation();
-                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
+                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue", compositor.CreateLinearEasingFunction());
                 anim.Duration = config.Duration;
                 anim.Target = "Offset";
                 offset = anim;
@@ -6132,7 +6132,7 @@ public sealed partial class Reconciler : IDisposable
             else
             {
                 var anim = compositor.CreateVector2KeyFrameAnimation();
-                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue");
+                anim.InsertExpressionKeyFrame(1.0f, "this.FinalValue", compositor.CreateLinearEasingFunction());
                 anim.Duration = config.Duration;
                 anim.Target = "Size";
                 size = anim;
