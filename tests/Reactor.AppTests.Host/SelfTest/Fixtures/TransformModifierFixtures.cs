@@ -1159,6 +1159,11 @@ internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFix
             H.Check("OpacityLoop_FlyoutLoopStarted", visual.TryGetAnimationController("Opacity") is not null);
             reconciler.Update(playing, pulse, target, () => { });
             await Harness.Render();
+            // Clearing .Opacity(0.4) makes XAML push 1 to the visual on its next frame, which also stops
+            // the loop. Let it land first: pushed later, it would overwrite the child's .Set below.
+            H.Check("OpacityLoop_FlyoutXamlPushLanded", await Harness.WaitForWithin(
+                () => visual.TryGetAnimationController("Opacity") is null && visual.Opacity == 1f, 3000),
+                $"visual={visual.Opacity}");
 
             var updatedChild = child.Set(static control => ElementCompositionPreview.GetElementVisual(control).Opacity = 0.7f);
             var replay = Flyout(updatedChild, menu).Keyframes("pulse", 2, k => k.Loop().Duration(60000).At(1, rotation: 90));
@@ -1235,9 +1240,10 @@ internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFix
                     && Math.Abs(visual.Opacity - 0.65f) < 0.001f,
                     $"local={target.ReadLocalValue(UIElement.OpacityProperty)}, visual={visual.Opacity}");
                 target.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.55d) } };
-                await Harness.Render();
-                H.Check(name + "_StyleCanChange", Math.Abs(target.Opacity - 0.55) < 0.001
-                    && Math.Abs(visual.Opacity - 0.55f) < 0.001f, $"native={target.Opacity}, visual={visual.Opacity}");
+                // XAML pushes the new style value to the visual on a later frame, not synchronously.
+                bool synced = await Harness.WaitForWithin(() => Math.Abs(visual.Opacity - 0.55f) < 0.001f, 3000);
+                H.Check(name + "_StyleCanChange", Math.Abs(target.Opacity - 0.55) < 0.001 && synced,
+                    $"native={target.Opacity}, visual={visual.Opacity}");
             }
             else if (redeclare)
                 H.Check(name + "_LatestOpacity", visual.TryGetAnimationController("Opacity") is null
