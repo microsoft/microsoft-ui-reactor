@@ -93,9 +93,13 @@ WinUI content, and it works with the rest of the WinUI ecosystem.
 
 ## 🚀 Get started
 
-You need Windows 10 (1809) or Windows 11 and the
-[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). Create an
-app with the WinApp CLI:
+You need Windows 10 (1809) or Windows 11, the
+[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and the
+Windows App Runtime 2.x. New apps are framework-dependent, so they load the
+runtime that is installed on the machine. If it is missing, install it with
+`winget install Microsoft.WindowsAppRuntime.2`.
+[Installation](https://microsoft.github.io/microsoft-ui-reactor/get-started/install/)
+has the full list. Create an app with the WinApp CLI:
 
 ```powershell
 winget install Microsoft.WinAppCli
@@ -123,10 +127,10 @@ invents API names or falls back to XAML. These tools close that gap:
 
 | Tool | What it gives your agent | How to get it |
 |---|---|---|
-| Agent plugin | The `reactor-dev` agent and 16 skills, for GitHub Copilot CLI and Claude Code | `copilot plugin install microsoft/microsoft-ui-reactor:plugins/reactor` |
+| Agent plugin | The `reactor-dev` agent and the Reactor skills, for GitHub Copilot CLI and Claude Code | `copilot plugin install microsoft/microsoft-ui-reactor:plugins/reactor` |
 | Skill kit | [`SKILL.md`](SKILL.md), the topic files in [`skills/`](skills/) and an index of every public API, for agents without plugins | The `reactor-skill-kit` zip on the [releases page](https://github.com/microsoft/microsoft-ui-reactor/releases) |
 | `mur check` | Build output with one line per problem and a fix to try | Comes with the skill kit |
-| Devtools MCP server | Eyes on the running app: the visual tree, hook state, screenshots, clicks and typing | `mur devtools` |
+| [Devtools MCP server](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Eyes on the running app: the visual tree, hook state, screenshots, clicks and typing | Add the `Microsoft.UI.Reactor.Devtools` package to your app, then run `mur devtools` |
 | Docs for AI tools | `llms.txt`, `llms-full.txt` and a Markdown copy of every docs page | [`llms.txt`](https://microsoft.github.io/microsoft-ui-reactor/latest/llms.txt) |
 
 [Build with AI](https://microsoft.github.io/microsoft-ui-reactor/tools/build-with-ai/)
@@ -212,6 +216,8 @@ the bootstrap script once:
 git clone https://github.com/microsoft/microsoft-ui-reactor.git C:\src\microsoft-ui-reactor
 cd C:\src\microsoft-ui-reactor
 & (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
+
+# In a new terminal, so that mur is on PATH:
 mur doctor
 ```
 
