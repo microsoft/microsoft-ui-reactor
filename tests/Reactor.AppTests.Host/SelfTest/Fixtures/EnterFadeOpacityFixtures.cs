@@ -41,19 +41,26 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
 
         // Mounted with .Opacity(0.4), the fade starts before XAML pushes 0.4. A commit before the
         // element is attached makes sure the push lands after the fade started. Combined with a
-        // Scale enter the fade restarts the same way. With .Animate() on Opacity the push itself
-        // animates (an implicit key), so the fade may not need a restart, but it must still play.
-        foreach (var (scenario, element, restartExpected) in new (string, Element, bool?)[]
+        // Scale enter the fade restarts the same way. With .Animate() on Opacity a push would fire
+        // an implicit animation that replaces the fade, whatever its curve, so the fade must still
+        // be the one playing: its base value reads 0, where a replacement started by the push
+        // would read the pushed opacity.
+        foreach (var (scenario, element, styled, restartExpected) in new (string, Element, bool, bool?)[]
         {
-            ("Local", Faded(0.4, 60000), true),
+            ("Local", Faded(0.4, 60000), false, true),
             ("CombinedScale", Border(TextBlock("Enter Fade")).Opacity(0.4)
-                .Transition(Animation.Transition.Fade + Animation.Transition.Scale(0.8f), Curve.Linear(60000)), true),
+                .Transition(Animation.Transition.Fade + Animation.Transition.Scale(0.8f), Curve.Linear(60000)), false, true),
             ("Animate", Border(TextBlock("Enter Fade")).Opacity(0.4).Animate(Curve.Linear(60000), AnimateProperty.Opacity)
-                .Transition(Animation.Transition.Fade, Curve.Linear(60000)), null),
+                .Transition(Animation.Transition.Fade, Curve.Linear(60000)), false, null),
+            ("AnimateShort", Border(TextBlock("Enter Fade")).Opacity(0.4).Animate(Curve.Linear(1), AnimateProperty.Opacity)
+                .Transition(Animation.Transition.Fade, Curve.Linear(60000)), false, null),
+            ("AnimateShortStyled", Border(TextBlock("Enter Fade")).Animate(Curve.Linear(1), AnimateProperty.Opacity)
+                .Transition(Animation.Transition.Fade, Curve.Linear(60000)), true, null),
         })
         {
             using var reconciler = new Reconciler();
             var control = (Border)reconciler.Mount(element, () => { })!;
+            if (styled) control.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.4d) } };
             var visual = ElementCompositionPreview.GetElementVisual(control);
             bool concealed = !visual.IsVisible && Reconciler.OpacityRestartPendingForTests(control);
             await AfterNextCommit(visual);
@@ -63,14 +70,13 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             var running = visual.TryGetAnimationController("Opacity");
             int restarts = Reconciler.OpacityRestartsForTests(control);
             // The restart count shows the fade survived because Reactor restarted it, not because of
-            // timing, and the base value reads 0 only when the restart wrote the fade's start again.
-            bool restarted = restartExpected is not true || (restarts == 1 && visual.Opacity == 0f);
+            // timing, and the base value reads 0 only while the fade's own start value stands.
+            bool restarted = restartExpected is not true || restarts == 1;
             H.Check($"EnterFade_{scenario}OpacitySurvivesXamlPush", concealed && running is not null && restarted
-                && visual.IsVisible && !Reconciler.OpacityRestartPendingForTests(control),
+                && visual.Opacity == 0f && visual.IsVisible && !Reconciler.OpacityRestartPendingForTests(control),
                 $"concealed={concealed}, running={running is not null}, restarts={restarts}, visible={visual.IsVisible}, opacity={visual.Opacity}");
             H.SetContent(null);
         }
-
         // A style's opacity, set after mount, is the target the restarted fade ends at. The default
         // opacity is the control: no push, so no restart, and the fade ends at 1.
         foreach (var (scenario, styled) in new[] { ("Styled", true), ("Default", false) })
@@ -259,6 +265,30 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             int restarts = Reconciler.OpacityRestartsForTests(control);
             H.Check("EnterFade_CollapsedWaitsThenRestarts", waiting && running is not null && restarts == 1 && visual.IsVisible,
                 $"waiting={waiting}, running={running is not null}, restarts={restarts}, visible={visual.IsVisible}");
+            host.Child = null;
+            H.SetContent(null);
+        }
+
+        // An ambient enter waiting under a collapsed parent is the reconciler's too: disposing it
+        // cancels the check and shows the visual again.
+        {
+            var reconciler = new Reconciler();
+            var with = VStack(Border(TextBlock("Ambient Enter")).Opacity(0.4));
+            var without = VStack();
+            var panel = (Panel)reconciler.Mount(without, () => { })!;
+            var host = new Border { Child = panel, Visibility = Visibility.Collapsed };
+            H.SetContent(host);
+            await Harness.Render();
+            Animations.Animate(AnimationKind.Spring, () => reconciler.Update(without, with, panel, () => { }));
+            var control = (Border)panel.Children[0];
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            bool waiting = !visual.IsVisible && Reconciler.OpacityRestartPendingForTests(control);
+            reconciler.Dispose();
+            bool cancelled = !Reconciler.OpacityRestartPendingForTests(control) && visual.IsVisible;
+            H.Check("EnterFade_AmbientEnterDisposeCancelsAndReveals", waiting && cancelled,
+                $"waiting={waiting}, pending={Reconciler.OpacityRestartPendingForTests(control)}, visible={visual.IsVisible}");
             host.Child = null;
             H.SetContent(null);
         }

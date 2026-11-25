@@ -795,7 +795,7 @@ public sealed partial class Reconciler
             if (args.Item is ReactorRow row && row.PendingEnterAnimation is { } kind)
             {
                 row.PendingEnterAnimation = null;
-                ApplyAmbientEnterAnimation(args.ItemContainer, kind);
+                ApplyAmbientEnterAnimation(args.ItemContainer, kind, this);
             }
         }
     }
@@ -857,7 +857,7 @@ public sealed partial class Reconciler
     /// developer's <c>.Transition(...)</c> modifier still wins when set —
     /// this only fires when no per-element transition has been declared.
     /// </summary>
-    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind)
+    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind, Reconciler? owner)
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
@@ -877,7 +877,7 @@ public sealed partial class Reconciler
             var prevOffset = visual.Offset;
             visual.Offset = new global::System.Numerics.Vector3(prevOffset.X, prevOffset.Y + 12f, prevOffset.Z);
 
-            StartEnterFade(container, visual, compositor, curve, TimeSpan.Zero, owner: null);
+            StartEnterFade(container, visual, compositor, curve, TimeSpan.Zero, owner);
 
             var offsetAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, prevOffset, curve);
             visual.StartAnimation("Offset", offsetAnim);
