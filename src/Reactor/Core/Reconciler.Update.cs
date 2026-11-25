@@ -341,6 +341,10 @@ public sealed partial class Reconciler
             }
         }
 
+        // A keyed Memo's update can hand back a replaced control; keep the old control's layer order for it.
+        bool memoWrappedDecorator = newEl is KeyedMemoElement
+            && control.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoWrapsDecorator: true };
+
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
         //   (3) global `ControlRegistry`, (4) composition-primitive switch.
@@ -421,6 +425,27 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // Mount recorded a keyed Memo's exit on the control it shares (#1663); keep it current when
+        // the Memo declares, retimes or drops one under an unchanged key.
+        if (newEl is KeyedMemoElement)
+        {
+            bool newExit = newEl.ElementTransition?.GetExitTransition() is not null;
+            bool oldExit = oldEl.ElementTransition?.GetExitTransition() is not null;
+            if (newExit || oldExit)
+            {
+                var memoState = GetOrCreateReactorState(target);
+                memoState.MemoTransition = newExit ? newEl.ElementTransition : null;
+                // The layer order holds while the Memo keeps its exit (a resource refresh passes the
+                // same Memo as old and new), and a replaced control, whose state starts fresh, takes
+                // the order the old control had. A new exit sits over a flyout on the control only
+                // when no outer layer is updating the control.
+                if (!newExit) memoState.MemoWrapsDecorator = false;
+                else if (!oldExit)
+                    memoState.MemoWrapsDecorator = modifierParent is null && memoState.DecoratorElement is not null;
+                else if (result is not null)
+                    memoState.MemoWrapsDecorator = memoWrappedDecorator;
+            }
+        }
         // A nested update can replace the control or introduce its first
         // restorable inner declaration. Publish the edge before outer restoration.
         if (modifierParent is not null && (result is not null || mountedModifierTarget is null))
