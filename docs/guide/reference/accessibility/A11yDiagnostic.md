@@ -18,8 +18,6 @@ Namespace: `Microsoft.UI.Reactor.Core`.
 public A11yDiagnostic()
 ```
 
-> **Obsolete.** Constructors of types with required members are not supported in this version of your compiler.
-
 ## Properties
 
 ### `AutomationId`
@@ -43,7 +41,7 @@ public string? ComponentType  // get, init
 Contextual clues from the surrounding element tree.
 
 ```csharp
-public A11yContext Context  // get, init
+public required A11yContext Context  // get, init
 ```
 
 ### `ElementType`
@@ -51,7 +49,7 @@ public A11yContext Context  // get, init
 The C# record type name of the element (e.g., "ButtonElement").
 
 ```csharp
-public string ElementType  // get, init
+public required string ElementType  // get, init
 ```
 
 ### `Fix`
@@ -59,7 +57,7 @@ public string ElementType  // get, init
 What modifier to add and a suggested value.
 
 ```csharp
-public A11yFixSuggestion Fix  // get, init
+public required A11yFixSuggestion Fix  // get, init
 ```
 
 ### `Id`
@@ -67,7 +65,7 @@ public A11yFixSuggestion Fix  // get, init
 Diagnostic ID (e.g., "A11Y_001").
 
 ```csharp
-public string Id  // get, init
+public required string Id  // get, init
 ```
 
 ### `Message`
@@ -75,7 +73,7 @@ public string Id  // get, init
 Human-readable description of the issue.
 
 ```csharp
-public string Message  // get, init
+public required string Message  // get, init
 ```
 
 ### `Severity`
@@ -83,7 +81,7 @@ public string Message  // get, init
 "warning" or "info".
 
 ```csharp
-public string Severity  // get, init
+public required string Severity  // get, init
 ```
 
 ### `WcagCriterion`
@@ -91,5 +89,5 @@ public string Severity  // get, init
 WCAG 2.1 success criterion (e.g., "1.1.1").
 
 ```csharp
-public string WcagCriterion  // get, init
+public required string WcagCriterion  // get, init
 ```

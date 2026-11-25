@@ -22,8 +22,6 @@ Namespace: `Microsoft.UI.Reactor`.
 public DisplayInfo()
 ```
 
-> **Obsolete.** Constructors of types with required members are not supported in this version of your compiler.
-
 ### Properties
 
 #### `BoundsDip`
@@ -47,7 +45,7 @@ public uint Dpi  // get, init
 Stable monitor id from Win32 `MONITORINFOEX.szDevice` (for example, `\\.\DISPLAY1`).
 
 ```csharp
-public string Id  // get, init
+public required string Id  // get, init
 ```
 
 #### `IsPrimary`

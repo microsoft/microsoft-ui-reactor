@@ -3,10 +3,10 @@
 An observable data source that watches an ObservableCollection for changes and fires DataChanged when items are added, removed, or modified. The collection is the authoritative source — mutations go through the collection, not through the data source's CRUD methods.
 
 ```csharp
-public class ObservableListDataSource<T> : IObservableDataSource<T>, IDataSource<T>, IDisposable
+public class ObservableListDataSource<T> : ListDataSource<T>, IObservableDataSource<T>, IDataSource<T>, IDisposable
 ```
 
-Namespace: `Microsoft.UI.Reactor.Data.Providers`.
+Namespace: `Microsoft.UI.Reactor.Data.Providers`. Inherits from [`ListDataSource<T>`](ListDataSource.md).
 
 **Learn more:** [Data System](../../data-system.md)
 

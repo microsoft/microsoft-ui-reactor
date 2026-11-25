@@ -31,7 +31,7 @@ public T Get<T>(string name)
 Gets an optional parameter value. Returns `defaultValue` if the parameter was not present in the matched URI.
 
 ```csharp
-public T GetOrDefault<T>(string name, T defaultValue = null)
+public T GetOrDefault<T>(string name, T defaultValue = default)
 ```
 
 **Parameters**
@@ -39,7 +39,7 @@ public T GetOrDefault<T>(string name, T defaultValue = null)
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `name` | `string` |  |  |
-| `defaultValue` | `T` | `null` |  |
+| `defaultValue` | `T` | `default` |  |
 
 ### `GetString`
 
@@ -68,7 +68,7 @@ public string? GetWildcard()
 Gets a query string parameter value by name, converted to the specified type. Returns `defaultValue` if the parameter is not present.
 
 ```csharp
-public T Query<T>(string name, T defaultValue = null)
+public T Query<T>(string name, T defaultValue = default)
 ```
 
 **Parameters**
@@ -76,7 +76,7 @@ public T Query<T>(string name, T defaultValue = null)
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `name` | `string` |  |  |
-| `defaultValue` | `T` | `null` |  |
+| `defaultValue` | `T` | `default` |  |
 
 ### `QueryString`
 
