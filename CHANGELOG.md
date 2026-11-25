@@ -220,7 +220,8 @@ Conventions for contributors:
 
 - Markdown selection skips offscreen glyph queries during drag growth for single-run
   printable-ASCII left-to-right paragraphs with positive axis-aligned 2D transforms.
-  Other layouts retain the reference geometry path (PR #1698).
+  Right-to-left Runs and other layouts retain the reference geometry path; offscreen
+  text remains selected for copy, UI Automation and scrolling (PR #1698).
 
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the

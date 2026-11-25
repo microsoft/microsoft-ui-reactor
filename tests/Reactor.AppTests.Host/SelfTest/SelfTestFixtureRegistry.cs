@@ -121,6 +121,8 @@ internal static class SelfTestFixtureRegistry
         ("Markdown_Selection_ClippingGeometry", static harness => new MarkdownSelectionClippingFixtures(harness)),
         ("Markdown_Selection_ClippingSpacing", static harness => new MarkdownSelectionClippingFixtures(
             harness, MarkdownSelectionClippingCase.Spacing)),
+        ("Markdown_Selection_ClippingGuards", static harness => new MarkdownSelectionClippingFixtures(
+            harness, MarkdownSelectionClippingCase.Guards)),
         ("Markdown_Selection_ClippingTransformsAndScroll", static harness => new MarkdownSelectionClippingFixtures(
             harness, MarkdownSelectionClippingCase.TransformsAndScroll)),
         ("Markdown_Selection_IdleLayoutCost", static harness => new MarkdownSelectionFixtures.IdleLayoutCost(harness)),

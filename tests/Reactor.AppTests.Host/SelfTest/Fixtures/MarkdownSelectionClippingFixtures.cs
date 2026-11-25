@@ -12,7 +12,7 @@ using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
-internal enum MarkdownSelectionClippingCase { Layout, Spacing, TransformsAndScroll }
+internal enum MarkdownSelectionClippingCase { Layout, Spacing, Guards, TransformsAndScroll }
 
 internal sealed class MarkdownSelectionClippingFixtures(
     Harness harness, MarkdownSelectionClippingCase scenario = MarkdownSelectionClippingCase.Layout)
@@ -20,6 +20,11 @@ internal sealed class MarkdownSelectionClippingFixtures(
 {
     public override async Task RunAsync()
     {
+        if (scenario == MarkdownSelectionClippingCase.Guards)
+        {
+            await CheckGuards();
+            return;
+        }
         var options = new MarkdownTextSelectionOptions();
         string paragraph = string.Join(" ", Enumerable.Repeat(
             "Wrapped text with office affinity ffi, 123-45, and native selection geometry.", 6));
@@ -117,7 +122,10 @@ internal sealed class MarkdownSelectionClippingFixtures(
         MarkdownSelectionHost selection, Canvas overlay, ScrollViewer scroll, string paragraph)
     {
         scroll.Width = 320;
-        foreach (string transform in new[] { "rotate", "mirror", "perspective", "scale" })
+        selection.Width = 960;
+        scroll.HorizontalScrollMode = ScrollMode.Enabled;
+        scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+        foreach (string transform in new[] { "identity", "rotate", "mirror", "perspective", "scale" })
         {
             foreach (var rich in MarkdownSelectionHost.Descendants(selection).OfType<RichTextBlock>())
             {
@@ -127,29 +135,30 @@ internal sealed class MarkdownSelectionClippingFixtures(
                     run.CharacterSpacing = 0;
                 rich.RenderTransform = transform switch
                 {
-                    "mirror" => new ScaleTransform { ScaleX = -1, CenterX = 160 },
-                    "rotate" => new RotateTransform { Angle = 5 },
+                    "mirror" => new ScaleTransform { ScaleX = -1, CenterX = 480 },
+                    "rotate" => new RotateTransform { Angle = .1 },
                     "scale" => new ScaleTransform { ScaleX = 1.25, ScaleY = 1.25 },
                     _ => null
                 };
                 rich.Projection = transform == "perspective"
-                    ? new PlaneProjection { RotationY = 15, CenterOfRotationX = 0, CenterOfRotationY = 0 }
+                    ? new PlaneProjection { RotationY = 1, CenterOfRotationX = 0, CenterOfRotationY = 0 }
                     : null;
             }
             await Harness.Render();
             var (parity, usedShortcut, visible, queried) = Compare(selection, overlay, 0, 650);
+            int candidates = BeyondRightEdgeCandidates(selection);
+            Console.WriteLine($"# Clipping transform={transform}; candidates={candidates}; shortcut={usedShortcut}; parity={parity}");
             H.Check($"MdSelection_ClippingTransformParity_{transform}", parity);
-            H.Check($"MdSelection_ClippingTransformShortcut_{transform}", usedShortcut == (transform == "scale"));
-            H.Check($"MdSelection_ClippingTransformExercised_{transform}", visible > 0 && queried > 0);
+            H.Check($"MdSelection_ClippingTransformShortcut_{transform}",
+                usedShortcut == (transform is "identity" or "scale"));
+            H.Check($"MdSelection_ClippingTransformExercised_{transform}",
+                candidates > 0 && visible > 0 && queried > 0);
         }
         foreach (var rich in MarkdownSelectionHost.Descendants(selection).OfType<RichTextBlock>())
         {
             rich.RenderTransform = null;
             rich.FontFamily = new FontFamily("Segoe UI");
         }
-        selection.Width = 960;
-        scroll.HorizontalScrollMode = ScrollMode.Enabled;
-        scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
         scroll.ChangeView(0, 0, null, true);
         await Harness.Render();
         selection.Refresh();
@@ -185,6 +194,93 @@ internal sealed class MarkdownSelectionClippingFixtures(
             OverlayRects(overlay).SequenceEqual(ReferenceRects(selection)) &&
             OverlayRects(overlay).Any(rect => rect.Left <= revealed.Left && rect.Right >= revealed.Right &&
                 Math.Abs(rect.Y - revealed.Y) < .5));
+    }
+
+    private async Task CheckGuards()
+    {
+        foreach (string guard in new[] { "plain", "block-rtl", "run-rtl", "unicode", "mixed", "span" })
+        {
+            string text = string.Join(" ", Enumerable.Repeat("office affinity ffi, 123-45, and native selection.", 5));
+            if (guard == "unicode") text += " e\u0301";
+            var run = new Run
+            {
+                Text = text,
+                FlowDirection = guard == "run-rtl" ? FlowDirection.RightToLeft : FlowDirection.LeftToRight
+            };
+            MarkdownSelectionHost? scope = null;
+            ScrollViewer? scroll = null;
+            var host = H.CreateHost();
+            host.Mount(_ => ScrollViewer(MarkdownTextSelection.Scope(new MarkdownTextSelectionOptions(),
+                MarkdownTextSelection.Surface(text, RichTextBlock("").Set(rich =>
+                {
+                    rich.FlowDirection = guard == "block-rtl" ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+                    rich.Blocks.Clear();
+                    var paragraph = new Paragraph();
+                    if (guard == "mixed")
+                    {
+                        run.Text = text[..(text.Length / 2)];
+                        paragraph.Inlines.Add(run);
+                        var bold = new Bold();
+                        bold.Inlines.Add(new Run { Text = text[(text.Length / 2)..] });
+                        paragraph.Inlines.Add(bold);
+                    }
+                    else if (guard == "span")
+                    {
+                        var span = new Span();
+                        span.Inlines.Add(run);
+                        paragraph.Inlines.Add(span);
+                    }
+                    else paragraph.Inlines.Add(run);
+                    rich.Blocks.Add(paragraph);
+                }))).Width(960).OnMountAdd(fe =>
+                {
+                    scope = (MarkdownSelectionHost)fe;
+                    // Matching parent direction avoids the transform guard masking the block guard.
+                    scope.FlowDirection = guard == "block-rtl" ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+                }))
+                .Width(320).Height(240).Set(scroll =>
+                {
+                    scroll.HorizontalScrollMode = ScrollMode.Enabled;
+                    scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+                }).OnMountAdd(fe => scroll = (ScrollViewer)fe));
+            await Harness.Render();
+            if (!await Harness.WaitFor(() => scope is { IsLoaded: true, Document.Entries.Count: 1 }))
+                throw new InvalidOperationException($"Clipping guard scope not loaded: {guard}");
+            if (guard == "block-rtl")
+            {
+                var viewer = scroll ?? throw new InvalidOperationException("Clipping guard scroller not mounted.");
+                viewer.ChangeView(viewer.ScrollableWidth, null, null, true);
+                if (!await Harness.WaitFor(() => viewer.HorizontalOffset > 0))
+                    throw new InvalidOperationException("RTL guard viewport never scrolled.");
+            }
+            var selection = scope ?? throw new InvalidOperationException("Clipping guard scope not mounted.");
+            var rich = MarkdownSelectionHost.Descendants(selection).OfType<RichTextBlock>().Single();
+            H.Check($"MdSelection_ClippingGuardPositiveTransform_{guard}",
+                rich.TransformToVisual(selection) is MatrixTransform
+                { Matrix: { M11: > 0, M12: 0, M21: 0, M22: > 0 } });
+            var overlay = ((Grid)selection.Content).Children.OfType<Canvas>().Single();
+            var (parity, usedShortcut, visible, queried) = Compare(selection, overlay, 0, text.Length);
+            int candidates = BeyondRightEdgeCandidates(selection);
+            Console.WriteLine($"# Clipping guard={guard}; candidates={candidates}; shortcut={usedShortcut}; parity={parity}");
+            H.Check($"MdSelection_ClippingGuardExercised_{guard}", candidates > 0 && visible > 0 && queried > 0);
+            H.Check($"MdSelection_ClippingGuardParity_{guard}", parity && selection.Document.SelectedText == text);
+            H.Check($"MdSelection_ClippingGuardShortcut_{guard}", usedShortcut == (guard == "plain"));
+            host.Dispose();
+            await Harness.Render();
+        }
+    }
+
+    private static int BeyondRightEdgeCandidates(MarkdownSelectionHost selection)
+    {
+        var viewport = selection.Viewport();
+        return selection.VisibleGlyphs(selection.Document.Start, selection.Document.End).Count(pair =>
+        {
+            var entry = selection.Document.EntryAt(pair.Offset)!;
+            var start = selection.CharacterBounds(pair.Offset);
+            var following = selection.CharacterBounds(pair.Next);
+            return pair.Next < entry.End && start.X > viewport.Right && following.X > viewport.Right &&
+                Math.Abs(start.Y - following.Y) < .5;
+        });
     }
 
     private void CheckBoundaryGlyphs(MarkdownSelectionHost selection, Canvas overlay, int spacing)

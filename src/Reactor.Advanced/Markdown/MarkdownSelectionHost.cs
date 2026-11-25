@@ -1266,7 +1266,7 @@ internal sealed partial class MarkdownSelectionHost : ContentControl
             // backward carets need NOT coincide (for example with negative spacing).
             bool canSkipRight =
                 _segments.TryGetValue((MarkdownSelectionMarker)entry.Identity, out var segments) &&
-                segments is [var segment] && segment.Identity is Run &&
+                segments is [var segment] && segment.Identity is Run { FlowDirection: FlowDirection.LeftToRight } &&
                 segment.Text == entry.Text && segment.Text.All(character => character is >= ' ' and <= '~') &&
                 segment.Owner is RichTextBlock { FlowDirection: FlowDirection.LeftToRight } rich &&
                 rich.Blocks.Count == 1 && rich.Blocks[0] is Paragraph { Inlines.Count: 1 } paragraph &&
