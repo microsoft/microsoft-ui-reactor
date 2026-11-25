@@ -139,8 +139,9 @@ Read from `ApplyModifiers` (`Reconciler.Modifiers.cs:237-780`). The unset-arm fl
 | D | Attached | `AutomationName`, `AutomationId`, `HeadingLevel` (`AutomationProperties`), `IsDragRegion` (`TitleBar`), `ToolTipPlacement` (`ToolTipService`) | static `SetX(fe, v)` and `ClearValue(Owner.XProperty)` |
 | E | Composite | `Margin` + `MarginInlineStart/End`; `Padding` + `PaddingInlineStart/End`; `BorderThickness` + `BorderInlineStart` | several fields resolve, against `FlowDirection` and the previous overlay (#965), to one DP |
 | F | Hand-coded with cross-system state | `Opacity`, `Scale`, `Rotation`, `Translation`, `CenterPoint`, `TransformOrigin` (composition, remaining-owner restore, spec 066); `BorderBrush` (interaction-state tracker, `:499-507`); `Background` (`keepRemovedBackground`, `:581`); `ToolTip` / `RichToolTip`, `AttachedFlyout`, `ContextFlyout` (mount child elements) | real logic, not a table row |
-| G | Behaviour, not a property write | 20 routed-event handlers, 4 gestures, 2 drag-drop configs, `OnMountAction`, `OnUpdateAction` (internal), `OnUnmountAction`, `Ref`, the four `XYFocus*Ref`, `ToolTipPlacementTargetRef`, `OnAccessKeyDisplayRequested`, `Backdrop` (read by the host) | these still need merge and skip-equality declarations |
-| H | Accessibility sub-record | 16 `AccessibilityModifiers` fields (`Element.cs:2636`), 12 arms in `ApplyAccessibilityModifiers` | 11 fields are A/D shapes. `LabeledBy` is row F (deferred `FindByAutomationId` plus `Loaded` resolution with `PendingLabeledBy` state, `Reconciler.Accessibility.cs:224` onward). `LabeledByRef`, `DescribedByRefs`, `FlowsToRefs` and `FlowsFromRefs` are row G (reference edges) |
+| G | Behaviour, not a property write | 20 routed-event handlers, 4 gestures, 2 drag-drop configs, `OnMountAction`, `OnUpdateAction` (internal), `OnUnmountAction`, `Ref`, `OnAccessKeyDisplayRequested`, `Backdrop` (read by the host) | these still need merge and skip-equality declarations |
+| G′ | Reference edge (hand-coded property writer) | the four `XYFocus*Ref`, `ToolTipPlacementTargetRef` | written by `ApplyModifierReferenceEdges` (`Reconciler.ReferenceEdges.cs:166`) once the target resolves, but they *are* DP writes: `AppliedModifierMap` reports them (`AppliedModifierMap.cs:113, 134-137`) and `CleanElement` clears them (`ElementPool.cs:519-529`). Their wiring stays hand-written; receivers, reporting and pool reset come from the schema |
+| H | Accessibility sub-record | 16 `AccessibilityModifiers` fields (`Element.cs:2636`), 12 arms in `ApplyAccessibilityModifiers` | 11 fields are A/D shapes. `LabeledBy` is row F (deferred `FindByAutomationId` plus `Loaded` resolution with `PendingLabeledBy` state, `Reconciler.Accessibility.cs:224` onward). `LabeledByRef`, `DescribedByRefs`, `FlowsToRefs` and `FlowsFromRefs` are row G′ (reference edges that write `LabeledBy` / `DescribedBy` / `FlowsTo` / `FlowsFrom`) |
 
 Rows A–D are 29 of the property-writing modifiers on the main bag, and all of them are mechanical.
 Row E is mechanical around one hand-written resolver per family. Row F is not mechanical and this
@@ -211,7 +212,7 @@ internal enum ModifierBucket { Root, Layout, Visual, Accessibility }
 internal enum ModifierFamily { Theme, Box, Size, Alignment, Composition, Visibility, ToolTip, Flyout,
     ControlState, Border, Brush, Automation, Focus, Accessibility, Typography, Behavior, Lifecycle }
 
-internal enum ApplyShape { Simple, Converted, Attached, Composite, HandCoded, Behavior }
+internal enum ApplyShape { Simple, Converted, Attached, Composite, HandCoded, ReferenceEdge, Behavior }
 
 // How the shallow-skip gate compares the field (ModifiersEqualCore and ModifiersVisiblyEqual).
 internal enum SkipEquality
@@ -272,6 +273,12 @@ internal sealed class ModifierSlot
     public SkipEquality Skip; public string SkipReason;
     public WriteEquality Write;
     public bool CallbackSlot;                  // ignored by ModifiersVisiblyEqual
+    // AppliedModifierMap reporting (§4.3). Defaults to "<DpOwner>.<Property>" per Apply receiver.
+    public string ReportTarget;                // non-DP targets: "Visual.RotationAngle" for
+                                               // Rotation, "Visual.CenterPoint" for TransformOrigin
+    public string ReportSuppressedBy;          // "RichToolTip" for ToolTip (AppliedModifierMap.cs:111)
+    public bool ReportHandWritten;             // an entry whose owner logic stays hand-written,
+                                               // e.g. AttachedFlyout's ResolveFlyoutSlot mirror
     // Analyzer editorial facts (§4.5). Not derived from Receivers.
     public string[] AnalyzerControlGate;       // null where the analyzer deliberately has no gate
     public string GateOnlyInReconcilerReason;  // non-null puts the slot in GateOnlyInReconciler
@@ -696,7 +703,8 @@ it can.
 | `Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection` | **Kept, unchanged.** It is the assignability oracle for `AnalyzerPoolResetGate` (§4.5). |
 | `Analyzer_Poolable_Type_Mirror_Matches_ElementPool` | Deleted in layer 5, when `ElementPool.PoolableTypes` and `ModifierTable.PoolableTypeNames` are both generated from the schema list. |
 | `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` | Deleted in layer 2, when both sides are generated from the `Theme`-role receivers. |
-| `AppliedModifierMap_*` owner-resolution tests (`tests/Reactor.Tests/Diagnostics/ReactorDiagnosticsComponentsTests.cs:689-886`) | **Kept** as tests of the generated map. Its completeness becomes the §10.1 schema completeness test. |
+| `AppliedModifierMap_*` owner-resolution tests (`tests/Reactor.Tests/Diagnostics/ReactorDiagnosticsComponentsTests.cs:689-886`) | **Kept** as tests of the generated map, including the `RichToolTip`-shadows-`ToolTip` and transform-facade cases (`:768-803`) that `ReportSuppressedBy` and `ReportTarget` must reproduce. |
+| `AppliedModifierMap_CoversEveryModifier_OrExcludesItOnPurpose` (`ReactorDiagnosticsComponentsTests.cs:914-931`) | **Kept**. Schema completeness proves every field has a slot. This proves the *emitted* map has an entry for every field, so an emitter bug that drops entries still fails. Freshness alone would just regenerate the same incomplete output. |
 | `Descriptor_Applied_Common_Modifiers_Match_The_Analyzer_Exception_List` | **Kept**. It scans descriptor hooks, which the schema does not own. |
 | `ModifierGateProseParityTests` | **Kept**, compares the skill prose against the schema instead of `ModifierTable`. |
 | `ModifierGateIdentifierTests` / `ModifierGateSource` | Shrinks with the number of places that still need a text matcher. Likely deleted once `ModifierTable.cs` no longer declares gate arrays by name. |
@@ -727,8 +735,10 @@ that changes what it checks.
 - **Brushes and fonts are not headless.** Headless tests cannot construct a `Brush` or a
   `FontFamily` (`ElementModifiersCoverageTests.cs` records the FontFamily limit). `Background`,
   `Foreground`, `BorderBrush` and `FontFamily` are excluded from the headless merge and equality
-  tests by name, and a selftest covers them (fresh-but-equal brushes and fonts under
-  `ModifiersEqual`), so "every slot" stays true across the two tiers.
+  tests by name. A UI-thread selftest runs the same two checks for them: the merge round trip, and
+  the full four-pair matrix under both `ModifiersEqual` and `ModifiersVisiblyEqual`. Layer 2
+  generates their `Merge` and equality code too, so a dropped brush assignment still has an
+  oracle, and "every slot" stays true across the two tiers.
 - **Receivers resolve.** Every receiver type, DP owner and `XProperty` name exists (`typeof` and
   static-property lookup by reflection, no activation).
 - **Fluent coverage.** Every non-behaviour slot has a generic fluent modifier for each of its
@@ -755,7 +765,8 @@ close the §14 class of bug immediately.
 One fixture family, `ModifierMatrix_*`, checks every row A–D slot against an **expected matrix that
 is frozen as literal data in the fixture**, captured in layer 1 from the hand-written
 `ApplyModifiers` and `CleanElement`. The matrix lists, per slot, the receiver control types, one
-non-receiver control type for gated slots, and the expected pool reset. It does **not** read the schema. A fixture
+non-receiver control type for gated slots where one exists (with a recorded reason where it
+doesn't), and the expected pool reset. It does **not** read the schema. A fixture
 that took both its inputs and its expected outcomes from the schema could not detect a wrong
 schema, and a receiver dropped from the schema would just turn into a "non-receiver" that passes.
 The schema only supplies the typed probes (§8). A schema test then checks that schema and matrix
@@ -774,13 +785,14 @@ For every (slot, receiver) the fixture mounts a representative concrete control 
    value for `ClearValue`, the declared value for `WriteDefault` (`TextBlock.FontSize` = 14), and
    the previous renter's value for `NotReset` (`RequestedTheme`). The last one is a known gap
    pinned on purpose, not endorsed (the `ModifierPoolClearValueOnRent` shape, `:999`);
-6. for **gated** slots only, on a non-receiver control that declares a DP of the same name the
-   modifier deliberately does not reach (for example `ContentPresenter.Padding` / `CornerRadius` /
-   `Foreground`, or `RichTextBlock.Foreground` on the plain brush path), `ReadLocalValue` stays
-   `UnsetValue`. Ungated slots (`Width` on every `FrameworkElement`, attached `AutomationName`)
-   have no such control, because any control with the DP is already a receiver, so the matrix
-   records "no negative case" for them. A non-receiver without the DP cannot fail and does not
-   count.
+6. for gated slots **that have a qualifying control**, on a non-receiver control that declares a
+   DP of the same name the modifier deliberately does not reach (for example
+   `ContentPresenter.Padding` / `CornerRadius` / `Foreground`, or `RichTextBlock.Foreground` on the
+   plain brush path), `ReadLocalValue` stays `UnsetValue`. Many slots have no such control:
+   ungated ones (`Width` on every `FrameworkElement`, attached `AutomationName`), and gated ones
+   whose DP exists only on the receiver (`IsEnabled`, declared on `Control` only,
+   `ModifierTable.cs:402-407`). The matrix records "no negative case" with that reason for them. A
+   non-receiver without the DP cannot fail and does not count.
 
 The fixture is written in **layer 1, against the hand-written code**, and must be green there
 before any arm is generated. It is the characterization test that makes the later layers safe.
