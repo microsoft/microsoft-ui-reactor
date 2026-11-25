@@ -6159,6 +6159,9 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
         ElementPool.MarkVisualTaken(uie);
+        // The exit owns the leaving element now. A pending enter fade restart must not fade it back
+        // in, nor keep it hidden through the exit (#1680).
+        CancelOpacityRestart(uie);
 
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
@@ -6227,24 +6230,32 @@ public sealed partial class Reconciler : IDisposable
         CancelOpacityRestart(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         if (isEnter)
-        {
-            visual.Opacity = 0;
-            visual.StartAnimation("Opacity", EnterFade());
-            // XAML's first push of a changed opacity (a modifier's, a style's) stops the fade (#1680).
-            if (visual.TryGetAnimationController("Opacity") is { } controller)
-                RestartOpacityAfterXamlPush(uie, visual, controller, owner, owns: null, restart: () =>
-                {
-                    WithoutImplicitAnimations(visual, () => visual.Opacity = 0);
-                    visual.StartAnimation("Opacity", EnterFade());
-                    return visual.TryGetAnimationController("Opacity");
-                }, conceal: true);
-        }
+            StartEnterFade(uie, visual, compositor, curve, delay, owner);
         else
         {
             var anim = AnimationHelper.CreateScalarTargetAnimation(compositor, 0f, curve);
             if (delay > TimeSpan.Zero) AnimationHelper.SetDelay(anim, delay);
             visual.StartAnimation("Opacity", anim);
         }
+    }
+
+    /// <summary>
+    /// Fades <paramref name="uie"/> in from 0 to its own opacity, restarted once after XAML's first
+    /// opacity push stops it (#1680). Shared by <c>.Transition(Fade)</c> and the ambient enter.
+    /// </summary>
+    internal static void StartEnterFade(UIElement uie, Visual visual, Compositor compositor, Curve curve, TimeSpan delay, Reconciler? owner)
+    {
+        visual.Opacity = 0;
+        visual.StartAnimation("Opacity", EnterFade());
+        // XAML's first push of a changed opacity (a modifier's, a style's) stops the fade (#1680).
+        // A spring has no controller to tell a stopped fade from a running one, so the check
+        // restarts it regardless: one frame in, from a concealed first frame, that doesn't show.
+        RestartOpacityAfterXamlPush(uie, visual, visual.TryGetAnimationController("Opacity"), owner, owns: null, restart: () =>
+        {
+            WithoutImplicitAnimations(visual, () => visual.Opacity = 0);
+            visual.StartAnimation("Opacity", EnterFade());
+            return visual.TryGetAnimationController("Opacity");
+        }, conceal: true);
 
         // The fade rests at the element's own opacity, not 1: XAML pushes only a changed value, so
         // it wouldn't correct a fade that ended above it (#1680). Read when the fade (re)starts,
@@ -6944,12 +6955,19 @@ public sealed partial class Reconciler : IDisposable
     /// (#1669, #1680). A modifier or setter write to the opacity replaces the animation on purpose
     /// and cancels the check, and so does disposing <paramref name="owner"/>.
     /// </summary>
+    /// <param name="uie">The element whose visual's opacity animation XAML's push may stop.</param>
+    /// <param name="visual">The element's handed-out visual.</param>
+    /// <param name="controller">The controller of the animation just started on the visual's Opacity, or <see langword="null"/> for a spring, which has none.</param>
+    /// <param name="owner">The reconciler whose disposal cancels the check, when known.</param>
+    /// <param name="owns">Whether the starter still owns the channel; <see langword="null"/> means always.</param>
+    /// <param name="restart">Starts the animation again and returns its controller, or <see langword="null"/>.</param>
     /// <param name="conceal">
     /// Hides the visual (<see cref="Visual.IsVisible"/>, which XAML doesn't push) until the check
-    /// resolves, when the element hasn't rendered yet. The frame that pushes would otherwise show the
-    /// pushed opacity before a restarted enter fade starts again from 0.
+    /// resolves. The frame that pushes would otherwise show the pushed opacity before a restarted
+    /// enter fade starts again from 0. An enter fade just started from 0, so hiding its first frame
+    /// doesn't show either, even on an element already on screen (the ambient enter's insert).
     /// </param>
-    private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, AnimationController controller,
+    private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, AnimationController? controller,
         Reconciler? owner, Func<bool>? owns, Func<AnimationController?> restart, bool conceal = false)
     {
         var state = GetOrCreateReactorState(uie);
@@ -6963,15 +6981,12 @@ public sealed partial class Reconciler : IDisposable
             (owner._opacityRestarts ??= new()).Add(state);
         }
         var dispatcher = uie.DispatcherQueue;
-        if (uie is FrameworkElement unrendered && !IsRendered(unrendered))
+        if (conceal && visual.IsVisible)
         {
-            if (conceal && visual.IsVisible)
-            {
-                visual.IsVisible = false;
-                check.Concealed = visual;
-            }
-            WaitForRender(unrendered);
+            visual.IsVisible = false;
+            check.Concealed = visual;
         }
+        if (uie is FrameworkElement unrendered && !IsRendered(unrendered)) WaitForRender(unrendered);
         else RequestCheck();
 
         void RequestCheck()
@@ -7040,6 +7055,10 @@ public sealed partial class Reconciler : IDisposable
                 // Already rendering (an Unloaded can arrive after the frame that pushed, with no
                 // layout pass left to wait for): check after the next commit. Otherwise wait for layout.
                 if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                // A Loaded or Unloaded while the same ancestor is still collapsed changes nothing:
+                // its Visibility callback stays armed, rather than falling back to every layout pass.
+                else if (check.Hidden is { } waitingOn && ReferenceEquals(CollapsedAncestor(fe), waitingOn)
+                    && (fe.IsLoaded || ElementPool.IsInLiveTree(fe))) return;
                 else WaitForLayout(fe);
             }
             catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
@@ -7063,6 +7082,23 @@ public sealed partial class Reconciler : IDisposable
             check.LayoutHandler = onLayout;
             check.WaitTarget = fe;
             fe.LayoutUpdated += onLayout;
+            // Content outside the window's root (a popup, a flyout) is never in the live tree, and
+            // no layout pass may follow its Loaded, so Loaded requests the check too. Only while it
+            // hasn't loaded yet, and it never re-arms a wait: that would subscribe Loaded again
+            // inside the raise that is running.
+            if (!fe.IsLoaded)
+            {
+                check.LoadedHandler = (_, _) =>
+                {
+                    try
+                    {
+                        if (!Owns()) { Drop(); return; }
+                        if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                    }
+                    catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+                };
+                fe.Loaded += check.LoadedHandler;
+            }
             OpacityRestartWaitsForTests++;
         }
 
@@ -7081,17 +7117,18 @@ public sealed partial class Reconciler : IDisposable
             CancelOpacityRestart(state);
             // An animation that completed keeps its controller, and every deliberate stop (a modifier
             // or setter write, removal, unmount) cancelled this check, so a missing controller
-            // means XAML's push stopped it, whether it loops or not.
+            // means XAML's push stopped it, whether it loops or not. A spring never has one.
             if (visual.TryGetAnimationController("Opacity") is not null) return;
-            if (restart() is null) return;
+            // A spring reports no controller even when it runs, so count the restart itself.
+            if (restart() is null && controller is not null) return;
             s_opacityRestartsForTests.GetOrCreateValue(uie).Value++;
         }
     }
 
     /// <summary>A pending <see cref="RestartOpacityAfterXamlPush"/> check and whatever it waits on.</summary>
-    internal sealed class OpacityRestartCheck(AnimationController controller)
+    internal sealed class OpacityRestartCheck(AnimationController? controller)
     {
-        internal readonly AnimationController Controller = controller;
+        internal readonly AnimationController? Controller = controller;
         // The reconciler that registered the check, so its disposal can cancel it.
         internal Reconciler? Owner;
         // What the check waits on until the element renders: layout while off the tree, or a

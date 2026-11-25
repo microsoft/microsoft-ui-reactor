@@ -870,15 +870,14 @@ public sealed partial class Reconciler
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the
-            // fade-in; a small Y offset carries the slide-up so the row
+            // fade-in, to the container's own opacity like .Transition(Fade);
+            // a small Y offset carries the slide-up so the row
             // visibly emerges rather than just appearing. Both targets use
             // the same curve so they stay phase-locked.
-            visual.Opacity = 0f;
             var prevOffset = visual.Offset;
             visual.Offset = new global::System.Numerics.Vector3(prevOffset.X, prevOffset.Y + 12f, prevOffset.Z);
 
-            var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, 1.0f, curve);
-            visual.StartAnimation("Opacity", opacityAnim);
+            StartEnterFade(container, visual, compositor, curve, TimeSpan.Zero, owner: null);
 
             var offsetAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, prevOffset, curve);
             visual.StartAnimation("Offset", offsetAnim);

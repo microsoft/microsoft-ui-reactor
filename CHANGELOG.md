@@ -207,8 +207,9 @@ Conventions for contributors:
 
 ### Fixed
 
-- An enter fade (`.Transition(Transition.Fade)`) on an element with its own opacity (a
-  `.Opacity(x)` modifier or a style setter) now fades in, and ends at that opacity instead of 1.
+- An enter fade (`.Transition(Transition.Fade)`, and the default enter under
+  `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
+  style setter) now fades in, and ends at that opacity instead of 1.
   XAML writes the element's opacity to the visual when it first renders it, which stopped the fade,
   so `Border(...).Opacity(0.4).Transition(Transition.Fade)` snapped to 0.4. A pooled control that
   gets no such write faded to 1 and stayed there. Reactor now restarts the fade once after that
