@@ -1252,7 +1252,8 @@ public class ModifierUnsetClearValueTests
     /// Being listed here is not a claim that the method writes no dependency property. The
     /// input handlers do (<c>ManipulationMode</c>, <c>IsTapEnabled</c>, <c>CanDrag</c>,
     /// <c>AllowDrop</c>), and they reset by assigning the inert default rather than through
-    /// <c>ClearValue</c>. They were never part of the #952/#986 scan, and this list records that
+    /// <c>ClearValue</c>. Reference edges write theirs through ref-driven callbacks. None of
+    /// them were part of the #952/#986 scan, and this list records that
     /// rather than changing it. Bringing one under the gates means adding it to
     /// <see cref="ScannedMethods"/> with its own floors and exceptions.
     /// </remarks>
@@ -1271,7 +1272,13 @@ public class ModifierUnsetClearValueTests
                 "Drag-and-drop. Wires drag/drop handlers and writes CanDrag/AllowDrop, resetting them " +
                 "to false by assignment. Outside the #952 scan since before ApplyModifiers was split.",
             ["ApplyModifierReferenceEdges"] =
-                "Reference-edge (element-to-element) tracking. Bookkeeping, no dependency-property writes.",
+                "Reference edges (.LabeledBy(ref), .DescribedBy/.FlowsTo/.FlowsFrom refs, " +
+                ".XYFocus*(ref), .ToolTipPlacementTarget(ref)). Writes those properties through " +
+                "per-slot apply callbacks that re-run whenever the referenced ElementRef changes, " +
+                "and resets them by applying a null target (emptying the DescribedBy/FlowsTo/FlowsFrom " +
+                "lists, ClearValue for PlacementTarget) when the ref is dropped or the control is torn down. " +
+                "That wiring/reset contract lives in Reconciler.ReferenceEdges.cs, not in set/unset arms " +
+                "these gates can read.",
         };
 
     /// <summary>
