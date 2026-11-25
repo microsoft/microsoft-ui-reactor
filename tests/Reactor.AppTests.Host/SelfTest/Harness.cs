@@ -194,23 +194,17 @@ internal sealed class Harness
         var hosts = new List<ReactorHost>(s_createdHosts.Count + 1);
         if (ReactorApp.PrimaryWindow?.Host is { } primary)
             hosts.Add(primary);
-        s_createdHosts.RemoveAll(weak => !weak.TryGetTarget(out var host) || host.IsDisposed);
-        foreach (var weak in s_createdHosts)
+        // One pass prunes collected or disposed entries and collects the rest.
+        s_createdHosts.RemoveAll(weak =>
         {
-            if (weak.TryGetTarget(out var host) && !hosts.Contains(host))
-                hosts.Add(host);
-        }
+            if (!weak.TryGetTarget(out var host) || host.IsDisposed) return true;
+            if (!hosts.Contains(host)) hosts.Add(host);
+            return false;
+        });
         return hosts;
     }
 
-    private static bool AllIdle(List<ReactorHost> hosts)
-    {
-        foreach (var host in hosts)
-        {
-            if (!host.IsIdle) return false;
-        }
-        return true;
-    }
+    private static bool AllIdle(List<ReactorHost> hosts) => hosts.TrueForAll(static host => host.IsIdle);
 
     /// <summary>
     /// Places arbitrary content into the test content area (below the TitleBar).
