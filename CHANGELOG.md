@@ -30,6 +30,11 @@ Conventions for contributors:
 
 ### Changed
 
+- ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
+  ("Date & time"), every card has an image, the nav uses WinUI Gallery's category glyphs, and
+  page titles use the regular title weight. Category keys, deep-link slugs and the search index
+  are unchanged.
+
 - Layout fluent modifiers copy the existing layout bucket directly instead of
   constructing a temporary delta to merge. Chained sizing, spacing, alignment,
   visibility, and theme updates preserve immutable snapshots and last-write

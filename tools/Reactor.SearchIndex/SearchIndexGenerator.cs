@@ -191,17 +191,17 @@ public static partial class SearchIndexGenerator
         foreach (var element in arrayInit.Expressions)
         {
             // Strict: every element of the `new ControlInfo[] { ... }` initializer must be a
-            // fully literal `new(title, desc, category, glyph, tag, ...)`. Throwing (rather
+            // fully literal `new(title, desc, category, tag, ...)`. Throwing (rather
             // than skipping) keeps the no-silent-drop guarantee if a future entry uses named
             // args, a constant, or an interpolated string the parser can't read.
-            if (ObjectCreationArgs(element) is not { } args || args.Count < 5)
+            if (ObjectCreationArgs(element) is not { } args || args.Count < 4)
                 throw new InvalidOperationException(
-                    "ControlRegistry entry is not a `new(title, desc, category, glyph, tag, ...)` with >=5 args: " + Truncate(element));
+                    "ControlRegistry entry is not a `new(title, desc, category, tag, ...)` with >=4 args: " + Truncate(element));
 
             var title = TryGetStringLiteral(args[0].Expression);
             var description = TryGetStringLiteral(args[1].Expression);
             var category = TryGetStringLiteral(args[2].Expression);
-            var tag = TryGetStringLiteral(args[4].Expression);
+            var tag = TryGetStringLiteral(args[3].Expression);
 
             if (title is null || description is null || category is null || string.IsNullOrEmpty(tag))
                 throw new InvalidOperationException(
