@@ -60,7 +60,7 @@ public sealed partial class Reconciler
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
         var composition = GetOrCreateCompositionState(uie);
-        var keyframes = composition.Keyframes ??= new(StringComparer.Ordinal);
+        var keyframes = composition.Keyframes ??= new();
 
         foreach (var entry in entries)
         {

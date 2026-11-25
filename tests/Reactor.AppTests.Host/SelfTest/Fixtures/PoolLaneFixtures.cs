@@ -984,14 +984,25 @@ internal static class PoolLaneFixtures
                 control = await lab.Show(Target("K").Keyframes(name, 1, Pulse));
             var names = control is null ? null : Reconciler.GetCompositionState(control)?.Keyframes;
             H.Check(p + "_OnlyCurrent", names is not null && names.Count == 1 && names.ContainsKey("c"),
-                names is null ? "null" : string.Join(",", names.Keys));
+                names is null ? "null" : string.Join(",", names.Keys.Select(k => k.Value)));
+
+            // .Keyframes() doesn't reject a null name, and one plays, retriggers and is removed like any other.
+            control = await lab.Show(Target("K").Keyframes(null!, 1, Pulse));
+            bool nullPlays = control is not null && Reconciler.KeyframeControllerForTests(control, null!, "Opacity") is not null;
+            control = await lab.Show(Target("K").Keyframes(null!, 2, Pulse));
+            bool nullRetriggers = control is not null && Reconciler.KeyframeControllerForTests(control, null!, "Opacity") is not null;
+            control = await lab.Show(Target("K"));
+            names = control is null ? null : Reconciler.GetCompositionState(control)?.Keyframes;
+            H.Check(p + "_NullName", nullPlays && nullRetriggers && names is { Count: 0 },
+                $"plays={nullPlays} retriggers={nullRetriggers} left={names?.Count}");
         }
     }
 
     /// <summary>
     /// A control's composition state lives on the control and outlasts the pool's visual reset: the
     /// handoff (and so the visual lane) stays, while what the previous renter owned (keyframe
-    /// triggers, the interaction tracker, modifier channels) goes.
+    /// triggers, the interaction tracker, modifier channels) goes. The features are declared on a
+    /// keyed <c>Memo</c>, a layer unmount doesn't reach, so only the pool reset can drop them.
     /// </summary>
     internal sealed class CompositionStateReset(Harness h) : SelfTestFixtureBase(h)
     {
@@ -1002,14 +1013,14 @@ internal static class PoolLaneFixtures
             const string p = "ElementPoolLanes_CompositionStateReset";
             using var lab = new Lab(H);
             int trackers = Reconciler.InteractionTrackerCountForTests;
-            var control = await lab.Show(Target("C").Keyframes("pulse", 1, Pulse)
+            var control = await lab.Show(Memo("k", static () => Target("C")).Keyframes("pulse", 1, Pulse)
                 .InteractionStates(b => b.PointerOver(opacity: 0.8f)).Scale(1.1f));
             var state = control is null ? null : Reconciler.GetCompositionState(control);
             var visual = state?.HandedOutVisual;
-            H.Check(p + "_Owned", state is { VisualTaken: true, Keyframes.Count: 1, InteractionTracker: not null }
+            H.Check(p + "_Owned", state is { VisualTaken: true, Keyframes.Count: 1, InteractionTracker: not null, TransformRest: not null }
                 && visual is not null && (state.ModifierProperties & AnimateProperty.Scale) != 0
                 && Reconciler.InteractionTrackerCountForTests == trackers + 1,
-                $"keyframes={state?.Keyframes?.Count} tracker={state?.InteractionTracker is not null} props={state?.ModifierProperties}");
+                $"keyframes={state?.Keyframes?.Count} tracker={state?.InteractionTracker is not null} rest={state?.TransformRest is not null} props={state?.ModifierProperties}");
             if (control is null || state is null) return;
 
             await lab.Show(null);

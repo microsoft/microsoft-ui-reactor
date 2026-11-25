@@ -1400,7 +1400,8 @@ internal sealed class TransformCompositionOwnershipFixture(Harness h) : SelfTest
                 var flag = property == "Opacity" ? AnimateProperty.Opacity : AnimateProperty.Offset;
                 var state = target.GetValue(Reconciler.ReactorAttached.StateProperty) as Reconciler.ReactorState;
                 H.Check(name + "_NativeOwnershipSurvives", state is not null
-                    && ReferenceEquals(state, tracked.State) && (state.Composition?.ModifierProperties & flag) != 0);
+                    && ReferenceEquals(state, tracked.State) && state.Composition is { } composition
+                    && (composition.ModifierProperties & flag) != 0);
                 var visual = ElementCompositionPreview.GetElementVisual(target);
                 H.Check(name + "_AnimationStillRunning", visual.TryGetAnimationController(property) is not null);
 

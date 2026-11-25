@@ -52,7 +52,7 @@ public sealed partial class Reconciler
         // started, by compositor property. An unchanged trigger skips playback, so the started
         // channels can differ from the entry's latest definition. Whichever layer declared the
         // entries, the pool's visual reset drops them all (spec 066 §7.3 step 4).
-        internal Dictionary<string, KeyframeTriggerState>? Keyframes;
+        internal Dictionary<KeyframeName, KeyframeTriggerState>? Keyframes;
         // The .InteractionStates() tracker while its pointer and focus handlers are attached.
         internal InteractionStateTracker? InteractionTracker;
         // Reactor enabled translation on the handed-out visual for a declared Translation channel
@@ -89,6 +89,15 @@ public sealed partial class Reconciler
 
     /// <summary>A keyframe entry's previous trigger and the controllers of the channels it started.</summary>
     internal record struct KeyframeTriggerState(object? Trigger, Dictionary<string, AnimationController>? Started);
+
+    /// <summary>
+    /// A keyframe entry's name as a dictionary key. <c>.Keyframes()</c> doesn't reject a null name,
+    /// so this keeps one usable as a key; names compare ordinally.
+    /// </summary>
+    internal readonly record struct KeyframeName(string? Value)
+    {
+        public static implicit operator KeyframeName(string? value) => new(value);
+    }
 
     /// <summary>The control's composition state, or <see langword="null"/> when it never used a composition feature.</summary>
     internal static CompositionState? GetCompositionState(UIElement uie)
