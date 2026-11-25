@@ -163,7 +163,7 @@ The `EventDispatch` keyword covers the per-event trampoline that lets
 Reactor swap your handler closure between renders without
 detaching from the WinUI event:
 
-```csharp snippet="source:src/Reactor/Core/Reconciler.cs#event-trampoline"
+```csharp snippet="source:src/Reactor/Core/Reconciler.Events.cs#event-trampoline"
 ```
 
 The pattern matters for performance because the trampoline is bound
