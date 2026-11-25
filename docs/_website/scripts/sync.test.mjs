@@ -8,6 +8,7 @@ import {
   REPO_URL,
   changelogEntry,
   changelogSlug,
+  changelogSummary,
   convertPage,
   headingIds,
   linkIssues,
@@ -114,6 +115,15 @@ describe("routes and redirects", () => {
     assert.match(checkRedirects([{ from: "/old", to: "/nowhere" }], placements)[0], /no page lives at/);
     assert.match(checkRedirects([{ from: "old", to: "/controls/charting" }], placements)[0], /start with \//);
   });
+
+  test("a redirect may point at a heading on a live page", () => {
+    const placements = new Map([["charting.md", { dest: "controls/charting.md" }]]);
+    const idsAt = () => new Set(["axes"]);
+    assert.deepEqual(checkRedirects([{ from: "/old", to: "/controls/charting#axes" }], placements, idsAt), []);
+    assert.deepEqual(checkRedirects([{ from: "/old", to: "/controls/charting?tab=1#axes" }], placements, idsAt), []);
+    assert.match(checkRedirects([{ from: "/old", to: "/controls/charting#legend" }], placements, idsAt)[0], /no #legend heading/);
+    assert.match(checkRedirects([{ from: "/old", to: "/nowhere#axes" }], placements, idsAt)[0], /no page lives at/);
+  });
 });
 
 describe("changelog", () => {
@@ -181,6 +191,20 @@ describe("changelog", () => {
     assert.match(page, /\(issue \[#1482\]/);
     const previewPage = changelogEntry(preview, context);
     assert.match(previewPage, /description: "1 security fix\."/);
+  });
+
+  test("a bucket is known by its first word", () => {
+    const bucket = (title, n) => ({ title, lines: Array.from({ length: n }, (_, i) => `- ${i}`) });
+    assert.equal(changelogSummary([bucket("Changed (breaking)", 2), bucket("Fixed", 1)]), "2 changed and 1 fixed.");
+    assert.equal(changelogSummary([bucket("Notes", 3)]), null);
+  });
+
+  test("reports a ## heading that is not a release, instead of dropping it silently", () => {
+    const problems = [];
+    const releases = parseChangelog("## [Unreleased]\n\n## [1.0.0] 2026-01-02\n\n- Lost.\n\n## [0.9.0] - 2026-01-01\n", problems);
+    assert.deepEqual(releases.map((r) => r.version), ["0.9.0"]);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /^line 3: "## \[1\.0\.0\] 2026-01-02" is not a release heading/);
   });
 });
 
@@ -572,5 +596,31 @@ describe("sync", () => {
     const entry = fs.readFileSync(path.join(repo.website, "docs", "changelog", "v1-0-0.md"), "utf8");
     assert.match(entry, /type: changelog/);
     assert.match(entry, /\[A\]\(\/g\/a\)/);
+  });
+
+  test("a changelog link to a missing guide page or a bad release heading fails strict mode but only warns when lenient", () => {
+    const nav = { groups: [{ dir: "g", title: "G", pages: [{ file: "a.md" }] }] };
+    const changelog = "## [1.0.0] — 2026-01-02\n\n### Added\n\n- [Gone](docs/guide/gone.md).\n\n## [0.9.0]\n";
+    const strict = makeRepo("changelog-strict", { "a.md": "# A\n" }, nav);
+    fs.writeFileSync(path.join(strict.root, "CHANGELOG.md"), changelog);
+    const errors = sync({ lenient: false, ref: "main", guide: strict.guide, out: strict.website }).errors.join("\n");
+    assert.match(errors, /CHANGELOG\.md \[1\.0\.0\]: link docs\/guide\/gone\.md/);
+    assert.match(errors, /CHANGELOG\.md line 7: "## \[0\.9\.0\]" is not a release heading/);
+    const lenient = makeRepo("changelog-lenient", { "a.md": "# A\n" }, nav);
+    fs.writeFileSync(path.join(lenient.root, "CHANGELOG.md"), changelog);
+    const result = sync({ lenient: true, ref: "v1", guide: lenient.guide, out: lenient.website });
+    assert.deepEqual(result.errors, []);
+    const warnings = result.warnings.join("\n");
+    assert.match(warnings, /CHANGELOG\.md \[1\.0\.0\]: link docs\/guide\/gone\.md/);
+    assert.match(warnings, /CHANGELOG\.md line 7: "## \[0\.9\.0\]" is not a release heading/);
+  });
+
+  test("a changelog with no dated release writes no changelog folder", () => {
+    const repo = makeRepo("changelog-none", { "a.md": "# A\n" }, { groups: [{ dir: "g", title: "G", pages: [{ file: "a.md" }] }] });
+    fs.writeFileSync(path.join(repo.root, "CHANGELOG.md"), "## [Unreleased]\n\n### Added\n\n- Soon.\n");
+    const result = sync({ lenient: false, ref: "main", guide: repo.guide, out: repo.website });
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.releases, 0);
+    assert.equal(fs.existsSync(path.join(repo.website, "docs", "changelog")), false);
   });
 });

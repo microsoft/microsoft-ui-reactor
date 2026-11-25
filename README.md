@@ -89,40 +89,10 @@ Prefer plain .NET tooling? `dotnet new install Microsoft.WindowsAppSDK.WinUI.CSh
 ```powershell
 git clone https://github.com/microsoft/microsoft-ui-reactor.git
 cd microsoft-ui-reactor
-
-# calling the bootstrap system under the correct PowerShell version you're on
 & (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
-
-dotnet new reactor -n MyApp
-cd MyApp
-dotnet run -p:Platform=x64
 ```
 
-> ⚠️ **Clone to a short path**: Clone into a short root directory such as
-> `C:\src\` (e.g. `C:\src\microsoft-ui-reactor`), not a deeply nested or
-> OneDrive-synced folder. The Windows App SDK's XAML and resource compilers are
-> 32-bit tools with no long-path support, so a long checkout path can push a
-> project's generated `obj`/`bin` output past the Windows 260-character
-> `MAX_PATH` limit and break the build (`MSB3073` / `PRI210`) — most often on
-> ARM64 dev boxes, where those tools run under emulation. See
-> [#678](https://github.com/microsoft/microsoft-ui-reactor/issues/678).
-
-> ⚠️ **Platform flag required**: Always build with an explicit platform:
-> `dotnet build -p:Platform=x64` (or `ARM64`). Omitting `-p:Platform=...`
-> causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`,
-> `dotnet run`, and `mur check` invocations alike.
-
-`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs local framework snapshots into `local-nupkgs/`, installs the Windows App SDK `dotnet new` template pack via the Windows App SDK CLI (`winapp new --list`, which provides `dotnet new reactor`), and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Apps created by the template reference the public `Microsoft.UI.Reactor` package from NuGet.org by default; pass `--reactor-version 0.0.0-local` when you intentionally want a scaffolded app to consume the local source-built package instead. To hold the template pack at a known-good version, run `./bootstrap.ps1 -WinAppSdkTemplatesVersion <version>`. The optional `Microsoft.UI.Reactor.Advanced` and `Microsoft.UI.Reactor.Devtools` sibling packages are version-matched to the framework package when published. Re-run `bootstrap.ps1` (or `mur upgrade` for a lighter refresh) after `git pull` when you want updated CLI/plugin bits. Verify a working developer install with `mur doctor`.
-
-> **Scaffolding.** Reactor's templates ship in the official Windows App SDK template pack. `winapp new -t reactor` installs that pack on demand and scaffolds in one step; `dotnet new reactor` works too once the pack is installed. The in-repo `Microsoft.UI.Reactor.ProjectTemplates` package that used to provide `dotnet new reactorapp` has been removed; its published versions are deprecated on NuGet.org.
-
-On networks where the public NuGet registry is unreachable, bootstrap detects a recognised package mirror already configured in the user's NuGet.Config, verifies unauthenticated package access, and uses it only for the bootstrap process — including the optional Visual Studio extension build. Contributors on an unrestricted network keep the public defaults, unchanged. Any mirror can be selected explicitly with `-NuGetConfig <path>`; credentials remain in user configuration and are never written to the repository. Package feed URLs must use HTTPS (except loopback development feeds) and cannot embed credentials, query strings, or fragments.
-
-`src/Reactor.Cli` and two samples reference `GitHub.Copilot.SDK`, whose build targets download a native `copilot` CLI from the [github/copilot-cli releases](https://github.com/github/copilot-cli/releases) during a plain `dotnet build` / `dotnet run` / `dotnet test` (checksum-verified against the release's `SHA256SUMS.txt`). If that download is blocked on your network, point it at a mirror of those release assets with `CopilotCliReleaseBaseUrl` (or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment variable), or supply a pre-downloaded binary with `CopilotCliBinaryPath`. `CopilotSkipCliDownload=true` also gets a blocked build moving, but only for compiling: it omits the native binary that `mur loc translate` and the two Copilot SDK samples start at run time. CI sets it because CI never runs those paths.
-
-Prefer to wire it up by hand? **[Manual setup](CONTRIBUTING.md#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes. To learn the framework, start with **[Your first app](https://microsoft.github.io/microsoft-ui-reactor/get-started/first-app/)**.
-
-Release owners: see the [release runbook](docs/contributing/release-runbook.md) before minting a new version tag.
+Clone to a short path such as `C:\src\`. [CONTRIBUTING.md](CONTRIBUTING.md) explains what the bootstrap script installs, how to set things up by hand, and how to build on a restricted network. To learn the framework, start with **[Your first app](https://microsoft.github.io/microsoft-ui-reactor/get-started/first-app/)**.
 
 ---
 

@@ -30,11 +30,12 @@ calls does not change, `UseState`, `UseReducer`, `UseRef`, `UseMemo`, and
 |---|---|
 | Change a `Render()` body; add, remove, or reorder elements | Kept. Reactor patches the existing controls. |
 | Add or remove a field on a record or class stored in a hook | Kept. Reactor copies matching fields to the new shape. A removed field is dropped. A new field gets its default value. |
-| Rename a component type, or change its identity | Kept. Reactor moves the subtree to the new component. |
+| Add or remove a field on a component class | Kept. .NET gives the edited class a new type. Reactor moves the subtree to it and copies the fields that still exist. |
+| Rename a component class, move it to another namespace, or change its key | Reset. Reactor treats it as a different component, so it unmounts the old one and mounts the new one with fresh state. |
 | Change a stored field's type, such as `int` to `Optional<int>` | That field is not copied and gets its default value. Restart if you need the old value. |
 | Add, remove, or reorder hook calls | Reset for that component. Reactor runs pending cleanups and mounts the hooks again from scratch. |
 
-The last row cannot be avoided. When the hook order changes, the old values no
+A hook-order reset cannot be avoided. When the hook order changes, the old values no
 longer line up with the new hooks. Reactor resets that component instead of
 showing an error, so the loop keeps running.
 

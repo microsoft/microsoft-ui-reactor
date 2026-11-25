@@ -76,6 +76,35 @@ Run `Get-Help ./bootstrap.ps1 -Detailed` for the other switches.
 
 Apps created with `dotnet new reactor` reference the public `Microsoft.UI.Reactor` package from NuGet.org. To make a scaffolded app use the package you built from source, pass `--reactor-version 0.0.0-local`. Only need the framework package? Reference `Microsoft.UI.Reactor` from NuGet.org and skip the bootstrap.
 
+The optional `Microsoft.UI.Reactor.Advanced` and `Microsoft.UI.Reactor.Devtools` packages always have the same version as `Microsoft.UI.Reactor` when we publish them. Release owners: read the [release runbook](docs/contributing/release-runbook.md) before you tag a new version.
+
+### Templates
+
+By default, the bootstrap script installs the template pack only when it is missing. To hold it at a version you know works, pin it:
+
+```powershell
+./bootstrap.ps1 -WinAppSdkTemplatesVersion <version>
+```
+
+The `Microsoft.UI.Reactor.ProjectTemplates` package, which used to provide `dotnet new reactorapp`, was removed from this repository. Its versions on NuGet.org are deprecated. Use `dotnet new reactor` or `winapp new -t reactor` instead.
+
+### On a restricted network
+
+If your network blocks the public NuGet feed, add a package mirror to your user NuGet.Config. The bootstrap script looks there for a known mirror. If the mirror works without credentials, the script uses it for this run only, including the optional Visual Studio extension build. Without one, the script uses the public feed, as before. To choose a mirror yourself, pass its config file:
+
+```powershell
+./bootstrap.ps1 -NuGetConfig <path>
+```
+
+Keep credentials in your user NuGet config. The script never writes them to the repository. Feed URLs must use HTTPS (a loopback feed for local development is the exception), and must not contain credentials, a query string or a fragment.
+
+`src/Reactor.Cli` and two samples use `GitHub.Copilot.SDK`. When you build, run or test them, the SDK downloads a native `copilot` CLI from the [github/copilot-cli releases](https://github.com/github/copilot-cli/releases) and checks it against the release's `SHA256SUMS.txt`. If your network blocks that download, you have two options:
+
+- Point the download at a mirror of the release files with the `CopilotCliReleaseBaseUrl` MSBuild property or the `COPILOT_CLI_DOWNLOAD_BASE_URL` environment variable.
+- Use a binary you downloaded yourself with `CopilotCliBinaryPath`.
+
+`CopilotSkipCliDownload=true` also gets the build going, but only to compile. It leaves out the native binary, and `mur loc translate` and the two Copilot SDK samples need that binary at run time. CI sets it because CI never runs those paths.
+
 ### After `git pull`
 
 A pull changes your source, but not the packages in `local-nupkgs/` or the installed `mur` tool. A copied plugin does not change either (a symlinked one does). Rebuild them with one of these:
@@ -99,7 +128,7 @@ mur doctor
 
 ### Manual setup
 
-If you prefer not to run `bootstrap.ps1`, these are the same steps by hand. Steps 1 to 4 use only `dotnet` and `git`. Step 5 uses the `mur` you install in step 4. After step 2, run every step from the repository root.
+If you prefer not to run `bootstrap.ps1`, these are the same steps by hand. Steps 1 to 4 use only `dotnet`, `git` and a helper script from this repository. Step 5 uses the `mur` you install in step 4. After step 2, run every step from the repository root.
 
 | # | Step | What it produces |
 |---|------|------------------|
@@ -126,27 +155,31 @@ git clone https://github.com/microsoft/microsoft-ui-reactor.git
 cd microsoft-ui-reactor
 ```
 
-**3. Pack `mur` as a global-tool package.** `Reactor.Cli.csproj` sets `PackAsTool=true`. Pass the host architecture as the platform: the build runs the SignaturesGen apphost, which must match the machine.
+**3. Pack `mur` as a global-tool package.** `Reactor.Cli.csproj` sets `PackAsTool=true`. Pass the host architecture as the platform: the build runs the SignaturesGen apphost, which must match the machine. Give each pack a new, higher version, as `bootstrap.ps1` does. `dotnet tool update` skips a version that is already installed, so a repack with the same version would leave the old `mur` in place.
 
 ```powershell
+. ./tools/BootstrapFeedResolver.ps1
 $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+$murVersion = Get-ReactorLocalCliVersion
 dotnet pack src/Reactor.Cli/Reactor.Cli.csproj `
     -c Release `
     "-p:Platform=$hostArch" `
+    "-p:Version=$murVersion" `
     -o local-nupkgs `
     --nologo
 ```
 
-**4. Install `mur` as a global tool.** If `mur` is already installed, use `update` instead of `install`.
+**4. Install `mur` as a global tool.** Install the version you just packed. If `mur` is already installed, use `update` instead of `install`.
 
 ```powershell
 dotnet tool install -g `
     --add-source ./local-nupkgs `
     Microsoft.UI.Reactor.Cli `
+    --version $murVersion `
     --no-cache --ignore-failed-sources
 
 # If mur is already installed:
-# dotnet tool update -g --add-source ./local-nupkgs Microsoft.UI.Reactor.Cli --no-cache --ignore-failed-sources
+# dotnet tool update -g --add-source ./local-nupkgs Microsoft.UI.Reactor.Cli --version $murVersion --no-cache --ignore-failed-sources
 ```
 
 `dotnet tool install -g` adds `~/.dotnet/tools` to the user PATH, but the current shell does not see that change. For this shell only, add it yourself so the next step finds `mur`. New shells pick it up on their own.
@@ -250,7 +283,7 @@ Visual Studio will restore NuGet packages on first load, pulling the experimenta
 
 Library projects (`Reactor`, `Reactor.Interop.WinForms`) are architecture-neutral (`AnyCPU`). Application projects (samples, tests, CLI) target `x64` and `ARM64`.
 
-When building via the solution (`dotnet build Reactor.slnx`), the platform is selected automatically. When building a single app project directly, pass `-p:Platform=x64` (or `ARM64`):
+When building via the solution (`dotnet build Reactor.slnx`), the platform is selected automatically. When building or running a single app project directly, pass `-p:Platform=x64` (or `ARM64`). Without it, the build fails with a `WindowsAppSDKSelfContained` error:
 
 ```bash
 dotnet build tests/Reactor.Tests -p:Platform=x64

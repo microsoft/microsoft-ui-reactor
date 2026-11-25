@@ -5,16 +5,17 @@
 // file the older MkDocs builds read) and rebuilds the menu from it. Picking a
 // version opens the same page there when it exists, else that version's home.
 //
-// Loaded by the script() entry in blume.config.ts, which passes the site root
-// ("/microsoft-ui-reactor/") and the version of this build.
-(() => {
-  const me = document.currentScript;
-  if (!me || window.reactorVersionMenu) return;
+// Loaded as a module by the script() entry in blume.config.ts, which passes the
+// site root ("/microsoft-ui-reactor/") and the version of this build. The path
+// and folder rules live in version-paths.js, which has a node test.
+import { homeOf, menuEntries, pageInVersion, tagOf } from "./version-paths.js";
+
+const me = [...document.scripts].find((element) => element.src === import.meta.url);
+if (me && !window.reactorVersionMenu) {
   window.reactorVersionMenu = true;
 
   const root = me.dataset.root;
   const current = me.dataset.version;
-  const LATEST = "latest";
   // The row and tag classes NavSelector.astro renders, so rebuilt rows match.
   const ROW_CLASS =
     "flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-start text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground aria-[current=true]:text-foreground";
@@ -26,21 +27,8 @@
       .then((response) => (response.ok ? response.json() : null))
       .catch(() => null));
 
-  const isLatest = (entry) => entry.aliases?.includes(LATEST) ?? false;
-  const folderOf = (entry) => (isLatest(entry) ? LATEST : entry.version);
-  const tagOf = (entry) => (isLatest(entry) ? LATEST : entry.version === "main" ? "unreleased" : "");
-
-  // The page's path inside its version folder: "guides/hooks/" on
-  // /microsoft-ui-reactor/main/guides/hooks/.
-  const pageInVersion = () => {
-    if (!location.pathname.startsWith(root)) return "";
-    const rest = location.pathname.slice(root.length);
-    const slash = rest.indexOf("/");
-    return slash === -1 ? "" : rest.slice(slash + 1);
-  };
-
   const open = async (home) => {
-    const page = pageInVersion();
+    const page = pageInVersion(location.pathname, root);
     let target = home;
     if (page) {
       try {
@@ -66,7 +54,7 @@
   };
 
   const row = (entry, check) => {
-    const home = `${root}${folderOf(entry)}/`;
+    const home = homeOf(root, entry);
     const link = document.createElement("a");
     link.className = ROW_CLASS;
     link.href = home;
@@ -107,9 +95,8 @@
         wire(link, link.href);
       }
     }
-    let list = await loadVersions();
-    if (!Array.isArray(list) || list.length === 0) return;
-    if (!list.some((entry) => entry.version === current)) list = [{ version: current, aliases: [] }, ...list];
+    const list = menuEntries(await loadVersions(), current);
+    if (!list) return;
     for (const menu of found) {
       const panel = menu.querySelector("[data-blume-dropdown-panel]");
       if (!panel?.isConnected) continue;
@@ -120,4 +107,4 @@
 
   enhance();
   document.addEventListener("astro:after-swap", enhance);
-})();
+}

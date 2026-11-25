@@ -242,8 +242,8 @@ never inside an `if` or a loop.
 The fastest way to work is to run `dotnet watch` from the project folder.
 When you save `App.cs`, Reactor runs `Render()` again without restarting the
 window. State in `UseState` is kept, so a counter at 42 stays at 42 after you
-change the layout. State in static fields is **not** kept. Keep the state you
-want to survive a reload in `UseState`. See [Hot reload](hot-reload.md).
+change the layout. Static fields keep their values too, because the process
+keeps running. See [Hot reload](hot-reload.md) for what resets state.
 
 ### First event, first state
 
@@ -311,7 +311,7 @@ state, use `UseReducer` and pass a function, as the todo app does:
 
 ```csharp
 // Don't: the key moves to another item when a row is removed
-items.Select((item, index) => Row(item).WithKey(index))
+items.Select((item, index) => Row(item).WithKey(index.ToString()))
 ```
 
 When you remove a row, every row after it gets a new index, so Reactor matches

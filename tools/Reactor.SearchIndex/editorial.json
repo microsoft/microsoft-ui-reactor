@@ -142,7 +142,7 @@
     "curatedKeywords": ["open a file", "choose a folder", "save as dialog", "let the user pick files"],
     "usings": ["Microsoft.UI.Reactor.Core"],
     "docs": [
-      { "title": "Windows guide: Pickers", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/windows.md#pickers" }
+      { "title": "Desktop integration guide: File and folder pickers", "uri": "https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/desktop-integration.md#file-and-folder-pickers" }
     ]
   },
   "flex": {

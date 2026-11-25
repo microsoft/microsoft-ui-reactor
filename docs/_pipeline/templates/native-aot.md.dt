@@ -340,6 +340,10 @@ assembly:
 ```csharp snippet="native-aot/devtools-on"
 ```
 
+Set the switch in the project file, not with `AppContext.SetSwitch` in code.
+An AOT build replaces the switch with the project file value at compile time,
+so a call at run time has no effect.
+
 To turn the switch on for one build without editing the project, pass
 `-p:ReactorDiagnostics=true`. It also turns on source maps.
 `Reactor.targets` warns not to ship a build made with it. You still need the

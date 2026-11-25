@@ -95,7 +95,10 @@ jobs:
           # drift it catches is to hand-edit a generated page under docs/guide —
           # and that edit is pure .md, so it sets non-md=false and skips the one
           # job that would have caught it. Same shape as audit-ledger below.
-          if echo "$files" | grep -qE '^docs/guide/'; then
+          # CHANGELOG.md is here for the same reason: the docs site builds its
+          # /changelog pages from it, and `npm run site` below rejects a release
+          # section it cannot parse or a link it cannot resolve.
+          if echo "$files" | grep -qE '^(docs/guide/|CHANGELOG\.md$)'; then
             echo "compiled-docs=true" >> "$GITHUB_OUTPUT"
           else
             echo "compiled-docs=false" >> "$GITHUB_OUTPUT"

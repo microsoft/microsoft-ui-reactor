@@ -273,17 +273,26 @@ export function redirectsFor(placements, extra = []) {
   return [...redirects.values()].sort((a, b) => a.from.localeCompare(b.from));
 }
 
-/** Problems with nav.json's hand-written redirects: each must leave a dead URL for a live page. */
-export function checkRedirects(extra, placements) {
+/**
+ * Problems with nav.json's hand-written redirects: each must leave a dead URL
+ * for a live page. A `to` may end in `#anchor`; when `idsAt(route)` is given,
+ * the anchor must be a heading id on that page.
+ */
+export function checkRedirects(extra, placements, idsAt) {
   const live = new Set([...placements.values()].map(({ dest }) => routeFor(dest)));
   const errors = [];
   for (const { from, to } of extra) {
     if (typeof from !== "string" || !from.startsWith("/") || typeof to !== "string" || !to.startsWith("/")) {
       errors.push(`nav.json redirect ${JSON.stringify({ from, to })} needs a "from" and a "to" that start with /.`);
-    } else if (live.has(from)) {
+      continue;
+    }
+    const [, page, anchor] = /^([^?#]*)(?:\?[^#]*)?(?:#(.*))?$/.exec(to);
+    if (live.has(from)) {
       errors.push(`nav.json redirects ${from}, but a page still lives there.`);
-    } else if (!live.has(to)) {
+    } else if (!live.has(page)) {
       errors.push(`nav.json redirects ${from} to ${to}, which no page lives at.`);
+    } else if (anchor && idsAt && !idsAt(page).has(anchor)) {
+      errors.push(`nav.json redirects ${from} to ${to}, but ${page} has no #${anchor} heading.`);
     }
   }
   return errors;
@@ -674,9 +683,10 @@ const BUCKET_WORDS = {
 /**
  * The released versions in a Keep-a-Changelog file, newest first as written.
  * `## [Unreleased]` has no date and is left out. Each bucket (`### Added`, ...)
- * keeps its lines; a bucket with nothing in it is dropped.
+ * keeps its lines; a bucket with nothing in it is dropped. Any other `## `
+ * heading would drop a release from the site, so it goes into `problems`.
  */
-export function parseChangelog(source) {
+export function parseChangelog(source, problems = []) {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
   const mask = fenceMask(lines);
   const releases = [];
@@ -688,6 +698,9 @@ export function parseChangelog(source) {
       const m = RELEASE_HEADING.exec(line);
       release = m ? { version: m[1], date: m[2], intro: [], buckets: [] } : null;
       if (release) releases.push(release);
+      else if (!/^## \[Unreleased\]\s*$/i.test(line)) {
+        problems.push(`line ${i + 1}: "${line.trim()}" is not a release heading like "## [1.2.0] — 2026-01-31", so the site leaves it out.`);
+      }
       bucket = null;
     } else if (release && !mask[i] && /^### /.test(line)) {
       bucket = { title: line.slice(4).trim(), lines: [] };
@@ -707,11 +720,14 @@ export function parseChangelog(source) {
 export const changelogSlug = (version) =>
   `v${version.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 
-/** "12 added, 4 changed and 9 fixed." from the top-level bullets of each bucket. */
-function changelogSummary(buckets) {
+/**
+ * "12 added, 4 changed and 9 fixed." from the top-level bullets of each bucket.
+ * A bucket is known by its first word, so `### Changed (breaking)` counts too.
+ */
+export function changelogSummary(buckets) {
   const parts = [];
   for (const { title, lines } of buckets) {
-    const words = BUCKET_WORDS[title.toLowerCase()];
+    const words = BUCKET_WORDS[/^[a-z]+/i.exec(title)?.[0].toLowerCase()];
     const count = lines.filter((line) => /^[-*+] /.test(line)).length;
     if (words && count) parts.push(`${count} ${words[count === 1 ? 0 : 1]}`);
   }
@@ -809,17 +825,26 @@ export function sync({ lenient, ref, guide, out }) {
   const nav = JSON.parse(fs.readFileSync(path.join(out, "nav.json"), "utf8"));
   const files = listMarkdown(guide).filter((file) => !file.startsWith("images/"));
   const { placements, groups, errors, warnings } = planPlacement(nav, files, { lenient });
+  const fileAt = new Map([...placements].map(([file, { dest }]) => [routeFor(dest), file]));
+  const idCache = new Map();
+  const idsAt = (route) => {
+    if (!idCache.has(route)) {
+      const lines = fs.readFileSync(path.join(guide, fileAt.get(route)), "utf8").replace(/\r\n?/g, "\n").split("\n");
+      idCache.set(route, new Set([...headingIds(lines).values()].map(({ id }) => id)));
+    }
+    return idCache.get(route);
+  };
   let extraRedirects = nav.redirects ?? [];
   if (lenient) {
     // An old tag can predate a hand-written redirect: the page it retires may
     // still be there, or the page it points to may not exist yet.
     extraRedirects = extraRedirects.filter((redirect) => {
-      const problems = checkRedirects([redirect], placements);
+      const problems = checkRedirects([redirect], placements, idsAt);
       warnings.push(...problems.map((problem) => `${problem} Skipped.`));
       return !problems.length;
     });
   }
-  errors.push(...checkRedirects(extraRedirects, placements));
+  errors.push(...checkRedirects(extraRedirects, placements, idsAt));
   if (errors.length) return { errors, warnings };
 
   const routes = new Map([...placements].map(([file, { dest }]) => [file, routeFor(dest)]));
@@ -862,10 +887,17 @@ export function sync({ lenient, ref, guide, out }) {
   const changelog = path.join(repoRoot, "CHANGELOG.md");
   if (fs.existsSync(changelog)) {
     context.page = null;
+    const problems = [];
+    const found = parseChangelog(fs.readFileSync(changelog, "utf8"), problems);
+    for (const problem of problems) (lenient ? warnings : errors).push(`CHANGELOG.md ${problem}`);
+    // No dated release (an old tag, say) means no /changelog: blume.config.ts
+    // drops its links when this folder is missing.
     const dir = path.join(docs, CHANGELOG_DIR);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "meta.ts"), metaFile({ title: "Changelog", pages: [] }));
-    for (const release of parseChangelog(fs.readFileSync(changelog, "utf8"))) {
+    if (found.length) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "meta.ts"), metaFile({ title: "Changelog", pages: [] }));
+    }
+    for (const release of found) {
       fs.writeFileSync(path.join(dir, `${changelogSlug(release.version)}.md`), changelogEntry(release, context));
       for (const miss of context.unresolved.splice(0)) {
         const message = `CHANGELOG.md [${release.version}]: link ${miss.target} ${miss.reason}.`;

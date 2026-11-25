@@ -21,7 +21,6 @@ static class DevtoolsEntryPoint
     {
         // <snippet:devtools-on>
         // Program.cs of an app that keeps devtools in its AOT build.
-        AppContext.SetSwitch("Reactor.DevtoolsSupport", true);
         ReactorDevtools.EnsureRegistered();
         ReactorApp.Run<App>("Hello World AOT Devtools On", width: 480, height: 240);
         // </snippet:devtools-on>

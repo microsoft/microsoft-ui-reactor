@@ -807,7 +807,7 @@ no-ops (spec 033 §6).
 
 ## Topic Ideas for the Full Docset
 
-The 64-page layout mirrors spec 041 §7.1. Each row lists the target tier,
+The layout started from spec 041 §7.1 and has grown since. Each row lists the target tier,
 the `order:` slot, and a one-line description. "NEW" pages were authored
 as Stub-tier templates in Phase 1 and grow tier-by-tier through Phases
 2-4. Generate every page as `<topic>.md.dt` + `docs/_pipeline/apps/<topic>/`
@@ -818,7 +818,9 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
 | 0 | readme | comprehensive | Landing page: what Reactor is, the 10-section index, decision tree |
-| 1 | getting-started | comprehensive | Project setup, hello world, state, layout, todo + calculator |
+| 0.5 | install | solid | Requirements, then create and run a project with `winapp`, `dotnet new` or a coding agent (tabs, steps, prompts) |
+| 1 | getting-started | comprehensive | "Your first app": a numbered tutorial — first component, state, layout, lists with keys, a finished app |
+| 1.2 | samples | solid | Map of the apps in `samples/`: what each shows, its source link and the command that runs it |
 | 1.5 | thinking-in-reactor | comprehensive | Mental model: UI as a function of state, render → diff → patch, data flow, keys, and a worked filterable-list example |
 | 2 | xaml-developers | comprehensive | "Coming from XAML": XAML/MVVM concept map, side-by-side examples, bindings → state, gradual adoption and interop |
 
@@ -861,7 +863,9 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
 | 9 | navigation | comprehensive | UseNavigation, NavigationHandle, NavigationView, TabView, DeepLinkMap, lifecycle |
-| 21 | windows | solid | ReactorApp.Run, OpenWindow, WindowSpec, ShutdownPolicy, tray icons (moved from §3) |
+| 21 | windows | solid | ReactorApp.Run, OpenWindow, WindowSpec, ShutdownPolicy; tray icons and pickers moved to desktop-integration |
+| 21.5 | desktop-integration | comprehensive | Tray icons, the taskbar, jump lists, launch activation, file and folder pickers, the clipboard, drag and drop |
+| 13.5 | services | comprehensive | App services through Context\<T\>, Microsoft.Extensions.DependencyInjection, testable components |
 | 12 | async-resources | solid → comprehensive | UseResource, UseInfiniteResource, UseMutation, Pending (renamed from async-resources-cookbook) |
 | 14.5 | persistence | NEW stub → solid | UsePersisted, Window/Application scopes, migration |
 | 15 | localization | solid | LocaleProvider, UseIntl, RtlHelper, logical layout, pseudo-localization |
@@ -889,7 +893,14 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 
 | Order | Page | Tier | Description |
 |-------|------|------|-------------|
-| 2 | dev-tooling | solid → comprehensive | `mur` CLI, MCP server, VS Code panel, dotnet watch, in-app dev menu, reconcile-highlight + layout-cost overlays |
+| 2 | dev-tooling | solid | "Developer tools": overview of the Tools section, the inner dev loop one stage at a time, with a link to each tool page |
+| 2.1 | hot-reload | solid | `dotnet watch`, what survives a hot reload, rude edits, live preview (steps) |
+| 2.2 | devtools | solid | Turning devtools on, the dev menu and overlays, the MCP server, `mur devtools`, keeping devtools out of Release and AOT |
+| 2.3 | mur-cli | stub | Every `mur` command grouped by task, with install steps |
+| 2.4 | vs-extension | stub | The Visual Studio and VS Code preview extensions (tabs, steps) |
+| 2.5 | analyzers | solid | Every `REACTOR_*` rule with a stable anchor, severity settings |
+| 2.6 | build-with-ai | stub | Agent plugin, skill kit, `mur check`, the devtools MCP server, AI-readable site files (tabs, steps, prompts) |
+| 2.85 | native-aot | comprehensive | Publishing with Native AOT: setup, size options, devtools under AOT |
 | 22.6 | testing | NEW stub → solid | Renderer fixtures, headless tests, snapshot tests, a11y scanner |
 | 22.7 | performance | NEW stub → solid | ETW, EventDispatch walkthroughs, flame graphs |
 | 22.8 | packaging | NEW stub → solid | MSIX, single-file, ARM64, AOT considerations |

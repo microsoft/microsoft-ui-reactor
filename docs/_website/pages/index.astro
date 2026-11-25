@@ -61,6 +61,19 @@ const subsections = (group: NavGroup, skip: string[] = []) =>
 
 const href = (route: string) => withBase(route);
 
+// Old release tags are rebuilt with today's site code (publish.mjs --lenient),
+// and may lack pages this page links to. There a missing page only drops its
+// link. In every other build it fails the build, so a broken link can't ship.
+const lenient = process.env.DOCS_LENIENT === "1";
+const routes = new Set(navigation.sidebar.flatMap(pagesIn).map((page) => logical(page.route)));
+const has = (route: string) => {
+  if (routes.has(route) || findGroup(navigation.sidebar, route)) return true;
+  if (!lenient) throw new Error(`Home page: it links to ${route}, but no page lives there.`);
+  return false;
+};
+const firstApp = has("/get-started/first-app") ? "/get-started/first-app" : "/get-started";
+const xamlGuide = has("/get-started/xaml-developers");
+
 const recipesPath = "/guides/recipes";
 const guides = subsections(section("/guides"), [recipesPath]);
 const internals = subsections(section("/how-it-works"));
@@ -102,7 +115,7 @@ const counter = `class Counter : Component
 const facts: { title: string; text: string; icon?: string; image?: string }[] = [
   {
     title: "Native WinUI",
-    text: "Every element is a real WinUI\u00a03 control, with Fluent styling and accessibility built in. No web view, no Electron.",
+    text: "Every element is a real WinUI control, with Fluent styling and accessibility built in. No web view, no Electron.",
     image: "/brand/winui.svg",
   },
   { title: "Pure C#", text: "No XAML, no data binding, no view models. Your UI is code you can step through.", icon: codeIcon },
@@ -116,7 +129,7 @@ const startHere = [
   { title: "Coming from XAML", text: "Map XAML, bindings and code-behind to Reactor.", route: "/get-started/xaml-developers" },
   { title: "Samples", text: "Complete apps to run, read and copy from.", route: "/get-started/samples" },
   { title: "Cheat sheet", text: "The whole framework on one page.", route: "/get-started/cheat-sheet" },
-];
+].filter((item) => has(item.route));
 
 const tools = [
   {
@@ -143,7 +156,7 @@ const tools = [
     route: "/tools/build-with-ai",
     icon: botIcon,
   },
-];
+].filter((item) => has(item.route));
 
 const pipeline = [
   { name: "Render()", text: "Your component returns a tree of elements." },
@@ -204,18 +217,22 @@ const [frontShot, backShot] = showcaseShots;
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
           <a
-            href={href("/get-started/quickstart")}
+            href={href(firstApp)}
             class="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Get started
             <Icon name="arrow-right" size={16} />
           </a>
-          <a
-            href={href("/get-started/xaml-developers")}
-            class="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Coming from XAML
-          </a>
+          {
+            xamlGuide && (
+              <a
+                href={href("/get-started/xaml-developers")}
+                class="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                Coming from XAML
+              </a>
+            )
+          }
         </div>
         <p class="mt-6 text-sm text-muted-foreground">
           Built on <span class="font-medium text-foreground">WinUI</span>,{" the "}
@@ -299,7 +316,7 @@ const [frontShot, backShot] = showcaseShots;
               <CodeBlock code={quickstart} lang="powershell" />
             </div>
             <a
-              href={href("/get-started/first-app")}
+              href={href(firstApp)}
               class="mt-6 inline-flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-medium text-[#031619] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               Start the tutorial

@@ -48,6 +48,7 @@ which rules have a code fix. Select an ID to read more about it.
 | [REACTOR_A11Y_004](#reactor_a11y_004) | Microsoft.UI.Reactor.Accessibility | Warning | Yes | A container you can click can't be reached with the keyboard. |
 | [REACTOR_ANIM_002](#reactor_anim_002) | Reactor.Animation | Info | | A `.Keyframes` trigger changes on every render, so the animation restarts. |
 | [REACTOR_ANIM_003](#reactor_anim_003) | Reactor.Animation | Warning | | An async lambda passed to `WithAnimation` stops animating after the first `await`. |
+| [REACTOR_ANIM_004](#reactor_anim_004) | Reactor.Animation | Warning | Yes | `.Set` writes a transform property on an element whose modifiers own its composition visual, so WinUI rejects it. |
 | [REACTOR_CMD_001](#reactor_cmd_001) | Reactor.Commanding | Info | Yes | An element sets both `Command` and its own callback. The callback wins. |
 | [REACTOR_CTRL_001](#reactor_ctrl_001) | Reactor.Controls | Warning | Yes | `.Set` writes `SelectedItem` on a control whose selection is controlled by `SelectedIndex`. |
 | [REACTOR_CTX_001](#reactor_ctx_001) | Reactor.Context | Info | Yes | A context value is a new object on every render. |
@@ -93,6 +94,7 @@ which rules have a code fix. Select an ID to read more about it.
 | [REACTOR_MOD_003](#reactor_mod_003) | Reactor.Modifier | Warning | Yes | A modifier has no effect on this control type. |
 | [REACTOR_NAV_001](#reactor_nav_001) | Reactor.Navigation | Warning | | A `UseNavigation` handle is stored in a static field or property. |
 | [REACTOR_OPT_001](#reactor_opt_001) | Reactor.Controlled | Info | Yes | A sentinel value such as `-1` is used instead of `Optional<T>.Unset`. |
+| [REACTOR_PERF_001](#reactor_perf_001) | Reactor.Performance | Info | Yes | `.Width(...)` and `.Height(...)` are chained where one `.Size(...)` call would do. |
 | [REACTOR_PERF_FUNCREF](#reactor_perf_funcref) | Reactor.Performance | Info | Yes | A `Command` is created in `Render` without `UseMemo`. |
 | [REACTOR_PERSIST_001](#reactor_persist_001) | Reactor.Persistence | Warning | Yes | `UsePersisted` has no explicit scope. |
 | [REACTOR_POOL_001](#reactor_pool_001) | Reactor.Pool | Warning | Yes | `.Set(...)` writes a property that is reset when the control is pooled. |
@@ -382,6 +384,14 @@ The modifier does nothing on this control type. For example, `.Background`
 has no effect on a `Rectangle`, because shapes use `.Fill`. Use the
 modifier that the control supports.
 
+#### REACTOR_PERF_001
+
+`.Width(...)` and `.Height(...)` are chained on a built-in element. Each call
+copies the element, so one `.Size(width: ..., height: ...)` call saves a copy.
+The code fix makes the change and keeps the arguments in their original
+order. This is a small allocation saving, not a bug. See
+[Analyzer architecture](analyzer-architecture.md#combined-sizing-without-extra-copies).
+
 #### REACTOR_POOL_001
 
 `.Set(...)` writes a property that Reactor resets when it returns the
@@ -537,6 +547,17 @@ when you want to replay it, such as a counter in state. See
 An `async` lambda is passed to `WithAnimation`. Changes after the first
 `await` are not animated. Use one `WithAnimation` call for each step, around
 each `await`.
+
+#### REACTOR_ANIM_004
+
+`.Set(...)` or `.OnMount(...)` writes `Rotation`, `Scale`, `CenterPoint`,
+`RotationAxis`, `TransformMatrix` or a `*Transition` property, or calls
+`StartAnimation`, on an element whose modifiers already own its composition
+visual, such as `.Scale(...)`, `.Rotation(...)` or `.Keyframes(...)`. WinUI
+rejects the write. Use the matching modifier, such as `.Rotation(...)` or
+`.OpacityTransition()`; the code fix rewrites the simple cases. The rule also
+flags a `.Set` that writes `Translation` on an element that uses
+`.Translation(...)`. See [Animation](animation.md).
 
 ### Layout and media
 

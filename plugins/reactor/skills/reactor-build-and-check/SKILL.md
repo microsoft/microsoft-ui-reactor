@@ -19,7 +19,7 @@ which launches the app packaged (needs Developer Mode), or
 the app builds, then dies at startup with `REGDB_E_CLASSNOTREG`. No
 `-p:Platform` is needed — only a self-contained app
 (`#:property WindowsAppSDKSelfContained=true`) needs an architecture. The
-[Installation guide](https://microsoft.github.io/microsoft-ui-reactor/get-started/install/#one-file-no-project)
+[Installation guide](https://microsoft.github.io/microsoft-ui-reactor/latest/get-started/install/#one-file-no-project)
 documents the packaged header.
 
 Don't name the file after a Reactor assembly (`microsoft.ui.reactor.cs`, `Microsoft.UI.Reactor.Advanced.cs`; on

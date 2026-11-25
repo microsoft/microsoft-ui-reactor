@@ -14,6 +14,8 @@ on:
       - 'docs/guide/**'
       - 'docs/_website/**'
       - 'docs/_site-root/**'
+      # The site's /changelog pages are built from it.
+      - 'CHANGELOG.md'
       - '.github/workflows/docs.yml'
     # Path filters are not evaluated for tag pushes, so a release tag always
     # publishes regardless of which files the release commit touched. That is
