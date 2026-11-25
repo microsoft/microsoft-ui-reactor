@@ -570,7 +570,7 @@
       "change": { "threw": "-", "motion": "Opacity=JUMPED Background=unobservable", "running": "-", "pose": "120,150,230,194", "opacity": "0.80", "channel": "taken=1 facade=- visual=S", "model": "ok", "diag": "-" },
       "removeFeature": { "threw": "-", "running": "-", "pose": "120,150,230,194", "opacity": "0.80", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "running": "Opacity", "pose": "120,150,230,194", "opacity": "1.00", "model": "opacity", "diag": "-" },
-      "removeModifier": { "threw": "-", "residue": "remounted", "running": "-", "pose": "120,150,230,194", "opacity": "0.80", "model": "ok", "diag": "-" },
+      "removeModifier": { "threw": "-", "residue": "remounted", "running": "Opacity", "pose": "120,150,230,194", "opacity": "1.00", "model": "opacity", "diag": "-" },
       "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "120,150,220,190", "opacity": "1.00", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=- anims=-", "pose": "120,150,220,190", "opacity": "1.00", "model": "ok", "diag": "-" }
@@ -1164,7 +1164,7 @@
       "change": { "threw": "-", "motion": "Opacity=JUMPED Background=unobservable", "running": "-", "pose": "180,150,280,190", "opacity": "0.80", "channel": "taken=1 facade=- visual=-", "model": "ok", "diag": "-" },
       "removeFeature": { "threw": "-", "running": "-", "pose": "180,150,280,190", "opacity": "0.80", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "running": "Opacity", "pose": "180,150,280,190", "opacity": "1.00", "model": "opacity", "diag": "-" },
-      "removeModifier": { "threw": "-", "residue": "remounted", "running": "-", "pose": "180,150,280,190", "opacity": "0.80", "model": "ok", "diag": "-" },
+      "removeModifier": { "threw": "-", "residue": "remounted", "running": "Opacity", "pose": "180,150,280,190", "opacity": "1.00", "model": "opacity", "diag": "-" },
       "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "opacity": "1.00", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=plain diff=0 keys=- anims=-", "pose": "180,150,280,190", "opacity": "1.00", "model": "ok", "diag": "-" }
@@ -2352,7 +2352,7 @@
       "change": { "threw": "-", "motion": "RotationAngle=JUMPED Opacity=JUMPED Background=unobservable", "running": "-", "pose": "280,150,324,260", "opacity": "0.80", "channel": "taken=1 facade=- visual=S,R", "model": "ok", "diag": "-" },
       "removeFeature": { "threw": "-", "running": "-", "pose": "280,150,324,260", "opacity": "0.80", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "running": "Opacity", "pose": "280,150,324,260", "opacity": "1.00", "model": "opacity", "diag": "-" },
-      "removeModifier": { "threw": "-", "residue": "remounted", "running": "-", "pose": "170,150,280,194", "opacity": "0.80", "model": "ok", "diag": "-" },
+      "removeModifier": { "threw": "-", "residue": "remounted", "running": "Opacity", "pose": "170,150,280,194", "opacity": "1.00", "model": "opacity", "diag": "-" },
       "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "opacity": "1.00", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=fresh diff=0 keys=- anims=-", "running": "-", "pose": "194,150,300,234", "opacity": "1.00", "model": "ok", "diag": "-" }
@@ -4728,7 +4728,7 @@
       "change": { "threw": "-", "motion": "Scale=JUMPED RotationAngle=JUMPED Opacity=JUMPED Background=unobservable", "running": "-", "pose": "160,20,240,220", "screen": "160,21,240,221", "opacity": "0.80", "channel": "taken=1 facade=T visual=S,R", "model": "ok", "diag": "-" },
       "removeFeature": { "threw": "-", "running": "-", "pose": "160,20,240,220", "screen": "160,21,240,221", "opacity": "0.80", "model": "ok", "diag": "-" },
       "addFeature": { "threw": "-", "running": "Opacity", "pose": "160,20,240,220", "screen": "160,21,240,221", "opacity": "1.00", "model": "opacity", "diag": "-" },
-      "removeModifier": { "threw": "-", "residue": "remounted", "running": "-", "pose": "180,150,280,190", "screen": "180,151,280,191", "opacity": "0.80", "model": "ok", "diag": "-" },
+      "removeModifier": { "threw": "-", "residue": "remounted", "running": "Opacity", "pose": "180,150,280,190", "screen": "180,151,280,191", "opacity": "1.00", "model": "opacity", "diag": "-" },
       "unmount": { "threw": "-", "removed": "1", "model": "ok", "diag": "-" },
       "rentPlain": { "threw": "-", "pool": "recycled=0 diff=0 taken=0 xaml=-", "pose": "180,150,280,190", "screen": "180,151,280,191", "opacity": "1.00", "model": "ok", "diag": "-" },
       "rentTransformed": { "threw": "-", "pool": "recycled=fresh diff=0 keys=- anims=-", "running": "-", "pose": "158,88,317,214", "screen": "158,89,317,215", "opacity": "1.00", "model": "ok", "diag": "-" }

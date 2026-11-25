@@ -2,6 +2,7 @@
   "expectations": [
     { "case": "*.*.TransitionExit", "step": "unmount", "field": "{active,model}", "reason": "fixes #1663: an exit .Transition() declared on a keyed Memo now plays when the Memo is removed, so the unmount step reads the exit pose instead of active=none" },
     { "case": "{None,Rotation}.Background.TransitionExit", "step": "removeModifier", "field": "{pose,opacity,model}", "reason": "fixes #1663: this step changes the keyed Memo's key, so the replaced control now plays the Memo's declared exit beside its replacement, as a key change with an exit should" },
-    { "case": "{None.None,Rotation.Background}.TransitionExit", "step": "{rentPlain,rentTransformed}", "field": "pool", "reason": "fixes #1663: the Memo's exiting control now reaches the pool only after its exit ends, so the next renters recycle a different control" }
+    { "case": "{None.None,Rotation.Background}.TransitionExit", "step": "{rentPlain,rentTransformed}", "field": "pool", "reason": "fixes #1663: the Memo's exiting control now reaches the pool only after its exit ends, so the next renters recycle a different control" },
+    { "case": "{None,Identity,Rotation,TransformOrigin}.Background.Keyframes", "step": "removeModifier", "field": "{running,opacity,model}", "reason": "fixes #1669: this step changes the keyed Memo's key, so its remounted control plays the one-shot opacity keyframe, which #1682 now restarts after XAML's first opacity push; it finishes at 1, the #1660 disagreement its known rules attribute" }
   ]
 }
