@@ -48,6 +48,7 @@ public sealed class ReducedMotionSubscriptionTests
 
     const string HookFile = "Core/RenderContext.cs";
     const string HostFile = "Hosting/ReactorHost.cs";
+    const string EngineFile = "Core/Navigation/TransitionEngine.cs";
 
     static SyntaxNode Source(string file)
     {
@@ -91,6 +92,7 @@ public sealed class ReducedMotionSubscriptionTests
     [Theory]
     [InlineData(HookFile, "UseReducedMotionState", "OnChanged")]
     [InlineData(HostFile, "InitChartingState", "OnAnimationsEnabledChanged")]
+    [InlineData(EngineFile, "CreateUiSettings", "OnAnimationsEnabledChanged")]
     public void ReducedMotionListeners_SubscribeToTheEventThatActuallyFires(
         string file, string name, string handler)
     {
@@ -168,6 +170,7 @@ public sealed class ReducedMotionSubscriptionTests
     [Theory]
     [InlineData(HookFile)]
     [InlineData(HostFile)]
+    [InlineData(EngineFile)]
     public void EveryAnimationsEventBinding_SitsUnderTheCapabilityProbe(string file)
     {
         var bindings = Source(file).DescendantNodes()
@@ -220,8 +223,7 @@ public sealed class ReducedMotionSubscriptionTests
     /// on the UI thread every frame, so <c>RequestRender</c> is the whole propagation path.
     /// </summary>
     [Theory]
-    // The animations handler forwards to ApplyAnimationsEnabled, which a selftest also drives.
-    [InlineData("ApplyAnimationsEnabled")]
+    [InlineData("OnAnimationsEnabledChanged")]
     [InlineData("OnColorValuesChanged")]
     public void UiSettingsHandlers_LeaveTheChartingPushToTheRenderThread(string handler)
     {

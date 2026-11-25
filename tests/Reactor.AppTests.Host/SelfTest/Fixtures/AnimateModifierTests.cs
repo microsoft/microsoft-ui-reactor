@@ -242,14 +242,14 @@ internal static class AnimateModifierTests
         }
 
         // Implicit transitions check the "Animation effects" setting when they're applied, and an
-        // equal render skips its update, so a change of the setting refreshes every element.
+        // equal render skips its update, so the settings notification refreshes every host.
         private async Task AnimationSettingChanges()
         {
             Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             var host = H.CreateHost();
+            // Only this fixture's host sees the refresh, never hosts other fixtures left behind.
+            using var isolation = ThemeResourceListeners.IsolateForTest(host);
             host.Mount(_ => VStack(TextBlock("Motion").OpacityTransition(TimeSpan.FromMilliseconds(200)).AutomationId("motion-target")));
-            await Harness.Render();
-            host.ApplyAnimationsEnabled(true);
             await Harness.Render();
             var target = H.FindControl<TextBlock>(t =>
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "motion-target");
@@ -264,12 +264,12 @@ internal static class AnimateModifierTests
             await Harness.Render();
             // Positive control: the equal render skips, so only the setting change can drop the key.
             H.Check("RebuiltExtras_MotionEqualRenderSkips", HasKey());
-            host.ApplyAnimationsEnabled(false);
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.RefreshHostsForAnimationsChange();
             await Harness.Render();
             H.Check("RebuiltExtras_MotionOffDropsKey", !HasKey());
 
             Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
-            host.ApplyAnimationsEnabled(true);
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.RefreshHostsForAnimationsChange();
             await Harness.Render();
             H.Check("RebuiltExtras_MotionOnRestoresKey", HasKey());
         }

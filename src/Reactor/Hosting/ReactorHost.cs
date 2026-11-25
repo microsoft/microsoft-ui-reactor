@@ -1590,17 +1590,8 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
 
     private void OnAnimationsEnabledChanged(
         global::Windows.UI.ViewManagement.UISettings sender, object args)
-        => ApplyAnimationsEnabled(sender.AnimationsEnabled);
-
-    /// <summary>
-    /// Applies a change of the "Animation effects" setting. Implicit transitions check it when
-    /// they are applied, and an unchanged element skips its update, so this requests a
-    /// resource-refresh pass, which updates every element, rather than a plain render
-    /// (issue #1702). Internal so a selftest can drive it; any thread.
-    /// </summary>
-    internal void ApplyAnimationsEnabled(bool animationsEnabled)
     {
-        var value = !animationsEnabled;
+        var value = !sender.AnimationsEnabled;
         // A coincident palette change re-reads the same field through
         // OnColorValuesChanged, so bail out when nothing actually moved.
         if (value == _isReducedMotion) return;
@@ -1609,8 +1600,6 @@ public sealed class ReactorHost : IDisposable, Core.Diagnostics.IReactorDiagnost
         // [ThreadStatic] and this runs on the WinRT notification thread, so a push here
         // would write a copy the render thread never reads. Render() pushes on the UI
         // thread every frame, so RequestRender is what actually propagates this.
-        if (_disposed) return;
-        _reconciler.RequestResourceRefresh();
         RequestRender();
     }
 

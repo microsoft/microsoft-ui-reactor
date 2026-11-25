@@ -225,7 +225,7 @@ Conventions for contributors:
   The declarations now compare by value: keyframes, scroll expressions with the same `ScrollViewer`,
   transition durations and settings, and solid brushes by color and opacity. A changed or removed
   declaration still updates. Turning Windows' "Animation effects" setting on or off now refreshes
-  every element in a Reactor window, so implicit transitions on unchanged elements follow it too.
+  every element in every Reactor host, so implicit transitions on unchanged elements follow it too.
 
 - `.LayoutAnimation()` uses linear easing for position and optional size changes in
   non-spring mode (#1652).

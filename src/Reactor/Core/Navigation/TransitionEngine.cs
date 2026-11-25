@@ -251,7 +251,13 @@ internal static class TransitionEngine
     {
         try
         {
-            return new global::Windows.UI.ViewManagement.UISettings();
+            var settings = new global::Windows.UI.ViewManagement.UISettings();
+            // Implicit transitions check the setting when they're applied, and an unchanged
+            // element skips its update, so a change refreshes every host (issue #1702).
+            // ColorValuesChanged doesn't fire for this setting.
+            if (Core.UiSettingsCapabilities.HasAnimationsEnabledChanged)
+                settings.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
+            return settings;
         }
         catch (global::System.Runtime.InteropServices.COMException ex)
         {
@@ -267,6 +273,28 @@ internal static class TransitionEngine
             Core.Diagnostics.DiagnosticLog.SwallowedError(
                 Core.Diagnostics.LogCategory.Navigation, "UISettings activation", ex);
             return null;
+        }
+    }
+
+    private static void OnAnimationsEnabledChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
+        => RefreshHostsForAnimationsChange();
+
+    /// <summary>
+    /// Asks every live host for a pass that skips no element, so implicit transitions are
+    /// applied again under the current setting. Any thread. Internal so a selftest can drive
+    /// what the settings notification does.
+    /// </summary>
+    internal static void RefreshHostsForAnimationsChange()
+    {
+        try
+        {
+            Core.ThemeResourceListeners.NotifyAll();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Raised on the WinRT notification thread, where nothing above would catch it.
+            Core.Diagnostics.DiagnosticLog.SwallowedError(
+                Core.Diagnostics.LogCategory.Navigation, "AnimationsEnabledChanged refresh", ex);
         }
     }
 
