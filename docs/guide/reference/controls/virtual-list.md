@@ -116,10 +116,10 @@ Namespace: `Microsoft.UI.Reactor.Controls`.
 Component that renders a virtualized list using WinUI's ItemsRepeater. Adapts the count-based VirtualListElement API to the ItemsRepeater infrastructure, supporting both fixed-height (O(1) offset) and variable-height modes.
 
 ```csharp
-public class VirtualListComponent
+public class VirtualListComponent : Component<VirtualListElement>
 ```
 
-Namespace: `Microsoft.UI.Reactor.Controls`.
+Namespace: `Microsoft.UI.Reactor.Controls`. Inherits from [`Component<TProps>`](../components/Component-1.md).
 
 ### Constructors
 

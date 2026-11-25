@@ -9,10 +9,10 @@ The Pending element that shows a fallback while resources below it load.
 Component backing the `Pending` element. Hosts a [`PendingScope`](#pendingscope), subscribes to its [`PendingScope.Changed`](#changed) event, and chooses between [`PendingProps.Fallback`](#fallback) and [`PendingProps.Child`](#child).
 
 ```csharp
-public sealed class PendingComponent
+public sealed class PendingComponent : Component<PendingProps>
 ```
 
-Namespace: `Microsoft.UI.Reactor.Hooks`.
+Namespace: `Microsoft.UI.Reactor.Hooks`. Inherits from [`Component<TProps>`](../components/Component-1.md).
 
 ### Remarks
 

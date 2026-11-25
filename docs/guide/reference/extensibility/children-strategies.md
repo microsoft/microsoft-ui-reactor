@@ -79,10 +79,10 @@ protected ChildrenStrategy()
 Escape hatch — the handler drives child reconciliation imperatively via [`Imperative.Reconcile`](#reconcile). Use sparingly; the typed strategies above cover the 95% case.
 
 ```csharp
-public sealed record Imperative<TElement, TControl>(Action<MountContext, TElement, TElement, TControl> Reconcile) where TElement : Element where TControl : UIElement
+public sealed record Imperative<TElement, TControl>(Action<MountContext, TElement, TElement, TControl> Reconcile) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : UIElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -125,10 +125,10 @@ The live collection is incrementally inserted, removed and reordered, never rese
 SetCollection opts interface-typed, writable Items properties into a stable observable backing collection when their initial list has no change notifications. Native read-only ItemCollection properties keep their sink. Removed and terminally unmounted Element children receive real teardown.
 
 ```csharp
-public sealed record ItemsHost<TElement, TControl>(Func<TElement, IReadOnlyList<object>> GetItems, Func<TControl, IList<object>> GetCollection) where TElement : Element where TControl : UIElement
+public sealed record ItemsHost<TElement, TControl>(Func<TElement, IReadOnlyList<object>> GetItems, Func<TControl, IList<object>> GetCollection) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : UIElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -260,10 +260,10 @@ public Action<TControl, UIElement?> SetChild  // get, init
 Named-slot host (SplitView with Pane + Content, NavigationView with Header + Content + PaneFooter, etc.). Each [`NamedSlot<TElement, TControl>`](#namedslottelement-tcontrol) binds one slot.
 
 ```csharp
-public sealed record NamedSlots<TElement, TControl>(IReadOnlyList<NamedSlot<TElement, TControl>> Slots) where TElement : Element where TControl : UIElement
+public sealed record NamedSlots<TElement, TControl>(IReadOnlyList<NamedSlot<TElement, TControl>> Slots) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : UIElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -294,10 +294,10 @@ public IReadOnlyList<NamedSlot<TElement, TControl>> Slots  // get, init
 Leaf — no children. Engine performs no dispatch beyond the handler's Mount/Update body.
 
 ```csharp
-public sealed record None<TElement, TControl> where TElement : Element where TControl : UIElement
+public sealed record None<TElement, TControl> : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : UIElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -320,10 +320,10 @@ Panel host (StackPanel, Grid, Canvas). Engine mounts each child and appends to t
 **§14 Phase 3 close-out addition:** [`Panel.PerChildAttachedAfterAll`](#perchildattachedafterall) — optional two-pass callback invoked once after every child has been mounted (Mount path) or reconciled (Update path). Receives the full `(UIElement, Element)` pair list in collection order so the descriptor can apply attached DPs that reference OTHER children by name (e.g. `RelativePanel.SetRightOf(b, a)`). Distinct from [`Panel.PerChildAttached`](#perchildattached), which fires per-child mid-pass and cannot see siblings that haven't mounted yet. Most descriptors set only one of the two; `RelativePanel` is the canonical consumer of the after-all shape.
 
 ```csharp
-public sealed record Panel<TElement, TControl>(Func<TElement, IReadOnlyList<Element>> GetChildren, Func<TControl, UIElementCollection> GetCollection) where TElement : Element where TControl : UIElement
+public sealed record Panel<TElement, TControl>(Func<TElement, IReadOnlyList<Element>> GetChildren, Func<TControl, UIElementCollection> GetCollection) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : UIElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -387,10 +387,10 @@ public Action<TControl, IReadOnlyList<(UIElement Mounted, Element ChildElement)>
 **Invariants asserted in Debug:** the dispatched old element is the same closed type as the new (the engine's `CanUpdate` gate guarantees this for Update arms); `items.Count` tracks the previous source's `ItemCount`. Release builds full-rebuild when an invariant is violated rather than indexing into a stale collection.
 
 ```csharp
-public sealed record PreMountedItems<TElement, TControl>(Func<TElement, IItemViewSource> GetSource, Func<TControl, IList<object>> GetCollection) where TElement : Element where TControl : FrameworkElement
+public sealed record PreMountedItems<TElement, TControl>(Func<TElement, IItemViewSource> GetSource, Func<TControl, IList<object>> GetCollection) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : FrameworkElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -436,10 +436,10 @@ A null child on mount, or null on both sides of an update, leaves native content
 **Structural reconcile:** set [`SingleContent.GetCurrentChild`](#getcurrentchild_1) so the engine can read the existing slot value during `Update` and route through `Reconciler.ReconcileV1Child` — that preserves descendant component state across parent re-renders. When left null, the engine remounts the child on every update (only safe for slots that are reset every render anyway). All built-in handlers set it.
 
 ```csharp
-public sealed record SingleContent<TElement, TControl>(Func<TElement, Element?> GetChild, Action<TControl, UIElement?> SetChild) where TElement : Element where TControl : UIElement
+public sealed record SingleContent<TElement, TControl>(Func<TElement, Element?> GetChild, Action<TControl, UIElement?> SetChild) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : UIElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -493,10 +493,10 @@ public Action<TControl, UIElement?> SetChild  // get, init
 **Not covered (still legacy-only):** keyed reorder, pinnable tab headers, and the docking drag pipeline. Index-keyed pairing assumes the item at index `i` in the old list corresponds to index `i` in the new list.
 
 ```csharp
-public sealed record TabItemsHost<TElement, TControl, TItem>(Func<TElement, IReadOnlyList<TItem>> GetItems, Func<TControl, IList<object>> GetCollection, Func<TItem, Element> GetContent, Func<TItem, UIElement?, object> CreateContainer, Action<TItem, TItem, object>? UpdateContainer = null) where TElement : Element where TControl : FrameworkElement
+public sealed record TabItemsHost<TElement, TControl, TItem>(Func<TElement, IReadOnlyList<TItem>> GetItems, Func<TControl, IList<object>> GetCollection, Func<TItem, Element> GetContent, Func<TItem, UIElement?, object> CreateContainer, Action<TItem, TItem, object>? UpdateContainer = null) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : FrameworkElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -565,10 +565,10 @@ Keyed templated-items host for descriptor-driven typed lists (`ListView<T>`, `Gr
 **Per-item Element:** [`TemplatedItems.BuildItemView`](#builditemview) is called lazily by the realization machinery as containers materialize, so large lists never realize all items up front. The returned [`Element`](../elements/Element.md) is reconciled into the container's `ContentControl`.
 
 ```csharp
-public sealed record TemplatedItems<TItem, TElement, TControl>(Func<TElement, IReadOnlyList<TItem>> GetItems, Func<TItem, int, string> KeySelector, Func<TItem, int, Element> BuildItemView) where TElement : Element where TControl : FrameworkElement
+public sealed record TemplatedItems<TItem, TElement, TControl>(Func<TElement, IReadOnlyList<TItem>> GetItems, Func<TItem, int, string> KeySelector, Func<TItem, int, Element> BuildItemView) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : FrameworkElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -621,10 +621,10 @@ public Func<TItem, int, string> KeySelector  // get, init
 This is the shape used to port the existing `TemplatedListViewElement<T>` / `TemplatedGridViewElement<T>` family — registered once on a non-generic intermediate base ([`TemplatedListViewElementBase`](../elements/collections.md#templatedlistviewelementbase) / [`TemplatedGridViewElementBase`](../elements/collections.md#templatedgridviewelementbase)) via [`Reconciler.RegisterHandlerForDerivedTypes`](Reconciler.md#registerhandlerforderivedtypes); the engine's base-derived registry walk routes every closed-T variant to the same descriptor. Same realization plumbing as [`TemplatedItems<TItem, TElement, TControl>`](#templateditemstitem-telement-tcontrol): [`Reconciler.BindKeyedItemsSource`](Reconciler.md) owns the `ReactorListState` + `KeyedListDiff` + container-realization pipeline.
 
 ```csharp
-public sealed record TemplatedItemsErased<TElement, TControl>(Func<TElement, IKeyedItemSource> GetSource) where TElement : Element where TControl : FrameworkElement
+public sealed record TemplatedItemsErased<TElement, TControl>(Func<TElement, IKeyedItemSource> GetSource) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : FrameworkElement
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 
@@ -659,10 +659,10 @@ public Func<TElement, IKeyedItemSource> GetSource  // get, init
 **MVP scope:** positional rebuild on Update — old `ContentElement` subtrees are unmounted and the WinUI tree is reconstructed. No keyed reconcile (descendant component state inside ContentElement nodes is lost across renders that touch the tree). Same correctness contract as the legacy `UpdateTreeView` arm.
 
 ```csharp
-public sealed record TreeChildren<TElement, TControl>(Func<TElement, IReadOnlyList<TreeViewNodeData>> GetNodes) where TElement : Element where TControl : TreeView
+public sealed record TreeChildren<TElement, TControl>(Func<TElement, IReadOnlyList<TreeViewNodeData>> GetNodes) : ChildrenStrategy<TElement, TControl> where TElement : Element where TControl : TreeView
 ```
 
-Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`.
+Namespace: `Microsoft.UI.Reactor.Core.V1Protocol`. Inherits from [`ChildrenStrategy<TElement, TControl>`](#childrenstrategytelement-tcontrol).
 
 ### Constructors
 

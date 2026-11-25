@@ -55,7 +55,7 @@ public static double Double(string key)
 Try to look up a resource, returning default if not found.
 
 ```csharp
-public static T Get<T>(string key, T defaultValue = null)
+public static T Get<T>(string key, T defaultValue = default)
 ```
 
 **Parameters**
@@ -63,7 +63,7 @@ public static T Get<T>(string key, T defaultValue = null)
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `key` | `string` |  |  |
-| `defaultValue` | `T` | `null` |  |
+| `defaultValue` | `T` | `default` |  |
 
 ### `Thickness`
 

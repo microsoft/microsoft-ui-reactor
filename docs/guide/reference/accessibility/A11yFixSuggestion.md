@@ -18,8 +18,6 @@ Namespace: `Microsoft.UI.Reactor.Core`.
 public A11yFixSuggestion()
 ```
 
-> **Obsolete.** Constructors of types with required members are not supported in this version of your compiler.
-
 ## Properties
 
 ### `CodeSnippet`
@@ -35,7 +33,7 @@ public string? CodeSnippet  // get, init
 The Reactor modifier method name (e.g., "AutomationName").
 
 ```csharp
-public string Modifier  // get, init
+public required string Modifier  // get, init
 ```
 
 ### `SuggestedValue`

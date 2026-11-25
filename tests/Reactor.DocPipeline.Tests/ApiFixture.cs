@@ -49,6 +49,30 @@ public sealed class SealedFixture
     public void Shown() { }
 }
 
+public class GenericBaseFixture<T>
+{
+    public static T Pick(T fallback = default!) => fallback;
+}
+
+public class DerivedFromGenericFixture : GenericBaseFixture<string>
+{
+}
+
+public class RequiredFixture
+{
+    public required string Key { get; init; }
+
+    public string? Note { get; init; }
+}
+
+public class RequiredWithObsoleteCtorFixture
+{
+    [Obsolete("Use the factory.")]
+    public RequiredWithObsoleteCtorFixture() { }
+
+    public required int Id { get; init; }
+}
+
 internal sealed class InternalFixture
 {
     public void NotShown() { }

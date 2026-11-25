@@ -64,7 +64,7 @@ Allocates a delegate per arm at the call site; prefer a `switch` expression in p
 Fetch succeeded; `Value` is authoritative. Transitions to [`AsyncValue<T>.Reloading`](#asyncvaluetreloading) when a refetch starts, or back to [`AsyncValue<T>.Data`](#asyncvaluetdata) on cache hit within `StaleTime`.
 
 ```csharp
-public sealed record Data(T Value)
+public sealed record Data(T Value) : AsyncValue<T>
 ```
 
 #### Constructors
@@ -96,7 +96,7 @@ public T Value  // get, init
 Fetch failed. Any prior data is discarded — `UseResource` does not retain stale values across a failure. If you need "last known good", wrap the fetcher.
 
 ```csharp
-public sealed record Error(Exception Exception)
+public sealed record Error(Exception Exception) : AsyncValue<T>
 ```
 
 #### Constructors
@@ -128,7 +128,7 @@ public Exception Exception  // get, init
 First fetch in flight; no prior data is available. Transitions to [`AsyncValue<T>.Data`](#asyncvaluetdata) or [`AsyncValue<T>.Error`](#asyncvalueterror).
 
 ```csharp
-public sealed record Loading
+public sealed record Loading : AsyncValue<T>
 ```
 
 #### Constructors
@@ -154,7 +154,7 @@ public static readonly AsyncValue<T>.Loading Instance
 Refetching with the previous value still observable (stale-while-revalidate). The `Previous` payload is intentionally non-nullable so call sites can render the stale tree without null-guards. Components may choose to dim, overlay a spinner, or render identically to [`AsyncValue<T>.Data`](#asyncvaluetdata) — §5.1.
 
 ```csharp
-public sealed record Reloading(T Previous)
+public sealed record Reloading(T Previous) : AsyncValue<T>
 ```
 
 #### Constructors

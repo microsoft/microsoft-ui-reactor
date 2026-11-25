@@ -18,8 +18,6 @@ Namespace: `Microsoft.UI.Reactor.Core`.
 public Command()
 ```
 
-> **Obsolete.** Constructors of types with required members are not supported in this version of your compiler.
-
 ## Properties
 
 ### `Accelerator`
@@ -115,5 +113,5 @@ public bool IsExecuting  // get, init
 Human-readable label shown on buttons, menu items, tooltips, etc.
 
 ```csharp
-public string Label  // get, init
+public required string Label  // get, init
 ```
