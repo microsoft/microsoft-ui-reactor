@@ -2,7 +2,7 @@
 
 > Status: **proposed** (2026-11-25). Design only. No product code changes with this spec.
 > Builds on #1706, which moved `ApplyModifiers` into `src/Reactor/Core/Reconciler.Modifiers.cs`.
-> File and line references are to `azchohfi-split-reconciler-partials` @ `4e8fdb05f` unless noted.
+> File and line references are to `main` @ `4df0f6feb` unless noted.
 > Related: spec 034 (modifier buckets), spec 047 / 048 (control descriptors), spec 058 (wrapper
 > generator), spec 060 / 061 (analyzer suite), spec 066 (composition-visual transforms).
 
