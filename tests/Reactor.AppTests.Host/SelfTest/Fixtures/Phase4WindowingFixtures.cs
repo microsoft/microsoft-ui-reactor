@@ -289,9 +289,9 @@ internal static class Phase4WindowingFixtures
                     // Read before the probe below, which sets the bit when the OS allows it.
                     bool bitSet = (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
                     bool specTookUpdate = win.Spec.Level == WindowLevel.AlwaysOnTop;
-                    bool osGranted = true, foregroundIsSelf = false;
-                    if (!bitSet) osGranted = OsGrantsTopmost(win, out foregroundIsSelf);
-                    if (ShouldSkipRefusedTopmost(specTookUpdate, bitSet, osGranted, foregroundIsSelf))
+                    bool osGranted = true, foregroundIsForeign = false;
+                    if (!bitSet) osGranted = OsGrantsTopmost(win, out foregroundIsForeign);
+                    if (ShouldSkipRefusedTopmost(specTookUpdate, bitSet, osGranted, foregroundIsForeign))
                     {
                         const string reason =
                             "issue #927: Windows refused HWND_TOPMOST while another process owned the " +
@@ -391,23 +391,36 @@ internal static class Phase4WindowingFixtures
     /// Pure skip-or-fail decision for the Topmost half once the poll gave up, split out so
     /// <see cref="WindowLevelVerdictBranches"/> can cover it without reproducing the refusal.
     /// Skips only when Reactor's spec took the update, the bit is still clear, the fixture's own
-    /// SetWindowPos was refused too, and another process owns the foreground. Every other
-    /// combination is a Reactor failure.
+    /// SetWindowPos was refused too, and another process was positively identified as owning
+    /// the foreground. Every other combination is a Reactor failure.
     /// </summary>
     internal static bool ShouldSkipRefusedTopmost(
-        bool specTookUpdate, bool bitSet, bool osGranted, bool foregroundIsSelf)
-        => specTookUpdate && !bitSet && !osGranted && !foregroundIsSelf;
+        bool specTookUpdate, bool bitSet, bool osGranted, bool foregroundIsForeign)
+        => specTookUpdate && !bitSet && !osGranted && foregroundIsForeign;
+
+    /// <summary>
+    /// True only when the foreground lookup succeeded and named a different, nonzero process.
+    /// A null foreground window (common during activation changes or with no interactive
+    /// foreground) or a failed <c>GetWindowThreadProcessId</c> is unknown, not foreign.
+    /// </summary>
+    internal static bool IsForeignForeground(nint foregroundHwnd, uint lookupThreadId, uint foregroundPid, uint selfPid)
+        => foregroundHwnd != 0 && lookupThreadId != 0 && foregroundPid != 0 && foregroundPid != selfPid;
 
     /// <summary>
     /// Issues the same <c>SetWindowPos(HWND_TOPMOST)</c> Reactor does and reports whether the bit
     /// took. False means Windows refused the request for this process. Leaves the window topmost
     /// when it succeeds.
     /// </summary>
-    /// <param name="foregroundIsSelf">Whether this process owned the foreground at probe time.</param>
-    private static bool OsGrantsTopmost(ReactorWindow win, out bool foregroundIsSelf)
+    /// <param name="foregroundIsForeign">See <see cref="IsForeignForeground"/>, measured at probe time.</param>
+    private static bool OsGrantsTopmost(ReactorWindow win, out bool foregroundIsForeign)
     {
-        _ = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out uint foregroundPid);
-        foregroundIsSelf = foregroundPid == (uint)Environment.ProcessId;
+        nint foregroundHwnd = Native.GetForegroundWindow();
+        uint foregroundPid = 0;
+        uint lookupThreadId = foregroundHwnd == 0
+            ? 0
+            : Native.GetWindowThreadProcessId(foregroundHwnd, out foregroundPid);
+        foregroundIsForeign = IsForeignForeground(
+            foregroundHwnd, lookupThreadId, foregroundPid, (uint)Environment.ProcessId);
         nint hwnd = Hwnd(win);
         bool ok = Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0,
             Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
@@ -416,13 +429,15 @@ internal static class Phase4WindowingFixtures
         Console.WriteLine(
             $"# WindowLevel_RuntimeFlip OS probe (issue #927): direct SetWindowPos(HWND_TOPMOST) " +
             $"returned {ok} (error {error}), WS_EX_TOPMOST {(granted ? "set" : "still clear")}, " +
-            $"foreground pid {foregroundPid}, this pid {Environment.ProcessId}");
+            $"foreground hwnd {foregroundHwnd} pid {foregroundPid} (foreign={foregroundIsForeign}), " +
+            $"this pid {Environment.ProcessId}");
         return granted;
     }
 
     /// <summary>
-    /// Exhaustively covers the three-way verdict in <see cref="LevelMismatchVerdict"/> and the
-    /// skip decision in <see cref="ShouldSkipRefusedTopmost"/>. Both only execute when
+    /// Exhaustively covers the three-way verdict in <see cref="LevelMismatchVerdict"/>, the
+    /// skip decision in <see cref="ShouldSkipRefusedTopmost"/> and the foreground classification
+    /// in <see cref="IsForeignForeground"/>. They only execute when
     /// <c>WindowLevel_RuntimeFlip</c> doesn't see the bit follow, so without this fixture they
     /// are never exercised in CI. The verdict checks cover the whole 2x2 input domain, and the
     /// skip checks pin the one skipping combination plus each single-input flip away from it.
@@ -446,15 +461,27 @@ internal static class Phase4WindowingFixtures
                 LevelMismatchVerdict(specTookUpdate: true, bitNowCorrect: false).Tag == "apply-missing");
 
             H.Check("WindowLevelSkip_RefusedWhileBackgroundSkips",
-                ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsSelf: false));
+                ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsForeign: true));
             H.Check("WindowLevelSkip_SpecStaleFails",
-                !ShouldSkipRefusedTopmost(specTookUpdate: false, bitSet: false, osGranted: false, foregroundIsSelf: false));
+                !ShouldSkipRefusedTopmost(specTookUpdate: false, bitSet: false, osGranted: false, foregroundIsForeign: true));
             H.Check("WindowLevelSkip_LateApplyFails",
-                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: true, osGranted: false, foregroundIsSelf: false));
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: true, osGranted: false, foregroundIsForeign: true));
             H.Check("WindowLevelSkip_OsGrantedFails",
-                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: true, foregroundIsSelf: false));
-            H.Check("WindowLevelSkip_RefusedInForegroundFails",
-                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsSelf: true));
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: true, foregroundIsForeign: true));
+            H.Check("WindowLevelSkip_RefusedWithoutForeignForegroundFails",
+                !ShouldSkipRefusedTopmost(specTookUpdate: true, bitSet: false, osGranted: false, foregroundIsForeign: false));
+
+            const uint self = 100, other = 200;
+            H.Check("WindowLevelForeground_ForeignProcess",
+                IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 7, foregroundPid: other, selfPid: self));
+            H.Check("WindowLevelForeground_SelfIsNotForeign",
+                !IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 7, foregroundPid: self, selfPid: self));
+            H.Check("WindowLevelForeground_NullWindowIsUnknown",
+                !IsForeignForeground(foregroundHwnd: 0, lookupThreadId: 0, foregroundPid: 0, selfPid: self));
+            H.Check("WindowLevelForeground_FailedLookupIsUnknown",
+                !IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 0, foregroundPid: other, selfPid: self));
+            H.Check("WindowLevelForeground_ZeroPidIsUnknown",
+                !IsForeignForeground(foregroundHwnd: 1, lookupThreadId: 7, foregroundPid: 0, selfPid: self));
 
             return Task.CompletedTask;
         }
