@@ -255,14 +255,13 @@ internal sealed class ReferenceRenderer
 
     /// <summary>
     /// Renders the overloads that share one heading. Overloads get their own
-    /// sub-headings only when they have different summaries; otherwise they
-    /// share one summary and one merged set of sections.
+    /// sub-headings when their summaries differ (an empty summary counts as
+    /// different); otherwise they share one summary and one merged set of sections.
     /// </summary>
     private void RenderOverloadSet(PageWriter w, IReadOnlyList<ApiMember> overloads, int subLevel)
     {
         var summaries = overloads.Select(o => SummaryMd(o.DocId, w.Md)).ToList();
-        var distinct = summaries.Where(s => s.Length > 0).Distinct(StringComparer.Ordinal).Count();
-        if (overloads.Count >= 2 && distinct >= 2)
+        if (SummariesDiffer(summaries))
         {
             for (int i = 0; i < overloads.Count; i++)
             {
@@ -275,11 +274,19 @@ internal sealed class ReferenceRenderer
             }
             return;
         }
-        w.Add(summaries.FirstOrDefault(s => s.Length > 0));
+        w.Add(summaries[0]);
         w.Add(Fence(overloads.Select(o => Sig(o, w.Page))));
         w.Add(ObsoleteNote(overloads.Select(o => o.ObsoleteMessage).FirstOrDefault(m => m is not null), "member"));
         Details(w, overloads, headings: false, level: subLevel, includeSeeAlso: true);
     }
+
+    /// <summary>
+    /// True when a set of overloads cannot share one summary. An overload with no
+    /// summary differs from one that has one, so a documented overload's text is
+    /// never shown as if it described the undocumented ones too.
+    /// </summary>
+    internal static bool SummariesDiffer(IReadOnlyList<string> summaries) =>
+        summaries.Distinct(StringComparer.Ordinal).Skip(1).Any();
 
     private List<ApiMember> OwnedMembers(PlannedPage page, ApiType t)
     {
@@ -394,7 +401,9 @@ internal sealed class ReferenceRenderer
             var overloads = group.ToList();
             w.H(2, DocMarkdown.CodeSpan(group.Key), overloads.Select(o => o.DocId));
             var summaries = overloads.Select(o => SummaryMd(o.DocId, w.Md)).ToList();
-            w.Add(summaries.FirstOrDefault(s => s.Length > 0));
+            var differ = SummariesDiffer(summaries);
+            // Differing overloads are described one by one in the table below.
+            if (!differ) w.Add(summaries[0]);
             w.Add(Fence(overloads.Select(o => Sig(o, page))));
 
             var declaredIn = overloads.Select(o => o.DeclaringType)
@@ -404,7 +413,7 @@ internal sealed class ReferenceRenderer
                 w.Add($"Declared in {string.Join(", ", declaredIn.Select(DocMarkdown.CodeSpan))}.");
             w.Add(ObsoleteNote(overloads.Select(o => o.ObsoleteMessage).FirstOrDefault(m => m is not null), "method"));
 
-            if (overloads.Count >= 2 && summaries.Where(s => s.Length > 0).Distinct(StringComparer.Ordinal).Count() >= 2)
+            if (differ)
             {
                 var sb = new StringBuilder("| Overload | Description |\n| --- | --- |");
                 for (int i = 0; i < overloads.Count; i++)

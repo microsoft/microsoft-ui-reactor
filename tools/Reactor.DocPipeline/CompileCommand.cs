@@ -572,7 +572,7 @@ internal static partial class CompileCommand
                 // degradation: an author who hasn't built yet still gets their
                 // guide pages. Under --ci it is not. CI always builds, so a
                 // missing input means the run is not the run that was asked
-                // for, and the ~117 pages under docs/guide/reference/ are
+                // for, and the pages under docs/guide/reference/ are
                 // silently left at whatever was committed.
                 //
                 // Exiting 0 there is what let the freshness gate in
@@ -959,10 +959,11 @@ internal static partial class CompileCommand
     /// <summary>
     /// Locate the most recently built <c>Microsoft.UI.Reactor.xml</c> (see
     /// <see cref="FindReactorXml"/>) and generate the whole API reference
-    /// from it, plus <c>Microsoft.UI.Reactor.dll</c> next to it when present. Returns
-    /// <c>null</c> when an input is missing — typical on a first compile
-    /// before <c>dotnet build src/Reactor</c> has run. The caller decides
-    /// whether that is a failure (it is under <c>--ci</c>).
+    /// from it and the <c>Microsoft.UI.Reactor.dll</c> next to it. Returns
+    /// <c>null</c> when the map or the XML file is missing — typical on a first
+    /// compile before <c>dotnet build src/Reactor</c> has run. The caller decides
+    /// whether that is a failure (it is under <c>--ci</c>). A missing DLL beside
+    /// an XML file is an error finding, and nothing is written or pruned.
     /// </summary>
     private static ReferenceGen.ReferenceGenResult? RunReferenceGeneration(
         string repoRoot, string outputDir, string? navOutPath = null)
@@ -1006,11 +1007,22 @@ internal static partial class CompileCommand
             $"({Stamp(choice.Value.WriteUtc)}, newest of {choice.Value.CandidateCount} candidate(s))");
 
         // The public surface (signatures, kinds, base types, parameter
-        // defaults) comes from the assembly built beside the XML file. Without
-        // it the generator falls back to what the XML file alone can tell.
+        // defaults) comes from the assembly built beside the XML file. The XML
+        // file alone cannot tell element records from other records, so a run
+        // without the assembly would rewrite the pages and prune the area pages
+        // as stale. Fail before writing or pruning anything instead.
         var dllPath = Path.ChangeExtension(xmlPath, ".dll");
         if (!File.Exists(dllPath))
-            Console.WriteLine("  (Microsoft.UI.Reactor.dll not found next to Microsoft.UI.Reactor.xml — signatures come from the XML file only)");
+        {
+            var message =
+                $"Microsoft.UI.Reactor.dll not found next to {Rel(repoRoot, xmlPath)}. The reference is built " +
+                "from the assembly and the XML file together, so no page under docs/guide/reference was " +
+                "written or deleted. Run `dotnet build src/Reactor` and compile again.";
+            return new ReferenceGen.ReferenceGenResult(
+                Array.Empty<ReferenceGen.ReferencePage>(),
+                new[] { new ReferenceGen.RefGenFinding(
+                    "REACTOR_DOC_REFGEN_003", message, Rel(repoRoot, dllPath), TierLintSeverity.Error) });
+        }
 
         var staleFinding = BuildStaleXmlFinding(repoRoot, xmlPath);
 

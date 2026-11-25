@@ -141,13 +141,6 @@ defaults:
     }
 
     [Fact]
-    public void Overloads_DoNotEmit_REFGEN_002()
-    {
-        var result = GenerateFixture();
-        Assert.DoesNotContain(result.Findings, f => f.Code == "REACTOR_DOC_REFGEN_002");
-    }
-
-    [Fact]
     public void CrefToAnyOverload_ResolvesToItsAnchor()
     {
         var result = GenerateFixture();

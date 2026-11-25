@@ -1,6 +1,7 @@
 using System.CodeDom.Compiler;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Microsoft.UI.Reactor.Cli.Docs;
 using Microsoft.UI.Reactor.Cli.Docs.ReferenceGen;
 using Xunit;
@@ -528,6 +529,132 @@ overrides:
     }
 
     /// <summary>
+    /// When the overloads of a factory have different summaries, no single summary
+    /// opens the section: each overload's summary goes in a table under the signatures.
+    /// </summary>
+    [Fact]
+    public void FactoryOverloads_WithDifferentSummaries_GetATable()
+    {
+        var body = Body(Generate(), "reference/factories/buttons.md");
+        AssertOverloadTable(body, "| `Button(string)` | Creates a button with a text label. |",
+            "| `Button(Element, Action)` | Creates a button with custom content. |");
+    }
+
+    /// <summary>An overload with no summary still gets the table, so the other
+    /// overload's summary is not shown as if it described both.</summary>
+    [Fact]
+    public void FactoryOverloads_AnEmptySummaryCountsAsDifferent()
+    {
+        var xml = Xml.Replace("<summary>Creates a button with custom content.</summary>", "", StringComparison.Ordinal);
+        Assert.NotEqual(Xml, xml);
+        var r = new ReferenceGenerator().Generate(XmlDocReader.ReadString(xml), Map(), Model());
+        AssertOverloadTable(Body(r, "reference/factories/buttons.md"),
+            "| `Button(string)` | Creates a button with a text label. |",
+            "| `Button(Element, Action)` |  |");
+    }
+
+    private static void AssertOverloadTable(string body, params string[] rows)
+    {
+        var section = body[body.IndexOf("## `Button`", StringComparison.Ordinal)..];
+        var lead = section[..section.IndexOf("```", StringComparison.Ordinal)];
+        Assert.DoesNotContain("Creates a button", lead);
+        Assert.Contains("| Overload | Description |", section);
+        foreach (var row in rows) Assert.Contains(row, section);
+    }
+
+    [Fact]
+    public void SummariesDiffer_CountsAnEmptySummary()
+    {
+        Assert.False(ReferenceRenderer.SummariesDiffer(new[] { "a" }));
+        Assert.False(ReferenceRenderer.SummariesDiffer(new[] { "a", "a" }));
+        Assert.True(ReferenceRenderer.SummariesDiffer(new[] { "a", "b" }));
+        Assert.True(ReferenceRenderer.SummariesDiffer(new[] { "a", "" }));
+    }
+
+    /// <summary>
+    /// A <c>&lt;!-- ref:X --&gt;</c> marker in a guide template adds that guide to the
+    /// Learn more line of the page that documents X, whether the marker names the
+    /// type or one of its members by cref. A marker in a template that does not
+    /// exist adds no link.
+    /// </summary>
+    [Fact]
+    public void RefMarkers_AddLearnMoreLinks()
+    {
+        const string page = "reference/hosting/ReactorApp.md";
+        Assert.DoesNotContain("Learn more", Body(Generate(), page));
+
+        var reverse = ReferenceLinkInjector.BuildReverseIndex(new[]
+        {
+            ("windows", "See <!-- ref:P:Microsoft.UI.Reactor.Hosting.ReactorApp.Count -->."),
+            ("state-guide", "Uses <!-- ref:ReactorApp --> here."),
+            ("drafts", "Uses <!-- ref:ReactorApp --> too."),
+        });
+        var r = new ReferenceGenerator().Generate(XmlDocReader.ReadString(Xml), Map(), Model(),
+            templateIds: new HashSet<string>(StringComparer.Ordinal) { "hooks", "layout", "state-guide", "windows" },
+            reverseIndex: reverse);
+
+        var body = Body(r, page);
+        Assert.Contains("**Learn more:** [State guide](../../state-guide.md), [Windows](../../windows.md)\n", body);
+        Assert.DoesNotContain("drafts", body);
+        Assert.Contains(r.Findings, f => f.Code == "REACTOR_DOC_REFGEN_W003" && f.Message.Contains("'drafts'", StringComparison.Ordinal));
+    }
+
+    /// <summary>Page stems stay unique without regard to case, so two pages never
+    /// share a file on a case-insensitive file system. A generic type takes its
+    /// arity before falling back to its namespace or a number.</summary>
+    [Fact]
+    public void UniqueStem_ResolvesCollisions()
+    {
+        static HashSet<string> Used(params string[] stems) => new(stems, StringComparer.OrdinalIgnoreCase);
+        var generic = new ApiType
+        {
+            DocId = "T:Microsoft.UI.Reactor.Core.Foo`1",
+            Namespace = CoreNs,
+            Name = "Foo",
+            DisplayName = "Foo<T>",
+            TypeParameters = new[] { "T" },
+        };
+        var plain = new ApiType { DocId = "T:Microsoft.UI.Reactor.Core.Button", Namespace = CoreNs, Name = "Button", DisplayName = "Button" };
+
+        Assert.Equal("Foo", ReferencePlanner.UniqueStem(Used(), "Foo", generic));
+        Assert.Equal("Foo-1", ReferencePlanner.UniqueStem(Used("Foo"), "Foo", generic));
+        Assert.Equal("Button-Core", ReferencePlanner.UniqueStem(Used("button"), "Button", plain));
+        Assert.Equal("Button-2", ReferencePlanner.UniqueStem(Used("button", "button-core"), "Button", plain));
+        Assert.Equal("Index-2", ReferencePlanner.UniqueStem(Used("index"), "Index", null));
+
+        var used = Used("index");
+        ReferencePlanner.UniqueStem(used, "Index", null);
+        Assert.Equal("Index-3", ReferencePlanner.UniqueStem(used, "Index", null));
+    }
+
+    /// <summary>Two types whose names differ only in case get different files, so
+    /// neither overwrites the other on Windows.</summary>
+    [Fact]
+    public void TypePages_NeverShareAFileNameIgnoringCase()
+    {
+        var types = Model().Types.ToList();
+        types.Add(Type(HostingNs, "Reactorapp", ApiTypeKind.Class, "public sealed class Reactorapp"));
+        var r = new ReferenceGenerator().Generate(XmlDocReader.ReadString(Xml), Map(), new ApiModel(types, fromMetadata: true));
+
+        var paths = r.Pages.Select(p => p.RelativePath).ToList();
+        Assert.Contains("reference/hosting/ReactorApp.md", paths);
+        Assert.Contains("reference/hosting/Reactorapp-Hosting.md", paths);
+        Assert.Equal(paths.Count, paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    /// <summary>A paragraph that would start a list, heading or quote is escaped.
+    /// A numbered start escapes the dot, not the digit: <c>\1.</c> prints the backslash.</summary>
+    [Fact]
+    public void BlockStarts_AreEscapedWithoutPrintingABackslash()
+    {
+        var md = new DocMarkdown(c => new CrefLink(null, c));
+        var text = md.Block(XElement.Parse(
+            "<remarks><para>1. First</para><para>12) Second</para><para># x</para><para>- y</para><para>Plain 1. text.</para></remarks>"));
+
+        Assert.Equal("1\\. First\n\n12\\) Second\n\n\\# x\n\n\\- y\n\nPlain 1. text.", text);
+    }
+
+    /// <summary>
     /// Modifiers land on area pages: by the first name glob, then by the one control
     /// area every extended type shares, then on the fallback area.
     /// </summary>
@@ -732,6 +859,81 @@ overrides:
         {
             FixtureCleanup.DeleteTree(root);
         }
+    }
+
+    /// <summary>A page whose path leaves <c>reference/</c> is refused before anything
+    /// is written. Map ids are already checked as slugs; this is the backstop.</summary>
+    [Fact]
+    public void WriteToDisk_RefusesAPageOutsideTheReferenceFolder()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "refgen-tmp-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var page = new ReferencePage("reference/../escaped.md", null, "Escaped", string.Empty, "# Escaped\n", PageKind.Type);
+            var r = new ReferenceGenResult(new[] { page }, Array.Empty<RefGenFinding>());
+
+            Assert.Throws<InvalidOperationException>(() => ReferenceGenerator.WriteToDisk(r, root));
+            Assert.False(File.Exists(Path.Combine(root, "escaped.md")));
+        }
+        finally
+        {
+            FixtureCleanup.DeleteTree(root);
+        }
+    }
+
+    /// <summary>
+    /// The prune does not walk into a junction under <c>reference/</c>: the Markdown
+    /// file behind it lives outside the folder and must survive.
+    /// </summary>
+    [Fact]
+    public void WriteToDisk_PruneDoesNotFollowAJunction()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "refgen-tmp-" + Guid.NewGuid().ToString("N"));
+        var outside = root + "-outside";
+        var link = Path.Combine(root, "reference", "linked");
+        try
+        {
+            Directory.CreateDirectory(outside);
+            var victim = Path.Combine(outside, "Victim.md");
+            File.WriteAllText(victim, "# Not a reference page\n");
+            Directory.CreateDirectory(Path.Combine(root, "reference"));
+            CreateJunction(link, outside);
+            Assert.True(File.Exists(Path.Combine(link, "Victim.md")),
+                "fixture: the junction must resolve, or the check below proves nothing");
+
+            ReferenceGenerator.WriteToDisk(Generate(), root);
+
+            Assert.True(File.Exists(victim));
+            Assert.True(Directory.Exists(link));
+        }
+        finally
+        {
+            // Remove the link itself first, so the cleanup never reaches its target.
+            if (Directory.Exists(link)) Directory.Delete(link);
+            FixtureCleanup.DeleteTree(root);
+            FixtureCleanup.DeleteTree(outside);
+        }
+    }
+
+    /// <summary><c>mklink /J</c> needs no elevation or Developer Mode. Throws rather
+    /// than skipping, so a broken fixture cannot pass quietly.</summary>
+    private static void CreateJunction(string link, string target)
+    {
+        using var p = global::System.Diagnostics.Process.Start(new global::System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            ArgumentList = { "/c", "mklink", "/J", link, target },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        })!;
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
+        p.WaitForExit();
+        if (p.ExitCode != 0 || !Directory.Exists(link))
+            throw new InvalidOperationException(
+                $"could not create junction {link} -> {target}: exit {p.ExitCode} {stderr.Result.Trim()} {stdout.Result.Trim()}");
     }
 
     // ── Sidebar fragment ─────────────────────────────────────────────────

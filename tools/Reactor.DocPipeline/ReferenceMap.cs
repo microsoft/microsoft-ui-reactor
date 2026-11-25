@@ -22,14 +22,15 @@ internal sealed record ReferenceMapMatch(string Category, IReadOnlyList<string> 
 /// exact override beats prefix override beats prefix default; among prefix
 /// matches the longer prefix wins.
 /// </summary>
-internal sealed class ReferenceMap
+internal sealed partial class ReferenceMap
 {
     private readonly List<DefaultRule> _defaults;
     private readonly List<OverrideRule> _overrides;
 
     /// <summary>The reference categories in display order. When the YAML has no
-    /// <c>categories:</c> list, one category is synthesized per distinct default
-    /// category id.</summary>
+    /// <c>categories:</c> list, one category is synthesized per distinct rule
+    /// category id. When it has one, every rule must name a declared category
+    /// (or <c>excluded</c>).</summary>
     public IReadOnlyList<RefCategory> Categories { get; private init; } = Array.Empty<RefCategory>();
 
     /// <summary>Control areas. Element records and factory methods are grouped onto one page per area.</summary>
@@ -60,7 +61,7 @@ internal sealed class ReferenceMap
     /// <summary>
     /// Resolve a canonical cref (e.g. <c>M:Microsoft.UI.Reactor.Hooks.UseState.SetValue</c>)
     /// to category + guide-pages. Returns <c>null</c> when no rule matches; the
-    /// caller should surface a <c>REACTOR_DOC_REGISTRY_W001</c> warning.
+    /// reference generator reports such a type as <c>REACTOR_DOC_REFGEN_004</c>.
     /// </summary>
     public ReferenceMapMatch? Resolve(string cref)
     {
@@ -142,7 +143,8 @@ internal sealed class ReferenceMap
     /// <summary>
     /// Load and validate <c>reference-map.yaml</c>. Throws
     /// <see cref="DocPipelineException"/> with code <c>REACTOR_DOC_REGISTRY_001</c>
-    /// when the file is malformed.
+    /// when the file is malformed: an unknown key, an id that is not a slug, a
+    /// rule that names an undeclared category, and so on.
     /// </summary>
     public static ReferenceMap Load(string yamlPath)
     {
@@ -152,9 +154,10 @@ internal sealed class ReferenceMap
 
     public static ReferenceMap Parse(string yaml)
     {
+        // No IgnoreUnmatchedProperties: a misspelled key (`modifier_areas:`)
+        // would otherwise drop its whole section without a word.
         var deserializer = new StaticDeserializerBuilder(new YamlStaticContext())
             .WithNamingConvention(HyphenatedNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
             .Build();
 
         FileShape? shape;
@@ -175,6 +178,7 @@ internal sealed class ReferenceMap
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", "default rule is missing `match:` glob");
             if (string.IsNullOrEmpty(d.Category))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", $"default rule for `{d.Match}` is missing `category:`");
+            RequireSlug(d.Category!, $"the category of the default rule for `{d.Match}`");
             defaults.Add(new DefaultRule(d.Match!, d.Category!, d.GuidePages ?? new List<string>()));
         }
 
@@ -183,6 +187,8 @@ internal sealed class ReferenceMap
         {
             if (string.IsNullOrEmpty(o.Cref) && string.IsNullOrEmpty(o.Match))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", "override rule must declare either `cref:` or `match:`");
+            if (!string.IsNullOrEmpty(o.Category))
+                RequireSlug(o.Category!, $"the category of the override for `{o.Cref ?? o.Match}`");
             overrides.Add(new OverrideRule(o.Cref, o.Match, string.IsNullOrEmpty(o.Category) ? null : o.Category, o.GuidePages ?? new List<string>()));
         }
 
@@ -192,6 +198,7 @@ internal sealed class ReferenceMap
         {
             if (string.IsNullOrEmpty(c.Id))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", "category is missing `id:`");
+            RequireSlug(c.Id!, "category");
             if (!seenCategories.Add(c.Id!))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", $"category `{c.Id}` is declared twice");
             if (string.IsNullOrEmpty(c.Title))
@@ -206,6 +213,7 @@ internal sealed class ReferenceMap
             {
                 if (string.IsNullOrEmpty(g.Id) || string.IsNullOrEmpty(g.Title))
                     throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", $"a group in category `{c.Id}` is missing `id:` or `title:`");
+                RequireSlug(g.Id!, $"group (in category `{c.Id}`)");
                 if (!seenGroups.Add(g.Id!))
                     throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", $"group `{g.Id}` is declared twice in category `{c.Id}`");
                 groups.Add(new RefGroup(g.Id!, g.Title!, g.Summary?.Trim() ?? string.Empty,
@@ -214,13 +222,29 @@ internal sealed class ReferenceMap
             categories.Add(new RefCategory(c.Id!, c.Title!, c.Summary?.Trim() ?? string.Empty,
                 c.Intro?.Trim() ?? string.Empty, layout, c.GuidePages ?? new List<string>(), groups));
         }
-        // Older maps name categories only through their rules.
-        foreach (var id in defaults.Select(d => d.Category).Concat(overrides.Select(o => o.Category)))
+        var ruleCategories = defaults.Select(d => (Category: (string?)d.Category, Rule: d.Match))
+            .Concat(overrides.Select(o => (o.Category, Rule: o.Cref ?? o.Match!)));
+        if (categories.Count == 0)
         {
-            if (id is null || id == ExcludedCategory || !seenCategories.Add(id)) continue;
-            categories.Add(new RefCategory(id, char.ToUpperInvariant(id[0]) + id[1..].Replace('-', ' '),
-                string.Empty, string.Empty, id == "hooks" ? "hooks" : "types",
-                Array.Empty<string>(), Array.Empty<RefGroup>()));
+            // A map without `categories:` names its categories only through its rules.
+            foreach (var (id, _) in ruleCategories)
+            {
+                if (id is null || id == ExcludedCategory || !seenCategories.Add(id)) continue;
+                categories.Add(new RefCategory(id, char.ToUpperInvariant(id[0]) + id[1..].Replace('-', ' '),
+                    string.Empty, string.Empty, id == "hooks" ? "hooks" : "types",
+                    Array.Empty<string>(), Array.Empty<RefGroup>()));
+            }
+        }
+        else
+        {
+            // With a declared list, an unknown id is a typo (`themeing`), not a new
+            // top-level folder.
+            foreach (var (id, rule) in ruleCategories)
+            {
+                if (id is null || id == ExcludedCategory || seenCategories.Contains(id)) continue;
+                throw new DocPipelineException("REACTOR_DOC_REGISTRY_001",
+                    $"the rule for `{rule}` names category `{id}`, which `categories:` does not declare");
+            }
         }
 
         var areas = new List<RefArea>();
@@ -228,6 +252,7 @@ internal sealed class ReferenceMap
         {
             if (string.IsNullOrEmpty(a.Id) || string.IsNullOrEmpty(a.Title))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", "an area is missing `id:` or `title:`");
+            RequireSlug(a.Id!, "area");
             if (areas.Any(x => x.Id == a.Id))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", $"area `{a.Id}` is declared twice");
             areas.Add(new RefArea(a.Id!, a.Title!, a.Summary?.Trim() ?? string.Empty,
@@ -239,6 +264,7 @@ internal sealed class ReferenceMap
         {
             if (string.IsNullOrEmpty(a.Id) || string.IsNullOrEmpty(a.Title))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001", "a modifier area is missing `id:` or `title:`");
+            RequireSlug(a.Id!, "modifier area");
             if (modifierAreas.Any(x => x.Id == a.Id) || areas.Any(x => x.Id == a.Id))
                 throw new DocPipelineException("REACTOR_DOC_REGISTRY_001",
                     $"modifier area `{a.Id}` reuses an id; modifier area ids must differ from each other and from area ids");
@@ -259,6 +285,23 @@ internal sealed class ReferenceMap
     internal const string ExcludedCategory = "excluded";
 
     private static readonly string[] Layouts = { "types", "hooks", "elements", "factories", "modifiers" };
+
+    /// <summary>
+    /// Map ids become folder and file names under <c>docs/guide/reference</c>, so
+    /// they must be slugs: runs of lowercase a–z joined by single hyphens. Every id
+    /// in the map has that shape. A dot, a slash or a capital is rejected here
+    /// instead of reaching the disk.
+    /// </summary>
+    [GeneratedRegex(@"\A[a-z]+(-[a-z]+)*\z", RegexOptions.CultureInvariant)]
+    private static partial Regex SlugPattern();
+
+    private static void RequireSlug(string id, string what)
+    {
+        if (!SlugPattern().IsMatch(id))
+            throw new DocPipelineException("REACTOR_DOC_REGISTRY_001",
+                $"{what} id `{id}` is not a slug. Ids become file and folder names, so use lowercase letters " +
+                "joined by single hyphens, for example `focus-and-keyboard`");
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────
 

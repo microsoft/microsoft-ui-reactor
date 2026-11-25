@@ -130,7 +130,7 @@ public class ReferenceStalenessWiringTests
     /// <summary>
     /// Issue #1052. Under <c>--ci</c> the same missing input is a failure, not a
     /// degradation: CI always builds, so no <c>Microsoft.UI.Reactor.xml</c> means the run is
-    /// not the run that was asked for, and the ~117 pages under
+    /// not the run that was asked for, and the pages under
     /// <c>docs/guide/reference/</c> are silently left at whatever was committed.
     /// </summary>
     /// <remarks>
@@ -210,6 +210,54 @@ public class ReferenceStalenessWiringTests
     }
 
     /// <summary>
+    /// The assembly is the other half of the input. The XML file alone cannot
+    /// tell element records from other records, so a run without the DLL must
+    /// fail before it rewrites or prunes anything, locally as well as in CI.
+    /// </summary>
+    [Fact]
+    public void Missing_dll_fails_and_leaves_the_reference_pages_alone()
+    {
+        using var repo = new FakeRepo();
+        repo.PlantXml("x64/Release/net10.0-windows10.0.22621.0", Base.AddMinutes(30), withDll: false);
+        repo.PlantSource("Core/Widget.cs", Base);
+        var committed = repo.PlantReferencePage("elements/buttons.md", "# Buttons\n");
+
+        var (ciExit, ciOutput) = repo.CompileWithReference();
+        var (localExit, localOutput) = repo.CompileWithReferenceLocally();
+
+        Assert.Equal(1, ciExit);
+        Assert.Contains("REACTOR_DOC_REFGEN_003", ciOutput);
+        Assert.Contains("Microsoft.UI.Reactor.dll not found", ciOutput);
+        Assert.Contains("dotnet build src/Reactor", ciOutput);
+        Assert.Contains("REACTOR_DOC_REFGEN_003", localOutput);
+        Assert.Equal(0, localExit);
+        // Neither run may prune: this page is not in the plan, so a run that
+        // carried on without the DLL would delete it (see the control below).
+        Assert.True(File.Exists(committed));
+        Assert.Equal("# Buttons\n", File.ReadAllText(committed));
+    }
+
+    /// <summary>
+    /// The control for the test above: with the DLL present, the same stray
+    /// page is pruned. Without it, "the page is still there" could just mean
+    /// the prune never runs on this fixture.
+    /// </summary>
+    [Fact]
+    public void With_the_dll_present_a_page_outside_the_plan_is_pruned()
+    {
+        using var repo = new FakeRepo();
+        repo.PlantXml("x64/Release/net10.0-windows10.0.22621.0", Base.AddMinutes(30));
+        repo.PlantSource("Core/Widget.cs", Base);
+        var stray = repo.PlantReferencePage("elements/buttons.md", "# Buttons\n");
+
+        var (exitCode, output) = repo.CompileWithReference();
+
+        Assert.Equal(0, exitCode);
+        Assert.DoesNotContain("REACTOR_DOC_REFGEN_003", output);
+        Assert.False(File.Exists(stray));
+    }
+
+    /// <summary>
     /// Minimal repo the doc compiler accepts, plus the two trees issue #1068 is
     /// about: <c>src/Reactor/bin</c> (candidates) and <c>src/Reactor</c>
     /// (sources). Modelled on the fixture in
@@ -282,12 +330,16 @@ public class ReferenceStalenessWiringTests
 
         /// <summary>
         /// Writes a routable <c>Microsoft.UI.Reactor.xml</c> at
-        /// <c>src/Reactor/bin/&lt;layout&gt;/</c>. The member is under
-        /// <c>Hooks</c> because Phase 5.7 restricts generation to that category,
-        /// so anything else would produce zero pages and exercise less.
+        /// <c>src/Reactor/bin/&lt;layout&gt;/</c>, plus the assembly beside it
+        /// unless <paramref name="withDll"/> is false. The member is under
+        /// <c>Hooks</c> because that is the only category the fixture map
+        /// declares, so anything else would produce zero pages and exercise less.
         /// </summary>
-        public string PlantXml(string layout, DateTime writeUtc) =>
-            Write(Path.Join("src", "Reactor", "bin", Native(layout)), "Microsoft.UI.Reactor.xml",
+        public string PlantXml(string layout, DateTime writeUtc, bool withDll = true)
+        {
+            var dir = Path.Join("src", "Reactor", "bin", Native(layout));
+            if (withDll) PlantDll(Path.Join(_root, dir, "Microsoft.UI.Reactor.dll"), writeUtc);
+            return Write(dir, "Microsoft.UI.Reactor.xml",
                 """
                 <?xml version="1.0"?>
                 <doc>
@@ -300,6 +352,30 @@ public class ReferenceStalenessWiringTests
                 </doc>
                 """,
                 writeUtc);
+        }
+
+        /// <summary>
+        /// Emits a real assembly holding the one public type the XML documents,
+        /// so the reference phase reads the same surface it would from a build.
+        /// </summary>
+        private static void PlantDll(string path, DateTime writeUtc)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var assembly = new System.Reflection.Emit.PersistedAssemblyBuilder(
+                new System.Reflection.AssemblyName("Microsoft.UI.Reactor"), typeof(object).Assembly);
+            var module = assembly.DefineDynamicModule("Microsoft.UI.Reactor");
+            module.DefineType(
+                "Microsoft.UI.Reactor.Hooks.UseState",
+                System.Reflection.TypeAttributes.Public | System.Reflection.TypeAttributes.Class |
+                System.Reflection.TypeAttributes.Abstract | System.Reflection.TypeAttributes.Sealed).CreateType();
+            assembly.Save(path);
+            File.SetLastWriteTimeUtc(path, writeUtc);
+        }
+
+        /// <summary>Writes a page under <c>docs/guide/reference/</c>, as a previous compile would have.</summary>
+        public string PlantReferencePage(string relativePath, string content) =>
+            Write(Path.Join("docs", "guide", "reference", Path.GetDirectoryName(Native(relativePath)) ?? string.Empty),
+                Path.GetFileName(relativePath), content, Base);
 
         /// <summary>Writes a C# file at <c>src/Reactor/&lt;relativePath&gt;</c>.</summary>
         public string PlantSource(string relativePath, DateTime writeUtc)

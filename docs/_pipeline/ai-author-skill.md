@@ -155,8 +155,8 @@ The state hook (<!-- ref:UseState -->) is the building block.
 The marker accepts either a short name (`<!-- ref:UseState -->`) or a
 full XML-doc cref (`<!-- ref:M:Microsoft.UI.Reactor.Hooks.UseState -->`).
 The compiler resolves it to a relative link into
-`docs/guide/reference/<category>/<name>.md` and also feeds the reverse
-"Featured in" callout that appears on the reference page. Use the marker
+`docs/guide/reference/<category>/<page>.md` and also feeds the reverse
+"Learn more" links that appear on the reference page. Use the marker
 inline in prose — it is the only Reactor-specific syntax for cross-axis
 linking; everything else is standard XML doc `<see cref="..."/>` /
 `<seealso cref="..."/>` in the source.
@@ -887,22 +887,18 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 
 ### 10. API Reference (auto-generated — spec §7.1.2)
 
-Section 10 is generated from XML doc comments in `src/Reactor*/` and
-landed in Phase 1 for the Hooks category. Authors do **not** hand-write
-template files for the leaves — they author `<summary>`, `<remarks>`,
-`<param>`, `<returns>`, `<example>`, and `<seealso cref="..."/>` in the
-canonical C# source, and the pipeline emits one MD page per public
-member into `docs/guide/reference/<category>/<name>.md`. The hand-
-written part is the per-category `index.md` (e.g.
-`docs/guide/reference/hooks/index.md`).
+Section 10 is generated from the XML doc comments and the built
+`Microsoft.UI.Reactor.dll`. Authors do **not** hand-write any reference
+page — they author `<summary>`, `<remarks>`, `<param>`, `<returns>`,
+`<example>`, and `<seealso cref="..."/>` in the canonical C# source, and
+the pipeline writes grouped pages under
+`docs/guide/reference/<category>/`: one page per public type with its
+members on it, one page per hook, and area pages that group related
+factories and modifiers (for example `factories/buttons.md`). Each
+category's `index.md` is generated too.
 
-Categories (driven by `docs/_pipeline/reference-map.yaml`):
-
-- **factories** — every element factory
-- **hooks** — every `Use*` hook (Phase 1 prototype: 73 pages)
-- **modifiers** — every chainable modifier
-- **elements** — every Element record type
-- **system** — App, Window, Navigation, Context, Command primitives
+Categories and groups are driven by `docs/_pipeline/reference-map.yaml`
+(hooks, factories, modifiers, elements, hosting, and more).
 
 Cross-axis linking: write `<!-- ref:UseState -->` in a guide template to
 link into the reference axis; write `<seealso cref="UseState"/>` in XML

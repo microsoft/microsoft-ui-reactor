@@ -534,7 +534,7 @@ internal static class ReferencePlanner
 
     /// <summary>A file stem that is unique in its folder, ignoring case (Windows file
     /// names and site routes are case-insensitive).</summary>
-    private static string UniqueStem(HashSet<string> used, string name, ApiType? type)
+    internal static string UniqueStem(HashSet<string> used, string name, ApiType? type)
     {
         var candidates = new List<string> { name };
         if (type is not null)
