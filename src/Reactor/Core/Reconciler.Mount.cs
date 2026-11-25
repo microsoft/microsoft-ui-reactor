@@ -270,7 +270,7 @@ public sealed partial class Reconciler
         if (control is not null && element.ElementTransition is not null)
         {
             var (staggerIdx, staggerDly) = ConsumeStaggerIndex();
-            ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly);
+            ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly, this);
             // A keyed Memo shares its factory output's control and tag, so the exit paths read its
             // declaration from the control's state (#1663).
             if (element is KeyedMemoElement && element.ElementTransition.GetExitTransition() is not null)
@@ -767,6 +767,9 @@ public sealed partial class Reconciler
     // realize/recycle handler; also reused 1:1 by Reconciler.KeyedItemsBinding.cs.
     internal void HandleTemplatedContainerContentChanging(object sender, ContainerContentChangingEventArgs args, Action requestRerender)
     {
+        // A container recycled or re-realized for another row drops its previous row's pending
+        // ambient-enter check, so it isn't left concealed or replays that row's fade (#1680).
+        CancelOpacityRestart(args.ItemContainer);
         if (args.InRecycleQueue)
         {
             // Issue #951 — drop any name this container carried for its
@@ -810,7 +813,7 @@ public sealed partial class Reconciler
             if (args.Item is ReactorRow row && row.PendingEnterAnimation is { } kind)
             {
                 row.PendingEnterAnimation = null;
-                ApplyAmbientEnterAnimation(args.ItemContainer, kind);
+                ApplyAmbientEnterAnimation(args.ItemContainer, kind, this);
             }
         }
     }
@@ -872,12 +875,12 @@ public sealed partial class Reconciler
     /// developer's <c>.Transition(...)</c> modifier still wins when set —
     /// this only fires when no per-element transition has been declared.
     /// </summary>
-    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind)
+    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind, Reconciler? owner)
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
-        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
-        CancelKeyframeOpacityCheck(container);
+        // The fade takes the opacity channel, so a pending opacity restart must not replace it (#1669).
+        CancelOpacityRestart(container);
 
         try
         {
@@ -885,15 +888,14 @@ public sealed partial class Reconciler
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the
-            // fade-in; a small Y offset carries the slide-up so the row
+            // fade-in, to the container's own opacity like .Transition(Fade);
+            // a small Y offset carries the slide-up so the row
             // visibly emerges rather than just appearing. Both targets use
             // the same curve so they stay phase-locked.
-            visual.Opacity = 0f;
             var prevOffset = visual.Offset;
             visual.Offset = new global::System.Numerics.Vector3(prevOffset.X, prevOffset.Y + 12f, prevOffset.Z);
 
-            var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, 1.0f, curve);
-            visual.StartAnimation("Opacity", opacityAnim);
+            StartEnterFade(container, visual, compositor, curve, TimeSpan.Zero, owner);
 
             var offsetAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, prevOffset, curve);
             visual.StartAnimation("Offset", offsetAnim);

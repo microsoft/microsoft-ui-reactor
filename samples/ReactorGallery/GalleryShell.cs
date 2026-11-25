@@ -9,25 +9,6 @@ namespace WinUIGalleryReactor;
 
 class GalleryShell : Component
 {
-    static readonly Dictionary<string, string> CategoryIcons = new()
-    {
-        ["Basic Input"] = "\uE73A",
-        ["Collections"] = "\uE8A9",
-        ["Data"] = "\uE7C3",
-        ["Date and Time"] = "\uE787",
-        ["Dialogs and Flyouts"] = "\uE8BD",
-        ["Fundamentals"] = "\uE8F1",
-        ["Layout"] = "\uE8A1",
-        ["Media"] = "\uE8B9",
-        ["Menus and Toolbars"] = "\uE700",
-        ["Navigation"] = "\uE8B0",
-        ["Status and Info"] = "\uE946",
-        ["System"] = "\uE770",
-        ["Text"] = "\uE8D2",
-        ["Patterns"] = "\uE943",
-        ["Styles"] = "\uE790",
-    };
-
     public override Element Render()
     {
         // A cold-start deep link (`reactor-gallery:///item/button`) seeds the initial
@@ -97,10 +78,10 @@ class GalleryShell : Component
 
         // Design, Fundamentals and System are not control categories — they sit above the
         // "Controls" header as their own top-level entries rather than inside it.
-        NavigationViewItemData CategoryNavItem(string category, string glyph) =>
-            NavItem(category, tag: GalleryRoutes.CategorySlug(category)) with
+        NavigationViewItemData CategoryNavItem(string category) =>
+            NavItem(ControlRegistry.CategoryDisplayName(category), tag: GalleryRoutes.CategorySlug(category)) with
             {
-                IconElement = FontIcon(glyph),
+                IconElement = FontIcon(ControlRegistry.CategoryGlyph(category)),
                 Children = ControlRegistry.All
                     .Where(c => c.Category == category)
                     .Select(c => NavItem(c.Title, tag: c.Tag))
@@ -109,15 +90,15 @@ class GalleryShell : Component
 
         var controlNavItems = ControlRegistry.Categories
             .Where(cat => !nonControlCategories.Contains(cat))
-            .Select(cat => CategoryNavItem(cat, CategoryIcons.GetValueOrDefault(cat, "\uE71D")))
+            .Select(CategoryNavItem)
             .ToArray();
 
         var navItems = new[]
         {
             NavItem("Home", tag: GalleryRoutes.HomeTag) with { IconElement = FontIcon("\uE80F") },
-            CategoryNavItem("Fundamentals", "\uE8F1"),
-            CategoryNavItem("Design", "\uE790"),
-            CategoryNavItem("System", "\uE770"),
+            CategoryNavItem("Fundamentals"),
+            CategoryNavItem("Design"),
+            CategoryNavItem("System"),
             NavItemHeader("Controls"),
         }
         .Concat(controlNavItems)
@@ -150,7 +131,7 @@ class GalleryShell : Component
                 .Where(c => c.Category == categoryName)
                 .ToArray();
 
-            content = CardListPage("category:" + selectedTag, categoryName,
+            content = CardListPage("category:" + selectedTag, ControlRegistry.CategoryDisplayName(categoryName),
                 ControlRegistry.IsControlCategory(categoryName)
                     ? $"{controls.Length} controls in this category"
                     : $"{controls.Length} topics in this category",
