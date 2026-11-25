@@ -6285,14 +6285,16 @@ public sealed partial class Reconciler : IDisposable
         visual.Opacity = 0;
         visual.StartAnimation("Opacity", EnterFade());
         // XAML's first push of a changed opacity (a modifier's, a style's) stops the fade (#1680).
-        // A spring has no controller to tell a stopped fade from a running one, so the check
-        // restarts it regardless: one frame in, from a concealed first frame, that doesn't show.
-        RestartOpacityAfterXamlPush(uie, visual, visual.TryGetAnimationController("Opacity"), owner, owns: null, restart: () =>
+        // A spring has no controller to tell a stopped fade from a running one, so it counts as
+        // stopped once the visual's base value moved off the 0 written above: XAML's push writes it,
+        // and so does the spring's own end, which only comes before the element ever showed.
+        var controller = visual.TryGetAnimationController("Opacity");
+        RestartOpacityAfterXamlPush(uie, visual, controller, owner, owns: null, restart: () =>
         {
             WithoutImplicitAnimations(visual, () => visual.Opacity = 0);
             visual.StartAnimation("Opacity", EnterFade());
             return visual.TryGetAnimationController("Opacity");
-        }, conceal: true);
+        }, conceal: true, stopped: controller is not null ? null : () => global::System.Math.Abs(visual.Opacity) > 1e-6f);
 
         // The fade rests at the element's own opacity, not 1: XAML pushes only a changed value, so
         // it wouldn't correct a fade that ended above it (#1680). Read when the fade (re)starts,
@@ -7016,12 +7018,16 @@ public sealed partial class Reconciler : IDisposable
     /// enter fade starts again from 0. An enter fade just started from 0, so hiding its first frame
     /// doesn't show either, even on an element already on screen (the ambient enter's insert).
     /// </param>
+    /// <param name="stopped">
+    /// Whether the animation was stopped, for one without a controller to check (a spring);
+    /// <see langword="null"/> means the channel has no controller left.
+    /// </param>
     private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, AnimationController? controller,
-        Reconciler? owner, Func<bool>? owns, Func<AnimationController?> restart, bool conceal = false)
+        Reconciler? owner, Func<bool>? owns, Func<AnimationController?> restart, bool conceal = false, Func<bool>? stopped = null)
     {
         var state = GetOrCreateReactorState(uie);
         CancelOpacityRestart(state);
-        var check = new OpacityRestartCheck(controller);
+        var check = new OpacityRestartCheck(controller) { EnterFade = conceal };
         state.OpacityRestart = check;
         Interlocked.Increment(ref s_pendingOpacityRestarts);
         if (owner is not null)
@@ -7167,7 +7173,7 @@ public sealed partial class Reconciler : IDisposable
             // An animation that completed keeps its controller, and every deliberate stop (a modifier
             // or setter write, removal, unmount) cancelled this check, so a missing controller
             // means XAML's push stopped it, whether it loops or not. A spring never has one.
-            if (visual.TryGetAnimationController("Opacity") is not null) return;
+            if (stopped is null ? visual.TryGetAnimationController("Opacity") is not null : !stopped()) return;
             // A spring reports no controller even when it runs, so count the restart itself.
             if (restart() is null && controller is not null) return;
             s_opacityRestartsForTests.GetOrCreateValue(uie).Value++;
@@ -7190,6 +7196,8 @@ public sealed partial class Reconciler : IDisposable
         internal long VisibilityToken;
         // The visual an enter fade hid until the check resolves (RestartOpacityAfterXamlPush's conceal).
         internal Visual? Concealed;
+        // Whether the check restarts an enter fade, which targets the opacity it started with.
+        internal bool EnterFade;
 
         internal void Reveal()
         {
@@ -7283,6 +7291,23 @@ public sealed partial class Reconciler : IDisposable
                 || global::System.Math.Abs(visual.Opacity - _visualOpacity) > 1e-6f)
                 CancelOpacityRestart(state);
         }
+    }
+
+    /// <summary>
+    /// The <c>.Opacity()</c> modifier was removed while an enter fade waits for the element's first
+    /// frame. The fade targets the removed value, and with XAML's default left unchanged no push would
+    /// stop it, so stop it at the element's opacity now, as a modifier write does (#1680). A pending
+    /// keyframe restart stays: the keyframe still owns the channel.
+    /// </summary>
+    internal static void StopPendingEnterFade(UIElement uie)
+    {
+        if (Volatile.Read(ref s_pendingOpacityRestarts) == 0
+            || uie.GetValue(ReactorAttached.StateProperty) is not ReactorState { OpacityRestart.EnterFade: true } state)
+            return;
+        CancelOpacityRestart(state);
+        // The fade already took the visual, so this has no handoff side effects.
+        var visual = ElementCompositionPreview.GetElementVisual(uie);
+        WithoutImplicitAnimations(visual, () => visual.Opacity = (float)uie.Opacity);
     }
 
     internal static void CancelOpacityRestart(UIElement uie)
@@ -8082,6 +8107,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 fe.ClearValue(UIElement.OpacityProperty);
                 AnimationHelper.ResetCompositionModifier(fe, "Opacity");
+                StopPendingEnterFade(fe);
             }
         }
         // These facade properties have no public dependency-property identifiers.

@@ -254,6 +254,45 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             if (scenario != "Dispose") reconciler.Dispose();
         }
 
+        // .Opacity() removed before the first frame: the fade targeted 0.4, and with XAML's default
+        // unchanged nothing would stop it, so the removal stops it at 1, as a modifier write does.
+        {
+            using var reconciler = new Reconciler();
+            var faded = Faded(0.4, 60000);
+            var plain = Faded(null, 60000);
+            var control = (Border)reconciler.Mount(faded, () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            bool armed = Reconciler.OpacityRestartPendingForTests(control);
+            reconciler.Update(faded, plain, control, () => { });
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            H.Check("EnterFade_OpacityRemovedBeforeFirstFrameStopsFade", armed && !Reconciler.OpacityRestartPendingForTests(control)
+                && visual.IsVisible && visual.TryGetAnimationController("Opacity") is null && Math.Abs(visual.Opacity - 1f) < 0.001f,
+                $"armed={armed}, pending={Reconciler.OpacityRestartPendingForTests(control)}, visible={visual.IsVisible}, "
+                + $"running={visual.TryGetAnimationController("Opacity") is not null}, opacity={visual.Opacity}");
+            H.SetContent(null);
+        }
+
+        // A spring has no controller, so its check reads the visual's base value instead: XAML's push
+        // of .Opacity(0.4) moves it off the fade's 0 and the fade restarts; at the default opacity
+        // nothing pushes, and a spring still running isn't restarted.
+        foreach (var (scenario, opacity, expectedRestarts) in new[] { ("SpringLocal", (double?)0.4, 1), ("SpringDefault", (double?)null, 0) })
+        {
+            using var reconciler = new Reconciler();
+            Element plain = Border(TextBlock("Enter Fade"));
+            if (opacity is { } o) plain = plain.Opacity(o);
+            var control = (Border)reconciler.Mount(plain.Transition(Animation.Transition.Fade, Curve.Spring(1f, 2f)), () => { })!;
+            var visual = ElementCompositionPreview.GetElementVisual(control);
+            H.SetContent(control);
+            await Harness.Render();
+            await AfterNextCommit(visual);
+            int restarts = Reconciler.OpacityRestartsForTests(control);
+            H.Check($"EnterFade_{scenario}RestartsOnlyWhenPushed", restarts == expectedRestarts && visual.IsVisible
+                && !Reconciler.OpacityRestartPendingForTests(control),
+                $"restarts={restarts}, visible={visual.IsVisible}, opacity={visual.Opacity}");
+            H.SetContent(null);
+        }
         // Under a collapsed parent nothing renders, so the visual stays hidden and the check waits
         // for the frame that shows it.
         {
