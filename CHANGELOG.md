@@ -210,6 +210,19 @@ Conventions for contributors:
 - `.LayoutAnimation()` uses linear easing for position and optional size changes in
   non-spring mode (#1652).
 
+- **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
+  layers mount no control of their own, so the ref points at the control their child mounted, and
+  unmount only cleared refs declared on that control's own element and its decorators. The ref kept
+  pointing at the control after it left the tree, and after an unrelated element rented it from the
+  pool. Unmount now clears every ref the reconciler pointed at the control, whichever layer declared
+  it.
+
+- **An exit `.Transition()` declared on a keyed `Memo(key, …)` now plays when the Memo is removed or
+  its key changes (issues #1663 and #1665).** The control used to leave the tree at once, while the
+  same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
+  until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
+  honoured too.
+
 - An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
   XAML writes that value to the visual when it first renders it, which stopped the animation, so
@@ -227,6 +240,11 @@ Conventions for contributors:
   so `ItemsView` click and selection right after a reorder, and app code that calls
   `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
   microsoft/microsoft-ui-xaml#12659).
+
+- Markdown selection skips offscreen glyph queries during drag growth for single-run
+  printable-ASCII left-to-right paragraphs with positive axis-aligned 2D transforms.
+  Right-to-left Runs and other layouts retain the reference geometry path; offscreen
+  text remains selected for copy, UI Automation and scrolling (PR #1698).
 
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the

@@ -327,10 +327,8 @@ internal static class NativeDockingSmokeFixtures
     /// and that the delegates remain invokable without throwing. The
     /// state-mutation side-effect path (selectedIndexStore → re-render →
     /// TabView SelectedIndex update) is exercised visually in the
-    /// showcase and locked down by `DockHostKeyboardTests` unit tests;
-    /// the sub-host the fixture mounts doesn't flush internal-state
-    /// re-renders through `Harness.Render`'s primary-host wait, so we
-    /// don't assert observable side effects here.
+    /// showcase and locked down by `DockHostKeyboardTests` unit tests,
+    /// so we don't assert observable side effects here.
     /// </summary>
     internal class KeyboardChordsRegisteredOnMount(Harness h) : SelfTestFixtureBase(h)
     {
@@ -358,11 +356,8 @@ internal static class NativeDockingSmokeFixtures
 
             // Observable side-effects on TabView.SelectedIndex live in
             // selectedIndexStore (UseRef captured inside the host's
-            // Render closure). The harness's Render flushes the primary
-            // host's reconcile pass but does not flush the sub-host's
-            // bumpTick-driven re-render that NextTab/PrevTab schedule —
-            // the dictionary update path is locked down by
-            // DockHostKeyboardTests at the unit tier. Here we assert
+            // Render closure); the dictionary update path is locked down
+            // by DockHostKeyboardTests at the unit tier. Here we assert
             // the harness-observable contract: chord delegates are
             // wired and invocable without throwing.
             chords?.NextTab();
