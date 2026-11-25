@@ -919,6 +919,31 @@ public class ModifierTableIntegrityTests
                     Name.Identifier.ValueText: "GetProperty",
                 });
 
+    [Fact]
+    public void Foreground_Diagnostics_And_Runtime_Have_The_Same_Receivers()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+        var runtimeReceivers = ReadForegroundPropertyGate(ReadForegroundModifierSource(root!));
+
+        var file = Path.Join(root!, "src", "Reactor", "Core", "Diagnostics", "AppliedModifierMap.cs");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var source = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree
+            .ParseText(File.ReadAllText(file), cancellationToken: cancellationToken)
+            .GetRoot(cancellationToken);
+        var owner = Assert.Single(source.DescendantNodes().OfType<MethodDeclarationSyntax>(),
+            method => method.Identifier.ValueText == "ForegroundOwner");
+        var diagnosticReceivers = owner.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(call => call.Expression)
+            .OfType<GenericNameSyntax>()
+            .Where(name => name.Identifier.ValueText == "Is")
+            .Select(name => SimpleTypeName(name.TypeArgumentList.Arguments.Single()))
+            .OfType<string>();
+
+        Assert.Equal(runtimeReceivers.OrderBy(name => name, StringComparer.Ordinal),
+            diagnosticReceivers.OrderBy(name => name, StringComparer.Ordinal));
+    }
+
     private static SyntaxNode ReadForegroundModifierSource(string repoRoot)
     {
         var file = Path.Join(repoRoot, "src", "Reactor", "Core", "ForegroundModifier.cs");

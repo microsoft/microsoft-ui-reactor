@@ -207,9 +207,10 @@ Conventions for contributors:
 
 ### Fixed
 
-- Animated icons now use `.Foreground(brush)`, `.Foreground(ThemeRef)`, and
-  interaction-state foreground overrides. All three paths share support for
-  controls, text blocks, rich text blocks, and icon elements (issue #1674).
+- `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
+  support common `.Foreground(brush)` modifiers and interaction-state foreground
+  overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and
+  `REACTOR_MOD_003` now accepts the supported `.Foreground(...)` calls (issue #1674).
 
 - An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.

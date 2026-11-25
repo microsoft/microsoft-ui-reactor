@@ -248,6 +248,36 @@ internal static class ThemeRefStyleFixtures
         }
     }
 
+    internal sealed class RichTextForegroundRemovedDuringHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var black = new SolidColorBrush(Microsoft.UI.Colors.Black);
+            var red = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var next = RichTextBlock("foreground").Foreground(black)
+                .InteractionStates(s => s.PointerOver(foreground: green));
+            var initial = next.Foreground<RichTextBlockElement>(red);
+            var text = (WinUI.RichTextBlock)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("RichTextHoverRemoval_CommonRedApplied", ReferenceEquals(text.Foreground, red));
+                Reconciler.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("RichTextHoverRemoval_HoverGreenApplied", ReferenceEquals(text.Foreground, green));
+
+                var replacement = reconciler.Update(initial, next, text, static () => { });
+                H.Check("RichTextHoverRemoval_SameControlStaysGreen", replacement is null && ReferenceEquals(text.Foreground, green));
+
+                Reconciler.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("RichTextHoverRemoval_ExplicitBlackRestored", ReferenceEquals(text.Foreground, black),
+                    $"foreground={ColorOf(text.Foreground)}");
+            }
+            finally { reconciler.UnmountChild(text); }
+            return Task.CompletedTask;
+        }
+    }
+
     internal sealed class DerivedIconThemeForeground(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync() => WithThemeKey(H, "TrsDerivedIcon", async host =>

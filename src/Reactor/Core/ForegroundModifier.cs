@@ -45,13 +45,15 @@ internal static class ForegroundModifier
         if (oldModifier is null || newRichText.Foreground is not { } explicitForeground)
             return UpdateAction.None;
 
-        // Restore before native setters so they can take precedence. If another writer already
-        // owns the local value, leave it in place and still skip the later common clear.
+        // Restore before native setters so they can take precedence. If an interaction state
+        // is covering the applied brush, update what it will restore when it ends.
         if (s_appliedForegroundProperty is { } property)
         {
-            var applied = richText.GetValue(property);
+            var applied = richText.GetValue(property) as Brush;
             richText.ClearValue(property);
-            if (applied is not null && ReferenceEquals(richText.ReadLocalValue(WinUI.RichTextBlock.ForegroundProperty), applied))
+            if (applied is not null
+                && !Reconciler.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground)
+                && ReferenceEquals(richText.ReadLocalValue(WinUI.RichTextBlock.ForegroundProperty), applied))
                 richText.Foreground = explicitForeground;
         }
         return UpdateAction.RemovalHandled;

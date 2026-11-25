@@ -379,6 +379,7 @@ internal static class SelfTestFixtureRegistry
         ("ThemeRefStyle_SharedForegroundLookup", static harness => new ThemeRefStyleFixtures.SharedForegroundLookup(harness)),
         ("ThemeRefStyle_ForegroundAppliedAfterBackgroundCallback", static harness => new ThemeRefStyleFixtures.ForegroundAppliedAfterBackgroundCallback(harness)),
         ("ThemeRefStyle_RichTextForegroundRestoredAfterSkippedRender", static harness => new ThemeRefStyleFixtures.RichTextForegroundRestoredAfterSkippedRender(harness)),
+        ("ThemeRefStyle_RichTextForegroundRemovedDuringHover", static harness => new ThemeRefStyleFixtures.RichTextForegroundRemovedDuringHover(harness)),
         ("ThemeRefStyle_DerivedIconThemeForeground", static harness => new ThemeRefStyleFixtures.DerivedIconThemeForeground(harness)),
         ("ThemeRefStyle_RichTextForegroundResetOutranksSetter", static harness => new ThemeRefStyleFixtures.RichTextForegroundResetOutranksSetter(harness)),
         ("ThemeRefStyle_PooledRichTextDoesNotKeepForeground", static harness => new ThemeRefStyleFixtures.PooledRichTextDoesNotKeepForeground(harness)),
