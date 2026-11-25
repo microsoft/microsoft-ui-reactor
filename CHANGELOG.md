@@ -211,6 +211,24 @@ Conventions for contributors:
   interaction-state foreground overrides. All three paths share support for
   controls, text blocks, rich text blocks, and icon elements (issue #1674).
 
+- An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
+  `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
+  XAML writes that value to the visual when it first renders it, which stopped the animation, so
+  `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
+  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
+  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+
+- Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
+  corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
+  and drop another row, because WinUI's `ItemsRepeater` doesn't update its element
+  indices for a move and Reactor looked rows up by index. Reactor now tracks realized
+  rows by key. A focused row that moved or was removed while scrolled out of view no
+  longer comes back showing the wrong item. Focus moves to a nearby row instead, so the
+  repeater recycles the stale control. WinUI's own indices are still stale after a move,
+  so `ItemsView` click and selection right after a reorder, and app code that calls
+  `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
+  microsoft/microsoft-ui-xaml#12659).
+
 - **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
   transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
   composition visual moved a facade `Translation` to the visual and enabled translation there, after

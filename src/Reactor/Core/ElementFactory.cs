@@ -66,6 +66,14 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
     // running Reconcile against a mismatched UIElement tree.
     private readonly Dictionary<UIElement, string> _keyByControl = new();
 
+    // Forward lookup: key → the control currently realized for it. RefreshRealizedItems finds
+    // a row's control here rather than through ItemsRepeater.TryGetElement(index): the
+    // repeater doesn't update its element indices for a Move, so after a reorder
+    // TryGetElement can return a different row's control (microsoft/microsoft-ui-xaml#12659).
+    // When the repeater realizes a key a second time (a stale pinned element still holds the
+    // old control) the newest control wins.
+    private readonly Dictionary<string, UIElement> _controlByKey = new(global::System.StringComparer.Ordinal);
+
     // Recycle pool for proper WinUI ItemsRepeater integration. The framework
     // keeps every realized UIElement parented to the repeater forever and
     // expects the factory to cycle them — see ViewManager.cpp:865-869 in the
@@ -364,6 +372,12 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
 
     internal void RefreshRealizedItems(Microsoft.UI.Xaml.Controls.ItemsRepeater repeater)
     {
+        if (_listState is { PinnedIndicesMayBeStale: true } changedList)
+        {
+            changedList.PinnedIndicesMayBeStale = false;
+            ScheduleFocusedContainerCheck(repeater);
+        }
+
         // If scrolling restarted after the render was dispatched, skip reconciliation.
         // The next settle timer will pick it up when scrolling truly stops. A resource refresh
         // (Theme.NotifyResourcesChanged) is a one-shot pass with no later settle to catch up,
@@ -372,10 +386,9 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
             return;
 
         using var realizationTheme = _reconciler.EnterRealizationTheme(repeater);
-        // Snapshot the keys we currently believe are realized. The actual
-        // realized set may have changed since the last GetElement, but the
-        // ItemsRepeater authoritatively tells us per-key via TryGetElement
-        // on the row's current index.
+        // Snapshot the keys we currently believe are realized; each key's
+        // control comes from _controlByKey on the keyed path, and from the
+        // repeater's TryGetElement on the legacy int-index path.
         var keys = _mountedElements.Keys.ToArray();
         foreach (var key in keys)
         {
@@ -403,10 +416,13 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
                 }
             }
 
-            var child = repeater.TryGetElement(currentIndex);
+            var child = _listState is not null
+                ? _controlByKey.GetValueOrDefault(key)
+                : repeater.TryGetElement(currentIndex);
             if (child is null)
             {
-                // The framework can return null from TryGetElement during
+                // Keyed path: no control is realized for the key right now.
+                // Legacy int-index path: the framework can return null from TryGetElement during
                 // transient layout passes — e.g., the inner ItemsRepeater
                 // is mid-relayout when an unrelated re-render (slider
                 // scrub, theme change) walks down here. Permanently
@@ -502,6 +518,7 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
                     // painted over the row with live trampolines still attached. (Issue #919)
                     RetireAlreadyUnmounted(child);
                     _keyByControl.Remove(child);
+                    _controlByKey.Remove(key);
                     _mountedElements.Remove(key);
                     _reconciler.UnmountChild(replacement);
                     ScheduleReRealize(key);
@@ -703,6 +720,7 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
             if (control is FrameworkElement realizedElement)
                 Reconciler.GetOrCreateReactorState(realizedElement).RealizationTheme = realizationTheme.Theme;
             _keyByControl[control] = key;
+            _controlByKey[key] = control;
             _lastElementByControl[control] = element;
             if (_keyByControl.Count > _maxRealized) _maxRealized = _keyByControl.Count;
 
@@ -991,9 +1009,16 @@ public sealed partial class ElementFactory<T> : IElementFactory, IContextCapturi
 
         // Drop the mounted-element tracking for this container so a later
         // RefreshRealizedItems can't run Reconcile against a stale Element
-        // paired with a now-foreign realized child.
-        if (_keyByControl.Remove(args.Element, out var stashedKey) && stashedKey is not null)
+        // paired with a now-foreign realized child. Only when the key is still
+        // tracked against THIS control: a stale pinned control can come back
+        // after the repeater realized its key again elsewhere, and that live
+        // row has to keep its tracking.
+        if (_keyByControl.Remove(args.Element, out var stashedKey) && stashedKey is not null
+            && _controlByKey.TryGetValue(stashedKey, out var tracked) && ReferenceEquals(tracked, args.Element))
+        {
+            _controlByKey.Remove(stashedKey);
             _mountedElements.Remove(stashedKey);
+        }
 
         // DON'T UnmountChild — the WinUI tree stays alive and is reused on
         // the next GetElement call via Reconciler.Reconcile. ItemsRepeater

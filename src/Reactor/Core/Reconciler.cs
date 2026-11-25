@@ -1696,6 +1696,9 @@ public sealed partial class Reconciler : IDisposable
         // removing one named animation can release its deferred reset.
         internal Dictionary<AnimateProperty, KeyframeChannelOwner>? KeyframeChannelOwners;
         internal AnimateProperty DeferredModifierResets;
+        // A keyframe opacity restart waiting for XAML's push (#1669). Allocated only while one is
+        // pending, so a control that never has one pays a single reference.
+        internal KeyframeOpacityCheckState? KeyframeOpacity;
         // Who claims each implicit animation key (spec 066 §6). See ImplicitAnimationSlots.
         internal Animation.ImplicitAnimationClaims? ImplicitClaims;
         // The delay a parent's .Stagger() gives this child's implicit animations, so a key
@@ -2442,6 +2445,8 @@ public sealed partial class Reconciler : IDisposable
         state.DecoratorElement = null;
         state.ModifierTargets = null;
         if (state.ImplicitClaims is not null) Animation.ImplicitAnimationSlots.ReleaseAll(fe);
+        // A pending keyframe opacity restart holds a layout handler and its reconciler (#1669).
+        CancelKeyframeOpacityCheck(state);
         state.UnmountAction = null;
         state.UnmountActionOwner = null;
         state.Modifiers?.ClearCurrentHandlers();
@@ -4788,6 +4793,9 @@ public sealed partial class Reconciler : IDisposable
     private static void CleanupElementChainForUnmount(FrameworkElement control)
     {
         ElementPool.CancelOpacitySync(control);
+        // Whichever layer started a keyframe (a keyed Memo's isn't on this element chain), an
+        // unmounted control's pending opacity restart must go with it (#1669).
+        CancelKeyframeOpacityCheck(control);
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.
@@ -5213,6 +5221,8 @@ public sealed partial class Reconciler : IDisposable
         var curve = Microsoft.UI.Reactor.Core.Internal.AnimationKindMap.ToCurve(kind);
         if (curve is null) return false;
 
+        // The fade takes the opacity channel, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(control);
         try
         {
             var visual = AnimationHelper.GetElementVisual(control);
@@ -5730,9 +5740,12 @@ public sealed partial class Reconciler : IDisposable
             && fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs
                 ? rs : null;
         if (state is not null) state.EchoSuppressScopeDepth++;
+        // A setter's opacity write replaces a pending opacity keyframe, as a modifier's does (#1669).
+        var opacityProbe = control is UIElement probed ? new KeyframeOpacityProbe(probed) : default;
         try
         {
             foreach (var setter in setters) setter(control);
+            opacityProbe.Complete();
         }
         // Spec 066 §9 row 1: name the modifier when WinUI rejects a facade write after the
         // handoff. The filter returns false, so the exception is unchanged.
@@ -6209,6 +6222,8 @@ public sealed partial class Reconciler : IDisposable
 
     private static void ApplyFadeTransition(UIElement uie, Compositor compositor, Curve curve, bool isEnter, TimeSpan delay)
     {
+        // The fade owns the opacity channel now, so a pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         if (isEnter)
         {
@@ -6440,7 +6455,9 @@ public sealed partial class Reconciler : IDisposable
         // so a facade transform has already moved and been recorded.
         var rest = RestTransformOf(uie);
 
-        // Compositor properties — animate via Visual
+        // Compositor properties — animate via Visual. The state takes the opacity channel, so a
+        // pending keyframe restart must not replace it (#1669).
+        CancelKeyframeOpacityCheck(uie);
         var targetOpacity = values?.Opacity ?? 1.0f;
         var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, targetOpacity, curve);
         visual.StartAnimation("Opacity", opacityAnim);
@@ -6740,7 +6757,7 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Checks trigger values and starts keyframe animations when they change.
     /// </summary>
-    internal static void ApplyKeyframeAnimations(UIElement uie, KeyframeEntry[] entries)
+    internal static void ApplyKeyframeAnimations(UIElement uie, KeyframeEntry[] entries, Reconciler? owner = null)
     {
         ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
@@ -6853,7 +6870,11 @@ public sealed partial class Reconciler : IDisposable
             {
                 visual.StartAnimation(anim.Target, anim);
                 if (visual.TryGetAnimationController(anim.Target) is { } controller)
+                {
                     started[anim.Target] = controller;
+                    if (anim.Target == "Opacity")
+                        RestartOpacityAfterXamlPush(uie, visual, entry.Name, anim, controller, owner);
+                }
             }
             _keyframeTriggerValues[key] = (entry.Trigger, started);
 
@@ -6862,6 +6883,310 @@ public sealed partial class Reconciler : IDisposable
                     new KeyframeChannelOwner(entries, entry));
         }
     }
+
+    /// <summary>
+    /// XAML writes a changed <see cref="UIElement.Opacity"/> (a local value, a style setter) to the
+    /// handed-out visual when it next renders the element, and that write stops whatever animation
+    /// runs on the visual's Opacity. A keyframe started before that frame, such as one mounted
+    /// together with <c>.Opacity(x)</c>, would never play. Once the element renders, this checks
+    /// after the next commit and restarts the keyframe when its animation is gone while this entry
+    /// still owns the channel (#1669). A modifier or setter write to the opacity replaces the
+    /// keyframe on purpose and cancels the check, and so does disposing <paramref name="owner"/>.
+    /// </summary>
+    private static void RestartOpacityAfterXamlPush(UIElement uie, Visual visual, string name,
+        CompositionAnimation animation, AnimationController controller, Reconciler? owner)
+    {
+        var state = GetOrCreateReactorState(uie);
+        CancelKeyframeOpacityCheck(state);
+        var check = new KeyframeOpacityCheckState(controller);
+        state.KeyframeOpacity = check;
+        Interlocked.Increment(ref s_pendingKeyframeOpacityChecks);
+        if (owner is not null)
+        {
+            check.Owner = owner;
+            (owner._keyframeOpacityChecks ??= new()).Add(state);
+        }
+        var dispatcher = uie.DispatcherQueue;
+        if (uie is FrameworkElement unrendered && !IsRendered(unrendered)) WaitForRender(unrendered);
+        else RequestCheck();
+
+        void RequestCheck()
+        {
+            global::Windows.Foundation.IAsyncAction commit;
+            try { commit = visual.Compositor.RequestCommitAsync(); }
+            catch (Exception ex) when (IsTeardown(ex))
+            {
+                Drop();
+                return; // No compositor (e.g. unit tests) or it is shutting down.
+            }
+            // Always queued: Completed runs inline when the commit already finished, which can be
+            // before ApplyKeyframeAnimations publishes the entry's started controllers.
+            commit.Completed = (_, _) => dispatcher.TryEnqueue(SafeCheck);
+        }
+
+        // The check and the waits run from the dispatcher after the update returned, so an
+        // exception would end the app. An element or compositor torn down meanwhile drops the check.
+        static bool IsTeardown(Exception ex) => ex is global::System.Runtime.InteropServices.COMException
+            or ObjectDisposedException or InvalidOperationException or UnauthorizedAccessException;
+
+        // Drops this check only: a newer one may have replaced it on the state already.
+        void Drop()
+        {
+            if (ReferenceEquals(state.KeyframeOpacity, check)) CancelKeyframeOpacityCheck(state);
+            else check.DetachWait();
+        }
+
+        void SafeCheck()
+        {
+            try { Check(); }
+            catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+        }
+
+        // XAML pushes when it first renders the element. Under a collapsed ancestor in the live tree
+        // nothing renders until that ancestor's Visibility changes, so watch it (and Loaded and
+        // Unloaded, for a move to another parent) rather than every layout pass. Off the tree, wait for layout, as
+        // the pool's renter sync does.
+        void WaitForRender(FrameworkElement fe)
+        {
+            if (!ReferenceEquals(state.KeyframeOpacity, check)) return;
+            check.DetachWait();
+            if (CollapsedAncestor(fe) is { } hidden && (fe.IsLoaded || ElementPool.IsInLiveTree(fe)))
+            {
+                check.Hidden = hidden;
+                check.VisibilityToken = hidden.RegisterPropertyChangedCallback(UIElement.VisibilityProperty,
+                    (_, _) => Resume(fe));
+                check.WaitTarget = fe;
+                check.LoadedHandler = (_, _) => Resume(fe);
+                fe.Loaded += check.LoadedHandler;
+                // A move to a visible parent in the same turn can skip Loaded while Unloaded is
+                // pending (ElementPool.SyncOpacityWhenLoaded), but that Unloaded still comes.
+                check.UnloadedHandler = (_, _) => Resume(fe);
+                fe.Unloaded += check.UnloadedHandler;
+                KeyframeOpacityWaitsForTests++;
+                return;
+            }
+            WaitForLayout(fe);
+        }
+
+        void Resume(FrameworkElement fe)
+        {
+            try
+            {
+                if (!Owns(out _)) { Drop(); return; }
+                // Already rendering (an Unloaded can arrive after the frame that pushed, with no
+                // layout pass left to wait for): check after the next commit. Otherwise wait for layout.
+                if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                else WaitForLayout(fe);
+            }
+            catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+        }
+
+        void WaitForLayout(FrameworkElement fe)
+        {
+            check.DetachWait();
+            EventHandler<object>? onLayout = null;
+            onLayout = (_, _) =>
+            {
+                try
+                {
+                    if (!Owns(out _)) { Drop(); return; }
+                    if (IsRendered(fe)) { check.DetachWait(); RequestCheck(); }
+                    // Laid out but now in the live tree under a collapsed ancestor: watch that instead.
+                    else if (fe.IsLoaded || ElementPool.IsInLiveTree(fe)) WaitForRender(fe);
+                }
+                catch (Exception ex) when (IsTeardown(ex)) { Drop(); }
+            };
+            check.LayoutHandler = onLayout;
+            check.WaitTarget = fe;
+            fe.LayoutUpdated += onLayout;
+            KeyframeOpacityWaitsForTests++;
+        }
+
+        bool Owns([global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Dictionary<string, AnimationController>? started)
+        {
+            started = null;
+            if (!ReferenceEquals(state.KeyframeOpacity, check)
+                || !_keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+                || entry.Started is not { } current || !current.TryGetValue("Opacity", out var owned)
+                || !Equals(owned, controller))
+                return false;
+            started = current;
+            return true;
+        }
+
+        void Check()
+        {
+            if (!Owns(out var started)) return;
+            if (uie is FrameworkElement fe && !IsRendered(fe))
+            {
+                WaitForRender(fe);
+                return;
+            }
+            CancelKeyframeOpacityCheck(state);
+            // A keyframe that completed keeps its controller, and every deliberate stop (a modifier
+            // or setter write, removal, unmount) cancelled this check, so a missing controller
+            // means XAML's push stopped it, whether it loops or not.
+            if (visual.TryGetAnimationController("Opacity") is not null) return;
+            visual.StartAnimation("Opacity", animation);
+            if (visual.TryGetAnimationController("Opacity") is not { } restarted) return;
+            started["Opacity"] = restarted;
+            if (state.KeyframeChannelOwners?.TryGetValue(AnimateProperty.Opacity, out var channelOwner) == true
+                && Equals(channelOwner.DeferredController, controller))
+                state.KeyframeChannelOwners[AnimateProperty.Opacity] = channelOwner with { DeferredController = restarted };
+            s_keyframeOpacityRestartsForTests.GetOrCreateValue(uie).Value++;
+        }
+    }
+
+    /// <summary>A pending <see cref="RestartOpacityAfterXamlPush"/> check and whatever it waits on.</summary>
+    internal sealed class KeyframeOpacityCheckState(AnimationController controller)
+    {
+        internal readonly AnimationController Controller = controller;
+        // The reconciler that registered the check, so its disposal can cancel it.
+        internal Reconciler? Owner;
+        // What the check waits on until the element renders: layout while off the tree, or a
+        // collapsed ancestor's Visibility (and the element's Loaded) while in the tree.
+        internal FrameworkElement? WaitTarget;
+        internal EventHandler<object>? LayoutHandler;
+        internal RoutedEventHandler? LoadedHandler;
+        internal RoutedEventHandler? UnloadedHandler;
+        internal UIElement? Hidden;
+        internal long VisibilityToken;
+
+        internal void DetachWait()
+        {
+            if (WaitTarget is { } fe)
+            {
+                if (LayoutHandler is { } onLayout) { fe.LayoutUpdated -= onLayout; KeyframeOpacityWaitsForTests--; }
+                if (LoadedHandler is { } onLoaded) fe.Loaded -= onLoaded;
+                if (UnloadedHandler is { } onUnloaded) fe.Unloaded -= onUnloaded;
+            }
+            if (Hidden is { } hidden)
+            {
+                hidden.UnregisterPropertyChangedCallback(UIElement.VisibilityProperty, VisibilityToken);
+                KeyframeOpacityWaitsForTests--;
+            }
+            WaitTarget = null;
+            LayoutHandler = null;
+            LoadedHandler = null;
+            UnloadedHandler = null;
+            Hidden = null;
+        }
+    }
+
+    // Loaded alone isn't proof: WinUI can skip it for a control re-added while its Unloaded is
+    // pending, and a collapsed ancestor keeps a loaded element out of the render walk.
+    private static bool IsRendered(FrameworkElement fe)
+        => (fe.IsLoaded || ElementPool.IsInLiveTree(fe)) && CollapsedAncestor(fe) is null;
+
+    private static UIElement? CollapsedAncestor(FrameworkElement fe)
+    {
+        for (DependencyObject? node = fe; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            if (node is UIElement { Visibility: not Visibility.Visible } hidden) return hidden;
+        return null;
+    }
+
+    // Checks still pending, so an unmount with none to cancel pays no attached-state read.
+    private static int s_pendingKeyframeOpacityChecks;
+
+    /// <summary>
+    /// Snapshots a control's opacity and the visual's Opacity value and animation around user code (setters,
+    /// <c>.OnMount</c>, <c>.OnUpdate</c>). A change to either is a deliberate opacity write, so it
+    /// cancels a pending keyframe restart as a modifier's write does (#1669). Free when none is pending.
+    /// </summary>
+    internal readonly struct KeyframeOpacityProbe
+    {
+        private readonly UIElement? _element;
+        private readonly ReactorState? _state;
+        private readonly KeyframeOpacityCheckState? _check;
+        private readonly double _opacity;
+        private readonly AnimationController? _controller;
+        private readonly float _visualOpacity;
+
+        internal KeyframeOpacityProbe(UIElement element)
+        {
+            if (Volatile.Read(ref s_pendingKeyframeOpacityChecks) == 0
+                || element.GetValue(ReactorAttached.StateProperty) is not ReactorState { KeyframeOpacity: not null } state)
+            {
+                this = default;
+                return;
+            }
+            _element = element;
+            _state = state;
+            _check = state.KeyframeOpacity;
+            _opacity = element.Opacity;
+            // The keyframe already took the visual, so this has no handoff side effects.
+            var visual = ElementCompositionPreview.GetElementVisual(element);
+            _controller = visual.TryGetAnimationController("Opacity");
+            _visualOpacity = visual.Opacity;
+        }
+
+        internal void Complete()
+        {
+            // A nested update (a decorator's target) may have armed a newer check meanwhile. Its
+            // keyframe is what changed the controller, so it stays.
+            if (_element is null || _state is not { } state || !ReferenceEquals(state.KeyframeOpacity, _check)) return;
+            var visual = ElementCompositionPreview.GetElementVisual(_element);
+            // The visual's base value counts too: once XAML's push stopped the keyframe, a write to the
+            // visual leaves no controller to compare.
+            if (global::System.Math.Abs(_element.Opacity - _opacity) > 1e-9
+                || !Equals(visual.TryGetAnimationController("Opacity"), _controller)
+                || global::System.Math.Abs(visual.Opacity - _visualOpacity) > 1e-6f)
+                CancelKeyframeOpacityCheck(state);
+        }
+    }
+
+    internal static void CancelKeyframeOpacityCheck(UIElement uie)
+    {
+        if (Volatile.Read(ref s_pendingKeyframeOpacityChecks) == 0) return;
+        if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState state) CancelKeyframeOpacityCheck(state);
+    }
+
+    /// <summary>
+    /// Drops a pending <see cref="RestartOpacityAfterXamlPush"/> check and detaches whatever it waits
+    /// on, so a control that never renders isn't kept alive by a layout or property callback.
+    /// </summary>
+    internal static void CancelKeyframeOpacityCheck(ReactorState state)
+    {
+        if (state.KeyframeOpacity is not { } check) return;
+        state.KeyframeOpacity = null;
+        Interlocked.Decrement(ref s_pendingKeyframeOpacityChecks);
+        check.Owner?._keyframeOpacityChecks?.Remove(state);
+        check.DetachWait();
+    }
+
+    // Pending opacity restart checks by control, so disposal (which drops the tree without
+    // unmounting it) can cancel them and detach their waits. Created by the first one.
+    private HashSet<ReactorState>? _keyframeOpacityChecks;
+
+    private void CancelKeyframeOpacityChecks()
+    {
+        if (_keyframeOpacityChecks is not { Count: > 0 } checks) return;
+        foreach (var state in new List<ReactorState>(checks))
+            CancelKeyframeOpacityCheck(state);
+        checks.Clear();
+    }
+
+    // Test-only seams (InternalsVisibleTo Reactor.AppTests.Host), kept out of ReactorState so
+    // product controls don't carry them: restarts per control, and the waits attached right now.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, global::System.Runtime.CompilerServices.StrongBox<int>>
+        s_keyframeOpacityRestartsForTests = new();
+
+    internal static int KeyframeOpacityRestartsForTests(UIElement uie)
+        => s_keyframeOpacityRestartsForTests.TryGetValue(uie, out var count) ? count.Value : 0;
+
+    internal static int KeyframeOpacityWaitsForTests;
+
+    internal static bool KeyframeOpacityPendingForTests(UIElement uie)
+        => uie.GetValue(ReactorAttached.StateProperty) is ReactorState { KeyframeOpacity: not null };
+
+    internal static bool KeyframeOpacityWaitsOnLayoutForTests(UIElement uie)
+        => uie.GetValue(ReactorAttached.StateProperty) is ReactorState { KeyframeOpacity.LayoutHandler: not null };
+
+    // Test-only seam, same visibility: the controller the named entry started on a compositor property,
+    // so a fixture can tell its keyframe from another animation on the same channel.
+    internal static AnimationController? KeyframeControllerForTests(UIElement uie, string name, string property)
+        => _keyframeTriggerValues.TryGetValue((uie, name), out var entry)
+            && entry.Started?.TryGetValue(property, out var controller) == true ? controller : null;
 
     private static void TrackKeyframeChannelOwners(ReactorState state, AnimateProperty channels, KeyframeChannelOwner owner)
     {
@@ -6954,7 +7279,13 @@ public sealed partial class Reconciler : IDisposable
         {
             if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
             if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)) continue;
-            if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState { KeyframeNames: { } names }) names.Remove(entry.Name);
+            if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState reactorState)
+            {
+                reactorState.KeyframeNames?.Remove(entry.Name);
+                if (state.Started?.TryGetValue("Opacity", out var opacity) == true
+                    && Equals(reactorState.KeyframeOpacity?.Controller, opacity))
+                    CancelKeyframeOpacityCheck(reactorState);
+            }
             if (!ownedOnly || noCompositor || state.Started is not { } started)
                 continue;
             // Started controllers mean the visual was already handed out. Look it up without
@@ -7013,6 +7344,7 @@ public sealed partial class Reconciler : IDisposable
             state.TransformRest = null;
             state.KeyframeChannelOwners = null;
             state.DeferredModifierResets = default;
+            CancelKeyframeOpacityCheck(state);
             state.ImplicitClaims = null;
             state.StaggerDelay = null;
             state.TranslationEnabled = false;
@@ -7046,6 +7378,9 @@ public sealed partial class Reconciler : IDisposable
 
         foreach (var expr in config.Expressions)
         {
+            // An expression has no AnimationController, so a pending keyframe restart would
+            // read the channel as free and replace it (#1669).
+            if (expr.Property == "Opacity") CancelKeyframeOpacityCheck(GetOrCreateReactorState(uie));
             var animation = compositor.CreateExpressionAnimation(expr.Expression);
             animation.SetReferenceParameter("scroll", scrollPropertySet);
             visual.StartAnimation(expr.Property, animation);
@@ -7909,8 +8244,10 @@ public sealed partial class Reconciler : IDisposable
         // filter returns false, so the exception is unchanged.
         if (m.OnMountAction is not null && oldM is null)
         {
+            var opacityProbe = new KeyframeOpacityProbe(fe);
             try { m.OnMountAction(fe); }
             catch (UnauthorizedAccessException) when (FacadeConflictDiagnostic.ReportRejectedSetter(fe, "'.OnMount(...)' callback")) { throw; }
+            opacityProbe.Complete();
         }
 
         // OnUpdateAction — the update-time counterpart, run on every in-place
@@ -7920,7 +8257,11 @@ public sealed partial class Reconciler : IDisposable
         // visual tree. Chart label a11y uses it to re-hide newly realized
         // focusable descendants that OnMountAction (mount-only) would miss (#162).
         if (m.OnUpdateAction is not null && oldM is not null)
+        {
+            var opacityProbe = new KeyframeOpacityProbe(fe);
             m.OnUpdateAction(fe);
+            opacityProbe.Complete();
+        }
 
         // OnUnmountAction — captured here (authoritative modifier set) so it fires
         // reliably at teardown regardless of the tagged element's identity. Keep the
@@ -9862,6 +10203,7 @@ public sealed partial class Reconciler : IDisposable
             node.Cache?.Clear();
         }
         _navigationHostNodes.Clear();
+        CancelKeyframeOpacityChecks();
         _pool.Clear();
         // The tree is dropped without unmounting, so a TitleBar this (ReactorHostControl)
         // reconciler registered with its containing window would otherwise stay registered

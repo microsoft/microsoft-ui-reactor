@@ -360,6 +360,10 @@ public sealed partial class Reconciler
             return ReferenceEquals(v1Result, control) ? null : v1Result;
         }
 
+        // A handler's own opacity write (a descriptor such as Button's IsDisabledFocusable dimming)
+        // replaces a pending keyframe restart as a modifier's does (#1669). Free when none is pending.
+        var opacityProbe = new KeyframeOpacityProbe(control);
+
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
         //   (3) global `ControlRegistry`, (4) composition-primitive switch.
@@ -411,6 +415,7 @@ public sealed partial class Reconciler
         // Composition primitives own their Border wrapper; a keyed memo is transparent.
         ownsControl = newEl is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
+        if (result is null) opacityProbe.Complete();
 
         // A transparent layer (a keyed Memo, a flyout wrapping its target) shares its inner
         // element's control. When the inner update hands back a different control (a target whose
@@ -564,7 +569,7 @@ public sealed partial class Reconciler
         {
             if (targetCanAdvanceTrigger && result is null)
                 ReleaseRemovedKeyframeChannels(target, keyframes, keyframes, KeyframeReleaseStage.BeforePlayback);
-            ApplyKeyframeAnimations(target, keyframes);
+            ApplyKeyframeAnimations(target, keyframes, this);
         }
         // Apply or clear scroll-linked expression animations (.ScrollLinked() modifier)
         if (newEl.ScrollAnimation is not null)
