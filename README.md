@@ -95,9 +95,10 @@ WinUI content, and it works with the rest of the WinUI ecosystem.
 
 You need Windows 10 (1809) or Windows 11, the
 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and the
-Windows App Runtime 2.x. New apps are framework-dependent, so they load the
-runtime that is installed on the machine. If it is missing, install it with
-`winget install Microsoft.WindowsAppRuntime.2`.
+Windows App Runtime 2.2 or later. New apps are framework-dependent, so they
+load the runtime that is installed on the machine. If it is missing, install it
+with `winget install Microsoft.WindowsAppRuntime.2`. If an older 2.x runtime is
+installed, update it with `winget upgrade Microsoft.WindowsAppRuntime.2`.
 [Installation](https://microsoft.github.io/microsoft-ui-reactor/get-started/install/)
 has the full list. Create an app with the WinApp CLI:
 
