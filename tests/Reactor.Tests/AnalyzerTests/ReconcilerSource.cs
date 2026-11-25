@@ -47,4 +47,91 @@ internal static class ReconcilerSource
             .OfType<MethodDeclarationSyntax>()
             .Where(method => names.Contains(method.Identifier.Text))
             .ToList();
+
+    /// <summary>
+    /// The name gates use for the whole modifier-apply pass: <c>ApplyModifiers</c> plus the
+    /// per-family helpers it calls (see <see cref="ApplyModifiersFamily"/>).
+    /// </summary>
+    public const string ApplyModifiersName = "ApplyModifiers";
+
+    /// <summary>
+    /// <c>ApplyModifiers</c> and every family helper it calls directly — the methods that,
+    /// together, hold the set/unset arm pairs of the common modifiers.
+    /// </summary>
+    /// <remarks>
+    /// <c>ApplyModifiers</c> is an ordered sequence of <c>Apply…Modifier(s)(fe, oldM, m, …)</c>
+    /// calls, so a gate that read only its own body would see none of the arms. A helper joins
+    /// the family by convention, not by a hand-kept list: it is invoked from
+    /// <c>ApplyModifiers</c>, its name matches <c>Apply…Modifier</c> or <c>Apply…Modifiers</c>,
+    /// and it takes <c>ElementModifiers? oldM</c> and <c>ElementModifiers m</c> (see
+    /// <see cref="IsModifierFamilyHelper"/>). A newly extracted helper is therefore scanned the
+    /// moment it is called. A helper that takes the bags under some other name would be missed
+    /// silently, which is what <c>ApplyModifiers_Delegates_Only_To_Scanned_Or_Recorded_Helpers</c>
+    /// guards against.
+    /// </remarks>
+    public static List<MethodDeclarationSyntax> ApplyModifiersFamily()
+    {
+        var roots = Methods(ApplyModifiersName);
+        var called = CalledMethodNames(roots);
+
+        return roots
+            .Concat(s_roots.Value
+                .SelectMany(root => root.DescendantNodes())
+                .OfType<MethodDeclarationSyntax>()
+                .Where(method => called.Contains(method.Identifier.Text) && IsModifierFamilyHelper(method)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Every reconciler method <c>ApplyModifiers</c> calls that takes the modifier bags —
+    /// family helpers and delegated subsystems alike.
+    /// </summary>
+    public static List<MethodDeclarationSyntax> ApplyModifiersBagConsumers()
+    {
+        var called = CalledMethodNames(Methods(ApplyModifiersName));
+
+        return s_roots.Value
+            .SelectMany(root => root.DescendantNodes())
+            .OfType<MethodDeclarationSyntax>()
+            .Where(method => method.Identifier.Text != ApplyModifiersName
+                && called.Contains(method.Identifier.Text)
+                && method.ParameterList.Parameters.Any(p => IsElementModifiers(p.Type)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The family-helper convention: an <c>Apply…Modifier(s)</c> method taking
+    /// <c>ElementModifiers? oldM</c> and <c>ElementModifiers m</c>.
+    /// </summary>
+    public static bool IsModifierFamilyHelper(MethodDeclarationSyntax method)
+    {
+        var name = method.Identifier.Text;
+        if (name == ApplyModifiersName
+            || !name.StartsWith("Apply", StringComparison.Ordinal)
+            || !(name.EndsWith("Modifier", StringComparison.Ordinal) || name.EndsWith("Modifiers", StringComparison.Ordinal)))
+            return false;
+
+        var parameters = method.ParameterList.Parameters;
+        return parameters.Any(p => p.Identifier.Text == "oldM" && IsElementModifiers(p.Type))
+            && parameters.Any(p => p.Identifier.Text == "m" && IsElementModifiers(p.Type));
+    }
+
+    private static bool IsElementModifiers(TypeSyntax? type) => type switch
+    {
+        NullableTypeSyntax nullable => IsElementModifiers(nullable.ElementType),
+        _ => type?.ToString() is { } text && text[(text.LastIndexOf('.') + 1)..] == "ElementModifiers",
+    };
+
+    private static HashSet<string> CalledMethodNames(IEnumerable<MethodDeclarationSyntax> methods) =>
+        methods
+            .SelectMany(method => method.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            .Select(invocation => invocation.Expression switch
+            {
+                IdentifierNameSyntax id => id.Identifier.Text,
+                MemberAccessExpressionSyntax access => access.Name.Identifier.Text,
+                _ => null,
+            })
+            .Where(name => name is not null)
+            .Select(name => name!)
+            .ToHashSet(StringComparer.Ordinal);
 }

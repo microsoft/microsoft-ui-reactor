@@ -1136,9 +1136,11 @@ public class ModifierTableIntegrityTests
     /// </remarks>
     private static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
     {
-        var methods = ReconcilerSource.Methods("ApplyModifiers");
+        // ApplyModifiers itself is an ordered sequence of per-family helper calls; the arms
+        // live in those helpers, so read the whole family.
+        var methods = ReconcilerSource.ApplyModifiersFamily();
 
-        Assert.True(methods.Count > 0, "No ApplyModifiers method found in the Reconciler partial files");
+        Assert.True(methods.Count > 1, "No ApplyModifiers family helpers found in the Reconciler partial files");
 
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 

@@ -60,6 +60,9 @@ public class ModifierUnsetClearValueTests
         // Real counts when these were set: set arms 37 / 12, unset arms 36 / 12. Read them out
         // of the assertion message (raise the floor to 99999 and run) rather than re-deriving
         // with a text scan — the scan walks syntax nodes, so a line-scoped regex undercounts.
+        //
+        // The ApplyModifiers entry spans ApplyModifiers and its per-family helpers
+        // (ScannedMethodBodies), so its floors count arms across the whole family.
         ("ApplyModifiers", "m", "oldM", 32, 31),
         ("ApplyAccessibilityModifiers", "a", "oldA", 10, 10),
     ];
@@ -541,7 +544,7 @@ public class ModifierUnsetClearValueTests
             .Select(entry => entry.Method)
             .ToHashSet(StringComparer.Ordinal);
 
-        var methods = ReconcilerSource.Methods(scanned);
+        var methods = scanned.SelectMany(ScannedMethodBodies).ToList();
 
         Assert.True(
             methods.Count > 0,
@@ -1230,10 +1233,88 @@ public class ModifierUnsetClearValueTests
             .Select(reset => (reset.Owner ?? reset.Receiver) + "." + reset.Property)
             .ToHashSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The method bodies a <see cref="ScannedMethods"/> entry stands for. <c>ApplyModifiers</c>
+    /// is an ordered sequence of per-family helper calls, so its entry covers the whole family
+    /// (<see cref="ReconcilerSource.ApplyModifiersFamily"/>) and its floors count arms across
+    /// every helper; any other name is the method itself.
+    /// </summary>
+    private static List<MethodDeclarationSyntax> ScannedMethodBodies(string methodName) =>
+        methodName == ReconcilerSource.ApplyModifiersName
+            ? ReconcilerSource.ApplyModifiersFamily()
+            : ReconcilerSource.Methods(methodName);
+
+    /// <summary>
+    /// Reconciler methods <c>ApplyModifiers</c> hands the modifier bags to that are deliberately
+    /// <em>not</em> scanned as part of its family, with the reason each one owes no
+    /// set/unset arm pair of a common modifier.
+    /// </summary>
+    private static readonly Dictionary<string, string> DelegatedBagConsumers =
+        new(StringComparer.Ordinal)
+        {
+            ["ApplyEventHandlers"] =
+                "Declarative event handlers: subscribe/unsubscribe bookkeeping, not dependency-property writes.",
+            ["ApplyGestureHandlers"] =
+                "Gesture recognizers (.OnPan/.OnPinch/.OnRotate): handler wiring, not dependency-property writes.",
+            ["ApplyDragDropHandlers"] =
+                "Drag-and-drop handlers: handler wiring plus the AllowDrop/CanDrag flags they own, covered by their own tests.",
+            ["ApplyModifierReferenceEdges"] =
+                "Reference-edge (element-to-element) tracking: bookkeeping, not dependency-property writes.",
+        };
+
+    /// <summary>
+    /// Every method <c>ApplyModifiers</c> hands the modifier bags to is either scanned as a
+    /// family helper or recorded in <see cref="DelegatedBagConsumers"/> with a reason.
+    /// </summary>
+    /// <remarks>
+    /// The family is discovered by convention (<see cref="ReconcilerSource.IsModifierFamilyHelper"/>),
+    /// so a helper that breaks the convention — named <c>ApplyFooSettings</c>, or taking the
+    /// bags as <c>prev</c>/<c>next</c> — would drop out of every gate in this file and in
+    /// <c>ModifierTableIntegrityTests</c> without a sound. This is the tripwire for that: it
+    /// names the unscanned method instead.
+    /// </remarks>
+    [Fact]
+    public void ApplyModifiers_Delegates_Only_To_Scanned_Or_Recorded_Helpers()
+    {
+        var family = ReconcilerSource.ApplyModifiersFamily()
+            .Select(method => method.Identifier.Text)
+            .Where(name => name != ReconcilerSource.ApplyModifiersName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Non-vacuity: ApplyModifiers is split into 13 family helpers today. A discovery rule
+        // that stopped matching would leave only ApplyModifiers' own (arm-free) body to scan,
+        // so the per-method arm floors would fail too — but naming the cause here is cheaper.
+        Assert.True(
+            family.Count >= 10,
+            $"Only {family.Count} ApplyModifiers family helper(s) were discovered " +
+            $"([{string.Join(", ", family.OrderBy(n => n, StringComparer.Ordinal))}]); expected at least 10.");
+
+        var consumers = ReconcilerSource.ApplyModifiersBagConsumers()
+            .Select(method => method.Identifier.Text)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Positive control: the delegated subsystems really are seen as bag consumers, so an
+        // empty `unscanned` below is a measurement rather than a reader that matches nothing.
+        Assert.Contains("ApplyEventHandlers", consumers);
+
+        var unscanned = consumers
+            .Where(name => !family.Contains(name) && !DelegatedBagConsumers.ContainsKey(name))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            unscanned.Count == 0,
+            "ApplyModifiers hands the modifier bags to methods that are neither scanned as family " +
+            $"helpers nor recorded in DelegatedBagConsumers: [{string.Join(", ", unscanned)}]. " +
+            "Name a helper that writes common modifiers `Apply<Family>Modifier(s)` and take the bags " +
+            "as `ElementModifiers? oldM, ElementModifiers m` so the source gates scan it, or record " +
+            "why it owes no set/unset arms.");
+    }
+
     /// <summary>Every <c>if</c> statement in the named reconciler method(s).</summary>
     private static List<IfStatementSyntax> ReadIfStatements(string methodName)
     {
-        var methods = ReconcilerSource.Methods(methodName);
+        var methods = ScannedMethodBodies(methodName);
 
         Assert.True(methods.Count > 0, $"No {methodName} method found in the Reconciler partial files");
 
