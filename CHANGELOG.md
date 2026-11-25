@@ -207,6 +207,13 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
+  layers mount no control of their own, so the ref points at the control their child mounted, and
+  unmount only cleared refs declared on that control's own element and its decorators. The ref kept
+  pointing at the control after it left the tree, and after an unrelated element rented it from the
+  pool. Unmount now clears every ref the reconciler pointed at the control, whichever layer declared
+  it.
+
 - **An exit `.Transition()` declared on a keyed `Memo(key, …)` now plays when the Memo is removed or
   its key changes (issues #1663 and #1665).** The control used to leave the tree at once, while the
   same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
