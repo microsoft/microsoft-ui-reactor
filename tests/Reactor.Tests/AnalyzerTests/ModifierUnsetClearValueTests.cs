@@ -1245,33 +1245,47 @@ public class ModifierUnsetClearValueTests
             : ReconcilerSource.Methods(methodName);
 
     /// <summary>
-    /// Reconciler methods <c>ApplyModifiers</c> hands the modifier bags to that are deliberately
-    /// <em>not</em> scanned as part of its family, with the reason each one owes no
-    /// set/unset arm pair of a common modifier.
+    /// Methods the <c>ApplyModifiers</c> family hands the modifier bags to that are deliberately
+    /// <em>not</em> scanned as part of it, with the reason each one is outside these gates.
     /// </summary>
+    /// <remarks>
+    /// Being listed here is not a claim that the method writes no dependency property. The
+    /// input handlers do (<c>ManipulationMode</c>, <c>IsTapEnabled</c>, <c>CanDrag</c>,
+    /// <c>AllowDrop</c>), and they reset by assigning the inert default rather than through
+    /// <c>ClearValue</c>. They were never part of the #952/#986 scan, and this list records that
+    /// rather than changing it. Bringing one under the gates means adding it to
+    /// <see cref="ScannedMethods"/> with its own floors and exceptions.
+    /// </remarks>
     private static readonly Dictionary<string, string> DelegatedBagConsumers =
         new(StringComparer.Ordinal)
         {
             ["ApplyEventHandlers"] =
-                "Declarative event handlers: subscribe/unsubscribe bookkeeping, not dependency-property writes.",
+                "Declarative event handlers. Subscribes and unsubscribes trampolines, and toggles " +
+                "IsTapEnabled for .OnTapped, resetting it by assignment. Not a styled common modifier, " +
+                "and outside the #952 scan since before ApplyModifiers was split.",
             ["ApplyGestureHandlers"] =
-                "Gesture recognizers (.OnPan/.OnPinch/.OnRotate): handler wiring, not dependency-property writes.",
+                "Gesture recognizers (.OnPan/.OnPinch/.OnRotate). Wires manipulation handlers and " +
+                "writes ManipulationMode, resetting it to None by assignment. Outside the #952 scan " +
+                "since before ApplyModifiers was split.",
             ["ApplyDragDropHandlers"] =
-                "Drag-and-drop handlers: handler wiring plus the AllowDrop/CanDrag flags they own, covered by their own tests.",
+                "Drag-and-drop. Wires drag/drop handlers and writes CanDrag/AllowDrop, resetting them " +
+                "to false by assignment. Outside the #952 scan since before ApplyModifiers was split.",
             ["ApplyModifierReferenceEdges"] =
-                "Reference-edge (element-to-element) tracking: bookkeeping, not dependency-property writes.",
+                "Reference-edge (element-to-element) tracking. Bookkeeping, no dependency-property writes.",
         };
 
     /// <summary>
-    /// Every method <c>ApplyModifiers</c> hands the modifier bags to is either scanned as a
-    /// family helper or recorded in <see cref="DelegatedBagConsumers"/> with a reason.
+    /// Every method the <c>ApplyModifiers</c> family hands the modifier bags to is either
+    /// scanned as a family helper or recorded in <see cref="DelegatedBagConsumers"/> with a
+    /// reason.
     /// </summary>
     /// <remarks>
     /// The family is discovered by convention (<see cref="ReconcilerSource.IsModifierFamilyHelper"/>),
-    /// so a helper that breaks the convention — named <c>ApplyFooSettings</c>, or taking the
-    /// bags as <c>prev</c>/<c>next</c> — would drop out of every gate in this file and in
-    /// <c>ModifierTableIntegrityTests</c> without a sound. This is the tripwire for that: it
-    /// names the unscanned method instead.
+    /// so a helper that breaks it — named <c>ApplyFooSettings</c>, taking the bags as
+    /// <c>prev</c>/<c>next</c>, or moved out of the <c>Reconciler.*.cs</c> files — would drop out of
+    /// every gate in this file and in <c>ModifierTableIntegrityTests</c> without a sound. This
+    /// tripwire is driven by call sites (<see cref="ReconcilerSource.ApplyModifiersBagHandoffs"/>),
+    /// not declarations, so it names such a helper instead.
     /// </remarks>
     [Fact]
     public void ApplyModifiers_Delegates_Only_To_Scanned_Or_Recorded_Helpers()
@@ -1283,32 +1297,32 @@ public class ModifierUnsetClearValueTests
 
         // Non-vacuity: ApplyModifiers is split into 13 family helpers today. A discovery rule
         // that stopped matching would leave only ApplyModifiers' own (arm-free) body to scan,
-        // so the per-method arm floors would fail too — but naming the cause here is cheaper.
+        // so the per-method arm floors would fail too, but naming the cause here is cheaper.
         Assert.True(
             family.Count >= 10,
             $"Only {family.Count} ApplyModifiers family helper(s) were discovered " +
             $"([{string.Join(", ", family.OrderBy(n => n, StringComparer.Ordinal))}]); expected at least 10.");
 
-        var consumers = ReconcilerSource.ApplyModifiersBagConsumers()
-            .Select(method => method.Identifier.Text)
-            .ToHashSet(StringComparer.Ordinal);
+        var handoffs = ReconcilerSource.ApplyModifiersBagHandoffs();
 
-        // Positive control: the delegated subsystems really are seen as bag consumers, so an
-        // empty `unscanned` below is a measurement rather than a reader that matches nothing.
-        Assert.Contains("ApplyEventHandlers", consumers);
+        // Positive controls: the handoff reader sees both a delegated subsystem and a family
+        // helper, so an empty `unscanned` below is a measurement rather than a reader that
+        // matches nothing.
+        Assert.Contains("ApplyEventHandlers", handoffs);
+        Assert.Contains(family.First(), handoffs);
 
-        var unscanned = consumers
+        var unscanned = handoffs
             .Where(name => !family.Contains(name) && !DelegatedBagConsumers.ContainsKey(name))
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
         Assert.True(
             unscanned.Count == 0,
-            "ApplyModifiers hands the modifier bags to methods that are neither scanned as family " +
-            $"helpers nor recorded in DelegatedBagConsumers: [{string.Join(", ", unscanned)}]. " +
-            "Name a helper that writes common modifiers `Apply<Family>Modifier(s)` and take the bags " +
-            "as `ElementModifiers? oldM, ElementModifiers m` so the source gates scan it, or record " +
-            "why it owes no set/unset arms.");
+            "The ApplyModifiers family hands the modifier bags to methods that are neither scanned " +
+            $"as family helpers nor recorded in DelegatedBagConsumers: [{string.Join(", ", unscanned)}]. " +
+            "Name a helper that writes common modifiers `Apply<Family>Modifier(s)`, take the bags as " +
+            "`ElementModifiers? oldM, ElementModifiers m`, and declare it in a Reconciler.*.cs partial " +
+            "so the source gates scan it, or record why it is outside them.");
     }
 
     /// <summary>Every <c>if</c> statement in the named reconciler method(s).</summary>

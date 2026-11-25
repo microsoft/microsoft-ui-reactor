@@ -1140,7 +1140,10 @@ public class ModifierTableIntegrityTests
         // live in those helpers, so read the whole family.
         var methods = ReconcilerSource.ApplyModifiersFamily();
 
-        Assert.True(methods.Count > 1, "No ApplyModifiers family helpers found in the Reconciler partial files");
+        // Two ApplyModifiers overloads are roots, so count the helpers themselves.
+        Assert.True(
+            methods.Count(method => method.Identifier.Text != ReconcilerSource.ApplyModifiersName) > 0,
+            "No ApplyModifiers family helpers found in the Reconciler partial files");
 
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 

@@ -50,54 +50,67 @@ internal static class ReconcilerSource
 
     /// <summary>
     /// The name gates use for the whole modifier-apply pass: <c>ApplyModifiers</c> plus the
-    /// per-family helpers it calls (see <see cref="ApplyModifiersFamily"/>).
+    /// per-family helpers reachable from it (see <see cref="ApplyModifiersFamily"/>).
     /// </summary>
     public const string ApplyModifiersName = "ApplyModifiers";
 
     /// <summary>
-    /// <c>ApplyModifiers</c> and every family helper it calls directly — the methods that,
+    /// <c>ApplyModifiers</c> and every family helper reachable from it — the methods that,
     /// together, hold the set/unset arm pairs of the common modifiers.
     /// </summary>
     /// <remarks>
     /// <c>ApplyModifiers</c> is an ordered sequence of <c>Apply…Modifier(s)(fe, oldM, m, …)</c>
     /// calls, so a gate that read only its own body would see none of the arms. A helper joins
-    /// the family by convention, not by a hand-kept list: it is invoked from
-    /// <c>ApplyModifiers</c>, its name matches <c>Apply…Modifier</c> or <c>Apply…Modifiers</c>,
-    /// and it takes <c>ElementModifiers? oldM</c> and <c>ElementModifiers m</c> (see
-    /// <see cref="IsModifierFamilyHelper"/>). A newly extracted helper is therefore scanned the
-    /// moment it is called. A helper that takes the bags under some other name would be missed
-    /// silently, which is what <c>ApplyModifiers_Delegates_Only_To_Scanned_Or_Recorded_Helpers</c>
-    /// guards against.
+    /// the family by convention, not by a hand-kept list: it is called from <c>ApplyModifiers</c>
+    /// or from another family helper (transitively), its name matches <c>Apply…Modifier</c> or
+    /// <c>Apply…Modifiers</c>, and it takes <c>ElementModifiers? oldM</c> and
+    /// <c>ElementModifiers m</c> (see <see cref="IsModifierFamilyHelper"/>). A helper that breaks
+    /// the convention, or is declared outside the reconciler's partial files, would be missed;
+    /// <c>ApplyModifiers_Delegates_Only_To_Scanned_Or_Recorded_Helpers</c> fails on it by name,
+    /// driven by <see cref="ApplyModifiersBagHandoffs"/>.
     /// </remarks>
     public static List<MethodDeclarationSyntax> ApplyModifiersFamily()
     {
-        var roots = Methods(ApplyModifiersName);
-        var called = CalledMethodNames(roots);
-
-        return roots
-            .Concat(s_roots.Value
-                .SelectMany(root => root.DescendantNodes())
-                .OfType<MethodDeclarationSyntax>()
-                .Where(method => called.Contains(method.Identifier.Text) && IsModifierFamilyHelper(method)))
+        var family = Methods(ApplyModifiersName);
+        var names = new HashSet<string>(StringComparer.Ordinal) { ApplyModifiersName };
+        var candidates = s_roots.Value
+            .SelectMany(root => root.DescendantNodes())
+            .OfType<MethodDeclarationSyntax>()
+            .Where(IsModifierFamilyHelper)
             .ToList();
+
+        // Fixpoint: a helper extracted out of another helper is still part of the family.
+        while (true)
+        {
+            var called = CalledMethodNames(family);
+            var added = candidates
+                .Where(method => called.Contains(method.Identifier.Text) && !names.Contains(method.Identifier.Text))
+                .ToList();
+            if (added.Count == 0) return family;
+
+            family.AddRange(added);
+            foreach (var method in added) names.Add(method.Identifier.Text);
+        }
     }
 
     /// <summary>
-    /// Every reconciler method <c>ApplyModifiers</c> calls that takes the modifier bags —
-    /// family helpers and delegated subsystems alike.
+    /// The name of every method the <see cref="ApplyModifiersFamily"/> hands a modifier bag to —
+    /// any call that passes the <c>oldM</c> or <c>m</c> identifier as an argument — whether or
+    /// not a declaration for it exists in the reconciler's partial files.
     /// </summary>
-    public static List<MethodDeclarationSyntax> ApplyModifiersBagConsumers()
-    {
-        var called = CalledMethodNames(Methods(ApplyModifiersName));
-
-        return s_roots.Value
-            .SelectMany(root => root.DescendantNodes())
-            .OfType<MethodDeclarationSyntax>()
-            .Where(method => method.Identifier.Text != ApplyModifiersName
-                && called.Contains(method.Identifier.Text)
-                && method.ParameterList.Parameters.Any(p => IsElementModifiers(p.Type)))
-            .ToList();
-    }
+    /// <remarks>
+    /// Driven by call sites rather than by declarations, so a helper that moved out of the
+    /// <c>Reconciler.*.cs</c> files (and so no longer resolves) still shows up here.
+    /// </remarks>
+    public static HashSet<string> ApplyModifiersBagHandoffs() =>
+        ApplyModifiersFamily()
+            .SelectMany(method => method.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            .Where(invocation => invocation.ArgumentList.Arguments.Any(argument =>
+                argument.Expression is IdentifierNameSyntax { Identifier.Text: "oldM" or "m" }))
+            .Select(InvokedName)
+            .Where(name => name is not null && name != ApplyModifiersName)
+            .Select(name => name!)
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The family-helper convention: an <c>Apply…Modifier(s)</c> method taking
@@ -125,13 +138,15 @@ internal static class ReconcilerSource
     private static HashSet<string> CalledMethodNames(IEnumerable<MethodDeclarationSyntax> methods) =>
         methods
             .SelectMany(method => method.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Select(invocation => invocation.Expression switch
-            {
-                IdentifierNameSyntax id => id.Identifier.Text,
-                MemberAccessExpressionSyntax access => access.Name.Identifier.Text,
-                _ => null,
-            })
+            .Select(InvokedName)
             .Where(name => name is not null)
             .Select(name => name!)
             .ToHashSet(StringComparer.Ordinal);
+
+    private static string? InvokedName(InvocationExpressionSyntax invocation) => invocation.Expression switch
+    {
+        IdentifierNameSyntax id => id.Identifier.Text,
+        MemberAccessExpressionSyntax access => access.Name.Identifier.Text,
+        _ => null,
+    };
 }

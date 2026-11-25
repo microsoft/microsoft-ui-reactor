@@ -241,11 +241,12 @@ public sealed partial class Reconciler
         // Each WinUI property set is a managed→native interop call, so avoiding
         // unnecessary sets is critical for large element counts.
         //
-        // Each family helper below owns a set/unset arm pair per modifier. The call order is
-        // part of the contract (RequestedTheme before anything theme-resolved, transforms
-        // before tooltips and flyouts, callbacks and refs last), so add a new modifier's arms
-        // to the helper for its family, or add a new `Apply…Modifier(s)(fe, oldM, m, …)`
-        // helper here at the point in the sequence where its writes belong. The source gates in
+        // Each family helper below owns a set/unset arm pair per modifier, and the calls keep
+        // the statement order of the pre-split body. Keep it unless you have a reason: at least
+        // RequestedTheme must come before anything theme-resolved, and the OnMount/OnUpdate
+        // callbacks must run after the property writes they may override. Add a new modifier's
+        // arms to the helper for its family, or add a new `Apply…Modifier(s)(fe, oldM, m, …)`
+        // helper at the point in the sequence where its writes belong. The source gates in
         // Reactor.Tests scan every helper with that name and signature (ReconcilerSource.ApplyModifiersFamily).
         ApplyRequestedThemeModifier(fe, oldM, m);
         ApplyMarginModifiers(fe, oldM, m, ownsControl);
