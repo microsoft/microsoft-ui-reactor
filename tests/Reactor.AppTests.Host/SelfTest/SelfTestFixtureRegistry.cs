@@ -1215,6 +1215,7 @@ internal static class SelfTestFixtureRegistry
         ("Hosting_XamlInteropRegister", static harness => new HostingCoverageFixtures.XamlInteropRegister(harness)),
         ("Hosting_HostControlReparentSurvives", static harness => new HostingCoverageFixtures.HostControlReparentSurvives(harness)),
         ("Hosting_PreviewCaptureServerEndpoints", static harness => new HostingCoverageFixtures.PreviewCaptureServerEndpoints(harness)),
+        ("Hosting_HarnessRenderDrainsCreatedHosts", static harness => new HarnessRenderFixtures.DrainsCreatedHosts(harness)),
         ("Hosting_HostControlWaitForIdle", static harness => new HostIdleAndThemeResourceFixtures.HostControlWaitForIdle(harness)),
         ("Hosting_NotifyResourcesChangedRefreshesThemeRefOverrides", static harness => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesThemeRefOverrides(harness)),
         ("Hosting_NotifyResourcesChangedRefreshesMemoizedThemeModifiers", static harness => new HostIdleAndThemeResourceFixtures.NotifyResourcesChangedRefreshesMemoizedThemeModifiers(harness)),
