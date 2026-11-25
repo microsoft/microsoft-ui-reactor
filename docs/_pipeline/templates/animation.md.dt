@@ -439,7 +439,7 @@ Built-in transitions:
 
 | Transition | Effect |
 |-----------|--------|
-| `Transition.Fade` | Fade in/out |
+| `Transition.Fade` | Fade in from 0 to the element's own opacity (`.Opacity()` or a style's), and out to 0 |
 | `Transition.Slide(edge)` | Slide from an edge (Left, Top, Right, Bottom) |
 | `Transition.Scale(from)` | Scale from `from` times the element's own `.Scale()` to its full size |
 | `a + b` | Run both in parallel |

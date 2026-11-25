@@ -50,10 +50,15 @@ Conventions for contributors:
   element construction with `Size`. The code fix preserves argument evaluation order
   and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
 
-- The Toolkit compatibility harness can capture and measure SettingsCard header
-  and description fit at an already-active OS text scale above 100%. Other
-  controls retain explicit unimplemented outcomes; no desktop settings are
-  changed, and runtime acceptance still requires an approved host (issue #1602).
+- The Toolkit compatibility harness can measure SettingsCard header/description
+  fit and explicit initial plain-text targets in eleven additional header, item
+  and panel controls at an already-active OS text scale above 100%. It checks
+  OS-profile stability and separates high-contrast capture completion from the
+  still-blocked actual-host appearance review. Unsupported shapes remain blocked;
+  no desktop settings are changed, and runtime acceptance still requires an
+  approved host. Panel fixture slots accommodate measured label sizes, and the
+  document theme check permits equal Light/Dark brushes under stable OS high
+  contrast without weakening text containment (issue #1602).
 
 - **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
   the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
@@ -67,6 +72,11 @@ Conventions for contributors:
   own message and no fix.
 
 ### Changed
+
+- ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
+  ("Date & time"), every card has an image, the nav uses WinUI Gallery's category glyphs, and
+  page titles use the regular title weight. Category keys, deep-link slugs and the search index
+  are unchanged.
 
 - **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
   visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
@@ -223,6 +233,15 @@ Conventions for contributors:
   same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
   until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
   honoured too.
+
+- An enter fade (`.Transition(Transition.Fade)`, and the default enter under
+  `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
+  style setter) now fades in, and ends at that opacity instead of 1.
+  XAML writes the element's opacity to the visual when it first renders it, which stopped the fade,
+  so `Border(...).Opacity(0.4).Transition(Transition.Fade)` snapped to 0.4. A pooled control that
+  gets no such write faded to 1 and stayed there. Reactor now restarts the fade once after that
+  first frame, keeping the element hidden until then, unless a modifier or `.Set(...)` changed the
+  opacity in between (spec 066 §3, issue #1680).
 
 - An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.

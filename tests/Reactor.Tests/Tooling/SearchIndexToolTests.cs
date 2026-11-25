@@ -73,13 +73,13 @@ sealed class MiniGallery : IDisposable
     }
 
     const string Registry = @"namespace WinUIGalleryReactor;
-public record ControlInfo(string Title, string Description, string Category, string IconGlyph, string Tag, string ImageFile = ""p.png"");
+public record ControlInfo(string Title, string Description, string Category, string Tag, string ImageFile = ""p.png"");
 public static class ControlRegistry
 {
     public static ControlInfo[] All { get; } = new ControlInfo[]
     {
-        new(""Alpha"", ""The alpha control."", ""Basic Input"", ""\uE001"", ""alpha""),
-        new(""Beta"", ""The beta control."", ""Basic Input"", ""\uE002"", ""beta""),
+        new(""Alpha"", ""The alpha control."", ""Basic Input"", ""alpha""),
+        new(""Beta"", ""The beta control."", ""Basic Input"", ""beta""),
     };
 }";
 
@@ -208,12 +208,12 @@ public sealed class SearchIndexGeneratorEdgeTests
     {
         using var g = new MiniGallery(betaRouted: true);
         g.OverwriteRegistry(@"namespace WinUIGalleryReactor;
-public record ControlInfo(string Title, string Description, string Category, string IconGlyph, string Tag);
+public record ControlInfo(string Title, string Description, string Category, string Tag);
 public static class ControlRegistry
 {
     public static ControlInfo[] All { get; } = new ControlInfo[]
     {
-        new(""Alpha"", ""ok"", ""Basic Input"", ""\uE001"", ""alpha""),
+        new(""Alpha"", ""ok"", ""Basic Input"", ""alpha""),
         new(""Bad"", ""too few args""),
     };
 }");

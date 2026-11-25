@@ -87,6 +87,8 @@ internal static class AnimationHelper
     {
         MarkCompositionWrite(state, property);
         if (property == "Rotation") (state.TransformRest ??= new()).RotationDegrees = value;
+        // An animated .Opacity() leaves UIElement.Opacity alone, so the rest value is kept here.
+        else if (property == "Opacity") (state.TransformRest ??= new()).Opacity = value;
     }
 
     private static void MarkCompositionWrite(Reconciler.ReactorState state, string property, Vector3 value)
@@ -103,7 +105,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
-        if (flag == AnimateProperty.Opacity) Reconciler.CancelKeyframeOpacityCheck(state);
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelOpacityRestart(state);
         return state;
     }
 
@@ -294,6 +296,7 @@ internal static class AnimationHelper
                 case "Rotation": rest.RotationDegrees = 0; break;
                 case "Translation": rest.Translation = Vector3.Zero; break;
                 case "CenterPoint": rest.CenterPoint = Vector3.Zero; break;
+                case "Opacity": rest.Opacity = null; break;
             }
         }
         if (state is null) return;
@@ -372,7 +375,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties &= ~flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
-        if (flag == AnimateProperty.Opacity) Reconciler.CancelKeyframeOpacityCheck(state);
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelOpacityRestart(state);
     }
 
     /// <summary>
@@ -443,7 +446,7 @@ internal static class AnimationHelper
             || !Equals(controller, state.OpacityKeyframe?.Controller)) return;
         var current = visual.TryGetAnimationController("Opacity");
         // The XAML push can complete the original batch before its restart check runs.
-        if (!applyDeferredReset && current is null && Equals(state.KeyframeOpacity?.Controller, controller)) return;
+        if (!applyDeferredReset && current is null && Equals(state.OpacityRestart?.Controller, controller)) return;
 
         bool restoreDeferred = cancelledRestart && current is null && state.DeclaredOpacity.Deferred;
         state.OpacityKeyframe = null;
