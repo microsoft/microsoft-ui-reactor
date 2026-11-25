@@ -67,7 +67,7 @@ internal sealed record ReferenceGenResult(
 /// </list>
 ///
 /// Findings: <c>REACTOR_DOC_REFGEN_001</c> (a Reactor cref that does not
-/// resolve), <c>_REFGEN_003</c> (no XML file), <c>_REFGEN_004</c> (a public
+/// resolve), <c>_REFGEN_003</c> (an input file is missing), <c>_REFGEN_004</c> (a public
 /// type that no category matches), <c>_REFGEN_W001</c> (missing summary) and
 /// <c>_REFGEN_W003</c> (a guide page that has no template).
 /// </summary>
@@ -136,13 +136,18 @@ internal sealed class ReferenceGenerator
     /// <returns>The number of files written and deleted.</returns>
     public static (int Written, int Deleted) WriteToDisk(ReferenceGenResult result, string guideRoot)
     {
-        var referenceRoot = Path.Combine(guideRoot, "reference");
+        var referenceRoot = Path.GetFullPath(Path.Combine(guideRoot, "reference"));
         var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int written = 0, deleted = 0;
 
         foreach (var page in result.Pages.OrderBy(p => p.RelativePath, StringComparer.Ordinal))
         {
             var path = Path.GetFullPath(Path.Combine(guideRoot, page.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            // Page paths come from map ids. ReferenceMap already rejects ids that
+            // are not slugs; this is the backstop for anything that slips past it.
+            if (!DocPaths.IsUnder(path, referenceRoot))
+                throw new InvalidOperationException(
+                    $"Reference page '{page.RelativePath}' resolves to '{path}', which is outside '{referenceRoot}'.");
             expected.Add(path);
             if (File.Exists(path))
             {
@@ -166,7 +171,7 @@ internal sealed class ReferenceGenerator
 
         if (!Directory.Exists(referenceRoot)) return (written, deleted);
 
-        foreach (var file in Directory.EnumerateFiles(referenceRoot, "*.md", SearchOption.AllDirectories)
+        foreach (var file in Directory.EnumerateFiles(referenceRoot, "*.md", PruneWalk)
                      .OrderBy(f => f, StringComparer.Ordinal))
         {
             var full = Path.GetFullPath(file);
@@ -176,13 +181,27 @@ internal sealed class ReferenceGenerator
             deleted++;
         }
 
-        foreach (var dir in Directory.EnumerateDirectories(referenceRoot, "*", SearchOption.AllDirectories)
+        foreach (var dir in Directory.EnumerateDirectories(referenceRoot, "*", PruneWalk)
                      .OrderByDescending(d => d.Length).ThenBy(d => d, StringComparer.Ordinal))
         {
             if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir);
         }
         return (written, deleted);
     }
+
+    /// <summary>
+    /// The walk the prune uses. It skips reparse points (junctions and
+    /// symlinks), the same way the XML candidate walk in
+    /// <see cref="CompileCommand"/> does, so a link under
+    /// <c>reference/</c> can never lead the prune into deleting files that
+    /// live outside it.
+    /// </summary>
+    internal static readonly EnumerationOptions PruneWalk = new()
+    {
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
+    };
 
     /// <summary>The file name as the file system stores it, which may differ in case from <paramref name="path"/>.</summary>
     private static string OnDiskName(string path)

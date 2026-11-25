@@ -153,6 +153,15 @@ dotnet run --project tools/Reactor.DocPipeline -- check-tier --tier solid --ci
 # Skip costly phases for inner-loop iteration
 dotnet run --project tools/Reactor.DocPipeline -- compile --skip-screenshots --skip-diagrams
 
+# Regenerate only the API reference (Phase 5.7), leaving the guide pages alone.
+# Exits 1 when an input is missing or an error finding is reported.
+dotnet run --project tools/Reactor.DocPipeline -- compile --reference-only
+
+# Also write the nav.json groups for the reference pages to a file. The
+# reference groups in docs/_website/nav.json must match it;
+# ReferenceNavTests fails when they drift.
+dotnet run --project tools/Reactor.DocPipeline -- compile --reference-only --reference-nav-out ref-nav.json
+
 # Render diagrams only (fast Mermaid loop)
 dotnet run --project tools/Reactor.DocPipeline -- render-diagrams --topic architecture-overview
 
@@ -230,10 +239,15 @@ rather than failing, printing:
 That degradation is deliberate: on a first compile you should still get your
 guide pages. Under `--ci` the same condition **exits 1** instead. CI always
 builds, so a missing input there means the run is not the run that was asked
-for, and skipping the phase would leave the ~117 pages under
+for, and skipping the phase would leave the pages under
 `docs/guide/reference/` silently at whatever was committed. The same applies to
 a missing `reference-map.yaml`. `ReferenceStalenessWiringTests` pins both
 directions.
+
+The phase also reads `Microsoft.UI.Reactor.dll` from the same folder as the XML
+file. If the XML file is there but the DLL is not, it reports
+[`REACTOR_DOC_REFGEN_003`](#6-snippet--image--diagram-error-codes) and writes
+and deletes nothing, so the committed pages stay as they are.
 
 CI does build it. The `docs-build` job runs `docs compile --no-screenshots --ci`
 *without* `--no-build`, so Phase 2 builds every doc app, each of which
@@ -647,8 +661,8 @@ reference-generation codes.
 | `REACTOR_DOC_IMAGE_004`    | *(warning — does **not** fail `--ci`)* The blank-image gate could not run: `System.Drawing.Common` is Windows-only, so on any other platform there is no decoder. Emitted **once per page** — the condition is a property of the machine, not of any image, so one finding per screenshot would bury it. Nothing else is suppressed: reference validation (`_001`) and the decoder-free checks behind `_003` (zero-byte file, no PNG/JPEG signature) still run everywhere. Never fires on the supported configuration. It is the one non-fatal finding this gate emits, and deliberately so: it says the scan *could not run*, not that an image is bad, and it fires precisely on the platform that cannot decode — so breaking the build on it would fail a docs compile over a missing codec while nothing is wrong with the docs |
 | `REACTOR_DOC_SHOT_001`     | Captured frame was contentless; nothing was written and the existing screenshot was left untouched. The message names which clause fired — *no pixel below the threshold* or *one flat colour* — because for a dark fill the first wording states the opposite of what happened |
 | `REACTOR_DOC_SHOT_002`     | Manifest screenshot id ends in the reserved `-thumb` suffix without `kind: catalog-thumb`. Matched against the whole id, so a dotted id (`widget.v2-thumb`) is caught too |
-| `REACTOR_DOC_REGISTRY_W001`| Registry rule maps to a category with no `guide-pages`     |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
+| `REACTOR_DOC_REFGEN_003`   | The reference phase found `Microsoft.UI.Reactor.xml` but no `Microsoft.UI.Reactor.dll` next to it (or an input file it was given does not exist). Nothing under `docs/guide/reference/` is written or deleted. Run `dotnet build src/Reactor` and compile again. Fails `--ci` and `--reference-only` |
 | `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* The `Microsoft.UI.Reactor.xml` the reference phase selected is older than the newest `.cs` under `src/Reactor`, so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run `dotnet build src/Reactor` and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds `src/Reactor` (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-microsoftuireactorxml-the-reference-phase-reads) |
 
 ## 7. Quarterly tier audit (spec 041 §5.4)
@@ -823,7 +837,7 @@ on `src/Reactor`'s `obj/bin`.
 ## 10. Compiled-output freshness gate
 
 `docs/guide/**` is generated. The `docs-build` job recompiles all of it on every
-PR — 72 topic pages, `README.md`, and ~117 pages under `reference/` — and then
+PR — 72 topic pages, `README.md`, and the API reference under `reference/` — and then
 asserts that recompiling changed nothing:
 
 ```pwsh
@@ -872,7 +886,7 @@ is the defect it was added to fix, one level up.
 There is a third way a compile can exit 0 without regenerating, and it is
 **not** checked here on purpose. Phase 5.7 prints its header and then bails when
 `Microsoft.UI.Reactor.xml` or `reference-map.yaml` is missing (see *Which `Microsoft.UI.Reactor.xml` the
-reference phase reads*), leaving ~117 reference pages unwritten. The pipeline's
+reference phase reads*), leaving the reference pages unwritten. The pipeline's
 `compile --ci` now **returns non-zero** for that, so the compile step catches it
 and the gate never sees it. The first version of this gate grepped stdout for
 `Microsoft.UI.Reactor.xml not found` instead, which was both the wrong owner and the wrong

@@ -127,11 +127,21 @@ internal sealed class DocMarkdown
         var text = Tidy(paragraph.ToString());
         paragraph.Clear();
         if (text.Length == 0) return;
-        // A paragraph that starts with `#`, `-`, `+`, `>` or `1.` would turn into a
-        // heading, list or quote. Escape the first character so it stays prose.
-        if (Regex.IsMatch(text, @"^([#>+\-]|\d+[.)])"))
-            text = "\\" + text;
-        blocks.Add(text);
+        blocks.Add(EscapeBlockStart(text));
+    }
+
+    /// <summary>
+    /// A paragraph that starts with <c>#</c>, <c>-</c>, <c>+</c>, <c>&gt;</c> or
+    /// <c>1.</c> would turn into a heading, list or quote. Markdown can only
+    /// escape punctuation, so a numbered start keeps its digits and escapes the
+    /// dot or parenthesis (<c>1\.</c>); a backslash before a digit would print.
+    /// </summary>
+    internal static string EscapeBlockStart(string text)
+    {
+        var numbered = Regex.Match(text, @"^\d+(?=[.)])");
+        if (numbered.Success)
+            return string.Concat(numbered.Value, "\\", text.AsSpan(numbered.Length));
+        return Regex.IsMatch(text, @"^[#>+\-]") ? "\\" + text : text;
     }
 
     private string List(XElement list)

@@ -510,9 +510,15 @@ internal static class TRefFormat
             }
             case NamedTRef n:
             {
-                var nullable = !n.IsValueType && ann.NextIsNullable();
+                // Roslyn writes one byte for a reference type and one (always 0) for a generic
+                // value type such as a tuple or KeyValuePair<,>. A non-generic value type and
+                // Nullable<T> itself get none, so skipping every value type misreads the bytes
+                // that follow: (int, string?) is [0, 2], not [2].
+                var isNullableOfT = n.Namespace == "System" && n.Path.Count == 1 && n.Path[0] == "Nullable`1" && n.Args.Count == 1;
+                var hasFlag = !n.IsValueType || (n.Args.Count > 0 && !isNullableOfT);
+                var nullable = hasFlag && ann.NextIsNullable() && !n.IsValueType;
                 if (n.Keyword is not null) return n.Keyword + (nullable ? "?" : string.Empty);
-                if (n.Namespace == "System" && n.Path.Count == 1 && n.Path[0] == "Nullable`1" && n.Args.Count == 1)
+                if (isNullableOfT)
                     return CSharp(n.Args[0], ann) + "?";
                 if (n.Namespace == "System" && n.Path.Count == 1 && n.Path[0].StartsWith("ValueTuple`", StringComparison.Ordinal) && n.Args.Count is > 1 and < 8)
                 {
@@ -1212,21 +1218,33 @@ internal sealed class MetadataModelReader
             bool b => b ? "true" : "false",
             string s => "\"" + s.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal) + "\"",
             char ch => "'" + ch + "'",
-            double d => DoubleText(d, "double"),
-            float f => DoubleText(f, "float") + (float.IsFinite(f) ? "f" : string.Empty),
+            double d => DoubleText(d),
+            float f => FloatText(f),
             IFormattable n => n.ToString(null, CultureInfo.InvariantCulture),
             _ => value.ToString() ?? "null",
         };
     }
 
-    private static string DoubleText(double d, string keyword)
+    private static string DoubleText(double d)
     {
-        if (double.IsNaN(d)) return keyword + ".NaN";
-        if (double.IsPositiveInfinity(d)) return keyword + ".PositiveInfinity";
-        if (double.IsNegativeInfinity(d)) return keyword + ".NegativeInfinity";
+        if (double.IsNaN(d)) return "double.NaN";
+        if (double.IsPositiveInfinity(d)) return "double.PositiveInfinity";
+        if (double.IsNegativeInfinity(d)) return "double.NegativeInfinity";
         if (d == double.MaxValue) return "double.MaxValue";
         if (d == double.MinValue) return "double.MinValue";
         return d.ToString("R", CultureInfo.InvariantCulture);
+    }
+
+    // Formatted as a float, not widened to double first: `0.8f` would otherwise
+    // print as `0.800000011920929f`.
+    private static string FloatText(float f)
+    {
+        if (float.IsNaN(f)) return "float.NaN";
+        if (float.IsPositiveInfinity(f)) return "float.PositiveInfinity";
+        if (float.IsNegativeInfinity(f)) return "float.NegativeInfinity";
+        if (f == float.MaxValue) return "float.MaxValue";
+        if (f == float.MinValue) return "float.MinValue";
+        return f.ToString("R", CultureInfo.InvariantCulture) + "f";
     }
 
     private string EnumText(NamedTRef enumType, long value)
