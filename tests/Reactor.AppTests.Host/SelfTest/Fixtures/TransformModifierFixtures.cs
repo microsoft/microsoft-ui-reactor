@@ -271,6 +271,29 @@ internal sealed class TransformModifierTransitionsFixture(Harness h) : SelfTestF
         H.Check("TransformKeyframes_ScaleResetAfterLoopRemoval", loopingVisual.Scale == Vector3.One
             && loopingVisual.TryGetAnimationController("Scale") is null, $"scale={loopingVisual.Scale}");
 
+        // Issue #1702: a render that rebuilds equal keyframes skips its update, so the channel's
+        // owner keeps the earlier render's array. Removing the loop must still reset the scale.
+        var firstScaled = animated.Keyframes("pulse", 1, Pulse).Scale(2);
+        var equalScaled = animated.Keyframes("pulse", 1, Pulse).Scale(2);
+        var equalLooping = animated.Keyframes("pulse", 1, Pulse);
+        loopingReconciler.Update(plainTarget, initialScale, loopingTarget, () => { });
+        loopingReconciler.Update(initialScale, firstScaled, loopingTarget, () => { });
+        await Harness.Render();
+        var equalController = loopingVisual.TryGetAnimationController("Scale");
+        H.Check("TransformKeyframes_EqualRenderLoopStarted", equalController is not null);
+        if (equalController is not null)
+        {
+            equalController.Pause();
+            equalController.Progress = 0.5f;
+        }
+        int skippedBefore = loopingReconciler.DebugElementsSkipped;
+        loopingReconciler.Update(firstScaled, equalScaled, loopingTarget, () => { });
+        H.Check("TransformKeyframes_EqualRenderSkipped", loopingReconciler.DebugElementsSkipped == skippedBefore + 1);
+        loopingReconciler.Update(equalScaled, equalLooping, loopingTarget, () => { });
+        loopingReconciler.Update(equalLooping, plainTarget, loopingTarget, () => { });
+        H.Check("TransformKeyframes_ScaleResetAfterEqualRender", loopingVisual.Scale == Vector3.One
+            && loopingVisual.TryGetAnimationController("Scale") is null, $"scale={loopingVisual.Scale}");
+
         loopingReconciler.Update(plainTarget, scaled, loopingTarget, () => { });
         var restarted = loopingVisual.TryGetAnimationController("Scale");
         if (restarted is not null)

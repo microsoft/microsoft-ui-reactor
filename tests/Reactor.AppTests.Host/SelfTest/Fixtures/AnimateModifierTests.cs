@@ -234,7 +234,44 @@ internal static class AnimateModifierTests
             var name = childSkip ? "RebuiltExtras_Child" : "RebuiltExtras_Direct";
             await Reconciles(name);
             await ScrollRestarts(name);
-            if (!childSkip) Declarations();
+            if (!childSkip)
+            {
+                Declarations();
+                await AnimationSettingChanges();
+            }
+        }
+
+        // Implicit transitions check the "Animation effects" setting when they're applied, and an
+        // equal render skips its update, so a change of the setting refreshes every element.
+        private async Task AnimationSettingChanges()
+        {
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(TextBlock("Motion").OpacityTransition(TimeSpan.FromMilliseconds(200)).AutomationId("motion-target")));
+            await Harness.Render();
+            host.ApplyAnimationsEnabled(true);
+            await Harness.Render();
+            var target = H.FindControl<TextBlock>(t =>
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(t) == "motion-target");
+            H.Check("RebuiltExtras_MotionMounted", target is not null);
+            if (target is null) return;
+            var visual = ElementCompositionPreview.GetElementVisual(target);
+            bool HasKey() => visual.ImplicitAnimations?.ContainsKey("Opacity") == true;
+            H.Check("RebuiltExtras_MotionKeyInstalled", HasKey());
+
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(false);
+            host.RequestRender();
+            await Harness.Render();
+            // Positive control: the equal render skips, so only the setting change can drop the key.
+            H.Check("RebuiltExtras_MotionEqualRenderSkips", HasKey());
+            host.ApplyAnimationsEnabled(false);
+            await Harness.Render();
+            H.Check("RebuiltExtras_MotionOffDropsKey", !HasKey());
+
+            Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
+            host.ApplyAnimationsEnabled(true);
+            await Harness.Render();
+            H.Check("RebuiltExtras_MotionOnRestoresKey", HasKey());
         }
 
         private Element Wrap(Element element) => childSkip ? VStack(element) : element;
@@ -295,7 +332,8 @@ internal static class AnimateModifierTests
             }
         }
 
-        // Expressions are stateless, so an update that leaves .ScrollLinked() unchanged keeps them running.
+        // An equal render skips its update, so it doesn't restart the expressions. Any other
+        // update re-applies them, since a modifier write can have replaced one.
         private async Task ScrollRestarts(string name)
         {
             using var reconciler = new Reconciler();
@@ -319,10 +357,8 @@ internal static class AnimateModifierTests
                 }
 
                 H.Check(name + "_ScrollEqualKeeps", Restarts(Linked()) == 0);
-                H.Check(name + "_ScrollUnrelatedUpdateKeeps", Restarts(Linked(margin: 4)) == 0);
+                H.Check(name + "_ScrollOtherUpdateRestarts", Restarts(Linked(margin: 4)) == 1);
                 H.Check(name + "_ScrollChangedRestarts", Restarts(Linked(margin: 4, value: "1")) == 1);
-                // Another animation on the element may have replaced an expression, so restart then.
-                H.Check(name + "_ScrollWithTransitionRestarts", Restarts(Linked(margin: 8, value: "1").OpacityTransition()) == 1);
             }
             finally
             {
@@ -341,6 +377,23 @@ internal static class AnimateModifierTests
             H.Check("RebuiltExtras_ScaleComponentsChanged", !Same(
                 Button("Go").ScaleTransition(new Vector3Transition { Components = Vector3TransitionComponents.X }),
                 Button("Go").ScaleTransition(new Vector3Transition { Components = Vector3TransitionComponents.Y })));
+            H.Check("RebuiltExtras_RotationChanged", !Same(Button("Go").RotationTransition(TimeSpan.FromMilliseconds(200)),
+                Button("Go").RotationTransition(TimeSpan.FromMilliseconds(800))));
+            H.Check("RebuiltExtras_TranslationChanged", !Same(
+                Button("Go").TranslationTransition(new Vector3Transition { Duration = TimeSpan.FromMilliseconds(200) }),
+                Button("Go").TranslationTransition(new Vector3Transition { Duration = TimeSpan.FromMilliseconds(800) })));
+            H.Check("RebuiltExtras_ChannelAddedChanged", !Same(Button("Go").RotationTransition(),
+                Button("Go").RotationTransition().OpacityTransition()));
+            SolidColorBrush Solid(byte red) => new(global::Windows.UI.Color.FromArgb(255, red, 0, 0));
+            H.Check("RebuiltExtras_ForegroundEqual", Same(
+                Button("Go").InteractionStates(s => s.PointerOver(foreground: Solid(255), borderBrush: Solid(255))),
+                Button("Go").InteractionStates(s => s.PointerOver(foreground: Solid(255), borderBrush: Solid(255)))));
+            H.Check("RebuiltExtras_ForegroundChanged", !Same(
+                Button("Go").InteractionStates(s => s.PointerOver(foreground: Solid(255))),
+                Button("Go").InteractionStates(s => s.PointerOver(foreground: Solid(128)))));
+            H.Check("RebuiltExtras_BorderBrushChanged", !Same(
+                Button("Go").InteractionStates(s => s.PointerOver(borderBrush: Solid(255))),
+                Button("Go").InteractionStates(s => s.PointerOver(borderBrush: Solid(128)))));
             H.Check("RebuiltExtras_OtherViewerChanged", !Same(
                 Button("Go").ScrollLinked(_viewer, static s => s.FadeOut(0, 100)),
                 Button("Go").ScrollLinked(new ScrollViewer(), static s => s.FadeOut(0, 100))));
@@ -350,6 +403,9 @@ internal static class AnimateModifierTests
             H.Check("RebuiltExtras_ItemContainerEqual", Same(
                 Button("Go").ItemContainerTransitions(new XamlAnim.AddDeleteThemeTransition()),
                 Button("Go").ItemContainerTransitions(new XamlAnim.AddDeleteThemeTransition())));
+            H.Check("RebuiltExtras_ItemContainerChanged", !Same(
+                Button("Go").WithTransitions(new XamlAnim.AddDeleteThemeTransition()).ItemContainerTransitions(new XamlAnim.AddDeleteThemeTransition()),
+                Button("Go").WithTransitions(new XamlAnim.AddDeleteThemeTransition()).ItemContainerTransitions(new XamlAnim.ReorderThemeTransition())));
 
             void Theme(string type, Func<XamlAnim.Transition> make, Func<XamlAnim.Transition>? changed)
             {
@@ -363,17 +419,28 @@ internal static class AnimateModifierTests
                 static () => new XamlAnim.EntranceThemeTransition { IsStaggeringEnabled = false });
             Theme("Content", static () => new XamlAnim.ContentThemeTransition { VerticalOffset = 10 },
                 static () => new XamlAnim.ContentThemeTransition { VerticalOffset = 20 });
+            Theme("ContentHorizontal", static () => new XamlAnim.ContentThemeTransition { HorizontalOffset = 10 },
+                static () => new XamlAnim.ContentThemeTransition { HorizontalOffset = 20 });
             Theme("Popup", static () => new XamlAnim.PopupThemeTransition { FromVerticalOffset = 10 },
                 static () => new XamlAnim.PopupThemeTransition { FromVerticalOffset = 20 });
+            Theme("PopupHorizontal", static () => new XamlAnim.PopupThemeTransition { FromHorizontalOffset = 10 },
+                static () => new XamlAnim.PopupThemeTransition { FromHorizontalOffset = 20 });
             Theme("Reposition", static () => new XamlAnim.RepositionThemeTransition { IsStaggeringEnabled = true },
                 static () => new XamlAnim.RepositionThemeTransition { IsStaggeringEnabled = false });
             Theme("EdgeUI", static () => new XamlAnim.EdgeUIThemeTransition { Edge = EdgeTransitionLocation.Left },
                 static () => new XamlAnim.EdgeUIThemeTransition { Edge = EdgeTransitionLocation.Right });
             Theme("Pane", static () => new XamlAnim.PaneThemeTransition { Edge = EdgeTransitionLocation.Left },
                 static () => new XamlAnim.PaneThemeTransition { Edge = EdgeTransitionLocation.Right });
-            var info = new XamlAnim.SlideNavigationTransitionInfo();
-            Theme("Navigation", () => new XamlAnim.NavigationThemeTransition { DefaultNavigationTransitionInfo = info },
-                static () => new XamlAnim.NavigationThemeTransition { DefaultNavigationTransitionInfo = new XamlAnim.SlideNavigationTransitionInfo() });
+            static XamlAnim.NavigationThemeTransition Navigation(XamlAnim.NavigationTransitionInfo info) => new() { DefaultNavigationTransitionInfo = info };
+            Theme("NavigationSlide", static () => Navigation(new XamlAnim.SlideNavigationTransitionInfo { Effect = XamlAnim.SlideNavigationTransitionEffect.FromRight }),
+                static () => Navigation(new XamlAnim.SlideNavigationTransitionInfo { Effect = XamlAnim.SlideNavigationTransitionEffect.FromLeft }));
+            Theme("NavigationCommon", static () => Navigation(new XamlAnim.CommonNavigationTransitionInfo { IsStaggeringEnabled = true }),
+                static () => Navigation(new XamlAnim.CommonNavigationTransitionInfo { IsStaggeringEnabled = false }));
+            Theme("NavigationDrillIn", static () => Navigation(new XamlAnim.DrillInNavigationTransitionInfo()),
+                static () => Navigation(new XamlAnim.EntranceNavigationTransitionInfo()));
+            H.Check("RebuiltExtras_NavigationContinuumByReference", !Same(
+                Button("Go").WithTransitions(Navigation(new XamlAnim.ContinuumNavigationTransitionInfo())),
+                Button("Go").WithTransitions(Navigation(new XamlAnim.ContinuumNavigationTransitionInfo()))));
             Theme("AddDelete", static () => new XamlAnim.AddDeleteThemeTransition(), static () => new XamlAnim.ReorderThemeTransition());
             Theme("Reorder", static () => new XamlAnim.ReorderThemeTransition(), null);
         }

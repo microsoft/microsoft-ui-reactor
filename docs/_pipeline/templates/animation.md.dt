@@ -46,9 +46,11 @@ only `.LayoutAnimation()`'s duration updates the layout animation on the next re
 Unchanged declarations still skip updates, even though each render rebuilds
 them. `.Keyframes()` and `.ScrollLinked()` compare their keyframes and
 expressions, implicit transitions such as `.OpacityTransition()` compare their
-duration, `.WithTransitions()` compares each theme transition's settings, and
-`.InteractionStates()` compares solid brushes by color. Other brushes, and a
-`.ScrollLinked()` driven by a different `ScrollViewer`, still count as a change.
+duration (and axes, for scale and translation), `.WithTransitions()` compares
+each theme transition's settings, and `.InteractionStates()` compares solid
+brushes by color and opacity. Other brushes, a `.ScrollLinked()` driven by a
+different `ScrollViewer`, a continuum navigation transition, and a transition
+type Reactor doesn't know still count as a change.
 
 ## Reference
 

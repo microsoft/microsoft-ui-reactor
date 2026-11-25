@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using XamlTransition = Microsoft.UI.Xaml.Media.Animation.Transition;
 
@@ -74,7 +73,7 @@ internal static class AnimationEquality
             (EdgeUIThemeTransition ea, EdgeUIThemeTransition eb) => ea.Edge == eb.Edge,
             (PaneThemeTransition pa, PaneThemeTransition pb) => pa.Edge == pb.Edge,
             (NavigationThemeTransition na, NavigationThemeTransition nb) =>
-                ReferenceEquals(na.DefaultNavigationTransitionInfo, nb.DefaultNavigationTransitionInfo),
+                NavigationInfoEqual(na.DefaultNavigationTransitionInfo, nb.DefaultNavigationTransitionInfo),
             (AddDeleteThemeTransition, AddDeleteThemeTransition) => true,
             (ReorderThemeTransition, ReorderThemeTransition) => true,
             _ => false,
@@ -82,16 +81,21 @@ internal static class AnimationEquality
     }
 
     /// <summary>
-    /// A solid brush compares by color and opacity, the same rule element brush properties use.
-    /// Other brushes compare by reference.
+    /// Navigation transition infos compare by type and setting. A continuum transition names
+    /// an exit element, so it compares by reference.
     /// </summary>
-    internal static bool BrushesEqual(Brush? a, Brush? b)
+    private static bool NavigationInfoEqual(NavigationTransitionInfo? a, NavigationTransitionInfo? b)
     {
         if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
-        if (a is SolidColorBrush sa && b is SolidColorBrush sb)
-            return sa.Color == sb.Color && sa.Opacity == sb.Opacity;
-        return false;
+        return (a, b) switch
+        {
+            (SlideNavigationTransitionInfo sa, SlideNavigationTransitionInfo sb) => sa.Effect == sb.Effect,
+            (CommonNavigationTransitionInfo ca, CommonNavigationTransitionInfo cb) => ca.IsStaggeringEnabled == cb.IsStaggeringEnabled,
+            (DrillInNavigationTransitionInfo, DrillInNavigationTransitionInfo) => true,
+            (EntranceNavigationTransitionInfo, EntranceNavigationTransitionInfo) => true,
+            (SuppressNavigationTransitionInfo, SuppressNavigationTransitionInfo) => true,
+            _ => false,
+        };
     }
 
     /// <summary>Hash for a value compared by reference.</summary>

@@ -25,14 +25,15 @@ public record InteractionStateValues(
     /// Compares solid brushes by color and opacity, so brushes rebuilt on every render compare
     /// equal (issue #1702). Other brushes compare by reference.
     /// </summary>
+    /// <remarks>Reads the brushes, so call it on the UI thread that created them.</remarks>
     public virtual bool Equals(InteractionStateValues? other)
         => ReferenceEquals(this, other)
             || (other is not null && EqualityContract == other.EqualityContract
                 && Opacity == other.Opacity && Scale == other.Scale && ScaleV == other.ScaleV
                 && Translation == other.Translation && Rotation == other.Rotation
-                && AnimationEquality.BrushesEqual(Background, other.Background)
-                && AnimationEquality.BrushesEqual(Foreground, other.Foreground)
-                && AnimationEquality.BrushesEqual(BorderBrush, other.BorderBrush));
+                && BrushHelper.BrushesEqual(Background, other.Background)
+                && BrushHelper.BrushesEqual(Foreground, other.Foreground)
+                && BrushHelper.BrushesEqual(BorderBrush, other.BorderBrush));
 
     /// <summary>Hashes the brushes' presence only, without reading the WinUI brushes.</summary>
     public override int GetHashCode()

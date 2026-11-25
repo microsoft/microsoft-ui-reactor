@@ -7335,7 +7335,9 @@ public sealed partial class Reconciler : IDisposable
 
         void Release(AnimateProperty property, string name)
         {
-            if (!owners.TryGetValue(property, out var owner) || !ReferenceEquals(owner.Scope, previous)) return;
+            // Sequence equality: an equal render skips its update, so the scope recorded at the
+            // last apply can be an equal array from an earlier render (issue #1702).
+            if (!owners.TryGetValue(property, out var owner) || !AnimationEquality.SequenceEqual(owner.Scope, previous)) return;
             if (current is not null)
             {
                 var nameKey = owner.Entry.Name;
@@ -7481,7 +7483,7 @@ public sealed partial class Reconciler : IDisposable
     // ════════════════════════════════════════════════════════════════
 
     // Test-only seam: counts ApplyScrollAnimation calls that started expressions, so a selftest
-    // can tell an unrelated update from one that restarted the scroll animation (issue #1702).
+    // can tell a skipped render from one that restarted the scroll animation (issue #1702).
     internal static int DebugScrollAnimationStarts;
 
     /// <summary>

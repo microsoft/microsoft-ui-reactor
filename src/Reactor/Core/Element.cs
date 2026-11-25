@@ -1203,7 +1203,7 @@ public abstract record Element
     /// style fluent chains. Unwrap the underlying Color for the common
     /// SolidColorBrush case and fall back to ReferenceEquals for everything else.
     /// </summary>
-    private static bool BrushesEqual(Brush? a, Brush? b) => Animation.AnimationEquality.BrushesEqual(a, b);
+    private static bool BrushesEqual(Brush? a, Brush? b) => BrushHelper.BrushesEqual(a, b);
 
     /// <summary>
     /// Structural transform comparison. D3PathTranslated allocates a fresh
@@ -2732,6 +2732,7 @@ public record ImplicitTransitions
     /// Compares each channel's transition by its settings, so a transition rebuilt with the same
     /// duration on every render compares equal (issue #1702).
     /// </summary>
+    /// <remarks>Reads the WinUI transitions, so call it on the UI thread that created them.</remarks>
     public virtual bool Equals(ImplicitTransitions? other)
         => ReferenceEquals(this, other)
             || (other is not null && EqualityContract == other.EqualityContract
@@ -2759,8 +2760,10 @@ public record ThemeTransitions
 
     /// <summary>
     /// Compares the transitions in order by type and settings, so transitions rebuilt on every
-    /// render compare equal (issue #1702).
+    /// render compare equal (issue #1702). A transition type Reactor doesn't know, and a
+    /// <c>ContinuumNavigationTransitionInfo</c>, compare by reference.
     /// </summary>
+    /// <remarks>Reads the WinUI transitions, so call it on the UI thread that created them.</remarks>
     public virtual bool Equals(ThemeTransitions? other)
         => ReferenceEquals(this, other)
             || (other is not null && EqualityContract == other.EqualityContract

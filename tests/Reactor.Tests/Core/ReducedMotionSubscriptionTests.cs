@@ -220,7 +220,8 @@ public sealed class ReducedMotionSubscriptionTests
     /// on the UI thread every frame, so <c>RequestRender</c> is the whole propagation path.
     /// </summary>
     [Theory]
-    [InlineData("OnAnimationsEnabledChanged")]
+    // The animations handler forwards to ApplyAnimationsEnabled, which a selftest also drives.
+    [InlineData("ApplyAnimationsEnabled")]
     [InlineData("OnColorValuesChanged")]
     public void UiSettingsHandlers_LeaveTheChartingPushToTheRenderThread(string handler)
     {

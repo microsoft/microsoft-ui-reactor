@@ -1,3 +1,4 @@
+using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
@@ -45,8 +46,8 @@ public class AnimationExtrasEqualityTests
     [Fact]
     public void Rebuilt_Equal_Keyframes_And_ScrollLinked_Skip()
     {
-        static Element Render(int trigger, float opacity = 0.5f, float parallax = 0.5f) => Button("Go")
-            .Keyframes("pulse", trigger, k => k.Duration(400).At(0f, opacity: 1f).At(1f, opacity: opacity, easing: Easing.EaseOut))
+        static Element Render(int trigger, float opacity = 0.5f, float parallax = 0.5f, int duration = 400, bool loop = false) => Button("Go")
+            .Keyframes("pulse", trigger, k => (loop ? k.Loop() : k).Duration(duration).At(0f, opacity: 1f).At(1f, opacity: opacity, easing: Easing.EaseOut))
             .ScrollLinked(null!, s => s.Parallax(parallax).FadeOut(0, 100));
 
         Assert.True(Element.ShallowEquals(Render(1), Render(1)));
@@ -56,11 +57,31 @@ public class AnimationExtrasEqualityTests
         Assert.Equal(Render(1).GetHashCode(), Render(1).GetHashCode());
 
         foreach (var changed in new[] { Render(2), Render(1, opacity: 0.4f), Render(1, parallax: 0.6f),
-            Render(1) with { ScrollAnimation = null }, Render(1) with { KeyframeAnimations = null } })
+            Render(1) with { ScrollAnimation = null }, Render(1) with { KeyframeAnimations = null },
+            Render(1, duration: 500), Render(1, loop: true) })
         {
             Assert.False(Element.ShallowEquals(Render(1), changed));
             Assert.False(Element.CanSkipUpdate(changed, Render(1)));
             Assert.False(Element.ExtrasEqual(Render(1), changed));
+        }
+    }
+
+    // Issue #1702: InteractionStateValues lists its fields by hand, so each one must decline the skip.
+    [Fact]
+    public void Each_Interaction_State_Value_Declines_The_Skip()
+    {
+        static Element Hover(InteractionStateValues values) => Button("Go") with { InteractionStates = new InteractionStatesConfig(PointerOver: values) };
+        var first = new InteractionStateValues(Opacity: 0.5f, Scale: 1.1f, ScaleV: Vector3.One, Translation: Vector3.UnitX, Rotation: 5f);
+
+        Assert.True(Element.CanSkipUpdate(Hover(first), Hover(first with { })));
+        foreach (var changed in new[]
+        {
+            first with { Opacity = 0.6f }, first with { Scale = 1.2f }, first with { ScaleV = Vector3.UnitY },
+            first with { Translation = Vector3.UnitY }, first with { Rotation = 6f },
+        })
+        {
+            Assert.False(Element.CanSkipUpdate(Hover(first), Hover(changed)));
+            Assert.NotEqual(first, changed);
         }
     }
 
@@ -103,7 +124,7 @@ public class AnimationExtrasEqualityTests
                 // Native transition values are exercised in the WinUI selftest. Distinct
                 // arrays with equal contents compare equal (issue #1702).
                 return (new ThemeTransitions { Children = new XamlTransition[0] }, new ThemeTransitions { Children = new XamlTransition[0] },
-                    new ThemeTransitions { ItemContainer = new XamlTransition[0] });
+                    new ThemeTransitions { Children = new XamlTransition[0], ItemContainer = new XamlTransition[0] });
             case nameof(Element.InteractionStates):
                 return (new InteractionStatesConfig(PointerOver: new(Opacity: 0.5f)),
                     new InteractionStatesConfig(PointerOver: new(Opacity: 0.5f)),
