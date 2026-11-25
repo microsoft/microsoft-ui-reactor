@@ -2,7 +2,7 @@
 
 > Status: **proposed** (2026-11-25). Design only. No product code changes with this spec.
 > Builds on #1706, which moved `ApplyModifiers` into `src/Reactor/Core/Reconciler.Modifiers.cs`.
-> File and line references are to `azchohfi-split-reconciler-partials` @ `de6da655f` unless noted.
+> File and line references are to `azchohfi-split-reconciler-partials` @ `4e8fdb05f` unless noted.
 > Related: spec 034 (modifier buckets), spec 047 / 048 (control descriptors), spec 058 (wrapper
 > generator), spec 060 / 061 (analyzer suite), spec 066 (composition-visual transforms).
 
@@ -40,7 +40,7 @@ seam".
 | 1 | Storage | `ElementModifiers` (`src/Reactor/Core/Element.cs:2142`), `LayoutModifiers` (`:2531`), `VisualModifiers` (`:2594`), `AccessibilityModifiers` (`:2636`) | the field, its bucket, the shim `init` that writes into the bucket |
 | 2 | Merge | `ElementModifiers.Merge` (`Element.cs:2439`), `LayoutModifiers.Merge`, `VisualModifiers.Merge` | `other.X ?? X`, one line per field |
 | 3 | Skip equality | `ModifiersEqualCore` (`Element.cs:1280`), `VisualModifiersEqual` (`:1401`), `ModifiersVisiblyEqual` | which fields block the shallow skip and how they compare (value, brush colour, reference, presence) |
-| 4 | Apply | `ApplyModifiers` (`Reconciler.Modifiers.cs:237-780`), `ApplyAccessibilityModifiers` (`Reconciler.Accessibility.cs:167`), `ClearRemovedTransformModifiers` (`Reconciler.Modifiers.cs:212`), `ApplyModifierReferenceEdges` (`Reconciler.ReferenceEdges.cs:166`) | diff guard, receiver type gate, write, matching type-gated `ClearValue` |
+| 4 | Apply | `ApplyModifiers` (`Reconciler.Modifiers.cs:237-780`), `ApplyAccessibilityModifiers` (`Reconciler.Accessibility.cs:165`), `ClearRemovedTransformModifiers` (`Reconciler.Modifiers.cs:212`), `ApplyModifierReferenceEdges` (`Reconciler.ReferenceEdges.cs:166`) | diff guard, receiver type gate, write, matching type-gated `ClearValue` |
 | 5 | Fluent API | `ElementExtensions` (`src/Reactor/Elements/ElementExtensions.cs`) | the public overloads |
 | 6 | Diagnostics | `AppliedModifierMap.Entries` (`src/Reactor/Core/Diagnostics/AppliedModifierMap.cs:82`) | modifier → owning WinUI property per control type |
 | 7 | ThemeRef path | `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568`) | which receivers a `ThemeRef` brush overload reaches |
@@ -491,7 +491,7 @@ make today's order load-bearing, each traced to the code that depends on it:
 | `CenterPoint` reset before `TransformOrigin` deactivate on removal | the restored static pivot is the remaining offset | `Reconciler.Modifiers.cs:229-232` |
 | transform removals before handlers and setters | a removal must not erase a value a setter or shared target writes in the same update | `Reconciler.Update.cs:316-317`, spec 066 §6.3 |
 | `BorderBrush` after interaction-state tracking | a hovered control keeps its interaction brush and only updates the restore value | `Reconciler.Modifiers.cs:499-507` |
-| `Background` unset honours `keepRemovedBackground` | `BorderElement`'s descriptor may already have released or replaced it | `Reconciler.Update.cs:486-490`, `Reconciler.Registration.cs:247` |
+| `Background` unset honours `keepRemovedBackground` | `BorderElement`'s descriptor may already have released or replaced it | `Reconciler.Update.cs:486-490`, `Reconciler.Registration.cs:251` |
 | event, gesture, drag-drop wiring after property writes | handlers see the applied state | `Reconciler.Modifiers.cs:701-709` |
 | `OnMountAction` / `OnUpdateAction` after every property write | the callback observes a fully applied control, under `OpacityRestartProbe` | `:712-735` |
 | `Ref` then reference edges last | a ref points at a fully applied control; edges may resolve against it | `:763-779` |
