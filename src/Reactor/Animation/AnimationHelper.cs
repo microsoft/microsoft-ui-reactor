@@ -382,17 +382,6 @@ internal static class AnimationHelper
     internal static void SetOrAnimate(UIElement element, string property, float value, Element? source = null, Func<UIElement, AnimateProperty, AnimationConfig?>? chainLookup = null)
     {
         if (property == "Rotation" && SkipsHandoff(element, property, value == 0)) return;
-        if (property == "Opacity")
-        {
-            var opacityState = Reconciler.GetOrCreateReactorState(element);
-            bool defer = OwnsOpacityWrite(element, opacityState);
-            var previous = opacityState.DeclaredOpacity;
-            opacityState.DeclaredOpacity = (value, defer && (previous.Deferred || previous.Value != value));
-            opacityState.DeferredModifierResets &= ~AnimateProperty.Opacity;
-            // XAML pushes a changed local value to the visual on its next frame (#1669).
-            // Defer the write itself so that push cannot interrupt the keyframe.
-            if (defer) return;
-        }
         var curve = ResolvePolicy(element, property, source, chainLookup).Curve;
 
         if (curve is null)
@@ -444,19 +433,11 @@ internal static class AnimationHelper
         MarkCompositionWrite(state, property, value);
     }
 
-    private static bool OwnsOpacityWrite(UIElement element, Reconciler.ReactorState state)
-    {
-        if (state.OpacityKeyframe is not { ReplayedWithoutOpacity: false } playback) return false;
-        var current = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
-        return Equals(current, playback.Controller)
-            || (current is null && Equals(state.KeyframeOpacity?.Controller, playback.Controller));
-    }
-
     /// <summary>
     /// Restores declared opacity at playback end and applies pending resets on explicit release.
     /// </summary>
     internal static void FinishOpacityKeyframe(UIElement element, Visual visual, AnimationController controller,
-        bool applyDeferredReset = true)
+        bool applyDeferredReset = true, bool cancelledRestart = false)
     {
         if (element.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state
             || !Equals(controller, state.OpacityKeyframe?.Controller)) return;
@@ -464,9 +445,10 @@ internal static class AnimationHelper
         // The XAML push can complete the original batch before its restart check runs.
         if (!applyDeferredReset && current is null && Equals(state.KeyframeOpacity?.Controller, controller)) return;
 
+        bool restoreDeferred = cancelledRestart && current is null && state.DeclaredOpacity.Deferred;
         state.OpacityKeyframe = null;
         state.DeclaredOpacity.Deferred = false;
-        if (!Equals(controller, current)) return;
+        if (!Equals(controller, current) && !restoreDeferred) return;
 
         if (state.DeclaredOpacity.Value is { } value)
         {
@@ -474,8 +456,9 @@ internal static class AnimationHelper
         }
         else if (applyDeferredReset && (state.DeferredModifierResets & AnimateProperty.Opacity) != 0)
         {
-            Reconciler.WithoutImplicitAnimations(visual, () => SetScalarDirect(element, "Opacity", (float)element.Opacity));
-            ClearCompositionOwnership(state, AnimateProperty.Opacity);
+            // The keyframe is releasing opacity. Reset the visual without recreating the cleared local value.
+            state.KeyframeChannelOwners?.Remove(AnimateProperty.Opacity);
+            ResetCompositionModifier(element, "Opacity", controller);
         }
     }
 

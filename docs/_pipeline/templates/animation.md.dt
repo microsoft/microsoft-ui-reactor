@@ -53,7 +53,7 @@ skipping, even when the settings match.
 
 | API | Animates | Trigger | Use when |
 |-----|----------|---------|----------|
-| `.OpacityTransition(duration?)` | Opacity | Implicit when no keyframe controls opacity | Show/hide a single element. |
+| `.OpacityTransition(duration?)` | Opacity | Implicit on opacity writes | Show/hide a single element. |
 | `.ScaleTransition(transition?)` | Scale | Implicit, on every change | Element resize feedback. |
 | `.TranslationTransition(transition?)` | Translation (offset) | Implicit, on every change | Slide a single element. |
 | `.RotationTransition(duration?)` | Rotation | Implicit, on every change | Spin a single element. |

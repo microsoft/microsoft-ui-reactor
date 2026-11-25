@@ -6798,8 +6798,9 @@ public sealed partial class Reconciler : IDisposable
             {
                 if (state.DeclaredOpacity.Deferred || (state.DeferredModifierResets & AnimateProperty.Opacity) != 0)
                 {
+                    bool cancelledRestart = Equals(state.KeyframeOpacity?.Controller, former);
                     CancelKeyframeOpacityCheck(state);
-                    AnimationHelper.FinishOpacityKeyframe(uie, visual, former);
+                    AnimationHelper.FinishOpacityKeyframe(uie, visual, former, cancelledRestart: cancelledRestart);
                     StopKeyframeTarget(visual, "Opacity", former);
                 }
                 else if (playback.Loops)
@@ -7335,12 +7336,16 @@ public sealed partial class Reconciler : IDisposable
         {
             if (retained is not null && HasKeyframeEntry(retained, entry.Name)) continue;
             if (!_keyframeTriggerValues.Remove((uie, entry.Name), out var state)) continue;
+            bool cancelledOpacityRestart = false;
             if (uie.GetValue(ReactorAttached.StateProperty) is ReactorState reactorState)
             {
                 reactorState.KeyframeNames?.Remove(entry.Name);
                 if (state.Started?.TryGetValue("Opacity", out var opacity) == true
                     && Equals(reactorState.KeyframeOpacity?.Controller, opacity))
+                {
+                    cancelledOpacityRestart = true;
                     CancelKeyframeOpacityCheck(reactorState);
+                }
             }
             if (!ownedOnly || noCompositor || state.Started is not { } started)
                 continue;
@@ -7350,7 +7355,8 @@ public sealed partial class Reconciler : IDisposable
             catch { noCompositor = true; continue; }
             foreach (var (property, controller) in started)
             {
-                if (property == "Opacity") AnimationHelper.FinishOpacityKeyframe(uie, owner, controller);
+                if (property == "Opacity")
+                    AnimationHelper.FinishOpacityKeyframe(uie, owner, controller, cancelledRestart: cancelledOpacityRestart);
                 StopKeyframeTarget(owner, property, controller);
             }
         }
@@ -7837,6 +7843,28 @@ public sealed partial class Reconciler : IDisposable
             TransformOriginBinding.Deactivate(control);
     }
 
+    private void ApplyDeclaredOpacity(FrameworkElement element, float value, Element? source)
+    {
+        var state = GetOrCreateReactorState(element);
+        bool defer = ShouldDeferOpacityWrite(element, state);
+        var previous = state.DeclaredOpacity;
+        state.DeclaredOpacity = (value, defer && (previous.Deferred || previous.Value != value));
+        state.DeferredModifierResets &= ~AnimateProperty.Opacity;
+
+        // XAML pushes a changed local value to the visual on its next frame (#1669).
+        // Hold the declaration until the keyframe releases opacity to preserve its controller.
+        if (!defer)
+            AnimationHelper.SetOrAnimate(element, "Opacity", value, source, ChannelAnimationLookup);
+    }
+
+    private static bool ShouldDeferOpacityWrite(UIElement element, ReactorState state)
+    {
+        if (state.OpacityKeyframe is not { ReplayedWithoutOpacity: false } playback) return false;
+        var current = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
+        return Equals(current, playback.Controller)
+            || (current is null && Equals(state.KeyframeOpacity?.Controller, playback.Controller));
+    }
+
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
     // flyout decorator or keyed memo layered over another element's control. Only the owner's
     // inline overlays are recorded (issue #965).
@@ -7984,11 +8012,11 @@ public sealed partial class Reconciler : IDisposable
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
+            ApplyDeclaredOpacity(fe, (float)m.Opacity.Value, GetModifierAnimationSource(fe));
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
+                ApplyDeclaredOpacity(fe, (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);

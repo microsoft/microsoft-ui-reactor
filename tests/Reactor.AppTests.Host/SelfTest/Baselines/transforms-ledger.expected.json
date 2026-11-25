@@ -1,5 +1,22 @@
 {
   "expectations": [
-    { "case": "TransformOrigin.*", "field": "*", "before": "(absent)", "after": "*", "reason": "fixes #773: spec 066 layer 5 adds the TransformOrigin transform axis, so its 54 cases are new and nothing else changes" }
+    {"case": "*.*.Keyframes", "step": "change", "field": "model", "before": "motion:Opacity", "after": "ok", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "model", "before": "motion:Opacity,pose", "after": "pose", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "CenterPoint=invisible Opacity=JUMPED", "after": "CenterPoint=invisible Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "CenterPoint=invisible Opacity=JUMPED Background=unobservable", "after": "CenterPoint=invisible Opacity=HELD Background=unobservable", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Opacity=JUMPED", "after": "Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "RotationAngle=JUMPED Opacity=JUMPED", "after": "RotationAngle=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Scale=ANIMATING Opacity=JUMPED", "after": "Scale=ANIMATING Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Scale=JUMPED Opacity=JUMPED", "after": "Scale=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Scale=JUMPED RotationAngle=JUMPED CenterPoint=JUMPED Opacity=ANIMATING", "after": "Scale=JUMPED RotationAngle=JUMPED CenterPoint=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Scale=JUMPED RotationAngle=JUMPED CenterPoint=JUMPED Opacity=JUMPED", "after": "Scale=JUMPED RotationAngle=JUMPED CenterPoint=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Scale=JUMPED RotationAngle=JUMPED Opacity=JUMPED", "after": "Scale=JUMPED RotationAngle=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Translation=JUMPED Opacity=ANIMATING", "after": "Translation=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Translation=JUMPED Opacity=JUMPED", "after": "Translation=JUMPED Opacity=HELD", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "change", "field": "motion", "before": "Translation=JUMPED Opacity=JUMPED Background=unobservable", "after": "Translation=JUMPED Opacity=HELD Background=unobservable", "reason": "fixes #1651: a looping keyframe keeps ownership when the declared opacity changes"},
+    {"case": "*.*.Keyframes", "step": "{addFeature,removeModifier}", "field": "model", "before": "opacity", "after": "ok", "reason": "fixes #1660: completing a one-shot restores the declared opacity"},
+    {"case": "*.*.Keyframes", "step": "{addFeature,removeModifier}", "field": "model", "before": "pose,opacity", "after": "pose", "reason": "fixes #1660: completing a one-shot restores the declared opacity"},
+    {"case": "*.*.Keyframes", "step": "{addFeature,removeModifier}", "field": "opacity", "before": "1.00", "after": "0.80", "reason": "fixes #1660: completing a one-shot restores the declared opacity"},
+    {"case": "*.*.Keyframes", "step": "{addFeature,mount}", "field": "running", "before": "Opacity", "after": "-", "reason": "fixes #1660: completing a one-shot releases its opacity controller"}
   ]
 }
