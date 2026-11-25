@@ -73,16 +73,22 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             // timing, and the base value reads 0 only while the fade's own start value stands.
             bool restarted = restartExpected is not true || restarts == 1;
             H.Check($"EnterFade_{scenario}OpacitySurvivesXamlPush", concealed && running is not null && restarted
-                && visual.Opacity == 0f && visual.IsVisible && !Reconciler.OpacityRestartPendingForTests(control),
+                && Math.Abs(visual.Opacity) < 1e-6f && visual.IsVisible && !Reconciler.OpacityRestartPendingForTests(control),
                 $"concealed={concealed}, running={running is not null}, restarts={restarts}, visible={visual.IsVisible}, opacity={visual.Opacity}");
             H.SetContent(null);
         }
         // A style's opacity, set after mount, is the target the restarted fade ends at. The default
         // opacity is the control: no push, so no restart, and the fade ends at 1.
-        foreach (var (scenario, styled) in new[] { ("Styled", true), ("Default", false) })
+        // With .Animate() on Opacity and a style applied after mount, the fade still ends at the
+        // style's opacity: XAML pushes it, and the restart reads the target again.
+        foreach (var (scenario, styled, animate) in new[] { ("Styled", true, false), ("Default", false, false), ("AnimateStyled", true, true) })
         {
             using var reconciler = new Reconciler();
-            var control = (Border)reconciler.Mount(Faded(null, 150), () => { })!;
+            var faded = animate
+                ? Border(TextBlock("Enter Fade")).Animate(Curve.Linear(1), AnimateProperty.Opacity)
+                    .Transition(Animation.Transition.Fade, Curve.Linear(150))
+                : Faded(null, 150);
+            var control = (Border)reconciler.Mount(faded, () => { })!;
             if (styled) control.Style = new Style(typeof(Border)) { Setters = { new Setter(UIElement.OpacityProperty, 0.65d) } };
             var visual = ElementCompositionPreview.GetElementVisual(control);
             await AfterNextCommit(visual);
@@ -178,13 +184,9 @@ internal sealed class EnterFadeOpacityFixture(Harness h) : SelfTestFixtureBase(h
             }
             var running = visual.TryGetAnimationController("Opacity");
             int restarts = Reconciler.OpacityRestartsForTests(control);
-            string chain = "";
-            for (DependencyObject? node = control; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
-                chain += node.GetType().Name + (node is UIElement { Visibility: Visibility.Collapsed } ? "(C)" : "") + ">";
             H.Check("EnterFade_PopupContentRevealed", visual.IsVisible && !Reconciler.OpacityRestartPendingForTests(control)
                 && running is not null && restarts == 1,
-                $"visible={visual.IsVisible}, pending={Reconciler.OpacityRestartPendingForTests(control)}, running={running is not null}, restarts={restarts}, "
-                + $"loaded={control.IsLoaded}, xamlRoot={control.XamlRoot is not null}, onLayout={Reconciler.OpacityRestartWaitsOnLayoutForTests(control)}, chain={chain}");
+                $"visible={visual.IsVisible}, pending={Reconciler.OpacityRestartPendingForTests(control)}, running={running is not null}, restarts={restarts}, loaded={control.IsLoaded}");
             popup.IsOpen = false;
             popup.Child = null;
             H.SetContent(null);

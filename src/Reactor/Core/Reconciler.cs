@@ -7148,7 +7148,10 @@ public sealed partial class Reconciler : IDisposable
             Concealed = null;
             // Cancellation also runs from teardown (disposal, pool reset), where the compositor may be gone.
             try { visual.IsVisible = true; }
-            catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or ObjectDisposedException) { }
+            catch (Exception ex) when (ex is global::System.Runtime.InteropServices.COMException or ObjectDisposedException)
+            {
+                Diagnostics.DiagnosticLog.SwallowedError(Diagnostics.LogCategory.Reactor, "OpacityRestart.Reveal", ex);
+            }
         }
         internal void DetachWait()
         {

@@ -752,6 +752,9 @@ public sealed partial class Reconciler
     // realize/recycle handler; also reused 1:1 by Reconciler.KeyedItemsBinding.cs.
     internal void HandleTemplatedContainerContentChanging(object sender, ContainerContentChangingEventArgs args, Action requestRerender)
     {
+        // A container recycled or re-realized for another row drops its previous row's pending
+        // ambient-enter check, so it isn't left concealed or replays that row's fade (#1680).
+        CancelOpacityRestart(args.ItemContainer);
         if (args.InRecycleQueue)
         {
             // Issue #951 — drop any name this container carried for its
