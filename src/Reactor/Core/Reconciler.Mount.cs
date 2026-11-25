@@ -271,7 +271,22 @@ public sealed partial class Reconciler
         {
             var (staggerIdx, staggerDly) = ConsumeStaggerIndex();
             ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly, this);
+            // A keyed Memo shares its factory output's control and tag, so the exit paths read its
+            // declaration from the control's state (#1663).
+            if (element is KeyedMemoElement && element.ElementTransition.GetExitTransition() is not null)
+            {
+                var memoState = GetOrCreateReactorState(control);
+                memoState.MemoTransition = element.ElementTransition;
+                // Layers mount inside out, so a flyout already recorded on the shared control is inside the Memo.
+                memoState.MemoWrapsDecorator = memoState.DecoratorElement is not null;
+            }
         }
+
+        // A flyout that records itself after a keyed Memo's exit wraps that Memo.
+        if (IsFlyoutDecorator(element)
+            && control?.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoTransition: not null } wrappedMemo
+            && ReferenceEquals(wrappedMemo.DecoratorElement, element))
+            wrappedMemo.MemoWrapsDecorator = false;
 
         // Apply interaction states (.InteractionStates() modifier)
         if (control is not null && element.InteractionStates is not null)

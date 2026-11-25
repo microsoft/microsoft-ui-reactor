@@ -207,6 +207,12 @@ Conventions for contributors:
 
 ### Fixed
 
+- **An exit `.Transition()` declared on a keyed `Memo(key, …)` now plays when the Memo is removed or
+  its key changes (issues #1663 and #1665).** The control used to leave the tree at once, while the
+  same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
+  until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
+  honoured too.
+
 - An enter fade (`.Transition(Transition.Fade)`, and the default enter under
   `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
   style setter) now fades in, and ends at that opacity instead of 1.

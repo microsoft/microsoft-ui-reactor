@@ -97,14 +97,10 @@ internal static partial class MarkdownSelectionFixtures
             throw new InvalidOperationException("A Markdown selection scope never loaded its document.");
     }
 
-    // A state change inside a fixture's own host re-renders that host, and Harness.Render only
-    // awaits ReactorApp.PrimaryWindow's host, never one from H.CreateHost(), so these checks
-    // otherwise rely on dispatcher ordering. Drain the fixture host first, then poll the scope's
+    // Harness.WaitFor drains the fixture's H.CreateHost() host before each poll of the scope's
     // membership (Refresh walks the live visual tree).
-    private static async Task<bool> WaitForMembership(Microsoft.UI.Reactor.Hosting.ReactorHost host,
-        MarkdownSelectionHost scope, string expected)
+    private static async Task<bool> WaitForMembership(MarkdownSelectionHost scope, string expected)
     {
-        await host.WaitForIdleAsync();
         return await Harness.WaitFor(() =>
         {
             scope.Refresh();
@@ -437,15 +433,15 @@ internal static partial class MarkdownSelectionFixtures
             var membershipHost = H.FindControl<MarkdownSelectionHost>(_ => true)!;
             toggle(true);
             H.Check("MdSelection_ChildMountUpdatesMembership",
-                await WaitForMembership(host, membershipHost, "intro\ndetails"),
+                await WaitForMembership(membershipHost, "intro\ndetails"),
                 MembershipState(membershipHost));
             toggle(false);
             H.Check("MdSelection_ChildUnmountUpdatesMembership",
-                await WaitForMembership(host, membershipHost, "intro"),
+                await WaitForMembership(membershipHost, "intro"),
                 MembershipState(membershipHost));
             toggle(true);
             H.Check("MdSelection_ChildRemountRestoresMembership",
-                await WaitForMembership(host, membershipHost, "intro\ndetails"),
+                await WaitForMembership(membershipHost, "intro\ndetails"),
                 MembershipState(membershipHost));
             var ancestor = H.FindControl<Border>(border =>
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(border) == "MembershipAncestor")!;
