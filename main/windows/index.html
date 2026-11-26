@@ -4093,6 +4093,9 @@ concepts.</p>
 <li><code>ZOrderChanged.IsCovered</code> is a covered hint based on HWND insertion order, not
   pixel-accurate occlusion.</li>
 <li><code>Floating</code> is app-local. Use <code>AlwaysOnTop</code> only when you need global topmost.</li>
+<li>Windows can decline an <code>AlwaysOnTop</code> change made while the app isn't in the
+  foreground, for example while the workstation is locked. Reactor logs a warning
+  and reapplies it the next time the app is activated.</li>
 <li>Runtime taskbar visibility flips hide/show the HWND once so the shell refreshes.</li>
 </ul>
 <h2 id="chrome-appearance">Chrome &amp; appearance<a class="headerlink" href="#chrome-appearance" title="Permanent link">&para;</a></h2>
