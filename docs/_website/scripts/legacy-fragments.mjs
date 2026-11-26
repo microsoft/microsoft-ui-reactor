@@ -2,7 +2,8 @@
 // like /latest/#minimal-project-setup point at its sections. That page now
 // lives at /get-started and the root is the custom home page. This script, put
 // inline on the home page, sends a fragment the home page does not have to the
-// same section on /get-started, keeping the query.
+// same section on /get-started, keeping the query. It also runs when the
+// fragment changes on a page that is already open.
 
 /** The inline script for the home page. `target` is the base-aware /get-started URL. */
 export function legacyFragmentScript(target) {
@@ -14,5 +15,6 @@ export function legacyFragmentScript(target) {
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", forward);
   else forward();
+  addEventListener("hashchange", forward);
 })();`;
 }

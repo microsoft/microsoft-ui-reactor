@@ -64,15 +64,18 @@ describe("redirect pages", () => {
 });
 
 describe("legacy home-page fragments", () => {
-  const run = ({ hash, search = "", ids = [] }) => {
-    let went = null;
+  const load = ({ hash, search = "", ids = [] }) => {
+    const page = { went: null, listeners: {} };
+    page.location = { hash, search, replace: (url) => (page.went = url) };
     vm.runInNewContext(legacyFragmentScript("/microsoft-ui-reactor/latest/get-started"), {
-      location: { hash, search, replace: (url) => (went = url) },
+      location: page.location,
       document: { readyState: "complete", getElementById: (id) => (ids.includes(id) ? {} : null) },
+      addEventListener: (type, fn) => (page.listeners[type] = fn),
       decodeURIComponent,
     });
-    return went;
+    return page;
   };
+  const run = (options) => load(options).went;
 
   test("a section the home page lacks goes to the same section on /get-started", () => {
     assert.equal(
@@ -84,5 +87,13 @@ describe("legacy home-page fragments", () => {
   test("the home page's own anchors and a bare root stay put", () => {
     assert.equal(run({ hash: "#guides-title", ids: ["guides-title"] }), null);
     assert.equal(run({ hash: "" }), null);
+  });
+
+  test("a fragment set after the page loaded is forwarded too", () => {
+    const page = load({ hash: "" });
+    assert.equal(page.went, null);
+    page.location.hash = "#why-reactor";
+    page.listeners.hashchange();
+    assert.equal(page.went, "/microsoft-ui-reactor/latest/get-started#why-reactor");
   });
 });
