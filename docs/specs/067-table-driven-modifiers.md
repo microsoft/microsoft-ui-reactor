@@ -366,7 +366,7 @@ Rules the schema enforces about itself (unit tests over the data, §10.1):
 | `src/Reactor/Core/Reconciler.Modifiers.Generated.cs` | rows A–D arms of `ApplyModifiers` at their current positions, and the call sites of rows E–F | 3 |
 | `src/Reactor/Core/Element.Modifiers.Generated.cs` | `ModifiersEqualCore`, `VisualModifiersEqual`, the three `Merge` bodies | 2 |
 | `src/Reactor/Core/Diagnostics/AppliedModifierMap.Generated.cs` | `AppliedModifierMap.Entries` and its owner helpers | 2 |
-| `src/Reactor/Core/Reconciler.ThemeBindings.Generated.cs` | `GetDependencyPropertyName` | 2 |
+| `src/Reactor/Core/ThemeBindingApplier.Generated.cs` | the common-modifier rows of `GetDependencyPropertyName` (`GetModifierDependencyPropertyName`); `PaneBackground` stays hand-written | 2 |
 | `src/Reactor/Core/ElementPool.Generated.cs` | a `CleanModifierBackedProperties(fe)` helper that `CleanElement` calls, emitted from each receiver's declared `PoolReset` (§6.2) | 5 |
 | `src/Reactor/Core/Reconciler.Pooling.Generated.cs` | `DeclaresTransform` (from `TakesVisualAtMount`) and `HasRestorableModifier`'s field list (from `RestorableOwner`) | 6 |
 
@@ -596,7 +596,7 @@ remaining-owner semantics would be a behaviour change.
 The `ThemeRef` overloads of `Background`, `Foreground` and `BorderBrush` go through
 `GetDependencyPropertyName` (`Reconciler.ThemeBindings.cs:568-580`), not `ApplyModifiers`, and
 their reach differs: `Foreground` reaches `RichTextBlock` on the theme path but not on the plain
-brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path share `ForegroundModifier.GetProperty` and reach the same receivers, so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
+brush path. The analyzer models this as `ThemeControlGate` (`ModifierTable.cs:304-305` at `4df0f6feb`). Since #1687 the plain write and the `ThemeRef` path reach the same receivers (layer 2 generates the `ThemeRef` rows from the `Theme` receivers, and `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` checks them against `ForegroundModifier.GetProperty`), so no slot has a separate theme gate today; `ModifierTable.ThemeGate` still derives one from `Theme`-role receivers if they ever differ. In the
 schema that is a receiver row with the `Theme` role but not the `Apply` role, so it never widens
 the plain write, and layer 2 generates `GetDependencyPropertyName`'s modifier rows from the
 `Theme`-role rows. The pool reach is a third, separate set (`RichTextBlock.Foreground` is cleared

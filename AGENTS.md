@@ -354,7 +354,8 @@ point of return: stop and ship.
   `ModifierSkipPolicySnapshotTests.Frozen` row (never hand-edit a generated file). A field that
   writes a property also goes in `ModifierSchema.AppliedReportOrder` (the generator throws without
   it) and gets an `AppliedModifierMapSnapshotTests.Frozen` row; a non-DP target is declared with
-  `.Report(target: …)`.
+  `.Report(target: …)`, and a field that writes no property goes in
+  `ReactorDiagnosticsComponentsTests.NotPropertyWrites` instead.
   `ModifierFieldContractTests` checks `Merge` and both skip-equality modes against it for every
   headless field, and `ModifierSchemaTests` checks its receivers, order, types and write
   equality against the reconciler and its fluent names against the public extensions. A simple,

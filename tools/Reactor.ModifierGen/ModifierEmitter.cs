@@ -43,9 +43,11 @@ internal static class ModifierEmitter
         var order = ModifierSchema.AppliedReportOrder;
         var missing = reported.Keys.Except(order).ToList();
         var extra = order.Except(reported.Keys).ToList();
-        if (missing.Count > 0 || extra.Count > 0 || order.Distinct().Count() != order.Length)
+        var duplicated = order.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (missing.Count > 0 || extra.Count > 0 || duplicated.Count > 0)
             throw new InvalidOperationException(
-                $"ModifierSchema.AppliedReportOrder must list every reported slot once. Missing: [{string.Join(", ", missing)}]; not reported: [{string.Join(", ", extra)}].");
+                $"ModifierSchema.AppliedReportOrder must list every reported slot once. Missing: [{string.Join(", ", missing)}]; "
+                + $"not reported: [{string.Join(", ", extra)}]; duplicated: [{string.Join(", ", duplicated)}].");
 
         var sb = Header("Microsoft.UI.Reactor.Core.Diagnostics");
         sb.Append("internal static partial class AppliedModifierMap\n{\n");
@@ -83,7 +85,9 @@ internal static class ModifierEmitter
         if (receivers is [{ Type: ModifierSchema.FrameworkElement } only])
             return $"Always(\"{Simple(only.DpOwner)}.{only.Property}\")";
         if (receivers.Any(r => r.Type == ModifierSchema.FrameworkElement || !r.Type.StartsWith(ControlsNamespace, StringComparison.Ordinal)))
-            throw new InvalidOperationException($"{slot.Name}: a gated report chain must name Microsoft.UI.Xaml.Controls receivers only.");
+            throw new InvalidOperationException($"{slot.Name}: a gated report chain must name Microsoft.UI.Xaml.Controls receivers only. "
+                + "Declare .Report(target: \"Owner.Property\") on the slot, or .Report(handWritten: true) and write "
+                + $"{slot.Name}Owner in AppliedModifierMap.cs.");
         var key = string.Join("|", receivers.Select(r => r.Type + "." + r.Property));
         foreach (var (name, chain) in owners)
             if (string.Join("|", chain.Select(r => r.Type + "." + r.Property)) == key)

@@ -219,8 +219,10 @@ internal static class ModifierSchema
             .On(ReceiverRole.Apply | ReceiverRole.Theme, Border)
             .Equality(SkipEquality.BrushValue, WriteEquality.Reference)
             .Analyzer(controlGate: PanelControlBorder),
-        // Hand-coded in ForegroundModifier (#1687): one receiver lookup for the plain write and the
-        // ThemeRef path, and a RichTextBlock's descriptor-written Foreground is coordinated there.
+        // Hand-coded in ForegroundModifier (#1687): the plain write goes through ForegroundModifier.GetProperty,
+        // and a RichTextBlock's descriptor-written Foreground is coordinated there. The ThemeRef row is generated
+        // from the Theme receivers below; GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table
+        // keeps the two in step.
         S("Foreground", ModifierBucket.Visual, Brush, ModifierFamily.Brush, ApplyShape.HandCoded)
             .Method("ForegroundModifier.Apply")
             .On(ReceiverRole.Apply | ReceiverRole.Theme, Control).On(ReceiverRole.Apply | ReceiverRole.Theme, TextBlock)

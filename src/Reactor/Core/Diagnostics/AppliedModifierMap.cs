@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 /// <c>CenterPoint</c>/<c>TransformOrigin</c> aren't DPs: the reconciler writes them to the element's composition
 /// visual (spec 066 layer 4; <c>Rotation</c> as <c>RotationAngle</c>, in radians), so they are mapped
 /// to its properties. The <c>UIElement</c> facades read identity for them.
-/// <c>AppliedModifierMapTests</c> fails when a new modifier is neither mapped nor listed
+/// <c>AppliedModifierMap_CoversEveryModifier_OrExcludesItOnPurpose</c> fails when a new modifier is neither mapped nor listed
 /// as excluded.</para>
 ///
 /// <para>Spec 067 layer 2: <c>Entries</c> and the owner helpers are generated from

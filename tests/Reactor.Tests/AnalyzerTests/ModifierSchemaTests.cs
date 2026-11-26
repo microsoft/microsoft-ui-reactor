@@ -334,6 +334,10 @@ public class ModifierSchemaTests
     [Fact]
     public void Theme_Receivers_Match_GetDependencyPropertyName()
     {
+        // Since layer 2 the rows this reads are generated from these same receivers, so this is a
+        // check of the gate reader and the emitter, not an independent oracle. The independent one
+        // is ModifierTableIntegrityTests.GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table,
+        // which compares the generated rows with the hand-written brush apply arms.
         var themeGates = ModifierTableIntegrityTests.ReadGetDependencyPropertyNameGates();
         Assert.True(themeGates.Count >= 3);
         themeGates.Remove("PaneBackground");   // SplitView's own property, not a common modifier
