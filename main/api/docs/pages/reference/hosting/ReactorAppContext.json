@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hosting/ReactorAppContext.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorAppContext.md",
+  "route": "/reference/hosting/ReactorAppContext",
+  "title": "ReactorAppContext",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorAppContext",
+  "markdown": "---\ntitle: \"ReactorAppContext\"\nseo:\n  description: \"The argument to ReactorApp.Run's startup callback. Carries the launch activation; all surface-management operations (open / find a window or tray icon, register events) go directly through the static ReactorApp API — call sites mix freely. (spec 036 §4.3)\"\n---\n\nThe argument to [`ReactorApp.Run`](/microsoft-ui-reactor/main/reference/hosting/ReactorApp#runactionreactorappcontext)'s startup callback. Carries the launch activation; all surface-management operations (open / find a window or tray icon, register events) go directly through the static [`ReactorApp`](/microsoft-ui-reactor/main/reference/hosting/ReactorApp) API — call sites mix freely. (spec 036 §4.3)\n\n```csharp\npublic sealed class ReactorAppContext\n```\n\nNamespace: `Microsoft.UI.Reactor`.\n\n**Learn more:** [Windows](/microsoft-ui-reactor/main/guides/windows)\n\n## Remarks [#remarks]\n\nKeep the context small on purpose: the static [`ReactorApp`](/microsoft-ui-reactor/main/reference/hosting/ReactorApp) surface is the single source of truth for windows / tray icons / shutdown policy, and remains valid before `Run` enters this callback and after it returns. Doubling the API on the context just doubled the discovery cost without adding capability.\n\n## Properties [#properties]\n\n### `LaunchActivation` [#launchactivation]\n\nHow the process was launched. See [`LaunchActivation`](/microsoft-ui-reactor/main/reference/hosting/launch#launchactivation).\n\n```csharp\npublic LaunchActivation LaunchActivation  // get\n```\n"
+}

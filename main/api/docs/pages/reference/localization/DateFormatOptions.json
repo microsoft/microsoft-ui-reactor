@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/DateFormatOptions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/DateFormatOptions.md",
+  "route": "/reference/localization/DateFormatOptions",
+  "title": "DateFormatOptions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/DateFormatOptions",
+  "markdown": "---\ntitle: \"DateFormatOptions\"\n---\n\n```csharp\npublic sealed class DateFormatOptions\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Constructors [#constructors]\n\n### `DateFormatOptions` [#dateformatoptions_1]\n\n```csharp\npublic DateFormatOptions()\n```\n\n## Properties [#properties]\n\n### `Style` [#style]\n\n```csharp\npublic DateStyle Style  // get, init\n```\n"
+}

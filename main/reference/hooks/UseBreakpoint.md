@@ -1,32 +1,58 @@
 ---
 title: "UseBreakpoint"
+description: "Returns true when the given window's width is >= minWidth. Re-renders when the window resizes across the breakpoint."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+```csharp
+public bool UseBreakpoint(double minWidth)
+public bool UseBreakpoint(Window window, double minWidth)
+```
+
+Declared on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext).
+
+**Learn more:** [Layout](/microsoft-ui-reactor/main/guides/layout), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
 ## Overloads [#overloads]
 
-- [`UseBreakpoint(double)`](#usebreakpointdouble)
-- [`UseBreakpoint(Window, double)`](#usebreakpointwindow-double)
+| Overload | Description |
+| --- | --- |
+| [`UseBreakpoint(double)`](#usebreakpointdouble) | Window-inferring overload — takes only `minWidth` and resolves the window whose host renders this component (see the parameterless `UseWindowSize`). |
+| [`UseBreakpoint(Window, double)`](#usebreakpointwindow-double) | Returns true when the given window's width is \>= minWidth. |
 
-## `UseBreakpoint(double)` [#usebreakpointdouble]
+### `UseBreakpoint(double)` [#usebreakpointdouble]
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(System.Double)`
+Window-inferring overload — takes only `minWidth` and resolves the window whose host renders this component (see the parameterless [`UseWindowSize`](/microsoft-ui-reactor/main/reference/hooks/UseWindowSize#usewindowsize_1)). Returns false when the component has no owning window. (spec 036 §5.2)
 
-### Summary [#summary]
+```csharp
+public bool UseBreakpoint(double minWidth)
+```
 
-Window-inferring overload — takes only `minWidth` and
-resolves the window whose host renders this component (see the parameterless
-[UseWindowSize](/microsoft-ui-reactor/main/reference/hooks/UseWindowSize) ([guide](/microsoft-ui-reactor/main/guides/hooks))). Returns false when the component has no owning
-window. (spec 036 §5.2)
+**Parameters**
 
-## `UseBreakpoint(Window, double)` [#usebreakpointwindow-double]
+| Name | Type | Description |
+| --- | --- | --- |
+| `minWidth` | `double` |  |
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseBreakpoint(Microsoft.UI.Xaml.Window,System.Double)`
+### `UseBreakpoint(Window, double)` [#usebreakpointwindow-double]
 
-### Summary [#summary_1]
+Returns true when the given window's width is \>= minWidth. Re-renders when the window resizes across the breakpoint.
 
-Returns true when the given window's width is >= minWidth.
-Re-renders when the window resizes across the breakpoint.
+```csharp
+public bool UseBreakpoint(Window window, double minWidth)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `window` | `Window` |  |
+| `minWidth` | `double` |  |
+
+## Use from a class component [#use-from-a-class-component]
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected bool UseBreakpoint(double minWidth)
+protected bool UseBreakpoint(Window window, double minWidth)
+```

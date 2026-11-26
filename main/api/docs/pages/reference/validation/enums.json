@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/validation/enums.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/enums.md",
+  "route": "/reference/validation/enums",
+  "title": "Enums",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/enums",
+  "description": "The enumerations in this category.",
+  "markdown": "---\ntitle: \"Enums\"\ndescription: \"The enumerations in this category.\"\n---\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## `Severity` [#severity]\n\nSeverity level for a validation message.\n\n```csharp\npublic enum Severity\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n### Values [#values]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Info` | `0` |  |\n| `Warning` | `1` |  |\n| `Error` | `2` |  |\n\n## `ShowWhen` [#showwhen]\n\nControls when error styling becomes visible.\n\n```csharp\npublic enum ShowWhen\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n### Values [#values_1]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Always` | `0` | Always show errors, regardless of touched/dirty state. |\n| `WhenTouched` | `1` | Only show errors after the field has been focused then blurred. |\n| `WhenDirty` | `2` | Only show errors after the field's value has changed from initial. |\n| `AfterFirstSubmit` | `3` | Only show errors after the first submit attempt. |\n| `Never` | `4` | Never show error styling (errors still exist in context). |\n\n## `VisualizerStyle` [#visualizerstyle]\n\nThe visual style of a validation visualizer.\n\n```csharp\npublic enum VisualizerStyle\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n### Values [#values_2]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Inline` | `0` | Inline error text below the control. |\n| `Summary` | `1` | Bullet list of all errors from the content subtree. |\n| `InfoBar` | `2` | WinUI InfoBar with severity-appropriate color. |\n| `Custom` | `3` | Custom render function receives all caught messages. |\n"
+}

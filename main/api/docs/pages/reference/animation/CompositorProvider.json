@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/animation/CompositorProvider.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/CompositorProvider.md",
+  "route": "/reference/animation/CompositorProvider",
+  "title": "CompositorProvider",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/CompositorProvider",
+  "description": "Static accessor for the current Compositor instance.",
+  "markdown": "---\ntitle: \"CompositorProvider\"\ndescription: \"Static accessor for the current Compositor instance.\"\n---\n\n```csharp\npublic static class CompositorProvider\n```\n\nNamespace: `Microsoft.UI.Reactor.Animation`.\n\n**Learn more:** [Animation](/microsoft-ui-reactor/main/guides/animation)\n\n## Properties [#properties]\n\n### `Current` [#current]\n\n```csharp\npublic static Compositor? Current  // get, set\n```\n\n## Methods [#methods]\n\n### `EnsureCompositor` [#ensurecompositor]\n\n```csharp\npublic static Compositor EnsureCompositor(UIElement element)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `element` | `UIElement` |  |\n"
+}

@@ -1,43 +1,63 @@
 ---
 title: "UseReducer"
+seo:
+  description: "Declares a piece of state with a functional updater variant. The updater receives the previous value and returns the next. Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher (same semantics as UseState); pass threadSafe: true for locked in-place updates that serialize many concurrent writers without an intervening UI tick."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+Declares a piece of state with a functional updater variant. The updater receives the previous value and returns the next. Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher (same semantics as [`UseState`](/microsoft-ui-reactor/main/reference/hooks/UseState)); pass `threadSafe`: `true` for locked in-place updates that serialize many concurrent writers without an intervening UI tick.
+
+```csharp
+public (T Value, Action<Func<T, T>> Update) UseReducer<T>(T initialValue, bool threadSafe = false)
+public (TState Value, Action<TAction> Dispatch) UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false)
+```
+
+Declared on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext).
+
+**Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
 ## Overloads [#overloads]
 
-- [`UseReducer<T1>(T1, bool)`](#usereducert1t1-bool)
-- [`UseReducer<T1, T2>(Func<T1, T2, T1>, T1, bool)`](#usereducert1-t2funct1-t2-t1-t1-bool)
+| Overload | Description |
+| --- | --- |
+| [`UseReducer<T>(T, bool)`](#usereducertt-bool) | Declares a piece of state with a functional updater variant. |
+| [`UseReducer<TState, TAction>(Func<TState, TAction, TState>, TState, bool)`](#usereducertstate-tactionfunctstate-taction-tstate-tstate-bool) | Declares a piece of state managed by a reducer function (like Redux). |
 
-## `UseReducer<T1>(T1, bool)` [#usereducert1t1-bool]
+### `UseReducer<T>(T, bool)` [#usereducertt-bool]
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseReducer``1(``0,System.Boolean)`
+Declares a piece of state with a functional updater variant. The updater receives the previous value and returns the next. Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher (same semantics as [`UseState`](/microsoft-ui-reactor/main/reference/hooks/UseState)); pass `threadSafe`: `true` for locked in-place updates that serialize many concurrent writers without an intervening UI tick.
 
-### Summary [#summary]
+```csharp
+public (T Value, Action<Func<T, T>> Update) UseReducer<T>(T initialValue, bool threadSafe = false)
+```
 
-Declares a piece of state with a functional updater variant.
-The updater receives the previous value and returns the next.
-Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher
-(same semantics as [UseState](/microsoft-ui-reactor/main/reference/hooks/UseState) ([guide](/microsoft-ui-reactor/main/guides/hooks))); pass
-`threadSafe`: `true` for locked in-place updates that
-serialize many concurrent writers without an intervening UI tick.
+**Parameters**
 
-## `UseReducer<T1, T2>(Func<T1, T2, T1>, T1, bool)` [#usereducert1-t2funct1-t2-t1-t1-bool]
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `initialValue` | `T` |  |  |
+| `threadSafe` | `bool` | `false` |  |
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseReducer``2(System.Func{``0,``1,``0},``0,System.Boolean)`
+### `UseReducer<TState, TAction>(Func<TState, TAction, TState>, TState, bool)` [#usereducertstate-tactionfunctstate-taction-tstate-tstate-bool]
 
-### Summary [#summary_1]
+Declares a piece of state managed by a reducer function (like Redux). The reducer takes (currentState, action) and returns the next state. Returns (currentState, dispatch) where dispatch sends an action through the reducer. Cross-thread dispatch calls are auto-marshaled onto the captured UI dispatcher (same semantics as [`UseState`](/microsoft-ui-reactor/main/reference/hooks/UseState)); pass `threadSafe`: `true` for locked in-place dispatch that serializes concurrent writers without an intervening UI tick.
 
-Declares a piece of state managed by a reducer function (like Redux).
-The reducer takes (currentState, action) and returns the next state.
-Returns (currentState, dispatch) where dispatch sends an action through the reducer.
-Cross-thread dispatch calls are auto-marshaled onto the captured UI dispatcher
-(same semantics as [UseState](/microsoft-ui-reactor/main/reference/hooks/UseState) ([guide](/microsoft-ui-reactor/main/guides/hooks))); pass
-`threadSafe`: `true` for locked in-place dispatch that
-serializes concurrent writers without an intervening UI tick.
+```csharp
+public (TState Value, Action<TAction> Dispatch) UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false)
+```
 
-## Featured in [#featured-in]
+**Parameters**
 
-- [Hooks](/microsoft-ui-reactor/main/guides/hooks)
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `reducer` | `Func<TState, TAction, TState>` |  |  |
+| `initialValue` | `TState` |  |  |
+| `threadSafe` | `bool` | `false` |  |
+
+## Use from a class component [#use-from-a-class-component]
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected (T Value, Action<Func<T, T>> Update) UseReducer<T>(T initialValue, bool threadSafe = false)
+protected (TState Value, Action<TAction> Dispatch) UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false)
+```

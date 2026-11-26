@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/accessibility.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility.md",
+  "route": "/reference/accessibility",
+  "title": "Accessibility",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility",
+  "description": "The accessibility scanner, its diagnostics and semantic panels.",
+  "markdown": "---\ntitle: \"Accessibility\"\ndescription: \"The accessibility scanner, its diagnostics and semantic panels.\"\nsidebar:\n  label: \"Overview\"\n---\n\n**Learn more:** [Accessibility](/microsoft-ui-reactor/main/guides/accessibility)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [`A11yContext`](/microsoft-ui-reactor/main/reference/accessibility/A11yContext) | Rich contextual information harvested from the element tree during the scan. |\n| [`A11yDiagnostic`](/microsoft-ui-reactor/main/reference/accessibility/A11yDiagnostic) | A single accessibility diagnostic finding from the scanner. |\n| [`A11yFixSuggestion`](/microsoft-ui-reactor/main/reference/accessibility/A11yFixSuggestion) | Tells an AI agent exactly which modifier to add and what value to use. |\n| [`AccessibilityScanner`](/microsoft-ui-reactor/main/reference/accessibility/AccessibilityScanner) | Post-reconciliation accessibility scanner that walks the Reactor virtual element tree and produces structured diagnostics. |\n| [`SemanticDescription`](/microsoft-ui-reactor/main/reference/accessibility/SemanticDescription) | Describes the semantic role, value, and range of a composite component for assistive technology. |\n| [`SemanticPanel`](/microsoft-ui-reactor/main/reference/accessibility/SemanticPanel) | A lightweight WinUI Panel that provides custom automation semantics for composite Reactor components. |\n| [`SemanticPanelAutomationPeer`](/microsoft-ui-reactor/main/reference/accessibility/SemanticPanelAutomationPeer) | Custom AutomationPeer for SemanticPanel. |\n"
+}

@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/layout/GridSizeExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/GridSizeExtensions.md",
+  "route": "/reference/layout/GridSizeExtensions",
+  "title": "GridSizeExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/GridSizeExtensions",
+  "markdown": "---\ntitle: \"GridSizeExtensions\"\nseo:\n  description: \"Fluent extension methods for GridSize to set the optional Min and Max properties.\"\n---\n\nFluent extension methods for [`GridSize`](/microsoft-ui-reactor/main/reference/layout/GridSize) to set the optional `Min` and `Max` properties.\n\n```csharp\npublic static class GridSizeExtensions\n```\n\nNamespace: `Microsoft.UI.Reactor`.\n\n**Learn more:** [Layout](/microsoft-ui-reactor/main/guides/layout)\n\n## Methods [#methods]\n\n### `MaxSize` [#maxsize]\n\nSets the `Max` property of a [`GridSize`](/microsoft-ui-reactor/main/reference/layout/GridSize) instance.\n\n```csharp\npublic static GridSize MaxSize(this GridSize size, double max)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `max` | `double` | The maximum size value to set. |\n\n**Returns:** A new [`GridSize`](/microsoft-ui-reactor/main/reference/layout/GridSize) instance with the `Max` property set.\n\n### `MinSize` [#minsize]\n\nSets the `Min` property of a [`GridSize`](/microsoft-ui-reactor/main/reference/layout/GridSize) instance.\n\n```csharp\npublic static GridSize MinSize(this GridSize size, double min)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `min` | `double` | The minimum size value to set. |\n\n**Returns:** A new [`GridSize`](/microsoft-ui-reactor/main/reference/layout/GridSize) instance with the `Min` property set.\n"
+}

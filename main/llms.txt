@@ -2,6 +2,394 @@
 
 > Declarative UI framework for native Windows desktop apps in pure C#.
 
+## API reference
+
+- [API reference](https://microsoft.github.io/microsoft-ui-reactor/main/reference): The API reference lists every public type, hook, factory method and modifier in Reactor. It is generated from the XML doc comments in the source code.
+
+### Hooks
+
+- [Hooks](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks): State, effects, context and the other hooks a component calls from Render.
+
+#### State
+
+- [UseCollection](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCollection): Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset. Returns the collection as IReadOnlyList.
+- [UseExternalStore](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseExternalStore): Subscribes to an external store that exposes a current snapshot getter. Re-renders only when a change notification yields a different snapshot.
+- [UseObservable](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservable): Subscribes to an INotifyPropertyChanged source and re-renders when any property changes. Returns the same source object.
+- [UseObservableProperty](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservableProperty): Subscribes to a specific property on an INotifyPropertyChanged source. Re-renders only when that property changes.
+- [UseObservableTree](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservableTree): Observes an object and all nested INotifyPropertyChanged values reachable through its properties. Re-renders when any property at any depth changes. Automatically subscribes/unsubscribes as property values change.
+- [UsePersisted](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePersisted): Like UseState, but the value survives unmount/remount via an in-memory cache. On first mount, uses cached value if available, otherwise uses initialValue. Value is saved to cache on unmount.
+- [UseReducer](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducer): Declares a piece of state with a functional updater variant. The updater receives the previous value and returns the next. Cross-thread updater calls are auto-marshaled onto the captured UI dispatcher (same semantics as UseState); pass threadSafe: true for locked in-place updates that serialize many concurrent writers without an intervening UI tick.
+- [UseRef](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseRef): Returns a mutable ref object that persists across renders.
+- [UseState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseState): Declares a piece of state. Returns (currentValue, setter). Must be called in the same order every render (just like React hooks).
+
+#### Effects and memoization
+
+- [UseCallback](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCallback): Returns a stable callback reference that doesn't change between renders.
+- [UseEffect](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseEffect): Runs a side effect after render. The effect re-runs when any dependency changes. Pass an empty array for "run once on mount" semantics. Returns a cleanup action that runs before the next effect or on unmount.
+- [UseMemo](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemo): Memoizes a computed value, recomputing only when dependencies change.
+- [UseMemoCells](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCells): Memoize cell construction for items. On the first render the builder runs for every index; on subsequent renders, an item that compares Object.Equals against the previous render's value at the same index reuses the previous element. Any change to dependencies invalidates the entire cache and rebuilds every cell.
+- [UseMemoCellsByIndex](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByIndex)
+- [UseMemoCellsByKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByKey): Memoize cell construction keyed by keySelector. Cells are reused when both the item's key and value match the previous render. Keys that recur with mutated content rebuild that cell only. Reordered keys reuse cells (the reconciler's keyed- children path keeps the underlying control without unmount/remount).
+
+#### Context
+
+- [UseContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseContext): Reads the nearest ancestor's provided value for the given context. Returns the context's DefaultValue if no provider exists in the ancestor chain. Follows hook rules — must be called in the same order every render.
+- [UseIntl](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIntl): Returns an IntlAccessor for the current locale. Re-renders this component when the locale changes via a parent LocaleProvider. If no LocaleProvider is present, returns a default accessor using the OS locale. Uses Context internally — the context system handles re-renders automatically.
+
+#### Data and commands
+
+- [UseCommand](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCommand)
+- [UseDataSource](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDataSource): Projects an IDataSource<T> through UseInfiniteResource, surfacing its pages as an InfiniteResource<TItem>. Deps are identity-based on source and value-based on the request descriptors, so a new sort/filter/search restarts the pagination cleanly.
+- [UseInfiniteResource](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource): Returns the InfiniteResource<TItem> owned by this hook slot. The resource's state is driven by fetchPage; deps controls cache-keying and deps-change restart.
+- [UseMutation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutation): Registers a Mutation<TInput, TResult> for this hook slot. The handle is stable across renders (pass it to buttons, context menus, etc.).
+- [UseResource](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseResource): Runs an async fetch keyed on deps, returning an AsyncValue<T> that tracks the fetch's lifecycle. The hook owns the cancellation token, stores results in cache, and re-renders when new results land.
+
+#### Forms and validation
+
+- [UseChildValidationContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseChildValidationContext): Creates a child validation context independent from any parent. Returns both the child context and the parent (if one exists). The child collects its own messages; use the parent reference to bubble manually.
+- [UseValidationContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseValidationContext): Returns the nearest ancestor's ValidationContext, or creates a new one scoped to this component. The created context persists across re-renders.
+
+#### Windows and display
+
+- [UseBreakpoint](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseBreakpoint): Returns true when the given window's width is >= minWidth. Re-renders when the window resizes across the breakpoint.
+- [UseClosingGuard](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseClosingGuard): Registers a synchronous "can the window close right now?" predicate. Multiple guards stack — any returning false cancels the close. Runs on the UI thread; for async confirmation, return false and re-trigger ReactorWindow.Close from the dialog callback. No-op outside a window. (spec 036 §7 / §13.4)
+- [UseDisplays](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDisplays): Returns the current display snapshot and re-renders when the display layout changes.
+- [UseDpi](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDpi): Returns the current per-window DPI (ReactorWindow.Dpi) and re-renders on DPI change. Returns the system primary-monitor DPI when called outside a window. (spec 036 §5.2)
+- [UseIsActive](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActive): Subscribes to the host window's activation events and re-renders on change. Returns true outside a window (the surface is "active" while shown). (spec 036 §7)
+- [UseIsCovered](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsCovered): Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.
+- [UseOpenWindow](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseOpenWindow): Open or reuse a secondary window keyed by key. Renders that pass the same key share the same ReactorWindow; if the spec changes across renders the live window is updated via ReactorWindow.Update. The returned handle is identity-stable across renders so long as the key is stable.
+- [UseTrayIcon](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseTrayIcon): Open (or reuse-by-TrayIconSpec.Key) a system-tray icon scoped to the calling component. The icon closes automatically on unmount — that's the only difference from ReactorApp.OpenTrayIcon, which is app-scoped and keeps the icon alive until explicit ReactorTrayIcon.Close.
+- [UseWindow](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindow): Resolves the ReactorWindow whose host renders this component — including nested components and virtualized rows realized outside the host's render pass — or null when it has no owning window (tray-flyout content, ReactorHostControl embeds). O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)
+- [UseWindowAspectRatio](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowAspectRatio): Applies a lifetime-bound width/height aspect lock to the owning window. Last mounted hook wins; unmounting restores the previous writer.
+- [UseWindowDragMove](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowDragMove): Returns a stable callback that starts a framework-managed window drag/move loop (cursor polling + AppWindow.Move at ~60Hz until the left mouse button is released).
+- [UseWindowPosition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowPosition): Subscribes to the host window's PositionChanged event and re-renders on change. Returns (0, 0) outside a window. (spec 054 §5.5)
+- [UseWindowSize](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowSize): Returns (width, height) of the given window and re-renders when the window resizes.
+- [UseWindowState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowState): Subscribes to the host window's StateChanged event and re-renders on change. Returns WindowState.Normal outside a window. (spec 036 §7)
+
+#### Theme and accessibility
+
+- [UseAnnounce](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounce): Creates an AnnounceHandle for making screen reader announcements. The handle persists across re-renders.
+- [UseColorScheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseColorScheme): Returns the app-global ColorScheme — ColorScheme.Light or ColorScheme.Dark, read from Application.Current.RequestedTheme.
+- [UseHighContrast](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrast): Returns true when the system is in a High Contrast (forced colors) theme. Automatically re-renders the component when high contrast is toggled.
+- [UseHighContrastScheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrastScheme): Returns the high contrast scheme name (e.g., "High Contrast Black", "High Contrast White") or null if not in high contrast mode. Automatically re-renders the component when the scheme changes.
+- [UseIsDarkTheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsDarkTheme): Convenience wrapper — returns true when the app-global color scheme is ColorScheme.Dark. Exactly UseColorScheme() == ColorScheme.Dark, so it inherits that hook's semantics: it does not observe per-element RequestedTheme.
+- [UseReducedMotion](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducedMotion): Returns true when the user or system prefers reduced motion (e.g., Windows "Show animations" is off, or SPI_GETCLIENTAREAANIMATION returns false). Automatically re-renders the component when the preference changes.
+
+#### Focus and element refs
+
+- [UseElementFocus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocus): Creates (or retrieves) a component-scoped ElementRef and pairs it with a RequestFocus action. Bind the ref to an element via .Ref(ref). Calling RequestFocus schedules FocusManager.Focus on the UI dispatcher; if the ref's target has not mounted yet the call is a no-op.
+- [UseElementRef](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRef): Returns a stable ElementRef<T> for the current component scope.
+- [UseFocus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocus): Creates and returns a FocusManager scoped to this component. The manager persists across re-renders.
+- [UseFocusTrap](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap): Creates a focus trap handle that traps keyboard focus within a container when active. Use with the .FocusTrap() element modifier.
+
+#### Navigation
+
+- [UseNavigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigation): Child mode: retrieves an ancestor's NavigationHandle<TRoute> from context. Throws if no ancestor provides one (i.e., no root UseNavigation with a NavigationHost exists above this component in the tree).
+- [UseNavigationLifecycle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigationLifecycle): Registers lifecycle callbacks that fire during navigation events.
+- [UseSystemBackButton](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseSystemBackButton): Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content to call NavigationHandle.GoBack. Unsubscribes on unmount.
+
+#### Developer tools
+
+- [UseDevtools](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools): Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:
+
+#### Types and options
+
+- [Focus helpers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/focus-helpers): The focus manager and the modifiers that the UseFocus hooks work with.
+- [Hook results and options](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/hook-types): Small types that hooks return or take as options.
+- [Pending](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/pending): The Pending element that shows a fallback while resources below it load.
+
+### Components
+
+- [Components](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components): Component base classes, the render context, refs, context and error types.
+- [Render errors](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/render-errors): Types that describe an error thrown while a component renders.
+- [Component<TProps>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Component-1): Base class for components that receive typed props (e.g., navigation parameters). Props are set by the host before rendering.
+- [AppContexts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/AppContexts): Static context registrations shared across the Reactor core. Install the cache via ReactorHost bootstrap (or override per test).
+- [Callbacks<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Callbacks): An opt-in, always-equal wrapper for the delegate (callback) portion of a component's props, so callback identity never forces a re-render.
+- [Component](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Component): Base class for stateful components (like React class components, but using hooks). Components hold a RenderContext that tracks their hook state across re-renders.
+- [Context<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Context): A typed, named context that can be provided to a subtree and consumed by any descendant. Define as a static field. Provide via .Provide() modifier. Consume via UseContext() hook.
+- [ContextBase](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/ContextBase): Non-generic base for type-erased storage in the context scope stack.
+- [ElementFactory<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/ElementFactory): Bridges WinUI's ItemsRepeater/IElementFactory to Reactor's Reconciler. GetElement calls the view builder then mounts; RecycleElement unmounts.
+- [IReactorKeyed](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/IReactorKeyed): Identity-on-data convention for items rendered into Reactor collection elements (TemplatedListElementBase and LazyStackElementBase) and into hand-built keyed children (FlexColumn(items.Select(... .WithKey(item)))).
+- [Observable<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Observable): A single-value cell that raises INotifyPropertyChanged.PropertyChanged when Observable.Value is assigned a different value. Exists to let developers declare small pieces of global app state (dev flags, light/dark mode, currently-signed-in user, etc.) in one line without hand-writing an INotifyPropertyChanged class.
+- [Optional<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Optional): Represents either an explicit value or an unset state.
+- [Ref<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Ref): A mutable reference that persists across renders (like React's useRef).
+- [RenderContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/RenderContext): Passed to function components and provides access to hooks. Each component instance gets its own RenderContext which tracks hook call order.
+- [SourceLocation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/SourceLocation): Spec 010 — the C# source location that produced an Element.
+
+### Elements
+
+- [Elements](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements): The immutable element records that describe each control.
+- [Elements: Layout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/layout): Panels, stacks, grids, scrolling and other containers.
+- [Elements: Text](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/text): Text blocks, rich text and the typography factories.
+- [Elements: Buttons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/buttons): Buttons, toggle buttons, split buttons and hyperlink buttons.
+- [Elements: Input](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/input): Text boxes, check boxes, combo boxes, sliders, pickers and other input controls.
+- [Elements: Collections](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/collections): Lists, grids, trees, flip views and virtualized collections.
+- [Elements: Navigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/navigation): Navigation views, tabs, pivots, breadcrumbs and the title bar.
+- [Elements: Menus and commands](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/menus-and-commands): Menus, menu bars, command bars and keyboard accelerators.
+- [Elements: Dialogs and flyouts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/dialogs-and-flyouts): Content dialogs, flyouts, popups and teaching tips.
+- [Elements: Media and icons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/media): Images, icons, animated visuals, media playback and person pictures.
+- [Elements: Shapes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/shapes): Rectangles, ellipses, lines, paths and brushes.
+- [Elements: Status and info](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/status-and-info): Info bars, badges and progress indicators.
+- [Elements: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/forms): Form fields, validation rules, validation visualizers and the property grid.
+- [Elements: Composition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/composition): Components, memoization, error boundaries, conditionals and other structural elements.
+- [Elements: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/interop): Hosted XAML content, web views and maps.
+
+#### Types
+
+- [Element](https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/Element): A lightweight, immutable description of a UI node (the "virtual DOM"). Elements are cheap to create and diff — they never touch real controls directly.
+
+### Factories
+
+- [Factories](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories): The DSL factory methods that create element records.
+- [Factories: Layout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/layout): Panels, stacks, grids, scrolling and other containers.
+- [Factories: Text](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/text): Text blocks, rich text and the typography factories.
+- [Factories: Buttons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/buttons): Buttons, toggle buttons, split buttons and hyperlink buttons.
+- [Factories: Input](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/input): Text boxes, check boxes, combo boxes, sliders, pickers and other input controls.
+- [Factories: Collections](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/collections): Lists, grids, trees, flip views and virtualized collections.
+- [Factories: Navigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/navigation): Navigation views, tabs, pivots, breadcrumbs and the title bar.
+- [Factories: Menus and commands](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/menus-and-commands): Menus, menu bars, command bars and keyboard accelerators.
+- [Factories: Dialogs and flyouts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/dialogs-and-flyouts): Content dialogs, flyouts, popups and teaching tips.
+- [Factories: Media and icons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/media): Images, icons, animated visuals, media playback and person pictures.
+- [Factories: Shapes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/shapes): Rectangles, ellipses, lines, paths and brushes.
+- [Factories: Status and info](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/status-and-info): Info bars, badges and progress indicators.
+- [Factories: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/forms): Form fields, validation rules, validation visualizers and the property grid.
+- [Factories: Composition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/composition): Components, memoization, error boundaries, conditionals and other structural elements.
+- [Factories: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/interop): Hosted XAML content, web views and maps.
+
+### Modifiers
+
+- [Modifiers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers): Fluent extension methods that change layout, appearance, input and behavior.
+
+#### Common modifiers
+
+- [Modifiers: Layout and spacing](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/layout-and-spacing): Size, margin, padding, alignment and the attached layout properties.
+- [Modifiers: Appearance](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/appearance): Background, foreground, borders, corners, opacity, transforms, styles and theme.
+- [Modifiers: Typography](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/typography): Fonts, text alignment, wrapping, trimming and other text formatting.
+- [Modifiers: Accessibility](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/accessibility): Automation names, landmarks, live regions and other accessibility properties.
+- [Modifiers: Focus and keyboard](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard): Tab order, access keys, directional focus and focus traps.
+- [Modifiers: Input and events](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/input-and-events): Pointer, keyboard, gesture and drag and drop events, and whether an element takes input.
+- [Modifiers: Lifecycle and identity](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/lifecycle): Keys, refs, mount and unmount callbacks, size changes and context values.
+- [Modifiers: Animation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/animation): Transitions, keyframes, layout animations, interaction states and scroll-linked animation.
+- [Modifiers: Tooltips and flyouts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/tooltips-and-flyouts): Tooltips, flyouts and context flyouts attached to any element.
+- [Modifiers: Validation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/validation): Validators, required fields and error styling.
+- [Modifiers: Native properties](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/native-properties): The Set modifier, which changes the real WinUI control directly.
+
+#### Control modifiers
+
+- [Control modifiers: Shared controls](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/shared-controls): Modifiers that several kinds of controls share, such as headers, placeholders and selection events.
+- [Control modifiers: Layout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/layout): Modifiers that only the controls in the Layout area have.
+- [Control modifiers: Buttons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/buttons): Modifiers that only the controls in the Buttons area have.
+- [Control modifiers: Input](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/input): Modifiers that only the controls in the Input area have.
+- [Control modifiers: Collections](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/collections): Modifiers that only the controls in the Collections area have.
+- [Control modifiers: Navigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/navigation): Modifiers that only the controls in the Navigation area have.
+- [Control modifiers: Dialogs and flyouts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/dialogs-and-flyouts): Modifiers that only the controls in the Dialogs and flyouts area have.
+- [Control modifiers: Media and icons](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/media): Modifiers that only the controls in the Media and icons area have.
+- [Control modifiers: Shapes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/shapes): Modifiers that only the controls in the Shapes area have.
+- [Control modifiers: Status and info](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/status-and-info): Modifiers that only the controls in the Status and info area have.
+- [Control modifiers: Forms](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/forms): Modifiers that only the controls in the Forms area have.
+- [Control modifiers: Interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/interop): Modifiers that only the controls in the Interop area have.
+
+#### Types
+
+- [AccessibilityModifiers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/AccessibilityModifiers): Advanced accessibility properties (WCAG Tier 2/3). Stored as a lazy sub-record on ElementModifiers to avoid allocating storage for elements that don't need advanced accessibility annotations. All fluent extension methods create/merge this record automatically — developers never need to construct it directly.
+- [ElementExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/ElementExtensions): Fluent modifier extension methods for elements. Modifiers are stored inline on Element.Modifiers, preserving the concrete type through the entire fluent chain. This means .Set() works after any modifier:
+- [ElementExtras](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/ElementExtras)
+- [ElementModifiers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/ElementModifiers)
+- [LayoutModifiers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/LayoutModifiers): Layout-related modifiers (sizing, alignment, spacing, visibility, theme, logical-direction insets). Stored as a lazy sub-record on ElementModifiers so that the common case of a few fields set allocates a small bucket rather than bloating the parent record. Public properties on ElementModifiers (Padding, Margin, Width, …) read from / write into this sub-record transparently — most callers never see this type.
+- [VisualModifiers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/VisualModifiers): Visual-related modifiers (brushes, borders, transforms, opacity). Stored as a lazy sub-record on ElementModifiers in the same pattern as LayoutModifiers. Public properties on ElementModifiers (Foreground, Background, BorderBrush, …) shim through.
+
+### Hosting and windows
+
+- [Hosting and windows](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting): Start the app, open windows and integrate with the Windows shell.
+- [Displays](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/displays): Information about the connected displays.
+- [File pickers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/file-pickers): Options for the open file, save file and folder pickers.
+- [Launch and activation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/launch): How the app was started, and requests to embed it.
+- [Persistence](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/persistence): Stores and scopes that save window placement and persisted state.
+- [Taskbar and jump lists](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/taskbar): Types for the taskbar button, its progress, overlay, thumbnail buttons and jump list.
+- [Tray icon](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/tray-icon): Types for an icon in the notification area.
+- [Window events](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/window-events): Event arguments raised by a Reactor window.
+- [Window options](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/window-options): Enums that describe the style, size and position of a window.
+- [XAML interop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/xaml-interop): Helpers for hosting Reactor inside an existing XAML app.
+- [ReactorApp](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorApp)
+- [ReactorAppContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorAppContext): The argument to ReactorApp.Run's startup callback. Carries the launch activation; all surface-management operations (open / find a window or tray icon, register events) go directly through the static ReactorApp API — call sites mix freely. (spec 036 §4.3)
+- [ReactorApplication](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorApplication): Application subclass that implements IXamlMetadataProvider so the native XAML schema context can resolve managed types from XBF theme resources. No App.xaml needed — XamlControlsResources are loaded programmatically. The IXamlMetadataProvider implementation delegates to the WinUI controls' built-in provider so that custom control types (TextCommandBarFlyout, etc.) can be instantiated from XBF theme resources.
+- [ReactorHost](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorHost): Hosts a Reactor component tree inside a WinUI Window. Manages the render loop: when state changes, re-renders the component and reconciles the virtual tree against the real WinUI control tree.
+- [ReactorHostControl](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorHostControl): A fully self-contained WinUI ContentControl that hosts a Reactor component tree. Drop this into any vanilla WinUI app — no ReactorApp, ReactorApplication, or special bootstrapping needed. Each instance owns its own Reconciler and render loop.
+- [ReactorWindow](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorWindow): Owns one OS top-level Window and one ReactorHost. Created via ReactorApp.OpenWindow. (spec 036 §3.2 / §4.2)
+- [RenderStats](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/RenderStats): Snapshot of render loop performance, updated every ~1 second by ReactorHost. Always available: FPS, frame timing, render count. DEBUG builds add per-reconcile element counters from the last render pass.
+- [UIThreadOnlyAttribute](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/UIThreadOnlyAttribute)
+- [WindowIcon](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/WindowIcon): Abstraction over AppWindow.SetIcon and AppWindow.SetIcon. Pass to WindowSpec.Icon, to a tray icon, or to a taskbar overlay. (spec 036 §4.1)
+- [WindowKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/WindowKey): Stable identity for a top-level surface within a process. Used by ReactorApp.FindWindow, WindowSpec.Key, and the UseOpenWindow hook to dedupe re-renders that should reuse a window rather than open a new one. (spec 036 §4.4)
+- [WindowSpec](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/WindowSpec): Immutable (init-only) declarative description of a top-level Reactor window. Hand to ReactorApp.OpenWindow to open a window; hand to ReactorWindow.Update to diff against the current spec and apply only changed fields.
+
+### Theming
+
+- [Theming](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming): Theme tokens, theme resources, brushes and window backdrops.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/enums): The enumerations in this category.
+- [BackdropChoice](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/BackdropChoice): Tagged value stored in ElementModifiers.Backdrop. Holds either a BackdropKind selector (the common case, materialized by the host into a built-in WinUI backdrop) or a custom factory delegate (escape hatch for tinted Mica or third-party SystemBackdrop subclasses) — never both, never neither. The "exactly one set" invariant is enforced by the private constructor; construct via BackdropChoice.Of or BackdropChoice.Of.
+- [BrushHelper](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/BrushHelper): Color and brush parsing utilities. Supports named colors, hex (#RRGGBB, #AARRGGBB), and direct Color values. Parsed colors are cached by string (an immutable value type, safe to share), but a fresh SolidColorBrush is created per call: a brush is a DependencyObject with thread affinity and mutable Color/Opacity, so a single instance cannot be safely shared across controls.
+- [ResourceBuilder](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ResourceBuilder): Fluent builder for per-control resource overrides (WinUI lightweight styling). Each Set() call registers a resource key override that will be injected into the control's FrameworkElement.Resources dictionary at mount time.
+- [ResourceOverrides](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ResourceOverrides): Immutable snapshot of per-control resource overrides built by ResourceBuilder. Contains both literal resource values and theme-reactive ThemeRef entries that are re-resolved on theme change.
+- [Theme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/Theme): Provides semantic theme tokens and custom resource references. All tokens resolve from WinUI's resource system and automatically adapt when the theme changes (Light ↔ Dark).
+- [ThemeRef](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ThemeRef): A reference to a WinUI theme resource that resolves at render time. Use via Theme tokens or Theme.Ref for custom keys.
+- [ThemeResource](https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ThemeResource): Lookup helpers for WinUI theme resources. These resolve against Application.Current.Resources, which includes all merged dictionaries (XamlControlsResources, custom themes, etc.).
+
+### Layout
+
+- [Layout](https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout): The flex panel, grid sizes and the attached layout records.
+- [Attached layout properties](https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/attached): Records that hold the attached properties set by the layout modifiers.
+- [Flex enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/flex-enums): Enums that control the flex layout.
+- [GridSize](https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/GridSize): Strongly-typed grid track size, used by the typed Microsoft.UI.Reactor.Factories.Grid(GridSize[], GridSize[], Element?[]) factory in place of the legacy string-form ("Auto", "*", "200", "1.5*") tracks. Optional Min and Max properties are available to constrain the track size.
+- [GridSizeExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/GridSizeExtensions): Fluent extension methods for GridSize to set the optional Min and Max properties.
+
+### Input and commands
+
+- [Input and commands](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input): Commands, element refs, focus, drag and drop, and gestures.
+- [Drag and drop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/drag-and-drop): Types for dragging data out of and dropping it onto elements.
+- [Element refs](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/element-refs): Refs to mounted controls.
+- [Gestures](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/gestures): Gesture events and their options.
+- [Command<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/Command-1): Immutable (init-only) parameterized command descriptor. The action receives an argument of type T, enabling a single command definition to operate on different targets: var delete = new Command<Item> { Label = "Delete", Execute = item => Remove(item) }; MenuItem(delete, selectedItem)
+- [Command](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/Command): Immutable (init-only) command descriptor that bundles an action with its metadata (label, icon, keyboard accelerator, enabled state). Define once, use in any surface: var save = new Command { Label = "Save", Execute = () => Save(), Icon = SymbolIcon("Save") }; AppBarButton(save) // toolbar MenuItem(save) // menu Button(save) // inline
+- [CommandInterop](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/CommandInterop): Bridges ICommand (MVVM/CommunityToolkit) to Command, enabling migration from ViewModel-based patterns to Reactor's declarative commanding. var reactorCmd = CommandInterop.FromCommand(viewModel.SaveCommand, "Save", icon: new SymbolIconData("Save"), accelerator: Accelerator(VirtualKey.S, Control));
+- [FocusManager](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/FocusManager): Imperative focus helpers (spec 027 Tier 5). These operate on ElementRef refs obtained via the UseElementFocus hook or an explicit .Ref(...) modifier; use them when declarative focus (.Focus(...) form helpers, UIElement.IsTabStop) is not enough.
+- [StandardCommand](https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/StandardCommand)
+
+### Data
+
+- [Data](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data): Async values, resources, the query cache and data sources.
+- [Async values](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/async-values): The value a resource hook returns while it loads, after it loads and after it fails.
+- [Column attributes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/column-attributes): Attributes that change how a property shows as a column.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/enums): The enumerations in this category.
+- [Paging](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/paging): Types for infinite and paged resources.
+- [Query cache](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/query-cache): The process-wide cache that resource hooks share.
+- [Sort and filter descriptors](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/descriptors): Requests, sort, filter and field descriptors that data sources receive.
+- [FocusRevalidationService](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/FocusRevalidationService): Central service that invalidates stale QueryCache entries when the app window is reactivated or resumed, so consumers that opted in via ResourceOptions.RefetchOnWindowFocus = true see fresh data after an Alt-Tab or resume. Disabled by default — see ReactorFeatureFlags.FocusRevalidation.
+- [IDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IDataSource): A read-only data source that provides paged access to items.
+- [IKeyedDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IKeyedDataSource): A data source that supports fetching individual items by key.
+- [IMutableDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IMutableDataSource): A mutable data source that supports CRUD operations.
+- [IObservableDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IObservableDataSource): A data source that fires events when data changes.
+- [ListDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ListDataSource): In-memory data source backed by a list. Supports client-side sorting, filtering, text search, paging, and CRUD mutations.
+- [ObservableListDataSource<T>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ObservableListDataSource): An observable data source that watches an ObservableCollection for changes and fires DataChanged when items are added, removed, or modified. The collection is the authoritative source — mutations go through the collection, not through the data source's CRUD methods.
+
+### Navigation
+
+- [Navigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation): Navigation state, routes, lifecycle contexts and page transitions.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/enums): The enumerations in this category.
+- [Navigation diagnostics](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/diagnostics): Diagnostic events raised by the navigation system.
+- [Navigation lifecycle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/lifecycle): Contexts passed to the navigation lifecycle callbacks.
+- [Navigation transitions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/transitions): Transitions that play when the navigation host changes pages.
+- [DeepLinkMap<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkMap): Maps URI patterns to route constructors for deep linking. Patterns use /segment/{param:type} syntax where type is int or string.
+- [DeepLinkResult<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkResult): Result of a deep link resolution attempt.
+- [NavigateOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigateOptions): Options for a single navigation action.
+- [NavigationEventArgs<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs): Event args fired after a successful navigation.
+- [NavigationHandle<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationHandle): Public API for controlling navigation. Wraps a NavigationStack with a safe, read-heavy interface. Obtained via UseNavigation hook.
+- [NavigationState<TRoute>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationState): A snapshot of a NavigationHandle<TRoute>'s full state: the back stack, the currently active route, and the forward stack. Obtained from NavigationHandle.GetState and restored via NavigationHandle.SetState.
+- [RouteArgs](https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/RouteArgs): Provides typed access to parameters extracted from a URI pattern match.
+
+### Animation
+
+- [Animation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation): Transitions, curves, keyframes, interaction states and scroll-linked animation.
+- [Curves and easing](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/curves): Curves that shape the timing of an animation.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/enums): The enumerations in this category.
+- [Implicit and theme transitions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/implicit): Transitions WinUI runs when a property or a child collection changes.
+- [Interaction states](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/interaction-states): Animations that follow pointer over, pressed and focus states.
+- [Keyframes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/keyframes): Types for keyframe animations.
+- [Scroll-linked animation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/scroll): Animations driven by the scroll position.
+- [Transitions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/transitions): Enter and exit transitions for elements.
+- [AnimationConfig](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/AnimationConfig): Configuration for the .Animate() modifier — declaration-site implicit animation on compositor Visual properties. Stored on the Element base record.
+- [AnimationScope](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/AnimationScope): Provides ambient animation context via [ThreadStatic] fields. When a curve is active, property changes in the reconciler's ApplyModifiers route through compositor animations instead of direct property assignment.
+- [Animations](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/Animations): Transactional animation entry points — the SwiftUI withAnimation { … } analog. See spec 042 §6.
+- [CompositorProvider](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/CompositorProvider): Static accessor for the current Compositor instance.
+- [StaggerConfig](https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/StaggerConfig): Stagger configuration for container children animations.
+
+### Accessibility
+
+- [Accessibility](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility): The accessibility scanner, its diagnostics and semantic panels.
+- [A11yContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yContext): Rich contextual information harvested from the element tree during the scan. An AI agent uses this to generate semantically correct accessible names without needing to re-read the source code.
+- [A11yDiagnostic](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yDiagnostic): A single accessibility diagnostic finding from the scanner. Each finding maps to a specific WCAG 2.1 criterion and includes rich contextual information so an AI agent can generate intelligent fixes from the JSON export alone.
+- [A11yFixSuggestion](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yFixSuggestion): Tells an AI agent exactly which modifier to add and what value to use.
+- [AccessibilityScanner](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/AccessibilityScanner): Post-reconciliation accessibility scanner that walks the Reactor virtual element tree and produces structured diagnostics. Intended for DEBUG builds only — call via ReactorHostControl.EnableAccessibilityDiagnostics.
+- [SemanticDescription](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticDescription): Describes the semantic role, value, and range of a composite component for assistive technology. Used with the .Semantics() modifier.
+- [SemanticPanel](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticPanel): A lightweight WinUI Panel that provides custom automation semantics for composite Reactor components. Wraps a single child and overrides OnCreateAutomationPeer() to expose a custom role, value, and range to screen readers.
+- [SemanticPanelAutomationPeer](https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticPanelAutomationPeer): Custom AutomationPeer for SemanticPanel. Implements IRangeValueProvider and IValueProvider so screen readers can read the composite component's semantic role, value, and range. Analogous to SwiftUI's .accessibilityRepresentation {} and Compose's Modifier.semantics { role = Role.Slider }.
+
+### Localization
+
+- [Localization](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization): Message keys, string resources, number and date formatting, and right-to-left helpers.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/enums): The enumerations in this category.
+- [DateFormatOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/DateFormatOptions)
+- [IStringResourceProvider](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IStringResourceProvider): Abstracts string resource loading so that the localization system can be tested without MRT/ResourceLoader.
+- [IntlAccessor](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IntlAccessor): Provides locale-aware message formatting, number/date formatting, and text direction for the active locale. Obtained via UseIntl() hook.
+- [IntlContexts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IntlContexts): Context-based locale context. The LocaleProvider component provides an IntlAccessor to its subtree via this context. Components consume it via UseIntl() or UseContext(IntlContexts.Locale).
+- [MessageCache](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageCache): Caches MessageFormatter instances per locale. Each formatter internally caches compiled ICU patterns, so we only need one instance per locale.
+- [MessageKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageKey): Identifies a localizable message by namespace and key. Namespace corresponds to the .resw file name (e.g., "Common" for Common.resw). Key is the data name within the .resw file.
+- [NumberFormatOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/NumberFormatOptions)
+- [PseudoLocalizer](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/PseudoLocalizer): Transforms strings for pseudolocalization testing: - Replaces ASCII chars with accented equivalents - Wraps in [!! ... !!] markers - Pads ~30% longer to simulate text expansion - Preserves ICU syntax ({variables}, {count, plural, ...}) untouched
+- [ReswResourceProvider](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/ReswResourceProvider): Production implementation of IStringResourceProvider that reads .resw files directly from disk as XML.
+- [RtlHelper](https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/RtlHelper): Determines text direction for a locale based on CLDR data.
+
+### Controls
+
+- [Controls](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls): Item data records and support types for the property grid, masked input and virtual lists.
+- [Collection items](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/collection-items): Records and enums for tree, swipe and items view content.
+- [Icon data](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/icons): Records that describe an icon.
+- [Masked input](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/masked-input): The mask engine and formatters behind MaskedTextBox.
+- [Menu and command bar items](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/menu-items): Records that describe menu, menu bar, command bar and keyboard accelerator items.
+- [Navigation items](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/navigation-items): Records that describe items of navigation controls.
+- [Property grid attributes](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/property-grid-attributes): Attributes that change how the property grid shows a property.
+- [Property grid templates](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/property-grid-templates): Delegates and metadata the property grid uses to build its rows.
+- [Rich text](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/rich-text): Inline records for rich text blocks.
+- [Virtual list](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/virtual-list): Support types for the virtual list.
+- [PropertyGridComponent](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/PropertyGridComponent): The core PropertyGrid component. Uses FlexColumn layout with FlexRow per property row. Category headers and property expand/collapse use a single shared state dictionary.
+- [PropertyGridDefaults](https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/PropertyGridDefaults): Default rendering templates for PropertyGrid — compact Windows 11 layout. Uses FlexRow per property row: fixed 160px label, grow-1 editor.
+
+### Validation
+
+- [Validation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation): Validators, validation contexts and error styling for forms.
+- [Attached validation state](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/attached): Records that hold the validation state stored on an element.
+- [Enums](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/enums): The enumerations in this category.
+- [ErrorBubbling](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ErrorBubbling): Helpers for filtering and processing validation messages through the visualizer hierarchy.
+- [ErrorStyling](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ErrorStyling): Default error styling configuration. Uses WinUI theme resource names.
+- [FormFieldHelpers](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/FormFieldHelpers): Helpers for FormField rendering logic.
+- [IAsyncValidator](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IAsyncValidator): An asynchronous validator for operations that require I/O (e.g., server-side uniqueness checks).
+- [IValidator](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IValidator): A synchronous validator that checks a value and returns a validation message on failure.
+- [Validate](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/Validate): Factory methods for built-in validators.
+- [ValidateExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidateExtensions): Fluent extension methods for attaching validation to Reactor elements.
+- [ValidationContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationContext): Collects, queries, and manages validation messages for a form or section of a component tree. Thread-safe: all mutation and query methods are synchronized.
+- [ValidationContexts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationContexts): Provides the Context definition for propagating ValidationContext through the tree.
+- [ValidationMessage](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationMessage): An immutable validation message associated with a specific field.
+- [ValidationReconciler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationReconciler): Helpers for running validation within a component's render cycle. Validation runs after state updates and before the returned element tree is reconciled. Results are available to visualizers in the same render pass.
+- [ValidationRuleDsl](https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationRuleDsl): DSL factory methods for ValidationRule elements.
+
+### Diagnostics
+
+- [Diagnostics](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics): Tracing, source maps, component snapshots and developer tools hosting.
+- [Developer tools hosting](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/devtools): Types the developer tools use to start inside an app.
+- [Diagnostic snapshots](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/snapshots): Snapshots of the component tree that the diagnostics API returns.
+- [ReactorEvent](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorEvent): A single event captured from the Microsoft-UI-Reactor EventSource, delivered to subscribers of ReactorTrace.Subscribe.
+- [ReactorSourceMap](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorSourceMap): Spec 010 — runtime switch and read path for Reactor source mapping.
+- [ReactorSourceTransparentAttribute](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorSourceTransparentAttribute): Spec 010 — marks a helper method as source-transparent: elements it returns are attributed to the line that CALLED it, not to the line inside it that ran the DSL factory.
+- [ReactorTrace](https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorTrace): In-process subscription helper for the Microsoft-UI-Reactor EventSource. Lets an app developer (or an internal devtools surface — reactor.logs MCP, an ILogger bridge) observe framework events without writing an EventListener subclass.
+
+### Extensibility
+
+- [Extensibility](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility): The control protocol, control descriptors, the reconciler and element pooling.
+- [Children strategies](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/children-strategies): Records that tell the reconciler how a control holds its children.
+- [Descriptor callbacks](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/descriptor-delegates): Delegates and attributes used by control descriptors.
+- [Handler contexts](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/lifecycle-contexts): Contexts passed to an element handler when it mounts, updates or unmounts a control.
+- [ReactorBinding<TElement>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorBinding-1): Spec 047 §9 / §14 Phase 1 (1.6) — per-binding event helper.
+- [ControlDescriptor<TElement, TControl>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ControlDescriptor): Spec 047 §6 / §14 Phase 2 (Q1 spike) — declarative control description.
+- [ControlRegistry](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ControlRegistry)
+- [DescriptorHandler<TElement, TControl>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/DescriptorHandler): Spec 047 §6 / §14 Phase 2 (Q1 spike) — interpreter that drives a ControlDescriptor<TElement, TControl> against the v1 protocol surface.
+- [ElementPool](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ElementPool): Per-CLR-type pool (cap 32 per lane) that recycles unmounted WinUI FrameworkElement instances.
+- [IDecoratorElementHandler<TElement>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/IDecoratorElementHandler): Spec 047 §14 Phase 3 completion — decorator-style V1 handler contract for elements whose returned UIElement identity may change on update or whose unmount disposition diverges from the standard pool-return.
+- [IElementHandler<TElement, TControl>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/IElementHandler): Spec 047 §4 / §14 Phase 1 (1.6) — author-facing handler contract for porting a control onto the v1 protocol.
+- [PoolPolicy<TControl>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/PoolPolicy): Spec 047 §13 Q18 / §14 Phase 1 (1.5) — author-facing pool policy.
+- [PropEntry<TElement, TControl>](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/PropEntry): Spec 047 §6 / §14 Phase 2 (Q1 spike) — base class for descriptor entries declared on a ControlDescriptor<TElement, TControl>.
+- [ReactorBinding](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorBinding)
+- [ReactorFeatureFlags](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorFeatureFlags): Process-wide feature flags that gate risky or in-progress behavior. Each flag is a plain mutable boolean so apps can flip it on startup; the defaults are chosen to preserve existing behavior.
+- [Reconciler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/Reconciler): The reconciler diffs old and new element trees and patches the real WinUI control tree.
+
 ## Controls
 
 - [Controls](https://microsoft.github.io/microsoft-ui-reactor/main/controls): Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the return value of a factory like TextBlock(...) or Button(...) — a plain element you compose, chain modifiers onto, and return from Render().
@@ -116,138 +504,6 @@
 - [Recipe: Paginated List](https://microsoft.github.io/microsoft-ui-reactor/main/recipes/paginated-list): A paginated list is four states sharing one source of truth: an initial load, a populated list, a "load the next page" affordance, and a terminal "no more results." UseInfiniteResource owns all four in Microsoft.UI.Reactor (Reactor) — the component below pattern-matches on LoadState and reads Items directly; there is no local UseState for loading or errors.
 - [Recipe: Search with suggestions](https://microsoft.github.io/microsoft-ui-reactor/main/recipes/search-with-suggestions): The pattern is two slots: an input that owns the query string, and a dropdown that shows zero or more suggestions filtered against a catalog. UseMemo keys the filter on the query, so a re-render that didn't touch the query is free — important for the keyboard-up- arrow-down-arrow loop where the suggestion index changes but the query doesn't.
 - [Recipe: Settings page](https://microsoft.github.io/microsoft-ui-reactor/main/recipes/settings-page): A settings page is many small persisted prefs side-by-side. Each preference is its own UsePersisted call with its own key — there's no central settings object that needs migration when one preference moves. The row layout is a single helper.
-
-## Reference
-
-### Hooks API
-
-- [Hooks reference](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks): Hooks are how Reactor components subscribe to state, schedule effects, and reach into the framework's lifecycle from a function-shaped Render body. Each entry on this index is generated from the <summary> XML doc comments authored alongside the source in src/Reactor/Hooks/ — the canonical surface — and is grouped by the hooks category in docs/_pipeline/reference-map.yaml.
-
-#### Hooks
-
-- [UseAnnounce](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounce)
-- [UseAnnounceExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions): Extension methods for the UseAnnounce hook.
-- [UseBreakpoint](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseBreakpoint)
-- [UseCallback](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCallback)
-- [UseClosingGuard](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseClosingGuard): Registers a synchronous "can the window close right now?" predicate. Multiple guards stack — any returning false cancels the close. Runs on the UI thread; for async confirmation, return false and re-trigger ReactorWindow.Close from the dialog callback. No-op outside a window. (spec 036 §7 / §13.4)
-- [UseCollection](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCollection): Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset. Returns the collection as IReadOnlyList.
-- [UseColorScheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseColorScheme): Returns the app-global ColorScheme — ColorScheme.Light or ColorScheme.Dark, read from Application.Current.RequestedTheme.
-- [UseCommand](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCommand)
-- [UseCommandState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCommandState): Allocates the stable hook shape shared by both UseCommand (guide) overloads: the IsExecuting / IsDebouncing state, the re-entrance guard and debounce-slot refs, and an unmount effect that disposes any live re-enable timer so it cannot fire setIsDebouncing / request a re-render against a torn-down context. These hooks are allocated unconditionally so the hook order is identical regardless of the command's shape.
-- [UseContext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseContext): Reads the nearest ancestor's provided value for the given context. Returns the context's DefaultValue if no provider exists in the ancestor chain. Follows hook rules — must be called in the same order every render.
-- [UseDevtools](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools): Returns true when the current process is running with the in-app devtools UI enabled. This is the AND of two independent signals:
-- [UseDisplays](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDisplays): Returns the current display snapshot and re-renders when the display layout changes.
-- [UseDpi](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDpi): Returns the current per-window DPI (ReactorWindow.Dpi) and re-renders on DPI change. Returns the system primary-monitor DPI when called outside a window. (spec 036 §5.2)
-- [UseEffect](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseEffect)
-- [UseElementFocus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocus)
-- [UseElementFocusExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions): Hook for imperative element focus (spec 027 Tier 5). Returns a stable ElementRef (survives re-renders) plus a RequestFocus action that schedules Input.FocusManager.Focus on the UI dispatcher. Scheduling defers focus past the current reconcile pass so callers can safely request focus from effects or event handlers without racing against layout.
-- [UseElementRef](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRef)
-- [UseElementRefExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions): Hook that returns a strongly-typed ElementRef for binding to a concrete WinUI control via the .Ref(...) modifier. The typed ref removes the (Button)ref.Current cast at consumers (Composition, Ink, focus, …).
-- [UseExternalStore](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseExternalStore): Subscribes to an external store that exposes a current snapshot getter. Re-renders only when a change notification yields a different snapshot.
-- [UseFocus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocus)
-- [UseFocusExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusExtensions): Extension methods for the UseFocus hook.
-- [UseFocusTrap](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap)
-- [UseFocusTrapExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions): Extension methods for the UseFocusTrap hook.
-- [UseHighContrast](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrast): Returns true when the system is in a High Contrast (forced colors) theme. Automatically re-renders the component when high contrast is toggled.
-- [UseHighContrastScheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrastScheme): Returns the high contrast scheme name (e.g., "High Contrast Black", "High Contrast White") or null if not in high contrast mode. Automatically re-renders the component when the scheme changes.
-- [UseInfiniteResource](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource)
-- [UseInfiniteResourceExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions): Extension methods providing UseInfiniteResource on RenderContext.
-- [UseIntl](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIntl): Returns an IntlAccessor for the current locale. Re-renders this component when the locale changes via a parent LocaleProvider. If no LocaleProvider is present, returns a default accessor using the OS locale. Uses Context internally — the context system handles re-renders automatically.
-- [UseIsActive](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActive): Subscribes to the host window's activation events and re-renders on change. Returns true outside a window (the surface is "active" while shown). (spec 036 §7)
-- [UseIsCovered](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsCovered): Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.
-- [UseIsDarkTheme](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsDarkTheme): Convenience wrapper — returns true when the app-global color scheme is ColorScheme.Dark. Exactly UseColorScheme() == ColorScheme.Dark, so it inherits that hook's semantics: it does not observe per-element RequestedTheme.
-- [UseMemo](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemo)
-- [UseMemoCells](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCells)
-- [UseMemoCellsByIndex](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByIndex)
-- [UseMemoCellsByKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByKey)
-- [UseMemoCellsExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsExtensions): Cell-level memoization hook for high-frequency list / grid bodies. Reuses element references for cells whose item value (and declared dependencies) haven't changed since the previous render. The reconciler short-circuits on Object.ReferenceEquals, so reused cells skip diffing entirely.
-- [UseMutation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutation)
-- [UseMutationExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions): Extension methods providing UseMutation on RenderContext.
-- [UseNavigation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigation)
-- [UseNavigationLifecycle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigationLifecycle): Registers lifecycle callbacks that fire during navigation events.
-- [UseObservable](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservable): Subscribes to an INotifyPropertyChanged source and re-renders when any property changes. Returns the same source object.
-- [UseObservableProperty](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservableProperty): Subscribes to a specific property on an INotifyPropertyChanged source. Re-renders only when that property changes.
-- [UseObservableTree](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservableTree): Observes an object and all nested INotifyPropertyChanged values reachable through its properties. Re-renders when any property at any depth changes. Automatically subscribes/unsubscribes as property values change.
-- [UseOpenWindow](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseOpenWindow): Open or reuse a secondary window keyed by key. Renders that pass the same key share the same ReactorWindow; if the spec changes across renders the live window is updated via ReactorWindow.Update. The returned handle is identity-stable across renders so long as the key is stable.
-- [UsePersisted](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UsePersisted)
-- [UseReducedMotion](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducedMotion): Returns true when the user or system prefers reduced motion (e.g., Windows "Show animations" is off, or SPI_GETCLIENTAREAANIMATION returns false). Automatically re-renders the component when the preference changes.
-- [UseReducer](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducer)
-- [UseRef](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseRef): Returns a mutable ref object that persists across renders.
-- [UseResource](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseResource)
-- [UseResourceExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseResourceExtensions): Extension methods providing UseResource on RenderContext.
-- [UseState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseState): Declares a piece of state. Returns (currentValue, setter). Must be called in the same order every render (just like React hooks).
-- [UseStateSetterByIndex](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseStateSetterByIndex): DEBUG ONLY: Directly set a UseState hook value by index and trigger re-render. Used for testing state changes without event handlers.
-- [UseSystemBackButton](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseSystemBackButton): Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content to call NavigationHandle.GoBack. Unsubscribes on unmount.
-- [UseTrayIcon](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseTrayIcon): Open (or reuse-by-TrayIconSpec.Key) a system-tray icon scoped to the calling component. The icon closes automatically on unmount — that's the only difference from ReactorApp.OpenTrayIcon, which is app-scoped and keeps the icon alive until explicit ReactorTrayIcon.Close.
-- [UseWindow](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindow): Resolves the ReactorWindow whose host renders this component — including nested components and virtualized rows realized outside the host's render pass — or null when it has no owning window (tray-flyout content, ReactorHostControl embeds). O(1) field read; no subscription, no re-render trigger. (spec 036 §7 / §7.1)
-- [UseWindowAspectRatio](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowAspectRatio): Applies a lifetime-bound width/height aspect lock to the owning window. Last mounted hook wins; unmounting restores the previous writer.
-- [UseWindowDragMove](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowDragMove): Returns a stable callback that starts a framework-managed window drag/move loop (cursor polling + AppWindow.Move at ~60Hz until the left mouse button is released).
-- [UseWindowPosition](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowPosition): Subscribes to the host window's PositionChanged event and re-renders on change. Returns (0, 0) outside a window. (spec 054 §5.5)
-- [UseWindowSize](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowSize)
-- [UseWindowState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowState): Subscribes to the host window's StateChanged event and re-renders on change. Returns WindowState.Normal outside a window. (spec 036 §7)
-
-#### Types and options
-
-- [Announce](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Announce)
-- [AnnounceHandle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle): Handle returned by UseAnnounce (guide). Provides an imperative Announce (guide) method for screen reader live-region announcements plus a zero-size Region (guide) element that must be included somewhere in the component's rendered tree.
-- [AnnounceRegionElement](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceRegionElement): Internal Reactor element that mounts a hidden TextBlock with LiveSetting for announcements.
-- [AnyLoading](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnyLoading): True iff any tracked token is currently Loading.
-- [CacheKey](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheKey): Overrides the generated cache key; null uses a key derived from deps. When set, the key identifies the query; deps changes alone do not cancel an in-flight request or start a new fetch. Include values that select different data in the key, for example $"user:{userId}".
-- [CacheTime](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheTime): Retention after the last subscriber leaves; null uses five minutes.
-- [Changed](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Changed): Fires when a resource joins, leaves, or changes its loading state.
-- [Clear](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Clear): Clears all registrations.
-- [ComponentUseMemoCellsExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions): Component-class shims for UseMemoCellsExtensions (guide) so subclasses can call UseMemoCells without going through this.Context. Same semantics as the RenderContext extension methods.
-- [Count](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Count): Snapshot the number of registered tokens (loading or not). Diagnostic only.
-- [CursorFromPageIndex](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex): Optional: computes the cursor for an arbitrary page index directly, bypassing the "wait for page N-1" constraint. Used by UseDataSource to expose the offset semantics of IDataSource's ContinuationToken, so deep scrolls fetch pages in parallel instead of walking the chain one round-trip at a time.
-- [Customize](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Customize): Author hook — add the bespoke descriptor entries for the [WrapManual] props.
-- [Descriptor](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Descriptor): The descriptor the engine interprets for every AnnounceRegionElement (guide).
-- [Error](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Error): Most recent error, or null if the last completion was a success or Reset (guide) was called.
-- [Fields](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Fields): Registered field names in order.
-- [Focus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Focus)
-- [FocusAttached](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusAttached): Attached metadata for focus registration on elements.
-- [FocusExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusExtensions): Fluent extensions for attaching focus management to elements. Uses .Set() to capture the WinUI control reference during mount/update.
-- [FocusField](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusField): Focuses a specific field by name.
-- [FocusFirst](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusFirst): Focuses the first field from the given list that exists in this manager. Useful with ValidationContext.InvalidFields.
-- [FocusManager](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusManager): Manages focus for a set of registered form fields. Supports programmatic focus control, enter-to-advance, and field ordering.
-- [FocusMeta](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusMeta): Registers any element with a FocusManager via attached metadata (for custom types).
-- [FocusNext](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusNext): Focuses the field after the given field in registration order. If the current field is the last one, triggers submit.
-- [FocusPrevious](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusPrevious): Focuses the field before the given field in registration order.
-- [FocusTrap](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrap): Attaches a focus trap to this element. When the trap is active, Tab/Shift+Tab cycles within this element's visual subtree.
-- [FocusTrapElementExtensions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions): Fluent extension to attach a FocusTrapHandle to an element. The handle captures the mounted WinUI element for focus trapping.
-- [FocusTrapHandle](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapHandle): Handle returned by UseFocusTrap. When active, traps keyboard focus within the container element so Tab/Shift+Tab cycles within the trapped scope. Essential for modal dialogs and flyouts.
-- [GetFocus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/GetFocus): Gets the FocusAttached metadata from an element.
-- [IHookDispatcher](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IHookDispatcher): Abstraction for marshalling continuations back to the render thread. Null-safe — if the callback is absent the continuation runs inline on the thread-pool completion thread (tests and headless hosts).
-- [InfiniteHookState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState): Per-hook state for UseInfiniteResource. Coordinates in-flight page fetches, cache subscriptions, deps-change restart, and unmount teardown.
-- [IsActive](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsActive): Whether the focus trap is currently active.
-- [IsFirstField](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsFirstField): Returns true if the given field is the first registered field.
-- [IsLastField](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsLastField): Returns true if the given field is the last registered field.
-- [IsPending](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsPending): True while at least one RunAsync (guide) call is in-flight.
-- [LastResult](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/LastResult): Most recent successful result, or default if none yet.
-- [Mutation](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Mutation): Handle returned by the UseMutation hook. Carries the pending/error/last-result state and the RunAsync (guide) entry point.
-- [MutationHookState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/MutationHookState): Mutable state backing a single UseMutation hook instance. Owned per-component, per-hook-slot; disposed on unmount.
-- [MutationOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/MutationOptions): Callbacks and side-effects for the UseMutation hook. All callbacks are optional; all run on the dispatcher thread except OnOptimistic which runs synchronously on the caller of RunAsync (guide) — the typical case is a render-thread click handler, so the optimistic update lands in the very next frame without a dispatcher hop.
-- [NotifyPending](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/NotifyPending): Called from RequestPage / page-completion paths to keep the Pending scope in sync.
-- [Pending](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Pending): Wraps child with a fresh PendingScope (guide). Renders fallback instead of child while any UseResource/UseInfiniteResource in the subtree is in the Loading state. Reloading(previous) does not trigger the fallback — spec §10.1.
-- [PendingComponent](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingComponent): Component backing the Pending element. Hosts a PendingScope (guide), subscribes to its Changed (guide) event, and chooses between Fallback and Child.
-- [PendingFactory](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingFactory): Entry-point factory for the Pending bubble-up element. See docs/specs/020-async-resources-design.md §10 for the full mechanism.
-- [PendingProps](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingProps): Props for PendingComponent (guide).
-- [PendingScope](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingScope): Shared loading-state ref-count consumed by the Pending element and populated by UseResource / UseInfiniteResource hooks inside the scope. When the scope observes any registered resource in the Loading state (not Reloading), the owning Pending element renders its fallback instead of the child subtree.
-- [Post](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Post): Enqueue action to run on the dispatcher thread.
-- [RefetchOnMount](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RefetchOnMount): Whether to fetch on a cache miss.
-- [RefetchOnWindowFocus](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RefetchOnWindowFocus): Whether to opt into window-focus revalidation.
-- [Region](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Region): A zero-size, invisible Reactor element that acts as the live-region anchor. Include this anywhere in your component tree (it renders nothing visible).
-- [Register](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Register)
-- [Reset](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Reset): Clear Error (guide) and LastResult (guide). Does not cancel or affect any in-flight RunAsync (guide) call.
-- [ResourceHookState](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ResourceHookState): Mutable state backing a single UseResource hook instance. Instances are owned per-component, per-hook-slot, and are disposed on unmount.
-- [ResourceOptions](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ResourceOptions): Tuning for the UseResource hook. Defaults mirror TanStack Query — zero StaleTime (guide) (always refetch-on-mount but dedup concurrent requests), five-minute CacheTime (guide).
-- [RetryCount](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RetryCount): Number of retries after a failed fetch.
-- [RunAsync](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RunAsync): Kick off the mutator with input. Returns a task that completes with the mutator's result or fault.
-- [SetControl](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetControl): Associates a WinUI control with a field name. Called from .Set() during mount/update.
-- [SetLoading](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetLoading): Update token's loading state. Silently ignored if the token was never registered (defensive — avoids forcing the caller to track whether they registered).
-- [SetSubmitHandler](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetSubmitHandler): Sets the callback for submit (Enter on last field).
-- [StaleTime](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/StaleTime): Freshness interval; null uses zero.
-- [Unregister](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Unregister): Stop tracking token. Idempotent.
-- [WindowsDispatcherHookDispatcher](https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/WindowsDispatcherHookDispatcher): Default IHookDispatcher (guide) backed by DispatcherQueue.GetForCurrentThread(). Falls back to inline invocation when called outside a WinUI dispatcher (unit tests).
 
 ## Agent skills
 

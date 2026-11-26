@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/validation/ValidateExtensions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidateExtensions.md",
+  "route": "/reference/validation/ValidateExtensions",
+  "title": "ValidateExtensions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidateExtensions",
+  "description": "Fluent extension methods for attaching validation to Reactor elements.",
+  "markdown": "---\ntitle: \"ValidateExtensions\"\ndescription: \"Fluent extension methods for attaching validation to Reactor elements.\"\n---\n\n```csharp\npublic static class ValidateExtensions\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## Methods [#methods]\n\n### `GetValidation` [#getvalidation]\n\nGets the ValidationAttached metadata from an element, if any.\n\n```csharp\npublic static ValidationAttached? GetValidation<T>(this T el) where T : Element\n```\n\n### `RunAsyncValidators` [#runasyncvalidators]\n\nRuns all async validators attached to an element against a value.\n\n```csharp\npublic static Task<IReadOnlyList<ValidationMessage>> RunAsyncValidators(this ValidationAttached attached, object? value, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `value` | `object?` |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n\n### `RunValidators` [#runvalidators]\n\nRuns all synchronous validators attached to an element against a value. Returns the list of validation messages (empty if all pass).\n\n```csharp\npublic static IReadOnlyList<ValidationMessage> RunValidators(this ValidationAttached attached, object? value)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `value` | `object?` |  |\n\n## Modifiers [#modifiers]\n\n- [`Validate`](/microsoft-ui-reactor/main/reference/modifiers/validation#validate)\n- [`ValidateAsync`](/microsoft-ui-reactor/main/reference/modifiers/validation#validateasync)\n"
+}

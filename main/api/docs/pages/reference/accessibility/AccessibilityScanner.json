@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/accessibility/AccessibilityScanner.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/AccessibilityScanner.md",
+  "route": "/reference/accessibility/AccessibilityScanner",
+  "title": "AccessibilityScanner",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/AccessibilityScanner",
+  "description": "Post-reconciliation accessibility scanner that walks the Reactor virtual element tree and produces structured diagnostics. Intended for DEBUG builds only — call via ReactorHostControl.EnableAccessibilityDiagnostics.",
+  "markdown": "---\ntitle: \"AccessibilityScanner\"\ndescription: \"Post-reconciliation accessibility scanner that walks the Reactor virtual element tree and produces structured diagnostics. Intended for DEBUG builds only — call via ReactorHostControl.EnableAccessibilityDiagnostics.\"\n---\n\nThe scanner produces AI-agent-friendly JSON output: each diagnostic includes rich contextual clues (sibling texts, parent names, child content) so an AI agent can generate semantically correct fixes in a single pass without re-reading source code.\n\n```csharp\npublic static class AccessibilityScanner\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n**Learn more:** [Accessibility](/microsoft-ui-reactor/main/guides/accessibility)\n\n## Methods [#methods]\n\n### `ExportJson` [#exportjson]\n\nExports diagnostics as structured JSON to the specified file path.\n\n```csharp\npublic static void ExportJson(List<A11yDiagnostic> diagnostics, string filePath)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `diagnostics` | `List<A11yDiagnostic>` |  |\n| `filePath` | `string` |  |\n\n### `Scan` [#scan]\n\nScans the virtual element tree for accessibility issues. Returns a list of diagnostics, each with rich context for AI-agent consumption.\n\n```csharp\npublic static List<A11yDiagnostic> Scan(Element root)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `root` | [`Element`](/microsoft-ui-reactor/main/reference/elements/Element) |  |\n"
+}

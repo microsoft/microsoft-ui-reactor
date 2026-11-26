@@ -8,5 +8,5 @@
   "title": "UseIsCovered",
   "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsCovered",
   "description": "Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.",
-  "markdown": "---\ntitle: \"UseIsCovered\"\ndescription: \"Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+  "markdown": "---\ntitle: \"UseIsCovered\"\ndescription: \"Returns a covered hint from the host window's z-order transitions and re-renders on change. The value is not pixel-accurate occlusion state.\"\n---\n\n```csharp\npublic bool UseIsCovered()\n```\n\nDeclared on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext).\n\n**Learn more:** [Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced), [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n\n## Use from a class component [#use-from-a-class-component]\n\nClass components can call the same hook directly. These overloads forward to the ones above:\n\n```csharp\nprotected bool UseIsCovered()\n```\n"
 }

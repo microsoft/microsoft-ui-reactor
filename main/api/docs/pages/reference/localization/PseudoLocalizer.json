@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/PseudoLocalizer.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/PseudoLocalizer.md",
+  "route": "/reference/localization/PseudoLocalizer",
+  "title": "PseudoLocalizer",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/PseudoLocalizer",
+  "description": "Transforms strings for pseudolocalization testing: - Replaces ASCII chars with accented equivalents - Wraps in [!! ... !!] markers - Pads ~30% longer to simulate text expansion - Preserves ICU syntax ({variables}, {count, plural, ...}) untouched",
+  "markdown": "---\ntitle: \"PseudoLocalizer\"\ndescription: \"Transforms strings for pseudolocalization testing: - Replaces ASCII chars with accented equivalents - Wraps in [!! ... !!] markers - Pads ~30% longer to simulate text expansion - Preserves ICU syntax ({variables}, {count, plural, ...}) untouched\"\n---\n\n```csharp\npublic static class PseudoLocalizer\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Methods [#methods]\n\n### `MissingKeyMarker` [#missingkeymarker]\n\nReturns the missing key pseudolocalization marker.\n\n```csharp\npublic static string MissingKeyMarker(MessageKey key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `key` | [`MessageKey`](/microsoft-ui-reactor/main/reference/localization/MessageKey) |  |\n\n### `Transform` [#transform]\n\nPseudolocalizes a string, preserving ICU syntax.\n\n```csharp\npublic static string Transform(string input)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `input` | `string` |  |\n"
+}

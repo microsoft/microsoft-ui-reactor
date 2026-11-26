@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/navigation/NavigationEventArgs.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs.md",
+  "route": "/reference/navigation/NavigationEventArgs",
+  "title": "NavigationEventArgs<TRoute>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs",
+  "description": "Event args fired after a successful navigation.",
+  "markdown": "---\ntitle: \"NavigationEventArgs<TRoute>\"\ndescription: \"Event args fired after a successful navigation.\"\nsidebar:\n  label: \"NavigationEventArgs\"\n---\n\n```csharp\npublic sealed record NavigationEventArgs<TRoute>(TRoute Route, TRoute PreviousRoute, NavigationMode Mode, NavigateOptions? Options = null) where TRoute : notnull\n```\n\nNamespace: `Microsoft.UI.Reactor.Navigation`.\n\n**Learn more:** [Navigation](/microsoft-ui-reactor/main/guides/navigation)\n\n## Constructors [#constructors]\n\n### `NavigationEventArgs` [#navigationeventargs]\n\nEvent args fired after a successful navigation.\n\n```csharp\npublic NavigationEventArgs(TRoute Route, TRoute PreviousRoute, NavigationMode Mode, NavigateOptions? Options = null)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `Route` | `TRoute` |  |  |\n| `PreviousRoute` | `TRoute` |  |  |\n| `Mode` | [`NavigationMode`](/microsoft-ui-reactor/main/reference/navigation/enums#navigationmode) |  |  |\n| `Options` | [`NavigateOptions?`](/microsoft-ui-reactor/main/reference/navigation/NavigateOptions) | `null` |  |\n\n## Properties [#properties]\n\n### `Mode` [#mode]\n\n```csharp\npublic NavigationMode Mode  // get, init\n```\n\n### `Options` [#options]\n\n```csharp\npublic NavigateOptions? Options  // get, init\n```\n\n### `PreviousRoute` [#previousroute]\n\n```csharp\npublic TRoute PreviousRoute  // get, init\n```\n\n### `Route` [#route]\n\n```csharp\npublic TRoute Route  // get, init\n```\n"
+}

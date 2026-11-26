@@ -72,92 +72,144 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/search-with-suggestions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes/settings-page</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/recipes</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Announce</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnnounceRegionElement</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/AnyLoading</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheKey</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CacheTime</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Changed</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Clear</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ComponentUseMemoCellsExtensions</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Count</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/CursorFromPageIndex</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Customize</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Descriptor</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Error</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Fields</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Focus</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusAttached</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusExtensions</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusField</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusFirst</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusManager</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusMeta</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusNext</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusPrevious</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrap</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapElementExtensions</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/FocusTrapHandle</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/GetFocus</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IHookDispatcher</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/InfiniteHookState</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsActive</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsFirstField</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsLastField</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/IsPending</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/LastResult</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Mutation</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/MutationHookState</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/MutationOptions</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/NotifyPending</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Pending</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingComponent</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingFactory</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingProps</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/PendingScope</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Post</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RefetchOnMount</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RefetchOnWindowFocus</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Region</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Register</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Reset</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ResourceHookState</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/ResourceOptions</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RetryCount</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/RunAsync</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetControl</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetLoading</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/SetSubmitHandler</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/StaleTime</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/Unregister</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yContext</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yDiagnostic</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yFixSuggestion</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/AccessibilityScanner</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticDescription</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticPanel</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticPanelAutomationPeer</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/AnimationConfig</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/AnimationScope</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/Animations</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/CompositorProvider</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/StaggerConfig</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/curves</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/implicit</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/interaction-states</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/keyframes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/scroll</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/transitions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/AppContexts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Callbacks</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Component-1</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Component</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Context</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/ContextBase</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/ElementFactory</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/IReactorKeyed</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Observable</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Optional</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Ref</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/RenderContext</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/SourceLocation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/render-errors</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/components</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/PropertyGridComponent</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/PropertyGridDefaults</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/collection-items</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/icons</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/masked-input</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/menu-items</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/navigation-items</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/property-grid-attributes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/property-grid-templates</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/rich-text</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/virtual-list</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/FocusRevalidationService</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IDataSource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IKeyedDataSource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IMutableDataSource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IObservableDataSource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ListDataSource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ObservableListDataSource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/async-values</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/column-attributes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/descriptors</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/paging</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/query-cache</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/data</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorEvent</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorSourceMap</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorSourceTransparentAttribute</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/ReactorTrace</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/devtools</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics/snapshots</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/diagnostics</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/Element</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/buttons</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/collections</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/composition</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/dialogs-and-flyouts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/forms</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/input</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/interop</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/layout</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/media</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/menus-and-commands</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/navigation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/shapes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/status-and-info</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements/text</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/elements</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ControlDescriptor</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ControlRegistry</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/DescriptorHandler</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ElementPool</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/IDecoratorElementHandler</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/IElementHandler</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/PoolPolicy</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/PropEntry</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorBinding-1</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorBinding</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/ReactorFeatureFlags</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/Reconciler</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/children-strategies</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/descriptor-delegates</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility/lifecycle-contexts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/extensibility</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/buttons</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/collections</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/composition</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/dialogs-and-flyouts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/forms</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/input</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/interop</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/layout</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/media</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/menus-and-commands</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/navigation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/shapes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/status-and-info</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories/text</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/factories</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounce</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseAnnounceExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseBreakpoint</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCallback</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseChildValidationContext</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseClosingGuard</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCollection</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseColorScheme</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCommand</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseCommandState</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseContext</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDataSource</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDevtools</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDisplays</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDpi</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseEffect</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocus</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementFocusExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRef</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseElementRefExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseExternalStore</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocus</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrap</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseFocusTrapExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrast</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseHighContrastScheme</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResource</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseInfiniteResourceExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIntl</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsActive</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseIsCovered</loc></url>
@@ -166,9 +218,7 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCells</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByIndex</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByKey</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutation</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseMutationExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigation</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseNavigationLifecycle</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseObservable</loc></url>
@@ -180,19 +230,134 @@
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseReducer</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseRef</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseResource</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseResourceExtensions</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseState</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseStateSetterByIndex</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseSystemBackButton</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseTrayIcon</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseValidationContext</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindow</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowAspectRatio</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowDragMove</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowPosition</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowSize</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseWindowState</loc></url>
-  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/WindowsDispatcherHookDispatcher</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/focus-helpers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/hook-types</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/pending</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorApp</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorAppContext</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorApplication</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorHost</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorHostControl</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/ReactorWindow</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/RenderStats</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/UIThreadOnlyAttribute</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/WindowIcon</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/WindowKey</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/WindowSpec</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/displays</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/file-pickers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/launch</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/persistence</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/taskbar</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/tray-icon</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/window-events</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/window-options</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting/xaml-interop</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/hosting</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/Command-1</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/Command</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/CommandInterop</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/FocusManager</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/StandardCommand</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/drag-and-drop</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/element-refs</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input/gestures</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/input</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/GridSize</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/GridSizeExtensions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/attached</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout/flex-enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/layout</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/DateFormatOptions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IStringResourceProvider</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IntlAccessor</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IntlContexts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageCache</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageKey</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/NumberFormatOptions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/PseudoLocalizer</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/ReswResourceProvider</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/RtlHelper</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/AccessibilityModifiers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/ElementExtensions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/ElementExtras</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/ElementModifiers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/LayoutModifiers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/VisualModifiers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/accessibility</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/animation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/appearance</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/buttons</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/collections</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/dialogs-and-flyouts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/focus-and-keyboard</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/forms</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/input-and-events</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/input</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/interop</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/layout-and-spacing</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/layout</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/lifecycle</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/media</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/native-properties</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/navigation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/shapes</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/shared-controls</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/status-and-info</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/tooltips-and-flyouts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/typography</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/validation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkMap</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkResult</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigateOptions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationHandle</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigationState</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/RouteArgs</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/diagnostics</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/lifecycle</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/transitions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/BackdropChoice</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/BrushHelper</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ResourceBuilder</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ResourceOverrides</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/Theme</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ThemeRef</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ThemeResource</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ErrorBubbling</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ErrorStyling</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/FormFieldHelpers</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IAsyncValidator</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IValidator</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/Validate</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidateExtensions</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationContext</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationContexts</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationMessage</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationReconciler</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationRuleDsl</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/attached</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/enums</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation</loc></url>
+  <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/reference</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main/showcase</loc></url>
   <url><loc>https://microsoft.github.io/microsoft-ui-reactor/main</loc></url>
 </urlset>

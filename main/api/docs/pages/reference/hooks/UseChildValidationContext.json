@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseChildValidationContext.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseChildValidationContext.md",
+  "route": "/reference/hooks/UseChildValidationContext",
+  "title": "UseChildValidationContext",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseChildValidationContext",
+  "description": "Creates a child validation context independent from any parent. Returns both the child context and the parent (if one exists). The child collects its own messages; use the parent reference to bubble manually.",
+  "markdown": "---\ntitle: \"UseChildValidationContext\"\ndescription: \"Creates a child validation context independent from any parent. Returns both the child context and the parent (if one exists). The child collects its own messages; use the parent reference to bubble manually.\"\n---\n\n```csharp\npublic static (ValidationContext Child, ValidationContext? Parent) UseChildValidationContext(this RenderContext ctx)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `ValidationContextHookExtensions`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms), [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n\n## Use from a class component [#use-from-a-class-component]\n\nClass components can call the same hook directly. These overloads forward to the ones above:\n\n```csharp\npublic static (ValidationContext Child, ValidationContext? Parent) UseChildValidationContext(this Component component)\n```\n"
+}

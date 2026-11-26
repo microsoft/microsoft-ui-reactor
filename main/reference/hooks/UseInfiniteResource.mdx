@@ -1,33 +1,76 @@
 ---
 title: "UseInfiniteResource"
+seo:
+  description: "Returns the InfiniteResource<TItem> owned by this hook slot. The resource's state is driven by fetchPage; deps controls cache-keying and deps-change restart."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+Returns the [`InfiniteResource<TItem>`](/microsoft-ui-reactor/main/reference/data/paging#infiniteresourcetitem) owned by this hook slot. The resource's state is driven by `fetchPage`; `deps` controls cache-keying and deps-change restart.
+
+```csharp
+public static InfiniteResource<TItem> UseInfiniteResource<TItem, TCursor>(this RenderContext ctx, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, object[] deps, InfiniteResourceOptions? options = null, IHookDispatcher? dispatcher = null, Func<int, TCursor?>? cursorFromPageIndex = null)
+public static InfiniteResource<TItem> UseInfiniteResource<TItem, TCursor>(this RenderContext ctx, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, QueryCache cache, object[] deps, InfiniteResourceOptions? options = null, IHookDispatcher? dispatcher = null, Func<int, TCursor?>? cursorFromPageIndex = null)
+protected InfiniteResource<TItem> UseInfiniteResource<TItem, TCursor>(Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, object[] deps, InfiniteResourceOptions? options = null)
+```
+
+An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseInfiniteResourceExtensions`.
+
+**Learn more:** [Async Resources](/microsoft-ui-reactor/main/guides/async-resources), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
 ## Overloads [#overloads]
 
-- [`UseInfiniteResource<T1, T2>(RenderContext, Func<T2, CancellationToken, Task<Page<T1, T2>>>, object[], InfiniteResourceOptions, IHookDispatcher, Func<int, T2>)`](#useinfiniteresourcet1-t2rendercontext-funct2-cancellationtoken-taskpaget1-t2-object-infiniteresourceoptions-ihookdispatcher-funcint-t2)
-- [`UseInfiniteResource<T1, T2>(RenderContext, Func<T2, CancellationToken, Task<Page<T1, T2>>>, QueryCache, object[], InfiniteResourceOptions, IHookDispatcher, Func<int, T2>)`](#useinfiniteresourcet1-t2rendercontext-funct2-cancellationtoken-taskpaget1-t2-querycache-object-infiniteresourceoptions-ihookdispatcher-funcint-t2)
+| Overload | Description |
+| --- | --- |
+| [`UseInfiniteResource<TItem, TCursor>(RenderContext, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>, object[], InfiniteResourceOptions?, IHookDispatcher?, Func<int, TCursor?>?)`](#useinfiniteresourcetitem-tcursorrendercontext-functcursor-cancellationtoken-taskpagetitem-tcursor-object-infiniteresourceoptions-ihookdispatcher-funcint-tcursor) | Overload that reads the ambient `QueryCache` from `AppContexts.QueryCache`. |
+| [`UseInfiniteResource<TItem, TCursor>(RenderContext, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>, QueryCache, object[], InfiniteResourceOptions?, IHookDispatcher?, Func<int, TCursor?>?)`](#useinfiniteresourcetitem-tcursorrendercontext-functcursor-cancellationtoken-taskpagetitem-tcursor-querycache-object-infiniteresourceoptions-ihookdispatcher-funcint-tcursor) | Returns the `InfiniteResource<TItem>` owned by this hook slot. |
+| [`UseInfiniteResource<TItem, TCursor>(Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>, object[], InfiniteResourceOptions?)`](#useinfiniteresourcetitem-tcursorfunctcursor-cancellationtoken-taskpagetitem-tcursor-object-infiniteresourceoptions) |  |
 
-## `UseInfiniteResource<T1, T2>(RenderContext, Func<T2, CancellationToken, Task<Page<T1, T2>>>, object[], InfiniteResourceOptions, IHookDispatcher, Func<int, T2>)` [#useinfiniteresourcet1-t2rendercontext-funct2-cancellationtoken-taskpaget1-t2-object-infiniteresourceoptions-ihookdispatcher-funcint-t2]
+### `UseInfiniteResource<TItem, TCursor>(RenderContext, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>, object[], InfiniteResourceOptions?, IHookDispatcher?, Func<int, TCursor?>?)` [#useinfiniteresourcetitem-tcursorrendercontext-functcursor-cancellationtoken-taskpagetitem-tcursor-object-infiniteresourceoptions-ihookdispatcher-funcint-tcursor]
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseInfiniteResourceExtensions.UseInfiniteResource``2(Microsoft.UI.Reactor.Core.RenderContext,System.Func{``1,System.Threading.CancellationToken,System.Threading.Tasks.Task{Microsoft.UI.Reactor.Core.Page{``0,``1}}},System.Object[],Microsoft.UI.Reactor.Core.InfiniteResourceOptions,Microsoft.UI.Reactor.Hooks.IHookDispatcher,System.Func{System.Int32,``1})`
+Overload that reads the ambient [`QueryCache`](/microsoft-ui-reactor/main/reference/data/query-cache#querycache) from [`AppContexts.QueryCache`](/microsoft-ui-reactor/main/reference/components/AppContexts#querycache). [`ReactorHost`](/microsoft-ui-reactor/main/reference/hosting/ReactorHost) installs a process-wide default cache at startup; tests or subtrees may override it via `.Provide(AppContexts.QueryCache, customCache)`.
 
-### Summary [#summary]
+```csharp
+public static InfiniteResource<TItem> UseInfiniteResource<TItem, TCursor>(this RenderContext ctx, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, object[] deps, InfiniteResourceOptions? options = null, IHookDispatcher? dispatcher = null, Func<int, TCursor?>? cursorFromPageIndex = null)
+```
 
-Overload that reads the ambient `QueryCache` from
-`AppContexts.QueryCache`. `ReactorHost` installs a
-process-wide default cache at startup; tests or subtrees may override it via
-`.Provide(AppContexts.QueryCache, customCache)`.
+**Parameters**
 
-## `UseInfiniteResource<T1, T2>(RenderContext, Func<T2, CancellationToken, Task<Page<T1, T2>>>, QueryCache, object[], InfiniteResourceOptions, IHookDispatcher, Func<int, T2>)` [#useinfiniteresourcet1-t2rendercontext-funct2-cancellationtoken-taskpaget1-t2-querycache-object-infiniteresourceoptions-ihookdispatcher-funcint-t2]
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetchPage` | `Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>` |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`InfiniteResourceOptions?`](/microsoft-ui-reactor/main/reference/data/paging#infiniteresourceoptions) | `null` |  |
+| `dispatcher` | [`IHookDispatcher?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher) | `null` |  |
+| `cursorFromPageIndex` | `Func<int, TCursor?>?` | `null` |  |
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseInfiniteResourceExtensions.UseInfiniteResource``2(Microsoft.UI.Reactor.Core.RenderContext,System.Func{``1,System.Threading.CancellationToken,System.Threading.Tasks.Task{Microsoft.UI.Reactor.Core.Page{``0,``1}}},Microsoft.UI.Reactor.Core.QueryCache,System.Object[],Microsoft.UI.Reactor.Core.InfiniteResourceOptions,Microsoft.UI.Reactor.Hooks.IHookDispatcher,System.Func{System.Int32,``1})`
+### `UseInfiniteResource<TItem, TCursor>(RenderContext, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>, QueryCache, object[], InfiniteResourceOptions?, IHookDispatcher?, Func<int, TCursor?>?)` [#useinfiniteresourcetitem-tcursorrendercontext-functcursor-cancellationtoken-taskpagetitem-tcursor-querycache-object-infiniteresourceoptions-ihookdispatcher-funcint-tcursor]
 
-### Summary [#summary_1]
+Returns the [`InfiniteResource<TItem>`](/microsoft-ui-reactor/main/reference/data/paging#infiniteresourcetitem) owned by this hook slot. The resource's state is driven by `fetchPage`; `deps` controls cache-keying and deps-change restart.
 
-Returns the `InfiniteResource` owned by this hook slot. The
-resource's state is driven by `fetchPage`; `deps`
-controls cache-keying and deps-change restart.
+```csharp
+public static InfiniteResource<TItem> UseInfiniteResource<TItem, TCursor>(this RenderContext ctx, Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, QueryCache cache, object[] deps, InfiniteResourceOptions? options = null, IHookDispatcher? dispatcher = null, Func<int, TCursor?>? cursorFromPageIndex = null)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetchPage` | `Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>` |  |  |
+| `cache` | [`QueryCache`](/microsoft-ui-reactor/main/reference/data/query-cache#querycache) |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`InfiniteResourceOptions?`](/microsoft-ui-reactor/main/reference/data/paging#infiniteresourceoptions) | `null` |  |
+| `dispatcher` | [`IHookDispatcher?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher) | `null` |  |
+| `cursorFromPageIndex` | `Func<int, TCursor?>?` | `null` |  |
+
+### `UseInfiniteResource<TItem, TCursor>(Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>, object[], InfiniteResourceOptions?)` [#useinfiniteresourcetitem-tcursorfunctcursor-cancellationtoken-taskpagetitem-tcursor-object-infiniteresourceoptions]
+
+```csharp
+protected InfiniteResource<TItem> UseInfiniteResource<TItem, TCursor>(Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, object[] deps, InfiniteResourceOptions? options = null)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fetchPage` | `Func<TCursor?, CancellationToken, Task<Page<TItem, TCursor>>>` |  |  |
+| `deps` | `object[]` |  |  |
+| `options` | [`InfiniteResourceOptions?`](/microsoft-ui-reactor/main/reference/data/paging#infiniteresourceoptions) | `null` |  |

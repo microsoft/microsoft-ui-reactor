@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/components/Ref.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Ref.md",
+  "route": "/reference/components/Ref",
+  "title": "Ref<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Ref",
+  "description": "A mutable reference that persists across renders (like React's useRef).",
+  "markdown": "---\ntitle: \"Ref<T>\"\ndescription: \"A mutable reference that persists across renders (like React's useRef).\"\nsidebar:\n  label: \"Ref\"\n---\n\n```csharp\npublic class Ref<T>\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n**Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n\n## Constructors [#constructors]\n\n### `Ref` [#ref]\n\n```csharp\npublic Ref(T initial)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `initial` | `T` |  |\n\n## Properties [#properties]\n\n### `Current` [#current]\n\n```csharp\npublic T Current  // get, set\n```\n"
+}

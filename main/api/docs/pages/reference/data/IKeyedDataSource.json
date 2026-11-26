@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/data/IKeyedDataSource.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IKeyedDataSource.md",
+  "route": "/reference/data/IKeyedDataSource",
+  "title": "IKeyedDataSource<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IKeyedDataSource",
+  "description": "A data source that supports fetching individual items by key.",
+  "markdown": "---\ntitle: \"IKeyedDataSource<T>\"\ndescription: \"A data source that supports fetching individual items by key.\"\nsidebar:\n  label: \"IKeyedDataSource\"\n---\n\n```csharp\npublic interface IKeyedDataSource<T> : IDataSource<T>\n```\n\nNamespace: `Microsoft.UI.Reactor.Data`.\n\n**Learn more:** [Data System](/microsoft-ui-reactor/main/controls/data-system)\n\n## Methods [#methods]\n\n### `GetByKeyAsync` [#getbykeyasync]\n\n```csharp\npublic Task<T?> GetByKeyAsync(RowKey key, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `key` | [`RowKey`](/microsoft-ui-reactor/main/reference/data/descriptors#rowkey) |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n\n### `GetByKeysAsync` [#getbykeysasync]\n\n```csharp\npublic Task<IReadOnlyList<T>> GetByKeysAsync(IEnumerable<RowKey> keys, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `keys` | `IEnumerable<RowKey>` |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n"
+}

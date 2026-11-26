@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/navigation/DeepLinkMap.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkMap.md",
+  "route": "/reference/navigation/DeepLinkMap",
+  "title": "DeepLinkMap<TRoute>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/DeepLinkMap",
+  "description": "Maps URI patterns to route constructors for deep linking. Patterns use /segment/{param:type} syntax where type is int or string.",
+  "markdown": "---\ntitle: \"DeepLinkMap<TRoute>\"\ndescription: \"Maps URI patterns to route constructors for deep linking. Patterns use /segment/{param:type} syntax where type is int or string.\"\nsidebar:\n  label: \"DeepLinkMap\"\n---\n\n```csharp\npublic sealed class DeepLinkMap<TRoute> where TRoute : notnull\n```\n\nNamespace: `Microsoft.UI.Reactor.Navigation`.\n\n**Learn more:** [Navigation](/microsoft-ui-reactor/main/guides/navigation)\n\n## Constructors [#constructors]\n\n### `DeepLinkMap` [#deeplinkmap]\n\n```csharp\npublic DeepLinkMap()\n```\n\n## Methods [#methods]\n\n### `Map` [#map]\n\n```csharp\npublic DeepLinkMap<TRoute> Map(string pattern, Func<RouteArgs, TRoute> factory)\npublic DeepLinkMap<TRoute> Map(string pattern, Func<RouteArgs, TRoute> factory, Func<TRoute[]> backStackFactory)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `pattern` | `string` |  |\n| `factory` | `Func<RouteArgs, TRoute>` |  |\n| `backStackFactory` | `Func<TRoute[]>` |  |\n\n### `Resolve` [#resolve]\n\n```csharp\npublic DeepLinkResult<TRoute> Resolve(string path)\npublic DeepLinkResult<TRoute> Resolve(Uri uri)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `path` | `string` |  |\n| `uri` | `Uri` |  |\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/data/IMutableDataSource.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IMutableDataSource.md",
+  "route": "/reference/data/IMutableDataSource",
+  "title": "IMutableDataSource<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IMutableDataSource",
+  "description": "A mutable data source that supports CRUD operations.",
+  "markdown": "---\ntitle: \"IMutableDataSource<T>\"\ndescription: \"A mutable data source that supports CRUD operations.\"\nsidebar:\n  label: \"IMutableDataSource\"\n---\n\n```csharp\npublic interface IMutableDataSource<T> : IDataSource<T>\n```\n\nNamespace: `Microsoft.UI.Reactor.Data`.\n\n**Learn more:** [Data System](/microsoft-ui-reactor/main/controls/data-system)\n\n## Methods [#methods]\n\n### `CreateAsync` [#createasync]\n\n```csharp\npublic Task<T> CreateAsync(T item, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `item` | `T` |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n\n### `DeleteAsync` [#deleteasync]\n\n```csharp\npublic Task DeleteAsync(RowKey key, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `key` | [`RowKey`](/microsoft-ui-reactor/main/reference/data/descriptors#rowkey) |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n\n### `UpdateAsync` [#updateasync]\n\n```csharp\npublic Task<T> UpdateAsync(RowKey key, T item, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `key` | [`RowKey`](/microsoft-ui-reactor/main/reference/data/descriptors#rowkey) |  |  |\n| `item` | `T` |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n"
+}

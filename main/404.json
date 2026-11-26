@@ -1,7 +1,7 @@
 {
   "code": "PAGE_NOT_FOUND",
   "detail": "We couldn't find the page you're looking for.",
-  "resolution": "Where to look next: https://microsoft.github.io/microsoft-ui-reactor/main, https://microsoft.github.io/microsoft-ui-reactor/main, https://microsoft.github.io/microsoft-ui-reactor/main/get-started, https://microsoft.github.io/microsoft-ui-reactor/main/guides/components, https://microsoft.github.io/microsoft-ui-reactor/main/controls, https://microsoft.github.io/microsoft-ui-reactor/main/recipes, https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks, https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/architecture-overview, https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml, https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt, https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
+  "resolution": "Where to look next: https://microsoft.github.io/microsoft-ui-reactor/main, https://microsoft.github.io/microsoft-ui-reactor/main, https://microsoft.github.io/microsoft-ui-reactor/main/get-started, https://microsoft.github.io/microsoft-ui-reactor/main/guides/components, https://microsoft.github.io/microsoft-ui-reactor/main/controls, https://microsoft.github.io/microsoft-ui-reactor/main/recipes, https://microsoft.github.io/microsoft-ui-reactor/main/reference, https://microsoft.github.io/microsoft-ui-reactor/main/how-it-works/architecture-overview, https://microsoft.github.io/microsoft-ui-reactor/main/sitemap.xml, https://microsoft.github.io/microsoft-ui-reactor/main/llms.txt, https://microsoft.github.io/microsoft-ui-reactor/main/openapi.json",
   "status": 404,
   "title": "Page not found",
   "type": "about:blank",
@@ -31,7 +31,7 @@
       "label": "Recipes"
     },
     {
-      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks",
+      "href": "https://microsoft.github.io/microsoft-ui-reactor/main/reference",
       "label": "API reference"
     },
     {

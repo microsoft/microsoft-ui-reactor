@@ -204,7 +204,10 @@ and `new-diagram`. See
 for the full surface and the `--validate-only`, `--no-screenshots`
 (alias `--skip-screenshots`), `--skip-diagrams`, `--no-build`,
 `--skip-reference`, and `--tier <stub|solid|comprehensive>`
-flags that make the inner loop fast.
+flags that make the inner loop fast. `--reference-only` regenerates
+just the API reference under `docs/guide/reference/`, and
+`--reference-nav-out <file>` also writes the matching `nav.json`
+groups for those pages to a file.
 
 ## MCP Server [#mcp-server]
 

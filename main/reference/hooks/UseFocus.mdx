@@ -1,29 +1,20 @@
 ---
 title: "UseFocus"
+description: "Creates and returns a FocusManager scoped to this component. The manager persists across re-renders."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+```csharp
+public static FocusManager UseFocus(this RenderContext ctx)
+```
 
-## Overloads [#overloads]
+An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseFocusExtensions`.
 
-- [`UseFocus(Component)`](#usefocuscomponent)
-- [`UseFocus(RenderContext)`](#usefocusrendercontext)
+**Learn more:** [Input and gestures](/microsoft-ui-reactor/main/guides/input-and-gestures), [Accessibility](/microsoft-ui-reactor/main/guides/accessibility), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
-## `UseFocus(Component)` [#usefocuscomponent]
+## Use from a class component [#use-from-a-class-component]
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusExtensions.UseFocus(Microsoft.UI.Reactor.Core.Component)`
+Class components can call the same hook directly. These overloads forward to the ones above:
 
-### Summary [#summary]
-
-Creates and returns a FocusManager for this component.
-
-## `UseFocus(RenderContext)` [#usefocusrendercontext]
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseFocusExtensions.UseFocus(Microsoft.UI.Reactor.Core.RenderContext)`
-
-### Summary [#summary_1]
-
-Creates and returns a FocusManager scoped to this component.
-The manager persists across re-renders.
+```csharp
+public static FocusManager UseFocus(this Component component)
+```

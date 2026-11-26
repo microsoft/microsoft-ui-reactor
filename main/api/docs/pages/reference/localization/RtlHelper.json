@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/RtlHelper.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/RtlHelper.md",
+  "route": "/reference/localization/RtlHelper",
+  "title": "RtlHelper",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/RtlHelper",
+  "description": "Determines text direction for a locale based on CLDR data.",
+  "markdown": "---\ntitle: \"RtlHelper\"\ndescription: \"Determines text direction for a locale based on CLDR data.\"\n---\n\n```csharp\npublic static class RtlHelper\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Methods [#methods]\n\n### `IsRtlLocale` [#isrtllocale]\n\nReturns true if the given locale uses right-to-left script. Handles both bare language codes (\"ar\") and full BCP 47 tags (\"ar-SA\").\n\n```csharp\npublic static bool IsRtlLocale(string locale)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `locale` | `string` |  |\n"
+}

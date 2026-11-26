@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/IntlContexts.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IntlContexts.md",
+  "route": "/reference/localization/IntlContexts",
+  "title": "IntlContexts",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IntlContexts",
+  "description": "Context-based locale context. The LocaleProvider component provides an IntlAccessor to its subtree via this context. Components consume it via UseIntl() or UseContext(IntlContexts.Locale).",
+  "markdown": "---\ntitle: \"IntlContexts\"\ndescription: \"Context-based locale context. The LocaleProvider component provides an IntlAccessor to its subtree via this context. Components consume it via UseIntl() or UseContext(IntlContexts.Locale).\"\n---\n\n```csharp\npublic static class IntlContexts\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Fields [#fields]\n\n### `Locale` [#locale]\n\nThe Context for locale/intl. Default is null — UseIntl() falls back to OS locale.\n\n```csharp\npublic static readonly Context<IntlAccessor?> Locale\n```\n"
+}

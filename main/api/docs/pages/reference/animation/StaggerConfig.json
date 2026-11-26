@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/animation/StaggerConfig.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/StaggerConfig.md",
+  "route": "/reference/animation/StaggerConfig",
+  "title": "StaggerConfig",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/StaggerConfig",
+  "description": "Stagger configuration for container children animations.",
+  "markdown": "---\ntitle: \"StaggerConfig\"\ndescription: \"Stagger configuration for container children animations.\"\n---\n\n```csharp\npublic record StaggerConfig(TimeSpan Delay, Curve? Curve = null)\n```\n\nNamespace: `Microsoft.UI.Reactor.Animation`.\n\n**Learn more:** [Animation](/microsoft-ui-reactor/main/guides/animation)\n\n## Constructors [#constructors]\n\n### `StaggerConfig` [#staggerconfig_1]\n\nStagger configuration for container children animations.\n\n```csharp\npublic StaggerConfig(TimeSpan Delay, Curve? Curve = null)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `Delay` | `TimeSpan` |  |  |\n| `Curve` | [`Curve?`](/microsoft-ui-reactor/main/reference/animation/curves#curve) | `null` |  |\n\n## Properties [#properties]\n\n### `Curve` [#curve]\n\n```csharp\npublic Curve? Curve  // get, init\n```\n\n### `Delay` [#delay]\n\n```csharp\npublic TimeSpan Delay  // get, init\n```\n"
+}

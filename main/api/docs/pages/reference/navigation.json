@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/navigation.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation.md",
+  "route": "/reference/navigation",
+  "title": "Navigation",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation",
+  "description": "Navigation state, routes, lifecycle contexts and page transitions.",
+  "markdown": "---\ntitle: \"Navigation\"\ndescription: \"Navigation state, routes, lifecycle contexts and page transitions.\"\nsidebar:\n  label: \"Overview\"\n---\n\n**Learn more:** [Navigation](/microsoft-ui-reactor/main/guides/navigation)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [Enums](/microsoft-ui-reactor/main/reference/navigation/enums) | The enumerations in this category. |\n| [Navigation diagnostics](/microsoft-ui-reactor/main/reference/navigation/diagnostics) | Diagnostic events raised by the navigation system. |\n| [Navigation lifecycle](/microsoft-ui-reactor/main/reference/navigation/lifecycle) | Contexts passed to the navigation lifecycle callbacks. |\n| [Navigation transitions](/microsoft-ui-reactor/main/reference/navigation/transitions) | Transitions that play when the navigation host changes pages. |\n| [`DeepLinkMap<TRoute>`](/microsoft-ui-reactor/main/reference/navigation/DeepLinkMap) | Maps URI patterns to route constructors for deep linking. |\n| [`DeepLinkResult<TRoute>`](/microsoft-ui-reactor/main/reference/navigation/DeepLinkResult) | Result of a deep link resolution attempt. |\n| [`NavigateOptions`](/microsoft-ui-reactor/main/reference/navigation/NavigateOptions) | Options for a single navigation action. |\n| [`NavigationEventArgs<TRoute>`](/microsoft-ui-reactor/main/reference/navigation/NavigationEventArgs) | Event args fired after a successful navigation. |\n| [`NavigationHandle<TRoute>`](/microsoft-ui-reactor/main/reference/navigation/NavigationHandle) | Public API for controlling navigation. |\n| [`NavigationState<TRoute>`](/microsoft-ui-reactor/main/reference/navigation/NavigationState) | A snapshot of a `NavigationHandle<TRoute>`'s full state: the back stack, the currently active route, and the forward stack. |\n| [`RouteArgs`](/microsoft-ui-reactor/main/reference/navigation/RouteArgs) | Provides typed access to parameters extracted from a URI pattern match. |\n"
+}

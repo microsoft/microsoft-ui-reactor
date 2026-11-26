@@ -1,41 +1,71 @@
 ---
 title: "UseMutation"
+seo:
+  description: "Registers a Mutation<TInput, TResult> for this hook slot. The handle is stable across renders (pass it to buttons, context menus, etc.)."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+Registers a [`Mutation<TInput, TResult>`](/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult) for this hook slot. The handle is stable across renders (pass it to buttons, context menus, etc.).
+
+```csharp
+public static Mutation<TInput, TResult> UseMutation<TInput, TResult>(this RenderContext ctx, Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult>? options = null, IHookDispatcher? dispatcher = null)
+public static Mutation<TInput, TResult> UseMutation<TInput, TResult>(this RenderContext ctx, Func<TInput, CancellationToken, Task<TResult>> mutator, QueryCache? cache, MutationOptions<TInput, TResult>? options = null, IHookDispatcher? dispatcher = null)
+protected Mutation<TInput, TResult> UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult>? options = null)
+```
+
+An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseMutationExtensions`.
+
+**Learn more:** [Async Resources](/microsoft-ui-reactor/main/guides/async-resources), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
 ## Overloads [#overloads]
 
-- [`UseMutation<T1, T2>(RenderContext, Func<T1, CancellationToken, Task<T2>>, MutationOptions<T1, T2>, IHookDispatcher)`](#usemutationt1-t2rendercontext-funct1-cancellationtoken-taskt2-mutationoptionst1-t2-ihookdispatcher)
-- [`UseMutation<T1, T2>(RenderContext, Func<T1, CancellationToken, Task<T2>>, QueryCache, MutationOptions<T1, T2>, IHookDispatcher)`](#usemutationt1-t2rendercontext-funct1-cancellationtoken-taskt2-querycache-mutationoptionst1-t2-ihookdispatcher)
+| Overload | Description |
+| --- | --- |
+| [`UseMutation<TInput, TResult>(RenderContext, Func<TInput, CancellationToken, Task<TResult>>, MutationOptions<TInput, TResult>?, IHookDispatcher?)`](#usemutationtinput-tresultrendercontext-functinput-cancellationtoken-tasktresult-mutationoptionstinput-tresult-ihookdispatcher) | Overload that reads the ambient `QueryCache` from `AppContexts.QueryCache`. |
+| [`UseMutation<TInput, TResult>(RenderContext, Func<TInput, CancellationToken, Task<TResult>>, QueryCache?, MutationOptions<TInput, TResult>?, IHookDispatcher?)`](#usemutationtinput-tresultrendercontext-functinput-cancellationtoken-tasktresult-querycache-mutationoptionstinput-tresult-ihookdispatcher) | Registers a `Mutation<TInput, TResult>` for this hook slot. |
+| [`UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>>, MutationOptions<TInput, TResult>?)`](#usemutationtinput-tresultfunctinput-cancellationtoken-tasktresult-mutationoptionstinput-tresult) |  |
 
-## `UseMutation<T1, T2>(RenderContext, Func<T1, CancellationToken, Task<T2>>, MutationOptions<T1, T2>, IHookDispatcher)` [#usemutationt1-t2rendercontext-funct1-cancellationtoken-taskt2-mutationoptionst1-t2-ihookdispatcher]
+### `UseMutation<TInput, TResult>(RenderContext, Func<TInput, CancellationToken, Task<TResult>>, MutationOptions<TInput, TResult>?, IHookDispatcher?)` [#usemutationtinput-tresultrendercontext-functinput-cancellationtoken-tasktresult-mutationoptionstinput-tresult-ihookdispatcher]
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseMutationExtensions.UseMutation``2(Microsoft.UI.Reactor.Core.RenderContext,System.Func{``0,System.Threading.CancellationToken,System.Threading.Tasks.Task{``1}},Microsoft.UI.Reactor.Hooks.MutationOptions{``0,``1},Microsoft.UI.Reactor.Hooks.IHookDispatcher)`
+Overload that reads the ambient [`QueryCache`](/microsoft-ui-reactor/main/reference/data/query-cache#querycache) from [`AppContexts.QueryCache`](/microsoft-ui-reactor/main/reference/components/AppContexts#querycache).
 
-### Summary [#summary]
+```csharp
+public static Mutation<TInput, TResult> UseMutation<TInput, TResult>(this RenderContext ctx, Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult>? options = null, IHookDispatcher? dispatcher = null)
+```
 
-Overload that reads the ambient `QueryCache` from
-`AppContexts.QueryCache`.
+**Parameters**
 
-## `UseMutation<T1, T2>(RenderContext, Func<T1, CancellationToken, Task<T2>>, QueryCache, MutationOptions<T1, T2>, IHookDispatcher)` [#usemutationt1-t2rendercontext-funct1-cancellationtoken-taskt2-querycache-mutationoptionst1-t2-ihookdispatcher]
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `mutator` | `Func<TInput, CancellationToken, Task<TResult>>` |  |  |
+| `options` | [`MutationOptions<TInput, TResult>?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationoptionstinput-tresult) | `null` |  |
+| `dispatcher` | [`IHookDispatcher?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher) | `null` |  |
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseMutationExtensions.UseMutation``2(Microsoft.UI.Reactor.Core.RenderContext,System.Func{``0,System.Threading.CancellationToken,System.Threading.Tasks.Task{``1}},Microsoft.UI.Reactor.Core.QueryCache,Microsoft.UI.Reactor.Hooks.MutationOptions{``0,``1},Microsoft.UI.Reactor.Hooks.IHookDispatcher)`
+### `UseMutation<TInput, TResult>(RenderContext, Func<TInput, CancellationToken, Task<TResult>>, QueryCache?, MutationOptions<TInput, TResult>?, IHookDispatcher?)` [#usemutationtinput-tresultrendercontext-functinput-cancellationtoken-tasktresult-querycache-mutationoptionstinput-tresult-ihookdispatcher]
 
-### Summary [#summary_1]
+Registers a [`Mutation<TInput, TResult>`](/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationtinput-tresult) for this hook slot. The handle is stable across renders (pass it to buttons, context menus, etc.).
 
-Registers a [Mutation](/microsoft-ui-reactor/main/reference/hooks/Mutation) ([guide](/microsoft-ui-reactor/main/guides/hooks)) for this hook slot. The handle
-is stable across renders (pass it to buttons, context menus, etc.).
+```csharp
+public static Mutation<TInput, TResult> UseMutation<TInput, TResult>(this RenderContext ctx, Func<TInput, CancellationToken, Task<TResult>> mutator, QueryCache? cache, MutationOptions<TInput, TResult>? options = null, IHookDispatcher? dispatcher = null)
+```
 
-### Parameters [#parameters]
+**Parameters**
 
-- **ctx** — The render context (extension target).
-- **mutator** — The async write. Receives the caller's input and a token that
-fires on unmount. Rethrow `OperationCanceledException` to honour it.
-- **cache** — The cache whose keys to invalidate on success, or null to skip
-invalidation regardless of [InvalidateKeys](/microsoft-ui-reactor/main/reference/hooks/MutationOptions).
-- **options** — Optional lifecycle callbacks; null uses defaults (no callbacks).
-- **dispatcher** — Optional dispatcher override; null captures the current
-`DispatcherQueue` at registration time (same convention as `UseResource`).
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `mutator` | `Func<TInput, CancellationToken, Task<TResult>>` |  | The async write. Receives the caller's input and a token that fires on unmount. Rethrow [`OperationCanceledException`](https://learn.microsoft.com/dotnet/api/system.operationcanceledexception) to honour it. |
+| `cache` | [`QueryCache?`](/microsoft-ui-reactor/main/reference/data/query-cache#querycache) |  | The cache whose keys to invalidate on success, or null to skip invalidation regardless of [`MutationOptions.InvalidateKeys`](/microsoft-ui-reactor/main/reference/hooks/hook-types#invalidatekeys). |
+| `options` | [`MutationOptions<TInput, TResult>?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationoptionstinput-tresult) | `null` | Optional lifecycle callbacks; null uses defaults (no callbacks). |
+| `dispatcher` | [`IHookDispatcher?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#ihookdispatcher) | `null` | Optional dispatcher override; null captures the current `DispatcherQueue` at registration time (same convention as `UseResource`). |
+
+### `UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>>, MutationOptions<TInput, TResult>?)` [#usemutationtinput-tresultfunctinput-cancellationtoken-tasktresult-mutationoptionstinput-tresult]
+
+```csharp
+protected Mutation<TInput, TResult> UseMutation<TInput, TResult>(Func<TInput, CancellationToken, Task<TResult>> mutator, MutationOptions<TInput, TResult>? options = null)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `mutator` | `Func<TInput, CancellationToken, Task<TResult>>` |  |  |
+| `options` | [`MutationOptions<TInput, TResult>?`](/microsoft-ui-reactor/main/reference/hooks/hook-types#mutationoptionstinput-tresult) | `null` |  |

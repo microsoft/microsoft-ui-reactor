@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/data/enums.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/enums.md",
+  "route": "/reference/data/enums",
+  "title": "Enums",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/enums",
+  "description": "The enumerations in this category.",
+  "markdown": "---\ntitle: \"Enums\"\ndescription: \"The enumerations in this category.\"\n---\n\n**Learn more:** [Data System](/microsoft-ui-reactor/main/controls/data-system)\n\n## `DataSourceCapabilities` [#datasourcecapabilities]\n\nCapabilities flags for data sources.\n\n```csharp\npublic enum DataSourceCapabilities\n```\n\nNamespace: `Microsoft.UI.Reactor.Data`.\n\n### Values [#values]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `None` | `0` |  |\n| `ServerSort` | `1` |  |\n| `ServerFilter` | `2` |  |\n| `ServerSearch` | `4` |  |\n| `ServerCount` | `8` |  |\n| `ServerSelect` | `16` |  |\n| `Mutate` | `32` |  |\n| `Refresh` | `64` |  |\n"
+}

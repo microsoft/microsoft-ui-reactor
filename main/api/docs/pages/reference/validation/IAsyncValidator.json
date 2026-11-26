@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/validation/IAsyncValidator.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IAsyncValidator.md",
+  "route": "/reference/validation/IAsyncValidator",
+  "title": "IAsyncValidator",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IAsyncValidator",
+  "description": "An asynchronous validator for operations that require I/O (e.g., server-side uniqueness checks).",
+  "markdown": "---\ntitle: \"IAsyncValidator\"\ndescription: \"An asynchronous validator for operations that require I/O (e.g., server-side uniqueness checks).\"\n---\n\n```csharp\npublic interface IAsyncValidator\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## Methods [#methods]\n\n### `ValidateAsync` [#validateasync]\n\nValidates the given value asynchronously. Returns a ValidationMessage on failure, or null on success.\n\n```csharp\npublic Task<ValidationMessage?> ValidateAsync(object? value, string field, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `value` | `object?` |  |  |\n| `field` | `string` |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n"
+}

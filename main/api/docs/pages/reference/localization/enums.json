@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/enums.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/enums.md",
+  "route": "/reference/localization/enums",
+  "title": "Enums",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/enums",
+  "description": "The enumerations in this category.",
+  "markdown": "---\ntitle: \"Enums\"\ndescription: \"The enumerations in this category.\"\n---\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## `DateStyle` [#datestyle]\n\nOptions for IntlAccessor.FormatDate(). Maps to .NET DateTimeFormatInfo styles.\n\n```csharp\npublic enum DateStyle\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n### Values [#values]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Default` | `0` |  |\n| `Short` | `1` |  |\n| `Long` | `2` |  |\n| `Full` | `3` |  |\n\n## `ListFormatType` [#listformattype]\n\nConjunction = \"A, B, and C\"; Disjunction = \"A, B, or C\". Used by IntlAccessor.FormatList().\n\n```csharp\npublic enum ListFormatType\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n### Values [#values_1]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Conjunction` | `0` |  |\n| `Disjunction` | `1` |  |\n\n## `NumberStyle` [#numberstyle]\n\nOptions for IntlAccessor.FormatNumber(). Mirrors ICU/Intl.NumberFormat options.\n\n```csharp\npublic enum NumberStyle\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n### Values [#values_2]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Default` | `0` |  |\n| `Currency` | `1` |  |\n| `Percent` | `2` |  |\n"
+}

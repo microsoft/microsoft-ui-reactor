@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/MessageCache.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageCache.md",
+  "route": "/reference/localization/MessageCache",
+  "title": "MessageCache",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageCache",
+  "description": "Caches MessageFormatter instances per locale. Each formatter internally caches compiled ICU patterns, so we only need one instance per locale.",
+  "markdown": "---\ntitle: \"MessageCache\"\ndescription: \"Caches MessageFormatter instances per locale. Each formatter internally caches compiled ICU patterns, so we only need one instance per locale.\"\n---\n\n```csharp\npublic sealed class MessageCache\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Constructors [#constructors]\n\n### `MessageCache` [#messagecache_1]\n\n```csharp\npublic MessageCache()\n```\n\n## Methods [#methods]\n\n### `Flush` [#flush]\n\n#### `Flush()` [#flush_1]\n\nFlushes all cached formatters (e.g., on full locale switch).\n\n```csharp\npublic void Flush()\n```\n\n#### `Flush(string)` [#flushstring]\n\nFlushes the cached formatter for a specific locale.\n\n```csharp\npublic void Flush(string locale)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `locale` | `string` |  |\n\n### `Format` [#format]\n\nFormats an ICU pattern with the given arguments for the specified locale.\n\n```csharp\npublic string Format(string locale, string pattern, IDictionary<string, object>? args = null)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `locale` | `string` |  |  |\n| `pattern` | `string` |  |  |\n| `args` | `IDictionary<string, object>?` | `null` |  |\n\n### `GetFormatter` [#getformatter]\n\nGets or creates a MessageFormatter for the given locale.\n\n```csharp\npublic MessageFormatter GetFormatter(string locale)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `locale` | `string` |  |\n"
+}

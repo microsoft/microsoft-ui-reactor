@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/hooks/UseValidationContext.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseValidationContext.md",
+  "route": "/reference/hooks/UseValidationContext",
+  "title": "UseValidationContext",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseValidationContext",
+  "description": "Returns the nearest ancestor's ValidationContext, or creates a new one scoped to this component. The created context persists across re-renders.",
+  "markdown": "---\ntitle: \"UseValidationContext\"\ndescription: \"Returns the nearest ancestor's ValidationContext, or creates a new one scoped to this component. The created context persists across re-renders.\"\n---\n\nWhen the context is component-local (no ancestor provided one) it is published to the rendered subtree automatically, so `FormField`, the visualizers, and nested components find it without an explicit `.Provide(ValidationContexts.Current, ctx)`. Writing that call yourself still works and takes precedence.\n\nThe component also re-renders when the context changes, which is what makes `ctx.MarkAllTouched()` in a submit handler visible: it mutates the context without touching component state, so nothing else would schedule a repaint.\n\n```csharp\npublic static ValidationContext UseValidationContext(this RenderContext ctx)\n```\n\nAn extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `ValidationContextHookExtensions`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms), [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n\n## Use from a class component [#use-from-a-class-component]\n\nClass components can call the same hook directly. These overloads forward to the ones above:\n\n```csharp\npublic static ValidationContext UseValidationContext(this Component component)\n```\n"
+}

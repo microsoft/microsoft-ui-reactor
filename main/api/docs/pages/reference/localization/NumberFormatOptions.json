@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/NumberFormatOptions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/NumberFormatOptions.md",
+  "route": "/reference/localization/NumberFormatOptions",
+  "title": "NumberFormatOptions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/NumberFormatOptions",
+  "markdown": "---\ntitle: \"NumberFormatOptions\"\n---\n\n```csharp\npublic sealed class NumberFormatOptions\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Constructors [#constructors]\n\n### `NumberFormatOptions` [#numberformatoptions_1]\n\n```csharp\npublic NumberFormatOptions()\n```\n\n## Properties [#properties]\n\n### `MaximumFractionDigits` [#maximumfractiondigits]\n\n```csharp\npublic int? MaximumFractionDigits  // get, init\n```\n\n### `MinimumFractionDigits` [#minimumfractiondigits]\n\n```csharp\npublic int? MinimumFractionDigits  // get, init\n```\n\n### `Style` [#style]\n\n```csharp\npublic NumberStyle Style  // get, init\n```\n"
+}

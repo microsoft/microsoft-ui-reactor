@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/input.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/input.md",
+  "route": "/reference/input",
+  "title": "Input and commands",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/input",
+  "description": "Commands, element refs, focus, drag and drop, and gestures.",
+  "markdown": "---\ntitle: \"Input and commands\"\ndescription: \"Commands, element refs, focus, drag and drop, and gestures.\"\nsidebar:\n  label: \"Overview\"\n---\n\n**Learn more:** [Input and gestures](/microsoft-ui-reactor/main/guides/input-and-gestures), [Commanding](/microsoft-ui-reactor/main/guides/commanding)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [Drag and drop](/microsoft-ui-reactor/main/reference/input/drag-and-drop) | Types for dragging data out of and dropping it onto elements. |\n| [Element refs](/microsoft-ui-reactor/main/reference/input/element-refs) | Refs to mounted controls. |\n| [Gestures](/microsoft-ui-reactor/main/reference/input/gestures) | Gesture events and their options. |\n| [`Command`](/microsoft-ui-reactor/main/reference/input/Command) | Immutable (init-only) command descriptor that bundles an action with its metadata (label, icon, keyboard accelerator, enabled state). |\n| [`Command<T>`](/microsoft-ui-reactor/main/reference/input/Command-1) | Immutable (init-only) parameterized command descriptor. |\n| [`CommandInterop`](/microsoft-ui-reactor/main/reference/input/CommandInterop) | Bridges ICommand (MVVM/CommunityToolkit) to Command, enabling migration from ViewModel-based patterns to Reactor's declarative commanding. var reactorCmd = CommandInterop.FromCommand(viewModel.SaveCommand, \"Save\", icon: new SymbolIconData(\"Save\"), accelerator: Accelerator(VirtualKey.S, Control)); |\n| [`FocusManager`](/microsoft-ui-reactor/main/reference/input/FocusManager) | Imperative focus helpers (spec 027 Tier 5). |\n| [`StandardCommand`](/microsoft-ui-reactor/main/reference/input/StandardCommand) | Factory methods for the 16 standard application commands with pre-filled metadata (label, icon, keyboard accelerator). |\n"
+}

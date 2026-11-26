@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/animation/enums.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/enums.md",
+  "route": "/reference/animation/enums",
+  "title": "Enums",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/enums",
+  "description": "The enumerations in this category.",
+  "markdown": "---\ntitle: \"Enums\"\ndescription: \"The enumerations in this category.\"\n---\n\n**Learn more:** [Animation](/microsoft-ui-reactor/main/guides/animation)\n\n## `AnimateProperty` [#animateproperty]\n\nFlags enum specifying which compositor properties should have implicit animations applied via the .Animate() modifier.\n\n```csharp\npublic enum AnimateProperty\n```\n\nNamespace: `Microsoft.UI.Reactor.Animation`.\n\n### Values [#values]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Opacity` | `1` |  |\n| `Offset` | `2` |  |\n| `Scale` | `4` |  |\n| `Rotation` | `8` |  |\n| `CenterPoint` | `16` |  |\n| `All` | `31` |  |\n\n## `AnimationKind` [#animationkind]\n\nAnimation kinds that an ambient `Animations.Animate(...)` transaction can carry through a state-setter into the resulting diff. See spec 042 §6.\n\n```csharp\npublic enum AnimationKind\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n### Values [#values_1]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `None` | `0` | No animation; container changes apply instantly. |\n| `Default` | `1` | Framework default — currently matches [`AnimationKind.EaseOut`](#values_1). |\n| `Spring` | `2` | Critically-damped spring; expressive on insert/remove. |\n| `EaseIn` | `3` | Standard quadratic ease-in. |\n| `EaseOut` | `4` | Standard quadratic ease-out (matches WinUI `RepositionThemeTransition`). |\n| `EaseInOut` | `5` | Standard ease-in-out. |\n"
+}

@@ -1,0 +1,804 @@
+---
+title: "Drag and drop"
+description: "Types for dragging data out of and dropping it onto elements."
+---
+
+**Learn more:** [Input and gestures](/microsoft-ui-reactor/main/guides/input-and-gestures)
+
+## `DragAttached` [#dragattached]
+
+Attached element data for the window drag-from-background opt-out modifier.
+
+```csharp
+public sealed record DragAttached(bool IsEnabled)
+```
+
+Namespace: `Microsoft.UI.Reactor.Core`.
+
+### Constructors [#constructors]
+
+#### `DragAttached` [#dragattached_1]
+
+Attached element data for the window drag-from-background opt-out modifier.
+
+```csharp
+public DragAttached(bool IsEnabled)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `IsEnabled` | `bool` |  |
+
+### Properties [#properties]
+
+#### `IsEnabled` [#isenabled]
+
+```csharp
+public bool IsEnabled  // get, init
+```
+
+## `DragData` [#dragdata]
+
+The drag payload. Supports typed-payload round-trip (Phase 6a), standard WinUI formats (text / URI / HTML / RTF / files / bitmap — Phase 6b eager + lazy), and custom format identifiers. Same-process transfers stash the in-memory [`DragData`](#dragdata) via a per-drag GUID in `DataPackage.Properties`; eager standard formats are also written directly to the [`DataPackage`](https://learn.microsoft.com/uwp/api/windows.applicationmodel.datatransfer.datapackage) so cross-process drops (Notepad, Word, File Explorer, …) can consume them natively. Lazy providers are adapted via [`DataPackage.SetDataProvider`](https://learn.microsoft.com/uwp/api/windows.applicationmodel.datatransfer.datapackage.setdataprovider) and invoked on demand.
+
+```csharp
+public sealed class DragData
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Constructors [#constructors_1]
+
+#### `DragData` [#dragdata_1]
+
+Create an empty [`DragData`](#dragdata). Use `With…` methods to populate formats.
+
+```csharp
+public DragData()
+```
+
+### Properties [#properties_1]
+
+#### `AvailableFormats` [#availableformats]
+
+Format identifiers this [`DragData`](#dragdata) advertises.
+
+```csharp
+public IReadOnlyCollection<string> AvailableFormats  // get
+```
+
+#### `OriginProcessId` [#originprocessid]
+
+Origin process id — stored so cross-process drops can be detected/rejected.
+
+```csharp
+public int OriginProcessId  // get
+```
+
+### Methods [#methods]
+
+#### `GetBitmapAsync` [#getbitmapasync]
+
+```csharp
+public Task<RandomAccessStreamReference?> GetBitmapAsync(CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `GetCustomFormatAsync` [#getcustomformatasync]
+
+```csharp
+public Task<T?> GetCustomFormatAsync<T>(string formatId, CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `formatId` | `string` |  |  |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `GetFilesAsync` [#getfilesasync]
+
+```csharp
+public Task<IReadOnlyList<IStorageItem>> GetFilesAsync(CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `GetHtmlAsync` [#gethtmlasync]
+
+```csharp
+public Task<string?> GetHtmlAsync(CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `GetRtfAsync` [#getrtfasync]
+
+```csharp
+public Task<string?> GetRtfAsync(CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `GetTextAsync` [#gettextasync]
+
+```csharp
+public Task<string?> GetTextAsync(CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `GetUriAsync` [#geturiasync]
+
+```csharp
+public Task<Uri?> GetUriAsync(CancellationToken cancellationToken = default)
+```
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cancellationToken` | `CancellationToken` | `default` |  |
+
+#### `HasFormat` [#hasformat]
+
+Returns true when the specified format id is present.
+
+```csharp
+public bool HasFormat(string formatId)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `formatId` | `string` |  |
+
+#### `Text` [#text]
+
+Convenience factory — creates a [`DragData`](#dragdata) pre-populated with plain text.
+
+```csharp
+public static DragData Text(string text)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `text` | `string` |  |
+
+#### `TryGetBitmap` [#trygetbitmap]
+
+```csharp
+public bool TryGetBitmap(out RandomAccessStreamReference value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `RandomAccessStreamReference` |  |
+
+#### `TryGetCustomFormat` [#trygetcustomformat]
+
+```csharp
+public bool TryGetCustomFormat<T>(string formatId, out T value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `formatId` | `string` |  |
+| `value` | `T` |  |
+
+#### `TryGetFiles` [#trygetfiles]
+
+```csharp
+public bool TryGetFiles(out IReadOnlyList<IStorageItem> value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `IReadOnlyList<IStorageItem>` |  |
+
+#### `TryGetHtml` [#trygethtml]
+
+```csharp
+public bool TryGetHtml(out string value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `string` |  |
+
+#### `TryGetRtf` [#trygetrtf]
+
+```csharp
+public bool TryGetRtf(out string value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `string` |  |
+
+#### `TryGetSafeLocalFiles` [#trygetsafelocalfiles]
+
+Filters dropped files to local-only paths, removing UNC, DOS-device, reparse, and shell-virtual entries that the source process picked. Apps that open/parse/render dropped files should prefer this over [`DragData.TryGetFiles`](#trygetfiles); UNC paths trigger NTLM authentication on stat/open, reparse points can escape the directory the user thought they shared, and Internet-zone files lose their MOTW warning if the app reads bytes without consulting `Zone.Identifier`. TASK-069.
+
+```csharp
+public bool TryGetSafeLocalFiles(out IReadOnlyList<IStorageItem> value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `IReadOnlyList<IStorageItem>` |  |
+
+#### `TryGetText` [#trygettext]
+
+```csharp
+public bool TryGetText(out string value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `string` |  |
+
+#### `TryGetTypedPayload` [#trygettypedpayload]
+
+Attempts to retrieve a typed payload. Returns false if the format isn't present or the stored payload can't be cast to `T`.
+
+```csharp
+public bool TryGetTypedPayload<T>(out T payload)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `payload` | `T` |  |
+
+#### `TryGetUri` [#trygeturi]
+
+```csharp
+public bool TryGetUri(out Uri value)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `value` | `Uri` |  |
+
+#### `Typed` [#typed]
+
+Factory for a typed-payload-only [`DragData`](#dragdata).
+
+```csharp
+public static DragData Typed<T>(T payload)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `payload` | `T` |  |
+
+#### `TypedFormatId` [#typedformatid]
+
+Canonical format id used for a typed payload of `T`.
+
+```csharp
+public static string TypedFormatId<T>()
+```
+
+#### `WithBitmap` [#withbitmap]
+
+```csharp
+public DragData WithBitmap(Func<CancellationToken, Task<RandomAccessStreamReference>> provider)
+public DragData WithBitmap(Func<RandomAccessStreamReference> provider)
+public DragData WithBitmap(RandomAccessStreamReference bitmap)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `provider` | `Func<CancellationToken, Task<RandomAccessStreamReference>>` or `Func<RandomAccessStreamReference>` |  |
+| `bitmap` | `RandomAccessStreamReference` |  |
+
+#### `WithCustomFormat` [#withcustomformat]
+
+```csharp
+public DragData WithCustomFormat(string formatId, Func<object> provider)
+public DragData WithCustomFormat(string formatId, Func<CancellationToken, Task<object>> provider)
+public DragData WithCustomFormat(string formatId, object payload)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `formatId` | `string` |  |
+| `provider` | `Func<object>` or `Func<CancellationToken, Task<object>>` |  |
+| `payload` | `object` |  |
+
+#### `WithFiles` [#withfiles]
+
+```csharp
+public DragData WithFiles(IEnumerable<IStorageItem> files)
+public DragData WithFiles(Func<IEnumerable<IStorageItem>> provider)
+public DragData WithFiles(Func<CancellationToken, Task<IEnumerable<IStorageItem>>> provider)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `files` | `IEnumerable<IStorageItem>` |  |
+| `provider` | `Func<IEnumerable<IStorageItem>>` or `Func<CancellationToken, Task<IEnumerable<IStorageItem>>>` |  |
+
+#### `WithHtml` [#withhtml]
+
+```csharp
+public DragData WithHtml(Func<string> provider)
+public DragData WithHtml(Func<CancellationToken, Task<string>> provider)
+public DragData WithHtml(string html)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `provider` | `Func<string>` or `Func<CancellationToken, Task<string>>` |  |
+| `html` | `string` |  |
+
+#### `WithRtf` [#withrtf]
+
+```csharp
+public DragData WithRtf(Func<string> provider)
+public DragData WithRtf(Func<CancellationToken, Task<string>> provider)
+public DragData WithRtf(string rtf)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `provider` | `Func<string>` or `Func<CancellationToken, Task<string>>` |  |
+| `rtf` | `string` |  |
+
+#### `WithText` [#withtext]
+
+```csharp
+public DragData WithText(Func<string> provider)
+public DragData WithText(Func<CancellationToken, Task<string>> provider)
+public DragData WithText(string text)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `provider` | `Func<string>` or `Func<CancellationToken, Task<string>>` |  |
+| `text` | `string` |  |
+
+#### `WithTypedPayload` [#withtypedpayload]
+
+Attaches a typed payload under the canonical typed-format key for `T`.
+
+```csharp
+public DragData WithTypedPayload<T>(T payload)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `payload` | `T` |  |
+
+#### `WithUri` [#withuri]
+
+```csharp
+public DragData WithUri(Func<CancellationToken, Task<Uri>> provider)
+public DragData WithUri(Func<Uri> provider)
+public DragData WithUri(Uri uri)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `provider` | `Func<CancellationToken, Task<Uri>>` or `Func<Uri>` |  |
+| `uri` | `Uri` |  |
+
+## `DragEndContext` [#dragendcontext]
+
+Delivered to the source's `onEnd` callback when the drag concludes. Distinguishes successful completion from cancellation, and identifies the final operation the target accepted so the source can apply the matching side-effect (e.g. remove on Move).
+
+```csharp
+public readonly record struct DragEndContext(DragOperations CompletedOperation, bool WasCancelled)
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Constructors [#constructors_2]
+
+#### `DragEndContext` [#dragendcontext_1]
+
+Delivered to the source's `onEnd` callback when the drag concludes. Distinguishes successful completion from cancellation, and identifies the final operation the target accepted so the source can apply the matching side-effect (e.g. remove on Move).
+
+```csharp
+public DragEndContext(DragOperations CompletedOperation, bool WasCancelled)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `CompletedOperation` | [`DragOperations`](#dragoperations) | Final operation negotiated with the target, or [`DragOperations.None`](#values) on cancellation. |
+| `WasCancelled` | `bool` | True when the drag was cancelled (ESC key, dropped outside any valid target, system abort). |
+
+### Properties [#properties_2]
+
+#### `CompletedOperation` [#completedoperation]
+
+Final operation negotiated with the target, or [`DragOperations.None`](#values) on cancellation.
+
+```csharp
+public DragOperations CompletedOperation  // get, init
+```
+
+#### `WasCancelled` [#wascancelled]
+
+True when the drag was cancelled (ESC key, dropped outside any valid target, system abort).
+
+```csharp
+public bool WasCancelled  // get, init
+```
+
+## `DragOperationNegotiation` [#dragoperationnegotiation]
+
+Negotiation helpers shared by the reconciler and tests.
+
+```csharp
+public static class DragOperationNegotiation
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Methods [#methods_1]
+
+#### `Negotiate` [#negotiate]
+
+Returns the first of [`DragOperations.Move`](#values) / [`DragOperations.Copy`](#values) / [`DragOperations.Link`](#values) that both source and target agree on. The preference order (Move before Copy before Link) matches the Windows shell's default.
+
+```csharp
+public static DragOperations Negotiate(DragOperations source, DragOperations target)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `source` | [`DragOperations`](#dragoperations) |  |
+| `target` | [`DragOperations`](#dragoperations) |  |
+
+## `DragOperations` [#dragoperations]
+
+Drag-and-drop operation flags. Source declares what it allows via `ElementExtensions.OnDragStart`; target negotiates the final operation by setting [`DragTargetArgs.AcceptedOperation`](#acceptedoperation).
+
+```csharp
+public enum DragOperations
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Values [#values]
+
+| Name | Value | Description |
+| --- | --- | --- |
+| `None` | `0` | No operation — used to reject a drop. |
+| `Copy` | `1` | Copy the payload, leaving the source intact. |
+| `Move` | `2` | Move the payload — source should remove the item on successful drop. |
+| `Link` | `4` | Create a link/reference to the payload. |
+| `All` | `7` | Any of Copy, Move, or Link. |
+
+## `DragSourceConfig` [#dragsourceconfig]
+
+Immutable source-side drag configuration. Stored on `ElementModifiers.DragSource`; the reconciler attaches [`UIElement.DragStarting`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragstarting) and [`UIElement.DropCompleted`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dropcompleted) trampolines and auto-sets [`UIElement.CanDrag`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.candrag).
+
+```csharp
+public sealed record DragSourceConfig(Func<DragData> GetData)
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Constructors [#constructors_3]
+
+#### `DragSourceConfig` [#dragsourceconfig_1]
+
+Immutable source-side drag configuration. Stored on `ElementModifiers.DragSource`; the reconciler attaches [`UIElement.DragStarting`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragstarting) and [`UIElement.DropCompleted`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dropcompleted) trampolines and auto-sets [`UIElement.CanDrag`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.candrag).
+
+```csharp
+public DragSourceConfig(Func<DragData> GetData)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `GetData` | `Func<DragData>` |  |
+
+### Properties [#properties_3]
+
+#### `AllowedOperations` [#allowedoperations]
+
+Operations the source will allow. Null means "all".
+
+```csharp
+public DragOperations? AllowedOperations  // get, init
+```
+
+#### `CanDrag` [#candrag]
+
+Optional guard — when returning false, the drag is cancelled in `DragStarting`.
+
+```csharp
+public Func<bool>? CanDrag  // get, init
+```
+
+#### `GetData` [#getdata]
+
+```csharp
+public Func<DragData> GetData  // get, init
+```
+
+#### `OnEnd` [#onend]
+
+Final callback when the drag ends (success or cancellation).
+
+```csharp
+public Action<DragEndContext>? OnEnd  // get, init
+```
+
+## `DragTargetArgs` [#dragtargetargs]
+
+Drop-target callback argument. Delivered to `.OnDragEnter`/`.OnDragOver`/ `.OnDragLeave`/raw `.OnDrop` handlers.
+
+```csharp
+public sealed class DragTargetArgs
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Constructors [#constructors_4]
+
+#### `DragTargetArgs` [#dragtargetargs_1]
+
+```csharp
+public DragTargetArgs(DragData data, Point position, DragOperations allowedOperations, DragDropModifiers modifiers, DragUIOverrideHandle uiOverride)
+```
+
+**Parameters**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| `data` | [`DragData`](#dragdata) |  |
+| `position` | `Point` |  |
+| `allowedOperations` | [`DragOperations`](#dragoperations) |  |
+| `modifiers` | `DragDropModifiers` |  |
+| `uiOverride` | [`DragUIOverrideHandle`](#draguioverridehandle) |  |
+
+### Properties [#properties_4]
+
+#### `AcceptedOperation` [#acceptedoperation]
+
+Operation the target wants to accept. Default [`DragOperations.None`](#values) rejects the drop; set to [`DragOperations.Copy`](#values)/`Move`/`Link` to accept.
+
+```csharp
+public DragOperations AcceptedOperation  // get, set
+```
+
+#### `AllowedOperations` [#allowedoperations_1]
+
+Union of operations the source declared it allows.
+
+```csharp
+public DragOperations AllowedOperations  // get
+```
+
+#### `Data` [#data]
+
+The drag payload as advertised by the source.
+
+```csharp
+public DragData Data  // get
+```
+
+#### `Modifiers` [#modifiers]
+
+Active Ctrl/Shift/Alt/mouse-button modifiers at the time of the event.
+
+```csharp
+public DragDropModifiers Modifiers  // get
+```
+
+#### `Position` [#position]
+
+Pointer position in target-element-local space.
+
+```csharp
+public Point Position  // get
+```
+
+#### `UIOverride` [#uioverride]
+
+Mutable UI override — caption/glyph visibility tweaks.
+
+```csharp
+public DragUIOverrideHandle UIOverride  // get
+```
+
+## `DragUIOverrideHandle` [#draguioverridehandle]
+
+Mutable hooks on [`DragTargetArgs.UIOverride`](#uioverride) that let drag-over handlers tweak the drop indicator (caption, glyph, preview). Values written here are applied by the reconciler onto the underlying WinUI `Windows.ApplicationModel.DataTransfer.DragDrop.DragUIOverride` after the user callback returns.
+
+```csharp
+public sealed class DragUIOverrideHandle
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Constructors [#constructors_5]
+
+#### `DragUIOverrideHandle` [#draguioverridehandle_1]
+
+```csharp
+public DragUIOverrideHandle()
+```
+
+### Properties [#properties_5]
+
+#### `Caption` [#caption]
+
+Override caption text (e.g. "Move to Inbox"). Null leaves WinUI's default.
+
+```csharp
+public string? Caption  // get, set
+```
+
+#### `IsCaptionVisible` [#iscaptionvisible]
+
+When false, hides the caption entirely.
+
+```csharp
+public bool IsCaptionVisible  // get, set
+```
+
+#### `IsContentVisible` [#iscontentvisible]
+
+When false, hides the drag-source content preview.
+
+```csharp
+public bool IsContentVisible  // get, set
+```
+
+#### `IsGlyphVisible` [#isglyphvisible]
+
+When false, hides the operation glyph (Copy/Move/Link icon).
+
+```csharp
+public bool IsGlyphVisible  // get, set
+```
+
+## `DropTargetConfig` [#droptargetconfig]
+
+Immutable target-side drag configuration. Stored on `ElementModifiers.DropTarget`; the reconciler attaches [`UIElement.DragEnter`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragenter), [`UIElement.DragOver`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragover), [`UIElement.DragLeave`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragleave) and [`UIElement.Drop`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.drop) trampolines and auto-sets [`UIElement.AllowDrop`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.allowdrop).
+
+```csharp
+public sealed record DropTargetConfig
+```
+
+Namespace: `Microsoft.UI.Reactor.Input`.
+
+### Constructors [#constructors_6]
+
+#### `DropTargetConfig` [#droptargetconfig_1]
+
+```csharp
+public DropTargetConfig()
+```
+
+### Properties [#properties_6]
+
+#### `AcceptedOperations` [#acceptedoperations]
+
+Default accepted operation applied when [`DragTargetArgs.AcceptedOperation`](#acceptedoperation) is left at [`DragOperations.None`](#values) by the user callback. Matches source-declared [`DragSourceConfig.AllowedOperations`](#allowedoperations) via [`DragOperationNegotiation`](#dragoperationnegotiation).
+
+```csharp
+public DragOperations AcceptedOperations  // get, init
+```
+
+#### `MaxPayloadBytes` [#maxpayloadbytes]
+
+Hard cap on the byte size of any single payload (Text, Html, Rtf, Bitmap) the target accepts from a cross-process drag. Default 4 MiB. Apps that legitimately accept larger payloads can override per drop target. TASK-068.
+
+```csharp
+public int MaxPayloadBytes  // get, init
+```
+
+#### `OnDragEnter` [#ondragenter]
+
+Invoked on [`UIElement.DragEnter`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragenter).
+
+```csharp
+public Action<DragTargetArgs>? OnDragEnter  // get, init
+```
+
+#### `OnDragLeave` [#ondragleave]
+
+Invoked on [`UIElement.DragLeave`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragleave).
+
+```csharp
+public Action<DragTargetArgs>? OnDragLeave  // get, init
+```
+
+#### `OnDragOver` [#ondragover]
+
+Invoked on [`UIElement.DragOver`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.uielement.dragover).
+
+```csharp
+public Action<DragTargetArgs>? OnDragOver  // get, init
+```
+
+#### `OnDrop` [#ondrop]
+
+Raw drop handler invoked with full [`DragTargetArgs`](#dragtargetargs). Either this or [`DropTargetConfig.TypedDrop`](#typeddrop) is non-null.
+
+```csharp
+public Action<DragTargetArgs>? OnDrop  // get, init
+```
+
+#### `TypedDrop` [#typeddrop]
+
+Typed-drop convenience. The reconciler unwraps the typed payload and calls this when it's present, falling back to [`DropTargetConfig.OnDrop`](#ondrop) otherwise.
+
+```csharp
+public Action<DragTargetArgs>? TypedDrop  // get, init
+```

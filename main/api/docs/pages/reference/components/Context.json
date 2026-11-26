@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/components/Context.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Context.md",
+  "route": "/reference/components/Context",
+  "title": "Context<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Context",
+  "description": "A typed, named context that can be provided to a subtree and consumed by any descendant. Define as a static field. Provide via .Provide() modifier. Consume via UseContext() hook.",
+  "markdown": "---\ntitle: \"Context<T>\"\ndescription: \"A typed, named context that can be provided to a subtree and consumed by any descendant. Define as a static field. Provide via .Provide() modifier. Consume via UseContext() hook.\"\nsidebar:\n  label: \"Context\"\n---\n\n```csharp\npublic sealed class Context<T> : ContextBase\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`. Inherits from [`ContextBase`](/microsoft-ui-reactor/main/reference/components/ContextBase).\n\n**Learn more:** [Context](/microsoft-ui-reactor/main/guides/context)\n\n## Constructors [#constructors]\n\n### `Context` [#context]\n\n```csharp\npublic Context(T defaultValue, string? name = null)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `defaultValue` | `T` |  |  |\n| `name` | `string?` | `null` |  |\n\n## Properties [#properties]\n\n### `DefaultValue` [#defaultvalue]\n\n```csharp\npublic T DefaultValue  // get\n```\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/controls/PropertyGridComponent.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/PropertyGridComponent.md",
+  "route": "/reference/controls/PropertyGridComponent",
+  "title": "PropertyGridComponent",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/controls/PropertyGridComponent",
+  "description": "The core PropertyGrid component. Uses FlexColumn layout with FlexRow per property row. Category headers and property expand/collapse use a single shared state dictionary.",
+  "markdown": "---\ntitle: \"PropertyGridComponent\"\ndescription: \"The core PropertyGrid component. Uses FlexColumn layout with FlexRow per property row. Category headers and property expand/collapse use a single shared state dictionary.\"\n---\n\n```csharp\npublic class PropertyGridComponent : Component<PropertyGridElement>\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls`. Inherits from [`Component<TProps>`](/microsoft-ui-reactor/main/reference/components/Component-1).\n\n**Learn more:** [Controls](/microsoft-ui-reactor/main/controls)\n\n## Constructors [#constructors]\n\n### `PropertyGridComponent` [#propertygridcomponent_1]\n\n```csharp\npublic PropertyGridComponent()\n```\n\n## Methods [#methods]\n\n### `Render` [#render]\n\n```csharp\npublic override Element Render()\n```\n"
+}

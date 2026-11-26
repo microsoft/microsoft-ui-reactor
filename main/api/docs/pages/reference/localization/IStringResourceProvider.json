@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/IStringResourceProvider.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IStringResourceProvider.md",
+  "route": "/reference/localization/IStringResourceProvider",
+  "title": "IStringResourceProvider",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/IStringResourceProvider",
+  "description": "Abstracts string resource loading so that the localization system can be tested without MRT/ResourceLoader.",
+  "markdown": "---\ntitle: \"IStringResourceProvider\"\ndescription: \"Abstracts string resource loading so that the localization system can be tested without MRT/ResourceLoader.\"\n---\n\n```csharp\npublic interface IStringResourceProvider\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Methods [#methods]\n\n### `GetString` [#getstring]\n\nGets a string resource for the given namespace and key in the specified locale. Returns null if the key is not found for that locale.\n\n```csharp\npublic string? GetString(string locale, string ns, string key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `locale` | `string` |  |\n| `ns` | `string` |  |\n| `key` | `string` |  |\n"
+}

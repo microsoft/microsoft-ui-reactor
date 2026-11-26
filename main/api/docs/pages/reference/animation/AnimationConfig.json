@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/animation/AnimationConfig.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/AnimationConfig.md",
+  "route": "/reference/animation/AnimationConfig",
+  "title": "AnimationConfig",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation/AnimationConfig",
+  "description": "Configuration for the .Animate() modifier — declaration-site implicit animation on compositor Visual properties. Stored on the Element base record.",
+  "markdown": "---\ntitle: \"AnimationConfig\"\ndescription: \"Configuration for the .Animate() modifier — declaration-site implicit animation on compositor Visual properties. Stored on the Element base record.\"\n---\n\n```csharp\npublic record AnimationConfig(Curve Curve, AnimateProperty Properties = AnimateProperty.All)\n```\n\nNamespace: `Microsoft.UI.Reactor.Animation`.\n\n**Learn more:** [Animation](/microsoft-ui-reactor/main/guides/animation)\n\n## Constructors [#constructors]\n\n### `AnimationConfig` [#animationconfig_1]\n\nConfiguration for the .Animate() modifier — declaration-site implicit animation on compositor Visual properties. Stored on the Element base record.\n\n```csharp\npublic AnimationConfig(Curve Curve, AnimateProperty Properties = AnimateProperty.All)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `Curve` | [`Curve`](/microsoft-ui-reactor/main/reference/animation/curves#curve) |  |  |\n| `Properties` | [`AnimateProperty`](/microsoft-ui-reactor/main/reference/animation/enums#animateproperty) | `AnimateProperty.All` |  |\n\n## Properties [#properties]\n\n### `Curve` [#curve]\n\n```csharp\npublic Curve Curve  // get, init\n```\n\n### `Properties` [#properties_1]\n\n```csharp\npublic AnimateProperty Properties  // get, init\n```\n"
+}

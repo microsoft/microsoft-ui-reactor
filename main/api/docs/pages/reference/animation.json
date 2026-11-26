@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/animation.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation.md",
+  "route": "/reference/animation",
+  "title": "Animation",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/animation",
+  "description": "Transitions, curves, keyframes, interaction states and scroll-linked animation.",
+  "markdown": "---\ntitle: \"Animation\"\ndescription: \"Transitions, curves, keyframes, interaction states and scroll-linked animation.\"\nsidebar:\n  label: \"Overview\"\n---\n\n**Learn more:** [Animation](/microsoft-ui-reactor/main/guides/animation)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [Curves and easing](/microsoft-ui-reactor/main/reference/animation/curves) | Curves that shape the timing of an animation. |\n| [Enums](/microsoft-ui-reactor/main/reference/animation/enums) | The enumerations in this category. |\n| [Implicit and theme transitions](/microsoft-ui-reactor/main/reference/animation/implicit) | Transitions WinUI runs when a property or a child collection changes. |\n| [Interaction states](/microsoft-ui-reactor/main/reference/animation/interaction-states) | Animations that follow pointer over, pressed and focus states. |\n| [Keyframes](/microsoft-ui-reactor/main/reference/animation/keyframes) | Types for keyframe animations. |\n| [Scroll-linked animation](/microsoft-ui-reactor/main/reference/animation/scroll) | Animations driven by the scroll position. |\n| [Transitions](/microsoft-ui-reactor/main/reference/animation/transitions) | Enter and exit transitions for elements. |\n| [`AnimationConfig`](/microsoft-ui-reactor/main/reference/animation/AnimationConfig) | Configuration for the .Animate() modifier — declaration-site implicit animation on compositor Visual properties. |\n| [`Animations`](/microsoft-ui-reactor/main/reference/animation/Animations) | Transactional animation entry points — the SwiftUI `withAnimation { … }` analog. |\n| [`AnimationScope`](/microsoft-ui-reactor/main/reference/animation/AnimationScope) | Provides ambient animation context via \\[ThreadStatic\\] fields. |\n| [`CompositorProvider`](/microsoft-ui-reactor/main/reference/animation/CompositorProvider) | Static accessor for the current Compositor instance. |\n| [`StaggerConfig`](/microsoft-ui-reactor/main/reference/animation/StaggerConfig) | Stagger configuration for container children animations. |\n"
+}

@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/data/IDataSource.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IDataSource.md",
+  "route": "/reference/data/IDataSource",
+  "title": "IDataSource<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IDataSource",
+  "description": "A read-only data source that provides paged access to items.",
+  "markdown": "---\ntitle: \"IDataSource<T>\"\ndescription: \"A read-only data source that provides paged access to items.\"\nsidebar:\n  label: \"IDataSource\"\n---\n\n```csharp\npublic interface IDataSource<T>\n```\n\nNamespace: `Microsoft.UI.Reactor.Data`.\n\n**Learn more:** [Data System](/microsoft-ui-reactor/main/controls/data-system)\n\n## Type parameters [#type-parameters]\n\n| Name | Description |\n| --- | --- |\n| `T` | The item type. |\n\n## Properties [#properties]\n\n### `Capabilities` [#capabilities]\n\nDeclares what this data source can do server-side.\n\n```csharp\npublic abstract DataSourceCapabilities Capabilities  // get\n```\n\n## Methods [#methods]\n\n### `GetPageAsync` [#getpageasync]\n\nFetches a page of data matching the request.\n\n```csharp\npublic Task<DataPage<T>> GetPageAsync(DataRequest request, CancellationToken cancellationToken = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `request` | [`DataRequest`](/microsoft-ui-reactor/main/reference/data/descriptors#datarequest) |  |  |\n| `cancellationToken` | `CancellationToken` | `default` |  |\n\n### `GetRowKey` [#getrowkey]\n\nGets the stable key for an item.\n\n```csharp\npublic RowKey GetRowKey(T item)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `item` | `T` |  |\n"
+}

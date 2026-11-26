@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/validation/ValidationContexts.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationContexts.md",
+  "route": "/reference/validation/ValidationContexts",
+  "title": "ValidationContexts",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationContexts",
+  "description": "Provides the Context definition for propagating ValidationContext through the tree.",
+  "markdown": "---\ntitle: \"ValidationContexts\"\ndescription: \"Provides the Context definition for propagating ValidationContext through the tree.\"\n---\n\n```csharp\npublic static class ValidationContexts\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## Fields [#fields]\n\n### `Current` [#current]\n\nThe Context definition used to propagate ValidationContext through the tree. Default value is null (no validation context provided by any ancestor).\n\n```csharp\npublic static readonly Context<ValidationContext?> Current\n```\n"
+}

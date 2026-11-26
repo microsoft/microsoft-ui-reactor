@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/navigation/enums.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/enums.md",
+  "route": "/reference/navigation/enums",
+  "title": "Enums",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/enums",
+  "description": "The enumerations in this category.",
+  "markdown": "---\ntitle: \"Enums\"\ndescription: \"The enumerations in this category.\"\n---\n\n**Learn more:** [Navigation](/microsoft-ui-reactor/main/guides/navigation)\n\n## `NavigationCacheMode` [#navigationcachemode]\n\nControls whether a page's component tree is cached across navigations.\n\n```csharp\npublic enum NavigationCacheMode\n```\n\nNamespace: `Microsoft.UI.Reactor.Navigation`.\n\n### Values [#values]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Disabled` | `0` | Page is always unmounted on navigate-away and remounted on navigate-to. |\n| `Enabled` | `1` | Page is cached up to the host's CacheSize limit (LRU eviction). |\n| `Required` | `2` | Page is always cached and never evicted by LRU. |\n\n## `NavigationMode` [#navigationmode]\n\nRepresents the direction/type of a navigation operation.\n\n```csharp\npublic enum NavigationMode\n```\n\nNamespace: `Microsoft.UI.Reactor.Navigation`.\n\n### Values [#values_1]\n\n| Name | Value | Description |\n| --- | --- | --- |\n| `Push` | `0` |  |\n| `Pop` | `1` |  |\n| `Replace` | `2` |  |\n| `Reset` | `3` |  |\n| `Forward` | `4` |  |\n"
+}

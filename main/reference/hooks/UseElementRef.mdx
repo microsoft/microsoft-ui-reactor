@@ -1,34 +1,29 @@
 ---
 title: "UseElementRef"
+seo:
+  description: "Returns a stable ElementRef<T> for the current component scope."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+Returns a stable [`ElementRef<T>`](/microsoft-ui-reactor/main/reference/input/element-refs#elementreft) for the current component scope.
 
-## Overloads [#overloads]
+```csharp
+public static ElementRef<T> UseElementRef<T>(this RenderContext ctx) where T : FrameworkElement
+```
 
-- [`UseElementRef<T>(Component)`](#useelementreftcomponent)
-- [`UseElementRef<T>(RenderContext)`](#useelementreftrendercontext)
+An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseElementRefExtensions`.
 
-## `UseElementRef<T>(Component)` [#useelementreftcomponent]
+**Learn more:** [Input and gestures](/microsoft-ui-reactor/main/guides/input-and-gestures), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.Component)`
+## Type parameters [#type-parameters]
 
-### Summary [#summary]
+| Name | Description |
+| --- | --- |
+| `T` | The concrete control type the ref will attach to. |
 
-Component-extension overload of [UseElementRef](/microsoft-ui-reactor/main/reference/hooks/UseElementRef#useelementreftrendercontext) ([guide](/microsoft-ui-reactor/main/guides/hooks)).
-Equivalent to calling the `RenderContext`-extension form against
-`component.Context`.
+## Use from a class component [#use-from-a-class-component]
 
-### Parameters [#parameters]
+Class components can call the same hook directly. These overloads forward to the ones above:
 
-- **component** — The component whose render context owns the hook slot.
-
-## `UseElementRef<T>(RenderContext)` [#useelementreftrendercontext]
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementRefExtensions.UseElementRef``1(Microsoft.UI.Reactor.Core.RenderContext)`
-
-### Summary [#summary_1]
-
-Returns a stable `ElementRef` for the current component scope.
+```csharp
+public static ElementRef<T> UseElementRef<T>(this Component component) where T : FrameworkElement
+```

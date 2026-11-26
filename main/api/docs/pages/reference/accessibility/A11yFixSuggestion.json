@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/accessibility/A11yFixSuggestion.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yFixSuggestion.md",
+  "route": "/reference/accessibility/A11yFixSuggestion",
+  "title": "A11yFixSuggestion",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/A11yFixSuggestion",
+  "description": "Tells an AI agent exactly which modifier to add and what value to use.",
+  "markdown": "---\ntitle: \"A11yFixSuggestion\"\ndescription: \"Tells an AI agent exactly which modifier to add and what value to use.\"\n---\n\n```csharp\npublic record A11yFixSuggestion\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n**Learn more:** [Accessibility](/microsoft-ui-reactor/main/guides/accessibility)\n\n## Constructors [#constructors]\n\n### `A11yFixSuggestion` [#a11yfixsuggestion_1]\n\n```csharp\npublic A11yFixSuggestion()\n```\n\n## Properties [#properties]\n\n### `CodeSnippet` [#codesnippet]\n\nExample code snippet (e.g., \".AutomationName(\\\\\"...\\\\\")\").\n\n```csharp\npublic string? CodeSnippet  // get, init\n```\n\n### `Modifier` [#modifier]\n\nThe Reactor modifier method name (e.g., \"AutomationName\").\n\n```csharp\npublic required string Modifier  // get, init\n```\n\n### `SuggestedValue` [#suggestedvalue]\n\nA suggested value, or null if the agent must infer from context.\n\n```csharp\npublic string? SuggestedValue  // get, init\n```\n"
+}

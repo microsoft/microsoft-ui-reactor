@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/modifiers/forms.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/forms.md",
+  "route": "/reference/modifiers/forms",
+  "title": "Control modifiers: Forms",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/modifiers/forms",
+  "description": "Modifiers that only the controls in the Forms area have.",
+  "markdown": "---\ntitle: \"Control modifiers: Forms\"\ndescription: \"Modifiers that only the controls in the Forms area have.\"\nsidebar:\n  label: \"Forms\"\n---\n\nModifiers are extension methods that return a changed copy of the element, so you can chain them.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## `RootChanged` [#rootchanged]\n\nWires the root-changed handler (fired when an immutable root object is replaced). Passing `null` clears.\n\n```csharp\nPropertyGridElement RootChanged(this PropertyGridElement el, Action<object>? handler)\n```\n\nDeclared in `ElementExtensions`.\n\n**Applies to:** [`PropertyGridElement`](/microsoft-ui-reactor/main/reference/elements/forms#propertygridelement).\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `handler` | `Action<object>?` |  |\n"
+}

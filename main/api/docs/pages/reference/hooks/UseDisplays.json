@@ -8,5 +8,5 @@
   "title": "UseDisplays",
   "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/hooks/UseDisplays",
   "description": "Returns the current display snapshot and re-renders when the display layout changes.",
-  "markdown": "---\ntitle: \"UseDisplays\"\ndescription: \"Returns the current display snapshot and re-renders when the display layout changes.\"\n---\n\n> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)\n"
+  "markdown": "---\ntitle: \"UseDisplays\"\ndescription: \"Returns the current display snapshot and re-renders when the display layout changes.\"\n---\n\n```csharp\npublic IReadOnlyList<DisplayInfo> UseDisplays()\n```\n\nDeclared on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext).\n\n**Learn more:** [Advanced Windowing](/microsoft-ui-reactor/main/guides/windowing-advanced), [Hooks](/microsoft-ui-reactor/main/guides/hooks)\n\n## Use from a class component [#use-from-a-class-component]\n\nClass components can call the same hook directly. These overloads forward to the ones above:\n\n```csharp\nprotected IReadOnlyList<DisplayInfo> UseDisplays()\n```\n"
 }

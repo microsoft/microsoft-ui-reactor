@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/data/IObservableDataSource.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IObservableDataSource.md",
+  "route": "/reference/data/IObservableDataSource",
+  "title": "IObservableDataSource<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/IObservableDataSource",
+  "description": "A data source that fires events when data changes.",
+  "markdown": "---\ntitle: \"IObservableDataSource<T>\"\ndescription: \"A data source that fires events when data changes.\"\nsidebar:\n  label: \"IObservableDataSource\"\n---\n\n```csharp\npublic interface IObservableDataSource<T> : IDataSource<T>\n```\n\nNamespace: `Microsoft.UI.Reactor.Data`.\n\n**Learn more:** [Data System](/microsoft-ui-reactor/main/controls/data-system)\n\n## Events [#events]\n\n### `DataChanged` [#datachanged]\n\n```csharp\npublic event EventHandler? DataChanged\n```\n"
+}

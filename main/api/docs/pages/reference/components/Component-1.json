@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/components/Component-1.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Component-1.md",
+  "route": "/reference/components/Component-1",
+  "title": "Component<TProps>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/Component-1",
+  "description": "Base class for components that receive typed props (e.g., navigation parameters). Props are set by the host before rendering.",
+  "markdown": "---\ntitle: \"Component<TProps>\"\ndescription: \"Base class for components that receive typed props (e.g., navigation parameters). Props are set by the host before rendering.\"\n---\n\n```csharp\npublic abstract class Component<TProps> : Component\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`. Inherits from [`Component`](/microsoft-ui-reactor/main/reference/components/Component).\n\n**Learn more:** [Components](/microsoft-ui-reactor/main/guides/components)\n\n## Constructors [#constructors]\n\n### `Component` [#component]\n\n```csharp\nprotected Component()\n```\n\n## Properties [#properties]\n\n### `Props` [#props]\n\nThe typed props passed to this component by its parent or host.\n\n```csharp\npublic TProps Props  // get\n```\n\n## Methods [#methods]\n\n### `ShouldUpdate` [#shouldupdate]\n\nControls whether this component should re-render when its parent re-renders with new props. Default: structural equality via record Equals — record props get auto-comparison for free; class props need an Equals override. Override for custom comparison logic.\n\n```csharp\nprotected virtual bool ShouldUpdate(TProps? oldProps, TProps? newProps)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `oldProps` | `TProps?` |  |\n| `newProps` | `TProps?` |  |\n"
+}

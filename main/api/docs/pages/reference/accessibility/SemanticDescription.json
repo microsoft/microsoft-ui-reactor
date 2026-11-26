@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/accessibility/SemanticDescription.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticDescription.md",
+  "route": "/reference/accessibility/SemanticDescription",
+  "title": "SemanticDescription",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/accessibility/SemanticDescription",
+  "description": "Describes the semantic role, value, and range of a composite component for assistive technology. Used with the .Semantics() modifier.",
+  "markdown": "---\ntitle: \"SemanticDescription\"\ndescription: \"Describes the semantic role, value, and range of a composite component for assistive technology. Used with the .Semantics() modifier.\"\n---\n\n```csharp\npublic record SemanticDescription(string? Role = null, string? Value = null, double? RangeMin = null, double? RangeMax = null, double? RangeValue = null, bool IsReadOnly = true)\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n**Learn more:** [Accessibility](/microsoft-ui-reactor/main/guides/accessibility)\n\n## Constructors [#constructors]\n\n### `SemanticDescription` [#semanticdescription_1]\n\nDescribes the semantic role, value, and range of a composite component for assistive technology. Used with the .Semantics() modifier.\n\n```csharp\npublic SemanticDescription(string? Role = null, string? Value = null, double? RangeMin = null, double? RangeMax = null, double? RangeValue = null, bool IsReadOnly = true)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `Role` | `string?` | `null` |  |\n| `Value` | `string?` | `null` |  |\n| `RangeMin` | `double?` | `null` |  |\n| `RangeMax` | `double?` | `null` |  |\n| `RangeValue` | `double?` | `null` |  |\n| `IsReadOnly` | `bool` | `true` |  |\n\n## Properties [#properties]\n\n### `IsReadOnly` [#isreadonly]\n\n```csharp\npublic bool IsReadOnly  // get, init\n```\n\n### `RangeMax` [#rangemax]\n\n```csharp\npublic double? RangeMax  // get, init\n```\n\n### `RangeMin` [#rangemin]\n\n```csharp\npublic double? RangeMin  // get, init\n```\n\n### `RangeValue` [#rangevalue]\n\n```csharp\npublic double? RangeValue  // get, init\n```\n\n### `Role` [#role]\n\n```csharp\npublic string? Role  // get, init\n```\n\n### `Value` [#value]\n\n```csharp\npublic string? Value  // get, init\n```\n"
+}

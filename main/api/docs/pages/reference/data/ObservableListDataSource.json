@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/data/ObservableListDataSource.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ObservableListDataSource.md",
+  "route": "/reference/data/ObservableListDataSource",
+  "title": "ObservableListDataSource<T>",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/data/ObservableListDataSource",
+  "description": "An observable data source that watches an ObservableCollection for changes and fires DataChanged when items are added, removed, or modified. The collection is the authoritative source — mutations go through the collection, not through the data source's CRUD methods.",
+  "markdown": "---\ntitle: \"ObservableListDataSource<T>\"\ndescription: \"An observable data source that watches an ObservableCollection for changes and fires DataChanged when items are added, removed, or modified. The collection is the authoritative source — mutations go through the collection, not through the data source's CRUD methods.\"\nsidebar:\n  label: \"ObservableListDataSource\"\n---\n\n```csharp\npublic class ObservableListDataSource<T> : ListDataSource<T>, IObservableDataSource<T>, IDataSource<T>, IDisposable\n```\n\nNamespace: `Microsoft.UI.Reactor.Data.Providers`. Inherits from [`ListDataSource<T>`](/microsoft-ui-reactor/main/reference/data/ListDataSource).\n\n**Learn more:** [Data System](/microsoft-ui-reactor/main/controls/data-system)\n\n## Constructors [#constructors]\n\n### `ObservableListDataSource` [#observablelistdatasource]\n\n```csharp\npublic ObservableListDataSource(ObservableCollection<T> collection, Func<T, RowKey> getRowKey)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `collection` | `ObservableCollection<T>` |  |\n| `getRowKey` | `Func<T, RowKey>` |  |\n\n## Methods [#methods]\n\n### `Dispose` [#dispose]\n\nReleases the resources that this object holds.\n\n```csharp\npublic void Dispose()\n```\n\n## Events [#events]\n\n### `DataChanged` [#datachanged]\n\n```csharp\npublic event EventHandler? DataChanged\n```\n"
+}

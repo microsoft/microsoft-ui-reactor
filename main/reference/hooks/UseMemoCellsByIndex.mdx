@@ -2,89 +2,35 @@
 title: "UseMemoCellsByIndex"
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+Memoize cell construction when the data source already knows which indices changed. Skips the per-cell [`Object.Equals`](https://learn.microsoft.com/dotnet/api/system.object.equals) scan entirely; the builder runs only for indices in `changedIndices`. When the item count changes between renders the overload falls back to a full rebuild (`changedIndices` is treated as "rebuild everything") because the index space no longer matches the prior render. Callers whose lists grow or shrink frequently will get better incremental reuse from [`UseMemoCells`](/microsoft-ui-reactor/main/reference/hooks/UseMemoCells) or [`UseMemoCellsByKey`](/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByKey), both of which can short-circuit per-cell on value or key equality across length changes.
 
-## Members [#members]
+On the steady-state path (unchanged count) the returned array reuses the previous render's element instance for every index NOT named in `changedIndices`, and publishes a positional structural-skip hint (Spec 034 §C) keyed by reference on that array so the reconciler can update only the changed cells and skip the reference-equal remainder. The returned array is therefore the hook's retained memoized state AND the key of that hint: treat it as immutable and declare every change through a subsequent render's `changedIndices` (React-style immutability — see AGENTS.md "Never mutate"). Mutating an unchanged slot in place both corrupts the memo's view of the previous render and can cause the reconciler to skip the mutated cell.
 
-> These members share a name but are declared on unrelated types. They are not overloads of one another.
+```csharp
+public static Element[] UseMemoCellsByIndex<T>(this RenderContext ctx, IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, params object[] dependencies) where T : notnull
+```
 
-- [`UseMemoCellsByIndex<T>(Component, IReadOnlyList<T>, IReadOnlyList<int>, Func<T, int, Element>, object[])`](#usememocellsbyindextcomponent-ireadonlylistt-ireadonlylistint-funct-int-element-object) — `Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions`
-- [`UseMemoCellsByIndex<T1>(RenderContext, IReadOnlyList<T1>, IReadOnlyList<int>, Func<T1, int, Element>, object[])`](#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object) — `Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions`
+An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseMemoCellsExtensions`.
 
-## `UseMemoCellsByIndex<T>(Component, IReadOnlyList<T>, IReadOnlyList<int>, Func<T, int, Element>, object[])` [#usememocellsbyindextcomponent-ireadonlylistt-ireadonlylistint-funct-int-element-object]
+**Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Performance](/microsoft-ui-reactor/main/guides/performance)
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.ComponentUseMemoCellsExtensions.UseMemoCellsByIndex``1(Microsoft.UI.Reactor.Core.Component,System.Collections.Generic.IReadOnlyList{``0},System.Collections.Generic.IReadOnlyList{System.Int32},System.Func{``0,System.Int32,Microsoft.UI.Reactor.Core.Element},System.Object[])`
+## Parameters [#parameters]
 
-### Summary [#summary]
+| Name | Type | Description |
+| --- | --- | --- |
+| `items` | `IReadOnlyList<T>` | Source items. |
+| `changedIndices` | `IReadOnlyList<int>` | Indices whose item differs from the previous render. Negative indices and indices \>= `items.Count` throw [`ArgumentOutOfRangeException`](https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception). Duplicate indices are a caller-contract violation but are tolerated: they are de-duplicated before the named cells are rebuilt, so each cell is rebuilt exactly once and the structural-skip hint's theme tally stays exact. |
+| `builder` | `Func<T, int, Element>` | Cell builder; same contract as [`UseMemoCells`](/microsoft-ui-reactor/main/reference/hooks/UseMemoCells). |
+| `dependencies` | `object[]` | Trailing-`params` deps. |
 
-Component-extension shim for [UseMemoCellsByIndex](/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByIndex#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object) ([guide](/microsoft-ui-reactor/main/guides/hooks)).
-Same semantics as the `RenderContext`-extension form;
-dispatches against `component.Context`.
+## Remarks [#remarks]
 
-### Parameters [#parameters]
+Spec 034 §C. A cell is "theme-sensitive" when it carries ThemeBindings or a ThemeRef-backed ResourceOverride; the hook tracks how many cells are theme-sensitive (carried forward incrementally) so the reconciler falls back to the full walk — which re-resolves themed brushes against the current effective theme — instead of structurally skipping such a range.
 
-- **component** — The component whose render context owns the hook slot.
-- **items** — Source items.
-- **changedIndices** — Indices whose builder output should re-run.
-- **builder** — Per-cell builder.
-- **dependencies** — Additional hook dependencies.
+## Use from a class component [#use-from-a-class-component]
 
-## `UseMemoCellsByIndex<T1>(RenderContext, IReadOnlyList<T1>, IReadOnlyList<int>, Func<T1, int, Element>, object[])` [#usememocellsbyindext1rendercontext-ireadonlylistt1-ireadonlylistint-funct1-int-element-object]
+Class components can call the same hook directly. These overloads forward to the ones above:
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseMemoCellsExtensions.UseMemoCellsByIndex``1(Microsoft.UI.Reactor.Core.RenderContext,System.Collections.Generic.IReadOnlyList{``0},System.Collections.Generic.IReadOnlyList{System.Int32},System.Func{``0,System.Int32,Microsoft.UI.Reactor.Core.Element},System.Object[])`
-
-### Summary [#summary_1]
-
-Memoize cell construction when the data source already knows which
-indices changed. Skips the per-cell `Object.Equals`
-scan entirely; the builder runs only for indices in
-`changedIndices`. When the item count changes
-between renders the overload falls back to a full rebuild
-(`changedIndices` is treated as
-"rebuild everything") because the index space no longer matches
-the prior render. Callers whose lists grow or shrink frequently
-will get better incremental reuse from [UseMemoCells](/microsoft-ui-reactor/main/reference/hooks/UseMemoCells#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) ([guide](/microsoft-ui-reactor/main/guides/hooks))
-or [UseMemoCellsByKey](/microsoft-ui-reactor/main/reference/hooks/UseMemoCellsByKey#usememocellsbykeyt1-t2rendercontext-ireadonlylistt1-funct1-t2-funct1-int-element-object) ([guide](/microsoft-ui-reactor/main/guides/hooks)), both of which can
-short-circuit per-cell on value or key equality across length
-changes.
-
-
-On the steady-state path (unchanged count) the returned array reuses
-the previous render's element instance for every index NOT named in
-`changedIndices`, and publishes a positional
-structural-skip hint (Spec 034 §C) keyed by reference on that array so
-the reconciler can update only the changed cells and skip the
-reference-equal remainder. The returned array is therefore the hook's
-retained memoized state AND the key of that hint: treat it as immutable
-and declare every change through a subsequent render's
-`changedIndices` (React-style immutability — see
-AGENTS.md "Never mutate"). Mutating an unchanged slot in place both
-corrupts the memo's view of the previous render and can cause the
-reconciler to skip the mutated cell.
-
-
-
-### Parameters [#parameters_1]
-
-- **ctx** — The render context.
-- **items** — Source items.
-- **changedIndices** — Indices whose item differs from the
-previous render. Negative indices and indices >= `items.Count`
-throw `ArgumentOutOfRangeException`. Duplicate indices are a
-caller-contract violation but are tolerated: they are de-duplicated
-before the named cells are rebuilt, so each cell is rebuilt exactly once
-and the structural-skip hint's theme tally stays exact.
-- **builder** — Cell builder; same contract as
-[UseMemoCells](/microsoft-ui-reactor/main/reference/hooks/UseMemoCells#usememocellstrendercontext-ireadonlylistt-funct-int-element-object) ([guide](/microsoft-ui-reactor/main/guides/hooks)).
-- **dependencies** — Trailing-`params` deps.
-
-### Discussion [#discussion]
-
-Spec 034 §C. A cell is "theme-sensitive" when it carries
-ThemeBindings or a ThemeRef-backed ResourceOverride; the hook tracks how
-many cells are theme-sensitive (carried forward incrementally) so the
-reconciler falls back to the full walk — which re-resolves themed brushes
-against the current effective theme — instead of structurally skipping
-such a range.
+```csharp
+public static Element[] UseMemoCellsByIndex<T>(this Component component, IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, params object[] dependencies) where T : notnull
+```

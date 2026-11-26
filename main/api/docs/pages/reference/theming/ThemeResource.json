@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/theming/ThemeResource.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ThemeResource.md",
+  "route": "/reference/theming/ThemeResource",
+  "title": "ThemeResource",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ThemeResource",
+  "description": "Lookup helpers for WinUI theme resources. These resolve against Application.Current.Resources, which includes all merged dictionaries (XamlControlsResources, custom themes, etc.).",
+  "markdown": "---\ntitle: \"ThemeResource\"\ndescription: \"Lookup helpers for WinUI theme resources. These resolve against Application.Current.Resources, which includes all merged dictionaries (XamlControlsResources, custom themes, etc.).\"\n---\n\nUsage: var brush = ThemeResource.Brush(\"TextFillColorSecondaryBrush\"); var radius = ThemeResource.CornerRadius(\"OverlayCornerRadius\");\n\n```csharp\npublic static class ThemeResource\n```\n\nNamespace: `Microsoft.UI.Reactor`.\n\n**Learn more:** [Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens)\n\n## Methods [#methods]\n\n### `Brush` [#brush]\n\n```csharp\npublic static Brush Brush(string key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `key` | `string` |  |\n\n### `CornerRadius` [#cornerradius]\n\n```csharp\npublic static CornerRadius CornerRadius(string key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `key` | `string` |  |\n\n### `Double` [#double]\n\n```csharp\npublic static double Double(string key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `key` | `string` |  |\n\n### `Get` [#get]\n\nTry to look up a resource, returning default if not found.\n\n```csharp\npublic static T Get<T>(string key, T defaultValue = default)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `key` | `string` |  |  |\n| `defaultValue` | `T` | `default` |  |\n\n### `Thickness` [#thickness]\n\n```csharp\npublic static Thickness Thickness(string key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `key` | `string` |  |\n"
+}

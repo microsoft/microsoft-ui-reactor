@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/components/AppContexts.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/AppContexts.md",
+  "route": "/reference/components/AppContexts",
+  "title": "AppContexts",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/AppContexts",
+  "description": "Static context registrations shared across the Reactor core. Install the cache via ReactorHost bootstrap (or override per test).",
+  "markdown": "---\ntitle: \"AppContexts\"\ndescription: \"Static context registrations shared across the Reactor core. Install the cache via ReactorHost bootstrap (or override per test).\"\n---\n\n```csharp\npublic static class AppContexts\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n**Learn more:** [Context](/microsoft-ui-reactor/main/guides/context)\n\n## Fields [#fields]\n\n### `FocusRevalidation` [#focusrevalidation]\n\nAmbient [`FocusRevalidationService`](/microsoft-ui-reactor/main/reference/data/FocusRevalidationService) bound to the root [`AppContexts.QueryCache`](#querycache). Hooks that opt in via `ResourceOptions.RefetchOnWindowFocus = true` enroll themselves so the service can invalidate their cache entry on window activation / resume.\n\n```csharp\npublic static readonly Context<FocusRevalidationService?> FocusRevalidation\n```\n\n### `PendingScope` [#pendingscope]\n\nNearest ancestor [`PendingScope`](/microsoft-ui-reactor/main/reference/hooks/pending#pendingscope), or `null` at the root. The `Pending` element provides a fresh scope to its subtree; hooks that participate in Pending-style bubble-up read this via `UseContext`.\n\n```csharp\npublic static readonly Context<PendingScope?> PendingScope\n```\n\n### `QueryCache` [#querycache]\n\nThe ambient [`QueryCache`](/microsoft-ui-reactor/main/reference/data/query-cache#querycache). The default value is a fresh cache instance installed at app root; tests can provide their own.\n\n```csharp\npublic static readonly Context<QueryCache> QueryCache\n```\n"
+}

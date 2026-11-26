@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/validation/ValidationMessage.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationMessage.md",
+  "route": "/reference/validation/ValidationMessage",
+  "title": "ValidationMessage",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/ValidationMessage",
+  "description": "An immutable validation message associated with a specific field.",
+  "markdown": "---\ntitle: \"ValidationMessage\"\ndescription: \"An immutable validation message associated with a specific field.\"\n---\n\n```csharp\npublic sealed record ValidationMessage(string Field, string Text, Severity Severity = Severity.Error, string? Code = null)\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## Constructors [#constructors]\n\n### `ValidationMessage` [#validationmessage_1]\n\nAn immutable validation message associated with a specific field.\n\n```csharp\npublic ValidationMessage(string Field, string Text, Severity Severity = Severity.Error, string? Code = null)\n```\n\n**Parameters**\n\n| Name | Type | Default | Description |\n| --- | --- | --- | --- |\n| `Field` | `string` |  | The field name this message applies to. |\n| `Text` | `string` |  | Human-readable message text. |\n| `Severity` | [`Severity`](/microsoft-ui-reactor/main/reference/validation/enums#severity) | `Severity.Error` | Message severity (default: Error). |\n| `Code` | `string?` | `null` | Optional machine-readable code for i18n/dedup. |\n\n## Properties [#properties]\n\n### `Code` [#code]\n\nOptional machine-readable code for i18n/dedup.\n\n```csharp\npublic string? Code  // get, init\n```\n\n### `Field` [#field]\n\nThe field name this message applies to.\n\n```csharp\npublic string Field  // get, init\n```\n\n### `Severity` [#severity]\n\nMessage severity (default: Error).\n\n```csharp\npublic Severity Severity  // get, init\n```\n\n### `Text` [#text]\n\nHuman-readable message text.\n\n```csharp\npublic string Text  // get, init\n```\n"
+}

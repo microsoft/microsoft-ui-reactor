@@ -1,38 +1,34 @@
 ---
 title: "UseAnnounce"
+seo:
+  description: "Creates an AnnounceHandle for making screen reader announcements. The handle persists across re-renders."
 ---
 
-> **Learn more:** [Hooks](/microsoft-ui-reactor/main/guides/hooks), [Effects](/microsoft-ui-reactor/main/guides/effects)
+Creates an [`AnnounceHandle`](/microsoft-ui-reactor/main/reference/hooks/hook-types#announcehandle) for making screen reader announcements. The handle persists across re-renders.
 
-## Overloads [#overloads]
+You must include [`AnnounceHandle.Region`](/microsoft-ui-reactor/main/reference/hooks/hook-types#region) in your rendered tree:
 
-- [`UseAnnounce(Component)`](#useannouncecomponent)
-- [`UseAnnounce(RenderContext)`](#useannouncerendercontext)
-
-## `UseAnnounce(Component)` [#useannouncecomponent]
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.Component)`
-
-### Summary [#summary]
-
-Creates an [AnnounceHandle](/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle) ([guide](/microsoft-ui-reactor/main/guides/hooks)) for making screen reader announcements.
-
-## `UseAnnounce(RenderContext)` [#useannouncerendercontext]
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseAnnounceExtensions.UseAnnounce(Microsoft.UI.Reactor.Core.RenderContext)`
-
-### Summary [#summary_1]
-
-Creates an [AnnounceHandle](/microsoft-ui-reactor/main/reference/hooks/AnnounceHandle) ([guide](/microsoft-ui-reactor/main/guides/hooks)) for making screen reader announcements.
-The handle persists across re-renders.
-
-You must include [Region](/microsoft-ui-reactor/main/reference/hooks/Region) ([guide](/microsoft-ui-reactor/main/guides/hooks)) in your rendered tree:
 ```csharp
 var announce = UseAnnounce();
 return VStack(
-announce.Region,
-Button("Save", () => { Save(); announce.Announce("Document saved"); }),
+    announce.Region,
+    Button("Save", () => { Save(); announce.Announce("Document saved"); }),
 );
+```
+
+```csharp
+public static AnnounceHandle UseAnnounce(this RenderContext ctx)
+```
+
+An extension method on [`RenderContext`](/microsoft-ui-reactor/main/reference/components/RenderContext), declared in `UseAnnounceExtensions`.
+
+**Learn more:** [Accessibility](/microsoft-ui-reactor/main/guides/accessibility), [Hooks](/microsoft-ui-reactor/main/guides/hooks)
+
+## Use from a class component [#use-from-a-class-component]
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected AnnounceHandle UseAnnounce()
+public static AnnounceHandle UseAnnounce(this Component component)
 ```

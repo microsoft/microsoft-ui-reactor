@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/theming.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming.md",
+  "route": "/reference/theming",
+  "title": "Theming",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming",
+  "description": "Theme tokens, theme resources, brushes and window backdrops.",
+  "markdown": "---\ntitle: \"Theming\"\ndescription: \"Theme tokens, theme resources, brushes and window backdrops.\"\nsidebar:\n  label: \"Overview\"\n---\n\n**Learn more:** [Theming Tokens](/microsoft-ui-reactor/main/guides/theming-tokens), [Styling and Theming](/microsoft-ui-reactor/main/guides/styling)\n\n## Types [#types]\n\n| Type | Description |\n| --- | --- |\n| [Enums](/microsoft-ui-reactor/main/reference/theming/enums) | The enumerations in this category. |\n| [`BackdropChoice`](/microsoft-ui-reactor/main/reference/theming/BackdropChoice) | Tagged value stored in `ElementModifiers.Backdrop`. |\n| [`BrushHelper`](/microsoft-ui-reactor/main/reference/theming/BrushHelper) | Color and brush parsing utilities. |\n| [`ResourceBuilder`](/microsoft-ui-reactor/main/reference/theming/ResourceBuilder) | Fluent builder for per-control resource overrides (WinUI lightweight styling). |\n| [`ResourceOverrides`](/microsoft-ui-reactor/main/reference/theming/ResourceOverrides) | Immutable snapshot of per-control resource overrides built by `ResourceBuilder`. |\n| [`Theme`](/microsoft-ui-reactor/main/reference/theming/Theme) | Provides semantic theme tokens and custom resource references. |\n| [`ThemeRef`](/microsoft-ui-reactor/main/reference/theming/ThemeRef) | A reference to a WinUI theme resource that resolves at render time. |\n| [`ThemeResource`](/microsoft-ui-reactor/main/reference/theming/ThemeResource) | Lookup helpers for WinUI theme resources. |\n"
+}

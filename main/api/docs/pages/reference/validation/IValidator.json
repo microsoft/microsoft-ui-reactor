@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/validation/IValidator.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IValidator.md",
+  "route": "/reference/validation/IValidator",
+  "title": "IValidator",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/validation/IValidator",
+  "description": "A synchronous validator that checks a value and returns a validation message on failure.",
+  "markdown": "---\ntitle: \"IValidator\"\ndescription: \"A synchronous validator that checks a value and returns a validation message on failure.\"\n---\n\n```csharp\npublic interface IValidator\n```\n\nNamespace: `Microsoft.UI.Reactor.Controls.Validation`.\n\n**Learn more:** [Forms and Input](/microsoft-ui-reactor/main/controls/forms)\n\n## Methods [#methods]\n\n### `Validate` [#validate]\n\nValidates the given value. Returns a ValidationMessage on failure, or null on success. The returned message's Field property may be empty — the caller sets the correct field name.\n\n```csharp\npublic ValidationMessage? Validate(object? value, string field)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `value` | `object?` |  |\n| `field` | `string` |  |\n"
+}

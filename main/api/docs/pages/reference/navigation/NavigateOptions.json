@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/navigation/NavigateOptions.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigateOptions.md",
+  "route": "/reference/navigation/NavigateOptions",
+  "title": "NavigateOptions",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/navigation/NavigateOptions",
+  "description": "Options for a single navigation action.",
+  "markdown": "---\ntitle: \"NavigateOptions\"\ndescription: \"Options for a single navigation action.\"\n---\n\n```csharp\npublic sealed record NavigateOptions\n```\n\nNamespace: `Microsoft.UI.Reactor.Navigation`.\n\n**Learn more:** [Navigation](/microsoft-ui-reactor/main/guides/navigation)\n\n## Constructors [#constructors]\n\n### `NavigateOptions` [#navigateoptions_1]\n\n```csharp\npublic NavigateOptions()\n```\n\n## Properties [#properties]\n\n### `ConnectedAnimationKey` [#connectedanimationkey]\n\nOptional key of the shared element on both pages. Independent of [`NavigateOptions.Transition`](#transition); use [`NavigationTransition.None`](/microsoft-ui-reactor/main/reference/navigation/transitions#none) for shared-element motion without an accompanying page transition. The key and explicit transition are remembered for back/forward navigation within this session, but are not part of serialized navigation state.\n\n```csharp\npublic string? ConnectedAnimationKey  // get, init\n```\n\n### `PushToBackStack` [#pushtobackstack]\n\nWhen true (default), the current route is pushed onto the back stack. When false, the current route is replaced (no back stack entry created).\n\n```csharp\npublic bool PushToBackStack  // get, init\n```\n\n### `Transition` [#transition]\n\nTransition override for this navigation. Null uses the host default.\n\n```csharp\npublic NavigationTransition? Transition  // get, init\n```\n"
+}

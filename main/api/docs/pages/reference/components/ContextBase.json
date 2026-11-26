@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/components/ContextBase.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/ContextBase.md",
+  "route": "/reference/components/ContextBase",
+  "title": "ContextBase",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/components/ContextBase",
+  "description": "Non-generic base for type-erased storage in the context scope stack.",
+  "markdown": "---\ntitle: \"ContextBase\"\ndescription: \"Non-generic base for type-erased storage in the context scope stack.\"\n---\n\n```csharp\npublic abstract class ContextBase\n```\n\nNamespace: `Microsoft.UI.Reactor.Core`.\n\n**Learn more:** [Context](/microsoft-ui-reactor/main/guides/context)\n\n## Constructors [#constructors]\n\n### `ContextBase` [#contextbase_1]\n\n```csharp\nprotected ContextBase()\n```\n"
+}

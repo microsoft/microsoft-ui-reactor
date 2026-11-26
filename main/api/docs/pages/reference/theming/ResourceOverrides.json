@@ -1,0 +1,11 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/theming/ResourceOverrides.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ResourceOverrides.md",
+  "route": "/reference/theming/ResourceOverrides",
+  "title": "ResourceOverrides",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/theming/ResourceOverrides",
+  "markdown": "---\ntitle: \"ResourceOverrides\"\nseo:\n  description: \"Immutable snapshot of per-control resource overrides built by ResourceBuilder. Contains both literal resource values and theme-reactive ThemeRef entries that are re-resolved on theme change.\"\n---\n\nImmutable snapshot of per-control resource overrides built by [`ResourceBuilder`](/microsoft-ui-reactor/main/reference/theming/ResourceBuilder). Contains both literal resource values and theme-reactive [`ThemeRef`](/microsoft-ui-reactor/main/reference/theming/ThemeRef) entries that are re-resolved on theme change.\n\n```csharp\npublic sealed record ResourceOverrides(IReadOnlyDictionary<string, object> Literals, IReadOnlyDictionary<string, ThemeRef> ThemeRefs)\n```\n\nNamespace: `Microsoft.UI.Reactor.Elements`.\n\n**Learn more:** [Styling and Theming](/microsoft-ui-reactor/main/guides/styling)\n\n## Constructors [#constructors]\n\n### `ResourceOverrides` [#resourceoverrides_1]\n\nImmutable snapshot of per-control resource overrides built by [`ResourceBuilder`](/microsoft-ui-reactor/main/reference/theming/ResourceBuilder). Contains both literal resource values and theme-reactive [`ThemeRef`](/microsoft-ui-reactor/main/reference/theming/ThemeRef) entries that are re-resolved on theme change.\n\n```csharp\npublic ResourceOverrides(IReadOnlyDictionary<string, object> Literals, IReadOnlyDictionary<string, ThemeRef> ThemeRefs)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `Literals` | `IReadOnlyDictionary<string, object>` |  |\n| `ThemeRefs` | `IReadOnlyDictionary<string, ThemeRef>` |  |\n\n## Properties [#properties]\n\n### `Literals` [#literals]\n\n```csharp\npublic IReadOnlyDictionary<string, object> Literals  // get, init\n```\n\n### `ThemeRefs` [#themerefs]\n\n```csharp\npublic IReadOnlyDictionary<string, ThemeRef> ThemeRefs  // get, init\n```\n"
+}

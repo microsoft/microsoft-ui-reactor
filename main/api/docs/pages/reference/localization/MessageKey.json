@@ -1,0 +1,12 @@
+{
+  "contentType": "doc",
+  "json": "https://microsoft.github.io/microsoft-ui-reactor/main/api/docs/pages/reference/localization/MessageKey.json",
+  "lastModified": null,
+  "locale": "",
+  "markdownUrl": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageKey.md",
+  "route": "/reference/localization/MessageKey",
+  "title": "MessageKey",
+  "url": "https://microsoft.github.io/microsoft-ui-reactor/main/reference/localization/MessageKey",
+  "description": "Identifies a localizable message by namespace and key. Namespace corresponds to the .resw file name (e.g., \"Common\" for Common.resw). Key is the data name within the .resw file.",
+  "markdown": "---\ntitle: \"MessageKey\"\ndescription: \"Identifies a localizable message by namespace and key. Namespace corresponds to the .resw file name (e.g., \\\"Common\\\" for Common.resw). Key is the data name within the .resw file.\"\n---\n\n```csharp\npublic readonly record struct MessageKey(string Namespace, string Key)\n```\n\nNamespace: `Microsoft.UI.Reactor.Localization`.\n\n**Learn more:** [Localization](/microsoft-ui-reactor/main/guides/localization)\n\n## Constructors [#constructors]\n\n### `MessageKey` [#messagekey_1]\n\nIdentifies a localizable message by namespace and key. Namespace corresponds to the .resw file name (e.g., \"Common\" for Common.resw). Key is the data name within the .resw file.\n\n```csharp\npublic MessageKey(string Namespace, string Key)\n```\n\n**Parameters**\n\n| Name | Type | Description |\n| --- | --- | --- |\n| `Namespace` | `string` |  |\n| `Key` | `string` |  |\n\n## Properties [#properties]\n\n### `Key` [#key]\n\n```csharp\npublic string Key  // get, init\n```\n\n### `Namespace` [#namespace]\n\n```csharp\npublic string Namespace  // get, init\n```\n"
+}
