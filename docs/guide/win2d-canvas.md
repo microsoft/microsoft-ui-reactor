@@ -1,10 +1,18 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Introduction](https://microsoft.github.io/Win2D/WinUI3/html/Introduction.htm).
-
-Reactor is a retained UI framework: a [component](components.md) renders immutable elements, the reconciler diffs them, and WinUI keeps the controls alive. Win2D is the immediate-mode escape hatch for pixels that are too dynamic or too numerous for retained controls — particle fields, paint surfaces, spectrograms, image editors, and GPU-heavy simulations. `Microsoft.UI.Reactor.Advanced` keeps that power opt-in so simple apps do not carry Win2D's native payload, while the canvas elements still live inside the same [hooks](hooks.md), [effects](effects.md), and reconciliation model as ordinary controls. Think of the canvas as a native WinUI island whose pixels are pulled by Win2D callbacks and whose lifetime, props, and invalidation are driven by Reactor.
 
 # Win2D canvas
 
-`Reactor.Advanced` exposes the three Win2D canvas controls as Reactor elements: [`Win2DCanvas`](#manual-canvas-win2dcanvas), [`Win2DAnimatedCanvas`](#animated-canvas-win2danimatedcanvas), and [`Win2DVirtualCanvas`](#virtual-canvas-win2dvirtualcanvas). Add the package when you need immediate-mode drawing; keep using ordinary [components](components.md), [Animation](animation.md), and the [Extending Reactor controls](extending-reactor-controls.md) model for retained UI.
+`Reactor.Advanced` exposes the three Win2D canvas controls as Reactor
+elements. Add the package when you need immediate-mode drawing.
+
+Reactor is a retained UI framework: a [component](components.md) renders immutable elements, the reconciler diffs them, and WinUI keeps the controls alive. Win2D is the immediate-mode escape hatch for pixels that are too dynamic or too numerous for retained controls — particle fields, paint surfaces, spectrograms, image editors, and GPU-heavy simulations. `Microsoft.UI.Reactor.Advanced` keeps that power opt-in so simple apps do not carry Win2D's native payload, while the canvas elements still live inside the same [hooks](hooks.md), [effects](effects.md), and reconciliation model as ordinary controls. Think of the canvas as a native WinUI island whose pixels are pulled by Win2D callbacks and whose lifetime, props, and invalidation are driven by Reactor.
+
+The three controls are [`Win2DCanvas`](#manual-canvas-win2dcanvas),
+[`Win2DAnimatedCanvas`](#animated-canvas-win2danimatedcanvas), and
+[`Win2DVirtualCanvas`](#virtual-canvas-win2dvirtualcanvas). For retained UI,
+keep using ordinary [components](components.md), [Animation](animation.md),
+and the [Extending Reactor controls](extending-reactor-controls.md) model.
+
+> **WinUI reference:** For the full property surface and design guidance, see [Introduction](https://microsoft.github.io/Win2D/WinUI3/html/Introduction.htm).
 
 ## Three canvases, three workloads
 

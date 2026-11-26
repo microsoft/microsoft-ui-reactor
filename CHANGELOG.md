@@ -195,6 +195,40 @@ Conventions for contributors:
   `Chart()` builder's line and area charts skip non-finite points, leaving a gap.
   Malformed `PathIcon(...)` markup still throws, as before (PR #1622).
 
+- **The documentation site is now built with Blume instead of MkDocs.** Material for MkDocs
+  is no longer developed, so the site at <https://microsoft.github.io/microsoft-ui-reactor/>
+  moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
+  project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
+  Old page URLs redirect to their new location and every heading keeps its anchor, so
+  existing links keep working, including links to a section of a page that moved. Versions published before the move stay as they were, and
+  their version selector still lists newer versions. `docs/_website/scripts/publish.mjs`
+  replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
+  the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
+
+- **Guide pages now open with their title and a one-sentence summary.** Each page in
+  `docs/guide` starts with its `#` title, then a short summary that the site shows under the
+  title, then the longer overview. Before, many pages put the overview above the title, and
+  16 pages opened with the WinUI reference note; that note now sits just before the first
+  section. Lint rule `TIER_008` now counts the overview between the title and the first `##`
+  heading. The site build also rewrites links whose text wraps onto a second line, and it
+  fails a page whose opening paragraph can't be shown as its summary (it has a link or runs
+  over 420 characters).
+
+- **The docs site has a new home page, a Showcase page and a clearer structure.** The home
+  page opens with a banner for the latest Reactor post on the Windows developer blog, links to
+  the new Showcase page, and explains that Reactor builds native WinUI 3 apps in C# next to a
+  live counter example. It then leads into
+  Get started, Guides, Controls, Recipes, API reference and How it works. Showcase lists the
+  sample apps in the repo, each with a link to its source. The site tabs are now Get started,
+  Guides, Controls, Recipes, API reference and How it works ("Internals" is renamed). Get
+  started also holds the cheat sheet and the rules of Reactor, and Guides is grouped into
+  Core concepts, Layout and styling, Building apps, Ship your app, Developer tools, and
+  Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
+  The site header and social cards show the WinUI logo next to the Reactor name.
+  Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
+  issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
+  the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
+
 ### Deprecated
 
 ### Removed

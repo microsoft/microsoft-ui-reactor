@@ -703,7 +703,7 @@ internal static partial class CompileCommand
 
             // The site-root template (topicId "index") also writes README.md
             // alongside so GitHub's directory browser renders the landing page
-            // when readers browse docs/guide/ on the source repo. The MkDocs
+            // when readers browse docs/guide/ on the source repo. The docs
             // site uses index.md; GitHub's web UI uses README.md.
             if (string.Equals(topicId, "index", StringComparison.Ordinal))
             {

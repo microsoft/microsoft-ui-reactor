@@ -28,8 +28,9 @@ tier: stub
 
 # {{REPLACE_ME: human-readable title}}
 
-Coming soon — this page documents {{REPLACE_ME: feature or topic}}. See
-[the AI Author Skill](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/_pipeline/ai-author-skill.md) for the planned
+Coming soon — this page documents {{REPLACE_ME: feature or topic}}.
+
+See [the AI Author Skill](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/_pipeline/ai-author-skill.md) for the planned
 surface area and the spec-041 §7.1 layout it slots into.
 
 In the meantime, the closest existing coverage is

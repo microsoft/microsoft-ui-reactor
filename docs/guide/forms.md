@@ -1,4 +1,9 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Forms](https://learn.microsoft.com/en-us/windows/apps/design/controls/forms).
+
+# Forms and Input
+
+Every form control in Reactor follows the controlled-input pattern: you own the
+value, you provide the change handler, and the control reflects your state.
+There is no two-way binding. The data always flows one direction.
 
 Forms are the Microsoft.UI.Reactor (Reactor) surface most apps spend most of their UI time inside.
 Every input control on this page follows the same controlled-input
@@ -19,11 +24,7 @@ field so errors only appear when the user has interacted. Read the
 controlled-input section first; everything else on this page is a
 specialization.
 
-# Forms and Input
-
-Every form control in Reactor follows the controlled-input pattern: you own the
-value, you provide the change handler, and the control reflects your state.
-There is no two-way binding. The data always flows one direction.
+> **WinUI reference:** For the full property surface and design guidance, see [Forms](https://learn.microsoft.com/en-us/windows/apps/design/controls/forms).
 
 ## The Controlled-Input Pattern
 

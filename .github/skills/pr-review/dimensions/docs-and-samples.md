@@ -41,7 +41,7 @@ command, or behavior change) lands, these surfaces may need updating:
   — but do **not** hand-edit it; note the mismatch.
 - **`README.md`, `CHANGELOG.md`.** New top-level capability → README/feature
   list; user-visible change → CHANGELOG entry.
-- **`mkdocs.yml`.** A new guide page must be wired into the nav.
+- **`docs/_website/nav.json`.** A new guide page must be placed in a sidebar group.
 
 ## What to look for
 
@@ -59,7 +59,7 @@ command, or behavior change) lands, these surfaces may need updating:
 - **New sample directory** under `samples/` without a README explaining it, and
   (if it's a public-facing showcase) without a mention in the gallery/nav.
 - **Broken cross-links.** New docs linking to renamed/deleted files; removed
-  docs still referenced from `README.md`, `mkdocs.yml`, or other guides.
+  docs still referenced from `README.md`, `docs/_website/nav.json`, or other guides.
 - **Stale agent-kit / api index.** `skills/reactor.api.txt` not regenerated when
   public API changed (flag the mismatch; don't edit it).
 
@@ -78,7 +78,7 @@ command, or behavior change) lands, these surfaces may need updating:
 - Behavior change that contradicts existing docs / a skill's stated rule → high.
 - Generated `docs/guide/*.md` edited directly instead of the template → high
   (the edit will be lost).
-- New sample without a README, or a new guide page not in `mkdocs.yml` → medium.
+- New sample without a README, or a new guide page not in `docs/_website/nav.json` → medium.
 - Stale `skills/reactor.api.txt` / missing `dotnet run --project tools/Reactor.DocPipeline -- compile` regeneration →
   medium (caught by CI/build, but better before push).
 - New analyzer ID missing from the cheat table → medium.

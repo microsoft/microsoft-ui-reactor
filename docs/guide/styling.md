@@ -1,4 +1,9 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Style](https://learn.microsoft.com/en-us/windows/apps/design/style/).
+
+# Styling and Theming
+
+Color and style your UI with theme tokens, named-style modifiers, and
+resource overrides that follow the Light, Dark, and high-contrast themes
+automatically.
 
 Styling in Microsoft.UI.Reactor (Reactor) is a layered modifier chain. The bottom layer is the
 WinUI theme system — every visible color is ultimately a brush resource
@@ -21,11 +26,7 @@ property writes — both are theme-frozen by construction and are the
 right tool only for brand colors that should stay constant regardless
 of mode.
 
-# Styling and Theming
-
-> **WinUI reference:** For the underlying brush resources, the Fluent
-> design language, and the full styling surface, see
-> [Design Windows apps overview on Microsoft Learn](https://learn.microsoft.com/en-us/windows/apps/design/style/).
+> **WinUI reference:** For the full property surface and design guidance, see [Style](https://learn.microsoft.com/en-us/windows/apps/design/style/).
 
 ## At-a-glance reference
 

@@ -1,13 +1,14 @@
 
 # Source Mapping
 
-"Source mapping" in Microsoft.UI.Reactor (Reactor) is the chain that ties a runtime artifact —
-an ETW event, a `--preview` overlay highlight, a thrown exception —
-back to the C# source that produced it. Two granularities ship today:
-*component* attribution, where every render emits an ETW event carrying
-the component's type name, and *per-element* attribution, where each DSL
-call site carries the file, line and column that produced it. This page covers
-both.
+"Source mapping" in Microsoft.UI.Reactor (Reactor) is the chain that ties a
+runtime artifact — an ETW event, a `--preview` overlay highlight, a thrown
+exception — back to the C# source that produced it.
+
+Two granularities ship today: *component* attribution, where every render
+emits an ETW event carrying the component's type name, and *per-element*
+attribution, where each DSL call site carries the file, line and column that
+produced it. This page covers both.
 
 > **Status.** Per-element source tagging ships as `Element.CallSite` plus
 > `Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap`. There are two

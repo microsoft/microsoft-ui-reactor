@@ -1,4 +1,10 @@
 
+# DevTools Internals
+
+This page covers the internals of Reactor's devtools — the MCP server that
+external agents talk to, the in-app dev menu, the runtime overlays, and the
+gate that keeps the whole subsystem out of retail.
+
 The Microsoft.UI.Reactor (Reactor) devtools surface is two subsystems that share a single
 gate. The MCP server speaks JSON-RPC over either HTTP loopback or
 stdio, exposing a fixed inventory of tools (`tools/list`, `tools/call`)
@@ -15,13 +21,8 @@ factory and contributes nothing visual, but the code path still
 allocates whatever the surrounding component constructed to pass to
 it. Gate the construction, not just the rendering.
 
-# DevTools Internals
-
-This page covers the internals of Reactor's devtools — the MCP server
-that external agents talk to, the in-app dev menu, the runtime
-overlays, and the gate that keeps the whole subsystem out of retail.
-[Dev Tooling](dev-tooling.md) is the user-facing companion; this is
-the internals view.
+[Dev Tooling](dev-tooling.md) is the user-facing companion; this is the
+internals view.
 
 ## The MCP loop
 

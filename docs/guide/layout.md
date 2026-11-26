@@ -1,4 +1,8 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Layout](https://learn.microsoft.com/en-us/windows/apps/design/layout/).
+
+# Layout
+
+Reactor provides a small set of layout primitives that compose to build any
+screen structure. Every layout element accepts children and optional spacing.
 
 Every Microsoft.UI.Reactor (Reactor) layout is a composition of single-responsibility panels —
 you pick by *direction* (`HStack` for a row, `VStack` for a column),
@@ -17,10 +21,7 @@ the moment you have row-and-column alignment; switch to
 [`FlexRow`/`FlexColumn`](flex-layout.md) when you need ratio-based
 sizing or multi-line wrapping with gaps.
 
-# Layout
-
-Reactor provides a small set of layout primitives that compose to build any
-screen structure. Every layout element accepts children and optional spacing.
+> **WinUI reference:** For the full property surface and design guidance, see [Layout](https://learn.microsoft.com/en-us/windows/apps/design/layout/).
 
 ## Decision table
 

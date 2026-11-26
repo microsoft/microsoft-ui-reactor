@@ -1,4 +1,10 @@
 
+# Commanding
+
+A `Command` bundles an action with its metadata. Define it once and use it
+across buttons, menus, toolbars, and dialogs — the metadata stays consistent
+everywhere.
+
 A Microsoft.UI.Reactor (Reactor) `Command` is the unit of "what the user can do" in a Reactor
 app. It bundles the action, its label, icon, keyboard accelerator,
 description, and enabled state into a single immutable record that you
@@ -15,12 +21,6 @@ place (toolbar + menu + keyboard), when you need async tracking with
 disable-while-running semantics, or when you're wiring a
 [dialog's primary button](dialogs-and-flyouts.md) to a real action
 rather than an inline lambda.
-
-# Commanding
-
-A `Command` bundles an action with its metadata. Define it once and use it
-across buttons, menus, toolbars, and dialogs — the metadata stays consistent
-everywhere.
 
 ## Defining a Command
 
