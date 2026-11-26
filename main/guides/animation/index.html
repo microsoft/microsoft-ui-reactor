@@ -103,7 +103,7 @@ type Reactor doesn’t know still count as a change.</p>
 <tr>
 <td><code>.OpacityTransition(duration?)</code></td>
 <td>Opacity</td>
-<td>Implicit, on every change</td>
+<td>Implicit on opacity writes</td>
 <td>Show/hide a single element.</td>
 </tr>
 <tr>
@@ -835,6 +835,11 @@ Define keyframes at progress points from 0.0 to 1.0:</p>
 <code>.At(progress, opacity?, scale?, translation?, rotation?, easing?)</code> for
 each keyframe, with <code>rotation</code> in degrees like <code>.Rotation()</code>. Keyframes run on the compositor — no managed-code
 involvement during playback.</p>
+<p>When the current keyframe entry animates opacity and its trigger stays the same,
+changing <code>.Opacity(value)</code> preserves playback progress. The latest declared value
+takes effect when the looping entry is removed or the one-shot finishes.
+If a new trigger replays the same name without an opacity track, subsequent
+<code>.Opacity(value)</code> updates can replace the previous opacity loop.</p>
 <h2 id="choreography"><a class="blume-heading-anchor" href="#choreography">Choreography</a></h2>
 <p><code>AnimationScope.WithAnimationAsync()</code> returns a <code>Task</code> that completes when
 the compositor animation finishes. Chain multiple calls with <code>await</code> to

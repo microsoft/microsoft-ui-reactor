@@ -44,7 +44,7 @@ type Reactor doesn't know still count as a change.
 
 | API | Animates | Trigger | Use when |
 |-----|----------|---------|----------|
-| `.OpacityTransition(duration?)` | Opacity | Implicit, on every change | Show/hide a single element. |
+| `.OpacityTransition(duration?)` | Opacity | Implicit on opacity writes | Show/hide a single element. |
 | `.ScaleTransition(transition?)` | Scale | Implicit, on every change | Element resize feedback. |
 | `.TranslationTransition(transition?)` | Translation (offset) | Implicit, on every change | Slide a single element. |
 | `.RotationTransition(duration?)` | Rotation | Implicit, on every change | Spin a single element. |
@@ -816,6 +816,12 @@ The builder supports `.Duration(ms)`, `.Loop()` for infinite repeat, and
 `.At(progress, opacity?, scale?, translation?, rotation?, easing?)` for
 each keyframe, with `rotation` in degrees like `.Rotation()`. Keyframes run on the compositor — no managed-code
 involvement during playback.
+
+When the current keyframe entry animates opacity and its trigger stays the same,
+changing `.Opacity(value)` preserves playback progress. The latest declared value
+takes effect when the looping entry is removed or the one-shot finishes.
+If a new trigger replays the same name without an opacity track, subsequent
+`.Opacity(value)` updates can replace the previous opacity loop.
 
 ## Choreography [#choreography]
 
