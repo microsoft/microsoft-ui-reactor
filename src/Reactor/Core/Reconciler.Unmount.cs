@@ -289,7 +289,7 @@ public sealed partial class Reconciler
         // A control kept out of the pool isn't reused, and a connected-animation source keeps its
         // hover brushes for the snapshot WinUI takes on the next frame.
         if (element?.InteractionStates is not null)
-            ClearInteractionStates(control,
+            InteractionStateApplier.ClearInteractionStates(control,
                 restoreBrushes: control.GetValue(ReactorAttached.StateProperty) is not ReactorState { PoolExcluded: true });
         if (element?.KeyframeAnimations is not null)
             ClearKeyframeAnimations(control, element.KeyframeAnimations);

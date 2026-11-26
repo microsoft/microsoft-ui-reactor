@@ -90,7 +90,7 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
 
             void Apply() => reconciler.Update(initial, rotated, target, () => { });
             if (mode == "Ambient") AnimationScope.WithAnimation(curve, Apply);
-            else if (mode == "InteractionStates") Reconciler.SimulatePointerOverForTests(target, isOver: true);
+            else if (mode == "InteractionStates") InteractionStateApplier.SimulatePointerOverForTests(target, isOver: true);
             else Apply();
             await Settle();
 
@@ -112,11 +112,11 @@ internal sealed class RotationUnitsFixture(Harness h, string mode) : SelfTestFix
         finally
         {
             // Unmounting drops the static keyframe-trigger and interaction-tracker registrations.
-            int trackers = Reconciler.InteractionTrackerCountForTests;
+            int trackers = InteractionStateApplier.InteractionTrackerCountForTests;
             reconciler.UnmountChild(target);
             if (mode == "InteractionStates")
-                H.Check(name + "_TrackerReleased", Reconciler.InteractionTrackerCountForTests == trackers - 1,
-                    $"trackers {trackers} -> {Reconciler.InteractionTrackerCountForTests}");
+                H.Check(name + "_TrackerReleased", InteractionStateApplier.InteractionTrackerCountForTests == trackers - 1,
+                    $"trackers {trackers} -> {InteractionStateApplier.InteractionTrackerCountForTests}");
             H.SetContent(null);
         }
     }

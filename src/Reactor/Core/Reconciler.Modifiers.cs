@@ -231,6 +231,28 @@ public sealed partial class Reconciler
             TransformOriginBinding.Deactivate(control);
     }
 
+    private void ApplyDeclaredOpacity(FrameworkElement element, float value, Element? source)
+    {
+        var state = GetOrCreateReactorState(element);
+        bool defer = ShouldDeferOpacityWrite(element, state);
+        var previous = state.DeclaredOpacity;
+        state.DeclaredOpacity = (value, defer && (previous.Deferred || previous.Value != value));
+        if (state.Composition is { } composition) composition.DeferredModifierResets &= ~AnimateProperty.Opacity;
+
+        // XAML pushes a changed local value to the visual on its next frame (#1669).
+        // Hold the declaration until the keyframe releases opacity to preserve its controller.
+        if (!defer)
+            AnimationHelper.SetOrAnimate(element, "Opacity", value, source, ChannelAnimationLookup);
+    }
+
+    private static bool ShouldDeferOpacityWrite(UIElement element, ReactorState state)
+    {
+        if (state.OpacityKeyframe is not { ReplayedWithoutOpacity: false } playback) return false;
+        var current = ElementCompositionPreview.GetElementVisual(element).TryGetAnimationController("Opacity");
+        return Equals(current, playback.Controller)
+            || (current is null && Equals(state.Composition?.OpacityRestart?.Controller, playback.Controller));
+    }
+
     // ownsControl: true when `fe` was created for the element `m` belongs to, as opposed to a
     // flyout decorator or keyed memo layered over another element's control. Only the owner's
     // inline overlays are recorded (issue #965).
@@ -442,15 +464,15 @@ public sealed partial class Reconciler
     private void ApplyOpacityTransformAndVisibilityModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
-            AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value, GetModifierAnimationSource(fe), ChannelAnimationLookup);
+            ApplyDeclaredOpacity(fe, (float)m.Opacity.Value, GetModifierAnimationSource(fe));
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
         {
             if (FindRemainingModifierOwner(static m => m.Opacity.HasValue) is { } owner)
-                AnimationHelper.SetOrAnimate(fe, "Opacity", (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source), ChannelAnimationLookup);
+                ApplyDeclaredOpacity(fe, (float)owner.Modifiers.Opacity!.Value, GetRetainedModifierAnimationSource(fe, owner.Source));
             else
             {
                 fe.ClearValue(UIElement.OpacityProperty);
-                AnimationHelper.ResetCompositionModifier(fe, "Opacity");
+                AnimationHelper.ResetCompositionModifier(fe, "Opacity", removeOpacityDeclaration: true);
                 StopPendingEnterFade(fe);
             }
         }

@@ -71,6 +71,39 @@ Conventions for contributors:
   ignored once translation is enabled on the visual (the build-time half of #1642). That arm has its
   own message and no fix.
 
+- **New and rewritten pages in the user guide.** Get started has a new Installation page, a
+  step-by-step "Your first app" tutorial (it replaces "Getting started"), and "Thinking in
+  Reactor". "Reactor vs. XAML" is merged into "Coming from XAML", and its old URL redirects.
+  Tools has new pages for hot reload and live preview, Devtools, the analyzers (one section
+  per `REACTOR_*` ID), the `mur` CLI, and building with AI agents. New guides cover Native
+  AOT, the sample apps, services and dependency injection, and desktop integration (tray
+  icons, the taskbar, launch activation, file pickers, the clipboard, and drag and drop)
+  (PR #1692).
+
+- **The API reference covers the whole public API.** It used to list only the hooks. The
+  generator now writes a page for every public hook, component, element, factory group,
+  modifier group and type, from the XML docs and the built `Microsoft.UI.Reactor.dll`.
+  Pages are grouped into 18 categories, such as Hosting and windows, Theming, Data,
+  Animation and Validation.
+  Each entry shows its signature, a parameter table with defaults, examples and links to the
+  matching guide. Links from the guides go to the right section of the right page. Run
+  `compile --reference-only` to regenerate only the reference, and add
+  `--reference-nav-out <path>` to also write its `nav.json` groups. The old per-hook pages
+  redirect to their new sections (PR #1691).
+
+- **The docs site has a Changelog page.** `/changelog` lists every release with its date,
+  and each release has its own page with the Added, Changed and Fixed notes from
+  `CHANGELOG.md`, plus an RSS feed at `/changelog/rss.xml`. The site build generates it, so
+  links to guide pages become site links and `#1234` references link to GitHub. The header
+  and the footer link to it (PR #1692).
+
+- **Guide pages can use tabs, steps and copyable prompts.** Templates mark them with
+  `<!-- tabs -->`, `<!-- steps -->` and `<!-- prompt -->` comments, so `docs/guide` still reads
+  as plain Markdown on GitHub, and the site turns them into Blume's Tabs, Steps and Prompt
+  components. Installation, Build with AI, the Visual Studio extension and Hot reload use them,
+  for example one tab each for `winapp`, `dotnet new` and a coding agent. The markers are
+  described in `docs/_pipeline/ai-author-skill.md` (PR #1692).
+
 ### Changed
 
 - ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
@@ -200,8 +233,9 @@ Conventions for contributors:
   moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
   project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
   Old page URLs redirect to their new location and every heading keeps its anchor, so
-  existing links keep working, including links to a section of a page that moved. Versions published before the move stay as they were, and
-  their version selector still lists newer versions. `docs/_website/scripts/publish.mjs`
+  existing links keep working, including links to a section of a page that moved. Versions
+  published before the move stay MkDocs sites until they are backfilled with `Publish docs`;
+  a backfill rebuilds them with Blume, the new version menu and a banner that links to the latest release. `docs/_website/scripts/publish.mjs`
   replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
   the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
 
@@ -216,14 +250,17 @@ Conventions for contributors:
 
 - **The docs site has a new home page, a Showcase page and a clearer structure.** The home
   page opens with a banner for the latest Reactor post on the Windows developer blog, links to
-  the new Showcase page, and explains that Reactor builds native WinUI 3 apps in C# next to a
+  the new Showcase page, and explains that Reactor builds native WinUI apps in C# next to a
   live counter example. It then leads into
-  Get started, Guides, Controls, Recipes, API reference and How it works. Showcase lists the
-  sample apps in the repo, each with a link to its source. The site tabs are now Get started,
-  Guides, Controls, Recipes, API reference and How it works ("Internals" is renamed). Get
-  started also holds the cheat sheet and the rules of Reactor, and Guides is grouped into
-  Core concepts, Layout and styling, Building apps, Ship your app, Developer tools, and
-  Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
+  Get started, the developer tools, Guides, Controls, Recipes, API reference and How it works.
+  Showcase lists the sample apps in the repo, each with a link to its source. The site tabs
+  are now Get started, Guides, Controls, Tools, API reference and How it works ("Internals" is
+  renamed). Get started also holds the cheat sheet and the rules of Reactor. Guides is grouped
+  into Core concepts, Layout and styling, Building apps, Ship your app, Recipes, and Interop
+  and migration. Tools collects hot reload, Devtools, the Visual Studio and VS Code
+  extensions, AI agent support, the analyzers, the `mur` CLI and diagnostics. Old page URLs
+  still redirect, and `nav.json` can now list extra redirects for pages that were merged or
+  renamed. The site now uses the Reactor icon.
   The site header and social cards show the WinUI logo next to the Reactor name.
   Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
   issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
@@ -259,9 +296,14 @@ Conventions for contributors:
   read as stale and the CLI deleted its lockfile. These clients now connect directly, and only to
   loopback.
 
+- Changing `.Opacity()` preserves playback progress when the current keyframe entry
+  animates opacity and its trigger stays the same. Removing the looping entry or
+  finishing a one-shot applies the latest declared opacity (#1651, #1660).
+
 - **Changing only `.XYFocusKeyboardNavigation(...)` now updates the control (spec 067 §14).** The
   reconciler's skip check never compared this modifier, so an element whose only change was its
   XY focus keyboard navigation mode skipped the update and kept the old mode.
+
 - **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
   `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders
   again (issue #1702; follow-up to #1536, spec 014).** Each render rebuilds these declarations with
@@ -308,8 +350,9 @@ Conventions for contributors:
   `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
   XAML writes that value to the visual when it first renders it, which stopped the animation, so
   `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
-  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
-  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+  once after that frame unless an intervening write, such as a `.Set(...)` callback, has taken
+  over opacity. A `.Opacity(...)` update is deferred while the keyframe still owns opacity.
+  A later style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
 
 - Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
   corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
@@ -1431,7 +1474,7 @@ Conventions for contributors:
   Shell link activation, property stores and removal queries no longer depend on
   built-in COM marshalling. Worker calls use a balanced explicit COM apartment scope and
   release transaction-owned interfaces deterministically. See the
-  [Jump list guide](docs/guide/windows.md#jump-list) (spec 036 §11.3).
+  [Jump list guide](docs/guide/desktop-integration.md#jump-list) (spec 036 §11.3).
 
 - **`.InteractionStates()` and `.Keyframes()` translations no longer move an element to its
   parent's origin** (issue #1432). Both animated the handoff visual's `Offset`, and on a

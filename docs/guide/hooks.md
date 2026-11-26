@@ -44,7 +44,7 @@ The picker methods (`PickFileAsync`, `PickMultipleFilesAsync`, `PickFolderAsync`
 reserve no state slot and must run from UI-thread event handlers, not during
 `Render()`. Call them directly inside the handler. Cancellation returns `null` for
 single-file, folder, and save dialogs, or an empty list for multiple selections. See
-[Pickers](windows.md#pickers) for the full options and the open/folder/save pattern:
+[File and folder pickers](desktop-integration.md#file-and-folder-pickers) for the full options and the open/folder/save pattern:
 
 ```csharp
 // Pickers are not hooks: call them directly from UI-thread event handlers.

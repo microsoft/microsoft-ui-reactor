@@ -1,6 +1,6 @@
 ---
 // The site's home page. A custom page at `/` wins over any docs page there.
-// The Guides, Controls, Recipes, API reference and How it works lists are read
+// The Guides, Recipes, Controls, API reference and How it works lists are read
 // from the navigation tree (nav.json), so they follow the docs when pages move.
 import data from "blume:data";
 import CodeBlock from "blume/components/content/CodeBlock.astro";
@@ -14,6 +14,10 @@ import { SHOWCASE_APPS } from "../components/showcase-apps";
 import codeIcon from "../components/fluent/code_24_regular.svg?raw";
 import contentViewIcon from "../components/fluent/content_view_24_regular.svg?raw";
 import syncIcon from "../components/fluent/arrow_sync_24_regular.svg?raw";
+import botIcon from "../components/fluent/bot_sparkle_24_regular.svg?raw";
+import devtoolsIcon from "../components/fluent/window_dev_tools_24_regular.svg?raw";
+import flashIcon from "../components/fluent/flash_24_regular.svg?raw";
+import shieldIcon from "../components/fluent/shield_checkmark_24_regular.svg?raw";
 import { legacyFragmentScript } from "../scripts/legacy-fragments.mjs";
 
 const { config, navigation, fontCssVars } = data;
@@ -48,20 +52,36 @@ const pagesIn = (node: NavNode): NavPage[] =>
 const pagesOf = (group: NavGroup) =>
   pagesIn(group).filter((page) => logical(page.route) !== logical(group.route ?? group.path));
 
-// A section's sub-groups, each with its pages.
-const subsections = (group: NavGroup) =>
+// A section's sub-groups, each with its pages. `skip` drops sub-groups that
+// the page shows somewhere else.
+const subsections = (group: NavGroup, skip: string[] = []) =>
   group.children
     .filter((child): child is NavGroup => child.kind === "group")
+    .filter((child) => !skip.includes(logical(child.route ?? child.path) ?? ""))
     .map((child) => ({ label: child.label, pages: pagesIn(child) }));
 
 const href = (route: string) => withBase(route);
 
-const guides = subsections(section("/guides"));
+// Old release tags are rebuilt with today's site code (publish.mjs --lenient),
+// and may lack pages this page links to. There a missing page only drops its
+// link. In every other build it fails the build, so a broken link can't ship.
+const lenient = process.env.DOCS_LENIENT === "1";
+const routes = new Set(navigation.sidebar.flatMap(pagesIn).map((page) => logical(page.route)));
+const has = (route: string) => {
+  if (routes.has(route) || findGroup(navigation.sidebar, route)) return true;
+  if (!lenient) throw new Error(`Home page: it links to ${route}, but no page lives there.`);
+  return false;
+};
+const firstApp = has("/get-started/first-app") ? "/get-started/first-app" : "/get-started";
+const xamlGuide = has("/get-started/xaml-developers");
+
+const recipesPath = "/guides/recipes";
+const guides = subsections(section("/guides"), [recipesPath]);
 const internals = subsections(section("/how-it-works"));
 const controls = pagesOf(section("/controls"));
-const recipes = pagesOf(section("/recipes"));
+const recipes = pagesOf(section(recipesPath));
 const featuredHooks = ["UseState", "UseEffect", "UseReducer", "UseMemo", "UseContext", "UseResource", "UseNavigation", "UsePersisted"];
-const hookPages = pagesOf(section("/reference"));
+const hookPages = pagesOf(section("/reference/hooks"));
 const hooks = featuredHooks
   .map((name) => hookPages.find((page) => page.label === name))
   .filter((page): page is NavPage => page !== undefined);
@@ -99,8 +119,8 @@ const counter = `class Counter : Component
 
 const facts: { title: string; text: string; icon?: string; image?: string }[] = [
   {
-    title: "Native WinUI 3",
-    text: "Every element is a real WinUI\u00a03 control, with Fluent styling and accessibility built in. No web view, no Electron.",
+    title: "Native WinUI",
+    text: "Every element is a real WinUI control, with Fluent styling and accessibility built in. No web view, no Electron.",
     image: "/brand/winui.svg",
   },
   { title: "Pure C#", text: "No XAML, no data binding, no view models. Your UI is code you can step through.", icon: codeIcon },
@@ -109,12 +129,39 @@ const facts: { title: string; text: string; icon?: string; image?: string }[] = 
 ];
 
 const startHere = [
-  { title: "Overview", text: "What Reactor is, and when to use it.", route: "/get-started" },
+  { title: "Installation", text: "Set up the .NET SDK, the templates and the tools.", route: "/get-started/install" },
+  { title: "Thinking in Reactor", text: "Components, state and re-rendering, in one short read.", route: "/get-started/thinking-in-reactor" },
   { title: "Coming from XAML", text: "Map XAML, bindings and code-behind to Reactor.", route: "/get-started/xaml-developers" },
-  { title: "Reactor vs XAML", text: "Why Reactor is designed the way it is.", route: "/get-started/reactor-vs-xaml" },
+  { title: "Samples", text: "Complete apps to run, read and copy from.", route: "/get-started/samples" },
   { title: "Cheat sheet", text: "The whole framework on one page.", route: "/get-started/cheat-sheet" },
-  { title: "Rules of Reactor", text: "The rules the render loop relies on, and the analyzers that check them.", route: "/get-started/rules-of-reactor" },
-];
+].filter((item) => has(item.route));
+
+const tools = [
+  {
+    title: "Hot reload",
+    text: "Run under dotnet watch. Save a file and the same window re-renders. For most edits, your state survives.",
+    route: "/tools/hot-reload",
+    icon: flashIcon,
+  },
+  {
+    title: "Devtools",
+    text: "Inspect the live element tree, read component state and take screenshots while the app runs.",
+    route: "/tools/devtools",
+    icon: devtoolsIcon,
+  },
+  {
+    title: "Analyzers",
+    text: "Roslyn analyzers flag hook mistakes and accessibility gaps as you type, with fixes where they can.",
+    route: "/tools/analyzers",
+    icon: shieldIcon,
+  },
+  {
+    title: "Build with AI",
+    text: "Give your coding agent the Reactor skills, and let it drive the running app through Devtools.",
+    route: "/tools/build-with-ai",
+    icon: botIcon,
+  },
+].filter((item) => has(item.route));
 
 const pipeline = [
   { name: "Render()", text: "Your component returns a tree of elements." },
@@ -132,6 +179,7 @@ const [frontShot, backShot] = showcaseShots;
   site={{ title: config.title, description: config.description }}
   logo={config.logo}
   banner={config.banner}
+  analytics={config.analytics}
   navigation={navigation}
   fontCssVars={fontCssVars}
   favicon={config.favicon}
@@ -143,7 +191,7 @@ const [frontShot, backShot] = showcaseShots;
   page={{
     title: "Reactor: native Windows apps in pure C#",
     description:
-      "Build native Windows apps with WinUI 3, in pure C#. No XAML, no data binding, no view models. Describe your UI as a function of state, and Reactor keeps the WinUI controls in sync.",
+      "Build native Windows apps with WinUI, in pure C#. No XAML, no data binding, no view models. Describe your UI as a function of state, and Reactor keeps the WinUI controls in sync.",
     route: "/",
   }}
 >
@@ -171,27 +219,31 @@ const [frontShot, backShot] = showcaseShots;
           <span class="sm:whitespace-nowrap">Native Windows apps,</span> in pure C#.
         </h1>
         <p class="mt-5 max-w-[62ch] text-lg leading-relaxed text-muted-foreground">
-          Reactor is a declarative UI framework for building native Windows apps with WinUI&nbsp;3. Write your UI in C#,
+          Reactor is a declarative UI framework for building native Windows apps with WinUI. Write your UI in C#,
           with no XAML, no data binding and no view models. Describe it as a function of state, and Reactor keeps the
           WinUI controls in sync.
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
           <a
-            href={href("/get-started/quickstart")}
+            href={href(firstApp)}
             class="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Get started
             <Icon name="arrow-right" size={16} />
           </a>
-          <a
-            href={href("/get-started/xaml-developers")}
-            class="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Coming from XAML
-          </a>
+          {
+            xamlGuide && (
+              <a
+                href={href("/get-started/xaml-developers")}
+                class="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                Coming from XAML
+              </a>
+            )
+          }
         </div>
         <p class="mt-6 text-sm text-muted-foreground">
-          Built on <span class="font-medium text-foreground">WinUI&nbsp;3</span>,{" the "}
+          Built on <span class="font-medium text-foreground">WinUI</span>,{" the "}
           <span class="font-medium text-foreground">Windows App SDK</span>{" and "}
           <span class="font-medium text-foreground">.NET&nbsp;10</span>. Runs on Windows&nbsp;10 and Windows&nbsp;11.
         </p>
@@ -264,18 +316,18 @@ const [frontShot, backShot] = showcaseShots;
           <Bloom variant="teal" flipY />
           <div class="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent" aria-hidden="true"></div>
           <div class="relative p-6 sm:p-8">
-            <h3 class="font-display text-xl font-semibold">Quickstart</h3>
+            <h3 class="font-display text-xl font-semibold">Your first app</h3>
             <p class="mt-2 max-w-[52ch] text-white/80">
-              Install the tools, create an app and run it. Then grow it into a todo list and a calculator.
+              Create an app and run it. Then build it up step by step, from a counter to a working todo list.
             </p>
             <div class="code-on-dark mt-6 [&_.prose]:my-0 [&_figure]:my-0 [&_pre]:my-0!">
               <CodeBlock code={quickstart} lang="powershell" />
             </div>
             <a
-              href={href("/get-started/quickstart")}
+              href={href(firstApp)}
               class="mt-6 inline-flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-medium text-[#031619] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Read the quickstart
+              Start the tutorial
               <Icon name="arrow-right" size={16} />
             </a>
           </div>
@@ -296,6 +348,43 @@ const [frontShot, backShot] = showcaseShots;
           }
         </ul>
       </div>
+    </section>
+
+    <!-- Tools -->
+    <section class="mt-24 sm:mt-32" aria-labelledby="tools-title">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 id="tools-title" class="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Tools for the inner loop</h2>
+          <p class="mt-2 max-w-[60ch] text-muted-foreground">See every change right away, catch mistakes before you run, and let your AI agent help.</p>
+        </div>
+        <a href={href("/tools")} class="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:underline">
+          All tools <Icon name="arrow-right" size={14} />
+        </a>
+      </div>
+      <ul class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {
+          tools.map((tool) => (
+            <li>
+              <a
+                href={href(tool.route)}
+                class="group flex h-full flex-col rounded-2xl border border-border p-5 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                <span
+                  class="grid size-10 place-items-center rounded-xl bg-muted text-foreground ring-1 ring-inset ring-border [&_svg]:size-6 [&_svg]:fill-current"
+                  aria-hidden="true"
+                >
+                  <Fragment set:html={tool.icon} />
+                </span>
+                <h3 class="mt-4 flex items-center gap-1 text-sm font-semibold text-foreground">
+                  {tool.title}
+                  <Icon name="arrow-right" size={14} class="text-muted-foreground transition-transform group-hover:text-foreground motion-safe:group-hover:translate-x-0.5" />
+                </h3>
+                <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">{tool.text}</p>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
     </section>
 
     <!-- Showcase -->
@@ -408,13 +497,13 @@ const [frontShot, backShot] = showcaseShots;
       </div>
 
       <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
-        <a href={href("/recipes")} class="group relative isolate block h-28 overflow-hidden">
+        <a href={href("/guides/recipes")} class="group relative isolate block h-28 overflow-hidden">
           <Bloom variant="green" flipX class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
           <span class="sr-only">Recipes</span>
         </a>
         <div class="flex flex-1 flex-col p-6">
           <h2 class="font-display text-lg font-semibold text-foreground">
-            <a href={href("/recipes")} class="hover:underline">Recipes</a>
+            <a href={href("/guides/recipes")} class="hover:underline">Recipes</a>
           </h2>
           <p class="mt-1.5 text-sm text-muted-foreground">Complete, copyable answers to common UI tasks.</p>
           <ul class="mt-4 divide-y divide-border text-sm">
@@ -428,7 +517,7 @@ const [frontShot, backShot] = showcaseShots;
               ))
             }
           </ul>
-          <a href={href("/recipes")} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
+          <a href={href("/guides/recipes")} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
             All recipes <Icon name="arrow-right" size={14} />
           </a>
         </div>
@@ -443,7 +532,7 @@ const [frontShot, backShot] = showcaseShots;
           <h2 class="font-display text-lg font-semibold text-foreground">
             <a href={href(referenceRoute)} class="hover:underline">API reference</a>
           </h2>
-          <p class="mt-1.5 text-sm text-muted-foreground">Signatures and examples for every hook.</p>
+          <p class="mt-1.5 text-sm text-muted-foreground">Every hook, component, factory and modifier, generated from the source.</p>
           <ul class="mt-5 flex flex-wrap gap-2">
             {
               hooks.map((page) => (
@@ -456,7 +545,7 @@ const [frontShot, backShot] = showcaseShots;
             }
           </ul>
           <a href={href(referenceRoute)} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
-            All hooks <Icon name="arrow-right" size={14} />
+            Browse the reference <Icon name="arrow-right" size={14} />
           </a>
         </div>
       </div>

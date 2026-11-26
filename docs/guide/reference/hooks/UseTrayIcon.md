@@ -8,7 +8,7 @@ public ReactorTrayIcon? UseTrayIcon(TrayIconSpec spec)
 
 Declared on [`RenderContext`](../components/RenderContext.md).
 
-**Learn more:** [Hooks](../../hooks.md)
+**Learn more:** [Desktop integration](../../desktop-integration.md), [Hooks](../../hooks.md)
 
 ## Parameters
 

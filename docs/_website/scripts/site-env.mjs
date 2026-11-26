@@ -8,8 +8,10 @@
 //   DOCS_ALIAS          "latest" when this build is the copy served at /latest/
 //   DOCS_VERSIONS_FILE  versions.json (mike's format) listing every published version
 //
-// A local `npm run dev` sets none and gets a plain site at the root with no
-// version switcher or banner.
+// A local `npm run dev` sets none and gets a plain site at the root, whose
+// version menu links to the published docs, and no banner.
+
+import { DEFAULT_SITE_BASE, LATEST_ALIAS, MAIN_VERSION } from "./publish.mjs";
 
 /**
  * @param {Record<string, string | undefined>} env
@@ -22,25 +24,39 @@ export function siteSettings(env, published = []) {
   const alias = env.DOCS_ALIAS || undefined;
 
   // The site root: the folder that holds every version, and redirects to latest/.
-  const siteRoot = base && version ? base.slice(0, base.lastIndexOf("/") + 1) : "/";
+  const siteRoot = base && version ? base.slice(0, base.lastIndexOf("/") + 1) : `${DEFAULT_SITE_BASE}/`;
   const latestUrl = `${site}${siteRoot}`;
   const versionUrl = (id) => `${site}${siteRoot}${id}/`;
 
-  const releases = published.map((entry) => entry.version).filter((id) => id !== "main");
-
-  // Older builds keep the list they were built with, so the first two entries
-  // are the ones that never go stale: they follow the alias, not a number.
-  const versionItems = [
-    { label: "Latest release", path: alias === "latest" ? "/" : versionUrl("latest") },
-    { label: "Development (main)", path: version === "main" ? "/" : versionUrl("main") },
-    ...releases.map((id) => ({ label: id, path: alias !== "latest" && version === id ? "/" : versionUrl(id) })),
-  ];
+  // The version menu, in versions.json order like mike's: main, then releases
+  // newest first, with the release that holds "latest" linking to /latest/.
+  // This list is the one the build was made with; public/js/version-menu.js
+  // rebuilds it from the live versions.json, so older builds list newer
+  // releases too, and opens the same page in the version you pick.
+  const isLatest = (entry) => entry.aliases?.includes(LATEST_ALIAS) ?? false;
+  const versionTag = (entry) =>
+    isLatest(entry) ? LATEST_ALIAS : entry.version === MAIN_VERSION ? "unreleased" : undefined;
+  const entries =
+    version && !published.some((entry) => entry.version === version)
+      ? [{ version, aliases: alias ? [alias] : [] }, ...published]
+      : published;
+  const versionItems = version
+    ? entries.map((entry) => ({
+        label: entry.version,
+        tag: versionTag(entry),
+        path: entry.version === version ? "/" : versionUrl(isLatest(entry) ? LATEST_ALIAS : entry.version),
+      }))
+    : [
+        { label: "Local", tag: "this build", path: "/" },
+        { label: "Latest release", tag: LATEST_ALIAS, path: versionUrl(LATEST_ALIAS) },
+        { label: MAIN_VERSION, tag: "unreleased", path: versionUrl(MAIN_VERSION) },
+      ];
 
   let banner;
-  if (version && alias !== "latest") {
+  if (version && alias !== LATEST_ALIAS) {
     banner = {
       content:
-        version === "main"
+        version === MAIN_VERSION
           ? "You're reading the docs for the unreleased main branch."
           : `You're reading the docs for version ${version}.`,
       link: { href: latestUrl, text: "Go to the latest release" },
@@ -50,8 +66,9 @@ export function siteSettings(env, published = []) {
   return {
     site,
     base,
+    version,
     siteRoot,
     banner,
-    selectors: version ? [{ kind: "version", label: "Version", items: versionItems }] : [],
+    selectors: [{ kind: "version", label: "Version", items: versionItems }],
   };
 }

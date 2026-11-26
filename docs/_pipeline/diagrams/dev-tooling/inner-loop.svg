@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" font-family="Segoe UI, system-ui, -apple-system, sans-serif">
+  <style>
+    text { fill: #1f2328; }
+    .label { font-size: 12.5px; font-weight: 500; }
+    .sub { font-size: 10.5px; fill: #57606a; }
+    .edge-label { font-size: 10.5px; fill: #57606a; }
+    .box { fill: #ffffff; stroke: #57606a; stroke-width: 1.5; }
+    .box-accent { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .box-out { fill: #d1f4d6; stroke: #1a7f37; stroke-width: 1.5; }
+    .edge { stroke: #57606a; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #57606a; stroke-width: 1.5; fill: none; stroke-dasharray: 5 3; }
+    .marker-fill { fill: #57606a; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e6edf3; }
+      .sub { fill: #8b949e; }
+      .edge-label { fill: #8b949e; }
+      .box { fill: #161b22; stroke: #8b949e; }
+      .box-accent { fill: #0c2d6b; stroke: #58a6ff; }
+      .box-out { fill: #033a16; stroke: #3fb950; }
+      .edge { stroke: #8b949e; }
+      .edge-dashed { stroke: #8b949e; }
+      .marker-fill { fill: #8b949e; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="marker-fill" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+
+  <!-- 1. Create -->
+  <rect class="box-out" x="30" y="30" width="240" height="74" rx="6"/>
+  <text class="label" x="150" y="54" text-anchor="middle">1. Create</text>
+  <text class="sub" x="150" y="72" text-anchor="middle">Project templates</text>
+  <text class="sub" x="150" y="88" text-anchor="middle">mur --create</text>
+
+  <!-- 2. Edit live -->
+  <rect class="box" x="360" y="30" width="240" height="74" rx="6"/>
+  <text class="label" x="480" y="54" text-anchor="middle">2. Edit live</text>
+  <text class="sub" x="480" y="72" text-anchor="middle">dotnet watch + hot reload</text>
+  <text class="sub" x="480" y="88" text-anchor="middle">VS and VS Code live preview</text>
+
+  <!-- 3. Inspect -->
+  <rect class="box" x="690" y="30" width="240" height="74" rx="6"/>
+  <text class="label" x="810" y="54" text-anchor="middle">3. Inspect</text>
+  <text class="sub" x="810" y="72" text-anchor="middle">Devtools: dev menu, overlays</text>
+  <text class="sub" x="810" y="88" text-anchor="middle">MCP server, mur devtools</text>
+
+  <!-- 4. Catch mistakes -->
+  <rect class="box" x="690" y="310" width="240" height="74" rx="6"/>
+  <text class="label" x="810" y="334" text-anchor="middle">4. Catch mistakes early</text>
+  <text class="sub" x="810" y="352" text-anchor="middle">REACTOR_* analyzers</text>
+  <text class="sub" x="810" y="368" text-anchor="middle">mur check</text>
+
+  <!-- 5. Debug and measure -->
+  <rect class="box" x="360" y="310" width="240" height="74" rx="6"/>
+  <text class="label" x="480" y="334" text-anchor="middle">5. Debug and measure</text>
+  <text class="sub" x="480" y="352" text-anchor="middle">Diagnostics: EventSource,</text>
+  <text class="sub" x="480" y="368" text-anchor="middle">dotnet-trace, logs tool</text>
+
+  <!-- AI agents, center -->
+  <rect class="box-accent" x="360" y="170" width="240" height="74" rx="6"/>
+  <text class="label" x="480" y="194" text-anchor="middle">Work with AI agents</text>
+  <text class="sub" x="480" y="212" text-anchor="middle">Agent plugin, skill kit</text>
+  <text class="sub" x="480" y="228" text-anchor="middle">llms.txt, mur devtools</text>
+
+  <!-- Loop edges -->
+  <path class="edge" d="M270 67 L358 67" marker-end="url(#arr)"/>
+  <path class="edge" d="M600 67 L688 67" marker-end="url(#arr)"/>
+  <path class="edge" d="M810 104 L810 308" marker-end="url(#arr)"/>
+  <path class="edge" d="M690 347 L602 347" marker-end="url(#arr)"/>
+  <path class="edge" d="M360 347 L320 347 L320 92 L358 92" marker-end="url(#arr)"/>
+  <text class="edge-label" x="312" y="225" text-anchor="end">next change</text>
+
+  <!-- AI agents can drive each stage -->
+  <path class="edge-dashed" d="M480 170 L480 106" marker-end="url(#arr)"/>
+  <path class="edge-dashed" d="M600 190 L720 106" marker-end="url(#arr)"/>
+  <path class="edge-dashed" d="M600 226 L720 308" marker-end="url(#arr)"/>
+  <path class="edge-dashed" d="M480 244 L480 308" marker-end="url(#arr)"/>
+  <text class="edge-label" x="640" y="212" text-anchor="start">agents can drive each stage</text>
+</svg>

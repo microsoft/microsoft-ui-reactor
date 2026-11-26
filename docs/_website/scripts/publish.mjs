@@ -154,6 +154,9 @@ export function blumeBuild({ website, base, version, alias, versionsFile, strict
   const env = { ...process.env, DOCS_BASE: base, DOCS_VERSION: version, DOCS_VERSIONS_FILE: versionsFile };
   delete env.DOCS_ALIAS;
   if (alias) env.DOCS_ALIAS = alias;
+  // pages/index.astro drops links to pages an old tag lacks, instead of failing.
+  delete env.DOCS_LENIENT;
+  if (!strict) env.DOCS_LENIENT = "1";
   const args = [path.join(website, "node_modules", "blume", "bin", "blume.mjs"), "build"];
   if (!strict) args.push("--no-strict");
   const result = run(process.execPath, args, { cwd: website, env, stdio: "inherit" });
