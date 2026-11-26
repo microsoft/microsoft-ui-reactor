@@ -838,6 +838,12 @@ revertible on its own.
 | 6 | Composition metadata: generate `DeclaresTransform` and the five transform rows of `VisualOwningModifiers` from `TakesVisualAtMount` (the other rows stay hand-written, guarded by a full key-set snapshot added first), and `HasRestorableModifier`'s field list from `RestorableOwner`. Apply stays hand-coded. | `Reconciler.Pooling.cs`, `Reconciler.Modifiers.cs`, analyzer | `ModifierTransform_*`, visual-lane selftests, `VisualOwningModifiers` snapshot |
 | 7 | `AccessibilityModifiers` / `ApplyAccessibilityModifiers` get the layer 2–3 treatment for their 11 mechanical fields. `LabeledBy` and the ref fields stay hand-coded. | `Reconciler.Accessibility.cs` | same as 3 |
 
+**Progress.** Layer 0 has landed: #1711 extracted the per-family helpers and the scan-population
+guard, #1719 fixed §14, and the contract tests are `ModifierFieldContractTests` (completeness,
+merge, two-way skip equality, NaN per bucket), `ModifierApplyOrderTests` (frozen arm order for
+`ApplyModifiers` and `ApplyAccessibilityModifiers`, plus the §5 constraints) and the
+`ModifierFieldContract_BrushAndFont` selftest for the fields that can't run headless.
+
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short

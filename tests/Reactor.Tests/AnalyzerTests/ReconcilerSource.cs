@@ -125,12 +125,16 @@ internal static class ReconcilerSource
     public static HashSet<string> ApplyModifiersBagHandoffs() =>
         ApplyModifiersFamily()
             .SelectMany(method => method.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Where(invocation => invocation.ArgumentList.Arguments.Any(argument =>
-                argument.Expression is IdentifierNameSyntax { Identifier.Text: "oldM" or "m" }))
+            .Where(IsBagHandoff)
             .Select(InvokedName)
             .Where(name => name is not null && name != ApplyModifiersName)
             .Select(name => name!)
             .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>A call that passes the <c>oldM</c> or <c>m</c> identifier as an argument.</summary>
+    public static bool IsBagHandoff(InvocationExpressionSyntax invocation) =>
+        invocation.ArgumentList.Arguments.Any(argument =>
+            argument.Expression is IdentifierNameSyntax { Identifier.Text: "oldM" or "m" });
 
     /// <summary>
     /// The family-helper convention: an <c>Apply…Modifier(s)</c> method taking
@@ -163,9 +167,11 @@ internal static class ReconcilerSource
             .Select(name => name!)
             .ToHashSet(StringComparer.Ordinal);
 
-    private static string? InvokedName(InvocationExpressionSyntax invocation) => invocation.Expression switch
+    /// <summary>The simple name of the method an invocation calls, or null for a computed target.</summary>
+    public static string? InvokedName(InvocationExpressionSyntax invocation) => invocation.Expression switch
     {
         IdentifierNameSyntax id => id.Identifier.Text,
+        GenericNameSyntax generic => generic.Identifier.Text,
         MemberAccessExpressionSyntax access => access.Name.Identifier.Text,
         _ => null,
     };

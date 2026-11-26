@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
@@ -50,7 +51,12 @@ public class ModifierFieldContractTests
 
     internal enum Bucket { Root, Layout, Visual, Accessibility }
 
+    /// <summary>One modifier field and how the skip gate compares it.</summary>
+    /// <param name="Bucket">The record that declares the field.</param>
+    /// <param name="Name">The property name on that record.</param>
+    /// <param name="Skip">How <c>ModifiersEqualCore</c> compares it.</param>
     /// <param name="Callback">A callback slot, ignored by <c>ModifiersVisiblyEqual</c>.</param>
+    /// <param name="Reason">Why a <see cref="Skip.NotCompared"/> field is not compared. Required for that kind only.</param>
     internal sealed record Field(Bucket Bucket, string Name, Skip Skip, bool Callback = false, string? Reason = null);
 
     private const string GestureReason =
@@ -216,7 +222,10 @@ public class ModifierFieldContractTests
             Assert.True(actual.SetEquals(declared),
                 $"{bucket}: undeclared [{string.Join(", ", actual.Except(declared))}], "
                 + $"declared but missing [{string.Join(", ", declared.Except(actual))}]. "
-                + "Declare a new modifier field here with its skip-gate comparison, and add it to Merge and ModifiersEqualCore.");
+                + $"Declare a new field in {nameof(ModifierFieldContractTests)}.{nameof(Fields)} with its {nameof(Skip)} kind "
+                + "(and a Reason if NotCompared), wire it into Merge and ModifiersEqualCore, and update "
+                + "ModifierApplyOrderTests' frozen order. A Brush or FontFamily field also needs a CheckField line "
+                + "in ModifierFieldContractFixture and an entry in ModifierFieldContractSelfTestFields (Reactor.AppTests.Host).");
         }
 
         // The container slots themselves must still exist, or the exclusion above hides a rename.
@@ -246,6 +255,18 @@ public class ModifierFieldContractTests
             else
                 Assert.Null(f.Reason);
         }
+    }
+
+    [Fact]
+    public void The_Selftest_Covers_Exactly_The_Fields_That_Cannot_Run_Headless()
+    {
+        // The two tiers together cover every field only if this set matches what the
+        // ModifierFieldContract_BrushAndFont fixture checks (it asserts the same list on its side).
+        var nonHeadless = Fields.Where(f => !IsHeadless(f)).Select(f => f.Name).Order(StringComparer.Ordinal);
+        Assert.True(
+            nonHeadless.SequenceEqual(ModifierFieldContractSelfTestFields.Names.Order(StringComparer.Ordinal)),
+            $"Brush / FontFamily fields [{string.Join(", ", nonHeadless)}] must match ModifierFieldContractSelfTestFields.Names "
+            + $"[{string.Join(", ", ModifierFieldContractSelfTestFields.Names)}]. Add the field there and a CheckField line in ModifierFieldContractFixture.");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -305,22 +326,26 @@ public class ModifierFieldContractTests
         var (v1, v2, fresh) = Samples(Property(f).PropertyType);
 
         var set = With(f, v1);
-        (string Pair, ElementModifiers A, ElementModifiers B)[] pairs =
+        (string Pair, ElementModifiers? A, ElementModifiers B)[] pairs =
         [
+            ("null vs set", null, set),
             ("unset vs set", new ElementModifiers(), set),
             ("different", set, With(f, v2)),
             ("same instance", set, With(f, v1)),
             ("fresh equal", set, With(f, fresh())),
         ];
 
-        // Expected equality per pair, full mode then visible mode.
+        // Expected equality per pair, full mode then visible mode. A null bag never equals a set
+        // one in full mode, whatever the kind: ModifiersEqualCore returns false before reading any
+        // field, which is what lets a gesture or OnMount added to a bare element take the update.
+        // Visible mode reads null as an empty bag, so it matches the "unset" row.
         var (full, visible) = f.Skip switch
         {
-            Skip.Value => (new[] { false, false, true, true }, new[] { false, false, true, true }),
-            Skip.Reference when f.Callback => (new[] { false, false, true, false }, new[] { true, true, true, true }),
-            Skip.Reference => (new[] { false, false, true, false }, new[] { false, false, true, false }),
-            Skip.BlocksSkipWhenSet => (new[] { false, false, false, false }, new[] { false, true, true, true }),
-            Skip.NotCompared => (new[] { true, true, true, true }, new[] { true, true, true, true }),
+            Skip.Value => (new[] { false, false, false, true, true }, new[] { false, false, false, true, true }),
+            Skip.Reference when f.Callback => (new[] { false, false, false, true, false }, new[] { true, true, true, true, true }),
+            Skip.Reference => (new[] { false, false, false, true, false }, new[] { false, false, false, true, false }),
+            Skip.BlocksSkipWhenSet => (new[] { false, false, false, false, false }, new[] { false, false, true, true, true }),
+            Skip.NotCompared => (new[] { false, true, true, true, true }, new[] { true, true, true, true, true }),
             _ => throw new InvalidOperationException($"{f.Skip} is not headless."),
         };
 
@@ -343,12 +368,56 @@ public class ModifierFieldContractTests
         {
             var (v1, v2, fresh) = Samples(Property(f).PropertyType);
             var again = fresh();
-            Assert.False(Equals(v1, v2) || ReferenceEquals(v1, v2), $"{f.Name}: v1 and v2 must differ.");
+            Assert.False(Equals(v1, v2) || ReferenceEquals(v1, v2), $"{f.Name}: v1 and v2 must differ. Fix its case in {nameof(Samples)}.");
             if (!v1.GetType().IsValueType)
                 Assert.False(ReferenceEquals(v1, again), $"{f.Name}: fresh() must return a new instance.");
             if (v1 is string || v1.GetType().IsValueType)
                 Assert.Equal(v1, again);
+            // A cloned delegate is Delegate.Equals to the original, so a skip gate that compared
+            // callbacks with Equals instead of ReferenceEquals would fail the "fresh equal" row.
+            if (v1 is Delegate)
+                Assert.True(Equals(v1, again), $"{f.Name}: fresh() must return a value-equal delegate.");
         }
+    }
+
+    private static IEnumerable<Field> FloatingPoint() =>
+        Fields.Where(f => Nullable.GetUnderlyingType(Property(f).PropertyType) is { } t && (t == typeof(double) || t == typeof(float)));
+
+    public static TheoryData<string> FloatingPointFields()
+    {
+        var data = new TheoryData<string>();
+        foreach (var f in FloatingPoint()) data.Add($"{f.Bucket}.{f.Name}");
+        return data;
+    }
+
+    /// <summary>
+    /// NaN is where the buckets' value comparisons differ (spec 067 §4.2): Layout and
+    /// Accessibility compare through record <c>Equals</c> (NaN equals NaN), Visual and root fields
+    /// through <c>==</c> (NaN never equals NaN). <c>Width(double.NaN)</c> is WinUI's "Auto", so a
+    /// Layout comparison that switched to <c>==</c> would stop those elements ever skipping.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FloatingPointFields))]
+    public void Skip_Gate_NaN_Equality_Matches_The_Bucket(string id)
+    {
+        var f = Find(id);
+        object nan = Nullable.GetUnderlyingType(Property(f).PropertyType) == typeof(float) ? (object)float.NaN : double.NaN;
+        var expected = f.Bucket is Bucket.Layout or Bucket.Accessibility;
+
+        var a = With(f, nan);
+        var b = With(f, nan);
+        Assert.True(expected == Element.ModifiersEqual(a, b), $"{id}: ModifiersEqual(NaN, NaN) should be {expected}.");
+        Assert.True(expected == Element.ModifiersVisiblyEqual(a, b), $"{id}: ModifiersVisiblyEqual(NaN, NaN) should be {expected}.");
+    }
+
+    [Fact]
+    public void Floating_Point_Fields_Cover_Both_NaN_Behaviours()
+    {
+        // Positive control for the NaN theory: both outcomes are exercised.
+        var buckets = FloatingPoint().Select(f => f.Bucket).ToHashSet();
+        Assert.Contains(Bucket.Layout, buckets);
+        Assert.Contains(Bucket.Visual, buckets);
+        Assert.Contains(Bucket.Root, buckets);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -438,18 +507,29 @@ public class ModifierFieldContractTests
         if (type == typeof(BackdropChoice))
             return (BackdropChoice.Of(BackdropKind.Mica), BackdropChoice.Of(BackdropKind.DesktopAcrylic), () => BackdropChoice.Of(BackdropKind.Mica));
         if (typeof(Delegate).IsAssignableFrom(type))
-            return (NewDelegate(type), NewDelegate(type), () => NewDelegate(type));
+        {
+            var d1 = NewDelegate(type);
+            return (d1, NewDelegate(type), () => (Delegate)((ICloneable)d1).Clone());
+        }
         if (type == typeof(DropTargetConfig))
         {
             // No constructor arguments, so give each instance its own handler to make v1 != v2.
             DropTargetConfig Make() => new() { OnDrop = (Action<DragTargetArgs>)NewDelegate(typeof(Action<DragTargetArgs>)) };
             return (Make(), Make(), Make);
         }
+        if (typeof(DependencyObject).IsAssignableFrom(type))
+            throw new InvalidOperationException(
+                $"{type} can't be constructed headless. Declare the field {nameof(Skip.BrushValue)} / {nameof(Skip.FontFamilyValue)} "
+                + "(or add a new non-headless kind) and cover it in ModifierFieldContractFixture.");
         if (type.GetConstructors().OrderBy(c => c.GetParameters().Length).FirstOrDefault() is { } ctor && !type.IsValueType)
         {
             // Configuration records (gesture, drag-drop): construct from sample arguments.
             object Make() => ctor.Invoke(ctor.GetParameters().Select(p => Samples(p.ParameterType).V1).ToArray());
-            return (Make(), Make(), Make);
+            var (a, b) = (Make(), Make());
+            if (Equals(a, b))
+                throw new InvalidOperationException(
+                    $"Samples for {type} are value-equal. Add a case to {nameof(Samples)} that makes v1 != v2 (see {nameof(DropTargetConfig)}).");
+            return (a, b, Make);
         }
 
         throw new InvalidOperationException($"No sample values for {type}. Add them to {nameof(Samples)}.");
