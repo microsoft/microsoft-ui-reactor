@@ -137,8 +137,7 @@ internal sealed class ModifierSlot
 
     /// <summary>
     /// Row C: the conversion before the write, as the name of a static method in
-    /// <c>ModifierConverters</c> (spec 067 §4.2). Layer 3 adds that class when it generates the
-    /// arm; today the arm converts inline.
+    /// <c>ModifierConverters</c> (spec 067 §4.2). The generated apply arm calls it on the value.
     /// </summary>
     public string? Converter { get; private set; }
 

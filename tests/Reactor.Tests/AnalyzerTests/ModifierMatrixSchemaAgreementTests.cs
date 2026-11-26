@@ -37,7 +37,7 @@ public class ModifierMatrixSchemaAgreementTests
     [InlineData("gated in neither", "declare its arm shape in exactly one of SharedGate or InlineGates")]
     [InlineData("ungated but declared", "Width is ungated, so it cannot be in SharedGate or InlineGates")]
     [InlineData("declared out of range", "'HorizontalContentAlignment' is declared as gated but is not in the helper's slot range")]
-    [InlineData("converted", "IsVisible is Converted, and only Simple and Attached slots are emitted so far")]
+    [InlineData("hand-coded", "RichToolTip is HandCoded, and only Simple, Attached and Converted slots are emitted so far")]
     [InlineData("chain undeclared", "FontSize has 2 Apply receivers (Control, TextBlock)")]
     [InlineData("chain miscounted", "FontSize has 2 Apply receivers (Control, TextBlock)")]
     [InlineData("chain on single receiver", "Width has 1 Apply receiver (FrameworkElement)")]
@@ -53,7 +53,7 @@ public class ModifierMatrixSchemaAgreementTests
             "gated in neither" => new("H", "s", "ElementSoundMode", "ElementSoundMode"),
             "ungated but declared" => new("H", "s", "Width", "Width", InlineGates: new Dictionary<string, (string Set, string Clear)> { ["Width"] = ("a", "b") }),
             "declared out of range" => new("H", "s", "Width", "Width", SharedGate: ("c", ["HorizontalContentAlignment"])),
-            "converted" => new("H", "s", "IsVisible", "IsVisible"),
+            "hand-coded" => new("H", "s", "RichToolTip", "RichToolTip"),
             "chain undeclared" => new("H", "s", "FontSize", "FontSize"),
             "chain miscounted" => new("H", "s", "FontSize", "FontSize", ReceiverChains: new Dictionary<string, string[]> { ["FontSize"] = ["a"] }),
             "chain on single receiver" => new("H", "s", "Width", "Width", ReceiverChains: new Dictionary<string, string[]> { ["Width"] = ["a"] }),

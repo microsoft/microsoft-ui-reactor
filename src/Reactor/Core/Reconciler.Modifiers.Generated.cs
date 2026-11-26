@@ -193,4 +193,22 @@ public sealed partial class Reconciler
             else if (fe is WinUI.RelativePanel crRelative) crRelative.ClearValue(WinUI.RelativePanel.CornerRadiusProperty);
         }
     }
+
+    /// <summary>IsVisible, written as Visibility.</summary>
+    private static void ApplyVisibilityModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
+        if (m.IsVisible.HasValue && m.IsVisible != oldM?.IsVisible)
+            fe.Visibility = ModifierConverters.ToVisibility(m.IsVisible.Value);
+        else if (!m.IsVisible.HasValue && oldM?.IsVisible.HasValue == true)
+            fe.ClearValue(UIElement.VisibilityProperty);
+    }
+
+    /// <summary>ToolTipPlacement.</summary>
+    private static void ApplyToolTipPlacementModifier(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
+        if (m.ToolTipPlacement.HasValue && m.ToolTipPlacement != oldM?.ToolTipPlacement)
+            WinUI.ToolTipService.SetPlacement(fe, m.ToolTipPlacement.Value);
+        else if (!m.ToolTipPlacement.HasValue && oldM?.ToolTipPlacement.HasValue == true)
+            fe.ClearValue(WinUI.ToolTipService.PlacementProperty);
+    }
 }

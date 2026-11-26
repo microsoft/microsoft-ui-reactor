@@ -82,16 +82,18 @@ internal static class ModifierEmitter
             {
                 ["CornerRadius"] = ["crCtrl", "crBdr", "crGrid", "crStack", "crRelative"],
             }),
+        new("ApplyVisibilityModifier", "IsVisible, written as Visibility.", First: "IsVisible", Last: "IsVisible"),
+        new("ApplyToolTipPlacementModifier", "ToolTipPlacement.", First: "ToolTipPlacement", Last: "ToolTipPlacement"),
     ];
 
     /// <summary>
-    /// Spec 067 §11 layer 3: the row A, B and D apply arms, in today's shape (§7): an ungated
-    /// set/unset pair on <c>fe</c> (a property write, or an attached owner's <c>SetX</c>), a declared
-    /// <see cref="GeneratedHelper.SharedGate"/> run inside one <c>if (fe is T x) { … }</c> block, a
-    /// declared <see cref="GeneratedHelper.InlineGates"/> arm, or a declared
-    /// <see cref="GeneratedHelper.ReceiverChains"/> arm. Anything else (converted, hand-coded, or a
-    /// gated slot or chain left undeclared) throws, so a family whose arms look different today gets
-    /// its emitter support in its own PR instead of being silently reshaped.
+    /// Spec 067 §11 layer 3: the row A–D apply arms, in today's shape (§7): an ungated set/unset
+    /// pair on <c>fe</c> (a property write, an attached owner's <c>SetX</c>, or a row C write through
+    /// its <c>ModifierConverters</c> method), a declared <see cref="GeneratedHelper.SharedGate"/> run
+    /// inside one <c>if (fe is T x) { … }</c> block, a declared <see cref="GeneratedHelper.InlineGates"/>
+    /// arm, or a declared <see cref="GeneratedHelper.ReceiverChains"/> arm. Anything else (hand-coded,
+    /// a gated converted slot, or a gated slot or chain left undeclared) throws, so a family whose
+    /// arms look different gets its emitter support in its own PR instead of being silently reshaped.
     /// </summary>
     internal static string EmitReconcilerModifiers() => EmitReconcilerModifiers(GeneratedHelpers);
 
@@ -120,9 +122,13 @@ internal static class ModifierEmitter
             var chains = helper.ReceiverChains ?? new Dictionary<string, string[]>();
             foreach (var slot in slots)
             {
-                if (slot.Shape is not (ApplyShape.Simple or ApplyShape.Attached))
-                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple and Attached slots are emitted so far. "
+                if (slot.Shape is not (ApplyShape.Simple or ApplyShape.Attached or ApplyShape.Converted))
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple, Attached and Converted slots are emitted so far. "
                         + "Add its shape to EmitReconcilerModifiers in the PR that generates it, or end the helper's slot range before it.");
+                if (slot.Shape == ApplyShape.Converted
+                    && (slot.Converter is null || slot.ReceiversWith(ReceiverRole.Apply).ToList() is not [var convertedReceiver]
+                        || convertedReceiver.Type != ModifierSchema.FrameworkElement))
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is Converted, and only an ungated converted slot with a Converter is emitted so far.");
                 if (slot.Write == WriteEquality.Reference && !ReferenceTypes.Contains(slot.ClrType))
                     throw new InvalidOperationException($"{helper.Name}: {slot.Name} compares by reference, but {slot.ClrType} is not in ReferenceTypes. "
                         + "Add it there if it is a reference type.");
@@ -235,10 +241,15 @@ internal static class ModifierEmitter
         sb.Append(indent).Append("}\n");
     }
 
-    private static string Write(ModifierSlot slot, ModifierReceiver receiver, string target, string value) =>
-        slot.AttachedOwner is { } owner
+    // The write of an ungated arm. A row C slot converts the value through ModifierConverters first.
+    private static string Write(ModifierSlot slot, ModifierReceiver receiver, string target, string value)
+    {
+        if (slot.Converter is { } converter)
+            value = $"ModifierConverters.{converter}({value})";
+        return slot.AttachedOwner is { } owner
             ? $"{TypeRef(owner)}.Set{receiver.Property}({target}, {value})"
             : $"{target}.{receiver.Property} = {value}";
+    }
 
     // An ungated arm clears the DP through its declaring type; a gated one through the receiver it
     // tested (WinUI.Control.TabIndexProperty resolves to UIElement's), as the hand-written arms do.

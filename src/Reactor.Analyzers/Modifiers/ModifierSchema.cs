@@ -152,24 +152,24 @@ internal static class ModifierSchema
 
         // ── Composition (row F, spec 066). The transforms have no public DP. ──
         S("Opacity", ModifierBucket.Visual, "double", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").On(ReceiverRole.Apply, FrameworkElement, "Opacity", UIElement)
+            .Method("ApplyOpacityAndTransformModifiers").On(ReceiverRole.Apply, FrameworkElement, "Opacity", UIElement)
             .Restorable(),
         S("Scale", ModifierBucket.Visual, "System.Numerics.Vector3", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.One")
+            .Method("ApplyOpacityAndTransformModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.One")
             .Report(target: "Visual.Scale"),
         S("Rotation", ModifierBucket.Visual, "float", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "0")
+            .Method("ApplyOpacityAndTransformModifiers").Restorable(takesVisualAtMount: true, identity: "0")
             .Report(target: "Visual.RotationAngle"),
         S("Translation", ModifierBucket.Visual, "System.Numerics.Vector3", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero")
+            .Method("ApplyOpacityAndTransformModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero")
             .Report(target: "Visual.Translation"),
         // Before CenterPoint (spec 066 §8.2).
         S("TransformOrigin", ModifierBucket.Visual, "System.Numerics.Vector2", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector2.Zero")
+            .Method("ApplyOpacityAndTransformModifiers").Restorable(takesVisualAtMount: true, identity: "Vector2.Zero")
             // Spec 066 §8: an expression on Visual.CenterPoint fed by the visual's ReactorOrigin property.
             .Report(target: "Visual.CenterPoint"),
         S("CenterPoint", ModifierBucket.Visual, "System.Numerics.Vector3", ModifierFamily.Composition, ApplyShape.HandCoded)
-            .Method("ApplyOpacityTransformAndVisibilityModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero")
+            .Method("ApplyOpacityAndTransformModifiers").Restorable(takesVisualAtMount: true, identity: "Vector3.Zero")
             .Report(target: "Visual.CenterPoint"),
 
         // ── Visibility (row C) ──
@@ -179,10 +179,10 @@ internal static class ModifierSchema
 
         // ── Tooltips and flyouts (row F: they mount child elements) ──
         S("RichToolTip", ModifierBucket.Root, ElementType, ModifierFamily.ToolTip, ApplyShape.HandCoded)
-            .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService)
+            .Method("ApplyToolTipModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService)
             .Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithToolTip"),
         S("ToolTip", ModifierBucket.Root, "string", ModifierFamily.ToolTip, ApplyShape.HandCoded)
-            .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService)
+            .Method("ApplyToolTipModifiers").On(ReceiverRole.Apply, FrameworkElement, "ToolTip", ToolTipService)
             .Report(suppressedBy: "RichToolTip"),
         S("ToolTipPlacement", ModifierBucket.Root, "Microsoft.UI.Xaml.Controls.Primitives.PlacementMode", ModifierFamily.ToolTip, ApplyShape.Attached)
             .AttachedTo(ToolTipService, "Placement"),
@@ -190,7 +190,7 @@ internal static class ModifierSchema
             .Method("ApplyFlyoutAttachment").Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithFlyout")
             .Report(handWritten: true),
         S("ContextFlyout", ModifierBucket.Root, ElementType, ModifierFamily.Flyout, ApplyShape.HandCoded)
-            .Method("ApplyToolTipAndFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ContextFlyout", UIElement)
+            .Method("ApplyFlyoutModifiers").On(ReceiverRole.Apply, FrameworkElement, "ContextFlyout", UIElement)
             .Equality(SkipEquality.BlocksSkipWhenSet, WriteEquality.Reference).Fluent("WithContextFlyout"),
 
         // ── Control state ──
