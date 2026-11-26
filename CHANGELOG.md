@@ -190,7 +190,7 @@ Conventions for contributors:
   moves to [Blume](https://www.npmjs.com/package/blume), built from the new `docs/_website`
   project. The pages are still generated from `docs/_pipeline/templates` into `docs/guide`.
   Old page URLs redirect to their new location and every heading keeps its anchor, so
-  existing links keep working. Versions published before the move stay as they were, and
+  existing links keep working, including links to a section of a page that moved. Versions published before the move stay as they were, and
   their version selector still lists newer versions. `docs/_website/scripts/publish.mjs`
   replaces mike, and the PR docs check now runs a strict Blume build. Contributors preview
   the site with `npm run dev` in `docs/_website` (Node 22.23.4 or newer) instead of Python.
@@ -198,9 +198,11 @@ Conventions for contributors:
 - **Guide pages now open with their title and a one-sentence summary.** Each page in
   `docs/guide` starts with its `#` title, then a short summary that the site shows under the
   title, then the longer overview. Before, many pages put the overview above the title, and
-  17 pages opened with the WinUI reference note; that note now sits just before the first
+  16 pages opened with the WinUI reference note; that note now sits just before the first
   section. Lint rule `TIER_008` now counts the overview between the title and the first `##`
-  heading. The site build also rewrites links whose text wraps onto a second line.
+  heading. The site build also rewrites links whose text wraps onto a second line, and it
+  fails a page whose opening paragraph can't be shown as its summary (it has a link or runs
+  over 420 characters).
 
 - **The docs site has a new home page, a Showcase page and a clearer structure.** The home
   page opens with a banner for the latest Reactor post on the Windows developer blog, links to
@@ -214,7 +216,8 @@ Conventions for contributors:
   Interop and migration. Old page URLs still redirect, and the site now uses the Reactor icon.
   The site header and social cards show the WinUI logo next to the Reactor name.
   Each Showcase app has a screenshot, and a "Submit your app" link opens a new Showcase
-  issue form. The cards use soft color gradients drawn in CSS, so they need no image files.
+  issue form for open-source apps. A Showcase entry can link to a folder in this repo or to
+  the app's own repository. The cards use soft color gradients drawn in CSS, so they need no image files.
 
 ### Deprecated
 

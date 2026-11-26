@@ -26,6 +26,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { keepFragments, readRedirects } from "./redirect-pages.mjs";
 import { WEBSITE_DIR, sync as syncContent } from "./sync.mjs";
 
 export const MAIN_VERSION = "main";
@@ -157,6 +158,8 @@ export function blumeBuild({ website, base, version, alias, versionsFile, strict
   if (!strict) args.push("--no-strict");
   const result = run(process.execPath, args, { cwd: website, env, stdio: "inherit" });
   if (result.status !== 0) throw new Error(`blume build for ${base} failed with exit code ${result.status}.`);
+  const { missing } = keepFragments(dist, readRedirects(website));
+  if (missing.length) throw new Error(`blume build for ${base} wrote no redirect page for ${missing.join(", ")}.`);
   return dist;
 }
 

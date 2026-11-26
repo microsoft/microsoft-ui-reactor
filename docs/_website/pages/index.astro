@@ -65,6 +65,10 @@ const hooks = featuredHooks
   .map((name) => hookPages.find((page) => page.label === name))
   .filter((page): page is NavPage => page !== undefined);
 const firstInternal = internals[0]?.pages[0];
+// /guides and /reference have no index page, so links into them go to a page.
+const firstGuide = guides[0]?.pages[0];
+if (!firstGuide) throw new Error("Home page: the /guides section has no pages.");
+const referenceRoute = "/reference/hooks";
 
 const blogPost = {
   title: "Microsoft.UI.Reactor: a C#-first way to build WinUI apps",
@@ -346,7 +350,7 @@ const [frontShot, backShot] = showcaseShots;
           <h2 id="guides-title" class="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Guides</h2>
           <p class="mt-2 max-w-[60ch] text-muted-foreground">Everything you need to build, polish and ship a real app.</p>
         </div>
-        <a href={href("/guides")} class="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:underline">
+        <a href={href(firstGuide.route)} class="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:underline">
           All guides <Icon name="arrow-right" size={14} />
         </a>
       </div>
@@ -427,13 +431,13 @@ const [frontShot, backShot] = showcaseShots;
       </div>
 
       <div class="flex flex-col overflow-hidden rounded-3xl border border-border">
-        <a href={href("/reference")} class="group relative isolate block h-28 overflow-hidden">
+        <a href={href(referenceRoute)} class="group relative isolate block h-28 overflow-hidden">
           <Bloom variant="rose" flipY class="transition-transform duration-700 motion-safe:group-hover:scale-105" />
           <span class="sr-only">API reference</span>
         </a>
         <div class="flex flex-1 flex-col p-6">
           <h2 class="font-display text-lg font-semibold text-foreground">
-            <a href={href("/reference")} class="hover:underline">API reference</a>
+            <a href={href(referenceRoute)} class="hover:underline">API reference</a>
           </h2>
           <p class="mt-1.5 text-sm text-muted-foreground">Signatures and examples for every hook.</p>
           <ul class="mt-5 flex flex-wrap gap-2">
@@ -447,7 +451,7 @@ const [frontShot, backShot] = showcaseShots;
               ))
             }
           </ul>
-          <a href={href("/reference/hooks")} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
+          <a href={href(referenceRoute)} class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-foreground hover:underline">
             All hooks <Icon name="arrow-right" size={14} />
           </a>
         </div>

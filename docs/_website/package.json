@@ -9,7 +9,7 @@
   "scripts": {
     "sync": "node scripts/sync.mjs",
     "dev": "node scripts/sync.mjs && blume dev",
-    "site": "node scripts/sync.mjs && blume build",
+    "site": "node scripts/sync.mjs && blume build && node scripts/redirect-pages.mjs",
     "validate": "blume validate --strict",
     "smoke": "node --test --test-reporter=spec scripts/*.test.mjs"
   },

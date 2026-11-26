@@ -7,7 +7,7 @@ import { withBase } from "blume/components/islands/base-path.ts";
 
 import Bloom from "./Bloom.astro";
 import { BLOOMS } from "./bloom-palettes";
-import { SOURCE_ROOT, type ShowcaseApp } from "./showcase-apps";
+import { sourceUrl, type ShowcaseApp } from "./showcase-apps";
 
 interface Props {
   app: ShowcaseApp;
@@ -27,7 +27,7 @@ const shotWidth = shot ? Math.min(88, Math.round((100 * shot.width) / shot.heigh
 ---
 
 <a
-  href={`${SOURCE_ROOT}${app.path}`}
+  href={sourceUrl(app)}
   class="group flex flex-col rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
 >
   <div

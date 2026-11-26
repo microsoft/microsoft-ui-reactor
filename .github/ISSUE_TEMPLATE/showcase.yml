@@ -18,8 +18,8 @@ body:
   - type: input
     id: link
     attributes:
-      label: Link
-      description: The source repository, or a store or download page.
+      label: Source repository
+      description: The app's public source repository. The showcase only lists open-source apps.
       placeholder: https://github.com/you/your-app
     validations:
       required: true
@@ -46,6 +46,8 @@ body:
       label: Confirmation
       options:
         - label: The app is built with Reactor.
+          required: true
+        - label: The source repository is public and has an open-source license.
           required: true
         - label: You may show the name, screenshot and link on the Reactor docs site.
           required: true
