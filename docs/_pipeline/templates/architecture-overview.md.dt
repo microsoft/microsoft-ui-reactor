@@ -142,9 +142,9 @@ each have their own `Reconciler.<Topic>.cs` partial (`Modifiers`, `Unmount`,
 `Keyframes`, `Transitions`, `ReactorState`, …), while `Reconciler.cs` keeps the
 orchestration. Helpers that need none of the reconciler's private state
 (`ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents`,
-`ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`) are separate
-`internal static` classes. There is one reconciler instance per host; component
-recursion shares the dispatch.
+`ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`,
+`InteractionStateApplier`) are separate `internal static` classes. There is
+one reconciler instance per host; component recursion shares the dispatch.
 
 ## Hooks — slot table per RenderContext
 
@@ -222,8 +222,9 @@ or diagnostics.
 implementation in `Reconciler.cs` itself — the dispatch lives there,
 the handlers live in `Reconciler.Mount.cs`. Same for Update, and for
 modifiers, unmount and animations, which each have their own
-`Reconciler.<Topic>.cs`. Events, gestures and drag-drop live in
-`ModifierEvents.cs`, `GestureDispatch.cs` and `DragDropDispatch.cs`.
+`Reconciler.<Topic>.cs`. Events, gestures, drag-drop and interaction states
+live in `ModifierEvents.cs`, `GestureDispatch.cs`, `DragDropDispatch.cs` and
+`InteractionStateApplier.cs`.
 
 **The element pool is opt-in by type.** If a custom control needs
 pooling, the type must be in `ElementPool.PoolableTypes` and survive a

@@ -576,9 +576,9 @@ public sealed partial class Reconciler
 
         // Apply or clear interaction states (.InteractionStates() modifier)
         if (newEl.InteractionStates is not null)
-            ApplyInteractionStates(target, newEl.InteractionStates);
+            InteractionStateApplier.ApplyInteractionStates(target, newEl.InteractionStates);
         else if (oldEl.InteractionStates is not null)
-            ClearInteractionStates(target);
+            InteractionStateApplier.ClearInteractionStates(target);
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (keyframes is not null)

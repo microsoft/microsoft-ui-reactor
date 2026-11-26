@@ -86,7 +86,7 @@ internal sealed class CurveLinearProgressFixture(Harness h, string mode) : SelfT
                 else visual.Scale = new Vector3(2, 2, 1);
             }
             else if (mode.StartsWith("Ambient", StringComparison.Ordinal)) AnimationScope.WithAnimation(curve, Apply);
-            else if (mode.StartsWith("InteractionStates", StringComparison.Ordinal)) Reconciler.SimulatePointerOverForTests(target, isOver: true);
+            else if (mode.StartsWith("InteractionStates", StringComparison.Ordinal)) InteractionStateApplier.SimulatePointerOverForTests(target, isOver: true);
             else Apply();
             await Harness.Render();
 
