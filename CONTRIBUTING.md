@@ -141,7 +141,9 @@ src/Reactor/                      Core framework library
     Reconciler.cs                 Tree diff orchestration
     Reconciler.Mount.cs           Mount dispatch and composition-primitive handlers
     Reconciler.Update.cs          Update dispatch and composition-primitive handlers
-    Reconciler.*.cs               One partial per concern (Modifiers, Keyframes, Events, Unmount, ...)
+    Reconciler.*.cs               One partial per concern (Modifiers, Keyframes, Unmount, ...)
+    ThemeBindingApplier.cs, ...   Internal static helpers the reconciler calls (theme bindings,
+                                  accessibility, modifier events, reference edges, gestures, drag-drop)
     V1Protocol/                  Control registry, handlers, descriptors, and child strategies
     ChildReconciler.cs            Keyed child list reconciliation
     ElementPool.cs                Control reuse pool

@@ -99,7 +99,7 @@ public class StyleCacheTests
     public void ClearStyleCache_Does_Not_Throw()
     {
         // Just ensure the public API is callable without error
-        Reconciler.ClearStyleCache();
+        ThemeBindingApplier.ClearStyleCache();
     }
 
     /// <summary>
@@ -107,7 +107,7 @@ public class StyleCacheTests
     /// </summary>
     private static string BuildCacheKeyViaReflection(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
-        var method = typeof(Reconciler).GetMethod(
+        var method = typeof(ThemeBindingApplier).GetMethod(
             "BuildCacheKey",
             global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);

@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///         <see cref="Reconciler.ReactorState.ControlEventState"/> — a
 ///         <see cref="ControlEventStateBox"/> with a <c>HandlerType</c>
 ///         discriminator + <c>object Payload</c>, resolved via
-///         <c>Reconciler.GetOrCreateControlEventPayload&lt;T&gt;(fe)</c>.</item>
+///         <c>ModifierEvents.GetOrCreateControlEventPayload&lt;T&gt;(fe)</c>.</item>
 /// </list>
 ///
 /// <para>Pool reset (<c>ReturnControl&lt;T&gt;</c>) clears
@@ -143,7 +143,7 @@ internal static class Spec047EventStateSplitFixtures
 
             // Stamp payload type A (ButtonEventPayload) and tag it so we can
             // detect whether the box survives or is replaced.
-            var payloadA = Reconciler.GetOrCreateControlEventPayload<ButtonEventPayload>(control);
+            var payloadA = ModifierEvents.GetOrCreateControlEventPayload<ButtonEventPayload>(control);
             payloadA.ClickTrampoline = (_, _) => { };
             var boxA = ReadState(control)?.ControlEventState as ControlEventStateBox;
             H.Check("EventStateSplit_Mismatch_BoxAStamped",
@@ -151,7 +151,7 @@ internal static class Spec047EventStateSplitFixtures
 
             // Idempotency: requesting the SAME type returns the SAME payload
             // instance (no reset, no realloc).
-            var payloadASecond = Reconciler.GetOrCreateControlEventPayload<ButtonEventPayload>(control);
+            var payloadASecond = ModifierEvents.GetOrCreateControlEventPayload<ButtonEventPayload>(control);
             H.Check("EventStateSplit_Mismatch_SameTypeReturnsSamePayload",
                 ReferenceEquals(payloadA, payloadASecond));
 
@@ -163,7 +163,7 @@ internal static class Spec047EventStateSplitFixtures
             Exception? ex = null;
             try
             {
-                payloadB = Reconciler.GetOrCreateControlEventPayload<ToggleSwitchEventPayload>(control);
+                payloadB = ModifierEvents.GetOrCreateControlEventPayload<ToggleSwitchEventPayload>(control);
             }
             catch (Exception e) { ex = e; }
 
@@ -180,7 +180,7 @@ internal static class Spec047EventStateSplitFixtures
             // box — the discriminator guarantees a reader of type A can never
             // unbox the type-B payload (TryGetControlEventPayload<A> == null).
             H.Check("EventStateSplit_Mismatch_StalePayloadUnreachable",
-                Reconciler.TryGetControlEventPayload<ButtonEventPayload>(control) is null);
+                ModifierEvents.TryGetControlEventPayload<ButtonEventPayload>(control) is null);
 
             await Task.CompletedTask;
         }

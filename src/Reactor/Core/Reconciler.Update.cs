@@ -173,9 +173,9 @@ public sealed partial class Reconciler
             // #721 — refresh the cached gesture/drag dispatch closures so a skipped
             // element whose only change is a per-render gesture/drag closure dispatches
             // the latest closure (not a stale capture) without re-arming the trampolines.
-            if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
+            if ((GestureDispatch.HasGestureOrDragSlots(modifiers) || GestureDispatch.HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
-                RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+                GestureDispatch.RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
             // A virtualized host's own skipped element re-snapshots here at its own depth
             // (no-op for every other control or a decorator sharing it, and
             // allocation-free when nothing changed).
@@ -207,7 +207,7 @@ public sealed partial class Reconciler
         if (oldEl.ThemeBindings is not null && newEl.ThemeBindings is null
             && control is FrameworkElement clearThFe)
         {
-            ClearThemeBindings(clearThFe);
+            ThemeBindingApplier.ClearThemeBindings(clearThFe);
         }
         DebugUIElementsModified++;
 
@@ -526,8 +526,8 @@ public sealed partial class Reconciler
         if (target is FrameworkElement captionFe && modifiers?.AutomationName is null)
             UpdateDefaultAutomationName(
                 captionFe,
-                ResolveCaptionForElement(oldEl),
-                ResolveCaptionForElement(newEl));
+                AccessibilityApplier.ResolveCaptionForElement(oldEl),
+                AccessibilityApplier.ResolveCaptionForElement(newEl));
 
         // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
         if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)

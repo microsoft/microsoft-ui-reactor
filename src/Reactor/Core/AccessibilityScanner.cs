@@ -278,7 +278,7 @@ public static partial class AccessibilityScanner
 
         // Only flag buttons that have a non-text content element (icon) and
         // either no label or a label that looks like an emoji/symbol
-        var caption = Reconciler.ResolveCaptionForElement(el);
+        var caption = AccessibilityApplier.ResolveCaptionForElement(el);
         bool isIconOnly = string.IsNullOrWhiteSpace(caption) || IsLikelyEmoji(caption);
         if (!isIconOnly) return;
 
@@ -356,7 +356,7 @@ public static partial class AccessibilityScanner
                 header = cb.Header;
                 placeholder = cb.PlaceholderText;
                 break;
-            // Same precedence as Reconciler.ResolveCaptionForElement, which mirrors
+            // Same precedence as AccessibilityApplier.ResolveCaptionForElement, which mirrors
             // `Header ?? OnContent ?? OffContent` into the name: an empty header yields no caption.
             case ToggleSwitchElement ts:
                 header = ts.Header ?? ts.OnContent ?? ts.OffContent;
