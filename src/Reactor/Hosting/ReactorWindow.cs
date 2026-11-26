@@ -1045,8 +1045,8 @@ public sealed partial class ReactorWindow : IDisposable
         // Issue #1707. Windows can refuse HWND_TOPMOST from a process that doesn't own the
         // foreground (e.g. while the workstation is locked): SetWindowPos returns TRUE but the
         // insert-after is rewritten and WS_EX_TOPMOST stays clear. Nothing reports the refusal,
-        // so the bit is the only signal. ReassertWindowLevelsForActivation reapplies the level
-        // once one of the app's windows is activated, which is when Windows grants it.
+        // so the bit is the only signal. ReapplyRefusedTopmost reapplies the level once the app
+        // gains the foreground (WM_ACTIVATEAPP) or one of its windows activates.
         if (!_warnedTopmostRefused)
         {
             _warnedTopmostRefused = true;
@@ -1055,8 +1055,8 @@ public sealed partial class ReactorWindow : IDisposable
                 LogCategory.Hosting,
                 "ReactorWindow.WindowLevel",
                 "Windows declined WindowLevel.AlwaysOnTop (WS_EX_TOPMOST is still clear), typically because "
-                + "another process owns the foreground. Reactor reapplies it the next time one of the app's "
-                + "windows is activated.");
+                + "another process owns the foreground. Reactor reapplies it the next time the app is "
+                + "activated.");
         }
     }
 
@@ -1513,6 +1513,12 @@ public sealed partial class ReactorWindow : IDisposable
             case WindowMessageMonitor.WM_WINDOWPOSCHANGED:
                 DispatchZOrderChanged(args);
                 break;
+            case WindowMessageMonitor.WM_ACTIVATEAPP:
+                // The app just gained the foreground, which can happen without any Reactor
+                // window activating (a tray flyout, a NoActivate overlay). Issue #1707.
+                if (args.WParam != 0)
+                    ReapplyRefusedTopmost();
+                break;
             case WindowMessageMonitor.WM_SHOWWINDOW:
                 if (args.WParam != 0)
                 {
@@ -1857,15 +1863,21 @@ public sealed partial class ReactorWindow : IDisposable
                 if (!ReferenceEquals(candidate, activated))
                     candidate.ApplyWindowLevel(WindowLevel.Floating);
             }
-            else if (spec.Level == WindowLevel.AlwaysOnTop
-                && IsTopLevelChromeAllowed(spec)
-                && !candidate.IsTopmostBitSet())
+            else
             {
                 // The app now owns the foreground, so Windows grants a topmost request it
                 // refused earlier (issue #1707). This includes the activated window itself.
-                candidate.ApplyWindowLevel(WindowLevel.AlwaysOnTop);
+                candidate.ReapplyRefusedTopmost();
             }
         }
+    }
+
+    private void ReapplyRefusedTopmost()
+    {
+        if (_disposed) return;
+        var spec = Spec;
+        if (spec.Level == WindowLevel.AlwaysOnTop && IsTopLevelChromeAllowed(spec) && !IsTopmostBitSet())
+            ApplyWindowLevel(WindowLevel.AlwaysOnTop);
     }
 
     private void OnNativeSizeChanged(object sender, Microsoft.UI.Xaml.WindowSizeChangedEventArgs args)

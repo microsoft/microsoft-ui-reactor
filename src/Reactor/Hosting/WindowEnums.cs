@@ -65,7 +65,8 @@ public enum WindowLevel
     /// <remarks>
     /// Windows can decline a topmost change requested while the app doesn't own the foreground,
     /// for example when the level changes at runtime while the workstation is locked. Reactor
-    /// logs a warning and reapplies the level the next time one of the app's windows is activated.
+    /// logs a warning and reapplies the level the next time the app is activated, either by
+    /// gaining the foreground or by one of its windows activating.
     /// </remarks>
     AlwaysOnTop,
 }

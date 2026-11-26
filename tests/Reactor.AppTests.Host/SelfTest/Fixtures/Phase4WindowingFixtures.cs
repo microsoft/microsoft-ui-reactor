@@ -241,63 +241,108 @@ internal static class Phase4WindowingFixtures
     /// process owns the foreground, which only reproduces in a locked or background session, so
     /// the refusal is simulated with <see cref="ReactorWindow.RefuseTopmostForTests"/>: the apply
     /// skips <c>SetWindowPos</c> and leaves the bit clear, the same observable state. Reactor must
-    /// warn once and reapply the level when one of the app's windows is next activated.
+    /// warn once per refusal and reapply the level when the app gains the foreground
+    /// (<c>WM_ACTIVATEAPP</c>) or any of its windows activates, including the refused one.
     /// </summary>
     internal class WindowLevelRefusedTopmostReapplied(Harness h) : SelfTestFixtureBase(h)
     {
+        private static bool TopmostBit(ReactorWindow win) => (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0;
+
+        private static int Warnings => Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests);
+
+        // Drops win back to Normal (a real, never-refused HWND_NOTOPMOST), then requests
+        // AlwaysOnTop with the next apply refused. True when the refusal took.
+        private static async Task<bool> RefuseAlwaysOnTop(ReactorWindow win, WindowSpec spec)
+        {
+            win.Update(spec with { Level = WindowLevel.Normal });
+            await win.Host.WaitForIdleAsync();
+            win.RefuseTopmostForTests = 1;
+            win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
+            await win.Host.WaitForIdleAsync();
+            return win.RefuseTopmostForTests == 0 && !TopmostBit(win);
+        }
+
+        // The reapply is a real SetWindowPos, so in a locked or background session Windows can
+        // refuse it too. Skip only when a direct call is refused as well and another process
+        // owns the foreground, as WindowLevel_RuntimeFlip does (issue #927).
+        private void CheckReapplied(string name, ReactorWindow win, bool reapplied)
+        {
+            if (!reapplied && !OsGrantsTopmost(win, out bool foregroundIsForeign) && foregroundIsForeign)
+            {
+                H.Skip(name, "issue #927: Windows refused HWND_TOPMOST while another process owned the foreground");
+                return;
+            }
+            H.Check(name, reapplied);
+        }
+
         public override async Task RunAsync()
         {
             EnsureUIDispatcher();
             var spec = new WindowSpec { Title = "Refused Topmost", Width = 260, Height = 180 };
             ReactorWindow? win = null;
             ReactorWindow? other = null;
+            ReactorWindow? third = null;
             try
             {
                 win = await OpenAndSettle(spec);
                 other = await OpenAndSettle(new WindowSpec { Title = "Refused Topmost Other", Width = 260, Height = 180 });
                 other.Activate();
-                // win must be inactive so its Activate() below is a real activation edge.
-                if (!await Harness.WaitFor(() => !win.IsActive && other.IsActive, maxPasses: 25, perPassMs: 40))
-                {
-                    const string reason = "the second window never took activation, so the reapply edge can't be driven";
-                    H.Skip("WindowLevel_RefusedTopmost_Simulated", reason);
-                    H.Skip("WindowLevel_RefusedTopmost_Warns", reason);
-                    H.Skip("WindowLevel_RefusedTopmost_WarnsOnce", reason);
-                    H.Skip("WindowLevel_RefusedTopmost_ReappliedOnActivation", reason);
-                    return;
-                }
+                bool winInactive = await Harness.WaitFor(() => !win.IsActive && other.IsActive, maxPasses: 25, perPassMs: 40);
 
-                int warningsBefore = Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests);
+                int warningsBefore = Warnings;
                 win.RefuseTopmostForTests = 1;
                 win.Update(spec with { Level = WindowLevel.AlwaysOnTop });
                 await win.Host.WaitForIdleAsync();
-                H.Check("WindowLevel_RefusedTopmost_Simulated",
-                    win.RefuseTopmostForTests == 0 && (ExStyleBits(win) & Native.WS_EX_TOPMOST) == 0);
-                H.Check("WindowLevel_RefusedTopmost_Warns",
-                    Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests) == warningsBefore + 1);
+                H.Check("WindowLevel_RefusedTopmost_Simulated", win.RefuseTopmostForTests == 0 && !TopmostBit(win));
+                H.Check("WindowLevel_RefusedTopmost_Warns", Warnings == warningsBefore + 1);
 
                 // An unrelated spec change re-applies the level. Still refused, it must not warn again.
                 win.RefuseTopmostForTests = 1;
                 win.Update(spec with { Level = WindowLevel.AlwaysOnTop, Title = "Refused Topmost Retitled" });
                 await win.Host.WaitForIdleAsync();
                 H.Check("WindowLevel_RefusedTopmost_WarnsOnce",
-                    win.RefuseTopmostForTests == 0
-                    && (ExStyleBits(win) & Native.WS_EX_TOPMOST) == 0
-                    && Volatile.Read(ref ReactorWindow.TopmostRefusedWarningCountForTests) == warningsBefore + 1);
+                    win.RefuseTopmostForTests == 0 && !TopmostBit(win) && Warnings == warningsBefore + 1);
 
+                // The app gaining the foreground reaches every top-level window as WM_ACTIVATEAPP,
+                // even when no Reactor window activates. Sending it doesn't activate win.
+                _ = Native.SendMessage(Hwnd(win), Native.WM_ACTIVATEAPP, 1, 0);
+                CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnActivateApp", win, TopmostBit(win));
+
+                // Once granted, the warning re-arms: the next refusal warns again.
+                bool refusedAgain = await RefuseAlwaysOnTop(win, spec);
+                H.Check("WindowLevel_RefusedTopmost_WarningRearms", refusedAgain && Warnings == warningsBefore + 2);
+
+                // Another window activating reapplies the refused one, which stays inactive.
+                // win is still refused here, and opening `third` activates it.
+                third = await OpenAndSettle(new WindowSpec { Title = "Refused Topmost Third", Width = 260, Height = 180 });
+                bool thirdActive = await Harness.WaitFor(() => third.IsActive, maxPasses: 25, perPassMs: 40);
+                bool otherReapplied = await Harness.WaitFor(() => TopmostBit(win), maxPasses: 25, perPassMs: 40);
+                if (!winInactive || !thirdActive || win.IsActive)
+                {
+                    H.Skip("WindowLevel_RefusedTopmost_ReappliedOnOtherWindowActivation",
+                        $"no clean activation edge on another window (other={winInactive}, third={thirdActive}, win active={win.IsActive})");
+                }
+                else
+                {
+                    CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnOtherWindowActivation", win, otherReapplied);
+                }
+
+                // The refused window's own activation reapplies it too.
+                bool refusedForSelf = await RefuseAlwaysOnTop(win, spec);
                 win.Activate();
                 bool activated = await Harness.WaitFor(() => win.IsActive, maxPasses: 25, perPassMs: 40);
-                bool reapplied = await Harness.WaitFor(
-                    () => (ExStyleBits(win) & Native.WS_EX_TOPMOST) != 0, maxPasses: 25, perPassMs: 40);
-                if (!activated)
+                bool selfReapplied = await Harness.WaitFor(() => TopmostBit(win), maxPasses: 25, perPassMs: 40);
+                if (!refusedForSelf || !activated)
                 {
                     H.Skip("WindowLevel_RefusedTopmost_ReappliedOnActivation",
-                        $"Windows didn't activate the window (topmost bit {(reapplied ? "set" : "clear")}), so the reapply edge never fired");
-                    return;
+                        $"no clean self-activation edge (refused={refusedForSelf}, activated={activated})");
                 }
-                H.Check("WindowLevel_RefusedTopmost_ReappliedOnActivation", reapplied);
+                else
+                {
+                    CheckReapplied("WindowLevel_RefusedTopmost_ReappliedOnActivation", win, selfReapplied);
+                }
             }
-            finally { await CloseAndSettle(other, win); }
+            finally { await CloseAndSettle(third, other, win); }
         }
     }
 
@@ -576,6 +621,11 @@ internal static class Phase4WindowingFixtures
         }
 
         public static nint ForegroundWindow() => GetForegroundWindow();
+
+        public const uint WM_ACTIVATEAPP = 0x001C;
+
+        [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+        public static extern nint SendMessage(nint hWnd, uint msg, nuint wParam, nint lParam);
 
         public static uint WindowProcessId(nint hWnd, out uint processId)
             => GetWindowThreadProcessId(hWnd, out processId);

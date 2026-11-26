@@ -175,7 +175,7 @@ Caveats:
 - `Floating` is app-local. Use `AlwaysOnTop` only when you need global topmost.
 - Windows can decline an `AlwaysOnTop` change made while the app isn't in the
   foreground, for example while the workstation is locked. Reactor logs a warning
-  and reapplies it the next time one of the app's windows is activated.
+  and reapplies it the next time the app is activated.
 - Runtime taskbar visibility flips hide/show the HWND once so the shell refreshes.
 
 ## Chrome & appearance
