@@ -5,8 +5,8 @@ order: 2.6
 audience: beginner
 goal: |
   Show how to set up AI coding agents for Reactor work: the agent plugin, the
-  skill kit, build feedback from mur check, the devtools MCP server, and the
-  AI-readable files on the docs site. Every install step is verified.
+  skill kit, build feedback from mur check, the WinUI DevTools in the winapp
+  CLI, and the AI-readable files on the docs site. Every install step is verified.
 tier: stub
 ---
 
@@ -20,8 +20,8 @@ view models. Reactor gives agents four kinds of help:
   rules, and the tools.
 - **Build feedback:** `mur check` prints each diagnostic on one line with a
   fix hint.
-- **Eyes on the app:** `mur devtools` and its MCP server let an agent see and
-  drive the running app.
+- **Eyes on the app:** the WinUI DevTools in the winapp CLI let an agent see
+  and drive the running app.
 - **Docs for AI tools:** the docs site publishes `llms.txt` and a Markdown
   copy of each page.
 
@@ -32,7 +32,7 @@ view models. Reactor gives agents four kinds of help:
 | Agent plugin | The `reactor-dev` agent and 16 skills | `plugins/reactor` in the repository, or `agentkit/plugins/reactor/` in the `Microsoft.UI.Reactor` package |
 | Skill kit | `SKILL.md`, the topic files in `skills/`, and `mur` | The `reactor-skill-kit-<version>.zip` release asset |
 | `mur check` | Build output with fix hints | The [mur CLI](mur-cli.md) |
-| Devtools MCP server | A live view of the running app, and input | The `Microsoft.UI.Reactor.Devtools` package; see [Devtools](devtools.md) |
+| WinUI DevTools | A live view of the running app, and input | The winapp CLI and its `winui-devtools` skill; see [Devtools](devtools.md) |
 | Docs for AI tools | `llms.txt`, `llms-full.txt`, and a Markdown copy of each page | The docs site |
 
 ## The agent plugin
@@ -54,7 +54,7 @@ Code (`.claude-plugin/plugin.json`). It contains:
 | `reactor-getting-started` | The mental model, hooks, common factories, gotchas, and project setup. Enough for most tasks. |
 | `reactor-dsl` | The full index of public signatures, `reactor.api.txt`. |
 | `reactor-build-and-check` | Building with `mur check` and fixing common diagnostics. |
-| `reactor-devtools` | Driving a running app with `mur devtools`. |
+| `reactor-devtools` | Translating an old `mur devtools` command into its winapp equivalent. |
 | `reactor-recipes` | Single-file recipes to copy and adjust. |
 | `reactor-design` | Windows 11 design rules: theme tokens, typography, accessibility. |
 | `reactor-async` | `UseResource`, `UseMutation`, and `UseInfiniteResource`. |
@@ -178,29 +178,23 @@ rules, and the [mur CLI](mur-cli.md#check-your-code) page for every option.
 
 ## Let the agent see the app
 
-`mur devtools` builds the app and starts it with an MCP server inside. From
-another terminal, an agent can read the visual tree and hook state, take
-screenshots, and click, type, and scroll:
+The WinUI DevTools in the [winapp CLI](https://github.com/microsoft/winappCli)
+let an agent read the component tree and hook state, take screenshots, and
+click, type, and scroll. They attach from outside the app, so the project needs
+nothing extra:
 
 ```shell
-mur devtools
-mur devtools tree --view summary
-mur devtools screenshot --out shot.png
-mur devtools click "#save"
+winapp run . --devtools on --detach --json
+winapp devtools inspect --json
+winapp ui screenshot
+winapp ui click "<Editor>/Button" --json
 ```
 
-The `reactor-devtools` skill teaches these commands, so an agent with the
-plugin can use them without more setup.
+The `winui-devtools` skill in winapp's agent plugin teaches these commands. See
+[Devtools](devtools.md) for the selectors and the full list.
 
-You can also connect an MCP client directly. `mur devtools --print-config`
-prints config for Claude Code, VS Code (`.vscode/mcp.json`), and GitHub
-Copilot. That config does not include the bearer token yet, so read
-[Connect an MCP client](devtools.md#connect-an-mcp-client) first. The
-token-free option is the stdio transport, where the MCP client starts the app
-itself with `--devtools run --mcp-transport stdio`.
-
-This is the only MCP server in Reactor. It describes the running app, not your
-source code.
+Reactor no longer has an MCP server. The one that ran inside the app, behind
+`mur devtools`, has been removed.
 
 ## Docs for AI tools
 
@@ -230,8 +224,8 @@ results:
   warns that hand-written project files lead to invented API names.
 - **Ask for `mur check` after each batch of edits,** and for every `REACTOR_*`
   warning to be fixed. Ask for `mur check --final` at the end.
-- **Ask the agent to look at the app.** A screenshot and the visual tree from
-  `mur devtools` show layout and contrast bugs that a build can't.
+- **Ask the agent to look at the app.** A screenshot and the component tree
+  from the WinUI DevTools show layout and contrast bugs that a build can't.
 - **Name the feature.** Words like "form validation", "navigation", or
   "docking" match a topic skill, so the agent loads the right one.
 
@@ -244,14 +238,14 @@ of edits and fix every REACTOR_* warning.
 
 <!-- prompt -->
 ```text
-The Save button is cut off. Start the app with `mur devtools`, take a
-screenshot, read the visual tree, and fix the layout.
+The Save button is cut off. Start the app with `winapp run . --devtools on`,
+take a screenshot, read the component tree, and fix the layout.
 ```
 
 ## Next Steps
 
 - **[mur CLI](mur-cli.md)**: install `mur` and see every command
-- **[Devtools](devtools.md)**: the MCP server, commands, and selectors
+- **[Devtools](devtools.md)**: the WinUI DevTools commands and selectors
 - **[Analyzers](analyzers.md)**: every `REACTOR_*` rule that `mur check` reports
 - **[Rules of Reactor](rules-of-reactor.md)**: the rules behind the most common
   diagnostics

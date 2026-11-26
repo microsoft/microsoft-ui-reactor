@@ -987,8 +987,8 @@ public sealed partial class SourceMapInterceptorGenerator : IIncrementalGenerato
             // filters out before it ever becomes a control, so a location stamped here
             // could never be read back. Cloning it would be pure cost: it breaks the
             // singleton's reference identity AND materializes a 152-byte extras bucket
-            // on every conditional-empty render — a hot path for Empty(), and for
-            // factories like DevtoolsMenu that yield the sentinel when switched off.
+            // on every conditional-empty render — a hot path for Empty(), and for any
+            // factory that yields the sentinel when switched off.
             //
             // Emitted ONLY where the declared return type could actually be one. For a
             // factory returning a concrete record (TextBlockElement, …) the compiler

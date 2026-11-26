@@ -23,7 +23,7 @@ first trace.
 | `dotnet-trace` | EventPipe | `.nettrace` opened in speedscope.app or VS Profiler | Reactor-only timing on any OS, AOT-friendly |
 | PerfView / xperf | Classic ETW | `.etl` opened in PerfView's Events view or WPA | Frame stutter that may be Reactor *or* WinUI native |
 | `tests/perf_bench/PerfBench.*` | In-process `BenchTracker` | `*.report.txt` next to the exe | Reproducing a regression with FPS / update-ms / GC numbers |
-| Reconcile-highlight overlay | Dev menu | Flashing rectangle per re-render | Finding which component re-rendered without taking a trace |
+| Reconcile-highlight overlay | `ReactorFeatureFlags.HighlightReconcileChanges` | Flashing rectangle per re-render | Finding which component re-rendered without taking a trace |
 
 The reconcile-highlight overlay is documented in
 [Dev Tooling](dev-tooling.md); reach for it first when "something
@@ -35,7 +35,7 @@ per span and a complete hierarchy you can sort.
 
 The Reactor provider's events split across fifteen keywords. A consumer
 masks in only the ones it wants, so a "just reconcile" trace doesn't
-pay for state writes, MCP traffic, or trampoline dispatches:
+pay for state writes or trampoline dispatches:
 
 ```csharp
 public static class Keywords
@@ -64,7 +64,8 @@ public static class Keywords
 The seven that cover the render loop: `Reconcile` covers reconcile-pass
 boundaries and the child-list diff, `Render` covers per-component render
 timing and the effect-flush boundary, `State` covers `UseState` writes,
-`Mcp` covers [devtools](dev-tooling.md) tool dispatch, `Lifecycle` covers
+`Mcp` is reserved (its events are no longer emitted since the in-app MCP
+server was removed), `Lifecycle` covers
 mount and unmount, `Errors` is severity-Error events, and `EventDispatch`
 covers the trampoline that fans WinUI routed events out to your Reactor
 callbacks. The rest (`Hosting` through `HotReload`, and `RenderDetail` for

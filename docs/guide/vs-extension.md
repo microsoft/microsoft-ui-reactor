@@ -5,9 +5,13 @@ Reactor has two editor extensions. Both are named **Reactor Preview**, and both
 show your running app next to the code.
 
 Each one starts the app with
-`dotnet watch` and devtools turned on, so edits reach the preview as described
+`dotnet watch` and the preview host turned on, so edits reach the preview as described
 in [Hot reload and live preview](hot-reload.md). The Visual Studio extension
 embeds the real app window. The VS Code extension shows screenshots of it.
+
+The preview host is in the deprecated `Microsoft.UI.Reactor.Devtools` package,
+which `dotnet new reactor` references in Debug builds. It stays until winapp has
+its own previewer, so keep the reference if you use either extension.
 
 Both extensions are experimental. The Visual Studio extension is the least
 stable part of Reactor. Expect install problems, races while a solution loads,
@@ -151,7 +155,8 @@ set `<WindowsPackageType>None</WindowsPackageType>`.
   shows an error.
 - There are no settings yet. A **Tools > Options** page is planned.
 - The control reference graph is not shown in Visual Studio yet. Use the
-  VS Code panel or the devtools `references` tool.
+  VS Code panel, or `winapp devtools get-property <selector>`, which lists an
+  element's references.
 
 For more fixes, see the
 [troubleshooting section of the extension README](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md#troubleshooting).
@@ -220,14 +225,16 @@ starts it again with the old `--preview --vscode` flags.
   `dotnet watch` output and the handshake.
 - Restart the preview before you assume the app is broken. The extensions are
   rougher than the framework.
-- For a preview with no editor, run `mur devtools` in the project folder. See
-  [Devtools](devtools.md).
-- Both extensions need a debug build with devtools available. See
-  [Devtools](devtools.md) to set it up.
+- For a preview with no editor, run `dotnet run -- --preview <Component>` in the
+  project folder. Use `winapp run . --devtools on -- --preview <Component>` to
+  attach the WinUI DevTools too.
+- Both extensions need a Debug build that references the deprecated
+  `Microsoft.UI.Reactor.Devtools` package. See
+  [Devtools](devtools.md#the-deprecated-preview-package) to set it up.
 
 ## Next Steps
 
 - **[Hot reload and live preview](hot-reload.md)**: what survives an edit and what a rude edit is
-- **[Devtools](devtools.md)**: the launch flags and the MCP server that both extensions use
-- **[mur CLI](mur-cli.md)**: `mur devtools` and `mur upgrade`
+- **[Devtools](devtools.md#the-deprecated-preview-package)**: the preview host and the launch flags that both extensions use
+- **[mur CLI](mur-cli.md)**: `mur upgrade` refreshes the Visual Studio extension
 - **[Developer tools](dev-tooling.md)**: overview of all Reactor tools

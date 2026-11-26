@@ -12,7 +12,7 @@ tier: stub
 # mur CLI
 
 `mur` is the Reactor command-line tool. It checks your code with fix hints,
-starts and drives devtools sessions, manages localization files, prints the
+manages localization files, prints the
 API index for AI agents, and keeps a source checkout of Reactor up to date.
 Run `mur --help` to see the list of commands, and `mur --version` to see
 which version you have.
@@ -107,23 +107,19 @@ lists every hint.
 
 ## Drive a running app
 
-`mur devtools` builds your app, starts it with the devtools MCP server, and
-restarts it after a reload. In a second terminal, commands such as
-`mur devtools tree`, `mur devtools screenshot --out shot.png`, and
-`mur devtools click "#id"` act on the running app.
+`mur devtools` has been removed. Every `mur devtools` command now prints its
+winapp equivalent and exits `1`, and `mur devtools --help` prints the whole
+list. Inspect and drive a running app with the WinUI DevTools in the winapp
+CLI instead:
 
-| Command | What it does |
-|---|---|
-| `mur devtools [project.csproj]` | Build and start the app with devtools. |
-| `mur devtools --component <Name>` | Open one component instead of the app's root. |
-| `mur devtools --mcp-port <N>` | Use a fixed port. |
-| `mur devtools --print-config` | Print MCP client config for Claude Code, VS Code, and GitHub Copilot. |
-| `mur devtools session list` | List the running sessions. |
-| `mur devtools session clean` | Remove lock files left by sessions that are no longer running. Add `--dry-run` to only list them. |
-| `mur devtools <verb> ...` | Run one devtools command against the running app. |
+```
+winapp run . --devtools on
+winapp devtools inspect
+winapp ui screenshot
+```
 
-[Devtools](devtools.md#mcp-server) lists every verb, the selectors, and the
-exit codes.
+[Devtools](devtools.md#move-from-mur-devtools) maps each old command to the
+winapp command that replaces it.
 
 ## Localize
 
@@ -188,7 +184,7 @@ If that is not set, it looks for an MCP server entry that sets
 ## Next Steps
 
 - **[Developer tools](dev-tooling.md)**: how `mur` fits into the inner loop
-- **[Devtools](devtools.md)**: the in-app dev menu and the MCP server behind `mur devtools`
+- **[Devtools](devtools.md)**: the WinUI DevTools that replace `mur devtools`
 - **[Analyzers](analyzers.md)**: the rules behind `mur check`
 - **[Localization](localization.md)**: resource files and `mur loc`
 - **[Build with AI](build-with-ai.md)**: the skill kit and agent plugin

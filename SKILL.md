@@ -184,7 +184,7 @@ Workflow modes (Phase-2 ranker):
 | [`skills/async.md`](skills/async.md) | Fetching data, caching, pagination, optimistic writes. `UseResource`, `UseMutation`, `UseInfiniteResource`, `Pending`. |
 | [`skills/design.md`](skills/design.md) | Any visual-styling work. Windows 11 design rules — theme tokens, High Contrast, typography, 4px grid, acrylic surfaces, accessibility. |
 | [`skills/commanding.md`](skills/commanding.md) | Actions that appear in multiple surfaces (menu + toolbar), need keyboard shortcuts, or need `CanExecute`. `Command`, `StandardCommand`, `UseCommand`, `CommandHost`. |
-| [`skills/devtools.md`](skills/devtools.md) | Drive a running app via `mur devtools` — screenshot, inspect visual tree, click/type/scroll, read hook state. Load when diagnosing visible bugs (layout, contrast) or verifying a change landed. |
+| [`skills/devtools.md`](skills/devtools.md) | **Removed** — `mur devtools` no longer works; drive a running app with the WinUI DevTools instead: `winapp run . --devtools on` + the `winui-devtools` skill. This file only maps old `mur devtools` commands to their winapp equivalents. |
 | [`skills/navigation.md`](skills/navigation.md) | Multi-page apps, sidebar/tab navigation, routes, deep linking, page transitions, caching. `UseNavigation`, `NavigationHost`, `NavigationView`, `TabView`. |
 | [`skills/forms.md`](skills/forms.md) | Data-entry screens, validation, masked/formatted input. `UseValidationContext`, `FormField`, `MaskEngine`, `InputFormatter`. |
 | [`skills/input.md`](skills/input.md) | Gestures, pointer events, drag-and-drop, focus management. `OnPan`, `OnPinch`, `OnRotate`, `OnDragStarting`, `UseElementFocus`. |

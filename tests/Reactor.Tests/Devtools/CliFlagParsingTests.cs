@@ -14,7 +14,6 @@ public class CliFlagParsingTests
     {
         var opts = DevtoolsCliParser.Parse(["app.exe"]);
         Assert.Null(opts.Subverb);
-        Assert.False(opts.UsedDeprecatedPreview);
         Assert.False(opts.PreviewAndDevtoolsConflict);
     }
 
@@ -170,7 +169,6 @@ public class CliFlagParsingTests
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
-        Assert.False(opts.UsedDeprecatedPreview);
     }
 
     [Fact]
@@ -180,20 +178,110 @@ public class CliFlagParsingTests
         Assert.Equal(DevtoolsSubverb.List, opts.Subverb);
     }
 
-    [Fact]
-    public void DevtoolsScreenshot_ParsesAsScreenshot()
+    [Theory]
+    [InlineData("screenshot", "'--devtools screenshot' was removed", "winapp ui screenshot")]
+    [InlineData("tree", "'--devtools tree' was removed", "winapp devtools inspect")]
+    [InlineData("TREE", "'--devtools tree' was removed", "winapp devtools inspect")]
+    [InlineData("on", "'--devtools on' is a winapp option", "winapp run . --devtools on")]
+    [InlineData("off", "'--devtools off' is a winapp option", "winapp run . --devtools off")]
+    [InlineData("headless", "'--devtools headless' is a winapp option", "winapp run . --devtools headless")]
+    public void RemovedValues_ReportTheWinappCommand_InsteadOfRunningAComponentNamedAfterThem(string verb, string message, string winapp)
     {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "screenshot", "CounterDemo", "--out", "c:/tmp/out.png"]);
-        Assert.Equal(DevtoolsSubverb.Screenshot, opts.Subverb);
-        Assert.Equal("CounterDemo", opts.ComponentName);
-        Assert.Equal("c:/tmp/out.png", opts.ScreenshotOutputPath);
+        string[] args = ["app.exe", "--devtools", verb, "CounterDemo"];
+        var opts = DevtoolsCliParser.Parse(args);
+
+        Assert.Null(opts.Subverb);
+        Assert.Null(opts.ComponentName);
+        var error = DevtoolsCliParser.RemovedSubverbMessage(args);
+        Assert.NotNull(error);
+        Assert.Contains(message, error);
+        Assert.Contains(winapp, error);
+        Assert.Null(DevtoolsCliParser.RemovedAppVerbNotice(args));
+    }
+
+    [Theory]
+    [InlineData("app")]
+    [InlineData("APP")]
+    public void AppVerb_IsANotice_NotAnError_AndRunsNothing(string verb)
+    {
+        // `--devtools app` used to run the app with the dev menu. It now runs the app normally.
+        string[] args = ["app.exe", "--devtools", verb];
+        var opts = DevtoolsCliParser.Parse(args);
+
+        Assert.Null(opts.Subverb);
+        Assert.Null(DevtoolsCliParser.RemovedSubverbMessage(args));
+        var notice = DevtoolsCliParser.RemovedAppVerbNotice(args);
+        Assert.NotNull(notice);
+        Assert.Contains("winapp run . --devtools on", notice);
+    }
+
+    [Theory]
+    [InlineData("run")]
+    [InlineData("list")]
+    [InlineData("Counter")]
+    public void KeptSubverbsAndComponentNames_AreNotReportedAsRemoved(string token)
+    {
+        // Positive control for the theory above: the same position holding a kept verb
+        // or a component name parses normally.
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", token]);
+
+        Assert.NotNull(opts.Subverb);
+        Assert.Null(DevtoolsCliParser.RemovedSubverbMessage(["app.exe", "--devtools", token]));
+        Assert.Null(DevtoolsCliParser.RemovedAppVerbNotice(["app.exe", "--devtools", token]));
+    }
+
+    [Theory]
+    [InlineData("--mcp-port", "1234")]
+    [InlineData("--mcp-transport", "stdio")]
+    [InlineData("--devtools-log-level", "trace")]
+    [InlineData("--devtools-logs", "off")]
+    [InlineData("--devtools-project", "MyProj")]
+    public void RemovedMcpFlags_AreIgnored_AndDoNotBecomeTheComponentName(string flag, string value)
+    {
+        // The MCP server's flags went with it. An old launch profile that still passes
+        // one must run the named component, not fail or read the value as a component.
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "Counter", flag, value]);
+
+        Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
+        Assert.Equal("Counter", opts.ComponentName);
+        Assert.Null(opts.EmbedValidationError);
+    }
+
+    [Theory]
+    [InlineData("--mcp-port")]
+    [InlineData("--mcp-transport")]
+    [InlineData("--devtools-log-level")]
+    [InlineData("--devtools-logs")]
+    [InlineData("--devtools-logs-capacity")]
+    [InlineData("--devtools-project")]
+    public void RemovedMcpFlags_AreNamedInTheNotice(string flag)
+    {
+        var notice = DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", flag, "x"]);
+
+        Assert.NotNull(notice);
+        Assert.StartsWith($"Ignoring {flag}:", notice);
+        Assert.Contains("winapp run . --devtools on", notice);
     }
 
     [Fact]
-    public void DevtoolsTree_ParsesAsTree()
+    public void RemovedFlagsNotice_ListsEveryRemovedFlag_AndIsNullWithoutThem()
     {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "tree"]);
-        Assert.Equal(DevtoolsSubverb.Tree, opts.Subverb);
+        Assert.Equal(
+            "Ignoring --mcp-port, --mcp-transport: the in-app MCP server was removed. Inspect the app with the WinUI DevTools: winapp run . --devtools on",
+            DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", "--mcp-transport", "stdio", "--mcp-port", "1"]));
+        // Lookalikes and surviving flags are not removed flags.
+        Assert.Null(DevtoolsCliParser.RemovedFlagsNotice(["app.exe", "--devtools", "run", "--vscode", "--fps", "5", "--mcp-portx", "1"]));
+    }
+
+    [Fact]
+    public void RemovedSubverbName_AsAComponentNameAfterRun_StillRuns()
+    {
+        // Only the token right after --devtools is a verb; `run tree` previews a component called "tree".
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "tree"]);
+
+        Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
+        Assert.Equal("tree", opts.ComponentName);
+        Assert.Null(DevtoolsCliParser.RemovedSubverbMessage(["app.exe", "--devtools", "run", "tree"]));
     }
 
     [Fact]
@@ -220,20 +308,18 @@ public class CliFlagParsingTests
     }
 
     [Fact]
-    public void PreviewAlias_SetsDeprecatedFlag_AndMapsToRun()
+    public void PreviewAlias_MapsToRun()
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--preview", "MyComp"]);
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
-        Assert.True(opts.UsedDeprecatedPreview);
         Assert.Equal("MyComp", opts.ComponentName);
     }
 
     [Fact]
-    public void PreviewListAlias_SetsDeprecatedFlag_AndMapsToList()
+    public void PreviewListAlias_MapsToList()
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--preview-list"]);
         Assert.Equal(DevtoolsSubverb.List, opts.Subverb);
-        Assert.True(opts.UsedDeprecatedPreview);
     }
 
     [Fact]
@@ -242,7 +328,6 @@ public class CliFlagParsingTests
         // --devtools-list is the one-step alias used by tools that pre-date the subverb form.
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools-list"]);
         Assert.Equal(DevtoolsSubverb.List, opts.Subverb);
-        Assert.False(opts.UsedDeprecatedPreview);
     }
 
     [Fact]
@@ -290,20 +375,6 @@ public class CliFlagParsingTests
     }
 
     [Fact]
-    public void McpPortFlag_IsParsed()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-port", "54321"]);
-        Assert.Equal(54321, opts.McpPort);
-    }
-
-    [Fact]
-    public void McpPortFlag_Default_IsNull()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Null(opts.McpPort);
-    }
-
-    [Fact]
     public void Fps_Default_Is10()
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
@@ -324,72 +395,6 @@ public class CliFlagParsingTests
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "MyComponent"]);
         Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
         Assert.Equal("MyComponent", opts.ComponentName);
-    }
-
-    [Fact]
-    public void LogLevelFlag_IsParsed()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--devtools-log-level", "trace"]);
-        Assert.Equal("trace", opts.LogLevel);
-    }
-
-    [Fact]
-    public void LogLevelFlag_Default_IsNull()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Null(opts.LogLevel);
-    }
-
-    [Fact]
-    public void McpTransportFlag_Stdio_IsPicked()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-transport", "stdio"]);
-        Assert.Equal(McpTransport.Stdio, opts.Transport);
-    }
-
-    [Fact]
-    public void McpTransportFlag_DefaultsToHttp()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Equal(McpTransport.Http, opts.Transport);
-    }
-
-    [Fact]
-    public void McpTransportFlag_UnknownValue_KeepsHttpDefault()
-    {
-        // An unknown transport token should not flip to stdio silently —
-        // the HTTP default stays, so users don't end up with a silently
-        // broken stdout stream.
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--mcp-transport", "carrier-pigeon"]);
-        Assert.Equal(McpTransport.Http, opts.Transport);
-    }
-
-    [Fact]
-    public void LogsFlag_OffDisablesCapture()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--devtools-logs", "off"]);
-        Assert.True(opts.LogsDisabled);
-    }
-
-    [Fact]
-    public void LogsFlag_Default_CaptureEnabled()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.False(opts.LogsDisabled);
-    }
-
-    [Fact]
-    public void LogsCapacityFlag_IsParsed()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--devtools-logs-capacity", "16"]);
-        Assert.Equal(16, opts.LogsCapacityMb);
-    }
-
-    [Fact]
-    public void LogsCapacityFlag_Default_IsNull()
-    {
-        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
-        Assert.Null(opts.LogsCapacityMb);
     }
 
     [Fact]
@@ -534,6 +539,142 @@ public class DevtoolsHostCliTests
         Assert.Contains("[reactor] --embed requires '--devtools run'", stderr.ToString());
     }
 
+    [Theory]
+    [InlineData("screenshot", "'--devtools screenshot' was removed", "winapp ui screenshot")]
+    [InlineData("tree", "'--devtools tree' was removed", "winapp devtools inspect")]
+    [InlineData("on", "'--devtools on' is a winapp option", "winapp run . --devtools on")]
+    public void TryRunDevtoolsForTest_RemovedSubverb_PrintsTheWinappCommandAndExits2_BeforeTheSupportGate(string verb, string message, string winapp)
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+
+        bool handled;
+        try
+        {
+            // Switch off: the removed-verb message must win over "enable Reactor.DevtoolsSupport".
+            AppContext.SetSwitch(switchName, false);
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+
+            handled = ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", verb], title: "App", width: 800, height: 600);
+
+            Assert.Equal(2, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
+        }
+
+        var text = stderr.ToString();
+        Assert.True(handled);
+        Assert.Contains($"[reactor] {message}", text);
+        Assert.Contains(winapp, text);
+        Assert.DoesNotContain("RuntimeHostConfigurationOption", text);
+    }
+
+    [Theory]
+    [InlineData(new[] { "app.exe", "--devtools", "on", "--preview", "X" }, "'--devtools on' is a winapp option")]
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--preview", "X" }, "pass either --devtools or --preview, not both.")]
+    public void TryRunDevtoolsForTest_WithPreview_ReportsTheSpecificError_AndExits2(string[] args, string message)
+    {
+        // A removed value wins over the generic --devtools/--preview conflict, and the conflict
+        // itself is an error (exit 2), not a silent exit 0.
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+        bool handled;
+        int exitCode;
+        try
+        {
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+            handled = ReactorApp.TryRunDevtoolsForTest(args, title: "App", width: 800, height: 600);
+            exitCode = Environment.ExitCode;
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+        }
+
+        Assert.True(handled);
+        Assert.Equal(2, exitCode);
+        Assert.Contains($"[reactor] {message}", stderr.ToString());
+    }
+
+    [Fact]
+    public void AppVerb_WithPreview_IsIgnored_AndThePreviewRuns()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "app", "--preview", "Counter"]);
+
+        Assert.False(opts.PreviewAndDevtoolsConflict);
+        Assert.Equal(DevtoolsSubverb.Run, opts.Subverb);
+        Assert.Equal("Counter", opts.ComponentName);
+    }
+
+    [Fact]
+    public void TryRunDevtoolsForTest_AppVerb_PrintsANotice_AndLetsTheAppRun()
+    {
+        // A launch profile that still passes `--devtools app` must start the app, not exit.
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+
+        bool handled;
+        try
+        {
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+
+            handled = ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", "app"], title: "App", width: 800, height: 600);
+
+            Assert.Equal(0, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+        }
+
+        Assert.False(handled);
+        Assert.Contains("[reactor] Ignoring '--devtools app'", stderr.ToString());
+        Assert.Contains("winapp run . --devtools on", stderr.ToString());
+    }
+
+    [Theory]
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--mcp-transport", "stdio" }, true)]
+    [InlineData(new[] { "app.exe", "--devtools", "run", "--mcp-port", "1234" }, true)]
+    [InlineData(new[] { "app.exe", "--devtools", "run" }, false)]
+    public void TryRunDevtools_RemovedMcpFlags_PrintANotice_AndStillRunThePreview(string[] args, bool expectNotice)
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        var host = new CapturingDevtoolsHost();
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        ReactorDevtoolsBootstrap.Register(host);
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+            Console.SetError(stderr);
+
+            Assert.True(ReactorApp.TryRunDevtoolsForTest(args, title: "Preview", width: 800, height: 600));
+            Assert.NotNull(host.Captured);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
+        }
+
+        Assert.Equal(expectNotice, stderr.ToString().Contains("[reactor] Ignoring --mcp-", StringComparison.Ordinal));
+    }
+
     // The whole manifest-driven capture size rests on one expression in
     // TryRunDevtoolsCore -- `options.WindowWidth ?? width` -- so it gets a
     // direct test rather than only the end-to-end screenshot evidence.
@@ -549,11 +690,6 @@ public class DevtoolsHostCliTests
             return true;
         }
 
-        public global::Microsoft.UI.Reactor.Core.Element? BuildDevtoolsMenu(
-            Func<IEnumerable<global::Microsoft.UI.Reactor.Core.MenuFlyoutItemBase>>? items,
-            string glyph,
-            string toolTip,
-            string? automationId) => null;
     }
 
     [Theory]
@@ -601,19 +737,112 @@ public class DevtoolsHostCliTests
         public override Element Render() => Factories.TextBlock("other");
     }
 
-    // The preview reports Run's call site only for the root that call mounts: its factory,
-    // or the same component type. Any other --component was never mounted by that call.
+    // Run<T> always passes its own factory. `--preview Other` must mount Other, not T; only T
+    // itself uses Run's factory (and reports Run's mount site).
+    [Fact]
+    public void PreviewRootFactory_MountsTheNamedComponent_NotRunsRoot()
+    {
+        Func<Component> factory = () => new AppRoot();
+
+#pragma warning disable IL2026
+        Assert.IsType<OtherComponent>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, typeof(OtherComponent))());
+        Assert.Same(factory, DevtoolsHost.PreviewRootFactory(typeof(AppRoot), factory, typeof(AppRoot)));
+        Assert.IsType<AppRoot>(DevtoolsHost.PreviewRootFactory(typeof(AppRoot), hostRootFactory: null, typeof(AppRoot))());
+#pragma warning restore IL2026
+    }
+
+    // The preview reports Run's call site only for the root that call mounts.
     [Fact]
     public void PreviewRootMountSite_KeepsRunSiteOnlyForTheAppsOwnRoot()
     {
         var site = new SourceLocation("App.cs", 12, 0);
-        Func<Component> factory = () => new AppRoot();
 
-        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), factory, typeof(AppRoot)));
-        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), hostRootFactory: null, typeof(AppRoot)));
-        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), hostRootFactory: null, typeof(OtherComponent)));
-        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, hostRoot: null, hostRootFactory: null, typeof(OtherComponent)));
-        Assert.Null(DevtoolsHost.PreviewRootMountSite(runSite: null, typeof(AppRoot), factory, typeof(AppRoot)));
+        Assert.Equal(site, DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), typeof(AppRoot)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, typeof(AppRoot), typeof(OtherComponent)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(site, hostRoot: null, typeof(OtherComponent)));
+        Assert.Null(DevtoolsHost.PreviewRootMountSite(runSite: null, typeof(AppRoot), typeof(AppRoot)));
+    }
+
+    // An older Devtools package can't JIT against this core, so core compares the builds first.
+    [Fact]
+    public void DevtoolsPackageMismatch_ReportsBothVersions_AndTheVersionToReference()
+    {
+        Assert.Null(ReactorApp.DevtoolsPackageMismatchMessage("0.2.0+abc", "0.2.0+abc"));
+
+        var message = ReactorApp.DevtoolsPackageMismatchMessage("0.2.0+abc", "0.1.1+def");
+        Assert.NotNull(message);
+        Assert.Contains("0.1.1+def", message);
+        Assert.Contains("Version=\"0.2.0\"", message);
+
+        // Only the real package is checked: a host from any other assembly (a test fake) is not.
+        Assert.Null(ReactorApp.DevtoolsPackageMismatchMessage(typeof(DevtoolsHostCliTests).Assembly));
+        Assert.Null(ReactorApp.DevtoolsPackageMismatchMessage(typeof(DevtoolsHost).Assembly));
+        Assert.NotNull(ReactorApp.DevtoolsPackageMismatchMessage("0.2.0", "0.2.0-local"));
+    }
+
+    // A host from an assembly named like the package but built at another version: the gate must
+    // stop before TryHandleCommandLine (which throws here, as a stale package would fail to JIT).
+    [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = "Emits a stand-in Devtools assembly for a stale-package test; Reactor.Tests runs on the JIT only.")]
+    public void TryRunDevtools_StaleDevtoolsPackage_ReportsBothVersions_Exits2_WithoutCallingTheHost()
+    {
+        const string switchName = "Reactor.DevtoolsSupport";
+        var host = EmitPackageNamedHost("0.0.1+stale");
+        Assert.Contains("0.0.1+stale", ReactorApp.DevtoolsPackageMismatchMessage(host.GetType().Assembly) ?? "");
+
+        var previous = ReactorDevtoolsBootstrap.CurrentForTests;
+        var originalExitCode = Environment.ExitCode;
+        var originalError = Console.Error;
+        using var stderr = new StringWriter();
+        ReactorDevtoolsBootstrap.Register(host);
+        try
+        {
+            AppContext.SetSwitch(switchName, true);
+            Console.SetError(stderr);
+
+            Assert.True(ReactorApp.TryRunDevtoolsForTest(["app.exe", "--devtools", "run"], title: "Preview", width: 800, height: 600));
+            Assert.Equal(2, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+            AppContext.SetSwitch(switchName, TestSetup.ConfiguredDevtoolsSupport);
+            ReactorDevtoolsBootstrap.RestoreForTests(previous);
+        }
+
+        Assert.Contains("Microsoft.UI.Reactor.Devtools: 0.0.1+stale", stderr.ToString());
+    }
+
+    [global::System.Diagnostics.CodeAnalysis.RequiresDynamicCode("Emits a stand-in for a stale package; JIT-only test.")]
+    private static IReactorDevtoolsHost EmitPackageNamedHost(string informationalVersion)
+    {
+        var versionAttribute = new global::System.Reflection.Emit.CustomAttributeBuilder(
+            typeof(global::System.Reflection.AssemblyInformationalVersionAttribute).GetConstructor([typeof(string)])!,
+            [informationalVersion]);
+        var assembly = global::System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
+            new global::System.Reflection.AssemblyName("Microsoft.UI.Reactor.Devtools"),
+            global::System.Reflection.Emit.AssemblyBuilderAccess.Run,
+            [versionAttribute]);
+        var type = assembly.DefineDynamicModule("StaleDevtools").DefineType(
+            "StaleDevtoolsHost",
+            global::System.Reflection.TypeAttributes.Public | global::System.Reflection.TypeAttributes.Sealed,
+            typeof(object),
+            [typeof(IReactorDevtoolsHost)]);
+        var contract = typeof(IReactorDevtoolsHost).GetMethod(nameof(IReactorDevtoolsHost.TryHandleCommandLine))!;
+        var method = type.DefineMethod(
+            contract.Name,
+            global::System.Reflection.MethodAttributes.Public | global::System.Reflection.MethodAttributes.Virtual
+                | global::System.Reflection.MethodAttributes.Final | global::System.Reflection.MethodAttributes.HideBySig
+                | global::System.Reflection.MethodAttributes.NewSlot,
+            typeof(bool),
+            [typeof(ReactorDevtoolsBootRequest)]);
+        var il = method.GetILGenerator();
+        il.Emit(global::System.Reflection.Emit.OpCodes.Ldstr, "the stale host must not be called");
+        il.Emit(global::System.Reflection.Emit.OpCodes.Newobj, typeof(InvalidOperationException).GetConstructor([typeof(string)])!);
+        il.Emit(global::System.Reflection.Emit.OpCodes.Throw);
+        type.DefineMethodOverride(method, contract);
+        return (IReactorDevtoolsHost)Activator.CreateInstance(type.CreateType())!;
     }
 
     // --x/--y place the capture window on a monitor whose scale matches the

@@ -366,12 +366,7 @@
       ]
     },
     {
-      "dir": "reference/01-hooks/10-(tools)",
-      "title": "Developer tools",
-      "pages": [{ "file": "reference/hooks/UseDevtools.md", "label": "UseDevtools" }]
-    },
-    {
-      "dir": "reference/01-hooks/11-(types)",
+      "dir": "reference/01-hooks/10-(types)",
       "title": "Types and options",
       "pages": [
         { "file": "reference/hooks/focus-helpers.md", "label": "Focus helpers" },

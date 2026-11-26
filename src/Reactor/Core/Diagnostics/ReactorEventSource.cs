@@ -4,7 +4,8 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 
 /// <summary>
 /// ETW/EventPipe provider for Reactor internals. Emits reconcile, render,
-/// state-change, lifecycle, and MCP-dispatch events.
+/// state-change and lifecycle events. (The MCP-dispatch events are still declared but
+/// no longer emitted.)
 ///
 /// This provider is a managed <see cref="EventSource"/>, so it surfaces on
 /// both EventPipe (<c>dotnet-trace</c>) and classic ETW (xperf / PerfView /
@@ -25,7 +26,7 @@ namespace Microsoft.UI.Reactor.Core.Diagnostics;
 ///
 /// Keywords (see <see cref="Keywords"/>) let consumers pick subsets without
 /// paying for the rest. Emit sites at hot paths (reconcile, render, state
-/// writes, MCP dispatch) call <see cref="EventSource.IsEnabled(EventLevel, EventKeywords)"/>
+/// writes) call <see cref="EventSource.IsEnabled(EventLevel, EventKeywords)"/>
 /// at the call site before computing payloads (timestamps, type names) so
 /// the disabled path avoids allocation and Stopwatch overhead. The
 /// <c>WriteEvent</c> overloads are additionally guarded inside this class
@@ -142,6 +143,9 @@ internal sealed class ReactorEventSource : EventSource
     }
 
     // ── MCP dispatch ─────────────────────────────────────────────────────
+    // Nothing emits these since the in-app MCP server was removed from
+    // Microsoft.UI.Reactor.Devtools. Event ids 7/8 and the Mcp keyword stay
+    // reserved so existing trace consumers and manifests keep their meaning.
 
     [Event(7, Level = EventLevel.Informational, Keywords = Keywords.Mcp,
         Task = Tasks.McpCall, Opcode = EventOpcode.Start,

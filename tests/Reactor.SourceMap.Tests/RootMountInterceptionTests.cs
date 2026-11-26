@@ -258,7 +258,7 @@ public sealed class RootMountInterceptionTests : IDisposable
 
     /// <summary>
     /// The site is taken even while the runtime flag is still off. <c>ReactorApp.Run</c>
-    /// depends on this: under <c>--devtools app</c> the devtools bootstrap turns source
+    /// depends on this: under <c>--devtools run</c> the devtools bootstrap turns source
     /// mapping on INSIDE Run, after Run's own call site was taken, and the window mounts
     /// later still. Whether a host keeps the site is decided at mount time
     /// (<c>KeepIfEnabled</c>, unit-tested in Reactor.Tests).
@@ -315,9 +315,6 @@ public sealed class RootMountInterceptionTests : IDisposable
             Captured = request;
             return true;
         }
-
-        public Element? BuildDevtoolsMenu(
-            Func<IEnumerable<MenuFlyoutItemBase>>? items, string glyph, string toolTip, string? automationId) => null;
     }
 
     /// <summary>

@@ -584,29 +584,25 @@ values that do not cause a render.
 
 ### Running with devtools
 
-The dev menu needs **two** separate signals. Neither one is `#if DEBUG`.
+The devtools for a running Reactor app are the WinUI DevTools in the
+[winapp CLI](https://github.com/microsoft/winappCli). They attach from outside
+the app, so you don't add anything to your project. Launch a Debug build with
+them:
 
-1. **Build-time capability.** The `Reactor.DevtoolsSupport` feature switch.
-   `dotnet new reactor` sets it in Debug builds, together with the
-   `Microsoft.UI.Reactor.Devtools` package.
-2. **Session opt-in.** A command-line argument:
+```powershell
+winapp run . --devtools on
+```
 
-   ```powershell
-   dotnet run -- --devtools app
-   ```
+Then use `winapp devtools inspect` to see the component tree and
+`winapp ui ...` to click and type. Add `--watch` to apply edits with hot reload
+and attach again after a restart. See [Devtools](devtools.md).
 
-`dotnet run` passes everything after `--` to the app, and a packaged app still
-gets it. The default profile in the template's
-`Properties/launchSettings.json` passes no arguments, so a plain
-`dotnet run -c Debug` starts the app **without** the dev menu. Keep the word
-`app`: a bare `--devtools` means `--devtools run`, the heavier session behind
-[`mur devtools`](devtools.md#mcp-server) that also starts an MCP endpoint.
-
-`UseDevtools()` returns `true` only when both signals are present. The
-signals do not draw anything by themselves. The menu is the `DevtoolsMenu(...)`
-element, so it appears only if your tree renders one. To add it to the title
-bar, see [In-app dev menu](devtools.md#in-app-dev-menu). Release builds
-leave out the package and the switch, so the devtools code is trimmed away.
+`dotnet new reactor` also adds the deprecated `Microsoft.UI.Reactor.Devtools`
+package to Debug builds. It runs the live previews in Visual Studio and VS Code.
+Release builds leave it out, so its code is trimmed away. If your template has an
+`"<AppName> (Unpackaged, Devtools)"` launch profile, a bare `--devtools` starts
+that preview. `--devtools app` used to open the in-app dev menu, which has been
+removed, so the app now prints a notice and starts normally.
 
 ## Common Mistakes
 
@@ -714,8 +710,8 @@ container, chain modifiers: `TextBlock("hi").Margin(8).Bold()`.
   with `UseEffect`.
 - **[Hot reload and live preview](hot-reload.md)**: see each change in the
   running app as you save.
-- **[Devtools](devtools.md)**: the dev menu, the element tree inspector and
-  the MCP server.
+- **[Devtools](devtools.md)**: inspect and drive a running app with the
+  WinUI DevTools.
 
 Working on Reactor itself? The source checkout setup is in
 [CONTRIBUTING.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/CONTRIBUTING.md).

@@ -902,11 +902,11 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 |-------|------|------|-------------|
 | 2 | dev-tooling | solid | "Developer tools": overview of the Tools section, the inner dev loop one stage at a time, with a link to each tool page |
 | 2.1 | hot-reload | solid | `dotnet watch`, what survives a hot reload, rude edits, live preview (steps) |
-| 2.2 | devtools | solid | Turning devtools on, the dev menu and overlays, the MCP server, `mur devtools`, keeping devtools out of Release and AOT |
+| 2.2 | devtools | solid | Inspecting a running app with the WinUI DevTools (`winapp run . --devtools on`), the reconcile-highlight overlay, the deprecated preview package, keeping it out of Release and AOT |
 | 2.3 | mur-cli | stub | Every `mur` command grouped by task, with install steps |
 | 2.4 | vs-extension | stub | The Visual Studio and VS Code preview extensions (tabs, steps) |
 | 2.5 | analyzers | solid | Every `REACTOR_*` rule with a stable anchor, severity settings |
-| 2.6 | build-with-ai | stub | Agent plugin, skill kit, `mur check`, the devtools MCP server, AI-readable site files (tabs, steps, prompts) |
+| 2.6 | build-with-ai | stub | Agent plugin, skill kit, `mur check`, the WinUI DevTools CLI (`winapp ... --json`, `winui-devtools` skill), AI-readable site files (tabs, steps, prompts) |
 | 2.85 | native-aot | comprehensive | Publishing with Native AOT: setup, size options, devtools under AOT |
 | 22.6 | testing | NEW stub → solid | Renderer fixtures, headless tests, snapshot tests, a11y scanner |
 | 22.7 | performance | NEW stub → solid | ETW, EventDispatch walkthroughs, flame graphs |
@@ -933,7 +933,7 @@ unless the file basename indicates otherwise (e.g. `recipes/login.md.dt`).
 | 37 | source-mapping | NEW stub → solid | Spec 010: stack-trace attribution to user source |
 | 38 | modifier-system | NEW stub → comprehensive | `.FontSize(24).Bold()` — modifier records vs property writes |
 | 39 | analyzer-architecture | NEW stub → comprehensive | REACTOR_THEME/A11Y/GRID/FUNC/PERSIST — authoring your own analyzer |
-| 40 | devtools-internals | NEW stub → comprehensive | Dev menu, reconcile-highlight overlay, layout-cost overlay, MCP protocol |
+| 40 | devtools-internals | NEW stub → comprehensive | In-app preview host (capture server, embed handshake, references), reconcile-highlight overlay |
 | 41 | animation-pipeline | NEW stub → comprehensive | Composition API end-to-end, 4 animation systems, compositor-property ceiling |
 | 42 | focus-and-input-internals | NEW stub → comprehensive | UseFocus dispatcher, UseFocusTrap container, pointer vs routed events |
 | 43 | perf-instrumentation | NEW stub → comprehensive | ETW sources, frame-aligned sampling (spec 031), layout-cost attribution (spec 032) |

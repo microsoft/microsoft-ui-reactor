@@ -76,7 +76,7 @@ Run `Get-Help ./bootstrap.ps1 -Detailed` for the other switches.
 
 Apps created with `dotnet new reactor` reference the public `Microsoft.UI.Reactor` package from NuGet.org. To make a scaffolded app use the package you built from source, pass `--reactor-version 0.0.0-local`. Only need the framework package? Reference `Microsoft.UI.Reactor` from NuGet.org and skip the bootstrap.
 
-The optional `Microsoft.UI.Reactor.Advanced` and `Microsoft.UI.Reactor.Devtools` packages always have the same version as `Microsoft.UI.Reactor` when we publish them. Release owners: read the [release runbook](docs/contributing/release-runbook.md) before you tag a new version.
+The optional `Microsoft.UI.Reactor.Advanced` and (deprecated) `Microsoft.UI.Reactor.Devtools` packages always have the same version as `Microsoft.UI.Reactor` when we publish them. Release owners: read the [release runbook](docs/contributing/release-runbook.md) before you tag a new version.
 
 ### Templates
 

@@ -9,17 +9,6 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 internal sealed class DevtoolsHost : IReactorDevtoolsHost
 {
-    /// <summary>Mirrors <c>DevtoolsSupervisor.ReloadExitCode</c> in <c>mur devtools</c>.</summary>
-    internal const int DevtoolsReloadExitCode = 42;
-
-    /// <summary>
-    /// Exit code when the MCP port pinned with <c>--mcp-port</c> is in use by
-    /// another process. <c>mur devtools</c> picks a new port when it chose the
-    /// port itself and fails clearly when the user pinned it. Mirrors
-    /// <c>DevtoolsSupervisor.McpPortUnavailableExitCode</c>.
-    /// </summary>
-    internal const int McpPortUnavailableExitCode = 43;
-
     private readonly int _embedGeneration = 1;
     private readonly Lock _embedResizeLock = new();
     private (int W, int H) _latestEmbedResize;
@@ -27,33 +16,11 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
 
     internal int EmbedGenerationForTests => _embedGeneration;
 
-    public Element? BuildDevtoolsMenu(
-        Func<IEnumerable<MenuFlyoutItemBase>>? items,
-        string glyph,
-        string toolTip,
-        string? automationId) =>
-        DevtoolsMenuFactory.Build(items, glyph, toolTip, automationId);
-
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Optional devtools package implementation; invoked only through the devtools host gate.")]
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Optional devtools package implementation; invoked only through the devtools host gate.")]
     public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
     {
-        if (TryReportPackageMismatch())
-            return true;
-
         var options = request.Options;
-
-        if (options.Subverb == DevtoolsSubverb.Run && !options.LogsDisabled)
-        {
-            var capBytes = options.LogsCapacityMb is { } mb
-                ? (long)mb * 1024 * 1024
-                : LogCaptureBuffer.DefaultCapacityBytes;
-            var forwardOut = options.Transport != McpTransport.Stdio;
-            LogCaptureInstall.Install(capBytes, forwardConsole: forwardOut);
-        }
-
-        if (options.UsedDeprecatedPreview)
-            Console.Error.WriteLine("[reactor] '--preview' is deprecated; use '--devtools run'.");
 
         var embedValidationError = GetOptionalStringProperty(options, "EmbedValidationError");
         if (!string.IsNullOrEmpty(embedValidationError))
@@ -69,112 +36,14 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             case DevtoolsSubverb.Run:
                 ReactorApp.DevtoolsEnabled = true;
                 return RunRunSubverb(options, request.Title, request.Width, request.Height, request.FullScreen, request.Configure, request.HostRoot, request.HostRootFactory, request.RootMountSite);
-            case DevtoolsSubverb.Screenshot:
-                return RunScreenshotSubverb(options, request.Width, request.Height, request.Configure, request.HostRoot);
-            case DevtoolsSubverb.Tree:
-                Console.Error.WriteLine($"[devtools] '--devtools tree' (headless) is not implemented yet.");
-                return true;
-            case DevtoolsSubverb.App:
-                ReactorApp.DevtoolsEnabled = true;
-                return false;
             default:
                 return false;
         }
     }
 
-    private static bool TryReportPackageMismatch()
-    {
-        var coreVersion = GetInformationalVersion(typeof(ReactorApp).Assembly);
-        var devtoolsVersion = GetInformationalVersion(typeof(DevtoolsHost).Assembly);
-        if (string.Equals(coreVersion, devtoolsVersion, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        Console.Error.WriteLine("[reactor] Microsoft.UI.Reactor and Microsoft.UI.Reactor.Devtools package payloads do not match.");
-        Console.Error.WriteLine($"[reactor]   Microsoft.UI.Reactor:          {coreVersion}");
-        Console.Error.WriteLine($"[reactor]   Microsoft.UI.Reactor.Devtools: {devtoolsVersion}");
-        Console.Error.WriteLine("[reactor] This usually means NuGet restored stale 0.0.0-local package contents. Run `mur pack-local`, delete bin/obj for this app, then restore/build again.");
-        return true;
-    }
-
-    private static string GetInformationalVersion(Assembly assembly)
-    {
-        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? assembly.GetName().Version?.ToString()
-            ?? "<unknown>";
-    }
-
     private static string? GetOptionalStringProperty<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(T instance, string propertyName)
     {
         return typeof(T).GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public)?.GetValue(instance) as string;
-    }
-
-    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
-    private static bool RunScreenshotSubverb(DevtoolsCliOptions options, double? width, double? height, Action<ReactorHost>? configure, Type? hostRoot = null)
-    {
-        if (string.IsNullOrEmpty(options.ScreenshotOutputPath))
-        {
-            Console.Error.WriteLine("[devtools] '--devtools screenshot' requires --out <path.png>.");
-            return true;
-        }
-
-        var componentName = options.ComponentName ?? hostRoot?.Name ?? FindAllComponentNames().FirstOrDefault();
-        if (componentName == null)
-        {
-            Console.Error.WriteLine("[devtools] No Component subclasses found.");
-            return true;
-        }
-        var type = FindComponentType(componentName);
-        if (type == null)
-        {
-            Console.Error.WriteLine($"[devtools] Component '{componentName}' not found.");
-            return true;
-        }
-
-        string outPath = options.ScreenshotOutputPath!;
-
-        ReactorApp.RunOnSta(() =>
-        {
-            ReactorApp.InitProcess();
-
-            ReactorApp.Options = new ReactorAppOptions(
-                RootFactory: () => (Component)Activator.CreateInstance(type)!,
-                Configure: host =>
-                {
-                    configure?.Invoke(host);
-                    host.Window.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        try
-                        {
-                            if (host.Window.Content is FrameworkElement fe) fe.UpdateLayout();
-                            var capture = ScreenshotCapture.CaptureWindow(host.Window, includeChrome: false);
-                            File.WriteAllBytes(outPath, capture.Png);
-                            Console.WriteLine($"[devtools] Wrote {capture.Width}x{capture.Height} PNG to {outPath}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine($"[devtools] Screenshot failed: {ex.Message}");
-                        }
-                        finally
-                        {
-                            Environment.Exit(0);
-                        }
-                    });
-                },
-                WindowTitle: $"Screenshot — {componentName}",
-                WindowWidth: width,
-                WindowHeight: height);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
-
-        return true;
     }
 
     [RequiresUnreferencedCode("Devtools component listing uses Assembly.GetTypes().")]
@@ -297,109 +166,16 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     server.Start();
                     host.Window.Closed += (_, _) => server.Dispose();
                 }
-
-                var logger = new DevtoolsLogger(
-                    DevtoolsLogger.DefaultDirectory(),
-                    global::System.Diagnostics.Process.GetCurrentProcess().Id,
-                    DevtoolsLogger.ParseLevel(options.LogLevel));
-                var projectId = options.ProjectIdentifier ?? DeriveProjectIdentifier();
-                if (projectId is not null && DevtoolsMcpServer.IsAnotherSessionActive(projectId, out var existing))
-                {
-                    Console.Error.WriteLine(
-                        $"[devtools] another session for this project is active at {existing!.Endpoint} (pid {existing.Pid}); stop it first");
-                    Environment.Exit(3);
-                    return;
-                }
-
-                var mcp = new DevtoolsMcpServer(
-                    host.Window.DispatcherQueue,
-                    host.Window,
-                    preferredPort: options.McpPort,
-                    logger: logger,
-                    transport: options.Transport,
-                    projectIdentifier: projectId);
-
-                var windows = new WindowRegistry(mcp.BuildTag);
-                var nodes = new NodeRegistry();
-                EventHandler<ReactorWindow> onOpened = (_, w) =>
-                {
-                    bool isMain = ReferenceEquals(w, ReactorApp.PrimaryWindow);
-                    windows.Attach(w, isMain: isMain, stableId: isMain ? "main" : null);
-                };
-                EventHandler<ReactorWindow> onClosed = (_, w) => windows.Detach(w);
-                ReactorApp.WindowOpened += onOpened;
-                ReactorApp.WindowClosed += onClosed;
-                host.Window.Closed += (_, _) =>
-                {
-                    ReactorApp.WindowOpened -= onOpened;
-                    ReactorApp.WindowClosed -= onClosed;
-                };
-
-                string? OpenWindowByAllowlistedComponentCore(WindowSpec spec, string componentName)
-                {
-                    var type = FindComponentType(componentName);
-                    if (type is null) return null;
-
-                    var opened = ReactorApp.OpenWindow(spec, () => (Component)Activator.CreateInstance(type)!);
-                    return opened.Id;
-                }
-
-                DevtoolsTools.RegisterCore(mcp, new DevtoolsTools.ToolHostContext
-                {
-                    GetComponents = () => FindAllComponentNames().ToList(),
-                    GetComponentsDetailed = () => FindAllComponentsDetailed().ToList(),
-                    GetCurrentComponent = () => initialComponentName,
-                    SwitchComponent = SwitchComponentCore,
-                    RequestReload = () => RequestDevtoolsReload(mcp, host),
-                    RequestShutdown = () => RequestDevtoolsShutdown(mcp, host),
-                    Windows = windows,
-                    Nodes = nodes,
-                    OpenWindowByAllowlistedComponent = OpenWindowByAllowlistedComponentCore,
-                });
-                DevtoolsUiaTools.RegisterUiaTools(mcp, nodes, windows);
-                DevtoolsFireTool.Register(mcp, () => host.RootComponent);
-                DevtoolsStateTool.Register(mcp, () => host.RootComponent);
-                DevtoolsLogsTool.Register(mcp, () => LogCaptureInstall.Shared);
-                DevtoolsDockingTools.Register(mcp);
-
-                bool announced = false;
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        mcp.Start();
-                        host.Window.DispatcherQueue.TryEnqueue(() =>
-                        {
-                            if (announced) return;
-                            announced = true;
-                            mcp.AnnounceReady();
-                        });
-                    }
-                    catch (LoopbackPortUnavailableException ex) when (ExitCodeForMcpStartFailure(ex) is { } exitCode)
-                    {
-                        // Neutral on purpose: under `mur devtools` the port may be one the
-                        // supervisor chose, and the supervisor prints the guidance.
-                        Console.Error.WriteLine(
-                            $"[devtools] MCP port {ex.Port} (--mcp-port) is already in use by another process; " +
-                            $"exiting with code {exitCode}.");
-                        ExitDevtoolsHost(mcp, host, exitCode);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.Error.WriteLine($"[devtools:mcp] Start failed: {ex}");
-                    }
-                });
-                host.Window.Closed += (_, _) => mcp.Dispose();
             };
 
             ReactorApp.Options = new ReactorAppOptions(
-                RootFactory: hostRootFactory ?? (() => (Component)Activator.CreateInstance(initialComponentType)!),
+                RootFactory: PreviewRootFactory(hostRoot, hostRootFactory, initialComponentType),
                 Configure: combinedConfigure,
                 WindowTitle: $"Preview — {initialComponentName}",
                 WindowWidth: width,
                 WindowHeight: height,
                 FullScreen: fullScreen,
-                RootMountSite: PreviewRootMountSite(rootMountSite, hostRoot, hostRootFactory, initialComponentType),
+                RootMountSite: PreviewRootMountSite(rootMountSite, hostRoot, initialComponentType),
                 InitialWindowSpec: options.EmbedRequested
                     ? BuildEmbedWindowSpec(options, $"Preview — {initialComponentName}", width, height)
                     : BuildPositionedWindowSpec(options, $"Preview — {initialComponentName}", width, height, fullScreen));
@@ -415,14 +191,25 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         return true;
     }
 
+    /// <summary>
+    /// <c>Run&lt;T&gt;</c>'s call site belongs to <c>T</c>: a preview of another component
+    /// (<c>--preview Other</c>) must not report it as that component's mount site.
+    /// </summary>
+    internal static SourceLocation? PreviewRootMountSite(SourceLocation? runSite, Type? hostRoot, Type previewedType) =>
+        hostRoot is not null && previewedType == hostRoot ? runSite : null;
 
     /// <summary>
-    /// The mount site the preview reports for its first root: the app's <c>Run</c> call when the
-    /// preview mounts that call's own root (its factory, or the same component type), and
-    /// <c>null</c> for any other component, which that call never mounted.
+    /// The root the preview mounts first: <c>Run&lt;T&gt;</c>'s own factory when the previewed
+    /// component is <c>T</c> (the only case that reports <c>Run</c>'s mount site), a new instance
+    /// of the previewed type otherwise. <c>Run&lt;T&gt;</c> always passes its factory, so using it
+    /// unconditionally would mount <c>T</c> for <c>--preview &lt;Name&gt;</c> while the window
+    /// title said <c>&lt;Name&gt;</c>.
     /// </summary>
-    internal static SourceLocation? PreviewRootMountSite(SourceLocation? runSite, Type? hostRoot, Func<Component>? hostRootFactory, Type previewedType)
-        => hostRootFactory is not null || previewedType == hostRoot ? runSite : null;
+    [RequiresUnreferencedCode("Devtools component discovery uses Activator.CreateInstance.")]
+    internal static Func<Component> PreviewRootFactory(Type? hostRoot, Func<Component>? hostRootFactory, Type previewedType)
+        => hostRootFactory is not null && previewedType == hostRoot
+            ? hostRootFactory
+            : () => (Component)Activator.CreateInstance(previewedType)!;
 
     /// <summary>
     /// Builds the initial spec for a non-embedded preview window when <c>--x</c>/<c>--y</c>
@@ -431,7 +218,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     /// <remarks>
     /// The docs screenshot harness uses this to capture on a monitor whose scale matches the
     /// repo's 150% capture convention when that monitor is not the primary display. It matters
-    /// because capture is <c>PrintWindow</c> over the live HWND in *physical* pixels, so the
+    /// because capture is of the live window in *physical* pixels, so the
     /// captured size follows the DPI of whichever monitor the window sits on.
     /// <para>Both axes are required together: a half-specified origin has no sensible meaning
     /// (the other axis would fall back to an OS-chosen value on a possibly different monitor),
@@ -656,90 +443,5 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             .Select(t => t!.Name)
             .Distinct()
             .OrderBy(n => n);
-    }
-
-    [RequiresUnreferencedCode("Assembly.GetTypes() is incompatible with trimming. Devtools-only code path.")]
-    private static IEnumerable<ComponentInfo> FindAllComponentsDetailed()
-    {
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .SelectMany(a => { try { return a.GetTypes(); } catch (global::System.Reflection.ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; } catch { return []; } })
-            .Where(t => typeof(Component).IsAssignableFrom(t!) && !t!.IsAbstract && !t.FullName!.StartsWith("Microsoft.UI.Reactor."))
-            .Select(t => new ComponentInfo(
-                Name: t!.Name,
-                FullName: t.FullName ?? t.Name,
-                IsNested: t.IsNested,
-                IsPublic: t.IsPublic || t.IsNestedPublic,
-                Namespace: t.Namespace))
-            .GroupBy(c => c.Name)
-            .Select(g => g.First());
-    }
-
-    [UnconditionalSuppressMessage("AOT", "IL3000", Justification = "Assembly.Location used for diagnostic project identifier.")]
-    private static string? DeriveProjectIdentifier()
-    {
-        try
-        {
-            var asm = global::System.Reflection.Assembly.GetEntryAssembly();
-            var loc = asm?.Location;
-            if (!string.IsNullOrEmpty(loc)) return loc;
-        }
-        catch { }
-        return null;
-    }
-
-    /// <summary>
-    /// Maps an MCP <see cref="DevtoolsMcpServer.Start"/> failure to the exit code
-    /// the devtools child exits with, or null to keep running without MCP (the
-    /// long-standing behavior for other failures). Only a pinned port that is in
-    /// use exits: the user (or <c>mur devtools</c>) asked for exactly that port,
-    /// and a devtools session without its endpoint fails silently for the agent.
-    /// </summary>
-    internal static int? ExitCodeForMcpStartFailure(Exception ex) =>
-        ex is LoopbackPortUnavailableException { Pinned: true } ? McpPortUnavailableExitCode : null;
-
-    private static void ExitDevtoolsHost(DevtoolsMcpServer mcp, ReactorHost host, int exitCode)
-    {
-        try
-        {
-            mcp.Dispose();
-        }
-        finally
-        {
-            // If the dispatcher is already shutting down, exit here so 43 still reaches the supervisor.
-            var enqueued = host.Window.DispatcherQueue.TryEnqueue(() =>
-            {
-                try { host.Window.Close(); }
-                finally { Environment.Exit(exitCode); }
-            });
-            if (!enqueued) Environment.Exit(exitCode);
-        }
-    }
-
-    private static void RequestDevtoolsReload(DevtoolsMcpServer mcp, ReactorHost host)
-    {
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(100);
-            try { mcp.Dispose(); } catch { }
-            host.Window.DispatcherQueue.TryEnqueue(() =>
-            {
-                try { host.Window.Close(); } catch { }
-                Environment.Exit(DevtoolsReloadExitCode);
-            });
-        });
-    }
-
-    private static void RequestDevtoolsShutdown(DevtoolsMcpServer mcp, ReactorHost host)
-    {
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(100);
-            try { mcp.Dispose(); } catch { }
-            host.Window.DispatcherQueue.TryEnqueue(() =>
-            {
-                try { host.Window.Close(); } catch { }
-                Environment.Exit(0);
-            });
-        });
     }
 }

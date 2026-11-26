@@ -185,9 +185,6 @@ internal static class FixtureRegistry
         ("ToolkitInput_PropertySizer", static _ => ToolkitInputFixtures.Build("psz")),
         ("ToolkitInput_GridSplitter", static _ => ToolkitInputFixtures.Build("splitter")),
 
-        // Devtools UX (spec 028 — E2E validation)
-        ("DevtoolsUx_MenuAndToggle", static ctx => DevtoolsUxFixtures.DevtoolsUxTest(ctx)),
-
         // Docking input (spec 045 — E2E validation of keyboard focus
         // across docking layout mutations)
         ("DockingInput_TwoPaneTextBoxes", static ctx => DockingInputE2EFixtures.TwoPaneTextBoxTest(ctx)),

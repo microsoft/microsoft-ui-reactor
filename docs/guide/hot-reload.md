@@ -52,9 +52,8 @@ call:
 // Program entry point — this is the entire App.cs file:
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo");
 //
-// Hot reload works when the app is launched under dotnet watch. Devtools
-// screenshot capture is enabled by the app project's Reactor.DevtoolsSupport
-// switch and activated by launching with --devtools.
+// Hot reload works when the app is launched under dotnet watch. Inspect the
+// running app with the WinUI DevTools: winapp run . --devtools on
 ```
 
 Here is a small app to try it with:
@@ -203,6 +202,11 @@ run the app under `dotnet watch`, so hot reload works there too.
 
 See [Visual Studio and VS Code extensions](vs-extension.md) to install and use
 them. The `mur` CLI has no preview command.
+
+To keep the WinUI DevTools attached while you edit, run
+`winapp run . --devtools on --watch` instead of `dotnet watch`. When an edit
+needs a restart, winapp rebuilds the app and attaches DevTools again. See
+[Devtools](devtools.md#start-a-session).
 
 ## Tips
 

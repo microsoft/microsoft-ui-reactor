@@ -12,7 +12,7 @@ one stage at a time. Each stage links to a page with the full details.
 | Project templates | Create a new Reactor app | Windows App SDK template pack, through `winapp new` or `dotnet new` | [Install Reactor](install.md) |
 | `mur` CLI | Create, check, inspect, and localize from the terminal | .NET tool `Microsoft.UI.Reactor.Cli`, or the skill kit zip | [mur CLI](mur-cli.md) |
 | Hot reload | Apply code edits to a running app and keep its state | Built into `Microsoft.UI.Reactor`; run with `dotnet watch` | [Hot reload](hot-reload.md) |
-| Devtools | In-app dev menu, overlays, and a local MCP server | NuGet package `Microsoft.UI.Reactor.Devtools` | [Devtools](devtools.md) |
+| WinUI DevTools | Inspect, edit, and drive a running app from the terminal or an agent | The winapp CLI: `winapp run . --devtools on` | [Devtools](devtools.md) |
 | Visual Studio extension | Live preview inside Visual Studio 2026 | `Reactor.VsExtension.vsix` on the GitHub release | [Extensions](vs-extension.md) |
 | VS Code extension | Live preview panel in VS Code | Run from source in `src/vscode-reactor` | [Extensions](vs-extension.md) |
 | Analyzers | Report Reactor mistakes in the editor and the build, with code fixes | Inside the `Microsoft.UI.Reactor` package | [Analyzers](analyzers.md) |
@@ -20,7 +20,7 @@ one stage at a time. Each stage links to a page with the full details.
 | Agent plugin and skill kit | Teach AI coding agents the Reactor DSL and tools | `plugins/reactor` in the repo, or the skill kit zip | [Build with AI](build-with-ai.md) |
 | Diagnostics | Release-safe events, traces, and logs | Built into `Microsoft.UI.Reactor` | [Diagnostics](diagnostics.md) |
 
-![The Reactor inner dev loop. 1 Create, with project templates and mur --create. 2 Edit live, with dotnet watch, hot reload, and live preview. 3 Inspect, with devtools. 4 Catch mistakes early, with analyzers and mur check. 5 Debug and measure, with diagnostics. An arrow labeled next change goes back to Edit live. In the center, Work with AI agents has dashed arrows to each stage.](images/dev-tooling/inner-loop.svg)
+![The Reactor inner dev loop. 1 Create, with project templates and mur --create. 2 Edit live, with dotnet watch, hot reload, and live preview. 3 Inspect, with the WinUI DevTools in the winapp CLI. 4 Catch mistakes early, with analyzers and mur check. 5 Debug and measure, with diagnostics. An arrow labeled next change goes back to Edit live. In the center, Work with AI agents has dashed arrows to each stage.](images/dev-tooling/inner-loop.svg)
 
 ## Create a project
 
@@ -67,48 +67,62 @@ show the live app next to your code.
 
 ## Inspect the running app
 
-Devtools let you look inside a running Debug build. Add the
-`Microsoft.UI.Reactor.Devtools` package, then launch the app with
-`--devtools app` for the in-app dev menu, or `--devtools run` to also start a
-local MCP server. With the MCP server running, `mur devtools` can take
-screenshots, read the visual tree and hook state, and click or type into the
-app from a terminal.
+The WinUI DevTools in the [winapp CLI](https://github.com/microsoft/winappCli)
+let you look inside a running Debug build. They attach from outside the app, so
+you don't add anything to your project:
 
-Your own debug-only UI can check the same gate. `UseDevtools()` returns `true`
-only when devtools are on for this session:
+```
+winapp run . --devtools on
+```
+
+`winapp devtools inspect` shows the component tree with the line of C# that
+created each element. Other `winapp devtools` commands read and change
+properties, resources, and hook state, and `winapp ui` clicks, types, and takes
+screenshots.
+
+For your own debug switches, such as a debug overlay or a "clear cache" command,
+build an ordinary menu that only Debug builds compile:
 
 ```csharp
-static class DevGate
+static class DevMenu
 {
-    // UseDevtools() is a RenderContext extension, so it is reached from a
-    // function component's ctx (or any helper you hand the ctx to) — there is
-    // no Component-level forwarder. It returns true only when BOTH the
-    // Reactor.DevtoolsSupport build switch and `--devtools app` (or `run`) are set.
-    //
-    // UseDevtools() uses no hook slot, but it is still a Use* call:
-    // REACTOR_HOOKS_005 only permits Use* calls from Render() or a Use*-named
-    // method, so a helper called `Shell` here would warn.
-    public static Element UseShell(RenderContext ctx)
+    // Named Use* because it consumes a hook slot: REACTOR_HOOKS_005 only
+    // permits hook calls from Render() or a Use*-named method.
+    public static Element UseTitleBar(RenderContext ctx)
     {
-        var dev = ctx.UseDevtools();
+        // Subscribe during render — not inside a menu item callback, which
+        // runs when the item is clicked rather than during a render pass.
+        var debugUI = ctx.UseObservable(AppFlags.DebugUI).Value;
 
-        return VStack(8,
-            MainContent(),
-            dev ? DebugOverlay() : Empty()
+        return HStack(8,
+            TextBlock("My App"),
+#if DEBUG
+            // An ordinary menu, compiled into Debug builds only.
+            DropDownButton("Dev", MenuItems(new MenuFlyoutItemBase[]
+            {
+                ToggleMenuItem("Debug UI", debugUI,
+                    v => AppFlags.DebugUI.Value = v),
+                MenuSeparator(),
+                MenuItem("Clear cache", () => CacheService.Clear()),
+                MenuItem("Slow mode off", () => AppFlags.SlowMode.Value = false),
+            })),
+#endif
+            // Only *constructed* when the flag is on: in retail the ternary
+            // costs one bool read — no element tree, no children reconciled.
+            debugUI ? TextBlock("debug overlay").Opacity(0.6) : null
         );
     }
+}
 
-    private static Element MainContent() => TextBlock("App content");
-
-    // Only *constructed* when dev is true. In retail the ternary costs one
-    // bool read plus one branch — no element tree, no children reconciled.
-    private static Element DebugOverlay() =>
-        TextBlock("debug overlay").Opacity(0.6);
+// Stand-in for whatever your app actually caches.
+static class CacheService
+{
+    public static void Clear() { }
 }
 ```
 
-Read [Devtools](devtools.md) for setup, the dev menu, overlays, the MCP
-server, and how devtools stay out of Release and AOT builds.
+Read [Devtools](devtools.md) for the commands, the overlays, and the deprecated
+`Microsoft.UI.Reactor.Devtools` package that the live previews still use.
 
 ## Catch mistakes early
 
@@ -144,8 +158,9 @@ class HookOrderGood : Component
 
 AI coding agents can do every stage of this loop. The Reactor agent plugin and
 the skill kit teach an agent the DSL, the hooks rules, and the tools on this
-page. `mur check` gives the agent build feedback with fix hints, and
-`mur devtools` lets it see and drive the running app. The docs site also
+page. `mur check` gives the agent build feedback with fix hints, and the
+winapp CLI with `--json` and the `winui-devtools` skill lets it see and drive
+the running app. The docs site also
 publishes `llms.txt` and a Markdown copy of each page.
 
 Read [Build with AI](build-with-ai.md) for install steps for each agent.
@@ -154,9 +169,8 @@ Read [Build with AI](build-with-ai.md) for install steps for each agent.
 
 In Release builds, Reactor reports swallowed exceptions and failed HRESULTs
 through the `Microsoft-UI-Reactor` EventSource. Capture them with environment
-variables, `dotnet-trace`, the Visual Studio profiler, or in process. During a
-devtools session, the `logs` tool returns the same events next to stdout and
-debug output.
+variables, `dotnet-trace`, the Visual Studio profiler, or in process.
+`winapp devtools logs` shows the warnings and errors among them.
 
 - [Diagnostics](diagnostics.md): capture and read Reactor's events and traces.
 - [Performance](performance.md): find and fix slow renders.
@@ -167,8 +181,8 @@ debug output.
 These pages explain the machinery behind the tools. You do not need them to
 use the tools.
 
-- [Devtools internals](devtools-internals.md): the MCP server, tree walker, and
-  selectors.
+- [Devtools internals](devtools-internals.md): the in-app preview host behind
+  the Visual Studio and VS Code previews.
 - [Analyzer architecture](analyzer-architecture.md): how the analyzers and
   code fixes are built.
 - [Source mapping](source-mapping.md): how a control maps back to the line of
@@ -190,7 +204,7 @@ use the tools.
 ## Next Steps
 
 - **[Hot reload and live preview](hot-reload.md)**: edit a running app
-- **[Devtools](devtools.md)**: the dev menu, overlays, and MCP server
+- **[Devtools](devtools.md)**: inspect and drive a running app with winapp
 - **[mur CLI](mur-cli.md)**: every command and its options
 - **[Analyzers](analyzers.md)**: every `REACTOR_*` rule
 - **[Build with AI](build-with-ai.md)**: use Reactor with AI coding agents

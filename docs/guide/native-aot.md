@@ -237,7 +237,6 @@ at run time in an AOT app:
 | `UseObservableTree` on plain objects | `Observable<T>` or an observable collection |
 | PropertyGrid auto-discovery and its array editor | Register editors by hand, or use a JIT build |
 | `FormField(field, value, onChange)`, which picks the editor from a `FieldDescriptor` | `FormField(content, label: ...)` with an editor you choose |
-| Devtools DP discovery (`properties`, `setProperty`) | Inspect a JIT build |
 | `{TemplateBinding}` to private DPs in a third-party assembly with no `.xaml` file | `ReactorApp.RegisterControlAssembly(provider)` |
 
 The full list, with issue links, is in
@@ -409,19 +408,20 @@ To turn the switch on for one build without editing the project, pass
 `Reactor.targets` warns not to ship a build made with it. You still need the
 Devtools package for `--devtools`.
 
-If an app built without devtools gets `--devtools run`, it does not open a
-normal window. It writes this to standard error and exits with code 2:
+If an app built without the switch gets `--devtools run`, it does not open a
+normal window. It writes a message like this to standard error and exits with
+code 2:
 
 ```text
-[reactor] --devtools requested but this binary was built without Reactor.DevtoolsSupport or without the Microsoft.UI.Reactor.Devtools package. Devtools must be enabled at build time. Add the following to your csproj and rebuild:
-  <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+[reactor] The in-app preview host (--devtools run / --preview) is off in this build: it needs the Reactor.DevtoolsSupport switch, which is on in Debug unless ReactorDiagnostics or Reactor.DevtoolsSupport is set to false. Run a Debug build instead, for example `winapp run . --devtools on -- --preview <Name>` (Debug is winapp's default). It also needs the Microsoft.UI.Reactor.Devtools package, referenced for Debug:
+  <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="0.1.0-preview.18" Condition="'$(Configuration)' == 'Debug'" />
 ```
 
-Some devtools features do less under AOT. DP discovery for `properties` and
-`setProperty` returns empty results, and the tool adds a notice that says
-why. For day-to-day work, use devtools in a Debug (JIT) build. Build an AOT
-devtools binary only to look at a problem that only happens under AOT. See
-[Devtools](devtools.md) for how to use devtools.
+The WinUI DevTools in the winapp CLI need none of this: they attach to an AOT
+build from outside. Without source mapping they can't show which line created
+each element, so for day-to-day work use a Debug (JIT) build. Build an AOT
+binary with the preview host only to look at a problem that only happens under
+AOT. See [Devtools](devtools.md).
 
 ## Tracing in AOT builds
 

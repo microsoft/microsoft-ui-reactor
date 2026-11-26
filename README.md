@@ -131,7 +131,7 @@ invents API names or falls back to XAML. These tools close that gap:
 | Agent plugin | The `reactor-dev` agent and the Reactor skills, for GitHub Copilot CLI and Claude Code | `copilot plugin install microsoft/microsoft-ui-reactor:plugins/reactor` |
 | Skill kit | [`SKILL.md`](SKILL.md), the topic files in [`skills/`](skills/) and an index of every public API, for agents without plugins | The `reactor-skill-kit` zip on the [releases page](https://github.com/microsoft/microsoft-ui-reactor/releases) |
 | `mur check` | Build output with one line per problem and a fix to try | Comes with the skill kit |
-| [Devtools MCP server](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Eyes on the running app: the visual tree, hook state, screenshots, clicks and typing | Add the `Microsoft.UI.Reactor.Devtools` package to your app, then run `mur devtools` |
+| [WinUI DevTools](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Eyes on the running app: the component tree, hook state, screenshots, clicks and typing | Run `winapp run . --devtools on`, then the `winapp` commands with `--json` and the `winui-devtools` skill |
 | Docs for AI tools | `llms.txt`, `llms-full.txt` and a Markdown copy of every docs page | [`llms.txt`](https://microsoft.github.io/microsoft-ui-reactor/latest/llms.txt) |
 
 [Build with AI](https://microsoft.github.io/microsoft-ui-reactor/tools/build-with-ai/)
@@ -144,7 +144,7 @@ conventions for this repo.
 | Tool | What it does |
 |---|---|
 | [Hot reload and live preview](https://microsoft.github.io/microsoft-ui-reactor/tools/hot-reload/) | Save a file and see the change without a restart. Preview one component at a time. |
-| [Devtools](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Inspect the visual tree and hook state of a running app, from a terminal or an MCP client. |
+| [Devtools](https://microsoft.github.io/microsoft-ui-reactor/tools/devtools/) | Inspect and drive a running app with the WinUI DevTools in the winapp CLI, from a terminal or an agent. |
 | [Analyzers](https://microsoft.github.io/microsoft-ui-reactor/tools/analyzers/) | Catch hook-order, accessibility and theming mistakes as you type. |
 | [mur CLI](https://microsoft.github.io/microsoft-ui-reactor/tools/mur-cli/) | `mur check`, `mur doctor`, localization tools and more. |
 | [Editor extensions](https://microsoft.github.io/microsoft-ui-reactor/tools/vs-extension/) | Live preview in VS Code and Visual Studio. |
@@ -172,7 +172,7 @@ may still change, not how complete it is.
 | **Input & gestures** | Pan / pinch / rotate / long-press gesture recognizers, drag-and-drop with typed data transfer, pointer and focus management | Draft |
 | **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
-| **DevTools & diagnostics** | In-process MCP server for AI agents, UIA tree inspection, layout-cost overlay, screenshot capture, structured log capture, ETW layout events | Draft |
+| **DevTools & diagnostics** | WinUI DevTools in the winapp CLI (`winapp run . --devtools on`: component tree, C# call sites, state, live edits, UI automation), source mapping, ETW events. Reactor's own `mur devtools` CLI and in-app MCP server have been removed; the `Microsoft.UI.Reactor.Devtools` preview-host package is deprecated | Draft |
 | **`mur` CLI & analyzers** | App scaffolding, `mur check` did-you-mean linter, localization tooling, `mur doctor` / `mur upgrade`, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |

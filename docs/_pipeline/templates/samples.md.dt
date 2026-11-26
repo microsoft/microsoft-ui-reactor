@@ -60,14 +60,16 @@ The commands on this page use `x64`. On an Arm PC, use `ARM64`. A few
 commands also set `-p:RuntimeIdentifier=win-x64`, as the sample's README does.
 Change that value to `win-arm64` when you change the platform.
 
-Debug builds of the samples also reference `Reactor.Devtools`, so you can add
-a `--devtools` argument after `--`:
+To inspect a sample while it runs, start it with the WinUI DevTools in the
+winapp CLI:
 
 ```powershell
-dotnet run --project samples/TodoApp -p:Platform=x64 -- --devtools app
+winapp run samples/TodoApp --devtools on
 ```
 
-See [Devtools](devtools.md) for the other launch modes.
+Debug builds of the samples also reference the deprecated `Reactor.Devtools`
+project, so `-- --preview <Component>` opens one component. See
+[Devtools](devtools.md).
 
 ## Start here
 

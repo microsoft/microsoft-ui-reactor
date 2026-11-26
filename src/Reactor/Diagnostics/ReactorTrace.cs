@@ -6,7 +6,7 @@ namespace Microsoft.UI.Reactor.Diagnostics;
 /// <summary>
 /// In-process subscription helper for the <c>Microsoft-UI-Reactor</c>
 /// <see cref="EventSource"/>. Lets an app developer (or an internal
-/// devtools surface — <c>reactor.logs</c> MCP, an <c>ILogger</c> bridge)
+/// surface such as an <c>ILogger</c> bridge or a debug overlay)
 /// observe framework events without writing an <see cref="EventListener"/>
 /// subclass.
 ///

@@ -117,25 +117,6 @@ CommandHostElement CommandHost(Command[] commands, Element child)
 | `commands` | [`Command[]`](../input/Command.md) |  |
 | `child` | [`Element`](../elements/Element.md) |  |
 
-## `DevtoolsMenu`
-
-Renders the optional in-app devtools menu when Microsoft.UI.Reactor.Devtools is referenced and active; otherwise returns [`Empty`](composition.md#empty).
-
-```csharp
-Element DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>>? items = null, string glyph = "⚡", string toolTip = "Devtools", string? automationId = null)
-```
-
-**Returns:** [`Element`](../elements/Element.md).
-
-**Parameters**
-
-| Name | Type | Default | Description |
-| --- | --- | --- | --- |
-| `items` | `Func<IEnumerable<MenuFlyoutItemBase>>?` | `null` |  |
-| `glyph` | `string` | `"⚡"` |  |
-| `toolTip` | `string` | `"Devtools"` |  |
-| `automationId` | `string?` | `null` |  |
-
 ## `Menu`
 
 ```csharp

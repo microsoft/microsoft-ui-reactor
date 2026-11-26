@@ -283,26 +283,26 @@ remove them. The repo-internal
 clone (`Directory.Build.props`); consumer projects pick their version
 directly.
 
-**Debug builds of the scaffolded template auto-include the
+**Debug builds of the scaffolded template auto-include the deprecated
 `Microsoft.UI.Reactor.Devtools` package** (gated by a
 `Condition="'$(Configuration)' == 'Debug'"` ItemGroup that adds both
 the package and `RuntimeHostConfigurationOption
-Reactor.DevtoolsSupport=true`). That makes devtools available without
-turning them on: the default launch profile passes no arguments, so launch
-with `dotnet run -- --devtools app` and render `DevtoolsMenu(...)` to get the
-[in-app dev menu](devtools.md#in-app-dev-menu) (see
+Reactor.DevtoolsSupport=true`). The package now only hosts the in-app
+component preview that the VS Code live preview and the Reactor Visual
+Studio embedded-preview extension (spec 056) use: the VSIX's
+`dotnet watch run -- --devtools run --embed --embed-host-pid <pid>`
+activation needs the devtools assembly loadable in the user's process.
+The default launch profile passes no arguments. A
+`"<AppName> (Unpackaged, Devtools)"` profile, where your template pack has
+one, starts that preview host when it passes a bare `--devtools`; one that
+passes `--devtools app` now starts the app normally with a notice, because
+the in-app dev menu has been removed (see
 [Running with devtools](getting-started.md#running-with-devtools)).
-The Reactor Visual
-Studio embedded-preview extension (spec 056) also relies on this
-Debug wiring — its `dotnet watch run -- --devtools run --embed
---embed-host-pid <pid>` activation needs the devtools assembly
-loadable in the user's process. That VSIX is the roughest and most
-experimental consumer of this wiring today; keep the Debug-only
-boundary in place unless you are deliberately testing the embedded
-preview. Release builds drop both the package
-and the host-config switch so the trim / AOT analyzers stay quiet;
-move the ItemGroup out of the Debug condition if you want devtools
-in Release too.
+To inspect or drive a running app, use the WinUI DevTools in the winapp
+CLI (`winapp run . --devtools on`), which need no package. Keep the
+Debug-only boundary in place: Release builds drop the package so the
+trim / AOT analyzers stay quiet, and a reference outside Debug gets
+build warning `REACTOR_DEVTOOLS_001`.
 
 ## Next Steps
 

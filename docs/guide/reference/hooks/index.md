@@ -120,14 +120,6 @@ Hooks for page navigation and the system back button.
 | [`UseNavigationLifecycle`](UseNavigationLifecycle.md) | Registers lifecycle callbacks that fire during navigation events. |
 | [`UseSystemBackButton`](UseSystemBackButton.md) | Subscribes to Alt+Left and VirtualKey.GoBack keyboard events on the given window's content to call `NavigationHandle.GoBack`. |
 
-## Developer tools
-
-Hooks for the Reactor developer tools.
-
-| Hook | Description |
-| --- | --- |
-| [`UseDevtools`](UseDevtools.md) | Returns `true` when the current process is running with the in-app devtools UI enabled. |
-
 ## Types and options
 
 | Type | Description |

@@ -569,7 +569,10 @@ public sealed class DemoScriptShell : Component
                 .Set("ButtonForegroundPressed", new ThemeRef("TextOnAccentFillColorSecondaryBrush"))
                 .Set("ButtonForegroundDisabled", new ThemeRef("TextOnAccentFillColorDisabledBrush")));
 
-        var devMenu = DevtoolsMenu(() => new Microsoft.UI.Reactor.Core.MenuFlyoutItemBase[]
+        // Debug builds only (it used to be the in-app devtools menu, which only showed in devtools sessions).
+        Microsoft.UI.Reactor.Core.Element? devMenu = null;
+#if DEBUG
+        devMenu = DropDownButton("Dev", MenuItems(new Microsoft.UI.Reactor.Core.MenuFlyoutItemBase[]
         {
             MenuItem("Reveal demo-script.md…",
                 () =>
@@ -608,7 +611,8 @@ public sealed class DemoScriptShell : Component
                 })),
             MenuItem("Force banner: dummy auth error",
                 () => _status.SetBanner("Dummy auth banner — testing recovery UX. Click Open Folder to clear.")),
-        });
+        }));
+#endif
 
         var headerActions = HStack(8,
             Button(openCmd),

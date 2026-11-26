@@ -177,10 +177,9 @@ the whole list: a fixture that asserts the scan is completely clean
 starts failing the day an unrelated rule is added, and the failure
 will not be about the thing the test was written to protect.
 
-The same scanner backs the in-app dev menu's "Run accessibility scan"
-button, so a fixture that passes here is the same shape that passes in
-the running app. Treat scanner-clean as the standing bar for every new
-component you ship.
+Because the scanner takes an `Element`, a fixture that passes here
+checks the same tree the running app renders. Treat scanner-clean as
+the standing bar for every new component you ship.
 
 ## Self-tests (real WinUI tree)
 

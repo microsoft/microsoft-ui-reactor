@@ -330,8 +330,6 @@ scheme actually changes.
   values; how the brush transitions through a theme swap.
 - **[Accessibility](accessibility.md)** — Contrast budgets that
   determine which token to reach for in each surface.
-- **[Devtools Internals](devtools-internals.md)** — How the dev-menu's
-  theme-swap toggle drives the same resolver this page documents.
 - **[Rules of Reactor](rules-of-reactor.md)** — Where the
   REACTOR_THEME_001 analyzer is listed alongside the rest of the
   enforced idioms.

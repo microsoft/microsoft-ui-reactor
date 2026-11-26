@@ -759,11 +759,12 @@ six body sections above are the recipe; [the protocol page](control-reconciler-p
 specification it implements. The two pages together are the complete
 contract — bookmark both.
 
-**Keep devtools-adjacent hooks in the optional package.** Control helpers
-that only serve the `--devtools` MCP/preview surface belong in
-`Microsoft.UI.Reactor.Devtools`, not core `Microsoft.UI.Reactor`. That
-keeps retail apps from resolving or shipping devtools implementation IL
-unless they add the optional package and enable `Reactor.DevtoolsSupport`.
+**Keep devtools-adjacent hooks out of core.** Control helpers that only
+serve the `--devtools run` preview surface belong in the (deprecated)
+`Microsoft.UI.Reactor.Devtools` package, not core `Microsoft.UI.Reactor`,
+so retail apps never resolve or ship that IL. New inspector hooks go
+through the public `ReactorDiagnostics` APIs that the WinUI DevTools read,
+gated by `Reactor.DevtoolsSupport`.
 
 ## Next Steps
 

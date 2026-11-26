@@ -9,7 +9,7 @@ Types the developer tools use to start inside an app.
 Parsed result of a `--devtools` / `--preview` invocation. [`DevtoolsCliOptions.Subverb`](#subverb) is `null` when neither flag is present.
 
 ```csharp
-public sealed record DevtoolsCliOptions(DevtoolsSubverb? Subverb, string? ComponentName, bool VsCodeMode, int Fps, string? ListOutputPath, string? ScreenshotOutputPath, int? McpPort, string? LogLevel, McpTransport Transport, bool UsedDeprecatedPreview, bool PreviewAndDevtoolsConflict, string? ProjectIdentifier = null, bool LogsDisabled = false, int? LogsCapacityMb = null, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string? EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
+public sealed record DevtoolsCliOptions(DevtoolsSubverb? Subverb, string? ComponentName, bool VsCodeMode, int Fps, string? ListOutputPath, bool PreviewAndDevtoolsConflict, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string? EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
 ```
 
 Namespace: `Microsoft.UI.Reactor.Hosting.Devtools`.
@@ -21,7 +21,7 @@ Namespace: `Microsoft.UI.Reactor.Hosting.Devtools`.
 Parsed result of a `--devtools` / `--preview` invocation. [`DevtoolsCliOptions.Subverb`](#subverb) is `null` when neither flag is present.
 
 ```csharp
-public DevtoolsCliOptions(DevtoolsSubverb? Subverb, string? ComponentName, bool VsCodeMode, int Fps, string? ListOutputPath, string? ScreenshotOutputPath, int? McpPort, string? LogLevel, McpTransport Transport, bool UsedDeprecatedPreview, bool PreviewAndDevtoolsConflict, string? ProjectIdentifier = null, bool LogsDisabled = false, int? LogsCapacityMb = null, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string? EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
+public DevtoolsCliOptions(DevtoolsSubverb? Subverb, string? ComponentName, bool VsCodeMode, int Fps, string? ListOutputPath, bool PreviewAndDevtoolsConflict, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string? EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
 ```
 
 **Parameters**
@@ -33,15 +33,7 @@ public DevtoolsCliOptions(DevtoolsSubverb? Subverb, string? ComponentName, bool 
 | `VsCodeMode` | `bool` |  |  |
 | `Fps` | `int` |  |  |
 | `ListOutputPath` | `string?` |  |  |
-| `ScreenshotOutputPath` | `string?` |  |  |
-| `McpPort` | `int?` |  |  |
-| `LogLevel` | `string?` |  |  |
-| `Transport` | [`McpTransport`](#mcptransport) |  |  |
-| `UsedDeprecatedPreview` | `bool` |  |  |
 | `PreviewAndDevtoolsConflict` | `bool` |  |  |
-| `ProjectIdentifier` | `string?` | `null` |  |
-| `LogsDisabled` | `bool` | `false` |  |
-| `LogsCapacityMb` | `int?` | `null` |  |
 | `EmbedRequested` | `bool` | `false` |  |
 | `EmbedStyle` | [`WindowEmbedStyle`](../hosting/window-options.md#windowembedstyle) | `WindowEmbedStyle.Child` |  |
 | `EmbedHostPid` | `int?` | `null` |  |
@@ -102,64 +94,16 @@ public int Fps  // get, init
 public string? ListOutputPath  // get, init
 ```
 
-#### `LogLevel`
-
-```csharp
-public string? LogLevel  // get, init
-```
-
-#### `LogsCapacityMb`
-
-```csharp
-public int? LogsCapacityMb  // get, init
-```
-
-#### `LogsDisabled`
-
-```csharp
-public bool LogsDisabled  // get, init
-```
-
-#### `McpPort`
-
-```csharp
-public int? McpPort  // get, init
-```
-
 #### `PreviewAndDevtoolsConflict`
 
 ```csharp
 public bool PreviewAndDevtoolsConflict  // get, init
 ```
 
-#### `ProjectIdentifier`
-
-```csharp
-public string? ProjectIdentifier  // get, init
-```
-
-#### `ScreenshotOutputPath`
-
-```csharp
-public string? ScreenshotOutputPath  // get, init
-```
-
 #### `Subverb`
 
 ```csharp
 public DevtoolsSubverb? Subverb  // get, init
-```
-
-#### `Transport`
-
-```csharp
-public McpTransport Transport  // get, init
-```
-
-#### `UsedDeprecatedPreview`
-
-```csharp
-public bool UsedDeprecatedPreview  // get, init
 ```
 
 #### `VsCodeMode`
@@ -194,6 +138,8 @@ public double? WindowY  // get, init
 
 ## `DevtoolsSubverb`
 
+What the in-app preview host was asked to do: [`DevtoolsSubverb.Run`](#values) the preview (the VS Code live preview and the Visual Studio embedded preview launch this), or [`DevtoolsSubverb.List`](#values) the app's components.
+
 ```csharp
 public enum DevtoolsSubverb
 ```
@@ -206,11 +152,10 @@ Namespace: `Microsoft.UI.Reactor.Hosting.Devtools`.
 | --- | --- | --- |
 | `Run` | `0` |  |
 | `List` | `1` |  |
-| `Screenshot` | `2` |  |
-| `Tree` | `3` |  |
-| `App` | `4` |  |
 
 ## `IReactorDevtoolsHost`
+
+Implemented by the `Microsoft.UI.Reactor.Devtools` package: the in-app preview host that the VS Code live preview and the Visual Studio embedded preview launch with `--devtools run`.
 
 ```csharp
 public interface IReactorDevtoolsHost
@@ -219,21 +164,6 @@ public interface IReactorDevtoolsHost
 Namespace: `Microsoft.UI.Reactor.Hosting.Devtools`.
 
 ### Methods
-
-#### `BuildDevtoolsMenu`
-
-```csharp
-public Element? BuildDevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>>? items, string glyph, string toolTip, string? automationId)
-```
-
-**Parameters**
-
-| Name | Type | Description |
-| --- | --- | --- |
-| `items` | `Func<IEnumerable<MenuFlyoutItemBase>>?` |  |
-| `glyph` | `string` |  |
-| `toolTip` | `string` |  |
-| `automationId` | `string?` |  |
 
 #### `TryHandleCommandLine`
 
@@ -246,23 +176,6 @@ public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
 | Name | Type | Description |
 | --- | --- | --- |
 | `request` | [`ReactorDevtoolsBootRequest`](#reactordevtoolsbootrequest) |  |
-
-## `McpTransport`
-
-Which MCP transport the devtools surface uses.
-
-```csharp
-public enum McpTransport
-```
-
-Namespace: `Microsoft.UI.Reactor.Hosting.Devtools`.
-
-### Values
-
-| Name | Value | Description |
-| --- | --- | --- |
-| `Http` | `0` |  |
-| `Stdio` | `1` |  |
 
 ## `ReactorDevtoolsBootRequest`
 

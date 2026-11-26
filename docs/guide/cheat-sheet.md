@@ -41,7 +41,6 @@ Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Direct
 | `UseFocusTrap(isActive)` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
 | `UseAnnounce()` | `AnnounceHandle` | Push a screen-reader announcement (via `.Announce(string)` method). |
 | `UseElementRef<T>()` | `ElementRef<T>` | Reference a realized element for focus, `TeachingTip.Target`, UIA relationships, or XYFocus. |
-| `UseDevtools()` | `bool` | [Dev-tooling](dev-tooling.md) gate — true when devtools are enabled. |
 
 ```csharp
 class StateVignette : Component

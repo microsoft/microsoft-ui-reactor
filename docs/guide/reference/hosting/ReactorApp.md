@@ -295,7 +295,7 @@ public static void Run(WindowSpec spec, Func<RenderContext, Element> rootRender,
 
 #### `Run<TRoot>(string, double?, double?, bool, WindowIcon?, Action<ReactorHost>?)`
 
-Launches the app. `width` / `height` are DIPs; leave them `null` (the default) to let the OS pick the initial window size, exactly as a plain XAML `Window` does. Enable the `Reactor.DevtoolsSupport` runtime host configuration switch in DEBUG builds to allow the `mur devtools` / `--devtools` surface: component switching via VS Code, MCP agent tools, and component listing.
+Launches the app. `width` / `height` are DIPs; leave them `null` (the default) to let the OS pick the initial window size, exactly as a plain XAML `Window` does. With the `Reactor.DevtoolsSupport` runtime host configuration switch on (the Debug default) and the deprecated Microsoft.UI.Reactor.Devtools package referenced, `--devtools run` starts the in-app preview host that the VS Code and Visual Studio previews use (component switching and listing). To inspect a running app, use the WinUI DevTools: `winapp run. --devtools on`.
 
 ```csharp
 public static void Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, WindowIcon? icon = null, Action<ReactorHost>? configure = null) where TRoot : Component, new()

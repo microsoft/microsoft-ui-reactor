@@ -20,15 +20,14 @@ Spec 044 changed this. Error and HRESULT diagnostics now go through the
 - are grouped by keyword, so you turn on only the groups you need;
 - allocate nothing when no listener is attached.
 
-The devtools `logs` tool can also return these framework events, next to
-stdout, stderr, and debug output. An AI agent connected to the
-[devtools MCP server](devtools.md#mcp-server) gets all of them in one call.
+The WinUI DevTools show the warnings and errors among these events with
+`winapp devtools logs`. See [Logs from the WinUI DevTools](#logs-from-the-winui-devtools).
 
 To add or change events, read [perf-instrumentation.md](perf-instrumentation.md)
 first. It covers keywords, the `IsEnabled` gate, event IDs, and the split
 between EventPipe and ETW.
 
-![Reactor diagnostics flow — a framework catch site delegates to DiagnosticLog, which emits to ReactorEventSource for the Release path and mirrors to Debug.WriteLine in Debug builds; four consumers read the event surface: env-var / dotnet-trace capture, Visual Studio Profiler, the in-process ReactorTrace.Subscribe helper, and the reactor.logs MCP tool](images/diagnostics/flow.svg)
+![Reactor diagnostics flow — a framework catch site delegates to DiagnosticLog, which emits to ReactorEventSource for the Release path and mirrors to Debug.WriteLine in Debug builds; four consumers read the event surface: env-var / dotnet-trace capture, Visual Studio Profiler, the in-process ReactorTrace.Subscribe helper, and ETW tools such as PerfView and xperf](images/diagnostics/flow.svg)
 
 ## The rule
 
@@ -298,53 +297,20 @@ custom diagnostics page) need access to the same events the env-var
 route writes to disk. For a `.nettrace` file, use one of the three
 routes above — they cost less and emit a richer format.
 
-## `reactor.logs source=event` — MCP integration
+## Logs from the WinUI DevTools
 
-The Reactor in-process devtools (`mur devtools`) expose a `logs` MCP
-tool that drains the captured `Console.Out` / `Console.Error` /
-`Debug.WriteLine` ring buffer. Spec 044 extended the tool so the
-buffer also captures `Microsoft-UI-Reactor` ETW events, surfaced
-under a new `source=event` filter:
-
-```jsonc
-// Request
-{
-  "method": "tools/call",
-  "params": {
-    "name": "logs",
-    "arguments": { "source": "event", "tail": 20, "level": "Warning" }
-  }
-}
-
-// Response — each entry now carries eventName / eventId
-{
-  "entries": [
-    {
-      "seq": 142,
-      "ts": "2026-05-19T17:42:11.330Z",
-      "source": "event",
-      "level": "Warning",
-      "text": "SwallowedError category=Hosting operation=ReactorWindow.Close exceptionType=COMException",
-      "eventName": "SwallowedError",
-      "eventId": 16
-    }
-  ],
-  "nextSeq": 143,
-  "dropped": 0
-}
-```
-
-Existing clients that don't pass `source=event` see zero behavior
-change — the `stdout` / `stderr` / `debug` filters still return their
-dedicated streams. The `eventName` and `eventId` fields are present
-on every entry but are `null` for non-event sources, so a client
-written before spec 044 ignores them safely.
-
-HR-style payload fields render in the same `0x{X8}` shape the
-pre-migration `Debug.WriteLine` sites used (`HResultFailed
-category=Shell operation=JumpList.Begin hr=0x80004002`), so log
-greps that matched the old shape continue to hit.
-
+The in-app `reactor.logs` MCP tool has been removed with the rest of the MCP
+server in the deprecated `Microsoft.UI.Reactor.Devtools` package. Launch the app
+with the WinUI DevTools (`winapp run . --devtools on`) and use
+`winapp devtools logs [--follow]` for the Reactor warnings and errors the app has
+raised since launch: render and swallowed errors, framework warnings, failed
+HRESULTs, keyed-list warnings, hot reload and window events. It doesn't show the
+app's own output, which the removed tool also captured. For `Debug.WriteLine` and
+`Trace` output, launch with `winapp run . --devtools on --debug-output` (it
+captures `OutputDebugString`; it can't be combined with `--watch`, `--detach` or
+`--json`). To route `Microsoft-UI-Reactor` events into your own logger, subscribe
+in process with `ReactorTrace.Subscribe` (above); for a file to hand to someone
+else, use the environment-variable or `dotnet-trace` route.
 ## Patterns
 
 ### Reading a swallow that happened in production
@@ -540,11 +506,10 @@ not at the `ReactorTrace.Subscribe` boundary.
 
 ## Tips
 
-**`reactor.logs source=event` is the fastest read.** Inside a
-devtools session, calling the MCP tool returns the last N events
-instantly without spinning up a `dotnet-trace` capture. Use the
-env-var route when you need to hand a file to someone else; use the
-MCP tool when you're sitting in front of the running app.
+**`ReactorTrace.Subscribe` is the fastest read.** In front of the running
+app, an in-process subscription shows events as they happen without
+spinning up a `dotnet-trace` capture. Use the env-var route when you need
+to hand a file to someone else.
 
 **The keyword mask is the audience pre-filter.** Subscribing on
 `Keywords.Errors` alone is dramatically cheaper than `(-1)` because
@@ -553,16 +518,10 @@ check immediately. A long-lived broad subscription raises the cost
 of every hot-path call site on the framework for as long as it
 lives.
 
-**HR fields are `0x{X8}`-rendered in `reactor.logs` text.** The MCP
-tool's text rendering recognizes payload field names `hr`,
-`hresult`, and `hwnd` and formats them as 8-digit uppercase hex.
-This matches the pre-migration `Debug.WriteLine` shape so existing
-log greps keep working.
-
 ## Next Steps
 
 - **[Developer tools](dev-tooling.md)** — Overview of the Tools section: hot reload, devtools, `mur`, analyzers, and AI agents.
 - **[Perf Instrumentation](perf-instrumentation.md)** — The emission pipeline, keyword design, and the IsEnabled gate. Read first if you're adding events.
-- **[DevTools Internals](devtools-internals.md)** — The MCP server and `logs` tool plumbing the diagnostic events flow through.
+- **[Devtools](devtools.md)** — The WinUI DevTools, including `winapp devtools logs`.
 - **[Persistence](persistence.md)** — Where `PersistenceRead` / `PersistenceWrite` / `PersistenceRejected` fire from.
 - **[Navigation](navigation.md)** — The route lifecycle that emits the Navigation-keyword events.

@@ -77,10 +77,10 @@
   <text class="label" x="695" y="355" text-anchor="middle">ReactorTrace.Subscribe</text>
   <text class="sub"   x="695" y="375" text-anchor="middle">In-process · app-controlled sink</text>
 
-  <!-- 4. reactor.logs MCP -->
+  <!-- 4. ETW (PerfView / xperf) -->
   <rect class="box box-sink" x="880" y="330" width="270" height="60" rx="6"/>
-  <text class="label" x="1015" y="355" text-anchor="middle">reactor.logs source=event</text>
-  <text class="sub"   x="1015" y="375" text-anchor="middle">MCP devtools tool · agent-readable</text>
+  <text class="label" x="1015" y="355" text-anchor="middle">ETW: PerfView / xperf</text>
+  <text class="sub"   x="1015" y="375" text-anchor="middle">Windows-only · correlate with XAML</text>
 
   <!-- Arrows from EventSource into each consumer -->
   <path class="arrow" d="M760,160 L760,210 L695,210 L695,240"/>

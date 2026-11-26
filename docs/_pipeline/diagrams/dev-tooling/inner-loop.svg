@@ -44,8 +44,8 @@
   <!-- 3. Inspect -->
   <rect class="box" x="690" y="30" width="240" height="74" rx="6"/>
   <text class="label" x="810" y="54" text-anchor="middle">3. Inspect</text>
-  <text class="sub" x="810" y="72" text-anchor="middle">Devtools: dev menu, overlays</text>
-  <text class="sub" x="810" y="88" text-anchor="middle">MCP server, mur devtools</text>
+  <text class="sub" x="810" y="72" text-anchor="middle">WinUI DevTools (winapp CLI)</text>
+  <text class="sub" x="810" y="88" text-anchor="middle">winapp devtools, winapp ui</text>
 
   <!-- 4. Catch mistakes -->
   <rect class="box" x="690" y="310" width="240" height="74" rx="6"/>
@@ -57,13 +57,13 @@
   <rect class="box" x="360" y="310" width="240" height="74" rx="6"/>
   <text class="label" x="480" y="334" text-anchor="middle">5. Debug and measure</text>
   <text class="sub" x="480" y="352" text-anchor="middle">Diagnostics: EventSource,</text>
-  <text class="sub" x="480" y="368" text-anchor="middle">dotnet-trace, logs tool</text>
+  <text class="sub" x="480" y="368" text-anchor="middle">dotnet-trace, winapp devtools logs</text>
 
   <!-- AI agents, center -->
   <rect class="box-accent" x="360" y="170" width="240" height="74" rx="6"/>
   <text class="label" x="480" y="194" text-anchor="middle">Work with AI agents</text>
   <text class="sub" x="480" y="212" text-anchor="middle">Agent plugin, skill kit</text>
-  <text class="sub" x="480" y="228" text-anchor="middle">llms.txt, mur devtools</text>
+  <text class="sub" x="480" y="228" text-anchor="middle">llms.txt, winapp --json</text>
 
   <!-- Loop edges -->
   <path class="edge" d="M270 67 L358 67" marker-end="url(#arr)"/>

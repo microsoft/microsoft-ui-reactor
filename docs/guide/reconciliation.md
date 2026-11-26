@@ -165,7 +165,7 @@ state changed under structurally unchanged parents.
 The reconciler holds debug counters (`DebugElementsDiffed`,
 `DebugElementsSkipped`, `DebugUIElementsCreated`,
 `DebugUIElementsModified`) reset at depth 0 and reported at the end of
-the pass. The reconcile overlay in the [dev menu](dev-tooling.md)
+the pass. The [reconcile-highlight overlay](devtools.md#in-app-dev-menu)
 reads these.
 
 > **Caveat:** The reconciler returns the *new* `UIElement` because Update can

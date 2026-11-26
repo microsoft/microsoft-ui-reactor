@@ -81,10 +81,6 @@ categories:
         title: Navigation
         summary: "Hooks for page navigation and the system back button."
         hooks: ["UseNavigation*", "UseSystemBackButton"]
-      - id: tools
-        title: Developer tools
-        summary: "Hooks for the Reactor developer tools."
-        hooks: ["UseDevtools"]
       - id: hook-types
         title: Hook results and options
         summary: "Small types that hooks return or take as options."
@@ -445,7 +441,7 @@ areas:
     title: Menus and commands
     summary: "Menus, menu bars, command bars and keyboard accelerators."
     elements: ["CommandBar", "CommandBarFlyout", "MenuBar", "MenuFlyout", "MenuFlyoutContent", "CommandHost", "AppBar*"]
-    factories: ["Accelerator", "AppBar*", "Menu", "MenuItem*", "MenuSeparator", "MenuSubItem", "RadioMenuItem", "ToggleMenuItem", "DevtoolsMenu"]
+    factories: ["Accelerator", "AppBar*", "Menu", "MenuItem*", "MenuSeparator", "MenuSubItem", "RadioMenuItem", "ToggleMenuItem"]
     guide-pages: [commanding]
   - id: dialogs-and-flyouts
     title: Dialogs and flyouts
@@ -966,8 +962,6 @@ overrides:
     guide-pages: [layout, hooks]
   - match: "*.UseTrayIcon*"
     guide-pages: [desktop-integration, hooks]
-  - match: "*.UseDevtools*"
-    guide-pages: [devtools, hooks]
   - match: "*.Use*ValidationContext*"
     guide-pages: [forms, hooks]
   - match: "*.UseCollection*"

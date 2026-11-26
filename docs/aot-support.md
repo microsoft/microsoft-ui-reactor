@@ -38,8 +38,7 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 | **DataGrid `AutoColumns<T>`** | Reflects over `T`'s public properties via `TypeRegistry`. The `T` parameter is annotated `[DynamicallyAccessedMembers(PublicProperties)]` so the trimmer keeps the members, but `AutoColumns` ultimately funnels into `TypeRegistry.Resolve`, which is `RequiresUnreferencedCode`. Use explicit `Column<T,V>(…)` definitions instead. | Issue #70 |
 | **`UseObservable` on POCOs** | `ObservableTreeTracker` walks public properties via reflection to subscribe to INPC. Observables built explicitly (`Observable<T>`, `IObservableCollection`) are fine; the implicit-INPC path is not. | Issue #70 |
 | **Form validation** | `FormField`'s default editor resolution goes through `TypeRegistry`. Same caveat as PropertyGrid. | Issue #70 |
-| **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. Devtools component enumeration is available only when the app opts into `Reactor.DevtoolsSupport` at build time and launches with `--devtools`; leave the switch off for retail/AOT builds. | Issue #70 |
-| **Devtools `properties` / `setProperty` DP discovery** | The tools locate `DependencyProperty` statics by reflection, and the trimmer keeps no reflection metadata for them unless something roots the members — so under AOT the lookups find nothing. Not specific to WinUI's CsWinRT-projected static properties: a C#-authored DP *field* on a custom control is equally undiscoverable. Works under JIT, which is where the devtools inner loop lives. The tool reports the likely cause rather than an empty result. See [Devtools DependencyProperty discovery](#devtools-dependencyproperty-discovery) for the measured cost of fixing it. Affected fixture: `Devtools_PropertyToolsDpDiscovery`. | Issue #1109 |
+| **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. The (deprecated) in-app preview host's component enumeration is available only when the app opts into `Reactor.DevtoolsSupport` at build time and launches with `--devtools run`; leave the switch off for retail/AOT builds. | Issue #70 |
 | **Third-party-assembly XAML metadata (Issue #142 fixtures)** | Built-in WinUI controls work under AOT now. What remains is `{TemplateBinding}` against private DPs in a third-party assembly that ships *no* `.xaml` file: the XAML compiler only emits an `IXamlMetadataProvider` for projects that have at least one `.xaml`, and AOT trims any implicit metadata path. Affected fixtures: `Issue142_CustomControlPrivateDp_Renders`, `Issue142_ThirdPartyControlPrivateDp_Renders`, `ThemeRefStyle_ThirdPartyStyleFallsBack`. The library-author workaround is to register a hand-written `IXamlMetadataProvider` via `RegisterControlAssembly`. The same trim hits a compiled `.xaml` page inside a `ReactorApp.Run` app with no `App.xaml`: `ReactorApplication` finds the app's generated provider only by reflecting over the entry assembly, nothing roots it, and AOT removes it, so the page fails to parse (`Hosting_HostControlXamlComponentType`). A vanilla WinUI app is unaffected: its `App` *is* the provider. | Issue #142 |
 
 ### Code-only apps wrapping toolkit controls
@@ -72,46 +71,17 @@ in `tests/aot_trim_proof/Reactor.WrapperMetadata` verifies automatic registratio
 without this explicit root. Its JIT and NativeAOT runs check realized text updates
 and retained header identity across two Toolkit libraries and a provider-free control.
 
-## Devtools DependencyProperty discovery
-
-The devtools `properties` / `setProperty` tools find `DependencyProperty` statics by
-reflecting over static members, and trimming removes the metadata for members nothing
-roots. On a NativeAOT build the lookups therefore come back empty even for DPs that
-plainly exist (issue #1109). Under JIT — where the devtools inner loop lives, since an
-AOT publish takes 10-15 minutes — discovery works.
-
-**The tool says so rather than looking broken.** When the inspected app is a NativeAOT
-build, an empty listing carries a `notice`, and a failed by-name lookup appends the same
-explanation to its error. Both are conditioned on the app actually being NativeAOT
-(`RuntimeFeature.IsDynamicCodeSupported`), so a JIT build never sees them, and an AOT
-build that does root its DP statics stays silent too. Without this the caller gets the
-same `not found` they would for a typo and goes hunting for a mistake they did not make.
-
-**If you need DP inspection in an AOT build**, root the DependencyProperty statics with an
-ILLink descriptor. That was measured on `samples/apps/hello-world-aot-devtools-on`
-(win-x64, `TrimMode=full`, `OptimizationPreference=Size`) before being left out of the
-#1109 fix, so the cost is known: rooting only the DP getters adds **+1.5 MB** (11.655 →
-13.196 MB) and covers all 1851 DPs across 311 WinUI types, while the blunt
-`preserve="all"` over `Microsoft.WinUI` costs +16.7 MB for the same capability. Gating
-the descriptor on the `Reactor.DevtoolsSupport` switch keeps devtools-off apps
-byte-identical. It is not shipped because a generated descriptor pinned to a Windows App
-SDK version needs regenerating on every SDK bump — ongoing friction for everyone, to
-serve a scenario the tool is not aimed at.
-
 ## Devtools support switch
 
-Devtools are a two-layer opt-in so release and NativeAOT binaries stay trimmed by default:
+The in-app preview host in the deprecated `Microsoft.UI.Reactor.Devtools` package (kept for component previews and the VS Code and Visual Studio previews) is a two-layer opt-in so release and NativeAOT binaries stay trimmed by default. Inspecting a running app needs no package and no launch flag: use the WinUI DevTools (`winapp run . --devtools on`). They read C# call sites through the same `Reactor.DevtoolsSupport` switch, which is on by default in Debug.
 
-1. **Build-time capability** — add the feature switch to an app project that needs devtools:
+1. **Build-time capability** — the `Reactor.DevtoolsSupport` feature switch. You don't declare it: `src/Reactor/build/Reactor.targets` sets it to `true` in Debug (through `ReactorDiagnostics`) and `false` otherwise, so Release/AOT publishes leave it off unless you opt in (`-p:ReactorDiagnostics=true`). Reference the package Debug-only to match:
 
    ```xml
-   <ItemGroup>
-     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
-                                     Value="true" Trim="true" />
+   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+     <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="<same as Microsoft.UI.Reactor>" />
    </ItemGroup>
    ```
-
-   `src/Reactor/build/Reactor.targets` supplies the default `false` value. Samples enable the switch conditionally in Debug builds; Release/AOT publishes leave it off.
 
 2. **Runtime activation** — launch with a devtools subverb, for example:
 
@@ -119,7 +89,7 @@ Devtools are a two-layer opt-in so release and NativeAOT binaries stay trimmed b
    dotnet run -- --devtools run
    ```
 
-   `ReactorApp.Run` and `Run<TRoot>` no longer take `devtools:` or `preview:` parameters. If a switch-off binary receives `--devtools run`, it writes an actionable stderr message with the `RuntimeHostConfigurationOption` snippet above instead of silently opening a normal window.
+   `ReactorApp.Run` and `Run<TRoot>` no longer take `devtools:` or `preview:` parameters. If a switch-off binary receives `--devtools run`, it writes an actionable stderr message instead of silently opening a normal window: run a Debug build, reference the package Debug-only, or opt in for one build with `-p:ReactorDiagnostics=true`.
 
 ## Conventions
 
@@ -127,7 +97,7 @@ Devtools are a two-layer opt-in so release and NativeAOT binaries stay trimmed b
 - **Control families register into core, never the reverse.** The core (`src/Reactor/Core/`) and host (`src/Reactor/Hosting/`) must carry **zero static type references** into any specific control family (Charting, Docking, …). When the core needs to call into a subsystem, it defines a minimal interface (e.g. `IChartingHostBridge`, `IScanExtension`) and the subsystem registers a concrete implementation at first use — see `ChartingRuntime.Activate()` / `D3ChartsHostBridge`. This keeps the trimmer free to drop the whole subsystem from apps that never use it (issue #498 reclaimed ~7.8 KB of Charting — `D3Color`/`ForcedColorsTheme`/`D3Charts` — from chart-free AOT binaries). The boundary is pinned by `CoreControlFamilyBoundaryTests`, which scans the compiled `Microsoft.UI.Reactor.dll` IL and fails on any Core/Hosting → Charting/Docking reference (including ones hidden inside generic instantiations).
 - **Suppressions are temporary.** Every `[UnconditionalSuppressMessage("Trimming", ...)]` or `("AOT", ...)` in this repo is a TODO. The justification field names the reflection use; tracking is folded into issue #70.
 - **The benchmark canary.** `tests/stress_perf/StressPerf.Reactor` (and the `StressPerf.Direct`/`ReactorGrid` siblings) set `PublishAot=true`. If they stop publishing, an AOT regression has landed in the framework.
-- **The runtime canary.** CI's `AOT Selftests` job (`.github/workflows/ci.yml`) publishes `tests/Reactor.AppTests.Host` with `PublishAotInternal=true` and runs the full selftest suite against the NativeAOT binary on every PR, split across four runners with `--shard 1/4` through `--shard 4/4` (see TESTING.md, "Sharding the corpus across runners"). `SelfTestRunner.DefaultAotSkipPatterns` mutes the 17 fixtures known to fail there (PropertyGrid auto-discovery, the three Devtools fixtures whose reflection targets get trimmed — `fire`'s handler lookup, `state`'s hook read, and DP discovery for `properties`/`setProperty` — the Issue142-style XAML-metadata cases, hot-reload state migration, plus the `UseObservableTree` property walk); any *new* failure fails the job. Note that "uses reflection" is not the same as "fails under AOT": the Devtools fixtures that run here mostly rely on type-name reflection (`GetType().Name`), which trimming always preserves — what breaks is member-level reflection whose target the trimmer drops. If you intentionally need to add a skip, document the bucket in the comment above `DefaultAotSkipPatterns` and re-probe with `tests/Reactor.AppTests.Host/probe-aot-skips.ps1`. Prefer splitting a fixture over skipping it whole — an entry mutes *every* check in the fixture, including ones that do pass under AOT, which is why DP discovery lives in its own `Devtools_PropertyToolsDpDiscovery` fixture. Treat that list as a liability, not a parking lot: a stale entry is AOT coverage silently switched off, so re-probe periodically and delete whatever now passes. `SelfTestRunner.ValidateDefaultSkipPatterns` aborts the run (TAP `Bail out!`, exit 1, no fixtures executed) if an entry stops matching any registered fixture, so a rename can't quietly turn a skip into a no-op.
+- **The runtime canary.** CI's `AOT Selftests` job (`.github/workflows/ci.yml`) publishes `tests/Reactor.AppTests.Host` with `PublishAotInternal=true` and runs the full selftest suite against the NativeAOT binary on every PR, split across four runners with `--shard 1/4` through `--shard 4/4` (see TESTING.md, "Sharding the corpus across runners"). `SelfTestRunner.DefaultAotSkipPatterns` mutes the 15 fixtures known to fail there (PropertyGrid auto-discovery, the Issue142-style XAML-metadata cases, hot-reload state migration, plus the `UseObservableTree` property walk); any *new* failure fails the job. Note that "uses reflection" is not the same as "fails under AOT": type-name reflection (`GetType().Name`) survives trimming — what breaks is member-level reflection whose target the trimmer drops. If you intentionally need to add a skip, document the bucket in the comment above `DefaultAotSkipPatterns` and re-probe with `tests/Reactor.AppTests.Host/probe-aot-skips.ps1`. Prefer splitting a fixture over skipping it whole — an entry mutes *every* check in the fixture, including ones that do pass under AOT. Treat that list as a liability, not a parking lot: a stale entry is AOT coverage silently switched off, so re-probe periodically and delete whatever now passes. `SelfTestRunner.ValidateDefaultSkipPatterns` aborts the run (TAP `Bail out!`, exit 1, no fixtures executed) if an entry stops matching any registered fixture, so a rename can't quietly turn a skip into a no-op.
 - **Probes can mask the defect they measure.** Reflection metadata under NativeAOT is emitted from what ILCompiler can see statically, so diagnostic code that calls `typeof(T).GetProperties()` / `GetMembers()` on a *constant* type roots that metadata and makes the failure disappear. `DynamicallyAccessedMemberTypes.PublicProperties` covers inherited members too, so probing one type can revive an entire base chain — a probe added to the #1109 fixture turned all 112 of `Button`'s DP statics visible again and made the fixture pass. Always confirm an AOT verdict with the probe deleted.
 
 ## Publish output
@@ -145,7 +115,7 @@ Probing each `DefaultAotSkipPatterns` entry in isolation (via the `tests/Reactor
 | Bucket | Symptom | Debug step |
 |---|---|---|
 | **Hang** (dispatcher starvation) | Fixture's `RunAsync()` synchronously blocks the UI thread; the in-band 15 s `Task.Delay` watchdog cannot fire because the dispatcher isn't pumping. | Off-dispatcher hang watchdog (60 s default, configurable via `REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS`) writes `Bail out! HANG_DETECTED: <fixture> …` to stdout + stderr, flushes, then `Environment.FailFast`. With `DOTNET_DbgEnableMiniDump=1` set, this produces a Watson minidump. |
-| **Native crash** | Process exits with `0xC0000409` (`STATUS_STACK_BUFFER_OVERRUN`) — the AOT runtime's `FailFast` for unhandled managed exceptions. No `# Total failures:` line because the process terminated abruptly. | Set `DOTNET_DbgEnableMiniDump=1` (and `COMPlus_DbgEnableMiniDump=1` — both, matching `DevtoolsStressE2ERunner`) before launching. Open the resulting `.dmp` with `dotnet-dump analyze` or WinDbg; look at the dispatcher (UI) thread's stack for the throwing call. |
+| **Native crash** | Process exits with `0xC0000409` (`STATUS_STACK_BUFFER_OVERRUN`) — the AOT runtime's `FailFast` for unhandled managed exceptions. No `# Total failures:` line because the process terminated abruptly. | Set `DOTNET_DbgEnableMiniDump=1` (and `COMPlus_DbgEnableMiniDump=1` — both, matching `SelfTestBatch`) before launching. Open the resulting `.dmp` with `dotnet-dump analyze` or WinDbg; look at the dispatcher (UI) thread's stack for the throwing call. |
 | **Assertion failure** | TAP output already shows `not ok <name> - <reason>`; process exits 1 cleanly. | No special tooling needed — read the TAP failure line. The fixture and check name are in the message. |
 
 ### Parent attribution

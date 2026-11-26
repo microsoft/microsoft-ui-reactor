@@ -53,15 +53,12 @@
        DockHostModel / DockLayoutMutator / native-control test hooks) were visible
        to these test hosts when both shipped in core; republish exactly that access
        here so the existing unit tests, selftest fixtures, and fuzz harness keep
-       compiling unchanged. Microsoft.UI.Reactor.Devtools reaches docking's internal
-       DockHostModelBridge for its docking.* MCP tools (it had core's IVT before the
-       move) — mirror that here. -->
+       compiling unchanged. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.PackagedTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
-    <InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />
     <!-- Issue #433 / spec 062 §7 B2: the md4c HTML renderer (MarkdownHtml) lives
          in the test-support library tests/Reactor.Markdown.TestRenderer and drives
          the parser internals (Md4cParser, Md4cEntity), which moved here with the

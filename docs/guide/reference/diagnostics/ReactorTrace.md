@@ -1,6 +1,6 @@
 # ReactorTrace
 
-In-process subscription helper for the `Microsoft-UI-Reactor` [`EventSource`](https://learn.microsoft.com/dotnet/api/system.diagnostics.tracing.eventsource). Lets an app developer (or an internal devtools surface — `reactor.logs` MCP, an `ILogger` bridge) observe framework events without writing an [`EventListener`](https://learn.microsoft.com/dotnet/api/system.diagnostics.tracing.eventlistener) subclass.
+In-process subscription helper for the `Microsoft-UI-Reactor` [`EventSource`](https://learn.microsoft.com/dotnet/api/system.diagnostics.tracing.eventsource). Lets an app developer (or an internal surface such as an `ILogger` bridge or a debug overlay) observe framework events without writing an [`EventListener`](https://learn.microsoft.com/dotnet/api/system.diagnostics.tracing.eventlistener) subclass.
 
 This is deliberately **not** a file-capture API. The .NET runtime already provides three:
 

@@ -54,7 +54,6 @@ Component<T>() → ComponentElement
 ContentDialog(string title, Element content, string primaryButtonText = "OK") → ContentDialogElement
 ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
 DatePicker(Optional<DateTimeOffset> date = default, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
-DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
 Display(string content) → TextBlockElement
 DropDownButton(Element content, Element flyout = null) → DropDownButtonElement
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
@@ -916,7 +915,6 @@ RenderContext.UseCommand<T>(Command<T> command) → Command<T>
 RenderContext.UseContext<T>(Context<T> context) → T
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, QueryCache cache, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
-RenderContext.UseDevtools() → bool
 RenderContext.UseDisplays() → IReadOnlyList<DisplayInfo>
 RenderContext.UseDpi() → uint
 RenderContext.UseEffect(Action effect, object[] dependencies) → void
@@ -1042,8 +1040,7 @@ DataSourceCapabilities { None, ServerSort, ServerFilter, ServerSearch, ServerCou
 FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Between, In, IsNull, IsNotNull }
 PinPosition { None, Left, Right }
 SortDirection { Ascending, Descending }
-DevtoolsSubverb { Run, List, Screenshot, Tree, App }
-McpTransport { Http, Stdio }
+DevtoolsSubverb { Run, List }
 DragOperations { None, Copy, Move, Link, All }
 GesturePhase { Began, Changed, Ended, Cancelled }
 PanAxis { Both, Horizontal, Vertical }
@@ -1969,15 +1966,12 @@ Unmount(UnmountContext ctx, TControl control) → void
 Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl) → void
 
 ### record DevtoolsCliOptions
-new(DevtoolsSubverb? Subverb, string ComponentName, bool VsCodeMode, int Fps, string ListOutputPath, string ScreenshotOutputPath, int? McpPort, string LogLevel, McpTransport Transport, bool UsedDeprecatedPreview, bool PreviewAndDevtoolsConflict, string ProjectIdentifier = null, bool LogsDisabled = false, int? LogsCapacityMb = null, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
+new(DevtoolsSubverb? Subverb, string ComponentName, bool VsCodeMode, int Fps, string ListOutputPath, bool PreviewAndDevtoolsConflict, bool EmbedRequested = false, WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child, int? EmbedHostPid = null, string EmbedValidationError = null, bool EmbedAutoEnabledVsCode = false, double? WindowWidth = null, double? WindowHeight = null, double? WindowX = null, double? WindowY = null)
 DevtoolsSubverb? Subverb { get; init; }
-McpTransport Transport { get; init; }
 WindowEmbedStyle EmbedStyle { get; init; }
 bool EmbedAutoEnabledVsCode { get; init; }
 bool EmbedRequested { get; init; }
-bool LogsDisabled { get; init; }
 bool PreviewAndDevtoolsConflict { get; init; }
-bool UsedDeprecatedPreview { get; init; }
 bool VsCodeMode { get; init; }
 double? WindowHeight { get; init; }
 double? WindowWidth { get; init; }
@@ -1985,15 +1979,10 @@ double? WindowX { get; init; }
 double? WindowY { get; init; }
 int Fps { get; init; }
 int? EmbedHostPid { get; init; }
-int? LogsCapacityMb { get; init; }
-int? McpPort { get; init; }
 string ComponentName { get; init; }
 string EmbedValidationError { get; init; }
 string ListOutputPath { get; init; }
-string LogLevel { get; init; }
-string ProjectIdentifier { get; init; }
-string ScreenshotOutputPath { get; init; }
-Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref string ScreenshotOutputPath, ref int? McpPort, ref string LogLevel, ref McpTransport Transport, ref bool UsedDeprecatedPreview, ref bool PreviewAndDevtoolsConflict, ref string ProjectIdentifier, ref bool LogsDisabled, ref int? LogsCapacityMb, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode, ref double? WindowWidth, ref double? WindowHeight, ref double? WindowX, ref double? WindowY) → void
+Deconstruct(ref DevtoolsSubverb? Subverb, ref string ComponentName, ref bool VsCodeMode, ref int Fps, ref string ListOutputPath, ref bool PreviewAndDevtoolsConflict, ref bool EmbedRequested, ref WindowEmbedStyle EmbedStyle, ref int? EmbedHostPid, ref string EmbedValidationError, ref bool EmbedAutoEnabledVsCode, ref double? WindowWidth, ref double? WindowHeight, ref double? WindowX, ref double? WindowY) → void
 Equals(DevtoolsCliOptions other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -2997,7 +2986,6 @@ Set<T>(string key, T value) → void
 TryGet<T>(string key, ref T value) → bool
 
 ### interface IReactorDevtoolsHost
-BuildDevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items, string glyph, string toolTip, string automationId) → Element
 TryHandleCommandLine(ReactorDevtoolsBootRequest request) → bool
 
 ### interface IReactorKeyed

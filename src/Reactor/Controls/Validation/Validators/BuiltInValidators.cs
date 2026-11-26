@@ -159,7 +159,7 @@ internal sealed class MatchValidator : IValidator
             throw new ArgumentException($"Match pattern too long (>{MaxPatternLength} chars).", nameof(pattern));
         // SECURITY (TASK-094): cap regex execution so a pathological pattern
         // can't tarpit the UI thread on every keystroke. 1s rather than the
-        // 200ms used by diagnostic paths (DevtoolsPropertyTools, LogCaptureBuffer):
+        // 200ms that Reactor's former devtools diagnostic paths used:
         // RegexMatchTimeout is wall-clock, and under threadpool starvation a
         // non-pathological match against a short input can blow past 200ms even
         // though CPU time is microseconds. False-invalid validation on legitimate

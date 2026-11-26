@@ -312,7 +312,7 @@ public sealed class ReactorHostDiagnosticsTests : IDisposable
     public void RootMountSite_IsTakenWithTheFlagOff_ButOnlyKeptWhileItIsOn()
     {
             // Capture is unconditional (Run's site must survive a flag switched on later, as
-            // `--devtools app` does); the host's store is what the flag gates.
+            // `--devtools run` does); the host's store is what the flag gates.
             ReactorSourceMap.Enabled = false;
             var token = ReactorSourceMap.EnterRootMountSite("App.cs", 12, 9);
             try

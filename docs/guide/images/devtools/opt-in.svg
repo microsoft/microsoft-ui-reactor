@@ -40,7 +40,7 @@
   <text class="sub" x="150" y="108" text-anchor="middle">on by default in Debug builds</text>
 
   <rect class="box-accent" x="20" y="180" width="260" height="74" rx="6"/>
-  <text class="label" x="150" y="204" text-anchor="middle">Devtools package</text>
+  <text class="label" x="150" y="204" text-anchor="middle">Devtools package (deprecated)</text>
   <text class="sub" x="150" y="222" text-anchor="middle">Microsoft.UI.Reactor.Devtools</text>
   <text class="sub" x="150" y="238" text-anchor="middle">PackageReference</text>
 
@@ -51,24 +51,24 @@
 
   <!-- Outcomes -->
   <rect class="box-out" x="660" y="20" width="320" height="74" rx="6"/>
-  <text class="label" x="820" y="44" text-anchor="middle">--devtools app</text>
-  <text class="sub" x="820" y="62" text-anchor="middle">In-app dev menu and overlays</text>
-  <text class="sub" x="820" y="78" text-anchor="middle">UseDevtools() returns true</text>
+  <text class="label" x="820" y="44" text-anchor="middle">--devtools run [Component]</text>
+  <text class="sub" x="820" y="62" text-anchor="middle">Preview host: one component, or the whole app</text>
+  <text class="sub" x="820" y="78" text-anchor="middle">The VS Code and Visual Studio previews use it</text>
 
   <rect class="box-out" x="660" y="115" width="320" height="74" rx="6"/>
-  <text class="label" x="820" y="139" text-anchor="middle">--devtools run (the default verb)</text>
-  <text class="sub" x="820" y="157" text-anchor="middle">MCP server on 127.0.0.1, plus the dev menu</text>
-  <text class="sub" x="820" y="173" text-anchor="middle">mur devtools and agents can attach</text>
+  <text class="label" x="820" y="139" text-anchor="middle">--devtools list</text>
+  <text class="sub" x="820" y="157" text-anchor="middle">Prints the names of the app's components</text>
+  <text class="sub" x="820" y="173" text-anchor="middle">and exits</text>
 
   <rect class="box" x="660" y="210" width="320" height="74" rx="6"/>
   <text class="label" x="820" y="234" text-anchor="middle">No flag</text>
-  <text class="sub" x="820" y="252" text-anchor="middle">Normal run: devtools stay off</text>
-  <text class="sub" x="820" y="268" text-anchor="middle">UseDevtools() returns false</text>
+  <text class="sub" x="820" y="252" text-anchor="middle">Normal run: the preview host stays off</text>
+  <text class="sub" x="820" y="268" text-anchor="middle">winapp run . --devtools on still attaches</text>
 
   <!-- Release / AOT -->
   <rect class="box-aot" x="20" y="320" width="560" height="80" rx="6"/>
   <text class="label" x="300" y="344" text-anchor="middle">Release or Native AOT build</text>
-  <text class="sub" x="300" y="362" text-anchor="middle">The switch defaults to false (Trim="true"), so the trimmer removes the devtools code.</text>
+  <text class="sub" x="300" y="362" text-anchor="middle">The switch defaults to false (Trim="true"), so the trimmer removes the preview host code.</text>
   <text class="sub" x="300" y="378" text-anchor="middle">Only -p:ReactorDiagnostics=true turns it back on. Do not ship that build.</text>
 
   <!-- Edges -->

@@ -81,8 +81,9 @@ public static class PackLocalCommand
 
         // 3. Devtools host — Microsoft.UI.Reactor.Devtools.<version>.nupkg.
         // Referenced by the scaffolded `dotnet new reactorapp` csproj in a Debug-only
-        // ItemGroup so the devtools menu (and the Reactor VS embedded-preview extension)
-        // works against this feed without falling through to NuGet.org.
+        // ItemGroup (deprecated; its preview host serves the VS Code live preview and the
+        // Reactor VS embedded-preview extension), so the template restores against this
+        // feed without falling through to NuGet.org.
         Console.WriteLine($"Packing Microsoft.UI.Reactor.Devtools {version} → {feed}");
         rc = RunPack(repoRoot, Path.Combine("src", "Reactor.Devtools", "Reactor.Devtools.csproj"), configuration, version, feed, arch);
         if (rc != 0)
