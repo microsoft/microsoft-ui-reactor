@@ -841,22 +841,13 @@ public class ModifierTableIntegrityTests
 
     /// <summary>
     /// Property name → the WinUI type names <c>Reconciler.GetDependencyPropertyName</c> will emit a
-    /// <c>{ThemeResource}</c> setter for, read out of <c>Reconciler.cs</c>. The method's body is a
+    /// <c>{ThemeResource}</c> setter for, read out of the reconciler source. The method's body is a
     /// chain of <c>if (property == "X" &amp;&amp; (fe is A || fe is B)) return "X";</c>, so each
     /// branch's string comparison names the property and the type tests are the gate.
     /// </summary>
     private static Dictionary<string, HashSet<string>> ReadGetDependencyPropertyNameGates()
     {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Reconciler.cs");
-        Assert.True(File.Exists(file), $"Reconciler.cs not found at {file}");
-
-        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(File.ReadAllText(file));
-        var method = tree.GetRoot()
-            .DescendantNodes()
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
-            .FirstOrDefault(m => m.Identifier.Text == "GetDependencyPropertyName");
+        var method = ReconcilerSource.Methods("GetDependencyPropertyName").FirstOrDefault();
 
         Assert.NotNull(method);
 
@@ -1134,7 +1125,7 @@ public class ModifierTableIntegrityTests
 
     /// <summary>
     /// Modifier property name → the WinUI type names <c>ApplyModifiers</c> actually writes it
-    /// to, read out of <c>Reconciler.cs</c>.
+    /// to, read out of the reconciler source.
     /// </summary>
     /// <remarks>
     /// Parsed with Roslyn rather than matched with a regex: the gate lives in a type-test
@@ -1145,19 +1136,14 @@ public class ModifierTableIntegrityTests
     /// </remarks>
     private static Dictionary<string, HashSet<string>> ReadApplyModifierControlGates()
     {
-        var root = RepoRootFinder.FindRepoRoot();
-        Assert.NotNull(root);
-        var file = Path.Join(root!, "src", "Reactor", "Core", "Reconciler.cs");
-        Assert.True(File.Exists(file), $"Reconciler.cs not found at {file}");
+        // ApplyModifiers itself is an ordered sequence of per-family helper calls; the arms
+        // live in those helpers, so read the whole family.
+        var methods = ReconcilerSource.ApplyModifiersFamily();
 
-        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(File.ReadAllText(file));
-        var methods = tree.GetRoot()
-            .DescendantNodes()
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
-            .Where(m => m.Identifier.Text == "ApplyModifiers")
-            .ToList();
-
-        Assert.True(methods.Count > 0, "No ApplyModifiers method found in Reconciler.cs");
+        // Two ApplyModifiers overloads are roots, so count the helpers themselves.
+        Assert.True(
+            methods.Count(method => method.Identifier.Text != ReconcilerSource.ApplyModifiersName) > 0,
+            "No ApplyModifiers family helpers found in the Reconciler partial files");
 
         var gates = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 

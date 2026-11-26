@@ -279,8 +279,8 @@ public sealed class SearchIndexCoverageTests
             ?? throw new InvalidDataException("Missing ControlRegistry.All initializer.");
         return controls.Expressions.Select(entry => ReadLiteral(entry switch
         {
-            ImplicitObjectCreationExpressionSyntax creation => Argument(creation.ArgumentList.Arguments, "Tag", 4),
-            ObjectCreationExpressionSyntax { ArgumentList: { } args } => Argument(args.Arguments, "Tag", 4),
+            ImplicitObjectCreationExpressionSyntax creation => Argument(creation.ArgumentList.Arguments, "Tag", 3),
+            ObjectCreationExpressionSyntax { ArgumentList: { } args } => Argument(args.Arguments, "Tag", 3),
             _ => throw new InvalidDataException($"Unknown ControlRegistry entry: {entry}"),
         })).ToArray();
     }

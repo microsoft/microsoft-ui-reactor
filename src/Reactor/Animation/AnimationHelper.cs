@@ -87,6 +87,8 @@ internal static class AnimationHelper
     {
         MarkCompositionWrite(state, property);
         if (property == "Rotation") (state.TransformRest ??= new()).RotationDegrees = value;
+        // An animated .Opacity() leaves UIElement.Opacity alone, so the rest value is kept here.
+        else if (property == "Opacity") (state.TransformRest ??= new()).Opacity = value;
     }
 
     private static void MarkCompositionWrite(Reconciler.ReactorState state, string property, Vector3 value)
@@ -103,6 +105,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties |= flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelOpacityRestart(state);
         return state;
     }
 
@@ -292,6 +295,7 @@ internal static class AnimationHelper
                 case "Rotation": rest.RotationDegrees = 0; break;
                 case "Translation": rest.Translation = Vector3.Zero; break;
                 case "CenterPoint": rest.CenterPoint = Vector3.Zero; break;
+                case "Opacity": rest.Opacity = null; break;
             }
         }
         if (state is null || (state.CompositionModifierProperties & flag) == 0) return;
@@ -362,6 +366,7 @@ internal static class AnimationHelper
         state.CompositionModifierProperties &= ~flag;
         state.KeyframeChannelOwners?.Remove(flag);
         state.DeferredModifierResets &= ~flag;
+        if (flag == AnimateProperty.Opacity) Reconciler.CancelOpacityRestart(state);
     }
 
     /// <summary>

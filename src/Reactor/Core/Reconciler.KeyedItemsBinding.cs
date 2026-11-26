@@ -441,7 +441,7 @@ public sealed partial class Reconciler
                 {
                     var container = lvb.ContainerFromIndex(movedRows[i].Index) as UIElement;
                     if (container is not null)
-                        ApplyAmbientEnterAnimation(container, ambient.Kind);
+                        ApplyAmbientEnterAnimation(container, ambient.Kind, this);
                 }
             }
         }
@@ -541,7 +541,7 @@ public sealed partial class Reconciler
                 {
                     var container = lvb.ContainerFromIndex(movedRows[i].Index) as UIElement;
                     if (container is not null)
-                        ApplyAmbientEnterAnimation(container, ambient.Kind);
+                        ApplyAmbientEnterAnimation(container, ambient.Kind, this);
                 }
             }
         }

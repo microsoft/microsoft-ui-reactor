@@ -60,9 +60,10 @@ Component.Render() → Element tree (records)
 
 ### Reconciler is split across partial classes
 
-- `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
+- `Reconciler.cs` — orchestration: the `Reconcile` entry, component rendering, child reconciliation, `CanUpdate`
 - `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
 - `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
+- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `InteractionStates`, `ThemeBindings`, `Events`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
 
 ### Hooks follow React rules
 
@@ -340,7 +341,9 @@ point of return: stop and ship.
     marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
     generation. Spec 064.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
-  equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
+  equality, `Merge`, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
+  helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
+  gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via

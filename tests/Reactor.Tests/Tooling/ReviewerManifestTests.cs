@@ -219,4 +219,39 @@ public class ReviewerManifestTests
     /// </summary>
     static bool HasTraversalSegment(string path) =>
         path.Split('/').Any(segment => segment == "..");
+
+    /// <summary>
+    /// Every <c>Reconciler</c> partial file is listed in at least one batch. The reconciler is
+    /// split into per-concern partials, and code moved into a new partial keeps passing
+    /// <see cref="EveryManifestPathResolvesFromRepoRoot"/> (the old path still exists) while no
+    /// agent reviews it any more.
+    /// </summary>
+    [Fact]
+    public void EveryReconcilerPartialIsInSomeBatch()
+    {
+        var root = GallerySources.RepoRoot();
+        var listed = Entries().Select(e => e.Path).ToHashSet();
+
+        var partials = Directory
+            .EnumerateFiles(global::System.IO.Path.Join(root, "src", "Reactor"), "*.cs", SearchOption.AllDirectories)
+            .Where(f => global::System.IO.Path.GetFileName(f) is var name
+                && (name == "Reconciler.cs" || name.StartsWith("Reconciler.", global::System.StringComparison.Ordinal)))
+            .Select(f => global::System.IO.Path.GetRelativePath(root, f).Replace('\\', '/'))
+            .ToList();
+
+        Assert.True(partials.Count >= 20, $"expected many Reconciler partials under src/Reactor, found {partials.Count}");
+
+        var unlisted = partials.Where(p => !listed.Contains(p)).OrderBy(p => p, global::System.StringComparer.Ordinal).ToList();
+
+        Assert.True(
+            unlisted.Count == 0,
+            $"""
+            {unlisted.Count} Reconciler partial(s) are not listed in any {ManifestRelativePath} batch:
+
+            {string.Join("\n", unlisted.Select(p => "  " + p))}
+
+            Add each to the batches that review that concern (e.g. a safety, lifecycle or general
+            reconciler batch), or no reviewer agent will read it.
+            """);
+    }
 }
