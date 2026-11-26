@@ -246,7 +246,10 @@ internal static class LockfileRegistry
 
     private static bool HttpProbe(string endpoint)
     {
-        if (string.IsNullOrEmpty(endpoint)) return false;
+        // The probe client skips the system proxy, so it only ever talks to loopback.
+        // TryRead checks this for "http" entries only; any other non-stdio transport
+        // still reaches this probe.
+        if (!IsLoopbackHttpEndpoint(endpoint)) return false;
         try
         {
             using var http = LoopbackHttpClient.Create(TimeSpan.FromMilliseconds(500));

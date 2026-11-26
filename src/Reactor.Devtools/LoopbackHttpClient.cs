@@ -4,7 +4,7 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
 /// Creates the <see cref="HttpClient"/>s that talk to the devtools' own
-/// <c>http://127.0.0.1</c> endpoints. They never consult the system proxy.
+/// <c>http://127.0.0.1</c> endpoints. They never consult the system proxy or follow redirects.
 /// </summary>
 /// <remarks>
 /// A default <see cref="HttpClient"/> resolves the system proxy for every request,
@@ -17,5 +17,5 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 internal static class LoopbackHttpClient
 {
     internal static HttpClient Create(TimeSpan timeout) =>
-        new(new SocketsHttpHandler { UseProxy = false }) { Timeout = timeout };
+        new(new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false }) { Timeout = timeout };
 }

@@ -217,13 +217,13 @@ Conventions for contributors:
 
 ### Fixed
 
-- **Devtools traffic to `127.0.0.1` no longer goes through the system proxy (issue #1718).** The
-  CLI's `mur devtools` client, its session liveness probe and the running app's single-instance
-  check used a default `HttpClient`. With Windows "Automatically detect settings" on, every request
-  first asked WinHTTP for a proxy, so slow WPAD discovery could use up the probe's 500 ms budget,
-  and a PAC script that doesn't exempt loopback sent the request to a proxy that can't reach the
-  app. When that happened, a live session read as stale and its lockfile was deleted. These clients
-  now connect directly.
+- **`mur devtools` traffic to `127.0.0.1` no longer goes through the system proxy (issue #1718).**
+  The CLI's devtools client and its session liveness probe used a default `HttpClient`. With
+  Windows "Automatically detect settings" on, every request first asked WinHTTP for a proxy, so
+  slow WPAD discovery could use up the probe's 500 ms budget, and a PAC script that doesn't exempt
+  loopback sent the request to a proxy that can't reach the app. When that happened, a live session
+  read as stale and the CLI deleted its lockfile. These clients now connect directly, and only to
+  loopback.
 
 - **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
   `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders

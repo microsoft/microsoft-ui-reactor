@@ -5,7 +5,7 @@ namespace Microsoft.UI.Reactor.Cli.Devtools;
 /// <summary>
 /// Creates the <see cref="HttpClient"/>s the CLI uses to reach a devtools session.
 /// <see cref="EndpointDiscovery"/> only accepts loopback endpoints, so these never
-/// consult the system proxy. Mirrors <c>Microsoft.UI.Reactor.Hosting.Devtools.LoopbackHttpClient</c>.
+/// consult the system proxy or follow redirects. Mirrors <c>Microsoft.UI.Reactor.Hosting.Devtools.LoopbackHttpClient</c>.
 /// </summary>
 /// <remarks>
 /// A default <see cref="HttpClient"/> resolves the system proxy for every request,
@@ -19,5 +19,5 @@ namespace Microsoft.UI.Reactor.Cli.Devtools;
 internal static class LoopbackHttpClient
 {
     internal static HttpClient Create(TimeSpan timeout) =>
-        new(new SocketsHttpHandler { UseProxy = false }) { Timeout = timeout };
+        new(new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false }) { Timeout = timeout };
 }

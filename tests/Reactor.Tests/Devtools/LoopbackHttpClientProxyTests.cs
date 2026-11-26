@@ -37,6 +37,8 @@ public sealed class LoopbackHttpClientProxyTests : IDisposable
     [Fact]
     public void DevtoolsLockfileProbe_BypassesSystemProxy()
     {
+        // No bearer check here: LockfileRegistry's probe sends none. Against the real server
+        // that is a 401, a separate pre-existing problem this test does not cover.
         using var server = new CannedHttpServer("200 OK", $"{{\"schema\":\"{LockfileRegistry.McpSchemaTag}\"}}");
         var entry = new DevtoolsLockfileEntry
         {
@@ -82,6 +84,42 @@ public sealed class LoopbackHttpClientProxyTests : IDisposable
         Assert.Equal(0, _proxyServer.Requests);
     }
 
+    // TryRead only checks the endpoint of "http" entries, so another non-stdio transport used
+    // to reach the probe with any URL. 127.0.0.2 is loopback on Windows but not an allowed
+    // devtools host, so a probe that skipped the check would get this server's 200.
+    [Fact]
+    public void DevtoolsLockfileProbe_RefusesNonDevtoolsHost()
+    {
+        using var server = new CannedHttpServer("200 OK", $"{{\"schema\":\"{LockfileRegistry.McpSchemaTag}\"}}", IPAddress.Parse("127.0.0.2"));
+        var entry = new DevtoolsLockfileEntry
+        {
+            Pid = Environment.ProcessId,
+            Transport = "tcp",
+            Port = server.Port,
+            Endpoint = $"http://127.0.0.2:{server.Port}/mcp",
+        };
+
+        Assert.False(LockfileRegistry.IsLive(entry));
+        Assert.Equal(0, server.Requests);
+    }
+
+    [Fact]
+    public void CliLockfileProbe_RefusesNonDevtoolsHost()
+    {
+        using var server = new CannedHttpServer("200 OK", $"{{\"schema\":\"{LockfileReader.McpSchemaTag}\"}}", IPAddress.Parse("127.0.0.2"));
+        var entry = new CliLockfileEntry
+        {
+            Pid = Environment.ProcessId,
+            Transport = "tcp",
+            Port = server.Port,
+            Endpoint = $"http://127.0.0.2:{server.Port}/mcp",
+            Token = "token",
+        };
+
+        Assert.False(LockfileReader.IsLive(entry));
+        Assert.Equal(0, server.Requests);
+    }
+
     private sealed class RecordingProxy(Uri proxyUri) : IWebProxy
     {
         private int _calls;
@@ -102,12 +140,13 @@ public sealed class LoopbackHttpClientProxyTests : IDisposable
     /// </summary>
     private sealed class CannedHttpServer : IDisposable
     {
-        private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly TcpListener _listener;
         private readonly byte[] _response;
         private int _requests;
 
-        public CannedHttpServer(string status, string body)
+        public CannedHttpServer(string status, string body, IPAddress? address = null)
         {
+            _listener = new TcpListener(address ?? IPAddress.Loopback, 0);
             var bodyBytes = Encoding.UTF8.GetBytes(body);
             _response = Encoding.ASCII.GetBytes(
                 $"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n")
