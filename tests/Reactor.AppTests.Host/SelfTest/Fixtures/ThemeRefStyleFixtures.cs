@@ -272,6 +272,33 @@ internal static class ThemeRefStyleFixtures
                 Reconciler.SimulatePointerOverForTests(text, isOver: false);
                 H.Check("RichTextHoverRemoval_ExplicitBlackRestored", ReferenceEquals(text.Foreground, black),
                     $"foreground={ColorOf(text.Foreground)}");
+
+                var withoutStates = RichTextBlock("foreground").Foreground(black);
+                reconciler.Update(next, initial, text, static () => { });
+                Reconciler.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("RichTextHoverRemoval_GreenBeforeDroppingStates", ReferenceEquals(text.Foreground, green));
+
+                replacement = reconciler.Update(initial, withoutStates, text, static () => { });
+                H.Check("RichTextHoverRemoval_BothRemovedRestoresBlackImmediately",
+                    replacement is null && ReferenceEquals(text.Foreground, black), $"foreground={ColorOf(text.Foreground)}");
+                Reconciler.SimulatePointerOverForTests(text, isOver: false);
+                H.Check("RichTextHoverRemoval_BlackRemainsAfterExit", ReferenceEquals(text.Foreground, black));
+
+                reconciler.Update(withoutStates, initial, text, static () => { });
+                Reconciler.SimulatePointerOverForTests(text, isOver: true);
+                H.Check("RichTextHoverRemoval_GreenBeforeSetterUpdate", ReferenceEquals(text.Foreground, green));
+
+                var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
+                Brush? beforeSetter = null;
+                var withSetter = withoutStates.Set(control =>
+                {
+                    beforeSetter = control.Foreground;
+                    control.Foreground = blue;
+                });
+                replacement = reconciler.Update(initial, withSetter, text, static () => { });
+                H.Check("RichTextHoverRemoval_BlackRestoredBeforeSetter", ReferenceEquals(beforeSetter, black),
+                    $"foreground={ColorOf(beforeSetter)}");
+                H.Check("RichTextHoverRemoval_SetterBrushWins", replacement is null && ReferenceEquals(text.Foreground, blue));
             }
             finally { reconciler.UnmountChild(text); }
             return Task.CompletedTask;

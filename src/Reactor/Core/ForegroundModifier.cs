@@ -51,10 +51,19 @@ internal static class ForegroundModifier
         {
             var applied = richText.GetValue(property) as Brush;
             richText.ClearValue(property);
-            if (applied is not null
-                && !Reconciler.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground)
-                && ReferenceEquals(richText.ReadLocalValue(WinUI.RichTextBlock.ForegroundProperty), applied))
-                richText.Foreground = explicitForeground;
+            if (applied is not null)
+            {
+                var stateOwnsForeground = Reconciler.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground);
+                var interactionStatesRemoved =
+                    oldRichText.InteractionStates is not null && newRichText.InteractionStates is null;
+
+                var shouldRestoreImmediately = stateOwnsForeground
+                    ? interactionStatesRemoved
+                    : ReferenceEquals(richText.ReadLocalValue(WinUI.RichTextBlock.ForegroundProperty), applied);
+
+                if (shouldRestoreImmediately)
+                    richText.Foreground = explicitForeground;
+            }
         }
         return UpdateAction.RemovalHandled;
     }
