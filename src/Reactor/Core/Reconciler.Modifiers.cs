@@ -426,39 +426,6 @@ public sealed partial class Reconciler
         }
     }
 
-    /// <summary>Width/Height, Min/Max sizes, and the (content) alignments.</summary>
-    private static void ApplySizeAndAlignmentModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
-    {
-        if (m.Width.HasValue && m.Width != oldM?.Width) fe.Width = m.Width.Value;
-        else if (!m.Width.HasValue && oldM?.Width.HasValue == true) fe.ClearValue(FrameworkElement.WidthProperty);
-        if (m.Height.HasValue && m.Height != oldM?.Height) fe.Height = m.Height.Value;
-        else if (!m.Height.HasValue && oldM?.Height.HasValue == true) fe.ClearValue(FrameworkElement.HeightProperty);
-        if (m.MinWidth.HasValue && m.MinWidth != oldM?.MinWidth) fe.MinWidth = m.MinWidth.Value;
-        else if (!m.MinWidth.HasValue && oldM?.MinWidth.HasValue == true) fe.ClearValue(FrameworkElement.MinWidthProperty);
-        if (m.MinHeight.HasValue && m.MinHeight != oldM?.MinHeight) fe.MinHeight = m.MinHeight.Value;
-        else if (!m.MinHeight.HasValue && oldM?.MinHeight.HasValue == true) fe.ClearValue(FrameworkElement.MinHeightProperty);
-        if (m.MaxWidth.HasValue && m.MaxWidth != oldM?.MaxWidth) fe.MaxWidth = m.MaxWidth.Value;
-        else if (!m.MaxWidth.HasValue && oldM?.MaxWidth.HasValue == true) fe.ClearValue(FrameworkElement.MaxWidthProperty);
-        if (m.MaxHeight.HasValue && m.MaxHeight != oldM?.MaxHeight) fe.MaxHeight = m.MaxHeight.Value;
-        else if (!m.MaxHeight.HasValue && oldM?.MaxHeight.HasValue == true) fe.ClearValue(FrameworkElement.MaxHeightProperty);
-        if (m.HorizontalAlignment.HasValue && m.HorizontalAlignment != oldM?.HorizontalAlignment) fe.HorizontalAlignment = m.HorizontalAlignment.Value;
-        else if (!m.HorizontalAlignment.HasValue && oldM?.HorizontalAlignment.HasValue == true) fe.ClearValue(FrameworkElement.HorizontalAlignmentProperty);
-        if (m.VerticalAlignment.HasValue && m.VerticalAlignment != oldM?.VerticalAlignment) fe.VerticalAlignment = m.VerticalAlignment.Value;
-        else if (!m.VerticalAlignment.HasValue && oldM?.VerticalAlignment.HasValue == true) fe.ClearValue(FrameworkElement.VerticalAlignmentProperty);
-        if (fe is WinUI.Control contentAlignmentControl)
-        {
-            if (m.HorizontalContentAlignment.HasValue && m.HorizontalContentAlignment != oldM?.HorizontalContentAlignment)
-                contentAlignmentControl.HorizontalContentAlignment = m.HorizontalContentAlignment.Value;
-            else if (!m.HorizontalContentAlignment.HasValue && oldM?.HorizontalContentAlignment.HasValue == true)
-                contentAlignmentControl.ClearValue(WinUI.Control.HorizontalContentAlignmentProperty);
-
-            if (m.VerticalContentAlignment.HasValue && m.VerticalContentAlignment != oldM?.VerticalContentAlignment)
-                contentAlignmentControl.VerticalContentAlignment = m.VerticalContentAlignment.Value;
-            else if (!m.VerticalContentAlignment.HasValue && oldM?.VerticalContentAlignment.HasValue == true)
-                contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
-        }
-    }
-
     /// <summary>Opacity, the facade transforms (Scale, Rotation, Translation, TransformOrigin, CenterPoint), and IsVisible.</summary>
     private void ApplyOpacityTransformAndVisibilityModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {

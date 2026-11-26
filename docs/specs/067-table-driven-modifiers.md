@@ -894,6 +894,15 @@ report order is pinned by `ModifierSchema.AppliedReportOrder`, so the diagnostic
 order, and `AppliedModifierMapSnapshotTests` freezes the map captured from the hand-written code.
 `GetDependencyPropertyName_Agrees_With_ApplyModifiers_And_The_Table` is kept, not deleted as §9
 planned: the brush apply arms stay hand-coded, so it still compares two independent sources.
+
+Layer 3 generates whole family helpers, one family per PR, listed in
+`ModifierEmitter.GeneratedHelpers` and emitted into `Reconciler.Modifiers.Generated.cs` under their
+existing names, so each keeps its call site and the apply order does not move. 3a generates
+`ApplySizeAndAlignmentModifiers` (sizing, alignment and the content alignments, which share that
+helper today). The emitter writes today's shapes only: an ungated set/unset pair, and a run of slots
+gated on one receiver type inside a shared `if (fe is T x)` block. The generated method is
+token-identical to the hand-written one it replaced, and anything else throws until a later family
+adds the shape it needs.
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short
