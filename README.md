@@ -112,7 +112,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Draft |
 | **Accessibility** | `AutomationProperties` modifiers (e.g. name, heading level, landmarks, live regions), WCAG 2.1 AA target, compile- and runtime-validation | Draft |
 | **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Draft |
-| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides | Draft |
+| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, live theme-resource bindings, per-control overrides | Draft |
 | **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Draft |
 | **Input & gestures** | Pan / pinch / rotate / long-press gesture recognizers, drag-and-drop with typed data transfer, pointer and focus management | Draft |
 | **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |

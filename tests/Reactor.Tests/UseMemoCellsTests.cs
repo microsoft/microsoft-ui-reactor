@@ -444,7 +444,7 @@ public class UseMemoCellsTests
     {
         // #758 gate-teeth: a range of ThemeBindings-only cells must publish
         // AnyThemeSensitive=false (was true) so the #750 container fast-path engages and
-        // structurally skips them — their {ThemeResource} setters self-heal natively.
+        // structurally skips them — their live theme-resource bindings self-heal natively.
         // Reverting the ChildDiffHints.IsThemeSensitive arm makes this go red.
         var ctx = NewCtx();
         Func<int, int, Element> themed = (item, i) => MakeThemeBindingCell(item);

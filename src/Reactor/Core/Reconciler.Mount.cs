@@ -236,9 +236,10 @@ public sealed partial class Reconciler
         if (control is FrameworkElement captionFe)
             ApplyDefaultAutomationName(captionFe, AccessibilityApplier.ResolveCaptionForElement(element));
 
-        // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
+        // Apply theme-resource bindings (ThemeRef → live {ThemeResource}-equivalent binding).
+        // After modifiers and setters, which it must not override (see ApplyThemeBindings).
         if (element.ThemeBindings is not null && control is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, element.ThemeBindings);
+            ThemeBindingApplier.ApplyThemeBindings(thFe, element.ThemeBindings, modifiers);
 
         // Apply per-control resource overrides (lightweight styling)
         if (element.ResourceOverrides is not null && control is FrameworkElement resFe)

@@ -605,8 +605,8 @@ internal static class CoreCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  9. Theme bindings — .Background(Theme.Xxx) applies XAML style
-    //     Targets: Reconciler.cs lines 1996-2077 (ApplyThemeBindings, GetStyleTargetType, etc.)
+    //  9. Theme bindings — .Background(Theme.Xxx) installs a theme-resource binding
+    //     Targets: Reconciler.ApplyThemeBindings / GetThemeBindingProperty
     // ════════════════════════════════════════════════════════════════════════
 
     internal class ThemeBindingApplication(Harness h) : SelfTestFixtureBase(h)
@@ -639,7 +639,7 @@ internal static class CoreCoverageFixtures
 
             await Harness.Render();
 
-            // Theme bindings should have created styles on the elements
+            // Theme bindings should have been installed on the elements
             var themed = H.FindText("Themed text");
             H.Check("Theme_TextMounted", themed is not null);
             H.Check("Theme_ButtonMounted", H.FindButton("Themed btn") is not null);
@@ -1464,7 +1464,7 @@ internal static class CoreCoverageFixtures
             host.Mount(ctx =>
             {
                 // Use multiple different theme binding combinations to exercise all
-                // GetStyleTargetType branches
+                // GetThemeBindingProperty branches
                 return VStack(
                     // TextBlock target
                     TextBlock("ThemeText").Foreground(Theme.PrimaryText),

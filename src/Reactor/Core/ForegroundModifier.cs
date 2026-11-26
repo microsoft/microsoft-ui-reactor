@@ -99,6 +99,7 @@ internal static class ForegroundModifier
         {
             fe.ClearValue(property);
             ClearApplied(fe);
+            ThemeBindingApplier.RestoreSuppressedThemeBinding(fe, "Foreground");
         }
     }
 

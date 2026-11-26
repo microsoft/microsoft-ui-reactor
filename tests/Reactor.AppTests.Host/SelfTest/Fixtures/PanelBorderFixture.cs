@@ -120,13 +120,14 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                             && brush?.Color == global::Windows.UI.Color.FromArgb(255, 204, 102, 51),
                         2 or 4 => cleared,
                         3 => thickness == new Thickness(9, 3, 4, 5),
-                        5 => brush?.Color == themeBrush.Color && panel.Style is not null,
+                        5 => brush?.Color == themeBrush.Color
+                            && panel.ReadLocalValue(brushProperties[i]) != DependencyProperty.UnsetValue,
                         7 => thickness == physical && brush is null
                             && panel.ReadLocalValue(brushProperties[i]) == DependencyProperty.UnsetValue,
                         8 or 10 or 11 => thickness == physical && ReferenceEquals(brush, hoverBrush),
                         9 or 13 => thickness == physical && ReferenceEquals(brush, themeBrush),
                         12 => thickness == physical && ReferenceEquals(brush, darkBrush),
-                        _ => brush is null && panel.Style is null,
+                        _ => brush is null && panel.ReadLocalValue(brushProperties[i]) == DependencyProperty.UnsetValue,
                     };
                     H.Check($"PanelBorder_{panel.GetType().Name}_{phases[phase]}", correct);
 
@@ -155,7 +156,7 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
 
                 if (phase == 5)
                 {
-                    // Change only the native theme: the existing ThemeResource style must
+                    // Change only the native theme: the existing theme-resource binding must
                     // resolve a different brush without another Reactor render/update.
                     foreach (var panel in panels)
                         panel!.RequestedTheme = ElementTheme.Dark;
@@ -189,14 +190,12 @@ internal sealed class PanelBorderFixture(Harness h) : SelfTestFixtureBase(h)
                 if (styledControls[i] is not { } control) continue;
                 var property = styledProperties[i];
                 var name = control.GetType().Name;
-                H.Check($"BorderRestore_{name}_NormalComesFromStyle", control.Style is not null
-                    && ReferenceEquals(control.GetValue(property), themeBrush)
-                    && control.ReadLocalValue(property) == DependencyProperty.UnsetValue);
+                H.Check($"BorderRestore_{name}_NormalComesFromThemeBinding",
+                    ReferenceEquals(control.GetValue(property), themeBrush));
                 InteractionStateApplier.SimulatePointerOverForTests(control, isOver: true);
                 H.Check($"BorderRestore_{name}_HoverBrush", ReferenceEquals(control.GetValue(property), hoverBrush));
                 InteractionStateApplier.SimulatePointerOverForTests(control, isOver: false);
                 H.Check($"BorderRestore_{name}_NormalBrushRestored", ReferenceEquals(control.GetValue(property), themeBrush));
-                H.Check($"BorderRestore_{name}_LocalBrushReleased", control.ReadLocalValue(property) == DependencyProperty.UnsetValue);
                 control.RequestedTheme = ElementTheme.Dark;
                 H.Check($"BorderRestore_{name}_ThemeStillResolves", await Harness.WaitFor(() =>
                     control.ActualTheme == ElementTheme.Dark && ReferenceEquals(control.GetValue(property), darkBrush)));
