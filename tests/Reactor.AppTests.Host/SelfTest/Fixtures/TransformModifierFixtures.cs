@@ -1073,6 +1073,8 @@ internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFix
             var playing = pulse.Opacity(0.4);
             reconciler.Update(seed, playing, target, () => { });
             await Harness.Render();
+            // A late XAML push of the seed's 0.4 can stop the loop until its #1669 restart runs.
+            await Harness.WaitForWithin(() => !Reconciler.OpacityRestartPendingForTests(target), 3000);
             H.Check("OpacityReplay_LoopStarted", visual.TryGetAnimationController("Opacity") is not null);
 
             reconciler.Update(playing, pulse, target, () => { });
@@ -1156,6 +1158,8 @@ internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFix
             var playing = pulse.Opacity(0.4);
             reconciler.Update(seed, playing, target, () => { });
             await Harness.Render();
+            // A late XAML push of the seed's 0.4 can stop the loop until its #1669 restart runs.
+            await Harness.WaitForWithin(() => !Reconciler.OpacityRestartPendingForTests(target), 3000);
             var loop = visual.TryGetAnimationController("Opacity");
             H.Check("OpacityLoop_FlyoutLoopStarted", loop is not null);
             reconciler.Update(playing, pulse, target, () => { });
@@ -1302,6 +1306,8 @@ internal sealed class KeyframeOpacityFixture(Harness h, bool loop) : SelfTestFix
                 reconciler.Update(seed, playing, target, () => { });
                 await Harness.Render();
             }
+            // A late XAML push of the declared opacity can stop the keyframe until its #1669 restart runs.
+            await Harness.WaitForWithin(() => !Reconciler.OpacityRestartPendingForTests(target), 3000);
             var controller = visual.TryGetAnimationController("Opacity");
             H.Check(name + "_Started", controller is not null);
             if (controller is null) return;
