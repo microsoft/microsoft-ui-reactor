@@ -125,10 +125,15 @@ internal static class ModifierEmitter
                 if (slot.Shape is not (ApplyShape.Simple or ApplyShape.Attached or ApplyShape.Converted))
                     throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple, Attached and Converted slots are emitted so far. "
                         + "Add its shape to EmitReconcilerModifiers in the PR that generates it, or end the helper's slot range before it.");
+                if (slot.Shape == ApplyShape.Converted && slot.Converter is null)
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is Converted but declares no Converter. "
+                        + "Add .Converted(\"<method>\") to its schema row and the method to ModifierConverters.");
                 if (slot.Shape == ApplyShape.Converted
-                    && (slot.Converter is null || slot.ReceiversWith(ReceiverRole.Apply).ToList() is not [var convertedReceiver]
-                        || convertedReceiver.Type != ModifierSchema.FrameworkElement))
-                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is Converted, and only an ungated converted slot with a Converter is emitted so far.");
+                    && slot.ReceiversWith(ReceiverRole.Apply).ToList() is var convertedReceivers
+                    && (convertedReceivers.Count != 1 || convertedReceivers[0].Type != ModifierSchema.FrameworkElement))
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is Converted with Apply receivers "
+                        + $"({string.Join(", ", convertedReceivers.Select(r => r.SimpleType))}), and only a single ungated FrameworkElement receiver is emitted so far. "
+                        + "Add gated converted arms to EmitReconcilerModifiers in the PR that generates it, or end the helper's slot range before it.");
                 if (slot.Write == WriteEquality.Reference && !ReferenceTypes.Contains(slot.ClrType))
                     throw new InvalidOperationException($"{helper.Name}: {slot.Name} compares by reference, but {slot.ClrType} is not in ReferenceTypes. "
                         + "Add it there if it is a reference type.");

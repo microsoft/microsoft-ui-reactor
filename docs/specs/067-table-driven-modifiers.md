@@ -945,7 +945,10 @@ arm whose tokens change; the write is the same.
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run
 `tools/Reactor.ModifierGen`". The contributor guide `extending-reactor-controls.md` gains a short
-"common modifiers" note at the same time, edited in its `docs/_pipeline/templates` source.
+"common modifiers" note at the same time, edited in its `docs/_pipeline/templates` source. 3e
+updates the field note's apply-arm part only (rows A–D are generated; place the slot in a
+`GeneratedHelpers` range). The full rewrite and the guide note wait for layer 5, because the pool
+reset in `CleanElement` is still hand-written until then and the short recipe would leave it out.
 
 **Stop points.** Layers 0 and 1 are worth landing even if nothing after them does: layer 0 closes
 the §14 bug class, and layer 1 gives the analyzer one source and adds the behavioural selftest.
