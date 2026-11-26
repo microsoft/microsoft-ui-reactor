@@ -288,6 +288,9 @@ Conventions for contributors:
 
 ### Fixed
 
+- **Changing only `.XYFocusKeyboardNavigation(...)` now updates the control (spec 067 §14).** The
+  reconciler's skip check never compared this modifier, so an element whose only change was its
+  XY focus keyboard navigation mode skipped the update and kept the old mode.
 - **Elements using `.Keyframes()`, `.ScrollLinked()`, an implicit transition such as
   `.OpacityTransition()`, `.WithTransitions()` or `.InteractionStates()` skip unchanged renders
   again (issue #1702; follow-up to #1536, spec 014).** Each render rebuilds these declarations with
