@@ -204,7 +204,7 @@ internal static class DevtoolsFixtures
                 var manual = key?.GetValue("ProxyEnable") is int enabled && enabled != 0 ? "on" : "off";
                 return $"autoDetect={autoDetect} pac={pac} manual={manual}";
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is global::System.Security.SecurityException or UnauthorizedAccessException or IOException)
             {
                 return $"unknown ({ex.GetType().Name})";
             }

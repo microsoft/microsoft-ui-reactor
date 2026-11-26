@@ -200,8 +200,10 @@ public sealed class LoopbackHttpClientProxyTests : IDisposable
                     Interlocked.Increment(ref _requests);
                     await stream.WriteAsync(_response);
                 }
-                catch (IOException) { }
-                catch (SocketException) { }
+                catch (Exception ex) when (ex is IOException or SocketException)
+                {
+                    // The client hung up first, e.g. a probe that hit its timeout. Nothing to answer.
+                }
             }
         }
 
