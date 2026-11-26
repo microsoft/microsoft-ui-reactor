@@ -94,10 +94,13 @@ internal static class DevtoolsFixtures
             };
             req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Server.AuthToken);
+            // ResponseHeadersRead so the headers stage is reached before the body is buffered;
+            // HttpClient.Timeout then stops at the headers, so one token bounds both reads.
+            using var cts = new CancellationTokenSource(RequestTimeout);
             _stages.Mark($"{method} sending");
-            using var resp = await _client.SendAsync(req);
+            using var resp = await _client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             _stages.Mark($"{method} response headers");
-            var text = await resp.Content.ReadAsStringAsync();
+            var text = await resp.Content.ReadAsStringAsync(cts.Token);
             _stages.Mark($"{method} response body");
             using var doc = JsonDocument.Parse(text);
             // Clone so the element survives disposing the document.
@@ -125,56 +128,54 @@ internal static class DevtoolsFixtures
 
     /// <summary>
     /// Per-stage timings for the MCP fixtures, as TAP comments (issue #1718). The first
-    /// harness in a process prints every stage as it is reached, so a stall shows where it
-    /// is even if the fixture then times out. Later harnesses print only a stage that took
+    /// fixture in a process prints every stage as it is reached, so a stall shows where it
+    /// is even if the fixture then times out. Later fixtures print only a stage that took
     /// at least <see cref="SlowStageMs"/>. Elapsed times are in the line itself because the
     /// packaged wrapper replays TAP without per-line timestamps.
     /// </summary>
     internal sealed class StageClock
     {
         private const long SlowStageMs = 1000;
-        private static (global::System.Diagnostics.Stopwatch Clock, long MountedMs)? s_pendingFixture;
-        private static int s_harnessCount;
+        private static StageClock? s_pendingFixture;
+        private static int s_clockCount;
 
-        private readonly global::System.Diagnostics.Stopwatch _clock;
+        private readonly global::System.Diagnostics.Stopwatch _clock = global::System.Diagnostics.Stopwatch.StartNew();
         private readonly bool _verbose;
         private long _lastMs;
 
-        private StageClock(global::System.Diagnostics.Stopwatch clock, bool verbose)
+        private StageClock()
         {
-            _clock = clock;
-            _verbose = verbose;
+            _verbose = Interlocked.Increment(ref s_clockCount) == 1;
+            if (_verbose)
+            {
+                Console.WriteLine($"# Devtools stage: first MCP fixture in process, system proxy {DescribeSystemProxy()}");
+            }
         }
 
-        /// <summary>Called by <see cref="MountRoot"/>, the first step of every MCP fixture.</summary>
-        internal static void FixtureMounting(global::System.Diagnostics.Stopwatch clock, long mountedMs) => s_pendingFixture = (clock, mountedMs);
+        /// <summary>
+        /// Called by <see cref="MountRoot"/>, the first step of every MCP fixture, before it
+        /// mounts. Returns the clock so the mount stage prints as soon as it completes.
+        /// </summary>
+        internal static StageClock FixtureStarting() => s_pendingFixture = new StageClock();
 
+        /// <summary>Continues the clock <see cref="MountRoot"/> started, or starts one.</summary>
         internal static StageClock ForHarness()
         {
-            var verbose = Interlocked.Increment(ref s_harnessCount) == 1;
             var pending = s_pendingFixture;
             s_pendingFixture = null;
-            var stages = new StageClock(pending?.Clock ?? global::System.Diagnostics.Stopwatch.StartNew(), verbose);
-            if (verbose)
+            if (pending is not null)
             {
-                Console.WriteLine($"# Devtools stage: first MCP harness in process, system proxy {DescribeSystemProxy()}");
+                pending.Mark("rendered");
+                return pending;
             }
-            if (pending is { } p)
-            {
-                stages.Report("host mounted", p.MountedMs);
-                stages.Mark("rendered");
-            }
-            else
-            {
-                stages.Mark("harness created");
-            }
+            var stages = new StageClock();
+            stages.Mark("harness created");
             return stages;
         }
 
-        internal void Mark(string stage) => Report(stage, _clock.ElapsedMilliseconds);
-
-        private void Report(string stage, long nowMs)
+        internal void Mark(string stage)
         {
+            var nowMs = _clock.ElapsedMilliseconds;
             var deltaMs = nowMs - _lastMs;
             _lastMs = nowMs;
             if (!_verbose && deltaMs < SlowStageMs) return;
@@ -251,11 +252,11 @@ internal static class DevtoolsFixtures
 
     private static DevtoolsFixtureRoot MountRoot(Harness h)
     {
-        var clock = global::System.Diagnostics.Stopwatch.StartNew();
+        var stages = StageClock.FixtureStarting();
         var host = h.CreateHost();
         var root = new DevtoolsFixtureRoot();
         host.Mount(root);
-        StageClock.FixtureMounting(clock, clock.ElapsedMilliseconds);
+        stages.Mark("host mounted");
         return root;
     }
 
