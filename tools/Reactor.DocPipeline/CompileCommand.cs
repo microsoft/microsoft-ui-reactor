@@ -21,9 +21,13 @@ internal static partial class CompileCommand
         // Reference generation (spec 041 §10.4) defaults to ON so the
         // compile step is uniform — `--skip-reference` is the inner-loop
         // escape hatch and `--reference` is a no-op alias for explicit
-        // callers. Phase 1B restricts generation to the `hooks` category;
-        // later phases lift the gate as more categories come online.
+        // callers. `--reference-only` runs Phase 5.7 alone and exits, so the
+        // reference can be regenerated without touching any guide page.
+        // `--reference-nav-out <path>` writes the nav.json groups for the
+        // generated pages to a file.
         var skipReference = HasFlag(args, "--skip-reference");
+        var referenceOnly = HasFlag(args, "--reference-only");
+        var referenceNavOut = GetOption(args, "--reference-nav-out");
         // --reference is accepted but a no-op — present so authors can
         // call it out explicitly in CI scripts. Discarded so we don't shadow
         // the variable.
@@ -82,6 +86,18 @@ internal static partial class CompileCommand
         var diagramsDir = Path.Combine(docsRoot, "_pipeline", "diagrams");
         var outputDir = Path.Combine(docsRoot, "guide");
         var imagesDir = Path.Combine(outputDir, "images");
+
+        if (referenceOnly)
+        {
+            Console.WriteLine("═══ Phase 5.7: Reference ═══");
+            var onlyResult = RunReferenceGeneration(repoRoot, outputDir, referenceNavOut);
+            if (onlyResult is null)
+            {
+                Console.Error.WriteLine("Reference generation was skipped for want of an input (see above).");
+                return 1;
+            }
+            return ReportReferenceFindings(onlyResult) ? 1 : 0;
+        }
 
         // ── Phase 1: Validate ─────────────────────────────────────────────
         Console.WriteLine("═══ Phase 1: Validate ═══");
@@ -543,22 +559,10 @@ internal static partial class CompileCommand
         else
         {
             Console.WriteLine("═══ Phase 5.7: Reference ═══");
-            phaseRefResult = RunReferenceGeneration(repoRoot, outputDir);
+            phaseRefResult = RunReferenceGeneration(repoRoot, outputDir, referenceNavOut);
             if (phaseRefResult is not null)
             {
-                foreach (var f in phaseRefResult.Findings)
-                {
-                    if (f.Severity == TierLintSeverity.Error)
-                    {
-                        Console.Error.WriteLine(f.Format());
-                        hasErrors = true;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"  ⚠ {f.Format()}");
-                    }
-                }
-                Console.WriteLine($"  Generated: {phaseRefResult.Pages.Count} page(s)");
+                if (ReportReferenceFindings(phaseRefResult)) hasErrors = true;
             }
             else if (ci)
             {
@@ -568,7 +572,7 @@ internal static partial class CompileCommand
                 // degradation: an author who hasn't built yet still gets their
                 // guide pages. Under --ci it is not. CI always builds, so a
                 // missing input means the run is not the run that was asked
-                // for, and the ~117 pages under docs/guide/reference/ are
+                // for, and the pages under docs/guide/reference/ are
                 // silently left at whatever was committed.
                 //
                 // Exiting 0 there is what let the freshness gate in
@@ -906,11 +910,15 @@ internal static partial class CompileCommand
         var result = new List<CrossLinkConcept>();
         var refRoot = Path.Combine(outputDir, "reference");
         if (!Directory.Exists(refRoot)) return result;
-        foreach (var file in Directory.EnumerateFiles(refRoot, "*.md", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(refRoot, "*.md", SearchOption.AllDirectories)
+                     .OrderBy(f => f, StringComparer.Ordinal))
         {
             var name = Path.GetFileNameWithoutExtension(file);
-            if (string.IsNullOrEmpty(name) || name.Equals("index", StringComparison.OrdinalIgnoreCase))
-                continue;
+            // Only hook pages (`UseState`, `UseEffect`, …) are concepts. Type
+            // and area pages carry ordinary words as names (`Component`,
+            // `layout`, `text`), and requiring a link for every prose use of
+            // those would bury the real findings.
+            if (string.IsNullOrEmpty(name) || !IsHookPageName(name)) continue;
             // Skip extension classes — their `…Extensions` suffix isn't a
             // natural-prose concept name (authors write "UseFocus" not
             // "UseFocusExtensions"). The base type carries the concept.
@@ -923,6 +931,9 @@ internal static partial class CompileCommand
         }
         return result;
     }
+
+    private static bool IsHookPageName(string name) =>
+        name.Length > 3 && name.StartsWith("Use", StringComparison.Ordinal) && char.IsUpper(name[3]);
 
     /// <summary>
     /// Assemble a template's body for tier-lint inspection. Same call as the
@@ -947,14 +958,15 @@ internal static partial class CompileCommand
 
     /// <summary>
     /// Locate the most recently built <c>Microsoft.UI.Reactor.xml</c> (see
-    /// <see cref="FindReactorXml"/>) and run the reference generator restricted
-    /// to the Hooks category. Returns <c>null</c> when the XML doc file isn't on
-    /// disk yet — typical on first compile before <c>dotnet build src/Reactor</c>
-    /// has run. The caller can decide whether to surface that as a warning;
-    /// for Phase 1B it's silent because the unit tests are the canonical
-    /// surface.
+    /// <see cref="FindReactorXml"/>) and generate the whole API reference
+    /// from it and the <c>Microsoft.UI.Reactor.dll</c> next to it. Returns
+    /// <c>null</c> when the map or the XML file is missing — typical on a first
+    /// compile before <c>dotnet build src/Reactor</c> has run. The caller decides
+    /// whether that is a failure (it is under <c>--ci</c>). A missing DLL beside
+    /// an XML file is an error finding, and nothing is written or pruned.
     /// </summary>
-    private static ReferenceGen.ReferenceGenResult? RunReferenceGeneration(string repoRoot, string outputDir)
+    private static ReferenceGen.ReferenceGenResult? RunReferenceGeneration(
+        string repoRoot, string outputDir, string? navOutPath = null)
     {
         var registryPath = Path.Combine(repoRoot, "docs", "_pipeline", "reference-map.yaml");
         if (!File.Exists(registryPath))
@@ -969,7 +981,7 @@ internal static partial class CompileCommand
         {
             Console.Error.WriteLine($"  {ex.Code}: {ex.Message}");
             return new ReferenceGen.ReferenceGenResult(
-                Array.Empty<ReferenceGen.GeneratedPage>(),
+                Array.Empty<ReferenceGen.ReferencePage>(),
                 new[] { new ReferenceGen.RefGenFinding(
                     ex.Code ?? "REACTOR_DOC_REGISTRY_001",
                     ex.Message,
@@ -994,23 +1006,31 @@ internal static partial class CompileCommand
             $"  XML: {Rel(repoRoot, xmlPath)} " +
             $"({Stamp(choice.Value.WriteUtc)}, newest of {choice.Value.CandidateCount} candidate(s))");
 
+        // The public surface (signatures, kinds, base types, parameter
+        // defaults) comes from the assembly built beside the XML file. The XML
+        // file alone cannot tell element records from other records, so a run
+        // without the assembly would rewrite the pages and prune the area pages
+        // as stale. Fail before writing or pruning anything instead.
+        var dllPath = Path.ChangeExtension(xmlPath, ".dll");
+        if (!File.Exists(dllPath))
+        {
+            var message =
+                $"Microsoft.UI.Reactor.dll not found next to {Rel(repoRoot, xmlPath)}. The reference is built " +
+                "from the assembly and the XML file together, so no page under docs/guide/reference was " +
+                "written or deleted. Run `dotnet build src/Reactor` and compile again.";
+            return new ReferenceGen.ReferenceGenResult(
+                Array.Empty<ReferenceGen.ReferencePage>(),
+                new[] { new ReferenceGen.RefGenFinding(
+                    "REACTOR_DOC_REFGEN_003", message, Rel(repoRoot, dllPath), TierLintSeverity.Error) });
+        }
+
         var staleFinding = BuildStaleXmlFinding(repoRoot, xmlPath);
 
-        var generator = new ReferenceGen.ReferenceGenerator();
-        var result = generator.Generate(
-            xmlPath,
-            map,
-            referenceRoot: outputDir,
-            categoryAllowList: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "hooks" });
-
-        // ── Spec §10.4.1 — conceptual-guide link injection ────────────────
+        // ── Spec §10.4.1 — guide ↔ reference links ────────────────────────
         // Scan every template for <!-- ref:Member --> markers so each
-        // generated reference page can grow a "Featured in" backlink. The
-        // template bodies are already parsed by DiscoverTemplates higher
-        // up, but ref-gen runs in its own helper and doesn't yet take the
-        // template list as input — re-scan here from disk. Cheap enough
-        // (small file count) for Phase 1B.
+        // reference page can link back to the guide pages that mention it.
         var templateBodies = new List<(string topicId, string body)>();
+        var templateTitles = new Dictionary<string, string>(StringComparer.Ordinal);
         var templatesDir = Path.Combine(repoRoot, "docs", "_pipeline", "templates");
         foreach (var f in EnumerateTemplateFiles(templatesDir))
         {
@@ -1019,42 +1039,101 @@ internal static partial class CompileCommand
                 ? rel[..^".md.dt".Length]
                 : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(rel));
             templateBodies.Add((id, File.ReadAllText(f)));
+            try
+            {
+                var title = TemplateParser.Parse(f).Title;
+                if (!string.IsNullOrWhiteSpace(title)) templateTitles[id] = title;
+            }
+            catch (DocPipelineException)
+            {
+                // A template that does not parse is reported by Phase 1; the
+                // reference just falls back to a title made from the slug.
+            }
         }
         var reverseIndex = ReferenceLinkInjector.BuildReverseIndex(templateBodies);
+        var templateIds = templateBodies.Select(t => t.topicId).ToHashSet(StringComparer.Ordinal);
 
-        var injectionFindings = new List<ReferenceGen.RefGenFinding>();
-        var injectedPages = new List<ReferenceGen.GeneratedPage>(result.Pages.Count);
-        foreach (var page in result.Pages)
+        var generator = new ReferenceGen.ReferenceGenerator();
+        var result = generator.Generate(
+            xmlPath,
+            map,
+            dllPath: dllPath,
+            templateIds: templateIds,
+            reverseIndex: reverseIndex,
+            guideTitle: id => templateTitles.TryGetValue(id, out var title) ? title : null);
+
+        // Lint W002: orphaned guide pages — a guide page the map declares
+        // that no template marker points at.
+        var lintFindings = ReferenceLinkInjector.LintOrphanedGuidePages(
+            result.DeclaredGuidePages, templateIds, reverseIndex).ToList();
+
+        // The stale-input warning (issue #1068) is a warning, so the caller
+        // prints it and `--ci` does not fail on it: it reports that the input
+        // *may* predate source, which is a local-loop hazard rather than a
+        // defect in the emitted pages.
+        var combined = result with
         {
-            var newBody = ReferenceLinkInjector.Inject(page, result, reverseIndex, injectionFindings);
-            injectedPages.Add(page with { Body = newBody });
-        }
-
-        // Lint W002: orphaned guide pages. Build the union of every
-        // guide-page declared by either an override or a default rule, then
-        // check which of those have no inbound marker.
-        var declaredGuidePages = result.Pages.SelectMany(p => p.Route.GuidePages).ToList();
-        var templateIds = templateBodies.Select(t => t.topicId).ToList();
-        injectionFindings.AddRange(ReferenceLinkInjector.LintOrphanedGuidePages(
-            declaredGuidePages, templateIds, reverseIndex));
-
-        // Merge findings; the injector findings join the generator's, and the
-        // stale-input warning (issue #1068) joins both. It is a warning, so the
-        // caller prints it and `--ci` does not fail on it: it reports that the
-        // input *may* predate source, which is a local-loop hazard rather than
-        // a defect in the emitted pages.
-        var combined = new ReferenceGen.ReferenceGenResult(
-            injectedPages,
-            result.Findings
-                .Concat(injectionFindings)
+            Findings = result.Findings
+                .Concat(lintFindings)
                 .Concat(staleFinding is null
                     ? Array.Empty<ReferenceGen.RefGenFinding>()
                     : new[] { staleFinding })
-                .ToList());
+                .ToList(),
+        };
 
-        // Write pages to disk so authors and lints can see the output.
-        generator.WriteToDisk(combined, outputDir);
+        var (written, deleted) = ReferenceGen.ReferenceGenerator.WriteToDisk(combined, outputDir);
+        Console.WriteLine($"  Wrote {written} page(s), deleted {deleted} stale page(s).");
+        if (navOutPath is not null)
+        {
+            var navFull = Path.GetFullPath(navOutPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(navFull)!);
+            File.WriteAllText(navFull, NormalizeLineEndings(combined.NavFragment));
+            Console.WriteLine($"  Nav fragment: {navFull}");
+        }
         return combined;
+    }
+
+    /// <summary>
+    /// Prints the Phase 5.7 findings. Errors go to stderr. The many
+    /// missing-summary warnings are folded into one count plus the pages
+    /// with the most gaps, so they do not hide everything else.
+    /// </summary>
+    /// <returns><c>true</c> when any finding is an error.</returns>
+    private static bool ReportReferenceFindings(ReferenceGen.ReferenceGenResult result)
+    {
+        var hasErrors = false;
+        var missingSummaries = new List<ReferenceGen.RefGenFinding>();
+        foreach (var f in result.Findings)
+        {
+            if (f.Severity == TierLintSeverity.Error)
+            {
+                Console.Error.WriteLine(f.Format());
+                hasErrors = true;
+            }
+            else if (f.Code == "REACTOR_DOC_REFGEN_W001")
+            {
+                missingSummaries.Add(f);
+            }
+            else
+            {
+                Console.WriteLine($"  ⚠ {f.Format()}");
+            }
+        }
+        if (missingSummaries.Count > 0)
+        {
+            Console.WriteLine(
+                $"  ⚠ REACTOR_DOC_REFGEN_W001: {missingSummaries.Count} public type(s) or member(s) have no <summary>. Pages with the most gaps:");
+            foreach (var g in missingSummaries
+                         .GroupBy(f => f.FilePath, StringComparer.Ordinal)
+                         .OrderByDescending(g => g.Count())
+                         .ThenBy(g => g.Key, StringComparer.Ordinal)
+                         .Take(10))
+            {
+                Console.WriteLine($"      {g.Key}: {g.Count()}");
+            }
+        }
+        Console.WriteLine($"  Generated: {result.Pages.Count} page(s)");
+        return hasErrors;
     }
 
     /// <summary>

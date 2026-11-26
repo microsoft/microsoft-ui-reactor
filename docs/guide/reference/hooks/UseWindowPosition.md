@@ -1,13 +1,19 @@
 # UseWindowPosition
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseWindowPosition`
+Subscribes to the host window's `PositionChanged` event and re-renders on change. Returns `(0, 0)` outside a window. (spec 054 §5.5)
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public (double X, double Y) UseWindowPosition()
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to the host window's `PositionChanged` event and re-renders
-on change. Returns `(0, 0)` outside a window. (spec 054 §5.5)
+**Learn more:** [Windows](../../windows.md), [Advanced Windowing](../../windowing-advanced.md), [Hooks](../../hooks.md)
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected (double X, double Y) UseWindowPosition()
+```

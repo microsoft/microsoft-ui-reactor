@@ -1284,7 +1284,7 @@ jobs:
 
       # Compiled-output freshness gate (issue #1052). The compile above
       # regenerates every generated file under docs/guide — 72 topic pages,
-      # README.md, and ~117 pages under reference/. Until this gate existed, CI
+      # README.md, and the API reference under reference/. Until this gate existed, CI
       # did all of that work and then checked exactly two of those files, so a
       # source edit that changed a `snippet="source:..."` region left the
       # published page stale and the job stayed green. The evidence was being
@@ -1317,7 +1317,7 @@ jobs:
       # so it fails here instead.
       #
       # The other class — Phase 5.7 bailing on a missing Microsoft.UI.Reactor.xml or
-      # reference-map.yaml and leaving ~117 reference pages unwritten — used to
+      # reference-map.yaml and leaving the reference pages unwritten — used to
       # be checked here too, by grepping stdout for those two "not found"
       # strings. That was the wrong owner and the wrong direction of failure: a
       # reword in CompileCommand.cs would have made the check silently stop

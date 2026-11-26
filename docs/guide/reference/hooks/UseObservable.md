@@ -1,16 +1,25 @@
 # UseObservable
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseObservable``1(``0)`
+Subscribes to an INotifyPropertyChanged source and re-renders when any property changes. Returns the same source object.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public T UseObservable<T>(T source) where T : INotifyPropertyChanged
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to an INotifyPropertyChanged source and re-renders when any property changes.
-Returns the same source object.
+**Learn more:** [Reactivity Model](../../reactivity-model.md), [Hooks](../../hooks.md)
 
-## Featured in
+## Parameters
 
-- [Hooks](../../hooks.md)
+| Name | Type | Description |
+| --- | --- | --- |
+| `source` | `T` |  |
 
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected T UseObservable<T>(T source) where T : INotifyPropertyChanged
+```
