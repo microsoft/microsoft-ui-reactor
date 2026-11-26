@@ -81,7 +81,7 @@ internal static class DevtoolsFixtures
 
             Server.Start();
             _stages.Mark("server started");
-            _client = CreateLoopbackClient(Server.Port);
+            _client = CreateTimedLoopbackClient(Server.Port, _stages);
         }
 
         public async Task<JsonElement> CallAsync(string method, CallArgs? args = null)
@@ -124,6 +124,45 @@ internal static class DevtoolsFixtures
         var client = LoopbackHttpClient.Create(McpHarness.RequestTimeout);
         client.BaseAddress = new Uri($"http://127.0.0.1:{port}/");
         return client;
+    }
+
+    /// <summary>
+    /// <see cref="CreateLoopbackClient"/> with the same handler settings, plus stage marks
+    /// around the TCP connect. They split "sending → response headers" into client setup
+    /// (the first request on a handler builds it on the thread pool), the connect itself,
+    /// and server time. Issue #1718: on CI the first request took 1.7 s with no proxy.
+    /// </summary>
+    private static HttpClient CreateTimedLoopbackClient(int port, StageClock stages)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            UseProxy = false,
+            AllowAutoRedirect = false,
+            ConnectCallback = async (context, ct) =>
+            {
+                stages.Mark("connecting");
+                var socket = new global::System.Net.Sockets.Socket(
+                    global::System.Net.Sockets.SocketType.Stream, global::System.Net.Sockets.ProtocolType.Tcp)
+                { NoDelay = true };
+                var connected = false;
+                try
+                {
+                    await socket.ConnectAsync(context.DnsEndPoint, ct);
+                    connected = true;
+                }
+                finally
+                {
+                    if (!connected) socket.Dispose();
+                }
+                stages.Mark("connected");
+                return new global::System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+            },
+        };
+        return new HttpClient(handler)
+        {
+            BaseAddress = new Uri($"http://127.0.0.1:{port}/"),
+            Timeout = McpHarness.RequestTimeout,
+        };
     }
 
     /// <summary>
