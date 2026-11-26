@@ -578,6 +578,36 @@ public sealed partial class Reconciler
         => GetCompositionState(uie)?.Keyframes is { } keyframes && keyframes.TryGetValue(name, out var entry)
             && entry.Started?.TryGetValue(property, out var controller) == true ? controller : null;
 
+    /// <summary>
+    /// True when a skipped element carries a new keyframe array that compares equal to the one
+    /// it replaces (issue #1702). A channel owner records the array its layer applied, by
+    /// reference so another layer sharing the control can't match it, so the skip moves the
+    /// owner to the new array (<see cref="RetargetKeyframeOwnersOnSkip"/>).
+    /// </summary>
+    internal static bool KeyframesRebuiltOnSkip(Element oldEl, Element newEl)
+        => oldEl.KeyframeAnimations is { } previous && newEl.KeyframeAnimations is { } current
+            && !ReferenceEquals(previous, current);
+
+    internal static void RetargetKeyframeOwnersOnSkip(UIElement control, Element oldEl, Element newEl)
+    {
+        if (!KeyframesRebuiltOnSkip(oldEl, newEl)
+            || GetCompositionState(control) is not { KeyframeChannelOwners: { Count: > 0 } owners })
+            return;
+
+        var previous = oldEl.KeyframeAnimations!;
+        var current = newEl.KeyframeAnimations!;
+        Retarget(AnimateProperty.Opacity);
+        Retarget(AnimateProperty.Scale);
+        Retarget(AnimateProperty.Rotation);
+        Retarget(AnimateProperty.Offset);
+
+        void Retarget(AnimateProperty property)
+        {
+            if (owners.TryGetValue(property, out var owner) && ReferenceEquals(owner.Scope, previous))
+                owners[property] = owner with { Scope = current };
+        }
+    }
+
     private static void TrackKeyframeChannelOwners(CompositionState state, AnimateProperty channels, KeyframeChannelOwner owner)
     {
         if (channels == default) return;
@@ -737,12 +767,17 @@ public sealed partial class Reconciler
     //  Scroll-linked expression animation (.ScrollLinked() modifier)
     // ════════════════════════════════════════════════════════════════
 
+    // Test-only seam: counts ApplyScrollAnimation calls that started expressions, so a selftest
+    // can tell a skipped render from one that restarted the scroll animation (issue #1702).
+    internal static int DebugScrollAnimationStarts;
+
     /// <summary>
     /// Applies scroll-linked expression animations to an element's Visual.
     /// </summary>
     internal static void ApplyScrollAnimation(UIElement uie, ScrollAnimationConfig config)
     {
         if (config.ScrollViewer is null) return;
+        DebugScrollAnimationStarts++;
         ElementPool.MarkVisualTaken(uie);
         var visual = AnimationHelper.GetElementVisual(uie);
         var compositor = visual.Compositor;
