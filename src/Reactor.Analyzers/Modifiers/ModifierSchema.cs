@@ -304,7 +304,7 @@ internal static class ModifierSchema
         S("LongPress", ModifierBucket.Root, "Microsoft.UI.Reactor.Input.LongPressGestureConfig", ModifierFamily.Behavior, ApplyShape.Behavior)
             .NotCompared(GestureReason).Fluent("OnLongPress"),
         S("DragSource", ModifierBucket.Root, "Microsoft.UI.Reactor.Input.DragSourceConfig", ModifierFamily.Behavior, ApplyShape.Behavior)
-            .NotCompared(GestureReason).Fluent("OnDragStart", "Drag"),
+            .NotCompared(GestureReason).Fluent("OnDragStart", "DraggableWhen"),
         S("DropTarget", ModifierBucket.Root, "Microsoft.UI.Reactor.Input.DropTargetConfig", ModifierFamily.Behavior, ApplyShape.Behavior)
             .NotCompared(GestureReason).Fluent("OnDrop", "OnDragEnter", "OnDragOver", "OnDragLeave"),
 

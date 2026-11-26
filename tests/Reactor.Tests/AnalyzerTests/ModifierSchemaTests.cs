@@ -394,6 +394,45 @@ public class ModifierSchemaTests
     }
 
     [Fact]
+    public void Every_Declared_Fluent_Modifier_Writes_Its_Slot()
+    {
+        // A name match alone let `.Drag(bool)`, which sets the window-drag attached flag, pass as a
+        // DragSource writer. Require some overload of each declared fluent, in any slot shape, to
+        // assign the slot's property (`new ElementModifiers { X = … }`, `existing with { X = … }`).
+        var root = Microsoft.UI.Reactor.Cli.Pack.RepoRootFinder.FindRepoRoot()!;
+        var all = global::System.IO.Directory.GetFiles(global::System.IO.Path.Join(root, "src", "Reactor", "Elements"), "*.cs")
+            .SelectMany(file => CSharpSyntaxTree.ParseText(global::System.IO.File.ReadAllText(file), cancellationToken: TestContext.Current.CancellationToken)
+                .GetRoot(TestContext.Current.CancellationToken).DescendantNodes().OfType<MethodDeclarationSyntax>())
+            .Where(m => m.Modifiers.Any(SyntaxKind.StaticKeyword))
+            .ToLookup(m => m.Identifier.Text, StringComparer.Ordinal);
+        var methods = all.SelectMany(g => g)
+            .Where(m => m.ParameterList.Parameters.FirstOrDefault()?.Modifiers.Any(SyntaxKind.ThisKeyword) == true)
+            .ToLookup(m => m.Identifier.Text, StringComparer.Ordinal);
+
+        // Direct assignment, or through a forwarder (`.Visible` → `.IsVisible`, `.Backdrop` → its
+        // helper), followed by name a few calls deep.
+        bool Writes(MethodDeclarationSyntax method, string slot, int depth = 3) =>
+            method.DescendantNodes().OfType<AssignmentExpressionSyntax>()
+                .Any(a => a.Left is IdentifierNameSyntax { Identifier.Text: var name } && name == slot)
+            || (depth > 0 && method.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Select(ReconcilerSource.InvokedName).OfType<string>().Distinct()
+                .Any(called => all[called].Any(callee => callee != method && Writes(callee, slot, depth - 1))));
+
+        Assert.Contains(methods["Width"], m => Writes(m, "Width"));        // positive controls: direct,
+        Assert.Contains(methods["Visible"], m => Writes(m, "IsVisible"));  // and through a forwarder
+        Assert.DoesNotContain(methods["Drag"], m => Writes(m, "DragSource"));
+
+        var wrong = ModifierSchema.Slots
+            .SelectMany(s => s.FluentNames.Select(name => (s.Name, Fluent: name)))
+            .Where(pair => !methods[pair.Fluent].Any(m => Writes(m, pair.Name)))
+            .Select(pair => $"{pair.Name} → .{pair.Fluent}({(methods[pair.Fluent].Any() ? "never assigns it" : "no extension found")})")
+            .ToList();
+        Assert.True(wrong.Count == 0,
+            "Declared fluent modifiers that don't write their slot. Fix the slot's .Fluent(…) names in ModifierSchema.cs:\n  "
+            + string.Join("\n  ", wrong));
+    }
+
+    [Fact]
     public void Reference_Edge_Order_Matches_ApplyModifierReferenceEdges()
     {
         // First mention of each reference-edge field in the wiring method, in source order.
