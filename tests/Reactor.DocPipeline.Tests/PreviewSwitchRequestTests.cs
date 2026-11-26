@@ -74,6 +74,19 @@ public class PreviewSwitchRequestTests
     }
 
     /// <summary>
+    /// A frame is refused when the preview host reports a render error, and also when it
+    /// cannot report one: an absent field is not evidence of a clean render.
+    /// </summary>
+    [Fact]
+    public void Status_render_error_is_read_and_a_missing_field_fails_closed()
+    {
+        Assert.Null(ScreenshotCapture.ParseRenderError("""{"building":false,"renderError":null}"""));
+        Assert.Equal("RootRender in Alert: NullReferenceException: boom",
+            ScreenshotCapture.ParseRenderError("""{"renderError":"RootRender in Alert: NullReferenceException: boom"}"""));
+        Assert.Throws<InvalidOperationException>(() => ScreenshotCapture.ParseRenderError("""{"building":false}"""));
+    }
+
+    /// <summary>
     /// The component switch must be bounded by its own timeout.
     /// </summary>
     /// <remarks>

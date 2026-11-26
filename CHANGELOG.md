@@ -288,6 +288,17 @@ Conventions for contributors:
 
 ### Fixed
 
+- Replacing a `Win2DCanvas`, `Win2DAnimatedCanvas` or `Win2DVirtualCanvas` with an
+  element of another type no longer removes the following sibling, or throws
+  `ArgumentOutOfRangeException` when the canvas was the last child. The Win2D
+  unmount detaches the control from its panel, and the reconciler then replaced
+  by a stale index.
+
+- The docs screenshot pipeline no longer writes a frame that shows Reactor's
+  render-error panel. The preview host reports the first render error since the
+  last component switch on `/status` (`renderError`), and capture fails with
+  `REACTOR_DOC_SHOT_003`, leaving the existing image untouched.
+
 - `RichTextBlock` and all `IconElement` types, including `AnimatedIcon`, now
   support common `.Foreground(brush)` modifiers and interaction-state foreground
   overrides. `.Foreground(ThemeRef)` uses the same receiver lookup, and

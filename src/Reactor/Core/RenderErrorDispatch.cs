@@ -140,6 +140,41 @@ internal static class RenderErrorDispatch
         return true;
     }
 
+    private static Action<RenderError>? s_observer;
+
+    /// <summary>
+    /// Process-wide observer told about every render error Reactor is about to show in place
+    /// of content — every outcome of <see cref="InvokeHandler"/> except
+    /// <see cref="RenderErrorSource.Cleanup"/>, which has nothing on screen. Called on the
+    /// rendering thread before the handler runs; an observer that throws is ignored.
+    /// </summary>
+    /// <remarks>
+    /// Set by the devtools preview host so the docs screenshot pipeline can refuse a frame
+    /// that shows an error panel instead of the requested component. Exceptions caught by an
+    /// <c>ErrorBoundary</c> never get here, so a sample that demonstrates one is unaffected.
+    /// </remarks>
+    internal static Action<RenderError>? Observer
+    {
+        get => global::System.Threading.Volatile.Read(ref s_observer);
+        set => global::System.Threading.Volatile.Write(ref s_observer, value);
+    }
+
+    private static void NotifyObserver(RenderError error)
+    {
+        if (error.Source == RenderErrorSource.Cleanup) return;
+        var observer = Observer;
+        if (observer is null) return;
+        try
+        {
+            observer(error);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            global::System.Diagnostics.Debug.WriteLine(
+                $"[Reactor] Render error observer threw ({ex.GetType().Name}: {ex.Message}); ignored.");
+        }
+    }
+
     /// <summary>
     /// Invokes <paramref name="handler"/> and classifies the result. A handler that throws is
     /// logged, any <see cref="RenderError.Propagate"/> it requested is cancelled, and the
@@ -148,6 +183,7 @@ internal static class RenderErrorDispatch
     internal static Outcome InvokeHandler(RenderErrorHandler? handler, RenderError error, ILogger? logger, out Element? appElement)
     {
         appElement = null;
+        NotifyObserver(error);
         if (handler is null) return Outcome.BuiltIn;
         try
         {

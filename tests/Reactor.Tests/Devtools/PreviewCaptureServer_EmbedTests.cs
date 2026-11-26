@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -26,6 +27,40 @@ public sealed class PreviewCaptureServer_EmbedTests
         Assert.Equal(h.Server.Port, json.RootElement.GetProperty("port").GetInt32());
         Assert.Equal("embed-v1", json.RootElement.GetProperty("protocol").GetString());
         Assert.Equal(1, json.RootElement.GetProperty("generation").GetInt32());
+    }
+
+    [Fact]
+    public async Task Status_ReportsRenderError_AsNullWhenNoneAndTheDescriptionWhenShown()
+    {
+        using var h = ServerHarness.Start(embedMode: false);
+        string? current = null;
+        h.Server.GetRenderError = () => current;
+
+        using (var clean = await h.Client.GetAsync("/status", TestContext.Current.CancellationToken))
+        using (var json = await ReadJson(clean))
+        {
+            // Present-and-null, not absent: the docs pipeline fails closed on a missing field.
+            Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("renderError").ValueKind);
+        }
+
+        current = "RootRender in Alert: NullReferenceException: boom";
+        using var failed = await h.Client.GetAsync("/status", TestContext.Current.CancellationToken);
+        using var failedJson = await ReadJson(failed);
+        Assert.Equal(current, failedJson.RootElement.GetProperty("renderError").GetString());
+    }
+
+    [Fact]
+    public void RenderErrorRecorder_KeepsTheFirstErrorUntilReset()
+    {
+        var recorder = new PreviewRenderErrorRecorder();
+        Assert.Null(recorder.Current);
+
+        recorder.Record(new RenderError(new NullReferenceException("first"), RenderErrorSource.RootRender, "Alert", isHostLevel: true));
+        recorder.Record(new RenderError(new InvalidOperationException("second"), RenderErrorSource.ComponentRender, null, isHostLevel: false));
+        Assert.Equal("RootRender in Alert: NullReferenceException: first", recorder.Current);
+
+        recorder.Reset();
+        Assert.Null(recorder.Current);
     }
 
     [Fact]

@@ -540,6 +540,20 @@ the compile still exited 0 ([issue #989][i989]). Several guards now prevent that
   pass that looks like it is working for hours instead of failing in seconds,
   which is the same "no output is not evidence of no problem" shape as the rest of
   this list.
+- A painted frame can still be Reactor's **render-error panel**: a red-bordered
+  exception dump that passes every pixel guard above. Two committed screenshots
+  were exactly that (`components/props-component` previewed `Alert`, a
+  `Component<AlertProps>`, with null `Props`; `win2d-canvas/virtual` hit a
+  reconciler bug on the component switch). So after each capture the client reads
+  `renderError` from the preview host's `/status`. The host records the first
+  error Reactor displays since the last component switch, through an internal
+  observer on `RenderErrorDispatch` that sees every displayed error whatever
+  `RenderErrorHandler` the app set. A non-null value fails that screenshot with
+  `REACTOR_DOC_SHOT_003` and writes nothing. A `/status` without the field fails
+  closed too, since it cannot vouch for the frame. Errors caught by an
+  `ErrorBoundary` never reach the observer, so the error-boundary samples still
+  capture. A `Component<TProps>` cannot be a manifest `component:` on its own;
+  point the manifest at a small wrapper that renders it with props.
 - A topic or screenshot id containing `:` is refused before it is joined to any
   output root, and so is a `:` in a markdown image reference. Containment alone
   does not cover it: on Windows `:` is a stream
@@ -661,6 +675,7 @@ reference-generation codes.
 | `REACTOR_DOC_IMAGE_004`    | *(warning — does **not** fail `--ci`)* The blank-image gate could not run: `System.Drawing.Common` is Windows-only, so on any other platform there is no decoder. Emitted **once per page** — the condition is a property of the machine, not of any image, so one finding per screenshot would bury it. Nothing else is suppressed: reference validation (`_001`) and the decoder-free checks behind `_003` (zero-byte file, no PNG/JPEG signature) still run everywhere. Never fires on the supported configuration. It is the one non-fatal finding this gate emits, and deliberately so: it says the scan *could not run*, not that an image is bad, and it fires precisely on the platform that cannot decode — so breaking the build on it would fail a docs compile over a missing codec while nothing is wrong with the docs |
 | `REACTOR_DOC_SHOT_001`     | Captured frame was contentless; nothing was written and the existing screenshot was left untouched. The message names which clause fired — *no pixel below the threshold* or *one flat colour* — because for a dark fill the first wording states the opposite of what happened |
 | `REACTOR_DOC_SHOT_002`     | Manifest screenshot id ends in the reserved `-thumb` suffix without `kind: catalog-thumb`. Matched against the whole id, so a dotted id (`widget.v2-thumb`) is caught too |
+| `REACTOR_DOC_SHOT_003`     | The preview host showed a render error (Reactor's error panel) instead of the requested component, or its `/status` does not report `renderError`. Nothing was written. Usually a `Component<TProps>` named directly in the manifest (its `Props` is null when previewed alone); point the manifest at a wrapper that renders it with props |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
 | `REACTOR_DOC_REFGEN_003`   | The reference phase found `Microsoft.UI.Reactor.xml` but no `Microsoft.UI.Reactor.dll` next to it (or an input file it was given does not exist). Nothing under `docs/guide/reference/` is written or deleted. Run `dotnet build src/Reactor` and compile again. Fails `--ci` and `--reference-only` |
 | `REACTOR_DOC_REFGEN_W002`  | *(warning — does **not** fail `--ci`)* The `Microsoft.UI.Reactor.xml` the reference phase selected is older than the newest `.cs` under `src/Reactor`, so `docs/guide/reference/**` is being generated from a build that predates the source it documents — an edited `<summary>` will not appear and a deleted one comes back. Run `dotnet build src/Reactor` and compile again. Warning, not error, because it reports that the *input* may be stale rather than a defect in the tree. It does not fire in CI: the docs job builds `src/Reactor` (via Phase 2's doc-app builds) *after* checkout has written the sources, so the XML always postdates them. See [§4](#which-microsoftuireactorxml-the-reference-phase-reads) |

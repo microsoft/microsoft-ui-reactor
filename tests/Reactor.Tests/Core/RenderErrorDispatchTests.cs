@@ -741,6 +741,41 @@ public class RenderErrorDispatchTests
         }
     }
 
+    // ── Observer (docs screenshot guard) ─────────────────────────────────────
+
+    [Fact]
+    public void Observer_Sees_Displayed_Errors_But_Not_Cleanup_And_Cannot_Change_The_Outcome()
+    {
+        var root = NewError(source: RenderErrorSource.RootRender);
+        var cleanup = NewError(source: RenderErrorSource.Cleanup);
+        var child = NewError();
+        RenderError[] mine = [root, cleanup, child];
+        var seen = new List<RenderError>();
+        var previous = RenderErrorDispatch.Observer;
+        RenderErrorDispatch.Observer = e =>
+        {
+            // The observer is process-wide; ignore errors from tests running in parallel.
+            if (Array.IndexOf(mine, e) < 0) return;
+            lock (seen) seen.Add(e);
+            throw new InvalidOperationException("observer bug");
+        };
+        try
+        {
+            var outcome = RenderErrorDispatch.InvokeHandler(null, root, logger: null, out _);
+            RenderErrorDispatch.InvokeHandler(_ => null, cleanup, logger: null, out _);
+            var appOutcome = RenderErrorDispatch.InvokeHandler(_ => new ProbeElement("fallback"), child, logger: null, out var element);
+
+            Assert.Equal(RenderErrorDispatch.Outcome.BuiltIn, outcome);
+            Assert.Equal(RenderErrorDispatch.Outcome.AppElement, appOutcome);
+            Assert.IsType<ProbeElement>(element);
+            Assert.Equal([root, child], seen);
+        }
+        finally
+        {
+            RenderErrorDispatch.Observer = previous;
+        }
+    }
+
     // ── WindowSpec ───────────────────────────────────────────────────────────
 
     [Fact]

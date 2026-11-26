@@ -321,6 +321,48 @@ internal static class Win2DCanvasFixtures
         }
     }
 
+    /// <summary>
+    /// Win2D's unmount calls <c>RemoveFromVisualTree</c>, which detaches the canvas from its
+    /// panel before the reconciler replaces it by index. Replacing a canvas with an element of
+    /// another type used to remove the following sibling instead (or throw when the canvas was
+    /// last), which is what put a render-error panel into the win2d-canvas docs screenshot.
+    /// </summary>
+    internal class CanvasReplacedByOtherTypeKeepsSiblings(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Exception? renderError = null;
+            var host = H.CreateHost();
+            host.RenderErrorHandler = e => { renderError ??= e.Exception; return null; };
+            host.Mount(ctx =>
+            {
+                var (showCanvas, setShowCanvas) = ctx.UseState(true);
+                return VStack(8,
+                    Button("Swap Win2D", () => setShowCanvas(false)),
+                    showCanvas
+                        ? Win2DCanvas((session, _) => session.Clear(Colors.White)).Width(120).Height(60)
+                        : TextBlock("Win2D replacement"),
+                    TextBlock("Win2D trailing sibling"));
+            });
+            await Harness.Render();
+            H.Check("Win2D_Canvas_Replace_CanvasMounted", H.FindControl<CanvasControl>(_ => true) is not null);
+
+            H.ClickButton("Swap Win2D");
+            await Harness.Render();
+
+            var panel = H.FindControl<Panel>(p => p.Children.OfType<Button>().Any(b => b.Content as string == "Swap Win2D"));
+            var texts = panel?.Children.OfType<TextBlock>().Select(t => t.Text).ToArray() ?? [];
+            H.Check("Win2D_Canvas_Replace_NoRenderError", renderError is null);
+            H.Check("Win2D_Canvas_Replace_ChildrenInOrder",
+                panel is not null && panel.Children.Count == 3
+                && texts.SequenceEqual(["Win2D replacement", "Win2D trailing sibling"]));
+            H.Check("Win2D_Canvas_Replace_CanvasGone", H.FindControl<CanvasControl>(_ => true) is null);
+
+            host.Mount(_ => TextBlock("Win2D replace unmounted"));
+            await Harness.Render();
+        }
+    }
+
     private sealed class AnimatedProbe
     {
         public int Ticks;

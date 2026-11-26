@@ -94,6 +94,13 @@ internal sealed class PreviewCaptureServer : IDisposable
     /// <summary>Switches to a different component by name. Returns true on success.</summary>
     public Func<string, bool>? SwitchComponent { get; set; }
 
+    /// <summary>
+    /// Describes the render error shown since the last component switch, or <c>null</c>
+    /// when none was. Reported on <c>/status</c> as <c>renderError</c> so the docs
+    /// screenshot pipeline can refuse a frame that shows an error panel.
+    /// </summary>
+    public Func<string?>? GetRenderError { get; set; }
+
     public Func<IntPtr>? GetHwnd { get; set; }
     public Func<IntPtr, int, int, int, EmbedAckResult>? AckEmbed { get; set; }
     public Action<int, int>? ResizeEmbed { get; set; }
@@ -500,6 +507,7 @@ internal sealed class PreviewCaptureServer : IDisposable
                 Port = Port,
                 Protocol = EmbedProtocol,
                 Generation = Generation,
+                RenderError = GetRenderError?.Invoke(),
             },
             PreviewJsonContext.Default.PreviewStatusPayload,
             noStore: true);
@@ -1010,6 +1018,11 @@ internal sealed record PreviewStatusPayload
     public int Port { get; set; }
     public string Protocol { get; set; } = string.Empty;
     public int Generation { get; set; }
+    /// <summary>
+    /// Always serialized, as <c>null</c> when no error was shown, so a client can tell
+    /// "no error" from a server that does not report errors at all.
+    /// </summary>
+    public string? RenderError { get; set; }
 }
 
 internal sealed class PreviewHwndPayload

@@ -257,7 +257,13 @@ public sealed partial class Reconciler
         }
 
         Unmount(oldControl);
-        children.Replace(index, newControl);
+        // A handler's unmount may detach the control itself (Win2D's RemoveFromVisualTree
+        // does). Replacing by index then removes the wrong sibling, or throws when the
+        // control was last, so insert into the gap instead.
+        if (index < children.Count && ReferenceEquals(children.Get(index), oldControl))
+            children.Replace(index, newControl);
+        else
+            children.Insert(index, newControl);
         return false;
     }
 }

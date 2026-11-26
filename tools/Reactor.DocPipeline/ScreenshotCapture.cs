@@ -232,6 +232,18 @@ internal static class ScreenshotCapture
                         failed++;
                         continue;
                     }
+
+                    // Asked after the frame is taken, so an error raised any time up to the
+                    // capture is seen. The frame guards only ask whether something painted,
+                    // and Reactor's error panel paints plenty.
+                    var renderError = await ReadRenderError(http, port, ComponentSwitchTimeout);
+                    if (renderError is not null)
+                    {
+                        ReportCaptureFailure(screenshot.Id,
+                            DescribeRenderErrorFailure(screenshot.Component, renderError));
+                        failed++;
+                        continue;
+                    }
                     // Catalog-thumb captures land at `<id>-thumb.<format>` so the
                     // controls-catalog index can refer to them without colliding with
                     // a full-size screenshot of the same id (spec 041 §6.3 + §12 Q7).
@@ -259,6 +271,7 @@ internal static class ScreenshotCapture
                                              or InvalidOperationException or ArgumentException
                                              or TaskCanceledException or OutOfMemoryException
                                              or UnauthorizedAccessException
+                                             or global::System.Text.Json.JsonException
                                              or global::System.Runtime.InteropServices.ExternalException)
                 {
                     // ArgumentException covers a malformed manifest (unknown
@@ -555,6 +568,50 @@ internal static class ScreenshotCapture
     }
 
     internal static string PreviewUrl(int port) => $"http://{CaptureHost}:{port}/preview";
+
+    internal static string StatusUrl(int port) => $"http://{CaptureHost}:{port}/status";
+
+    /// <summary>Diagnostic code for a capture refused because the app showed a render error.</summary>
+    internal const string RenderErrorDiagnosticCode = "REACTOR_DOC_SHOT_003";
+
+    /// <summary>
+    /// Asks the preview host whether it showed a render error since the last component
+    /// switch. Returns its description, or <c>null</c> when none was shown.
+    /// </summary>
+    internal static async Task<string?> ReadRenderError(HttpClient http, int port, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        using var resp = await http.GetAsync(StatusUrl(port), cts.Token);
+        resp.EnsureSuccessStatusCode();
+        return ParseRenderError(await resp.Content.ReadAsStringAsync(cts.Token));
+    }
+
+    /// <summary>
+    /// Reads <c>renderError</c> from a <c>/status</c> body.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The body has no <c>renderError</c> property. Fails closed: a host that does not
+    /// report render errors cannot vouch for the frame, and the capture loop counts this
+    /// as a failed screenshot rather than writing it.
+    /// </exception>
+    internal static string? ParseRenderError(string statusJson)
+    {
+        var node = JsonNode.Parse(statusJson) as JsonObject
+            ?? throw new InvalidOperationException("Preview /status did not return a JSON object.");
+        if (!node.TryGetPropertyValue("renderError", out var value))
+        {
+            throw new InvalidOperationException(
+                "Preview /status does not report 'renderError', so the frame cannot be checked for a render error. " +
+                "Rebuild the doc app against the current Reactor.Devtools.");
+        }
+        return value?.GetValue<string>();
+    }
+
+    internal static string DescribeRenderErrorFailure(string? component, string renderError) =>
+        $"{RenderErrorDiagnosticCode}: the app showed a render error instead of " +
+        $"{(string.IsNullOrEmpty(component) ? "its root component" : $"'{component}'")} ({renderError}). " +
+        "Nothing was written. A Component<TProps> previewed on its own has null Props; point the " +
+        "manifest at a component that renders it with props.";
 
     /// <summary>
     /// Builds the <c>/preview</c> component-switch body for
