@@ -235,12 +235,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         var initialComponentName = componentName;
 
         // Installed before the first render so an error in the initial component is seen too.
-        PreviewRenderErrorRecorder? renderErrors = null;
-        if (vscodeMode)
-        {
-            renderErrors = new PreviewRenderErrorRecorder();
-            RenderErrorDispatch.Observer = renderErrors.Record;
-        }
+        var renderErrors = vscodeMode ? PreviewRenderErrorRecorder.Install() : null;
 
         ReactorApp.RunOnSta(() =>
         {
@@ -286,7 +281,16 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                     server.GetComponents = () => FindAllComponentNames().ToList();
                     server.GetCurrentComponent = () => initialComponentName;
                     server.SwitchComponent = SwitchComponentCore;
-                    server.GetRenderError = () => renderErrors?.Current;
+                    if (renderErrors is not null)
+                    {
+                        renderErrors.AttachTo(server);
+                        var previousRenderComplete = host.OnRenderComplete;
+                        host.OnRenderComplete = (tree, reconcile, effects) =>
+                        {
+                            previousRenderComplete?.Invoke(tree, reconcile, effects);
+                            renderErrors.Settle();
+                        };
+                    }
 
                     if (options.EmbedRequested)
                     {

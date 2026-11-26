@@ -744,38 +744,40 @@ public class RenderErrorDispatchTests
     // ── Observer (docs screenshot guard) ─────────────────────────────────────
 
     [Fact]
-    public void Observer_Sees_Displayed_Errors_But_Not_Cleanup_And_Cannot_Change_The_Outcome()
+    public void Observer_Sees_Errors_That_Replace_Content_But_Not_Report_Only_Cleanup()
     {
-        var root = NewError(source: RenderErrorSource.RootRender);
-        var cleanup = NewError(source: RenderErrorSource.Cleanup);
         var child = NewError();
-        RenderError[] mine = [root, cleanup, child];
-        var seen = new List<RenderError>();
+        // A deferred root retirement that throws replaces the host's content, so it is seen
+        // even though its source is Cleanup.
+        var retirement = new RenderError(new InvalidOperationException("retire"), RenderErrorSource.Cleanup, "Root", isHostLevel: true);
+        var disposal = new InvalidOperationException("dispose");
+        Exception[] mine = [child.Exception, retirement.Exception, disposal];
+        var seen = new List<Exception>();
         var previous = RenderErrorDispatch.Observer;
         RenderErrorDispatch.Observer = e =>
         {
             // The observer is process-wide; ignore errors from tests running in parallel.
-            if (Array.IndexOf(mine, e) < 0) return;
-            lock (seen) seen.Add(e);
+            if (Array.IndexOf(mine, e.Exception) < 0) return;
+            lock (seen) seen.Add(e.Exception);
             throw new InvalidOperationException("observer bug");
         };
         try
         {
-            var outcome = RenderErrorDispatch.InvokeHandler(null, root, logger: null, out _);
-            RenderErrorDispatch.InvokeHandler(_ => null, cleanup, logger: null, out _);
-            var appOutcome = RenderErrorDispatch.InvokeHandler(_ => new ProbeElement("fallback"), child, logger: null, out var element);
+            var inTree = RenderErrorDispatch.BuildInTreeFallback(_ => new ProbeElement("fallback"), child, logger: null);
+            var host = RenderErrorDispatch.BuildHostFallback(_ => new ProbeElement("host fallback"), retirement, logger: null,
+                install: _ => null, releaseCurrent: () => { }, currentIsAppFallback: false);
+            RenderErrorDispatch.ReportCleanup(_ => null, disposal, "Root", isHostLevel: true, logger: null);
 
-            Assert.Equal(RenderErrorDispatch.Outcome.BuiltIn, outcome);
-            Assert.Equal(RenderErrorDispatch.Outcome.AppElement, appOutcome);
-            Assert.IsType<ProbeElement>(element);
-            Assert.Equal([root, child], seen);
+            // A throwing observer changes nothing about the outcome.
+            Assert.True(RenderErrorDispatch.IsAppFallback(inTree));
+            Assert.True(RenderErrorDispatch.IsAppFallback(host.Tree));
+            Assert.Equal([child.Exception, retirement.Exception], seen);
         }
         finally
         {
             RenderErrorDispatch.Observer = previous;
         }
     }
-
     // ── WindowSpec ───────────────────────────────────────────────────────────
 
     [Fact]

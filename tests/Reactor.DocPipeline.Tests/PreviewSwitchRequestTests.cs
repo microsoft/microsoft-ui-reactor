@@ -84,6 +84,45 @@ public class PreviewSwitchRequestTests
         Assert.Equal("RootRender in Alert: NullReferenceException: boom",
             ScreenshotCapture.ParseRenderError("""{"renderError":"RootRender in Alert: NullReferenceException: boom"}"""));
         Assert.Throws<InvalidOperationException>(() => ScreenshotCapture.ParseRenderError("""{"building":false}"""));
+        Assert.Throws<InvalidOperationException>(() => ScreenshotCapture.ParseRenderError("""{"renderError":42}"""));
+    }
+
+    /// <summary>
+    /// Every way the status check can refuse a frame carries the diagnostic code, and the
+    /// Component&lt;TProps&gt; hint only appears for a null reference.
+    /// </summary>
+    [Theory]
+    [InlineData(200, """{"renderError":null}""", null, false)]
+    [InlineData(200, """{"renderError":"RootRender in Alert: NullReferenceException: boom"}""", "boom", true)]
+    [InlineData(200, """{"renderError":"Reconcile: ArgumentOutOfRangeException: index"}""", "index", false)]
+    [InlineData(200, """{"renderError":"Pending: the component switch has not rendered yet."}""", "Pending", false)]
+    [InlineData(200, """{"building":false}""", "does not report", false)]
+    [InlineData(200, "not json", "could not check", false)]
+    [InlineData(500, "{}", "could not check", false)]
+    public async Task Render_error_check_refuses_with_the_code(int status, string body, string? expected, bool hint)
+    {
+        using var http = new HttpClient(new StubHandler((HttpStatusCode)status, body));
+
+        var refusal = await ScreenshotCapture.CheckRenderError(http, 4242, "Alert", TimeSpan.FromSeconds(5));
+
+        if (expected is null)
+        {
+            Assert.Null(refusal);
+            return;
+        }
+        Assert.NotNull(refusal);
+        Assert.StartsWith(ScreenshotCapture.RenderErrorDiagnosticCode + ":", refusal);
+        Assert.Contains(expected, refusal);
+        Assert.Equal(hint, refusal.Contains("Component<TProps>", StringComparison.Ordinal));
+    }
+
+    private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Assert.Equal(ScreenshotCapture.StatusUrl(4242), request.RequestUri!.ToString());
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
     }
 
     /// <summary>

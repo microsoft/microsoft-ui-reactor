@@ -143,10 +143,12 @@ internal static class RenderErrorDispatch
     private static Action<RenderError>? s_observer;
 
     /// <summary>
-    /// Process-wide observer told about every render error Reactor is about to show in place
-    /// of content — every outcome of <see cref="InvokeHandler"/> except
-    /// <see cref="RenderErrorSource.Cleanup"/>, which has nothing on screen. Called on the
-    /// rendering thread before the handler runs; an observer that throws is ignored.
+    /// Process-wide observer told about every render error that replaces content: each call
+    /// of <see cref="BuildInTreeFallback"/> or <see cref="BuildHostFallback"/>, whatever the
+    /// app's handler then shows. A host-level cleanup failure (deferred root retirement) is
+    /// included because it does replace the content; report-only disposal failures
+    /// (<see cref="ReportCleanup"/>) are not. Called on the rendering thread before the
+    /// handler runs; an observer that throws is ignored.
     /// </summary>
     /// <remarks>
     /// Set by the devtools preview host so the docs screenshot pipeline can refuse a frame
@@ -161,7 +163,6 @@ internal static class RenderErrorDispatch
 
     private static void NotifyObserver(RenderError error)
     {
-        if (error.Source == RenderErrorSource.Cleanup) return;
         var observer = Observer;
         if (observer is null) return;
         try
@@ -183,7 +184,6 @@ internal static class RenderErrorDispatch
     internal static Outcome InvokeHandler(RenderErrorHandler? handler, RenderError error, ILogger? logger, out Element? appElement)
     {
         appElement = null;
-        NotifyObserver(error);
         if (handler is null) return Outcome.BuiltIn;
         try
         {
@@ -211,6 +211,7 @@ internal static class RenderErrorDispatch
     /// </summary>
     internal static Element BuildInTreeFallback(RenderErrorHandler? handler, RenderError error, ILogger? logger)
     {
+        NotifyObserver(error);
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
             case Outcome.AppElement:
@@ -259,6 +260,7 @@ internal static class RenderErrorDispatch
         RenderErrorHandler? handler, RenderError error, ILogger? logger,
         Func<Element, UIElement?> install, Action releaseCurrent, bool currentIsAppFallback)
     {
+        NotifyObserver(error);
         switch (InvokeHandler(handler, error, logger, out var appElement))
         {
             case Outcome.AppElement:

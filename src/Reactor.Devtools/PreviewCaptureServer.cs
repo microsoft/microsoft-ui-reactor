@@ -95,9 +95,10 @@ internal sealed class PreviewCaptureServer : IDisposable
     public Func<string, bool>? SwitchComponent { get; set; }
 
     /// <summary>
-    /// Describes the render error shown since the last component switch, or <c>null</c>
-    /// when none was. Reported on <c>/status</c> as <c>renderError</c> so the docs
-    /// screenshot pipeline can refuse a frame that shows an error panel.
+    /// Describes the render error that replaced content since the last component switch,
+    /// reports a switch that has not rendered yet, or returns <c>null</c> when the current
+    /// component rendered cleanly. Reported on <c>/status</c> as <c>renderError</c> so the
+    /// docs screenshot pipeline can refuse a frame that shows an error panel.
     /// </summary>
     public Func<string?>? GetRenderError { get; set; }
 
