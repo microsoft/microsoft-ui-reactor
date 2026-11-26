@@ -30,7 +30,7 @@ internal static class ForegroundModifier
         // A nested update on the same control can share the outer layer's interaction tracker.
         if (!hasModifierParent && interactionStatesRemoved && modifier is not null && ReferenceEquals(oldModifier, modifier)
             && control is FrameworkElement element && entry.OwnsControl(current))
-            Reconciler.RestoreInteractionForeground(element);
+            InteractionStateApplier.RestoreInteractionForeground(element);
 
         // The built-in descriptor writes the element's explicit Foreground. A custom handler
         // for the same element and control types can decide to leave that declaration unapplied.
@@ -60,7 +60,7 @@ internal static class ForegroundModifier
             richText.ClearValue(property);
             if (applied is not null)
             {
-                var stateOwnsForeground = Reconciler.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground);
+                var stateOwnsForeground = InteractionStateApplier.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground);
 
                 var shouldRestoreImmediately = stateOwnsForeground
                     ? interactionStatesRemoved

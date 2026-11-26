@@ -263,29 +263,29 @@ internal static class ThemeRefStyleFixtures
             try
             {
                 H.Check("RichTextHoverRemoval_CommonRedApplied", ReferenceEquals(text.Foreground, red));
-                Reconciler.SimulatePointerOverForTests(text, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
                 H.Check("RichTextHoverRemoval_HoverGreenApplied", ReferenceEquals(text.Foreground, green));
 
                 var replacement = reconciler.Update(initial, next, text, static () => { });
                 H.Check("RichTextHoverRemoval_SameControlStaysGreen", replacement is null && ReferenceEquals(text.Foreground, green));
 
-                Reconciler.SimulatePointerOverForTests(text, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
                 H.Check("RichTextHoverRemoval_ExplicitBlackRestored", ReferenceEquals(text.Foreground, black),
                     $"foreground={ColorOf(text.Foreground)}");
 
                 var withoutStates = RichTextBlock("foreground").Foreground(black);
                 reconciler.Update(next, initial, text, static () => { });
-                Reconciler.SimulatePointerOverForTests(text, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
                 H.Check("RichTextHoverRemoval_GreenBeforeDroppingStates", ReferenceEquals(text.Foreground, green));
 
                 replacement = reconciler.Update(initial, withoutStates, text, static () => { });
                 H.Check("RichTextHoverRemoval_BothRemovedRestoresBlackImmediately",
                     replacement is null && ReferenceEquals(text.Foreground, black), $"foreground={ColorOf(text.Foreground)}");
-                Reconciler.SimulatePointerOverForTests(text, isOver: false);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: false);
                 H.Check("RichTextHoverRemoval_BlackRemainsAfterExit", ReferenceEquals(text.Foreground, black));
 
                 reconciler.Update(withoutStates, initial, text, static () => { });
-                Reconciler.SimulatePointerOverForTests(text, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(text, isOver: true);
                 H.Check("RichTextHoverRemoval_GreenBeforeSetterUpdate", ReferenceEquals(text.Foreground, green));
 
                 var blue = new SolidColorBrush(Microsoft.UI.Colors.Blue);
@@ -318,7 +318,7 @@ internal static class ThemeRefStyleFixtures
             try
             {
                 H.Check("AnimatedIconHoverRemoval_NormalWhiteApplied", ReferenceEquals(icon.Foreground, white));
-                Reconciler.SimulatePointerOverForTests(icon, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(icon, isOver: true);
                 H.Check("AnimatedIconHoverRemoval_HoverGreenApplied", ReferenceEquals(icon.Foreground, green));
 
                 var replacement = reconciler.Update(initial, withoutStates, icon, static () => { });
@@ -326,7 +326,7 @@ internal static class ThemeRefStyleFixtures
                     replacement is null && ReferenceEquals(icon.Foreground, white), $"foreground={ColorOf(icon.Foreground)}");
 
                 reconciler.Update(withoutStates, initial, icon, static () => { });
-                Reconciler.SimulatePointerOverForTests(icon, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(icon, isOver: true);
                 H.Check("AnimatedIconHoverRemoval_GreenBeforeSetterUpdate", ReferenceEquals(icon.Foreground, green));
 
                 Brush? beforeSetter = null;
@@ -362,7 +362,7 @@ internal static class ThemeRefStyleFixtures
             try
             {
                 H.Check("FlyoutHoverForeground_NormalWhiteApplied", ReferenceEquals(icon.Foreground, white));
-                Reconciler.SimulatePointerOverForTests(icon, isOver: true);
+                InteractionStateApplier.SimulatePointerOverForTests(icon, isOver: true);
                 H.Check("FlyoutHoverForeground_OuterGreenApplied", ReferenceEquals(icon.Foreground, green));
 
                 var replacement = reconciler.Update(initial, next, icon, static () => { });
