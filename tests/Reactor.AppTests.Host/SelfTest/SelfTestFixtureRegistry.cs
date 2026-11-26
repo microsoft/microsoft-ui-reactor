@@ -2387,6 +2387,7 @@ internal static class SelfTestFixtureRegistry
         ("ControlledOptionalDateTimeFamily", static harness => new ControlledOptionalDateTimeFamilyFixture.Execution(harness)),
         ("ControlledOptionalTextInputFamily", static harness => new ControlledOptionalTextInputFamilyFixture.Execution(harness)),
         ("OneWayClearValue", static harness => new OneWayClearValueFixture.Execution(harness)),
+        ("ModifierFieldContract_BrushAndFont", static harness => new ModifierFieldContractFixture.Execution(harness)),
         ("OptionalEchoStrandRegression", static harness => new OptionalEchoStrandRegressionFixture.Execution(harness)),
         ("AutoSuggestBoxCollectedStateTick", static harness => new AutoSuggestBoxCollectedStateTickFixture.Execution(harness)),
         ("OptionalThemeInteraction", static harness => new OptionalThemeInteractionFixture.Execution(harness)),
