@@ -31064,11 +31064,12 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 they now ship — `_002` flags a hook after a single-guard early return, `_003`
 flags an `async`-void `UseEffect` body (spec 060 §4.1).
 
-`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for writes through
-`ApplyModifiers`. When a `ThemeRef` overload has a separate receiver list,
-the rule uses `ThemeControlGate`. For example, the generic brush overload of
-`Foreground` reaches `Control` and `TextBlock`, and the `ThemeRef` overload
-also reaches `RichTextBlock`.
+`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for common modifier writes.
+When a `ThemeRef` overload has a separate receiver list,
+the rule uses `ThemeControlGate`. Generic `Foreground` overloads share a receiver gate for
+`Control`, `TextBlock`, `RichTextBlock`, and `IconElement`. The runtime uses
+the same dependency-property lookup for common foreground brush modifiers, theme bindings,
+and `InteractionStates` foreground overrides.
 
 ## Combined sizing without extra copies [#combined-sizing-without-extra-copies]
 
@@ -72093,7 +72094,7 @@ Declared in `ElementExtensions`.
 | `Foreground(RichTextParagraph, string)` |  |
 | `Foreground(RichTextRun, Brush)` |  |
 | `Foreground(RichTextRun, string)` |  |
-| `Foreground<T>(T, ThemeRef)` | Sets the foreground from a WinUI theme resource on [`Control`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.control), [`TextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.textblock), or [`RichTextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.richtextblock). WinUI updates the brush when the element's effective theme changes. For example, `RichTextBlock("Hello").Foreground(Theme.PrimaryText)`. |
+| `Foreground<T>(T, ThemeRef)` | Sets the foreground from a WinUI theme resource on [`Control`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.control), [`TextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.textblock), [`RichTextBlock`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.richtextblock), or [`IconElement`](https://learn.microsoft.com/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.iconelement). WinUI updates the brush when the element's effective theme changes. For example, `RichTextBlock("Hello").Foreground(Theme.PrimaryText)`. |
 | `Foreground<T>(T, Brush)` |  |
 | `Foreground<T>(T, string)` | Sets the foreground from a color string (named color or #RRGGBB / #AARRGGBB). Returns a fresh, caller-independent brush per call (see [`BrushHelper.Parse`](/microsoft-ui-reactor/main/reference/theming/BrushHelper#parse) — the parsed color is cached, the brush is not); the diff compares brushes structurally (color + opacity). Use the [`Foreground`](#foreground) overload to supply an explicit brush. |
 

@@ -615,11 +615,12 @@ sibling <code>src/Reactor.Analyzers.Internal/</code> project instead; see
 (variable hook counts across early returns, async boundaries inside <code>UseEffect</code>);
 they now ship — <code>_002</code> flags a hook after a single-guard early return, <code>_003</code>
 flags an <code>async</code>-void <code>UseEffect</code> body (spec 060 §4.1).</p>
-<p><code>REACTOR_MOD_003</code> checks <code>ModifierInfo.ControlGate</code> for writes through
-<code>ApplyModifiers</code>. When a <code>ThemeRef</code> overload has a separate receiver list,
-the rule uses <code>ThemeControlGate</code>. For example, the generic brush overload of
-<code>Foreground</code> reaches <code>Control</code> and <code>TextBlock</code>, and the <code>ThemeRef</code> overload
-also reaches <code>RichTextBlock</code>.</p>
+<p><code>REACTOR_MOD_003</code> checks <code>ModifierInfo.ControlGate</code> for common modifier writes.
+When a <code>ThemeRef</code> overload has a separate receiver list,
+the rule uses <code>ThemeControlGate</code>. Generic <code>Foreground</code> overloads share a receiver gate for
+<code>Control</code>, <code>TextBlock</code>, <code>RichTextBlock</code>, and <code>IconElement</code>. The runtime uses
+the same dependency-property lookup for common foreground brush modifiers, theme bindings,
+and <code>InteractionStates</code> foreground overrides.</p>
 <h2 id="combined-sizing-without-extra-copies"><a class="blume-heading-anchor" href="#combined-sizing-without-extra-copies">Combined sizing without extra copies</a></h2>
 <p><code>REACTOR_PERF_001</code> is allocation guidance, not a correctness warning or an FPS claim.
 For example, <code>Button("Save").Width(120).Height(32)</code> becomes
