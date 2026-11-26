@@ -1,10 +1,11 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Window Features](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features).
 
 # Advanced Windowing
 
 Some shell-window ideas are possible on Windows only by leaving the safe Reactor
 contract. We document the recipe so expert apps can make an informed choice, but
 Reactor does not ship these primitives as first-class `WindowSpec` fields.
+
+> **WinUI reference:** For the full property surface and design guidance, see [Window Features](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features).
 
 ## FancyZones-style click-through overlay
 

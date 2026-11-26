@@ -1,0 +1,50 @@
+---
+// Soft colored light, drawn with CSS gradients and a fine grain. It fills its
+// positioned parent and is decorative only.
+//
+//   <div class="relative overflow-hidden"><Bloom variant="blue" /> ...</div>
+//
+// The light comes from the top right and fades to a deep corner at the bottom
+// left, with two faint curved bands like the Windows 11 wallpaper. `flipX` and
+// `flipY` move the light to another corner, so text can stay on the deep side
+// and neighbours of one color still differ.
+import { BLOOMS, type BloomVariant } from "./bloom-palettes";
+
+interface Props {
+  variant?: BloomVariant;
+  flipX?: boolean;
+  flipY?: boolean;
+  class?: string;
+}
+
+const { variant = "blue", flipX = false, flipY = false, class: className } = Astro.props;
+const c = BLOOMS[variant];
+
+const at = (x: number, y: number) => `at ${flipX ? 100 - x : x}% ${flipY ? 100 - y : y}%`;
+const mix = (color: string, amount: number) => `color-mix(in oklab, ${color} ${amount}%, transparent)`;
+// The direction from the deep corner to the light.
+const toLight = `to ${flipY ? "bottom" : "top"} ${flipX ? "left" : "right"}`;
+
+const background = [
+  `radial-gradient(125% 110% ${at(100, 0)}, transparent 40%, ${mix(c.light, 11)} 46%, transparent 53%)`,
+  `radial-gradient(165% 145% ${at(100, 0)}, transparent 50%, ${mix(c.light, 7)} 56%, transparent 63%)`,
+  `radial-gradient(70% 85% ${at(96, 0)}, ${mix(c.light, 62)} 0%, ${mix(c.light, 26)} 28%, transparent 64%)`,
+  `radial-gradient(65% 80% ${at(28, -12)}, ${mix(c.accent, 45)} 0%, transparent 70%)`,
+  `radial-gradient(70% 90% ${at(104, 104)}, ${mix(c.side, 55)} 0%, transparent 72%)`,
+  `radial-gradient(120% 140% ${at(76, 28)}, ${mix(c.mid, 72)} 0%, ${mix(c.mid, 34)} 40%, transparent 78%)`,
+  `linear-gradient(${toLight}, ${c.deep} 15%, color-mix(in oklab, ${c.deep}, ${c.mid} 22%) 100%)`,
+].join(", ");
+
+// Fine grain keeps the gradients from banding and gives them some texture.
+const grain = encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(#g)'/></svg>",
+);
+---
+
+<div
+  aria-hidden="true"
+  class:list={["pointer-events-none absolute inset-0 select-none", className]}
+  style={`background: ${background}`}
+>
+  <div class="absolute inset-0 opacity-[0.16] mix-blend-overlay" style={`background-image: url("data:image/svg+xml,${grain}")`}></div>
+</div>

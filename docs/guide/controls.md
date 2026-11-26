@@ -1,6 +1,11 @@
 
 # Controls
 
+Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the
+return value of a factory like `TextBlock(...)` or `Button(...)` — a
+plain element you compose, chain modifiers onto, and return from
+`Render()`.
+
 ```csharp
 class ControlsCatalogApp : Component
 {
@@ -12,10 +17,7 @@ class ControlsCatalogApp : Component
 }
 ```
 
-Every visible thing on screen is a control. In Microsoft.UI.Reactor (Reactor) a control is the
-return value of a factory like `TextBlock(...)` or `Button(...)` — a
-plain element you compose, chain modifiers onto, and return from
-`Render()`. The ten categories below cover the full set Reactor
+The ten categories below cover the full set Reactor
 exposes today. Pick a category, open its detail page, and you'll find
 the factory signature, modifier matrix, and screenshots for every
 control inside it.

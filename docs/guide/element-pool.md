@@ -1,17 +1,17 @@
 
 # Element Pool
 
-The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI controls so a scroll-heavy
-list or fast-mounting subtree doesn't allocate a fresh `TextBlock` /
-`Button` / `Border` on every render. Each WinUI type gets its own
-fixed-size stacks (cap 32 per lane) inside `ElementPool`; the
-[reconciler](reconciliation.md) rents on mount and calls
-`Return(element)` on unmount. This page documents the rental
-contract, the two lanes that keep a control whose composition visual
-was taken away from code that can't use it, the cleanup pass that
-resets a returned element, and the exclusions that keep pooling safe —
-transform-transition locks, non-poolable types, and parent-state
-corner cases.
+The Microsoft.UI.Reactor (Reactor) element pool recycles unmounted WinUI
+controls so a scroll-heavy list or fast-mounting subtree doesn't allocate a
+fresh `TextBlock` / `Button` / `Border` on every render.
+
+Each WinUI type gets its own fixed-size stacks (cap 32 per lane) inside
+`ElementPool`; the [reconciler](reconciliation.md) rents on mount and calls
+`Return(element)` on unmount. This page documents the rental contract, the
+two lanes that keep a control whose composition visual was taken away from
+code that can't use it, the cleanup pass that resets a returned element, and
+the exclusions that keep pooling safe — transform-transition locks,
+non-poolable types, and parent-state corner cases.
 
 ## Renting on mount
 

@@ -16,6 +16,11 @@ goal: |
 tier: comprehensive
 ---
 
+# Focus and Input Internals
+
+This page covers the input subsystem from the routed-event boundary through
+the Reactor hooks that observe it.
+
 Microsoft.UI.Reactor (Reactor)'s focus and input surfaces are thin wrappers over WinUI's
 routed-event system — every pointer event, every key press, every
 gesture starts in WinUI's hit-test, walks the visual tree as a routed
@@ -33,11 +38,7 @@ focus, and the request loses to anything else competing on the same
 dispatcher tick. Route programmatic focus through `FocusManager` so
 the request runs at the right point in the lifecycle.
 
-# Focus and Input Internals
-
-This page covers the input subsystem from the routed-event boundary
-through the Reactor hooks that observe it. User-facing API is on
-[Input and Gestures](input-and-gestures.md) and
+User-facing API is on [Input and Gestures](input-and-gestures.md) and
 [Accessibility](accessibility.md); this is the internals view.
 
 ## The event flow

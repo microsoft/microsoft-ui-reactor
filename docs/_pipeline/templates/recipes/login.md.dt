@@ -12,11 +12,11 @@ tier: solid
 
 # Recipe: Login
 
-A Microsoft.UI.Reactor (Reactor) login form is four pieces working together: validated input,
-submit-gated state, an async call, and an error-display surface. The
-recipe below wires them with two `UseState` hooks and one
-[`UseMutation`](../async-resources.md) — no view model, no event
-handler classes, and no hand-rolled `submitting` / `error` flags.
+A Microsoft.UI.Reactor (Reactor) login form is four pieces working
+together: validated input, submit-gated state, an async call, and an
+error-display surface. The recipe below wires them with two `UseState`
+hooks and one `UseMutation` — no view model, no event handler classes,
+and no hand-rolled `submitting` / `error` flags.
 
 ## Primitives
 

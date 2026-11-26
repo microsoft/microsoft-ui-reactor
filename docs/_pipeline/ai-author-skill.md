@@ -46,11 +46,16 @@ Every page declares one tier. The `dotnet run --project tools/Reactor.DocPipelin
 enforces the structural checklist below. Pick the tier the page is *meant*
 to be; do not mark a page Comprehensive that doesn't meet the bar.
 
+Every tier also opens with a page summary: the first paragraph after the `#`
+title is plain prose, has no links, and is at most 420 characters. The docs
+site shows it as the page subtitle, and `npm run site` in `docs/_website`
+fails a page that has none (`reference/` pages are exempt).
+
 | Tier | Structural minimum | When to use |
 |------|---------------------|-------------|
 | `stub` | front-matter + title + one paragraph | Placeholder for surface visibility while you draft. "Coming soon" content. |
 | `solid` | ≥3 resolved `snippet=` refs, ≥1 `screenshot://`, a Markdown reference table, `## Tips`, `## Next Steps` with ≥3 links | Default bar for any new page. Code-first, working examples, modifier table. |
-| `comprehensive` | All solid checks plus an ≥80-word mental-model lead paragraph, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
+| `comprehensive` | All solid checks plus an ≥80-word mental-model lead before the first `##`, ≥1 `<!-- ai:caveat -->` block, `## Patterns` heading, `## Common Mistakes` heading, ≥5 inline cross-links, `winui-ref:` if the page wraps a WinUI control | Top-traffic pages and Under-the-hood deep dives. |
 
 Stub example:
 
@@ -501,16 +506,20 @@ these rules:
   by order number so readers can follow the learning path linearly.
 - **Link format.** Use relative `.md` paths: `[Getting Started](getting-started.md)`.
   Do not use absolute paths or `screenshot://` syntax for page links.
-- **Validate with `--strict`.** Before submitting, run `python -m mkdocs build --strict`
-  locally. The GitHub Pages publish *and* the PR CI both build with `--strict`, so any
-  broken cross-link or missing heading anchor aborts the build. Always link to a target
-  that exists; never rely on the non-strict build tolerating a dangling link, and never
-  silence the check — fix the link or the anchor.
+- **Build the site strictly.** Before submitting, run `npm ci` once, then
+  `npm run site` and `npm run validate` in `docs/_website` (Node 22.23.4 or newer).
+  The GitHub Pages publish *and* the PR CI both build strictly, so any broken
+  cross-link, missing heading anchor, or page missing from `docs/_website/nav.json`
+  aborts the build. Always link to a target that exists; never rely on a lenient
+  build tolerating a dangling link, and never silence the check — fix the link or
+  the anchor.
 
 **Topic order for sequential navigation:** see the full 64-page index in
-the "Topic Ideas" table at the bottom of this file. Authors should always
-trust the `order:` value in each template's front-matter as the source of
-truth; the bottom-of-file index is a snapshot of the spec-041 §7.1 layout.
+the "Topic Ideas" table at the bottom of this file. The `order:` value in each
+template's front-matter drives Previous/Next links and the topic index; the
+bottom-of-file index is a snapshot of the spec-041 §7.1 layout. The docs site
+sidebar is separate: a page's group, position and label there come from
+`docs/_website/nav.json`, so a new page also needs an entry in it.
 
 ---
 
@@ -922,4 +931,4 @@ doc to link from a reference page into the conceptual guide.
 - [ ] Page has a `## Next Steps` section with links to related and sequential topics
 - [ ] Readme links to all topic pages; all pages are reachable via link traversal
 - [ ] Run `dotnet run --project tools/Reactor.DocPipeline -- compile --validate-only` to check all references resolve
-- [ ] Run `python -m mkdocs build --strict` — the publish step and PR CI both use it; a broken cross-link or missing heading anchor aborts the build. Fix the link, don't silence the check.
+- [ ] Run `npm run site` and `npm run validate` in `docs/_website` — the publish step and PR CI both build strictly; a broken cross-link, missing heading anchor, or page missing from `nav.json` aborts the build. Fix the link, don't silence the check.

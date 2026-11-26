@@ -625,7 +625,7 @@ reference-generation codes.
 | `REACTOR_DOC_TIER_005`| No reference table in first half                       | error    |
 | `REACTOR_DOC_TIER_006`| Missing `## Tips` heading                              | error    |
 | `REACTOR_DOC_TIER_007`| Missing `## Next Steps` heading or fewer than 3 links  | error    |
-| `REACTOR_DOC_TIER_008`| No mental-model lead paragraph (≥80 words)             | error    |
+| `REACTOR_DOC_TIER_008`| No mental-model lead (≥80 words before the first `##`)  | error    |
 | `REACTOR_DOC_TIER_009`| No `<!-- ai:caveat -->` block                          | error    |
 | `REACTOR_DOC_TIER_010`| Missing `## Patterns` heading                          | error    |
 | `REACTOR_DOC_TIER_011`| Missing `## Common Mistakes` heading                   | error    |

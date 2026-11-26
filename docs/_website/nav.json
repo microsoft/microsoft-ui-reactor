@@ -1,0 +1,165 @@
+{
+  "$comment": "Site structure for docs/_website. scripts/sync.mjs reads it to place each docs/guide page. A page in docs/guide that is placed nowhere fails the strict sync. `as` renames the destination file (and so the URL); `glob` takes every still-unplaced file that matches, so order the groups from specific to general.",
+  "ignore": ["README.md"],
+  "groups": [
+    {
+      "dir": "get-started",
+      "title": "Get started",
+      "pages": [
+        { "file": "index.md", "as": "index", "label": "Overview" },
+        { "file": "getting-started.md", "as": "quickstart", "label": "Quickstart" },
+        { "file": "thinking-in-reactor.md", "label": "Thinking in Reactor" },
+        { "file": "xaml-developers.md", "label": "Coming from XAML" },
+        { "file": "reactor-vs-xaml.md", "label": "Reactor vs XAML" },
+        { "file": "cheat-sheet.md", "label": "Cheat sheet" },
+        { "file": "rules-of-reactor.md", "label": "Rules of Reactor" }
+      ]
+    },
+    { "dir": "guides", "title": "Guides" },
+    {
+      "dir": "guides/01-(core-concepts)",
+      "title": "Core concepts",
+      "pages": [
+        { "file": "components.md", "label": "Components" },
+        { "file": "hooks.md", "label": "Hooks" },
+        { "file": "effects.md", "label": "Effects and lifecycle" },
+        { "file": "context.md", "label": "Context" },
+        { "file": "commanding.md", "label": "Commanding" },
+        { "file": "advanced.md", "label": "Advanced patterns" }
+      ]
+    },
+    {
+      "dir": "guides/02-(layout-and-styling)",
+      "title": "Layout and styling",
+      "pages": [
+        { "file": "layout.md", "label": "Layout" },
+        { "file": "flex-layout.md", "label": "Flex layout" },
+        { "file": "styling.md", "label": "Styling and theming" },
+        { "file": "theming-tokens.md", "label": "Theming tokens" },
+        { "file": "animation.md", "label": "Animation" },
+        { "file": "input-and-gestures.md", "label": "Input and gestures" }
+      ]
+    },
+    {
+      "dir": "guides/03-(building-apps)",
+      "title": "Building apps",
+      "pages": [
+        { "file": "navigation.md", "label": "Navigation" },
+        { "file": "windows.md", "label": "Windows" },
+        { "file": "windowing-advanced.md", "label": "Advanced windowing" },
+        { "file": "docking.md", "label": "Docking windows" },
+        { "file": "async-resources.md", "label": "Async resources" },
+        { "file": "persistence.md", "label": "Persistence" }
+      ]
+    },
+    {
+      "dir": "guides/04-(ship-your-app)",
+      "title": "Ship your app",
+      "pages": [
+        { "file": "accessibility.md", "label": "Accessibility" },
+        { "file": "localization.md", "label": "Localization" },
+        { "file": "testing.md", "label": "Testing" },
+        { "file": "performance.md", "label": "Performance" },
+        { "file": "packaging.md", "label": "Packaging" }
+      ]
+    },
+    {
+      "dir": "guides/05-(developer-tools)",
+      "title": "Developer tools",
+      "pages": [
+        { "file": "dev-tooling.md", "label": "Dev tooling" },
+        { "file": "vs-extension.md", "label": "VS extension" },
+        { "file": "diagnostics.md", "label": "Diagnostics" }
+      ]
+    },
+    {
+      "dir": "guides/06-(interop-and-migration)",
+      "title": "Interop and migration",
+      "pages": [
+        { "file": "winforms-interop.md", "label": "WinForms interop" },
+        { "file": "wpf-interop.md", "label": "WPF interop" },
+        { "file": "migration/050-optional-t.md", "as": "optional-t", "label": "Optional<T> controlled props" },
+        { "file": "migration/054-windowing-evolution.md", "as": "windowing-evolution", "label": "Windowing evolution" }
+      ]
+    },
+    {
+      "dir": "controls",
+      "title": "Controls",
+      "pages": [
+        { "file": "controls.md", "as": "index", "label": "Controls catalog" },
+        { "file": "forms.md", "label": "Forms and input" },
+        { "file": "collections.md", "label": "Collections" },
+        { "file": "text-and-media.md", "label": "Text and media" },
+        { "file": "status-and-info.md", "label": "Status and info" },
+        { "file": "dialogs-and-flyouts.md", "label": "Dialogs and flyouts" },
+        { "file": "data-system.md", "label": "Data system" },
+        { "file": "charting.md", "label": "Charting" },
+        { "file": "win2d-canvas.md", "label": "Win2D canvas" }
+      ]
+    },
+    {
+      "dir": "recipes",
+      "title": "Recipes",
+      "pages": [
+        { "file": "recipes/index.md", "label": "Recipes" },
+        { "file": "recipes/command-palette.md", "label": "Command palette" },
+        { "file": "recipes/drag-reorder.md", "label": "Drag reorder" },
+        { "file": "recipes/login.md", "label": "Login" },
+        { "file": "recipes/master-detail.md", "label": "Master detail" },
+        { "file": "recipes/modal-dialog.md", "label": "Modal dialog" },
+        { "file": "recipes/multi-step-form.md", "label": "Multi-step form" },
+        { "file": "recipes/paginated-list.md", "label": "Paginated list" },
+        { "file": "recipes/search-with-suggestions.md", "label": "Search with suggestions" },
+        { "file": "recipes/settings-page.md", "label": "Settings page" }
+      ]
+    },
+    { "dir": "how-it-works", "title": "How it works" },
+    {
+      "dir": "how-it-works/01-(runtime)",
+      "title": "Runtime",
+      "pages": [
+        { "file": "architecture-overview.md", "label": "Architecture overview" },
+        { "file": "reactivity-model.md", "label": "Reactivity model" },
+        { "file": "hooks-internals.md", "label": "Hooks internals" },
+        { "file": "reconciliation.md", "label": "Reconciliation" },
+        { "file": "effects-scheduling.md", "label": "Effects scheduling" },
+        { "file": "threading-and-dispatch.md", "label": "Threading and dispatch" },
+        { "file": "element-pool.md", "label": "Element pool" }
+      ]
+    },
+    {
+      "dir": "how-it-works/02-(controls)",
+      "title": "Controls",
+      "pages": [
+        { "file": "control-reconciler-protocol.md", "label": "Control reconciler protocol" },
+        { "file": "extending-reactor-controls.md", "label": "Extending Reactor controls" },
+        { "file": "modifier-system.md", "label": "Modifier system" }
+      ]
+    },
+    {
+      "dir": "how-it-works/03-(input-and-motion)",
+      "title": "Input and motion",
+      "pages": [
+        { "file": "animation-pipeline.md", "label": "Animation pipeline" },
+        { "file": "focus-and-input-internals.md", "label": "Focus and input internals" }
+      ]
+    },
+    {
+      "dir": "how-it-works/04-(tooling)",
+      "title": "Tooling",
+      "pages": [
+        { "file": "source-mapping.md", "label": "Source mapping" },
+        { "file": "analyzer-architecture.md", "label": "Analyzer architecture" },
+        { "file": "devtools-internals.md", "label": "DevTools internals" },
+        { "file": "perf-instrumentation.md", "label": "Perf instrumentation" }
+      ]
+    },
+    {
+      "dir": "reference/hooks",
+      "title": "Hooks API",
+      "pages": [{ "file": "reference/hooks/index.md", "label": "Overview" }]
+    },
+    { "dir": "reference/hooks/01-(hooks)", "title": "Hooks", "glob": "reference/hooks/Use*.md" },
+    { "dir": "reference/hooks/02-(types)", "title": "Types and options", "glob": "reference/hooks/*.md" }
+  ]
+}

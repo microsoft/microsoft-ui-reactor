@@ -16,6 +16,12 @@ goal: |
 tier: comprehensive
 ---
 
+# Analyzer Architecture
+
+This page walks through the Reactor analyzer pipeline end-to-end: how a
+diagnostic descriptor wires into the C# compilation, what happens on each
+`InvocationExpression`, and how to add your own rule.
+
 Microsoft.UI.Reactor (Reactor) ships a small Roslyn analyzer suite that catches mistakes the
 type system can't — conditional hook calls, missing list keys,
 hardcoded colors, icon buttons with no accessible name, stale closure
@@ -30,18 +36,13 @@ authoring a new analyzer that hits `SemanticModel.GetSymbolInfo` on
 every `InvocationExpression` — that single change can double build
 time on a large solution.
 
-# Analyzer Architecture
-
-This page walks through the Reactor analyzer pipeline end-to-end:
-how a diagnostic descriptor wires into the C# compilation, what
-happens on each `InvocationExpression`, and how to add your own
-rule. The user-facing catalog of diagnostics lives on the
-[Rules of Reactor](rules-of-reactor.md) page; this is the contributor
-view. The analyzers sit in
-[`src/Reactor.Analyzers/`](https://github.com/microsoft/reactor) and
-reach every Reactor consumer because `Reactor.Analyzers.dll` is packed
-into the `Microsoft.UI.Reactor` NuGet package under
-`analyzers/dotnet/cs`, which the SDK loads automatically.
+The user-facing catalog of diagnostics lives on the [Rules of
+Reactor](rules-of-reactor.md) page; this is the contributor view. The
+analyzers sit in
+[`src/Reactor.Analyzers/`](https://github.com/microsoft/reactor) and reach
+every Reactor consumer because `Reactor.Analyzers.dll` is packed into the
+`Microsoft.UI.Reactor` NuGet package under `analyzers/dotnet/cs`, which the
+SDK loads automatically.
 
 ## The rule pipeline
 

@@ -1,4 +1,9 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Navigation Basics](https://learn.microsoft.com/en-us/windows/apps/design/basics/navigation-basics).
+
+# Navigation
+
+Reactor uses a stack-based navigation model with type-safe routes. You
+define your routes as an enum, create a navigation handle with
+`UseNavigation`, and render the current page with `NavigationHost`.
 
 Microsoft.UI.Reactor (Reactor)'s navigation is a stack of typed routes that lives in a hook. You
 call `UseNavigation(initialRoute)` once, in a root component, and you get
@@ -17,11 +22,7 @@ plain `IReadOnlyList<TRoute>`. Read [Defining Routes](#defining-routes)
 first if you're new; the rest of the page composes against that one
 shape.
 
-# Navigation
-
-Reactor uses a stack-based navigation model with type-safe routes. You define
-your routes as an enum, create a navigation handle with
-[`UseNavigation`](hooks.md), and render the current page with `NavigationHost`.
+> **WinUI reference:** For the full property surface and design guidance, see [Navigation Basics](https://learn.microsoft.com/en-us/windows/apps/design/basics/navigation-basics).
 
 ## Defining Routes
 

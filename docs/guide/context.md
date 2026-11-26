@@ -1,4 +1,10 @@
 
+# Context
+
+Context lets you pass data through the component tree without threading it
+through every level of props. Define a `Context<T>`, provide a value at any
+level, and any descendant can read it with `UseContext`.
+
 A Microsoft.UI.Reactor (Reactor) `Context<T>` is namespaced dependency injection scoped to the
 element tree, with reactivity. Define a context once as a static field,
 publish a value to any element's subtree with the `.Provide(ctx, value)`
@@ -15,12 +21,6 @@ on every render thrashes every consumer in the subtree. Read this page
 when you have data that many distant components need (theme, current
 user, locale, feature flags) and prop-threading would force every
 intermediate component to declare a prop it never uses.
-
-# Context
-
-Context lets you pass data through the [component](components.md) tree without
-threading it through every level of props. Define a `Context<T>`, provide a
-value at any level, and any descendant can read it with `UseContext`.
 
 ## Reference
 
