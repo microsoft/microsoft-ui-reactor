@@ -16,7 +16,7 @@ namespace Reactor.External.TestControl.Tests;
 ///
 /// <para>The very fact that this assembly compiles — the wrapper generator runs
 /// here against <see cref="EchoTextBox"/> with NO <c>InternalsVisibleTo</c> from
-/// Reactor.dll — is the proof the read-side echo primitive is public: before it
+/// Microsoft.UI.Reactor.dll — is the proof the read-side echo primitive is public: before it
 /// was, the generated code named the internal <c>ChangeEchoSuppressor</c> and this
 /// project failed with CS0122. The live echo round-trip (framework write is
 /// suppressed, user edit fires) needs a WinUI dispatcher and lives in
@@ -24,6 +24,22 @@ namespace Reactor.External.TestControl.Tests;
 /// </summary>
 public class ExternalEchoBoxWrapperSelftests
 {
+    [Fact]
+    public void CompositeControlledWrapper_CanBeConstructedWithoutWinUI()
+    {
+        double observed = 0;
+        var el = new BareRangeProbeElement
+        {
+            RangeStart = 20,
+            RangeEnd = 80,
+            OnRangeStartChanged = value => observed = value,
+        };
+        Assert.Equal(20, el.RangeStart.Value);
+        Assert.Equal(80, el.RangeEnd.Value);
+        el.OnRangeStartChanged?.Invoke(30);
+        Assert.Equal(30, observed);
+    }
+
     [Fact]
     public void GeneratedFactory_SurfacesControlledValue_AndCallback()
     {
@@ -54,12 +70,12 @@ public class ExternalEchoBoxWrapperSelftests
     public void GeneratedWrapper_LivesInExternalAssembly_NoInternalsVisibleTo()
     {
         // Guard the "external" in external-proof: the generated element must be
-        // compiled into THIS assembly, not Reactor.dll — otherwise the no-IVT ABI
+        // compiled into THIS assembly, not Microsoft.UI.Reactor.dll — otherwise the no-IVT ABI
         // proof is vacuous. (typeof does not construct a WinUI object.)
         var asm = typeof(ExternalEchoTextBoxElement).Assembly.GetName().Name;
         Assert.Equal("Reactor.External.TestControl", asm);
 
-        // And pin the ABI contract itself: Reactor.dll must NOT grant this assembly
+        // And pin the ABI contract itself: Microsoft.UI.Reactor.dll must NOT grant this assembly
         // InternalsVisibleTo. Without this guard the compile-proof could silently go
         // vacuous — a future IVT grant would let the generator emit internal symbols
         // again yet everything would still build green. ReactorBinding anchors the

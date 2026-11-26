@@ -7,7 +7,7 @@ namespace WinUIGalleryReactor;
 /// the gallery whether it is running with MSIX package identity.
 /// </summary>
 /// <remarks>
-/// Split out from <see cref="GalleryProtocol"/>, which owns the P/Invoke itself, so the
+/// Split out from <c>GalleryProtocol</c>, which owns the P/Invoke itself, so the
 /// mapping is unit-testable: the call can only ever report what the current test process
 /// happens to be, whereas the mapping has four cases that all matter. Getting it wrong is
 /// silent — the app would simply take the other flavour's registration path.

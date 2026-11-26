@@ -60,9 +60,11 @@ Component.Render() → Element tree (records)
 
 ### Reconciler is split across partial classes
 
-- `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
+- `Reconciler.cs` — orchestration: the `Reconcile` entry, component rendering, child reconciliation, `CanUpdate`
 - `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
 - `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
+- `Reconciler.<Topic>.cs` — one file per concern (`Modifiers`, `Keyframes`, `Transitions`, `InteractionStates`, `Unmount`, `ReactorState`, `Flyouts`, …). Put new code in the matching topic file, not `Reconciler.cs`, so unrelated PRs don't conflict
+- Per-control helpers that need none of the reconciler's private state live in standalone `internal static` classes beside it, so the compiler keeps them out of that state: `ThemeBindingApplier`, `AccessibilityApplier`, `ModifierEvents` (event trampolines, `ModifierEventHandlerState`, control event payloads), `ReferenceEdgeWiring`, `GestureDispatch`, `DragDropDispatch`. Public entry points that predate the split (`ApplyThemeBindings`, `ApplyResourceOverrides`, `Apply`/`UpdateDefaultAutomationName`) stay on `Reconciler` as forwarders in `Reconciler.StaticForwarders.cs`. `ThemeBindingApplier` (style caches), `GestureDispatch` and `DragDropDispatch` (per-element state tables) still own process-wide static state. Source-parsing gates and the reviewer-manifest gate find these files through `ReconcilerSource.HelperFiles` in `tests/Reactor.Tests/AnalyzerTests/ReconcilerSource.cs`, so add a new helper file there too
 
 ### Hooks follow React rules
 
@@ -74,11 +76,11 @@ Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-compar
 
 ### Element pooling
 
-`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. It also keeps a `ConditionalWeakTable<UIElement, object>` (`_compositorTainted`) of elements that have had `GetElementVisual()` called on them — those permanently lose the XAML implicit-transition APIs (`OpacityTransition`, `ScaleTransition`, …), so they are excluded from pooling rather than handed to a future user that might need those APIs.
+`ElementPool` recycles WinUI controls. `PoolableTypes` includes interactive controls (`Button`, `TextBox`, `ToggleSwitch`) alongside the non-interactive ones: their event trampolines subscribe **once for the control's lifetime** and read the current element from attached state at invocation time, so a recycled control dispatches to the new element's callbacks. `Reconciler.ReturnControl<T>` therefore deliberately **preserves** `ReactorState.ControlEventState` across rent/return (issue #114) — clearing it would re-allocate on every rent and double-subscribe; the box is dropped only on full detach (`DetachReactorState`). New event wiring on a poolable control must go through that one-time trampoline, never a fresh per-rent subscription. Each type has two lanes (spec 066 §7): a control whose composition visual was taken (marked by the native `CompositionState.VisualTaken`, reached through `ReactorState.Composition` and set by every `AnimationHelper.GetElementVisual`) permanently refuses the facade transforms and XAML implicit transitions, so it is reset and pooled in a visual lane that only a mount which takes the visual at mount, with no setters or mount callbacks, rents from.
 
 ### Per-element state via attached DP
 
-`ReactorAttached.StateProperty` stores `ReactorState` (Element pointer + `ModifierEventHandlerState` — the routed-input family, lazily allocated — + per-control `ControlEventStateBox` for control-intrinsic events) on native elements — not `FrameworkElement.Tag` or a CWT.
+`ReactorAttached.StateProperty` stores `ReactorState` (Element pointer + `ModifierEventHandlerState` — the routed-input family, lazily allocated — + per-control `ControlEventStateBox` for control-intrinsic events) on native elements — not `FrameworkElement.Tag` or a CWT. Composition and animation bookkeeping (visual handoff, channel ownership, keyframe triggers, interaction-state trackers) lives in the lazily allocated `ReactorState.Composition` (`CompositionState`), never in a static table keyed by the control: hosts can run on separate UI threads.
 
 ## Key Conventions
 
@@ -157,8 +159,8 @@ adds only MSIX properties plus a `Package.appxmanifest`. The whole corpus runs u
 the alias stub inherits stdout while keeping package identity, which AUMID activation cannot do
 (it is brokered, so stdout can't be redirected at all).
 **Second gotcha:** a packaged fixture needs *two* declarations, not one. The
-`RequirePackagedTier` gate decides whether the body asserts; `SelfTestFixtureRegistry.TierRequirements`
-decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
+`RequirePackagedTier` gate decides whether the body asserts; the `SelfTestTier.Packaged` tier on its
+`SelfTestFixtureRegistry.Registrations` entry decides whether the unpackaged host runs it at all. Skip the second and the fixture self-skips
 into the amber skip inventory on every unpackaged run forever (issue #1154). **The gate is not an
 independent identity check** — it and the tier filter share one entry-assembly predicate, so inside
 the packaged host it always returns true; `Packaged_IdentityGuard` failing its
@@ -236,7 +238,7 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   treat the markup errors as a likely cascade: fix the earlier error first, then confirm
   they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
-  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
+  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Microsoft.UI.Reactor.dll' ... used by another process`. If it still races under
   parallel WinUI builds, prebuild `src/Reactor` alone first, then escalate **on the build
   command only** — `-m:1 -nodereuse:false` (or `$env:MSBUILDDISABLENODEREUSE='1'`) — and run
   the suite separately with `--no-build`. (`-p:CI=true` also skips SignaturesGen.)
@@ -273,7 +275,7 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   geometry, `BitmapImage`, or **`AutomationPeer`-derived** type — you get a `COMException`.
   Test only pure-managed logic + WinRT value structs/enums; push anything live to a
   selftest. Internal seams are fair game: `InternalsVisibleTo("Reactor.Tests")` is set, so
-  prefer an internal tokenizer/parser (e.g. `PathDataParser.ParseTokens(pathData)`)
+  prefer an internal tokenizer/parser (e.g. `BrushHelper.ParseColor(color)`)
   over a public method that builds WinUI objects.
 - In the `Microsoft.UI.Reactor.*.Tests` namespaces, `Microsoft.UI.System` shadows `System`
   — use `global::System.IO.Path`, `global::System.IO.File`, etc.
@@ -340,7 +342,9 @@ point of return: stop and ship.
     marked block, not the JSON; an unclosed/nested marker or an id naming no control fails
     generation. Spec 064.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
-  equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
+  equality, `Merge`, `ApplyModifiers` (its arms go in the matching `Apply<Family>Modifier(s)`
+  helper in `Reconciler.Modifiers.cs`, keeping the `(fe, oldM, m, …)` signature so the source
+  gates scan it), and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
 - **Lock gates are `System.Threading.Lock`, not `object`** (issue #1350):
   `private readonly Lock _gate = new();`. IDE0330 is a build `warning` (enforced via

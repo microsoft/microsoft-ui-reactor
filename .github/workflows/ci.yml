@@ -120,7 +120,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           # .NET 11 SDK builds (global.json); .NET 10 runtime runs the net10.0 tests/apps.
           dotnet-version: |
@@ -132,6 +132,34 @@ jobs:
           dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj -p:Platform=x64
+
+      - name: Restore (ToolkitCompatibility.HeadlessTests)
+        run: dotnet restore tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj
+
+      - name: Extract the base transforms ledger
+        # Spec 066 §12.1 C.2: TransformsMatrixTests checks that every change between the behaviour
+        # ledger on the PR's base commit and this PR's ledger is declared, ignoring expectations the
+        # base already had. The base copies are fetched here because the checkout is shallow. Outside
+        # a pull request there is no base to diff.
+        shell: pwsh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $dir = 'tests/Reactor.AppTests.Host/SelfTest/Baselines'
+          if (-not $env:BASE_SHA) { "REACTOR_TRANSFORMS_LEDGER_BASE=skip" >> $env:GITHUB_ENV; exit 0 }
+          git fetch --no-tags --depth=1 origin $env:BASE_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't fetch the base commit $env:BASE_SHA." }
+          foreach ($pair in @(@('transforms-ledger.json', 'REACTOR_TRANSFORMS_LEDGER_BASE'), @('transforms-ledger.expected.json', 'REACTOR_TRANSFORMS_EXPECTED_BASE'))) {
+            $spec = "$($env:BASE_SHA):$dir/$($pair[0])"
+            git cat-file -e $spec 2>$null
+            if ($LASTEXITCODE -ne 0) { "$($pair[1])=absent" >> $env:GITHUB_ENV; continue }
+            $out = Join-Path $env:RUNNER_TEMP "base-$($pair[0])"
+            # cmd's redirect keeps git's bytes; a PowerShell pipe would re-decode them (the reasons hold "§").
+            cmd /c "git show $spec > `"$out`""
+            if ($LASTEXITCODE -ne 0) { throw "Couldn't read $spec." }
+            "$($pair[1])=$out" >> $env:GITHUB_ENV
+          }
+          $global:LASTEXITCODE = 0
 
       - name: Test (Reactor.Tests)
         # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
@@ -165,6 +193,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: dotnet test tests/Reactor.SourceMap.Tests/Reactor.SourceMap.Tests.csproj --no-restore -p:Platform=x64 --hangdump --hangdump-timeout 180s --hangdump-type None
 
+      - name: Test (ToolkitCompatibility.HeadlessTests)
+        if: ${{ !cancelled() }}
+        run: dotnet test tests/ToolkitCompatibility.HeadlessTests/ToolkitCompatibility.HeadlessTests.csproj --no-restore
+
   audit-ledger:
     name: Audit ledger gate
     needs: changes
@@ -176,7 +208,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -198,7 +230,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -211,7 +243,7 @@ jobs:
         run: dotnet test tests/Reactor.IntegrationTests/Reactor.IntegrationTests.csproj --no-restore
 
   selftests:
-    name: Selftests (${{ matrix.shard }}/2)
+    name: Selftests (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
@@ -220,20 +252,24 @@ jobs:
     # (issue #988). This job-level cap is the outer backstop for a genuinely wedged runner, so it
     # must sit above that budget but well below the 360-minute default.
     timeout-minutes: 45
-    # Two runners, each running half the fixture corpus (tests/_shared/SelfTestShard.cs). Every
-    # shard also proves the split covers every non-pinned fixture exactly once
-    # (SelfTestBatch.Shards_PartitionTheCorpus), so a shard cannot quietly drop part of the suite.
+    # Three runners, each running a third of the fixture corpus (tests/_shared/SelfTestShard.cs).
+    # A shard spends about 5 minutes on setup, restore and build whatever the count, and the
+    # fixtures themselves take about 14 runner-minutes, so a third shard is what keeps this job
+    # below Build solution. Every shard also proves the split covers every non-pinned fixture
+    # exactly once (SelfTestBatch.Shards_PartitionTheCorpus), so a shard cannot quietly drop part
+    # of the suite. The count comes from the matrix (strategy.job-total) here and in the Packaged
+    # and AOT jobs, so editing the shard list is the whole change.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
-      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/2
+      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -246,7 +282,7 @@ jobs:
         run: dotnet test tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore -p:Platform=x64
 
   packaged-tests:
-    name: Packaged Selftests (MSIX) (${{ matrix.shard }}/2)
+    name: Packaged Selftests (MSIX) (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
@@ -258,14 +294,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
-      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/2
+      REACTOR_SELFTEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -378,7 +414,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -402,7 +438,7 @@ jobs:
       # LocalAppData) and exports the result as $REACTOR_WINAPP_EXE, which is the harness's own
       # first candidate. CI picks the binary; the harness follows it.
       - name: Setup winapp CLI
-        uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
+        uses: microsoft/setup-WinAppCli@9288bd0729bd3f71e2ed1b9eb247dc91470b824e # v0.3.0
 
       # Records which winapp this job actually resolved, and whether it carries the
       # cooperative-UI-turn verb (winappCli#767). Diagnostics only — the Test step's
@@ -520,6 +556,8 @@ jobs:
           # fails here with a named cause instead of as a discovery-count mismatch.
           ./tests/Reactor.AppTests/Select-E2EShard.Tests.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\tests\Reactor.AppTests\InputGuardClassification.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./tests/Reactor.AppTests/Select-E2EShard.ps1 -Shard ${{ matrix.shard }} -Shard1Classes $env:E2E_SHARD1_CLASSES
 
       - name: Test
@@ -564,15 +602,9 @@ jobs:
             throw "AppTests TRX results were not produced."
           }
 
-          $blocked = @()
-          $results = Select-Xml -Path $trx.FullName -XPath "//*[local-name()='UnitTestResult' and (@outcome='Inconclusive' or @outcome='NotExecuted' or @outcome='Skipped')]"
-          foreach ($result in $results) {
-            $messageNode = $result.Node.SelectSingleNode("*[local-name()='Output']/*[local-name()='ErrorInfo']/*[local-name()='Message']")
-            $message = if ($messageNode) { $messageNode.InnerText } else { "" }
-            if ($message -match "cannot inject synthetic input|workstation is|locked desktop|disconnected session") {
-              $blocked += $result.Node.GetAttribute("testName")
-            }
-          }
+          . .\tests\Reactor.AppTests\InputGuardClassification.ps1
+          [xml]$results = Get-Content -LiteralPath $trx.FullName -Raw
+          $blocked = @(Get-InputGuardBlockedTests $results)
 
           if ($blocked.Count -gt 0) {
             throw "Input-injection E2Es were Inconclusive instead of executed: $($blocked -join ', ')"
@@ -642,7 +674,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -673,13 +705,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
             11.0.x
 
-      # Fuzz-free pass: walk the seed corpus once through both harness bodies.
+      # Fuzz-free pass: walk the seed corpus once through the markdown harness body.
       # Guards against harness rot (parser API drift, broken seed inputs) without
       # needing the libfuzzer-dotnet driver or SharpFuzz instrumentation tool in
       # the CI image. Using `dotnet run` keeps the invocation independent of the
@@ -696,7 +728,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -781,23 +813,26 @@ jobs:
           Write-Host "No High/Critical vulnerable packages in shipped projects."
 
   aot-selftests:
-    name: AOT Selftests (${{ matrix.shard }}/2)
+    name: AOT Selftests (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
-    # Half the fixture corpus per runner, split like the JIT Selftests job. Each shard publishes
-    # its own AOT host: fanning one publish out through an artifact would put an upload, a second
-    # job start and a download on the critical path, which costs more than a parallel publish.
+    # A quarter of the fixture corpus per runner, split like the JIT Selftests job. Each shard
+    # publishes its own AOT host: fanning one publish out through an artifact would put an upload,
+    # a second job start and a download on the critical path, which costs more than a parallel
+    # publish. That publish takes about 7 minutes per shard and the fixtures about 12
+    # runner-minutes in total, so this job needs one more shard than the JIT Selftests job to
+    # stay below Build solution.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -836,7 +871,7 @@ jobs:
         run: >
           ./tests/Reactor.AppTests.Host/Test-SelfTestShards.ps1
           -HostExe (Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe')
-          -Count 2 -Shard ${{ matrix.shard }}
+          -Count ${{ strategy.job-total }} -Shard ${{ matrix.shard }}
 
       - name: Run AOT selftests
         shell: pwsh
@@ -848,7 +883,7 @@ jobs:
             Write-Error "AOT-published host not found at $exe"
             exit 1
           }
-          & $exe --self-test --shard ${{ matrix.shard }}/2 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
+          & $exe --self-test --shard ${{ matrix.shard }}/${{ strategy.job-total }} 2>&1 | Tee-Object -FilePath aot-selftest-output.tap
           $code = $LASTEXITCODE
 
           $tap = Get-Content aot-selftest-output.tap
@@ -856,7 +891,7 @@ jobs:
           if (-not $plan) { throw 'The run printed no TAP plan (1..N).' }
           $planned = [int]($plan.Substring(3))
           if ($planned -ne [int]$env:EXPECTED) {
-            throw "The run planned $planned fixture(s), but shard ${{ matrix.shard }}/2 lists $env:EXPECTED."
+            throw "The run planned $planned fixture(s), but shard ${{ matrix.shard }}/${{ strategy.job-total }} lists $env:EXPECTED."
           }
           if (-not ($tap | Where-Object { $_ -like '# Total failures:*' })) {
             throw "The run never reached its '# Total failures:' trailer, so the TAP stream is truncated (exit $code)."
@@ -881,7 +916,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -920,6 +955,23 @@ jobs:
           -c Release
           -o ${{ runner.temp }}/aot-hello-world-advanced
           --nologo
+
+      # This app references Reactor directly and through Reactor.Advanced, and nothing before
+      # this step builds Reactor without a RID. A RID-less output here means some ProjectReference
+      # to Reactor strips RuntimeIdentifier again, which compiles Reactor.csproj twice on every
+      # `-r <rid>` build (see the comment on the reference in Reactor.Advanced.csproj).
+      - name: Check Reactor was built once
+        shell: pwsh
+        run: |
+          $tfm = @(Get-ChildItem src/Reactor/bin/x64/Release -Directory -Filter 'net10.0-windows*')
+          if ($tfm.Count -ne 1) { throw "Expected one Reactor output folder under src/Reactor/bin/x64/Release, found $($tfm.Count)." }
+          $rid = @(Get-ChildItem (Join-Path $tfm[0].FullName 'win-x64') -Filter *.dll -File -ErrorAction SilentlyContinue)
+          if ($rid.Count -eq 0) { throw "No win-x64 build of Reactor under $($tfm[0].FullName), so this check can't see the build it guards." }
+          $ridless = @(Get-ChildItem $tfm[0].FullName -Filter *.dll -File)
+          if ($ridless.Count -gt 0) {
+            throw "Reactor.csproj was also built without a RuntimeIdentifier ($($ridless.Name -join ', ')). A ProjectReference to Reactor strips RuntimeIdentifier; see src/Reactor.Advanced/Reactor.Advanced.csproj."
+          }
+          Write-Host "Reactor was built once, for win-x64 ($($rid.Count) dll(s))."
 
       - name: Run Advanced negative trim assertions
         shell: pwsh
@@ -965,7 +1017,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -974,15 +1026,15 @@ jobs:
       - name: Build Reactor framework
         run: dotnet build src\Reactor\Reactor.csproj -p:Platform=x64 -c Release --nologo
 
-      - name: Verify Reactor.dll has no devtools implementation IL
+      - name: Verify Microsoft.UI.Reactor.dll has no devtools implementation IL
         shell: pwsh
         run: |
-          $reactorDll = Get-ChildItem src\Reactor\bin -Recurse -Filter Reactor.dll |
+          $reactorDll = Get-ChildItem src\Reactor\bin -Recurse -Filter Microsoft.UI.Reactor.dll |
             Where-Object { $_.FullName -like '*\Release\*' } |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
           if (-not $reactorDll) {
-            Write-Error "No built Reactor.dll found."
+            Write-Error "No built Microsoft.UI.Reactor.dll found."
             exit 1
           }
           dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release -- reactor-il $reactorDll.FullName
@@ -1047,7 +1099,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -1074,7 +1126,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -1146,7 +1198,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: |
             10.0.x
@@ -1264,7 +1316,7 @@ jobs:
       # isn't implemented. Any *other* skipped phase silently narrows this gate,
       # so it fails here instead.
       #
-      # The other class — Phase 5.7 bailing on a missing Reactor.xml or
+      # The other class — Phase 5.7 bailing on a missing Microsoft.UI.Reactor.xml or
       # reference-map.yaml and leaving ~117 reference pages unwritten — used to
       # be checked here too, by grepping stdout for those two "not found"
       # strings. That was the wrong owner and the wrong direction of failure: a

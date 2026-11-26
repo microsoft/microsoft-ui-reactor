@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Compile Include="..\ToolkitCompatibility\TextScalingMeasurements.cs" Link="TextScalingMeasurements.cs" />
+    <Compile Include="..\ToolkitCompatibility\TextScalingTargets.cs" Link="TextScalingTargets.cs" />
+    <Compile Include="..\ToolkitCompatibility\AccessibilityProfile.cs" Link="AccessibilityProfile.cs" />
+    <Compile Include="..\ToolkitCompatibility\FixtureTextSize.cs" Link="FixtureTextSize.cs" />
+  </ItemGroup>
+</Project>

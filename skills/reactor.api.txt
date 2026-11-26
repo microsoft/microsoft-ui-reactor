@@ -1,5 +1,5 @@
 # Reactor API — signatures index (generated)
-# Source of truth: Reactor.dll and Reactor.Advanced.dll public surfaces.
+# Source of truth: Microsoft.UI.Reactor.dll and Microsoft.UI.Reactor.Advanced.dll public surfaces.
 # Regenerate: `mur --regen-api`  (or build tools/Reactor.SignaturesGen — its
 #             AfterBuild target rewrites this file).
 # Format: one symbol per line. No prose. Alphabetized within each section.
@@ -738,6 +738,7 @@ T.ToolTip<T>(string tip) → T
 T.ToolTip<T>(string tip, PlacementMode placement) → T
 T.ToolTipPlacement<T>(PlacementMode placement) → T
 T.ToolTipPlacementTarget<T>(ElementRef target) → T
+T.TransformOrigin<T>(float x, float y) → T
 T.Transition<T>(Transition transition, Curve curve = null) → T
 T.Translation<T>(float x, float y, float z) → T
 T.TranslationTransition<T>(Vector3Transition transition = null) → T
@@ -2373,6 +2374,7 @@ Thickness? BorderInlineStart { get; init; }
 Thickness? BorderThickness { get; init; }
 Thickness? Margin { get; init; }
 Thickness? Padding { get; init; }
+Vector2? TransformOrigin { get; init; }
 Vector3? CenterPoint { get; init; }
 Vector3? Scale { get; init; }
 Vector3? Translation { get; init; }
@@ -4227,9 +4229,6 @@ Equals(PasswordBoxElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
-
-### static class PathDataParser
-Parse(string pathData) → Geometry
 
 ### record PathElement
 new()
@@ -6435,6 +6434,7 @@ Brush BorderBrush { get; init; }
 Brush Foreground { get; init; }
 CornerRadius? CornerRadius { get; init; }
 Thickness? BorderThickness { get; init; }
+Vector2? TransformOrigin { get; init; }
 Vector3? CenterPoint { get; init; }
 Vector3? Scale { get; init; }
 Vector3? Translation { get; init; }

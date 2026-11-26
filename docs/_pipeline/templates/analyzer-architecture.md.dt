@@ -165,15 +165,17 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 | `REACTOR_GRID_001` | Warning | Declared Grid column/row that no child occupies (unused track) | `UnusedGridTrackAnalyzer.cs` |
 | `REACTOR_INPUT_001` | Warning | Ctrl/Alt chord on .OnKeyDown is focus-scoped; use a Command accelerator | `OnKeyDownChordAnalyzer.cs` |
 | `REACTOR_PERF_FUNCREF` | Info | Command constructed inline in the render path is re-allocated every render; wrap it in UseMemo | `MemoizeCommandAnalyzer.cs` |
+| `REACTOR_PERF_001` | Info | Adjacent `Width`/`Height` calls on built-in element construction can use `Size` to avoid an intermediate layout, modifier, and element copy (ships a code fix) | `CombinedSizeModifierAnalyzer.cs` |
 | `REACTOR_ANIM_002` | Info | Unstable .Keyframes trigger (DateTime.Now / Guid.NewGuid / per-render allocation) restarts the animation every render | `KeyframeTriggerAnalyzer.cs` |
 | `REACTOR_INPUT_002` | Warning | Unsafe TryGetFiles in .OnDrop returns UNC/reparse/virtual files; use TryGetSafeLocalFiles | `UnsafeDropFilesAnalyzer.cs` |
 | `REACTOR_NAV_001` | Warning | UseNavigation handle captured into a static field or property outlives the page and pins its dispatcher | `StaticNavigationHandleAnalyzer.cs` |
 | `REACTOR_DIALOG_001` | Warning | Imperative ContentDialog.ShowAsync escapes the render tree; use the controlled ContentDialog(...) element with IsOpen | `ImperativeContentDialogAnalyzer.cs` |
 | `REACTOR_MOD_001` | Info | Same atomic-replace placement modifier (.Grid/.Canvas/.RelativePanel/.Flex) applied twice in one chain; last-wins overwrite drops earlier args (ships a merge fix) | `DuplicateAtomicModifierAnalyzer.cs` |
 | `REACTOR_MOD_002` | Info | .Set assigns a property that has a first-class fluent modifier; the write re-runs every render, is never unwound, and pins the element to the update path (ships a chain-rewrite fix) | `PoolResetSetAnalyzer.cs` |
-| `REACTOR_MOD_003` | Warning | Common modifier applied to an element whose mounted control is outside the types `ApplyModifiers` writes it to, so the value is silently dropped (e.g. `.Background(...)` on a Rectangle renders an invisible shape); ships a did-you-mean fix to `.Fill`/`.Stroke` for shapes | `NoOpModifierAnalyzer.cs` |
+| `REACTOR_MOD_003` | Warning | The selected generic modifier overload compiles, but the reconciler discards its value on the mounted control. For example, `.Background(...)` on a `Rectangle` has no effect. The rule offers a fix to `.Fill(...)` or `.Stroke(...)` for shapes. | `NoOpModifierAnalyzer.cs` |
 | `REACTOR_MEDIA_001` | Info | WebView2 is a direct child of an auto-layout stack (HStack/VStack/FlexRow/FlexColumn) without explicit .Width/.Height | `UnsizedWebViewInStackAnalyzer.cs` |
 | `REACTOR_ANIM_003` | Warning | async lambda to WithAnimation loses the ThreadStatic scope after await | `AnimationScopeAsyncAnalyzer.cs` |
+| `REACTOR_ANIM_004` | Warning | `.Set` writes a `UIElement` transform facade (`Rotation`, `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix`, the `*Transition` properties) or calls `StartAnimation` on an element whose chain uses a modifier that takes the composition visual (`ModifierTable.VisualOwningModifiers`), so WinUI rejects the write. Since spec 066 layer 4 that includes a non-identity `.Scale`/`.Rotation`/`.Translation`/`.CenterPoint`, and since layer 5 a `.TransformOrigin` other than `(0, 0)` (a constant identity value doesn't take the visual, unless the `.Set` writes the same facade); also flags a `.Set` `Translation` write that conflicts with `.Translation(...)` (#1642). Ships a fix to `.Rotation`/`.Scale`/`.CenterPoint` and to the `.XxxTransition()` modifiers, which run on the visual since spec 066 layer 2 (spec 066 §9.1) | `FacadeTransformSetAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_002` | Warning | UseEffect(Action) allocates a timer/subscription/event with no returned cleanup | `EffectCleanupAnalyzer.cs` |
 | `REACTOR_LIFECYCLE_003` | Warning | A custom control updates its hosted child with Reconciler.UpdateChild, which skips the element-type check and leaves a replaced control mounted; use Reconcile (ships a rewrite fix) | `ReconcilerUpdateChildAnalyzer.cs` |
 | `REACTOR_MEMO_001` | Info | Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache | `MemoWrapperModifierAnalyzer.cs` |
@@ -188,6 +190,34 @@ sibling `src/Reactor.Analyzers.Internal/` project instead; see
 (variable hook counts across early returns, async boundaries inside `UseEffect`);
 they now ship — `_002` flags a hook after a single-guard early return, `_003`
 flags an `async`-void `UseEffect` body (spec 060 §4.1).
+
+`REACTOR_MOD_003` checks `ModifierInfo.ControlGate` for writes through
+`ApplyModifiers`. When a `ThemeRef` overload has a separate receiver list,
+the rule uses `ThemeControlGate`. For example, the generic brush overload of
+`Foreground` reaches `Control` and `TextBlock`, and the `ThemeRef` overload
+also reaches `RichTextBlock`.
+
+## Combined sizing without extra copies
+
+`REACTOR_PERF_001` is allocation guidance, not a correctness warning or an FPS claim.
+For example, `Button("Save").Width(120).Height(32)` becomes
+`Button("Save").Size(width: 120, height: 32)`. The fix also handles height-first
+chains, keeping the arguments in their original evaluation order with named
+arguments, and preserves explicit generic type arguments. Existing argument text
+is kept intact, including whitespace observed by nested `CallerArgumentExpression` calls.
+
+The rule binds both calls and the proposed `Size` call to Reactor's
+`ElementExtensions`. It only follows built-in factories or direct built-in element
+construction, optionally through Reactor's common modifiers. Unknown receivers and
+custom element records are excluded because their copy constructors can have side
+effects. Object initializers are also excluded because they can supply custom modifier
+or layout records. Non-adjacent calls, expression trees, query expressions,
+comments/directives in the rewritten portion, missing or shadowed `Size` methods, and incompatible result types are left
+alone. The original factory call and handler registration are preserved.
+
+There is no separate `mur check` Tier-3 mirror: those rules augment existing
+compiler diagnostics, whereas this pattern is valid C#. The suggestion ships in
+the bundled analyzer and can be configured through `.editorconfig`.
 
 ## Symbol-grounded matching — the WithKey case
 

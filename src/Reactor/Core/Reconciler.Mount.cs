@@ -33,6 +33,7 @@ public sealed partial class Reconciler
     // <snippet:mount-phase>
     public UIElement? Mount(Element element, Action requestRerender)
     {
+        var modifierTarget = element;
         // Unwrap legacy ModifiedElement (backward compat)
         ElementModifiers? modifiers = element.Modifiers;
         if (element is ModifiedElement mod)
@@ -47,6 +48,7 @@ public sealed partial class Reconciler
         // A direct Mount from outside is an outermost frame for render-error propagation
         // (issue #1291), like a top-level Reconcile; recursive mounts just count.
         using var entryFrame = EnterFrame(Diagnostics.ReactorPerfTrace.ReconcileEntries.Mount, element);
+        int mountFrame = ++_mountFrames;
         // Where this mount's completed roots start, while an ErrorBoundary records them.
         int boundaryRootsStart = _boundaryMountRoots?.Count ?? -1;
 
@@ -69,6 +71,8 @@ public sealed partial class Reconciler
             ? ownTheme : prevAmbientTheme;
 
         UIElement? control;
+        // Issue #965 — whether the control was created for this element (see ApplyModifiers).
+        bool ownsControl = false;
         // A per-host RegisterType callback may return the control it mounted for a child
         // element; that control already describes the child (see ForwardsAnotherElement).
         bool registeredType = false;
@@ -78,6 +82,11 @@ public sealed partial class Reconciler
         if (pushedStagger)
             PushStaggerScope(element.StaggerConfig!.Delay);
         var prevReconcilingElement = _reconcilingElement;
+        var outerRent = _rentContext;
+        _rentContext = ForMount(element, modifiers, outerRent);
+        var outerVisualLaneRental = _visualLaneRental;
+        _visualLaneRental = null;
+        FrameworkElement? visualLaneRental = null;
         try
         {
         // The innermost element being mounted owns any virtualized-host context capture
@@ -99,17 +108,26 @@ public sealed partial class Reconciler
         // _v1Handlers on first hit so arm 1 catches it next time.
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
+            // A keyed Memo is transparent only through the built-in arm 4. A handler registered for
+            // one is app code that may write a facade on the control its child rents.
+            if ((_rentContext.Candidate && MayUseAppHandler(element.GetType())) || _rentContext.Transparent)
+                _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl(element);
         }
         // Registered types checked first
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
         {
+            _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = reg.Mount(element, requestRerender, this);
             registeredType = true;
         }
         else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
         {
+            if ((_rentContext.Candidate && MayUseAppHandler(element.GetType())) || _rentContext.Transparent)
+                _rentContext = _rentContext with { Candidate = false, Transparent = false };
             control = v1Entry.Mount(element, requestRerender, this);
+            ownsControl = v1Entry.OwnsControl(element);
         }
         else
         {
@@ -127,7 +145,7 @@ public sealed partial class Reconciler
             // factory output) when it changes, so the mounted inner is never re-derived from
             // the old factory. Any modifiers on the wrapper itself are applied by the
             // post-dispatch ApplyModifiers below, exactly like any other element.
-            KeyedMemoElement km => Mount(WithWrapperKey(km.Factory() ?? EmptyElement.Instance, km.Key), requestRerender),
+            KeyedMemoElement km => MountKeyedMemo(km, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -136,11 +154,24 @@ public sealed partial class Reconciler
             EmptyElement => null,
             _ => ThrowNoHandlerRegistered(element),
         };
+        // Composition primitives mount their own Border wrapper; a keyed memo is transparent.
+        ownsControl = element is ErrorBoundaryElement or ComponentElement or FuncElement or MemoElement;
         }
 
         if (control is not null)
         {
             DebugUIElementsCreated++;
+            // Count only a control created for this element: a transparent keyed Memo, a
+            // flyout decorator wrapping its target, or a RegisterType callback forwarding a
+            // child hands back a control its inner Mount already counted. Forwarding is only
+            // detectable while source publishing is on; guarded inline (as below) so ILC folds
+            // the publisher out of a build without Reactor.DevtoolsSupport.
+            if (Diagnostics.ReactorPerfTrace.ComponentEnabled
+                && (ownsControl || registeredType
+                    && !(global::Microsoft.UI.Reactor.Hosting.ReactorFeatures.DevtoolsSupported
+                        && Diagnostics.ReactorSourcePublisher.IsEnabled
+                        && ForwardsAnotherElement(control, element))))
+                Diagnostics.ComponentPerfTally.AddChanges(1);
             // Highlight capture is gated by the flag, not just by list
             // existence: the list is allocated lazily on first flag-on and
             // never freed afterward, so a non-null check would keep
@@ -166,7 +197,7 @@ public sealed partial class Reconciler
 
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
-            ApplyModifiers(fe, modifiers, requestRerender);
+            ApplyModifiers(fe, modifiers, requestRerender, ownsControl);
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
         // Issue #1262 — bind a `.Validate(field, value, …)` verdict to the control's
@@ -203,7 +234,7 @@ public sealed partial class Reconciler
         // clients that read AutomationProperties.Name directly don't see an
         // empty string on a Button("Save", …). Author-supplied names win.
         if (control is FrameworkElement captionFe)
-            ApplyDefaultAutomationName(captionFe, ResolveCaptionForElement(element));
+            ApplyDefaultAutomationName(captionFe, AccessibilityApplier.ResolveCaptionForElement(element));
 
         // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
         if (element.ThemeBindings is not null && control is FrameworkElement thFe)
@@ -213,9 +244,15 @@ public sealed partial class Reconciler
         if (element.ResourceOverrides is not null && control is FrameworkElement resFe)
             ApplyResourceOverrides(resFe, null, element.ResourceOverrides, _ambientRequestedTheme);
 
+        // A transparent layer (a keyed Memo, a flyout over its target) mounts over the control its
+        // inner element just claimed implicit keys on. Those claims move one slot inward, so the
+        // outermost layer is slot 0, as Update counts it (spec 066 §6.1).
+        if (control is not null)
+            ShiftForwardedClaims(control, mountFrame, layer: element);
+
         // Apply transitions after mounting (runs after .Set() callbacks)
         if (control is not null && (element.ImplicitTransitions is not null || element.ThemeTransitions is not null))
-            ApplyTransitions(control, element.ImplicitTransitions, element.ThemeTransitions);
+            ApplyTransitions(control, null, element.ImplicitTransitions, element.ThemeTransitions);
 
         // Apply Composition-layer layout animation (implicit Offset/Size animation on Visual)
         if (control is not null && element.LayoutAnimation is not null)
@@ -223,14 +260,33 @@ public sealed partial class Reconciler
 
         // Apply compositor property animation (.Animate() modifier)
         if (control is not null && element.AnimationConfig is not null)
-            ApplyPropertyAnimation(control, element.AnimationConfig, element.LayoutAnimation);
+            ApplyPropertyAnimation(control, element.AnimationConfig);
+
+        if (control is not null && (element.ImplicitTransitions is not null || element.LayoutAnimation is not null
+            || element.AnimationConfig is not null))
+            StampImplicitClaims(control, mountFrame, element);
 
         // Apply enter transition (.Transition() modifier)
         if (control is not null && element.ElementTransition is not null)
         {
             var (staggerIdx, staggerDly) = ConsumeStaggerIndex();
-            ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly);
+            ApplyEnterTransition(control, element.ElementTransition, staggerIdx, staggerDly, this);
+            // A keyed Memo shares its factory output's control and tag, so the exit paths read its
+            // declaration from the control's state (#1663).
+            if (element is KeyedMemoElement && element.ElementTransition.GetExitTransition() is not null)
+            {
+                var memoState = GetOrCreateReactorState(control);
+                memoState.MemoTransition = element.ElementTransition;
+                // Layers mount inside out, so a flyout already recorded on the shared control is inside the Memo.
+                memoState.MemoWrapsDecorator = memoState.DecoratorElement is not null;
+            }
         }
+
+        // A flyout that records itself after a keyed Memo's exit wraps that Memo.
+        if (IsFlyoutDecorator(element)
+            && control?.GetValue(ReactorAttached.StateProperty) is ReactorState { MemoTransition: not null } wrappedMemo
+            && ReferenceEquals(wrappedMemo.DecoratorElement, element))
+            wrappedMemo.MemoWrapsDecorator = false;
 
         // Apply interaction states (.InteractionStates() modifier)
         if (control is not null && element.InteractionStates is not null)
@@ -238,7 +294,7 @@ public sealed partial class Reconciler
 
         // Apply keyframe animations (.Keyframes() modifier)
         if (control is not null && element.KeyframeAnimations is not null)
-            ApplyKeyframeAnimations(control, element.KeyframeAnimations);
+            ApplyKeyframeAnimations(control, element.KeyframeAnimations, this);
 
         // Apply scroll-linked expression animations (.ScrollLinked() modifier)
         if (control is not null && element.ScrollAnimation is not null)
@@ -256,6 +312,9 @@ public sealed partial class Reconciler
         finally
         {
             _reconcilingElement = prevReconcilingElement;
+            _rentContext = outerRent;
+            visualLaneRental = _visualLaneRental;
+            _visualLaneRental = outerVisualLaneRental;
             if (pushedStagger)
                 PopStaggerScope();
             if (ctxCount > 0)
@@ -264,6 +323,18 @@ public sealed partial class Reconciler
         }
 
         NoteMountCompleted(boundaryRootsStart, control);
+        if (visualLaneRental is not null) ElementPool.SyncOpacityWhenLoaded(visualLaneRental);
+        if (control is not null && _modifierMountParent is not null
+            && ReferenceEquals(prevReconcilingElement, _modifierMountParent))
+            (_modifierMounts ??= []).Add((control, modifierTarget));
+        return control;
+    }
+
+    private UIElement? MountKeyedMemo(KeyedMemoElement memo, Action requestRerender)
+    {
+        var inner = WithWrapperKey(memo.Factory() ?? EmptyElement.Instance, memo.Key);
+        var control = Mount(inner, requestRerender);
+        if (control is not null) RecordModifierTarget(control, memo, inner);
         return control;
     }
 
@@ -432,7 +503,7 @@ public sealed partial class Reconciler
 
     internal static bool EnsureNumberBoxImmediateTextBoxWiring(WinUI.NumberBox box)
     {
-        var payload = GetOrCreateControlEventPayload<V1Protocol.NumberBoxEventPayload>(box);
+        var payload = ModifierEvents.GetOrCreateControlEventPayload<V1Protocol.NumberBoxEventPayload>(box);
         if (payload.ImmediateInnerWired) return true;
 
         box.ApplyTemplate();
@@ -696,6 +767,9 @@ public sealed partial class Reconciler
     // realize/recycle handler; also reused 1:1 by Reconciler.KeyedItemsBinding.cs.
     internal void HandleTemplatedContainerContentChanging(object sender, ContainerContentChangingEventArgs args, Action requestRerender)
     {
+        // A container recycled or re-realized for another row drops its previous row's pending
+        // ambient-enter check, so it isn't left concealed or replays that row's fade (#1680).
+        CancelOpacityRestart(args.ItemContainer);
         if (args.InRecycleQueue)
         {
             // Issue #951 — drop any name this container carried for its
@@ -739,7 +813,7 @@ public sealed partial class Reconciler
             if (args.Item is ReactorRow row && row.PendingEnterAnimation is { } kind)
             {
                 row.PendingEnterAnimation = null;
-                ApplyAmbientEnterAnimation(args.ItemContainer, kind);
+                ApplyAmbientEnterAnimation(args.ItemContainer, kind, this);
             }
         }
     }
@@ -801,26 +875,27 @@ public sealed partial class Reconciler
     /// developer's <c>.Transition(...)</c> modifier still wins when set —
     /// this only fires when no per-element transition has been declared.
     /// </summary>
-    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind)
+    internal static void ApplyAmbientEnterAnimation(UIElement container, AnimationKind kind, Reconciler? owner)
     {
         var curve = AnimationKindMap.ToCurve(kind);
         if (curve is null) return;
+        // The fade takes the opacity channel, so a pending opacity restart must not replace it (#1669).
+        CancelOpacityRestart(container);
 
         try
         {
-            var visual = global::Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(container);
+            var visual = AnimationHelper.GetElementVisual(container);
             var compositor = visual.Compositor;
 
             // Set initial state, then animate to final. Opacity carries the
-            // fade-in; a small Y offset carries the slide-up so the row
+            // fade-in, to the container's own opacity like .Transition(Fade);
+            // a small Y offset carries the slide-up so the row
             // visibly emerges rather than just appearing. Both targets use
             // the same curve so they stay phase-locked.
-            visual.Opacity = 0f;
             var prevOffset = visual.Offset;
             visual.Offset = new global::System.Numerics.Vector3(prevOffset.X, prevOffset.Y + 12f, prevOffset.Z);
 
-            var opacityAnim = AnimationHelper.CreateScalarTargetAnimation(compositor, 1.0f, curve);
-            visual.StartAnimation("Opacity", opacityAnim);
+            StartEnterFade(container, visual, compositor, curve, TimeSpan.Zero, owner);
 
             var offsetAnim = AnimationHelper.CreateVector3TargetAnimation(compositor, prevOffset, curve);
             visual.StartAnimation("Offset", offsetAnim);

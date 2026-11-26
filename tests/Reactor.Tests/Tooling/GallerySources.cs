@@ -35,13 +35,22 @@ static class GallerySources
 
     public static string GalleryDir() => Path.Join(RepoRoot(), "samples", "ReactorGallery");
 
-    /// <summary>Every gallery control page, parsed, in a stable order.</summary>
-    public static IReadOnlyList<(string Path, SyntaxNode Root)> Pages()
-    {
-        var pagesDir = Path.Join(GalleryDir(), "ControlPages");
-        Assert.True(Directory.Exists(pagesDir), $"gallery ControlPages directory not found at {pagesDir}");
+    public static string ControlPagesDir() => Path.Join(GalleryDir(), "ControlPages");
 
-        var pages = Directory.EnumerateFiles(pagesDir, "*.cs", SearchOption.AllDirectories)
+    /// <summary>Every gallery control page, parsed, in a stable order.</summary>
+    public static IReadOnlyList<(string Path, SyntaxNode Root)> Pages() => ReadSources(ControlPagesDir());
+
+    /// <summary>Includes supporting source files so constants and partial types bind across files.</summary>
+    public static IReadOnlyList<(string Path, SyntaxNode Root)> AllSources() => ReadSources(GalleryDir());
+
+    internal static IReadOnlyList<(string Path, SyntaxNode Root)> ReadSources(string directory)
+    {
+        Assert.True(Directory.Exists(directory), $"gallery source directory not found at {directory}");
+
+        var pages = Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !Path.GetRelativePath(directory, path).Split(Path.DirectorySeparatorChar)
+                .Any(part => part.Equals("bin", global::System.StringComparison.OrdinalIgnoreCase)
+                             || part.Equals("obj", global::System.StringComparison.OrdinalIgnoreCase)))
             .OrderBy(p => p, global::System.StringComparer.Ordinal)
             .Select(p => (Path: p, Root: CSharpSyntaxTree.ParseText(File.ReadAllText(p)).GetRoot()))
             .ToList();

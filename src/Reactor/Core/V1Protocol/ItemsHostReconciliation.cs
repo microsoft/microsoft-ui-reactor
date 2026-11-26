@@ -106,8 +106,8 @@ internal static class ItemsHostReconciliation
                         reconciler.DebugElementsSkipped++;
                         if ((child.HasCallbacks
                                 || Reconciler.IsFlyoutDecorator(child)
-                                || Reconciler.HasGestureOrDragSlots(oldChild.Modifiers)
-                                || Reconciler.HasGestureOrDragSlots(child.Modifiers)
+                                || GestureDispatch.HasGestureOrDragSlots(oldChild.Modifiers)
+                                || GestureDispatch.HasGestureOrDragSlots(child.Modifiers)
                                 || Reconciler.CallSiteChangedOnSkip(oldChild, child))
                             && existing is FrameworkElement fe)
                         {
@@ -141,6 +141,10 @@ internal static class ItemsHostReconciliation
         }
 
         collection ??= strategy.GetCollection(control);
+        // Edits to what the host shows that no mount or unmount counts (perf `changes`): a raw
+        // value added, changed or removed, and a retained item moved. Element items count
+        // themselves when they mount, update or unmount.
+        uint perfEdits = 0;
         var used = new bool[previous.Count];
         var next = new List<ItemsHostState.Item>(source.Count);
         Dictionary<string, Queue<int>>? keyed = null;
@@ -204,6 +208,7 @@ internal static class ItemsHostReconciliation
                     }
                     RemoveReference(collection, retained);
                 }
+                perfEdits++;
                 next.Add(new(item, item));
             }
         }
@@ -215,6 +220,8 @@ internal static class ItemsHostReconciliation
             // Teardown must see a parented child (e.g. connected-animation snapshots).
             if (old.Source is Element && old.Value is UIElement child)
                 reconciler.UnmountChild(child);
+            else if (old.Source is not Element)
+                perfEdits++;
             RemoveReference(collection, old.Value);
         }
 
@@ -228,6 +235,7 @@ internal static class ItemsHostReconciliation
                 continue;
             }
             int current = IndexOfReference(collection, value, placement);
+            if (current >= 0) perfEdits++;
             if (current < 0)
                 collection.Insert(placement, value);
             else if (collection is ObservableCollection<object> observable)
@@ -239,6 +247,7 @@ internal static class ItemsHostReconciliation
             }
             placement++;
         }
+        if (!isMount && perfEdits != 0) Reconciler.CountPerfChanges(perfEdits);
         itemsState.Items = next;
         itemsState.Source = source;
         itemsState.ElementCount = elementCount;
@@ -272,6 +281,7 @@ internal static class ItemsHostReconciliation
         {
             for (int i = 0; i < count; i++)
                 if (source[i] is Element) return false;
+            Reconciler.CountPerfChanges();
             var collection = strategy.GetCollection(control);
             int target = 0;
             for (int i = 0; i < count; i++)

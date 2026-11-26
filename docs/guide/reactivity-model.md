@@ -70,6 +70,11 @@ component's `Render()` runs and the slot read returns the new value.
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
+    // Keep the captured argument in a separate frame so inline/locked calls
+    // do not allocate a closure before deciding whether marshaling is needed.
+    bool MarshalSetter(T newValue)
+        => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
     void Setter(T newValue)
     {
         bool changed;
@@ -84,21 +89,19 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-            if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
+            ReportPerfStateChange("UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
         else
         {
-            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-            if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
+            ReportPerfStateChange("UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
     }
@@ -271,6 +274,11 @@ change.
 ```csharp
 private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
+    // Keep the captured argument in a separate frame so inline/locked calls
+    // do not allocate a closure before deciding whether marshaling is needed.
+    bool MarshalSetter(T newValue)
+        => MarshalIfOffUIThread("UseState", () => Setter(newValue));
+
     void Setter(T newValue)
     {
         bool changed;
@@ -285,21 +293,19 @@ private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-            if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
+            ReportPerfStateChange("UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
         else
         {
-            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
+            if (Environment.CurrentManagedThreadId != _uiThreadId && MarshalSetter(newValue)) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
             if (Diagnostics.ReactorEventSource.Log.IsEnabled(
                     global::System.Diagnostics.Tracing.EventLevel.Verbose,
                     Diagnostics.ReactorEventSource.Keywords.State))
                 Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-            if (Diagnostics.ReactorPerfTrace.StateEnabled)
-                Diagnostics.ReactorPerfTrace.StateChange((ulong)EnsureDiagnosticId(), "UseState", changed);
+            ReportPerfStateChange("UseState", changed);
             if (changed) _requestRerender?.Invoke();
         }
     }

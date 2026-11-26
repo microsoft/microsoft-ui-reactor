@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -12,7 +11,19 @@ internal static class ContentControlContent
         internal UIElement? Child;
     }
 
-    private static readonly ConditionalWeakTable<ContentControl, ContentState> OwnedContent = new();
+    // The owned-child record lives on the native control, not in a table keyed by its managed
+    // wrapper: once that wrapper is collected WinRT projects a fresh one over the same control,
+    // a wrapper-keyed lookup misses, and the next update remounts the declared child instead of
+    // reconciling it (spec 047 §3, issues #86 / #114 / #1262). Registered lazily so building the
+    // descriptor never touches WinUI.
+    private static DependencyProperty? s_ownedContentProperty;
+
+    private static DependencyProperty OwnedContentProperty => s_ownedContentProperty ??=
+        DependencyProperty.RegisterAttached(
+            "ReactorOwnedContent", typeof(object), typeof(ContentControlContent), new PropertyMetadata(null));
+
+    private static ContentState? GetOwnedContent(ContentControl control) =>
+        s_ownedContentProperty is { } property ? control.GetValue(property) as ContentState : null;
 
     internal static ControlDescriptor<TElement, TControl> WithContent<TElement, TControl>(
         this ControlDescriptor<TElement, TControl> descriptor,
@@ -42,8 +53,13 @@ internal static class ContentControlContent
                     EnsureTagged(control, newElement);
                 return;
             }
-            var hadContent = OwnedContent.TryGetValue(control, out var state);
-            state ??= OwnedContent.GetValue(control, static _ => new ContentState());
+            var state = GetOwnedContent(control);
+            var hadContent = state is not null;
+            if (state is null)
+            {
+                state = new ContentState();
+                control.SetValue(OwnedContentProperty, state);
+            }
             state.Child = ctx.ReconcileChild(hadContent ? getChild(oldElement) : null, newChild, state.Child);
             if (!ReferenceEquals(control.Content, state.Child)) control.Content = state.Child;
         })
@@ -56,7 +72,7 @@ internal static class ContentControlContent
             {
                 // An untagged control's teardown skips the strategy, so a pooled
                 // control can arrive with a record of a child already unmounted.
-                OwnedContent.Remove(control);
+                if (s_ownedContentProperty is { } owned) control.ClearValue(owned);
                 control.Content = getChild(element) is null ? getText(element) : null;
             },
             update: (ctx, control, oldElement, newElement) =>
@@ -93,7 +109,9 @@ internal static class ContentControlContent
 
     private static void UnmountOwnedContent(Reconciler reconciler, ContentControl control)
     {
-        if (!OwnedContent.Remove(control, out var state) || state.Child is not { } child) return;
+        if (GetOwnedContent(control) is not { } state) return;
+        control.ClearValue(OwnedContentProperty);
+        if (state.Child is not { } child) return;
         reconciler.UnmountChild(child);
         if (ReferenceEquals(control.Content, child)) control.Content = null;
     }

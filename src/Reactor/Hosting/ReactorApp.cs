@@ -388,6 +388,8 @@ public static partial class ReactorApp
     /// registers it. Throws if no such provider is found — pass the
     /// <see cref="IXamlMetadataProvider"/> instance directly if your library
     /// uses a non-standard provider type.
+    /// Reflection discovery does not preserve the provider under trimming/NativeAOT;
+    /// use the instance overload with a statically constructed provider in that case.
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Caller-supplied assembly's XAML metadata provider is preserved by the XAML compiler that emits it.")]
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Parameterless ctor invoked on a freshly-discovered IXamlMetadataProvider type.")]
@@ -409,8 +411,9 @@ public static partial class ReactorApp
     /// does nothing (returning <c>false</c>) if it does not. A pure-code control
     /// library — e.g. code-only panels with no XAML files (and therefore no
     /// compiler-generated provider) — has nothing to register and needs nothing.
-    /// Used by generated control registrations, which cannot know in advance
-    /// whether a wrapped control's assembly ships XAML.
+    /// Reflection discovery does not preserve the provider under trimming/NativeAOT.
+    /// Generated wrappers use the instance overload when a suitable provider is
+    /// visible at compile time, and this method only as a best-effort fallback.
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See RegisterControlAssembly(Assembly).")]
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "See RegisterControlAssembly(Assembly).")]
@@ -1431,11 +1434,15 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
 
     private IXamlMetadataProvider ReactorProvider => _reactorProvider ??= CreateReactorProvider();
 
+    // The namespace follows the project file name (Reactor.csproj); the assembly follows AssemblyName.
+    internal const string ReactorProviderTypeName = "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider";
+    internal const string ReactorProviderAssemblyName = "Microsoft.UI.Reactor";
+
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicConstructors,
-        "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider", "Reactor")]
+        ReactorProviderTypeName, ReactorProviderAssemblyName)]
     private static IXamlMetadataProvider CreateReactorProvider()
     {
-        var t = global::System.Type.GetType("Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider, Reactor", throwOnError: false);
+        var t = global::System.Type.GetType(ReactorProviderTypeName + ", " + ReactorProviderAssemblyName, throwOnError: false);
         return t is null
             ? new Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider()
             : (IXamlMetadataProvider)global::System.Activator.CreateInstance(t)!;
@@ -1470,7 +1477,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // Reactor's own generated provider lives in the Reactor assembly; if the entry
         // assembly happens to BE Reactor (unit-test hosting), ReactorProvider already
         // covers it and we'd just be re-finding the same type.
-        if (found is not null && found.GetType().FullName != "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.XamlMetaDataProvider")
+        if (found is not null && found.GetType().FullName != ReactorProviderTypeName)
             return found;
         return EmptyXamlMetadataProvider.Instance;
     }

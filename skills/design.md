@@ -972,7 +972,7 @@ Three compile-time analyzers catch accessibility issues:
 |----------|--------|
 | `REACTOR_A11Y_001` | Icon-only Button/ToggleButton missing `.AutomationName()` |
 | `REACTOR_A11Y_002` | Image missing `.AutomationName()` or `.AccessibilityHidden()` |
-| `REACTOR_A11Y_003` | Form field (TextBox/NumberBox/PasswordBox) missing label |
+| `REACTOR_A11Y_003` | Form field (TextBox/NumberBox/PasswordBox/AutoSuggestBox/ComboBox/ToggleSwitch) missing label |
 
 These run as warnings by default. Promote to errors in CI:
 
@@ -1107,6 +1107,7 @@ VStack(children)
 // Scale bounce
 Border(child)
     .ScaleTransition()
+    .TransformOrigin(0.5f, 0.5f) // shrink toward the centre
     .Scale(isPressed ? 0.95f : 1.0f)
 ```
 

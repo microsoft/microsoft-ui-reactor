@@ -35,12 +35,15 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
 
     public bool HasUnmount => true;
     public bool PreservesTargetTag { get; }
+    public bool OwnsControl(Element element) => element is TElement typed && _handler.GetSourceTarget(typed) is null;
 
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
     {
         var typedEl = (TElement)element;
         var ctx = new MountContext(reconciler, requestRerender);
+        using var mounted = reconciler.CaptureModifierMounts(typedEl);
         var control = _handler.Mount(ctx, typedEl);
+        mounted.RecordReturnedChild(control);
 
         // Anchor element identity on the returned control via the
         // attached state DP. Target-wrapping flyouts use a separate slot so
@@ -56,6 +59,7 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
         var typedOld = (TElement)oldEl;
         var typedNew = (TElement)newEl;
         var ctx = new UpdateContext(reconciler, requestRerender);
+        using var mounted = reconciler.CaptureModifierMounts(typedNew);
         if (PreservesTargetTag && control is FrameworkElement target)
         {
             var state = Reconciler.GetOrCreateReactorState(target);
@@ -67,10 +71,12 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
                 // against the configuration actually installed on the control.
                 if (state.ActiveFlyoutUpdates == 1)
                 {
-                    if (state.DecoratorElement is TElement mounted) typedOld = mounted;
+                    if (state.DecoratorElement is TElement installed) typedOld = installed;
                     reconciler.UpdatingFlyout = (target, typedNew);
                 }
-                return _handler.Update(ctx, typedOld, typedNew, control);
+                var result = _handler.Update(ctx, typedOld, typedNew, control);
+                mounted.RecordReturnedChild(result);
+                return result;
             }
             finally
             {
@@ -79,6 +85,7 @@ internal sealed class V1DecoratorHandlerAdapter<TElement> : IV1HandlerEntry, IV1
             }
         }
         var next = _handler.Update(ctx, typedOld, typedNew, control);
+        mounted.RecordReturnedChild(next);
 
         // Re-tag whichever control is going to live in the slot — `next`
         // may equal `control` (in-place update) or be a different

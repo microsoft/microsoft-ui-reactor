@@ -481,26 +481,42 @@ internal static class RealizationIsolationFixtures
                 });
                 await Harness.Render();
 
-                int realizedInPass = 0;
+                var inPassRows = new List<TextBlock>();
                 s_forceLayout = () =>
                 {
                     var sv = H.FindControl<ScrollViewer>(s => s.Content is ItemsRepeater)!;
                     sv.ChangeView(null, 150 * 30, null, disableAnimation: true);
                     sv.UpdateLayout();
                     (sv.XamlRoot?.Content as UIElement)?.UpdateLayout();
-                    realizedInPass = H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
-                        && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100).Count;
+                    List<TextBlock> TargetRows() => H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
+                        && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100);
+                    inPassRows = TargetRows();
+                    var path = "scroll";
+                    // ChangeView is asynchronous: the viewer sometimes applies the offset after
+                    // this layout, and then no target row is realized in the pass (~5% of AOT
+                    // runs on CI). Realize one directly instead; it goes through the same
+                    // element factory, so it resolves its theme the same way.
+                    if (inPassRows.Count == 0 && sv.Content is ItemsRepeater repeater)
+                    {
+                        repeater.GetOrCreateElement(150);
+                        inPassRows = TargetRows();
+                        path = "direct";
+                    }
+                    Console.WriteLine($"# Iso_StablePass realized {inPassRows.Count} row(s) in the pass via {path}");
                 };
 
                 H.ClickButton("IsoStablePassGo");
                 await Harness.Render();
                 s_forceLayout = null;
 
+                // The rows realized in the pass are asserted by instance: the repeater may have
+                // recycled them by now, and rows realized after the pass prove nothing here.
                 var rows = H.FindAllControls<TextBlock>(t => t.Text?.StartsWith("sp1", StringComparison.Ordinal) == true
                         && int.TryParse(t.Text.AsSpan(2), out var n) && n >= 100)
+                    .Union(inPassRows)
                     .ToList();
                 int right = rows.Count(t => t.Resources.TryGetValue(TargetKey, out var b) && ReferenceEquals(b, BrushFor(second)));
-                H.Check("Iso_StablePass_RowsRealizedInPass", realizedInPass > 0, $"inPass={realizedInPass}");
+                H.Check("Iso_StablePass_RowsRealizedInPass", inPassRows.Count > 0, $"inPass={inPassRows.Count}");
                 H.Check("Iso_StablePass_RowsUseNewTheme", rows.Count > 0 && right == rows.Count, $"right={right}/{rows.Count}");
             }
             finally

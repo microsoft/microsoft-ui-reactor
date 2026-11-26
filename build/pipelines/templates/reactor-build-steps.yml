@@ -315,7 +315,7 @@ steps:
     # Signing the .nupkg later (Phase 2) only seals the container; Guardian CodeSign
     # post-analysis validates the members and breaks the build if any are unsigned.
     # Authored assemblies that ship inside Microsoft.UI.Reactor.nupkg:
-    #   lib/<tfm>/Reactor.dll (+ Reactor.resources.dll satellite)
+    #   lib/<tfm>/Microsoft.UI.Reactor.dll (+ Microsoft.UI.Reactor.resources.dll satellite)
     #   lib/<tfm>/Reactor.Wrappers.Abstractions.dll
     #   analyzers/dotnet/cs/Reactor.Analyzers.dll
     #   analyzers/dotnet/cs/Reactor.Localization.Generator.dll
@@ -325,7 +325,7 @@ steps:
     #      is true; the sign glob below is by project bin\, not package path,
     #      so it is unaffected by where the DLL lands in the nupkg)
     # And inside Microsoft.UI.Reactor.Advanced.nupkg:
-    #   lib/<tfm>/Reactor.Advanced.dll
+    #   lib/<tfm>/Microsoft.UI.Reactor.Advanced.dll
     # And inside Microsoft.UI.Reactor.Devtools.nupkg:
     #   lib/<tfm>/Microsoft.UI.Reactor.Devtools.dll
     # Each glob is scoped to its project's bin\ dir so we sign only our own assemblies.
@@ -335,7 +335,7 @@ steps:
         inputs:
           command: 'sign'
           signing_profile: external_distribution
-          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor\bin\**\Reactor.Wrappers.Abstractions.dll;Reactor.Advanced\bin\**\Reactor.Advanced.dll;Reactor.Devtools\bin\**\Microsoft.UI.Reactor.Devtools.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll;Reactor.Wrappers.Generator\bin\**\Reactor.Wrappers.Generator.dll;Reactor.SourceMap.Generator\bin\**\Reactor.SourceMap.Generator.dll'
+          files_to_sign: 'Reactor\bin\**\Microsoft.UI.Reactor.dll;Reactor\bin\**\Microsoft.UI.Reactor.resources.dll;Reactor\bin\**\Reactor.Wrappers.Abstractions.dll;Reactor.Advanced\bin\**\Microsoft.UI.Reactor.Advanced.dll;Reactor.Devtools\bin\**\Microsoft.UI.Reactor.Devtools.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll;Reactor.Wrappers.Generator\bin\**\Reactor.Wrappers.Generator.dll;Reactor.SourceMap.Generator\bin\**\Reactor.SourceMap.Generator.dll'
           search_root: '$(Build.SourcesDirectory)\src'
 
     - pwsh: |
@@ -364,6 +364,41 @@ steps:
           -p:Version=$(PackageVersion) `
           -o "${{ parameters.outputDirectory }}\nupkg"
       displayName: 'Pack Devtools NuGet'
+
+    # Packages with code ported from other projects (Yoga, WinUIEx, md4c, D3, WinUI.Dock) must carry their
+    # license notices (issue #1535). Mirrors 'Check third-party notices are packed' in
+    # .github/workflows/release.yml.
+    - pwsh: |
+        $ErrorActionPreference = 'Stop'
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $nupkgDir = "${{ parameters.outputDirectory }}\nupkg"
+        $expectedFiles = @{
+          'Microsoft.UI.Reactor'          = "$(Build.SourcesDirectory)\src\Reactor\ThirdPartyNoticeText.txt"
+          'Microsoft.UI.Reactor.Advanced' = "$(Build.SourcesDirectory)\src\Reactor.Advanced\ThirdPartyNoticeText.txt"
+        }
+        $problems = [System.Collections.Generic.List[string]]::new()
+        foreach ($id in $expectedFiles.Keys) {
+          $expected = [System.IO.File]::ReadAllBytes($expectedFiles[$id])
+          # A digit after the id keeps Microsoft.UI.Reactor from matching Microsoft.UI.Reactor.Advanced.
+          $matched = @(Get-ChildItem $nupkgDir -Filter *.nupkg -File |
+            Where-Object { $_.Name -match "^$([regex]::Escape($id))\.\d" -and $_.Name -notlike '*.symbols.nupkg' })
+          if ($matched.Count -ne 1) { $problems.Add("Expected one $id package in $nupkgDir, found $($matched.Count)."); continue }
+          $path = $matched[0].FullName
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($path)
+          try {
+            $entry = $zip.GetEntry('ThirdPartyNoticeText.txt')
+            if (-not $entry) { $problems.Add("$path has no ThirdPartyNoticeText.txt at its root."); continue }
+            $bytes = [System.IO.MemoryStream]::new()
+            $stream = $entry.Open()
+            try { $stream.CopyTo($bytes) } finally { $stream.Dispose() }
+            if (-not [System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes.ToArray(), [byte[]]$expected)) {
+              $problems.Add("$path has a ThirdPartyNoticeText.txt that differs from $($expectedFiles[$id]).")
+            }
+          } finally { $zip.Dispose() }
+        }
+        if ($problems.Count -gt 0) { throw "Third-party notice problems:`n$($problems -join "`n")" }
+        Write-Host "ThirdPartyNoticeText.txt is packed in Microsoft.UI.Reactor and Microsoft.UI.Reactor.Advanced."
+      displayName: 'Check third-party notices are packed'
 
     # ── NuGet.org Microsoft-compliance pre-flight (fail BEFORE the gated publish). ──
     # nuget.org enforces https://aka.ms/Microsoft-NuGet-Compliance on every

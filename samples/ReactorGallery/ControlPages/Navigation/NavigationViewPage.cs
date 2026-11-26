@@ -72,8 +72,13 @@ with {
                         PaneDisplayMode = NavigationViewPaneDisplayMode.Top,
                         IsSettingsVisible = false,
                     }).Height(200),
-                    @"NavigationView(items, content: TextBlock($""Content area for: {topTag}"")) with {
-    PaneDisplayMode = NavigationViewPaneDisplayMode.Top
+                    @"var (topTag, setTopTag) = UseState(""page1"");
+
+NavigationView(items, content: TextBlock($""Content area for: {topTag}"")) with {
+    SelectedTag = topTag,
+    OnSelectedTagChanged = tag => { if (tag != null) setTopTag(tag); },
+    PaneDisplayMode = NavigationViewPaneDisplayMode.Top,
+    IsSettingsVisible = false,
 }")
             ).Margin(36, 24, 36, 36)
         );

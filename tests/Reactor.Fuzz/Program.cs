@@ -3,7 +3,7 @@
 // OneFuzzConfig.json "CliArgs" wiring.
 //
 // `smoke` is a fuzz-free fast path used by the CI gate: walk the seed corpus
-// once through both parsers and exit non-zero on any uncaught exception. This
+// once through the parser and exit non-zero on any uncaught exception. This
 // guards against harness rot (parser API changes, seed-corpus regressions)
 // without needing libfuzzer-dotnet installed in CI.
 
@@ -11,7 +11,7 @@ using Microsoft.UI.Reactor.Fuzz;
 
 if (args.Length < 1)
 {
-    Console.Error.WriteLine("Usage: Reactor.Fuzz <markdown|pathdata|smoke>");
+    Console.Error.WriteLine("Usage: Reactor.Fuzz <markdown|smoke>");
     return 2;
 }
 
@@ -19,9 +19,6 @@ switch (args[0])
 {
     case "markdown":
         MarkdownFuzzHarness.Run();
-        return 0;
-    case "pathdata":
-        PathDataFuzzHarness.Run();
         return 0;
     case "smoke":
         return SmokeRunner.Run();

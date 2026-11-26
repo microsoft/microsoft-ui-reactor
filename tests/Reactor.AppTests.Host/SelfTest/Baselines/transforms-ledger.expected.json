@@ -1,0 +1,8 @@
+{
+  "expectations": [
+    {"case": "*.*.LayoutAnimation","step": "change","field": "curve","before": "Offset=0.6","after": "Offset=0.2","reason": "fixes #1652: layout Offset uses linear easing"},
+    {"case": "*.*.LayoutAnimation","step": "change","field": "curve","before": "Opacity=0.0 Offset=0.6","after": "Opacity=0.0 Offset=0.2","reason": "fixes #1652: layout Offset uses linear easing"},
+    {"case": "*.*.LayoutAnimation","step": "change","field": "curve","before": "Scale=0.0 Offset=0.6","after": "Scale=0.0 Offset=0.2","reason": "fixes #1652: layout Offset uses linear easing"},
+    {"case": "*.*.LayoutAnimation","step": "change","field": "curve","before": "Translation=0.0 Offset=0.6","after": "Translation=0.0 Offset=0.2","reason": "fixes #1652: layout Offset uses linear easing"}
+  ]
+}

@@ -511,7 +511,7 @@ public class OutputPathContainmentTests
     public void Containment_rule_has_exactly_one_implementation_in_the_doc_pipeline()
     {
         var docsDir = global::System.IO.Path.Join(
-            FindRepoRoot(), "tools", "Reactor.DocPipeline");
+            TestRepo.Root, "tools", "Reactor.DocPipeline");
 
         var sources = global::System.IO.Directory.GetFiles(
             docsDir, "*.cs", global::System.IO.SearchOption.AllDirectories);
@@ -530,19 +530,5 @@ public class OutputPathContainmentTests
             .ToArray();
 
         Assert.Equal(new[] { "DocPaths.cs" }, declarations);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new global::System.IO.DirectoryInfo(global::System.AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new global::System.InvalidOperationException(
-            "Could not locate repo root (Reactor.slnx) from test base dir.");
     }
 }

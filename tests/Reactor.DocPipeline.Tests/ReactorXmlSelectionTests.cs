@@ -3,7 +3,7 @@ using Xunit;
 namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 
 /// <summary>
-/// Issue #1068 — which <c>Reactor.xml</c> Phase 5.7 reads, and whether it
+/// Issue #1068 — which <c>Microsoft.UI.Reactor.xml</c> Phase 5.7 reads, and whether it
 /// admits to being older than the source it documents.
 /// </summary>
 /// <remarks>
@@ -178,7 +178,7 @@ public class ReactorXmlSelectionTests
     }
 
     /// <summary>
-    /// A populated <c>bin</c> that happens to contain no <c>Reactor.xml</c> is
+    /// A populated <c>bin</c> that happens to contain no <c>Microsoft.UI.Reactor.xml</c> is
     /// still "nothing to read" — distinct from the case above, because it
     /// exercises the enumeration rather than the existence guard.
     /// </summary>
@@ -187,7 +187,7 @@ public class ReactorXmlSelectionTests
     {
         using var fx = new RepoFixture();
         fx.BinFile("Debug/net10.0-windows10.0.22621.0", "Reactor.Cli.xml", Base);
-        fx.BinFile("Debug/net10.0-windows10.0.22621.0", "Reactor.dll", Base);
+        fx.BinFile("Debug/net10.0-windows10.0.22621.0", "Microsoft.UI.Reactor.dll", Base);
 
         Assert.Null(CompileCommand.FindReactorXml(fx.Root));
     }
@@ -239,9 +239,9 @@ public class ReactorXmlSelectionTests
         var outside = fx.OutsideXml("elsewhere", Base.AddMinutes(45));
         var linked = fx.JunctionInsideBin("linked", Path.GetDirectoryName(outside)!);
 
-        Assert.True(File.Exists(Path.Join(linked, "Reactor.xml")),
+        Assert.True(File.Exists(Path.Join(linked, "Microsoft.UI.Reactor.xml")),
             "fixture: the junction must resolve, or the exclusion below proves nothing");
-        Assert.Equal(Base.AddMinutes(45), File.GetLastWriteTimeUtc(Path.Join(linked, "Reactor.xml")));
+        Assert.Equal(Base.AddMinutes(45), File.GetLastWriteTimeUtc(Path.Join(linked, "Microsoft.UI.Reactor.xml")));
 
         var candidates = CompileCommand.EnumerateReactorXmlCandidates(fx.Root).ToList();
 
@@ -532,9 +532,9 @@ public class ReactorXmlSelectionTests
 
         public RepoFixture() => Directory.CreateDirectory(Root);
 
-        /// <summary>Writes <c>src/Reactor/bin/&lt;layout&gt;/Reactor.xml</c>.</summary>
+        /// <summary>Writes <c>src/Reactor/bin/&lt;layout&gt;/Microsoft.UI.Reactor.xml</c>.</summary>
         public string Xml(string layout, DateTime writeUtc) =>
-            BinFile(layout, "Reactor.xml", writeUtc);
+            BinFile(layout, "Microsoft.UI.Reactor.xml", writeUtc);
 
         public string BinFile(string layout, string fileName, DateTime writeUtc) =>
             Write(Path.Join("src", "Reactor", "bin", Native(layout)), fileName, writeUtc);
@@ -562,14 +562,14 @@ public class ReactorXmlSelectionTests
         }
 
         /// <summary>
-        /// Writes a <c>Reactor.xml</c> outside the repo root entirely — the
+        /// Writes a <c>Microsoft.UI.Reactor.xml</c> outside the repo root entirely — the
         /// thing a junction inside <c>bin</c> could otherwise drag in.
         /// </summary>
         public string OutsideXml(string dirName, DateTime writeUtc)
         {
             var dir = Path.Join(Root + "-outside", dirName);
             Directory.CreateDirectory(dir);
-            var path = Path.Join(dir, "Reactor.xml");
+            var path = Path.Join(dir, "Microsoft.UI.Reactor.xml");
             File.WriteAllText(path, "// fixture\n");
             File.SetLastWriteTimeUtc(path, writeUtc);
             return path;
@@ -599,14 +599,14 @@ public class ReactorXmlSelectionTests
             var realBin = Root + "-realbin";
             var dir = Path.Join(realBin, Native(layout));
             Directory.CreateDirectory(dir);
-            var path = Path.Join(dir, "Reactor.xml");
+            var path = Path.Join(dir, "Microsoft.UI.Reactor.xml");
             File.WriteAllText(path, "// fixture\n");
             File.SetLastWriteTimeUtc(path, writeUtc);
 
             var link = Path.Join(Root, "src", "Reactor", "bin");
             Directory.CreateDirectory(Path.GetDirectoryName(link)!);
             CreateJunction(link, realBin);
-            return Path.Join(link, Native(layout), "Reactor.xml");
+            return Path.Join(link, Native(layout), "Microsoft.UI.Reactor.xml");
         }
 
         /// <summary>

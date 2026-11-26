@@ -1,7 +1,7 @@
 # Reactor.Fuzz
 
-SharpFuzz-driven managed fuzz harnesses for Reactor's two attacker-influenced
-text parsers. Tracks SDL work item **62373203** (Applications Security: Apply
+SharpFuzz-driven managed fuzz harness for Reactor's attacker-influenced
+markdown parser. Tracks SDL work item **62373203** (Applications Security: Apply
 Fuzzers to Your Code).
 
 ## Targets
@@ -9,13 +9,9 @@ Fuzzers to Your Code).
 | TargetName              | Entry point                                                   | Corpus            |
 | ----------------------- | ------------------------------------------------------------- | ----------------- |
 | `Reactor.Fuzz.Markdown` | `MarkdownHtml.Render` (drives `Md4cParser`)                   | `corpus/markdown` |
-| `Reactor.Fuzz.PathData` | `PathDataParser.ParseTokens` (WinUI-free parse loop)          | `corpus/pathdata` |
 
-`PathDataParser.ParseTokens` shares its number / whitespace / command-dispatch
-loop with the production `Parse`; the only difference is that geometry / segment
-construction is gated on a non-null `PathGeometry`. Production `Parse` cannot
-run in a console process because `PathGeometry` requires XAML activation, so
-the fuzz harness exercises the equivalent token walker.
+Path markup (`PathIcon`, `PathElement.PathDataString`) is not fuzzed here: it is
+converted by WinUI's own native path-markup converter, not by Reactor code.
 
 ## Build
 
@@ -31,13 +27,13 @@ release artifacts. See https://github.com/Metalnem/sharpfuzz for the typical
 flow:
 
 ```pwsh
-sharpfuzz <publish>\Reactor.dll
+sharpfuzz <publish>\Microsoft.UI.Reactor.dll
 libfuzzer-dotnet --target_path=<publish>\Reactor.Fuzz.exe --target_arg=markdown corpus\markdown
 ```
 
 ## OneFuzz onboarding
 
-The `OneFuzzConfig.json` in this directory wires both targets to SDL work item
+The `OneFuzzConfig.json` in this directory wires the target to SDL work item
 `62373203`. Onboarding flow lives at https://aka.ms/onboardasan; the managed
 SharpFuzz path applies (the native ASAN build branch flow does not — Reactor
 is 100% managed C#). Once a job is registered, paste its OneFuzz Job ID into

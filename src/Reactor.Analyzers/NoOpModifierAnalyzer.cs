@@ -10,7 +10,7 @@ namespace Microsoft.UI.Reactor.Analyzers;
 
 /// <summary>
 /// REACTOR_MOD_003 — a <b>generic common modifier</b> applied to an element whose mounted control
-/// is outside the set of WinUI types <c>Reconciler.ApplyModifiers</c> writes that modifier to. The
+/// is outside the set of WinUI types the reconciler writes that overload to. The
 /// call compiles, chains, type-checks, and is then silently dropped at reconcile time.
 /// </summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.Analyzers;
 /// <c>Control</c>, or <c>Border</c>, and a <c>Rectangle</c> is a
 /// <c>Microsoft.UI.Xaml.Shapes.Shape</c>. Shapes are painted with <c>Fill</c>/<c>Stroke</c>. The
 /// <c>ThemeRef</c> overload drops through a second, independent copy of the same allow-list in
-/// <c>Reconciler.GetDependencyPropertyName</c>, so every <c>Background</c> overload is affected.
+/// <c>ThemeBindingApplier.GetDependencyPropertyName</c>, so every <c>Background</c> overload is affected.
 /// </para>
 /// <para>
 /// This is the reverse direction of <see cref="PoolResetSetAnalyzer"/>'s <c>REACTOR_MOD_002</c>:
@@ -179,9 +179,9 @@ public sealed class NoOpModifierAnalyzer : DiagnosticAnalyzer
         "'{0}' has no effect on '{1}' — Reactor only applies '{0}' to {2}{3}";
 
     private static readonly LocalizableString Description =
-        "Reconciler.ApplyModifiers writes each of these common modifiers only to specific WinUI " +
-        "control types. On anything else the call compiles and is silently discarded, so the value " +
-        "never reaches the control — for example '.Background(...)' on a Rectangle renders an " +
+        "The reconciler applies each common modifier overload only to specific WinUI control " +
+        "types. Calls on other controls compile and the reconciler silently discards the value. " +
+        "For example, '.Background(...)' on a Rectangle renders an " +
         "invisible shape, because shapes are painted with '.Fill(...)'. Use the modifier the target " +
         "control actually supports, or host the element in a container that does (a Border for " +
         "Background).";
@@ -229,6 +229,12 @@ public sealed class NoOpModifierAnalyzer : DiagnosticAnalyzer
             || !IsGenericReactorModifier(method))
             return;
 
+        if (info.ThemeControlGate is { } themeGate
+            && method.Parameters.Length == 1
+            && method.Parameters[0].Type is { Name: "ThemeRef" } parameterType
+            && parameterType.ContainingNamespace?.ToDisplayString() == ReactorCoreNamespace)
+            gate = themeGate;
+
         // A constant-null argument is inert regardless of the receiver, so the control gate is not
         // what makes it do nothing — and the rewrite would not be equivalent. See
         // HasConstantNullArgument.
@@ -247,7 +253,7 @@ public sealed class NoOpModifierAnalyzer : DiagnosticAnalyzer
             && control.ContainingNamespace?.ToDisplayString() == XamlNamespace)
             return;
 
-        // Reconciler.ApplyModifiers writes this modifier to one of these — nothing to report.
+        // The reconciler applies this overload to one of these controls.
         if (gate.Any(allowed => SetLambdaHelpers.InheritsFrom(control, allowed, XamlControlsNamespace)))
             return;
 

@@ -19,7 +19,7 @@ process-wide entry points such as `ControlRegistry.Register` and
 
 It is large: grep it for the symbol you need rather than reading it end to end.
 
-It is the source of truth for the public API surface, regenerated from `Reactor.dll` by `mur --regen-api`.
+It is the source of truth for the public API surface, regenerated from `Microsoft.UI.Reactor.dll` by `mur --regen-api`.
 
 In addition, the skill carries **focused topical references** for surfaces
 big enough to need their own page:

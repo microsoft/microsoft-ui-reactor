@@ -1031,7 +1031,8 @@ public sealed class WinAppUi
     /// <paramref name="dwellMs"/> settles on the destination before releasing so hover-armed drop targets /
     /// merge overlays can latch.
     /// </summary>
-    public void Drag(string from, string to, int holdMs = 0, int dwellMs = 0, bool rightButton = false,
+    /// <returns>The successful CLI JSON, including its resolved screen-coordinate endpoints.</returns>
+    public string Drag(string from, string to, int holdMs = 0, int dwellMs = 0, bool rightButton = false,
         long? hwnd = null)
     {
         // Native drag is real SendInput mouse input — ACCESS_DENIED off the interactive desktop, as click.
@@ -1046,6 +1047,7 @@ public sealed class WinAppUi
         var r = Run(15000 + holdMs + dwellMs, Args("drag", hwnd ?? HostHwnd, extra.ToArray()));
         if (r.ExitCode != 0)
             throw new WinAppException($"winapp ui drag '{from}' -> '{to}' failed: {r.StdErr.Trim()} {r.StdOut.Trim()}");
+        return r.StdOut;
     }
 
     /// <summary>Set a value via UIA ValuePattern (TextBox/ComboBox/Slider).</summary>

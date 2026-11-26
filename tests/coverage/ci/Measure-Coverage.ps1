@@ -10,7 +10,7 @@
       1. Build Reactor.Tests, src/Reactor, and Reactor.AppTests.Host (Debug, portable
          PDBs, no optimization) so the assemblies can be instrumented.
       2. Collect UNIT coverage (dotnet test Reactor.Tests) as cobertura.
-      3. Statically instrument the built Reactor.dll.
+      3. Statically instrument the built Microsoft.UI.Reactor.dll.
       4. Collect SELFTEST coverage (the AppTests.Host --self-test run) as cobertura.
       5. Merge the cobertura reports.
       6. Aggregate the merged report into line % + branch % (+ branch covered/total)
@@ -219,9 +219,9 @@ try {
         # 3. Instrument the built product DLLs (dynamic instrumentation skips referenced
         #    assemblies, so they are instrumented statically). Exclude the ref/ facade copy.
         #    Spec 062 Track B moved charting/docking/markdown/data-grid into
-        #    Reactor.Advanced.dll, so it must be instrumented alongside core — otherwise the
+        #    Microsoft.UI.Reactor.Advanced.dll, so it must be instrumented alongside core — otherwise the
         #    selftest leg contributes no coverage for those subsystems.
-        foreach ($dllName in @('Reactor.dll', 'Reactor.Advanced.dll')) {
+        foreach ($dllName in @('Microsoft.UI.Reactor.dll', 'Microsoft.UI.Reactor.Advanced.dll')) {
             $dll = Get-ChildItem -Path (Join-Path $Root 'tests/Reactor.AppTests.Host/bin') -Recurse -Filter $dllName -ErrorAction SilentlyContinue |
                 Where-Object { $_.FullName -notmatch 'ref[\\/]' } |
                 Select-Object -First 1

@@ -37,14 +37,552 @@ Conventions for contributors:
   resize instead of re-seeding (without `.FitParent()`, a size change leaves the nodes as they
   are). See the layout and charting guides (#174).
 
+- **`.TransformOrigin(x, y)` sets a size-relative pivot for `.Scale()` and `.Rotation()` (spec 066
+  §8, issue #773).** `(0.5f, 0.5f)` is the centre. The pivot is a compositor expression on the
+  element's visual size, so it follows resizes, and hit-testing and UI Automation bounds honour it. It
+  works with `.InteractionStates`, `.Keyframes`, `.Transition` and navigation, and `x` is
+  flow-relative (`0` is the right edge in a right-to-left layout). A `.CenterPoint()` on the same
+  element becomes a pixel offset added to the origin, and animating it (`.Animate()`, `WithAnimation`)
+  animates that offset. The default pivot is still the leading top corner. Navigation's DrillIn now uses the same
+  binding, and puts back a page's own origin when it ends.
+
+- **The `Microsoft-UI-Reactor-Perf` trace now says whether a render was worth it (spec 023
+  §10.3–10.4, issue #1538).** Schema revision 3 appends `memoMiss` to `ComponentRender` Start,
+  `changes` and `ownStateSets` to `ComponentRender` Stop and `ownStateSets` to `Effects` Stop, and adds
+  a `ComponentSkip` event (id 13) for each memo hit. `changes` is `0` for a render that changed
+  nothing on screen, and `ownStateSets` counts the state writes a component's render and effects
+  made (spec 023's setState fan-out check). Everything is at level 4 under the `Pass` and
+  `Component` keywords that `winapp perf` records, and only appends fields or adds an id, so
+  existing decoders keep working. See `docs/reference/perf-trace-events.md`.
+
+- `REACTOR_PERF_001` suggests combining adjacent `Width`/`Height` calls on built-in
+  element construction with `Size`. The code fix preserves argument evaluation order
+  and only rewrites calls that bind to Reactor's combined modifier (spec 034 §A).
+
+- The Toolkit compatibility harness can measure SettingsCard header/description
+  fit and explicit initial plain-text targets in eleven additional header, item
+  and panel controls at an already-active OS text scale above 100%. It checks
+  OS-profile stability and separates high-contrast capture completion from the
+  still-blocked actual-host appearance review. Unsupported shapes remain blocked;
+  no desktop settings are changed, and runtime acceptance still requires an
+  approved host. Panel fixture slots accommodate measured label sizes, and the
+  document theme check permits equal Light/Dark brushes under stable OS high
+  contrast without weakening text containment (issue #1602).
+
+- **`REACTOR_ANIM_004` catches facade transforms written through `.Set` on an element that uses
+  the composition visual (spec 066 §9.1, issue #1642).** It warns when `.Set` writes `Rotation`,
+  `Scale`, `CenterPoint`, `RotationAxis`, `TransformMatrix` or one of the `*Transition` properties,
+  or calls `StartAnimation`, on a chain that also uses `.Animate`, `.InteractionStates`,
+  `.Transition`, `.Keyframes`, `.LayoutAnimation`/`.SpringLayoutAnimation` or `.ScrollLinked`. Those
+  modifiers take the visual, and WinUI then throws on facade writes. A code fix rewrites a
+  single-assignment `.Set` of `Rotation`, `Scale` or `CenterPoint` to the matching modifier. The rule
+  also flags a `.Set` `Translation` write next to `.Translation(…)`, which conflicts with it and is
+  ignored once translation is enabled on the visual (the build-time half of #1642). That arm has its
+  own message and no fix.
+
 ### Changed
+
+- ReactorGallery now looks closer to WinUI Gallery. Category labels are sentence case
+  ("Date & time"), every card has an image, the nav uses WinUI Gallery's category glyphs, and
+  page titles use the regular title weight. Category keys, deep-link slugs and the search index
+  are unchanged.
+
+- **`.Scale()`, `.Rotation()`, `.Translation()` and `.CenterPoint()` always write the composition
+  visual (spec 066 §9 rows 1 to 3, issue #1630).** A non-identity value takes the element's visual
+  the first time it is written, so the transforms use one channel whether or not a compositor
+  feature is present. An identity value (`.Scale(1)`, `.Rotation(0)`) on a control whose visual
+  wasn't taken writes nothing. On a transformed element `fe.Scale`, `fe.Rotation` and
+  `fe.CenterPoint` read back identity (read `ElementCompositionPreview.GetElementVisual(fe)`
+  instead), and WinUI rejects a `.Set(...)` or `.OnMount(...)` that writes `Rotation`, `Scale`,
+  `CenterPoint`, `RotationAxis`, `TransformMatrix` or a XAML `*Transition` property after the
+  visual was taken. **Migration:** move the write into the modifier. `REACTOR_ANIM_004` now treats
+  the four transform modifiers as taking the visual, flags such a `.Set` at build time and rewrites
+  a single assignment (`.Set(fe => fe.Rotation = 45).Scale(2)` becomes `.Rotation(45).Scale(2)`), and
+  the run-time `DiagnosticLog` warning that names the modifier also covers `.OnMount(...)`. A
+  `.Set` write on mount still works for `Rotation`, `Scale` and `CenterPoint` (the value moves to the
+  visual), but not on a later render. Transformed controls are pooled in the visual lane, and the
+  first handoff costs about 0.1 ms per element. `REACTOR_ANIM_004` checks `.Set` only, so a facade write
+  in `.OnMount(...)` surfaces at run time. `ReactorDiagnostics.GetAppliedProperties` reports the four
+  modifiers as `Visual.Scale`, `Visual.RotationAngle`, `Visual.Translation` and `Visual.CenterPoint`.
+- **Breaking: each package's main assembly is now named after the package (issue #1664).**
+  `Reactor.dll` is now `Microsoft.UI.Reactor.dll` and `Reactor.Advanced.dll` is now
+  `Microsoft.UI.Reactor.Advanced.dll`, matching the `Microsoft.UI.Reactor` and
+  `Microsoft.UI.Reactor.Advanced` package ids (`Microsoft.UI.Reactor.Devtools.dll` already
+  matched). The bundled helper `Reactor.Wrappers.Abstractions.dll` keeps its name. Namespaces and
+  package ids don't change, but upgrade `Microsoft.UI.Reactor`, `Microsoft.UI.Reactor.Advanced` and
+  `Microsoft.UI.Reactor.Devtools` together: an older Advanced or Devtools package references the
+  `Reactor` assembly and fails to load next to the new core. Also update anything that names the
+  files or the assembly, such as assembly-qualified type names (`"…, Reactor"`),
+  `InternalsVisibleTo`, `TrimmerRootAssembly`, signing or coverage filters, and
+  `ms-appx:///Reactor/…` paths, which are now `ms-appx:///Microsoft.UI.Reactor/…`. A file-based app
+  saved as `reactor.cs` no longer collides with Reactor. `mur --create` still refuses `Reactor`,
+  because its generated solution already has a project with that name.
+
+- **An element with `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` or
+  `.TranslationTransition()` keeps its transforms on the composition visual (spec 066 §9 rows 1
+  and 2).** The transitions take the element's visual, so on such an element `fe.Scale`,
+  `fe.Rotation` and `fe.CenterPoint` read back identity for values set with `.Scale()`, `.Rotation()`
+  and `.CenterPoint()` (read `ElementCompositionPreview.GetElementVisual(fe)` instead), and WinUI
+  rejects a `.Set(...)` that writes `Rotation`, `Scale`, `CenterPoint`, `RotationAxis`,
+  `TransformMatrix` or a XAML `*Transition` property on a later render. Use the modifiers. Reactor
+  now logs a `DiagnosticLog` warning that names them when WinUI rejects a setter's facade write or
+  a user facade blocks the visual, and `REACTOR_ANIM_004` treats the four transition modifiers as
+  taking the visual and suggests them, with a code fix, for the matching `*Transition` writes.
+
+- **`.Animate(curve, properties)` animates only the properties it names (spec 066 §5.3).** A
+  `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()` change on an element whose
+  `.Animate(...)` excludes that property used to animate with its curve anyway. It now jumps, or
+  follows the element's transition for that property.
+
+- Opt-in Markdown text selection supports double-click to select a word and
+  triple-click to select a text surface, including drag extension by either unit.
+  Selection drags from inline links and release-mode custom link buttons do not
+  activate the link; clicking outside a message's text clears its selection (#1617).
+
+- Mixed keyed/unkeyed panel reorders match unkeyed middle children by position
+  without allocating fallback key strings. Explicit keys resembling the legacy
+  fallback format retain their existing collision behavior (spec 042 §5).
+
+- Layout fluent modifiers copy the existing layout bucket directly instead of
+  constructing a temporary delta to merge. Chained sizing, spacing, alignment,
+  visibility, and theme updates preserve immutable snapshots and last-write
+  precedence with fewer allocations. D3 rectangle/circle builders and PropertyGrid
+  array-item buttons also combine width/height updates with `Size`, avoiding an
+  intermediate layout, modifier, and element copy per shape/button (spec 034 §A).
+
+- `VirtualList` with default positional keys no longer projects every key on
+  unchanged-count updates; realized content and callbacks still refresh. Its memoized
+  index source is now an immutable range instead of an allocated integer list, reducing
+  mount/count-change storage. Custom key selectors retain keyed reconciliation (spec 042 §4).
+
+- `UseState` setters and both `UseReducer` callbacks defer marshaling closures
+  until an off-thread call needs the UI dispatcher. UI-thread and `threadSafe: true`
+  invocations avoid those allocations, including unchanged values; callback identity,
+  equality checks, and cross-thread dispatch behavior are unchanged (issue #659).
+
+- `UsePersisted` setters also defer marshaling closures until an off-thread call
+  needs the UI dispatcher. UI-thread writes avoid these allocations without changing
+  equality checks, callback identity, or save-on-unmount scope behavior (issue #659).
+
+- Avoid redundant element copies when assigning keys in built-in component factories,
+  DataGrid rows, and resize grips. `WithKey` reuses an immutable element when the
+  supplied key is already the same string reference. Different key references still
+  produce a copy, and key values and formatting are unchanged (spec 042 §5).
+
+- **`REACTOR_A11Y_003` now covers `ComboBox` and `ToggleSwitch` (issue #1007).** A bare
+  `ComboBox(...)` or `ToggleSwitch(...)` has no UIA name, so screen readers announce an
+  unnamed control, but the form-field label rule only checked `TextBox`, `NumberBox`,
+  `PasswordBox` and `AutoSuggestBox`. Both are now checked. A `ToggleSwitch` is also labeled by
+  its on/off content, which WinUI uses as its name. A `ComboBox` placeholder is not, because
+  WinUI only exposes `PlaceholderText` as help text. Projects that build with warnings as errors
+  may see new `REACTOR_A11Y_003` errors on unlabeled combo boxes and switches; add `.Header(...)`
+  or `.AutomationName(...)`. A label on an enclosing container (`Expander(field).Header(...)`)
+  no longer counts for the field inside it. The runtime `AccessibilityScanner` A11Y_003 check
+  (devtools) covers the same two controls.
+
+- **The `rotation:` parameter of `.InteractionStates(...)` and `.Keyframes(...)` is now in
+  degrees, like `.Rotation()` (issue #1615).** It used to be passed to the compositor as
+  radians, which was never documented. An existing value written in radians now turns
+  about 57 times less (π, a half turn, becomes about 3°), so multiply it by 180/π (for
+  example `rotation: 0.1f` becomes about `rotation: 6f`). `InteractionStateValues.Rotation`
+  and `KeyframeDef.Rotation` follow the same unit.
+
+- **Path markup no longer goes through `XamlReader` or a Reactor parser.** `PathIcon(...)`
+  data and `PathElement.PathDataString` (and so `D3Path`/`D3PathTranslated`) are converted
+  by WinUI's native path-markup converter via `XamlBindingHelper.ConvertValue`, the same
+  converter a XAML `Data="..."` attribute uses. This works under NativeAOT. `D3Path` no
+  longer parses its path eagerly on every render. In a local Release benchmark, mounting a
+  200-point D3 line dropped from about 39 ms to 0.24 ms (2,000 points: about 600 ms to
+  1.8 ms), and path icons converted at least as fast as before. `PathElement`'s `XamlReader`
+  strategy always failed (the loaded geometry can't be re-parented), so paths rendered from
+  a partial managed parser; relative commands and `S`/`T` now render as XAML does.
+  `PathElement` applies its `FillRule` to every new geometry, so it is no longer lost when
+  the path changes, and clearing `PathDataString` (to `null` or `""`) now clears the drawn
+  path. Data-driven markup the platform rejects, in practice a `NaN` or `Infinity`
+  coordinate from corrupt chart data, is not drawn and emits a warning on the
+  `Microsoft-UI-Reactor` ETW event source; it used to draw the bad point at (0,0). The
+  `Chart()` builder's line and area charts skip non-finite points, leaving a gap.
+  Malformed `PathIcon(...)` markup still throws, as before (PR #1622).
 
 ### Deprecated
 
 ### Removed
 
+- **`PathDataParser` is removed.** It only handled the absolute `M L A Q C Z` and relative
+  `h v` commands that D3's `PathBuilder` emits, and silently skipped anything else. For that
+  subset, WinUI's native converter produces the same geometry. To build a `Geometry` from
+  markup, set `PathElement.PathDataString`, or call
+  `XamlBindingHelper.ConvertValue(typeof(Geometry), data)`. Unlike `Parse`, it throws on
+  markup the platform rejects (including `NaN` coordinates), and its result is a
+  `PathGeometry` whose figures can't be read back from code. Its SharpFuzz target is removed
+  with it (PR #1622).
+
+- **The Visual Studio extension (Reactor Preview VSIX) no longer supports Visual Studio
+  2022 (issue #1557).** Its manifest now targets Visual Studio 2026 (`[18.0,19.0)`), the only
+  toolchain CI builds it with. `Build-Vsix.ps1` and `Reinstall-Vsix.ps1` only use Visual
+  Studio 2026 instances, and `bootstrap.ps1` skips the extension when the newest instance is
+  Visual Studio 2022. The build's fallback to the `Microsoft.VSSDK.BuildTools`
+  package targets now follows the restored package instead of a hardcoded version.
+
 ### Fixed
 
+- **`WindowLevel.AlwaysOnTop` refused by Windows is now reapplied (spec 054, issue #1707).** Windows
+  can decline a runtime topmost request from an app that doesn't own the foreground, for example
+  while the workstation is locked. The call reports success but the window never becomes topmost, and
+  Reactor never retried, so `Spec.Level` said `AlwaysOnTop` while the window wasn't. Reactor now checks
+  the result, logs a `DiagnosticLog` warning once, and reapplies the level the next time the app is
+  activated, either by gaining the foreground or by one of its windows activating.
+
+- `.LayoutAnimation()` uses linear easing for position and optional size changes in
+  non-spring mode (#1652).
+
+- **Unmount clears a `.Ref` declared on a keyed `Memo` or a `ModifiedElement` (issue #1659).** Those
+  layers mount no control of their own, so the ref points at the control their child mounted, and
+  unmount only cleared refs declared on that control's own element and its decorators. The ref kept
+  pointing at the control after it left the tree, and after an unrelated element rented it from the
+  pool. Unmount now clears every ref the reconciler pointed at the control, whichever layer declared
+  it.
+
+- **An exit `.Transition()` declared on a keyed `Memo(key, …)` now plays when the Memo is removed or
+  its key changes (issues #1663 and #1665).** The control used to leave the tree at once, while the
+  same exit declared on the element itself, or on the element a `ModifiedElement` wraps, kept it
+  until the exit finished. A Memo that adds or drops its exit on a render that keeps its key is
+  honoured too.
+
+- An enter fade (`.Transition(Transition.Fade)`, and the default enter under
+  `Animations.Animate(...)`) on an element with its own opacity (a `.Opacity(x)` modifier or a
+  style setter) now fades in, and ends at that opacity instead of 1.
+  XAML writes the element's opacity to the visual when it first renders it, which stopped the fade,
+  so `Border(...).Opacity(0.4).Transition(Transition.Fade)` snapped to 0.4. A pooled control that
+  gets no such write faded to 1 and stayed there. Reactor now restarts the fade once after that
+  first frame, keeping the element hidden until then, unless a modifier or `.Set(...)` changed the
+  opacity in between (spec 066 §3, issue #1680).
+
+- An opacity `.Keyframes(...)` animation that starts before XAML has rendered the element's own
+  `Opacity` (a `.Opacity(x)` modifier or a style setter, for example at mount) now keeps playing.
+  XAML writes that value to the visual when it first renders it, which stopped the animation, so
+  `Border(...).Opacity(0.4).Keyframes("fade", ...)` never animated. Reactor restarts the keyframe
+  once after that frame, unless a modifier or `.Set(...)` changed the opacity in between. A later
+  style change to `Opacity` still stops a running opacity keyframe (spec 066 §3, issue #1669).
+
+- Reordering a `LazyVStack`, `LazyHStack`, `ItemsRepeater` or `ItemsView` no longer
+  corrupts rows. The next re-render used to paint one row twice, with one copy frozen,
+  and drop another row, because WinUI's `ItemsRepeater` doesn't update its element
+  indices for a move and Reactor looked rows up by index. Reactor now tracks realized
+  rows by key. A focused row that moved or was removed while scrolled out of view no
+  longer comes back showing the wrong item. Focus moves to a nearby row instead, so the
+  repeater recycles the stale control. WinUI's own indices are still stale after a move,
+  so `ItemsView` click and selection right after a reorder, and app code that calls
+  `ItemsRepeater.TryGetElement`, can still land on the wrong row (spec 042 §4,
+  microsoft/microsoft-ui-xaml#12659).
+
+- Markdown selection skips offscreen glyph queries during drag growth for single-run
+  printable-ASCII left-to-right paragraphs with positive axis-aligned 2D transforms.
+  Right-to-left Runs and other layouts retain the reference geometry path; offscreen
+  text remains selected for copy, UI Automation and scrolling (PR #1698).
+
+- **A `UIElement.Translation` drag keeps working when the element also uses a transform, a
+  transition or a compositor feature (spec 066 §4.3, issues #1642 and #1630).** Taking the
+  composition visual moved a facade `Translation` to the visual and enabled translation there, after
+  which WinUI ignored every later `fe.Translation` write, so a drag card that wrote `fe.Translation`
+  from a handler stopped moving once it gained a hover state, a transition, `.Animate(...)` or an
+  animated scale, and with transforms on the visual a plain `.Scale(pressed ? 0.97f : 1)` would have
+  done the same.
+  Reactor now enables translation only for a declared `.Translation()`, `translation:` keyframe or
+  `.InteractionStates` translation, and no longer zeroes the facade when it writes the visual. Don't
+  write `fe.Translation` on an element that declares one of those.
+
+- **A pooled control no longer hands its previous renter's local values to the next renter
+  (spec 066 §7, issue #1662).** A `TextBlock` or control mounted where one with `.Foreground(...)`
+  was removed kept the old brush, and so did a `RichTextBlock` a custom handler rented itself. A
+  `Button`, `TextBox` or `ToggleSwitch` kept
+  a previous `.FontSize(...)`, `.FontFamily(...)`, `.FontWeight(...)`, `.TabIndex(...)` or
+  `.SoundMode(...)`, any element kept `.XYFocusKeyboardNavigation(...)` and `.TabNavigation(...)`,
+  and a `.Set(c => c.Clip = …)` clipped the next renter, in both pool lanes. The pool now clears
+  them all on return, so a renter shows its own values or the defaults.
+
+- Idle Markdown text-selection scopes no longer enumerate native text or compute
+  transforms on unrelated window layout passes. Input and automation access refresh
+  stale documents lazily; active selections retain layout tracking and streaming
+  endpoint remapping. One scope per message remains supported (PR #1475).
+
+- `RichTextBlock(...).Foreground(ThemeRef)` now uses the theme resource for the
+  block's default text brush and updates it when the block's effective theme
+  changes (issue #1002).
+
+- **`.LayoutAnimation()`, `.Animate()` and the implicit transitions no longer remove each other's
+  animations, and removing a transition modifier removes the transition (spec 066 §6, issues #1625
+  and #1626).** They all install implicit animations on the element's composition visual, and now
+  claim and release them per property through one owner. Applying or removing `.LayoutAnimation()`
+  replaced the whole collection, so a `.OpacityTransition()`, `.ScaleTransition()` or
+  `.RotationTransition()` installed on the compositor (after another feature took the visual)
+  stopped animating. Dropping `.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()`
+  or `.TranslationTransition()` on a later render now clears it, on WinUI's XAML transition and on
+  the compositor, so the property jumps again. When two features animate the same property, the
+  winner keeps the rule it had (`.LayoutAnimation()` over `.Animate()` over a transition), and
+  removing the winner brings the other back instead of leaving no animation. A removed
+  `.BackgroundTransition()` is cleared too (spec 066 layer 2).
+
+- **`.OpacityTransition()`, `.ScaleTransition()`, `.RotationTransition()` and
+  `.TranslationTransition()` work with every compositor feature (spec 066 §5, issue #1623).** They
+  set WinUI's XAML transitions, which block the composition visual, so combining one with
+  `.LayoutAnimation()`, `.Animate()`, `.Transition()`, `.InteractionStates()` or `.Keyframes()` threw
+  `UnauthorizedAccessException`. They now run on the visual with WinUI's own curve,
+  cubic-bezier (0.8, 0, 0.2, 1), instead of the linear one the compositor fallback used, keep a
+  `Vector3Transition`'s `Components` axis mask, and still jump when the Windows "Animation effects"
+  setting is off, as WinUI's do. `.TranslationTransition()` now animates `.Translation()` changes, as
+  WinUI's does, instead of layout moves, which the fallback animated by mistake; use
+  `.LayoutAnimation()` for those. On an update, adding or removing a transition applies to values
+  changed in the same render.
+
+- **The pool no longer hands a renter the previous renter's `.BackgroundTransition()` or
+  `OpacityTransition` (spec 066 §5.6 and §7.4, issue #1624).** Both lanes clear a panel's
+  `BackgroundTransition`, and dropping `.BackgroundTransition()` on a later render clears it too
+  (the Background arm of #1626). `.OpacityTransition()` no longer sets WinUI's XAML transition, so its
+  control is pooled in the visual lane, and a control whose `OpacityTransition` a `.Set` wrote is
+  dropped, because that transition locks its `RenderTransform` as the transform transitions do.
+
+- **Controls whose composition visual Reactor took are pooled again, and the pool no longer hands a
+  renter the previous renter's theme transitions or a taken visual (spec 066 §7, issues #1624,
+  #1639 and #1643).** `.Animate()`, `.Transition()`, `.InteractionStates()`, `.Keyframes()`,
+  `.LayoutAnimation()` and `.ScrollLinked()` take the element's visual for good, which made the
+  control unpoolable, so every remove and remount built a new control and took its visual again.
+  The pool now keeps those controls in a second lane, reset to a fresh control's pixels (animations
+  stopped, implicit animations dropped, identity transforms), and hands them only to an element that
+  takes the visual at mount and has no `.Set` setter or `.OnMount` callback, so user code never meets a
+  control whose `Rotation` or `Scale` write would throw. The marker that picks the lane now lives on
+  the native control and is set on every handoff, so a staggered panel's children no longer reach a
+  plain renter, where a `.Set(b => b.Rotation = …)` threw `UnauthorizedAccessException` (#1643). Both
+  lanes clear `ChildrenTransitions`, `ChildTransitions` and `ContentTransitions`, so a pooled panel,
+  border or button no longer plays the previous renter's `.WithTransitions(...)` (#1639).
+- An app whose assembly name matches one of its references, such as a file-based app saved as
+  `microsoft.ui.reactor.cs` next to Reactor's own `Microsoft.UI.Reactor.dll`, now fails the build with `REACTOR_BUILD_001`
+  instead of crashing at startup with a `TypeLoadException` for
+  `ReactorStaticInfoBuilder`. Assembly names are case-insensitive, so the app loaded in place of
+  the reference. Set `ReactorSkipAssemblyNameCollisionCheck=true` to opt out. `mur --create` also
+  rejects project names that collide with Reactor's assemblies (issue #1664).
+
+- Removing a `.Keyframes(...)` animation, or unmounting its element, now stops a running
+  `rotation:` channel when the keyframes never used `translation:`. The cleanup stopped every
+  channel inside one `try`, and stopping `Translation` throws when translation was never
+  enabled, so the rotation stop was skipped and the animation kept running on the control.
+  Each stop is now independent, and `Translation` is stopped only when the property exists.
+  When an update removes keyframes, or some of their entries, from a control that stays
+  mounted, it stops a channel only while the animation running there is still one a removed
+  entry started, and it does so before the control's handler and modifiers run. Animations
+  that other features started, including a Flyout target's own keyframes and modifier
+  animations, keep running (spec 066 §7.3, issue #1641).
+
+- **Resolving a theme resource for the theme the app is not using returns that theme's
+  brush and no longer changes the brush for the whole app (issue #1534).** WinUI creates a
+  theme dictionary entry the first time it is read, using the app's theme. Reactor read the
+  entries from code, so in a Light app `ThemeRef.Resolve("ControlFillColorSecondaryBrush",
+  isDark: true)` returned the Light color, and every Dark element using that key showed the
+  Light color from then on. Most theme keys were affected in both directions. The same lookup
+  backed `.Resources(...)` overrides with theme tokens under an element with the other
+  `RequestedTheme`, and validation styling in such a subtree. Reactor now asks WinUI to resolve
+  the key on an element in the requested theme, as a `{ThemeResource}` reference does, and
+  only reads the dictionaries itself when WinUI cannot find the key for that theme, never
+  reading WinUI's own `XamlControlsResources` that way.
+
+- `ThemeRef` modifiers that go through the synthesized `{ThemeResource}` Style, ported from
+  the `SetThemeResourceBinding` work in PR #1618 so they don't wait for a new Windows App SDK
+  (PR #1636):
+  - `SplitView(...).PaneBackground(ThemeRef)` themes the pane background. It used to do
+    nothing, and replacing a `.PaneBackground(brush)` with it left the old brush in place.
+    Removing `.PaneBackground(brush)` now also restores the default pane background instead
+    of keeping the last brush. A loaded `SplitView` no longer crashes with
+    `ArgumentException` (E_INVALIDARG) when a `ThemeRef` modifier is added or removed on
+    re-render: the themed Style is built on `DefaultSplitViewStyle`.
+  - `.InteractionStates()` no longer freezes a `ThemeRef` `Background` or `Foreground`.
+    Leaving a state wrote back a brush captured at setup, which pinned the theme it had
+    then, and even an opacity-only state did so. Now a property is restored only when a
+    state wrote over it. An explicit `.Background(brush)` comes back as the element carries
+    it when the states end, including a brush a re-render set during a hover, and a themed
+    property is cleared so it follows the theme again.
+  - A `ThemeRef` modifier keeps the control's own `Style` (`.Set(c => c.Style = s)`,
+    `.ApplyStyle(...)`, `.AccentButton()`, `.SubtleButton()`, `.TextLink()`, `Title(...)`
+    and the other typography factories). The themed Style is built `BasedOn` it instead of
+    replacing it, and dropping the `ThemeRef` restores it (issue #522 path). A Style whose
+    `TargetType` is a third-party control type can't be a `BasedOn` of the WinUI type, so
+    there the themed Style still replaces it, and a warning is logged once. Direct callers
+    of `Reconciler.ApplyThemeBindings` get the same behaviour.
+  - A `ThemeRef` key containing a comma, brace, `=`, `|`, quote, space or backslash now
+    works. The key used to be written unquoted, so the Style failed to parse and every
+    `ThemeRef` on that element silently did nothing. A key that cannot be written at all
+    (both quote characters, a tab or line break) skips only that property and logs a
+    warning.
+
+- Removing a pooled control (`Border`, `TextBlock`, `StackPanel`, …) that has a
+  non-identity `.Rotation()`, `.Scale()`, `.Translation()` or `.CenterPoint()` no
+  longer throws during reconcile and replaces the host content with the error
+  fallback. The pool now resets those transforms to identity before the control is
+  reused, and no longer pools a control that carries `.ScaleTransition()`,
+  `.RotationTransition()` or `.TranslationTransition()`, since WinUI keeps its
+  `RenderTransform` locked (issue #1614).
+
+- `.CenterPoint()`, `.Rotation()`, `.Scale()` and `.Translation()` no longer throw when
+  combined with `.InteractionStates()`, `.Transition()`, `.Keyframes()`, `.Animate()`,
+  `.LayoutAnimation()`, `.ScrollLinked()` or an animated child insert or move. Previously
+  a non-default `CenterPoint`, `Rotation` or `Scale` made those features throw
+  `UnauthorizedAccessException`, either at mount or from the pointer handler on hover.
+  The transform values now move to the element's composition visual when a feature first
+  needs it. Leaving an interaction state also returns to the element's own transform
+  values instead of identity (state values are still absolute targets), and
+  `Transition.Scale` scales relative to the element's `.Scale()` (issue #1613).
+
+- `VirtualList.OnVisibleRangeChanged` now observes the current callback, item height
+  (or estimate), and spacing after rerenders. Removing and re-adding the callback
+  preserves the native viewer and its single subscription, which is detached when
+  the component unmounts (spec 017, VirtualList).
+
+- Tight Markdown list items keep their leading text before child lists, headings,
+  blockquotes, and code blocks. Ordered numbering is preserved across nesting
+  levels, including in cross-block text selection (PR #1628).
+
+- Markdown selection drag autoscroll uses the enclosing scroll viewport's edges,
+  not individual message boundaries. Dragging above or below a message while still
+  inside the enclosing `ScrollView`/`ScrollViewer` no longer causes autoscroll
+  (PR #1631, openclaw/openclaw-windows-node#1844).
+
+- Removing the last `.Scale()`, `.Rotation()`, `.Translation()` or `.CenterPoint()`
+  declaration restores its identity value and releases modifier-owned composition
+  animations. Removing `.Opacity()` also releases its compositor override so styles
+  take effect again; surviving declarations on shared-control wrappers are preserved
+  (issue #1001).
+
+- `.Rotation()` is now degrees when it animates, as it already was for static
+  writes. With `.Animate()` or `AnimationScope.WithAnimation(...)` the value was sent to the
+  compositor's radian channel, so `.Rotation(90)` settled at about 116.6°. A `.Rotation()`
+  change on an element whose visual was already handed out now also plays the
+  `.RotationTransition()` compositor fallback instead of jumping (issue #1615).
+
+- Shallow comparison now checks all animation and transition declarations together,
+  so configuration-only changes reach direct updates and parent child-skip paths.
+  Value-equivalent plain-data configurations remain eligible for skipping; native
+  objects and arrays retain reference equality. This also restores `.Keyframes()`
+  playback when only the trigger changes (issue #1536; spec 014).
+
+- Generated wrapper callbacks now resolve the subscribed outer control when native events
+  forward an inner control, null, or unrelated sender. Current callbacks, original event
+  arguments, echo suppression, and native-identity subscription gates are preserved
+  (spec 058 §8.3, issue #1573).
+
+- The Toolkit `TabbedCommandBar` sample now composes its document below the native
+  ribbon instead of assigning the inherited `Content` property, which the Toolkit
+  template does not display. Native tabs and commands remain intact, with visible
+  command feedback that stays current across rerenders (issue #1577).
+
+- The Toolkit sample's GridSplitter panes and HeaderedContentControl card use
+  `Theme.CardBackground` instead of a hardcoded pale background, adapting to the app
+  theme and avoiding `REACTOR_THEME_001` errors in package consumers with warnings
+  treated as errors (issue #1578).
+
+- **A button whose content is an element no longer remounts that content after a garbage
+  collection.** `Button`, `ToggleButton`, `HyperlinkButton`, `CheckBox`, `RadioButton` and the
+  rest of the button family remembered which child they owned by the control's managed wrapper.
+  When a collection replaced that wrapper between renders, the next update mounted a second copy
+  of the content instead of updating it, which dropped its state (an `AnimatedIcon`'s visual
+  state, focus, caret) and leaked the old copy without unmounting it. The record now lives on the
+  native control. Found through the intermittent `AnimIconInButton_*ContentUpdatedInPlace`
+  selftest failures.
+
+- **Generated wrappers preserve their control library's XAML metadata under
+  trimming/NativeAOT (issue #1565, spec 058 §9a).** A unique publicly constructible
+  metadata provider is now registered through a static reference when the wrapper
+  is first used, fixing code-only Toolkit SettingsCard/SettingsExpander consumers
+  without rooting whole assemblies. Provider-free controls and explicit registration
+  remain supported; `REACTORGEN016` warns about ambiguous or nonconstructible providers.
+
+- The Toolkit RangeSelector sample now controls both endpoints through the shared
+  native event. It demonstrates pointer-driven parent acceptance/rejection, independent callback
+  counts and echo-free parent resets instead of calling one-way values controlled
+  (issue #1566; depends on #1564). The pinned Toolkit's missing keyboard change
+  notifications are documented as an unsupported mapping scenario.
+
+- Generated wrappers now support multiple controlled properties, including range endpoints
+  sharing one native event, without losing callbacks or notifying unchanged endpoints.
+  Controlled bindings also coexist with ordinary events, reassert parent values, and
+  suppress synchronous, deferred, silent-setter and coercion echoes. The obsolete
+  `REACTORGEN012` warning is retired (spec 058 §8.2, issue #1564).
+
+- The Toolkit sample maps Settings headers, descriptions, icons and expander
+  content as reconciled Element slots while preserving accessible string-header
+  names and native-owned headers when the wrapper's header inputs stay unset.
+  Rich-header state and cleanup survive native or lifecycle-driven Header
+  replacement without unmounting or clearing the foreign replacement.
+  Explicit wrapper factory calls keep the sample on actual Toolkit controls
+  rather than similarly named built-ins (issues #1504, #1566).
+
+- The Toolkit ContentSizer sample explicitly targets the advertised sibling
+  instead of resizing its containing stack. The target is connected on mount and
+  cleared on unmount, including when navigating away and back (issue #1567).
+
+- The Toolkit `SwitchPresenter` sample now populates native `SwitchCases` and
+  drives `Value` declaratively, demonstrating matching, default and no-match
+  transitions without replacing Toolkit's selected content with a Reactor
+  switch expression (issue #1568).
+
+- The Toolkit `TokenizingTextBox` sample filters suggestions as advertised, using
+  case-insensitive substring matching while preserving native token creation and
+  removal (issue #1569).
+
+- **The Toolkit `RichSuggestBox` sample now filters and commits suggestions (issue #1570).**
+  Typing a mention filters the sample names case-insensitively; choosing a suggestion
+  inserts the full name instead of the query text. The page shows the last chosen name
+  and selection count while leaving token management to the Toolkit control.
+
+- The Toolkit `CameraPreview` sample now waits for startup before stopping playback
+  and awaiting capture/frame-reader cleanup on unmount, including after native
+  retries from a failed preview. Re-entry, including a replacement mounted before
+  its predecessor unmounts, waits for the preceding cleanup,
+  and lifecycle failures are reported rather than swallowed (issue #1571).
+
+- The analyzers and source generators in the `Microsoft.UI.Reactor` package are
+  now built against Roslyn 5.0, so they load in Visual Studio 2026 18.0+ and with
+  the .NET 10.0.100+ SDK. Earlier previews were built against Roslyn 5.9 and
+  failed with CS8032 on anything older than VS 18.9 / SDK 10.0.400, which also
+  broke generator-dependent code. Visual Studio 2022 remains unsupported (#1558).
+
+- **The `Microsoft.UI.Reactor` and `Microsoft.UI.Reactor.Advanced` packages now include
+  `ThirdPartyNoticeText.txt` (issue #1535).** Both packages contain code ported from other
+  open-source projects (Yoga, md4c, D3, WinUI.Dock), but only shipped Reactor's own license.
+  Each package now carries a notice file at its root that lists only the code it ports (Yoga in
+  `Microsoft.UI.Reactor`, md4c, D3 and WinUI.Dock in `Microsoft.UI.Reactor.Advanced`), and the
+  package workflows fail if it is missing or out of date.
+
+- **`Microsoft.UI.Reactor` now credits WinUIEx in `ThirdPartyNoticeText.txt`.** Window-placement
+  persistence (`WindowPlacementCodec`) and the Win32 message monitor (`WindowMessageMonitor`) are
+  adapted from WinUIEx (MIT) but shipped without its notice. Comments that claimed Reactor reads
+  placements saved by WinUIEx were also corrected. It never did, because Reactor uses its own
+  settings container and keys. Behavior and the stored format are unchanged (spec 036 §5.1 and
+  §8, related issue #184).
+
+- **`REACTOR_A11Y_003` no longer flags fields that are already labeled (issue #1007).** It now
+  accepts a header passed positionally (`TextBox(v, set, "placeholder", "Email")`) or set with
+  `with { Header = ... }`, a field wrapped in `FormField(field, label: ...)` (the fix the rule's
+  own guidance recommends), a field passed as the `content` of a Community Toolkit
+  `SettingsCard` with a string header, and a field passed to a helper declared in the project that
+  applies `.AutomationName`, `.Header` or `.LabeledBy` to it, such as a
+  `SettingsRow(label, control)` row helper.
+
+- Interaction-state borders on Control, Border, Grid, StackPanel, and RelativePanel
+  restore null normal brushes and the latest normal value, including border modifier
+  changes during an active interaction (issue #1501).
+
+- Shallow comparison now detects changes to an element's `.Animate()` curve or
+  property flags, including parent child-skip checks. Equivalent configurations
+  remain eligible for skipping (spec 014, Feature 3).
+
+- Removing `.Animate()` or narrowing its property flags releases the dropped
+  implicit channels before handlers and modifiers run, preventing setters from
+  retriggering outgoing animations. Retained layout Offset and transitions
+  reapplied during the update are preserved (spec 014, Feature 3).
+
+- Reconcile-highlight overlay lifecycle selftests wait for actual expiry completion
+  and use controlled schedules to verify refresh lifetimes, removing fixed-delay
+  assertion races on contended runners. Coverage includes stale callbacks after
+  refresh and disposal (issue #995; [testing guide](TESTING.md#timer-lifetime-tests)).
 - **Release docs go live without a manual re-run (issue #1268).** On 0.1.0-preview.16,
   .17 and .18 the release tag's `Publish docs` deployment reported success but was never
   served, so the new version's docs stayed missing until someone dispatched the workflow on
@@ -54,8 +592,49 @@ Conventions for contributors:
   has just deployed. A tag run now publishes its version to `gh-pages` and hands the
   deployment to a `Publish docs` run it dispatches on `main`, whose `verify` job also probes
   the handed-off release directories.
+- **Inline margin, padding and border edges no longer keep the previous render's value
+  (issue #965).** With no physical value declared, `.MarginInlineStart`/`End`,
+  `.PaddingInlineStart`/`End` and `.BorderInlineStart` took the edges they do not set from
+  the control, which on an update still held the previous render's inline edge. Swapping
+  `.PaddingInlineStart(8)` for `.PaddingInlineEnd(4)` gave `8,0,4,0` instead of `0,0,4,0`,
+  and flipping `FlowDirection` under an unchanged `.PaddingInlineStart(8)` gave `8,0,8,0`
+  instead of `0,0,8,0`. A flip back to left-to-right with a declared physical value could
+  also skip the write and leave the right-to-left value on the control.
+- **`Curve.Linear` animates at constant speed (spec 066 §16, issue #1640).** Its compositor
+  keyframes had no easing function, so the compositor's default ease-out applied and a
+  linear animation was already about two-thirds of the way at 30% of its duration. Every linear
+  path now passes a linear easing function: `.Animate(Curve.Linear(...))`,
+  `AnimationScope.WithAnimation(Curve.Linear(...))`, `.InteractionStates(..., Curve.Linear(...))`,
+  `.Transition(..., Curve.Linear(...))` enter and exit animations, and the compositor fallback
+  for `.OpacityTransition()`, `.RotationTransition()`, `.ScaleTransition()` and
+  `.TranslationTransition()` on an element whose visual was already handed out. That fallback
+  is built on the linear curve, so it was linear too, until spec 066 layer 2 replaced it with
+  the XAML transition curve (see the #1623 entry above).
+
+- ReactorGallery search keeps complete samples that contain ellipses in comments
+  or display text, restoring the Pan and `OpacityTransition` examples in
+  `winapp find-ui --source reactor`. Code elisions, map-token fill-ins, and placeholders
+  in URI-shaped string literals are filtered, including Image and MediaPlayerElement
+  sources and displayed URI templates. An independent coverage check catches missing
+  cards even after index regeneration
+  ([issue #1020](https://github.com/microsoft/microsoft-ui-reactor/issues/1020),
+  [spec 064 §3.2](docs/specs/064-search-index-framework-concepts.md#32-every-clean-card-is-emitted)).
+
+- The doc pipeline's `render-diagrams` and `new-diagram` commands now reject
+  rooted topics and topics that resolve outside `docs/_pipeline/diagrams`.
+  Rendering a topic with a trailing directory separator keeps its SVGs under
+  that topic's image directory. `new-diagram` also rejects IDs that are rooted
+  or would place the `.mmd` outside the topic directory. Both commands report
+  path errors on stderr and return exit code `1`
+  ([issue #1034](https://github.com/microsoft/microsoft-ui-reactor/issues/1034),
+  [spec 041 §10.3](docs/specs/041-docs-comprehensive-uplift.md#103-image-and-diagram-pipeline-changes)).
 
 ### Security
+
+- **`PathIcon(...)` data is no longer interpolated into XAML.** It used to be spliced
+  unescaped into a `<Geometry>` document passed to `XamlReader.Load`, so icon data could
+  inject markup. It is now passed as a single value to WinUI's path-markup converter (see
+  [threat model §7.5](docs/security/threat-model.md#75-path-markup), PR #1622).
 
 ## [0.1.0-preview.18] — 2026-11-12
 

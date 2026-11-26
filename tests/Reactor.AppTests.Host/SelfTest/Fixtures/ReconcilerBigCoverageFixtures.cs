@@ -19,12 +19,33 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
 /// Targeted coverage fixtures aimed at the largest uncovered ranges in
-/// Reconciler.cs / Reconciler.Mount.cs / Reconciler.Update.cs / Reconciler.Gestures.cs /
-/// Reconciler.DragDrop.cs. Designed to be exhaustive rather than narrative —
+/// Reconciler.cs / Reconciler.Mount.cs / Reconciler.Update.cs / GestureDispatch.cs /
+/// DragDropDispatch.cs. Designed to be exhaustive rather than narrative —
 /// each fixture exercises a specific cluster of branches in one mount-and-rerender pass.
 /// </summary>
 internal static class ReconcilerBigCoverageFixtures
 {
+    /// <summary>
+    /// Waits for an element leaving through an exit transition (issue #1037). Removal is
+    /// driven by the compositor's <c>ScopedBatch.Completed</c>, whose latency on a
+    /// software-rendered CI VM has a multi-second tail, so the wait is a wall-clock
+    /// deadline rather than a pass count. On a miss it keeps watching and records which
+    /// failure it was — late completion (a budget problem) or none (a lost completion) —
+    /// since the two produce identical <c>not ok</c> lines otherwise.
+    /// </summary>
+    private static async Task<bool> WaitForExitRemoval(string checkName, Func<bool> removed)
+    {
+        const int budgetMs = 5000;
+        var sw = global::System.Diagnostics.Stopwatch.StartNew();
+        if (await Harness.WaitForWithin(removed, budgetMs, perPassMs: 30))
+            return true;
+        bool late = await Harness.WaitForWithin(removed, 10_000, perPassMs: 50);
+        Console.WriteLine(late
+            ? $"# {checkName}: exit removal completed late, after {sw.ElapsedMilliseconds}ms (budget {budgetMs}ms)"
+            : $"# {checkName}: exit removal never completed ({sw.ElapsedMilliseconds}ms), the transition's completion was lost");
+        return false;
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  1. Every Ensure*Subscribed branch — mount once with all handlers
     // ════════════════════════════════════════════════════════════════════
@@ -624,7 +645,7 @@ internal static class ReconcilerBigCoverageFixtures
                 "NVFooter_Phase0_SelectsFooterItem",
                 nv is not null && ReferenceEquals(nv.SelectedItem, nv.FooterMenuItems[0]));
 
-            var wired = nv is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
+            var wired = nv is null ? null : ModifierEvents.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
             H.Check("NVEvents_PayloadCreated", wired is not null);
             H.Check("NVEvents_SelectionChanged", wired?.SelectionChangedTrampoline is not null);
             H.Check("NVEvents_BackRequested", wired?.BackRequestedTrampoline is not null);
@@ -635,7 +656,7 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("NVEvents_IsPaneOpenObserved", wired?.IsPaneOpenObserver is not null);
 
             // Negative control — no callbacks declared, so nothing may be subscribed.
-            var bareBox = bare is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(bare);
+            var bareBox = bare is null ? null : ModifierEvents.TryGetControlEventPayload<NavigationViewEventPayload>(bare);
             H.Check(
                 "NVEvents_BareNavViewUnsubscribed",
                 bareBox is null
@@ -664,7 +685,7 @@ internal static class ReconcilerBigCoverageFixtures
             // comparison would be vacuous. The genuine re-subscription oracle is the
             // double-fire counters below (verified: forcing slotIsNull => true fails
             // NVEvents_SettingsSelectedFiredOnce, and leaves this check passing).
-            var afterUpdate = nv is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
+            var afterUpdate = nv is null ? null : ModifierEvents.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
             H.Check(
                 "NVEvents_PayloadSurvivesUpdate",
                 wired is not null && afterUpdate is not null && ReferenceEquals(afterUpdate, wired));
@@ -1383,6 +1404,10 @@ internal static class ReconcilerBigCoverageFixtures
     // ════════════════════════════════════════════════════════════════════
     internal class ExitTransitionOnRemove(Harness h) : SelfTestFixtureBase(h)
     {
+        // Two removals, each allowed up to 15 s (budget plus the late-completion watch) when
+        // the compositor never completes, which would overrun the 30 s default and stop the run.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
@@ -1404,17 +1429,14 @@ internal static class ReconcilerBigCoverageFixtures
 
             H.ClickButton("ExitRemove");
             // The child plays a Fade exit transition (~300ms) before it leaves
-            // the tree; poll with per-pass wall-clock time so we converge as soon
-            // as the transition completes rather than betting on one fixed wait
-            // (which flakes under NativeAOT cold-start jitter — see issue #715).
+            // the tree. Removal waits on the compositor batch completing, so wait
+            // against a wall-clock deadline (see WaitForExitRemoval, issues #715/#1037).
             H.Check("ExitTr_Removed",
-                await Harness.WaitFor(() => H.FindText("ex-item-2") is null,
-                    maxPasses: 12, perPassMs: 100));
+                await WaitForExitRemoval("ExitTr_Removed", () => H.FindText("ex-item-2") is null));
 
             H.ClickButton("ExitRemove");
             H.Check("ExitTr_RemovedAgain",
-                await Harness.WaitFor(() => H.FindText("ex-item-1") is null,
-                    maxPasses: 12, perPassMs: 100));
+                await WaitForExitRemoval("ExitTr_RemovedAgain", () => H.FindText("ex-item-1") is null));
         }
     }
 
@@ -1592,7 +1614,7 @@ internal static class ReconcilerBigCoverageFixtures
                             .At(0f, opacity: 0f,
                                 scale: new SysVec.Vector3(0.5f),
                                 translation: new SysVec.Vector3(20, 20, 0),
-                                rotation: 0.2f)
+                                rotation: 12f)
                             .At(1f, opacity: 1f,
                                 scale: SysVec.Vector3.One,
                                 translation: SysVec.Vector3.Zero,
@@ -1651,7 +1673,7 @@ internal static class ReconcilerBigCoverageFixtures
                             .Keyframes("anim", trigger, kf => kf
                                 .Duration(50)
                                 .At(0f, opacity: 0.4f, scale: new SysVec.Vector3(0.9f),
-                                    translation: new SysVec.Vector3(5, 0, 0), rotation: 0.05f)
+                                    translation: new SysVec.Vector3(5, 0, 0), rotation: 3f)
                                 .At(1f, opacity: 1f, scale: SysVec.Vector3.One,
                                     translation: SysVec.Vector3.Zero, rotation: 0f))
                         : (Element)TextBlock("kf-unmount-gone")
@@ -1693,12 +1715,9 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("CondExit_Initial", H.FindText("cond-exit-child") is not null);
 
             H.ClickButton("CondExit");
-            // The child plays a Fade exit transition before it leaves the
-            // tree; poll with per-pass wall-clock time so we converge as soon
-            // as the transition completes rather than betting on one fixed wait.
+            // The child plays a Fade exit transition before it leaves the tree.
             H.Check("CondExit_Removed",
-                await Harness.WaitFor(() => H.FindText("cond-exit-child") is null,
-                    maxPasses: 12, perPassMs: 100));
+                await WaitForExitRemoval("CondExit_Removed", () => H.FindText("cond-exit-child") is null));
         }
     }
 
@@ -1731,8 +1750,7 @@ internal static class ReconcilerBigCoverageFixtures
 
             H.ClickButton("AsymExit");
             H.Check("Asym_Removed",
-                await Harness.WaitFor(() => H.FindText("asym-target") is null,
-                    maxPasses: 20, perPassMs: 30));
+                await WaitForExitRemoval("Asym_Removed", () => H.FindText("asym-target") is null));
         }
     }
 
@@ -2271,7 +2289,7 @@ internal static class ReconcilerBigCoverageFixtures
             host.Mount(ctx => VStack(
                 TextBlock("is-target")
                     .InteractionStates(states => states
-                        .PointerOver(opacity: 0.7f, scale: 1.05f, rotation: 0.05f)
+                        .PointerOver(opacity: 0.7f, scale: 1.05f, rotation: 3f)
                         .Pressed(opacity: 0.5f) // inherits scale + rotation from PointerOver
                     )
             ));
@@ -2335,6 +2353,138 @@ internal static class ReconcilerBigCoverageFixtures
                 IconResolver.ResolveIconSource("DefinitelyNotASymbol"),
             };
             H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
+
+            // Path icons go through PathMarkup (XamlBindingHelper.ConvertValue — WinUI's native
+            // path-markup converter, no XamlReader). Natively parsed geometry does not expose
+            // its figures to code, so compare Bounds.
+            const string pathIconData = "F1 M0,0 l8,8 0,-8 z";
+            var expectedBounds = new global::Windows.Foundation.Rect(0, 0, 8, 8);
+            var converted = PathMarkup.Convert(pathIconData);
+            H.Check("PrivMount_PathMarkupConvert", converted?.Bounds == expectedBounds,
+                $"type={converted?.GetType().FullName ?? "null"} bounds={converted?.Bounds}");
+            // Full markup grammar: relative commands, compact numbers, arcs.
+            var roundedRect = PathMarkup.Convert("M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z");
+            H.Check("PrivMount_PathMarkupConvertRelativeArcs",
+                roundedRect?.Bounds == new global::Windows.Foundation.Rect(2, 2, 12, 12), $"bounds={roundedRect?.Bounds}");
+            H.Check("PrivMount_PathMarkupConvertBlankIsNull", PathMarkup.Convert("  ") is null && PathMarkup.Convert(null) is null);
+            // Markup the platform rejects (here a NaN coordinate, as corrupt chart data produces):
+            // Convert (author-written icon markup) throws as XAML would; TryConvert (data-driven
+            // paths) returns null so the path is not drawn.
+            Exception? convertError = null;
+            try { PathMarkup.Convert("M0,0 LNaN,5 L10,10"); }
+            catch (ArgumentException ex) { convertError = ex; }
+            H.Check("PrivMount_PathMarkupConvertRejectedThrows", convertError is not null);
+            var rejected = PathMarkup.TryConvert("M0,0 LNaN,5 L10,10");
+            H.Check("PrivMount_PathMarkupTryConvertRejectedIsNull", rejected is null, $"result={rejected?.Bounds}");
+
+            var iconSourceData = (IconResolver.ResolveIconSource(new PathIconData(pathIconData)) as WinXC.PathIconSource)?.Data;
+            H.Check("PrivMount_PathIconSourceGeometry", iconSourceData?.Bounds == expectedBounds, $"bounds={iconSourceData?.Bounds}");
+            var iconData = (IconResolver.ResolveIconForDescriptor(new PathIconData(pathIconData)) as WinXC.PathIcon)?.Data;
+            H.Check("PrivMount_PathIconGeometry", iconData?.Bounds == expectedBounds, $"bounds={iconData?.Bounds}");
+
+            // PathElement.PathDataString takes the same converter. Each phase is one update of the
+            // same live Path: geometry swaps keep the element's FillRule, rejected markup falls back
+            // to Data (and follows a Data swap), and removing the last geometry source clears it.
+            var fallbackA = new Microsoft.UI.Xaml.Media.RectangleGeometry { Rect = new global::Windows.Foundation.Rect(1, 2, 3, 4) };
+            var fallbackB = new Microsoft.UI.Xaml.Media.RectangleGeometry { Rect = new global::Windows.Foundation.Rect(5, 6, 7, 8) };
+            const string roundedMarkup = "M20 24a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H24a2 2 0 0 1-2-2z";
+            const string nanMarkup = "M20 24 LNaN,30";
+            var phases = new (string? Markup, Microsoft.UI.Xaml.Media.Geometry? Data)[]
+            {
+                (roundedMarkup, null),                // 0 mount
+                ("M0,0 L10,0 L10,10 Z", null),        // 1 markup swap
+                (nanMarkup, fallbackA),               // 2 rejected -> Data
+                (nanMarkup, fallbackB),               // 3 Data swap under unchanged markup
+                (nanMarkup, null),                    // 4 rejected, no Data -> cleared
+                ("M0,0 L10,10", null),                // 5
+                ("", null),                           // 6 markup -> "" clears
+                ("M0,0 L10,10", null),                // 7
+                (null, null),                         // 8 markup -> null clears
+                (null, fallbackA),                    // 9 Data only
+            };
+            var pathHost = H.CreateHost();
+            pathHost.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("PathMarkupNext", () => setPhase(phase + 1)),
+                    new PathElement
+                    {
+                        PathDataString = phases[phase].Markup,
+                        Data = phases[phase].Data,
+                        FillRule = Microsoft.UI.Xaml.Media.FillRule.Nonzero,
+                    }.AutomationName("PathMarkupProbe"));
+            });
+            await Harness.Render();
+            var mountedPath = H.FindControl<WinShapes.Path>(
+                p => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(p) == "PathMarkupProbe");
+            async Task NextPathPhase()
+            {
+                H.ClickButton("PathMarkupNext");
+                await Harness.Render();
+            }
+            bool HasBounds(double x, double y, double w, double h)
+                => mountedPath?.Data?.Bounds == new global::Windows.Foundation.Rect(x, y, w, h);
+            bool IsNonzero() => mountedPath?.Data is Microsoft.UI.Xaml.Media.PathGeometry { FillRule: Microsoft.UI.Xaml.Media.FillRule.Nonzero };
+            string Describe() => $"type={mountedPath?.Data?.GetType().Name ?? "null"} bounds={mountedPath?.Data?.Bounds} fill={(mountedPath?.Data as Microsoft.UI.Xaml.Media.PathGeometry)?.FillRule}";
+
+            H.Check("PrivMount_PathElementPathDataString", HasBounds(20, 22, 12, 12) && IsNonzero(), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementMarkupSwapKeepsFillRule", HasBounds(0, 0, 10, 10) && IsNonzero(), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementRejectedMarkupFallsBackToData", ReferenceEquals(mountedPath?.Data, fallbackA), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementFallbackDataSwap", ReferenceEquals(mountedPath?.Data, fallbackB), Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementRejectedMarkupClears", mountedPath is not null && mountedPath.Data is null, Describe());
+            await NextPathPhase();
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementEmptyMarkupClears", mountedPath is not null && mountedPath.Data is null, Describe());
+            await NextPathPhase();
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementNullMarkupClears", mountedPath is not null && mountedPath.Data is null, Describe());
+            await NextPathPhase();
+            H.Check("PrivMount_PathElementDataOnly", ReferenceEquals(mountedPath?.Data, fallbackA), Describe());
+
+            // A path icon whose markup changes is patched in place (same WinUI.PathIcon), and
+            // blank markup clears it, matching a fresh mount.
+            var iconHost = H.CreateHost();
+            iconHost.Mount(ctx =>
+            {
+                var (iconPhase, setIconPhase) = ctx.UseState(0);
+                return VStack(
+                    Button("PathIconNext", () => setIconPhase(iconPhase + 1)),
+                    Icon(PathIcon(iconPhase switch { 0 => "M0,0 L8,8", 1 => "M0,0 L16,16", _ => "" }))
+                        .AutomationName("PathIconProbe"));
+            });
+            await Harness.Render();
+            var liveIcon = H.FindControl<WinXC.PathIcon>(
+                p => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(p) == "PathIconProbe");
+            H.Check("PrivMount_PathIconPatchMount", liveIcon?.Data?.Bounds == new global::Windows.Foundation.Rect(0, 0, 8, 8),
+                $"bounds={liveIcon?.Data?.Bounds}");
+            H.ClickButton("PathIconNext");
+            await Harness.Render();
+            var patchedIcon = H.FindControl<WinXC.PathIcon>(
+                p => Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(p) == "PathIconProbe");
+            H.Check("PrivMount_PathIconPatchInPlace", liveIcon is not null && ReferenceEquals(liveIcon, patchedIcon)
+                && liveIcon.Data?.Bounds == new global::Windows.Foundation.Rect(0, 0, 16, 16), $"bounds={liveIcon?.Data?.Bounds}");
+            H.ClickButton("PathIconNext");
+            await Harness.Render();
+            H.Check("PrivMount_PathIconPatchBlankClears", liveIcon is not null && liveIcon.Data is null, $"bounds={liveIcon?.Data?.Bounds}");
+
+            // The Chart() builder turns non-finite points into gaps instead of emitting NaN markup
+            // that the platform rejects (which would leave the line and area undrawn), and keeps
+            // ±Infinity out of the scale domains so one bad sample can't collapse the whole chart.
+            var chartHost = H.CreateHost();
+            global::Microsoft.UI.Reactor.Hosting.XamlInterop.Register(chartHost.Reconciler);
+            double[] ys = [10, 40, double.NaN, 30, double.PositiveInfinity, 50, double.NegativeInfinity, 20];
+            chartHost.Mount(_ => VStack(
+                Microsoft.UI.Reactor.Charting.Charts.AreaChart(Enumerable.Range(0, ys.Length).ToArray(), i => i, i => ys[i])
+                    .Width(400).Height(300).ToElement()));
+            await Harness.Render();
+            var chartPaths = H.FindAllControls<WinShapes.Path>(_ => true);
+            H.Check("PrivMount_ChartNaNPointBecomesGap", chartPaths.Count >= 2 && chartPaths.All(p => p.Data is not null),
+                $"paths={chartPaths.Count} withData={chartPaths.Count(p => p.Data is not null)}");
 
             // The symbol-glyph fallback font must keep BOTH families: "Segoe Fluent
             // Icons" (Windows 11) and the "Segoe MDL2 Assets" tail (Windows 10, still a

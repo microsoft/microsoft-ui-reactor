@@ -137,6 +137,26 @@ public class ReactorListStateTests
     }
 
     [Fact]
+    public void PinnedIndicesMayBeStale_Is_Set_By_Move_Remove_And_Reset_Only()
+    {
+        var state = new ReactorListState();
+        state.Reset([(0, "a"), (1, "b"), (2, "c")]);
+
+        bool After(global::System.Action change)
+        {
+            state.PinnedIndicesMayBeStale = false;
+            change();
+            return state.PinnedIndicesMayBeStale;
+        }
+
+        Assert.False(After(() => state.Source.Add(new ReactorRow { Index = 3, Key = "d" })));
+        Assert.False(After(() => state.Source[0] = new ReactorRow { Index = 0, Key = "a" }));
+        Assert.True(After(() => state.Source.Move(0, 2)));
+        Assert.True(After(() => state.Source.RemoveAt(0)));
+        Assert.True(After(() => state.Source.Clear()));
+    }
+
+    [Fact]
     public void Row_Identity_Survives_Move()
     {
         // The whole point of using a reference-typed ReactorRow is that WinUI

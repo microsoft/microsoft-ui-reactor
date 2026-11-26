@@ -1,4 +1,5 @@
 using System.Numerics;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
@@ -29,6 +30,25 @@ internal static class AnimationCombinationTests
     static StackPanel? FindPanelById(Harness h, string id) =>
         h.FindControl<StackPanel>(sp =>
             Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(sp) == id);
+
+    /// <summary>
+    /// Waits until XAML has run a full render walk after the caller's writes. A UIElement
+    /// facade write (e.g. <c>UIElement.Opacity</c>) reaches the element's handoff Visual —
+    /// and fires any implicit animation keyed on it — only in that walk, which runs on a
+    /// frame tick that neither UpdateLayout nor a dispatcher yield (so not
+    /// <see cref="Harness.Render"/>) guarantees. The second Rendering event is a later
+    /// tick, so the first tick's walk has completed. Returns the frames observed.
+    /// </summary>
+    static async Task<int> WaitForRenderWalk(int frames = 2, int timeoutMs = 2000)
+    {
+        var seen = 0;
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<object> onRendering = (_, _) => { if (++seen >= frames) done.TrySetResult(); };
+        global::Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += onRendering;
+        try { await Task.WhenAny(done.Task, Task.Delay(timeoutMs)); }
+        finally { global::Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= onRendering; }
+        return seen;
+    }
 
     static bool HasImplicitKey(Microsoft.UI.Composition.ImplicitAnimationCollection? coll, string key)
     {
@@ -600,6 +620,8 @@ internal static class AnimationCombinationTests
     {
         public override async Task RunAsync()
         {
+            // Transitions honour the system's animation setting (spec 066 §5.5); this checks their keys.
+            using var motion = Microsoft.UI.Reactor.Navigation.TransitionEngine.OverrideAnimationsEnabled(true);
             var host = H.CreateHost();
             var useAnim = true;
 
@@ -628,6 +650,100 @@ internal static class AnimationCombinationTests
             H.Check("AnimRemove_ImplicitCleared",
                 target is not null
                 && ElementCompositionPreview.GetElementVisual(target).ImplicitAnimations is null);
+
+            var layout = new LayoutAnimationConfig { AnimateSize = true, Duration = TimeSpan.FromSeconds(5) };
+            foreach (var scenario in new (string Name, bool Setter, bool Layout, bool Transition, bool Narrow)[]
+            {
+                ("Modifier", false, false, false, false),
+                ("Setter", true, false, false, false),
+                ("LayoutSetter", true, true, false, false),
+                ("Transition", true, false, true, false),
+                ("NarrowSetter", true, false, false, true),
+                ("NarrowLayoutSetter", true, true, false, true),
+                ("NarrowTransition", true, false, true, true),
+            })
+            {
+                using var reconciler = new Reconciler();
+                var name = "AnimRemove_" + scenario.Name;
+                var transition = scenario.Transition
+                    ? new Vector3Transition { Duration = TimeSpan.FromMilliseconds(170) } : null;
+                var first = Button("Go").Animate(Curve.Ease(3000));
+                if (scenario.Layout) first = first.LayoutAnimation(layout);
+                if (transition is not null)
+                    // Exercise the existing compositor fallback for an independent transition.
+                    first = first.Set(c => { _ = ElementCompositionPreview.GetElementVisual(c); }).ScaleTransition(transition);
+                var button = (Button)reconciler.Mount(first, static () => { })!;
+                H.SetContent(button);
+                try
+                {
+                    await Harness.Render();
+                    var visual = ElementCompositionPreview.GetElementVisual(button);
+                    var channel = scenario.Narrow ? "Scale" : "Opacity";
+                    H.Check(name + "_StartsWith" + channel + "Channel", visual.ImplicitAnimations?.ContainsKey(channel) == true);
+                    // No explicit value on mount, and no StopAnimation: any
+                    // controller observed after Update must come from that update.
+                    H.Check(name + "_NoInitial" + channel + "Animation", visual.TryGetAnimationController(channel) is null);
+
+                    var next = Button("Go");
+                    if (scenario.Narrow) next = next.Animate(Curve.Ease(3000), AnimateProperty.Opacity);
+                    if (scenario.Setter)
+                        next = next.Set(c =>
+                        {
+                            if (scenario.Layout)
+                                H.Check(name + "_OffsetPresentInsideSetter", visual.ImplicitAnimations?["Offset"]
+                                    is Vector3KeyFrameAnimation offset && offset.Duration == layout.Duration);
+                            if (scenario.Narrow)
+                            {
+                                H.Check(name + "_DroppedScaleBeforeSetter", visual.ImplicitAnimations?.ContainsKey("Scale") != true);
+                                ElementCompositionPreview.GetElementVisual(c).Scale = new Vector3(0.75f, 0.75f, 1);
+                            }
+                            else
+                                ElementCompositionPreview.GetElementVisual(c).Opacity = 0.5f;
+                        });
+                    else
+                        next = next.Opacity(0.5);
+                    if (scenario.Layout) next = next.LayoutAnimation(layout);
+                    if (transition is not null) next = next.ScaleTransition(transition);
+                    H.Check(name + "_SameButton", reconciler.Update(first, next, button, static () => { }) is null);
+                    await Harness.Render();
+                    // The Modifier scenario writes UIElement.Opacity, which reaches the
+                    // Visual (and would fire a retained "Opacity" channel) only in a render
+                    // walk. Without one, both checks below read the pre-update Visual.
+                    var frames = await WaitForRenderWalk();
+
+                    H.Check(name + "_No" + channel + "Animation", visual.TryGetAnimationController(channel) is null);
+                    if (scenario.Narrow)
+                    {
+                        H.Check(name + "_ScaleIsImmediate", visual.Scale == new Vector3(0.75f, 0.75f, 1));
+                        H.Check(name + "_KeepsOpacityChannel", visual.ImplicitAnimations?["Opacity"]
+                            is ScalarKeyFrameAnimation opacity && opacity.Duration == TimeSpan.FromSeconds(3));
+                        if (!scenario.Transition)
+                            H.Check(name + "_DroppedScaleChannel", visual.ImplicitAnimations?.ContainsKey("Scale") != true);
+                    }
+                    else
+                    {
+                        H.Check(name + "_OpacityIsImmediate", (scenario.Setter || button.Opacity == 0.5)
+                            && Math.Abs(visual.Opacity - 0.5f) < 0.001f,
+                            $"element={button.Opacity} visual={visual.Opacity} frames={frames}");
+                        H.Check(name + "_DroppedOpacityChannel", visual.ImplicitAnimations?.ContainsKey("Opacity") != true);
+                    }
+                    if (scenario.Layout)
+                    {
+                        H.Check(name + "_KeepsLayoutOffset", visual.ImplicitAnimations?["Offset"]
+                            is Vector3KeyFrameAnimation offset && offset.Duration == layout.Duration);
+                        H.Check(name + "_KeepsLayoutSize", visual.ImplicitAnimations?["Size"]
+                            is Vector2KeyFrameAnimation size && size.Duration == layout.Duration);
+                    }
+                    if (transition is not null)
+                        H.Check(name + "_KeepsIndependentTransition", visual.ImplicitAnimations?["Scale"]
+                            is Vector3KeyFrameAnimation scale && scale.Duration == transition.Duration);
+                }
+                finally
+                {
+                    reconciler.UnmountChild(button);
+                    H.SetContent(null);
+                }
+            }
         }
     }
 
@@ -659,6 +775,369 @@ internal static class AnimationCombinationTests
             await Task.Delay(300);
             await Harness.Render();
             H.Check("KFTranslation_OffsetKeptLayoutPosition", visual.Offset.Y >= 40, $"offset={visual.Offset}");
+        }
+    }
+
+    /// <summary>
+    /// Unmounting a keyframed element, or removing its keyframes, stops every channel it may
+    /// have started, even when the visual has no Translation property (#1641). StopAnimation("Translation") throws on
+    /// such a visual, and it used to share one try with the RotationAngle stop.
+    /// </summary>
+    internal class KeyframesUnmountStopsRotation(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Positive control first: with translation enabled, the same oracle sees both stops.
+            await RunCase("KFUnmountStops_WithTranslation", withTranslation: true);
+            await RunCase("KFUnmountStops_RotationOnly", withTranslation: false);
+            await RunRemovalCase("KFRemoveStops_RotationOnly", rotationKeyframes: true);
+            await RunRemovalCase("KFRemoveKeepsModifierRotation", rotationKeyframes: false);
+            await RunRetainedRotationCase("KFRemoveKeepsRunningRotation");
+            await RunFlyoutTargetCase("KFRemoveKeepsTargetKeyframes");
+            await RunSkippedPlaybackCase("KFRemoveStopsStartedChannel");
+            await RunReplacedChannelCase("KFRemoveKeepsReplacedChannel");
+            await RunDroppedEntryCase("KFDropStopsEntry");
+            await RunSetterTranslationCase("KFRemoveKeepsSetterTranslation");
+            await RunFacadeResetCase("KFRemoveKeepsSetterReset");
+        }
+
+        // A facade Translation written outside Reactor (a ref) and reset by the setter in the
+        // update that removes the keyframes must not be moved to the visual first.
+        async Task RunFacadeResetCase(string name)
+        {
+            var before = Border(TextBlock(name)).Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, rotation: 0f).At(1f, rotation: 360f));
+            var after = Border(TextBlock(name)).Set(static b => b.Translation = Vector3.Zero);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                target.Translation = new Vector3(10, 0, 0);
+
+                H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+
+                bool moved = visual.Properties.TryGetVector3("Translation", out var translation) == CompositionGetValueStatus.Succeeded
+                    && translation != Vector3.Zero;
+                H.Check(name + "_NotMovedToVisual", !moved && target.Translation == Vector3.Zero,
+                    $"visual={translation} facade={target.Translation}");
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // A facade Translation setter next to keyframes without a translation: channel stays on the
+        // facade, before and after the update that removes the keyframes, and translation is never
+        // enabled, so the write keeps applying (spec 066 §4.3, #1642).
+        async Task RunSetterTranslationCase(string name)
+        {
+            static Element Shift(float x) => Border(TextBlock("KFRemoveKeepsSetterTranslation"))
+                .Set(b => b.Translation = new Vector3(x, 0, 0));
+            var before = Shift(10).Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, rotation: 0f).At(1f, rotation: 360f));
+            var after = Shift(20);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                bool enabled = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+                H.Check(name + "_MountedOnFacade", target.Translation == new Vector3(10, 0, 0) && !enabled,
+                    $"facade={target.Translation} enabled={enabled}");
+
+                H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+
+                enabled = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+                H.Check(name + "_UpdatedOnFacade", target.Translation == new Vector3(20, 0, 0) && !enabled,
+                    $"facade={target.Translation} enabled={enabled}");
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // Dropping entry "a" while "b" stays stops a's loop and leaves b's running. Removing b
+        // afterwards then stops b, so no loop outlives its declaration.
+        async Task RunDroppedEntryCase(string name)
+        {
+            var plain = Border(TextBlock(name));
+            static Element Fade(Element element) => element.Keyframes("b", 1, kf => kf
+                .Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            var both = Fade(plain.Keyframes("a", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, scale: Vector3.One).At(1f, scale: new Vector3(1.5f, 1.5f, 1f))));
+            var onlyB = Fade(plain);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(both, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                H.Check(name + "_BothLoopsRunning", visual.TryGetAnimationController("Scale") is not null
+                    && visual.TryGetAnimationController("Opacity") is not null);
+
+                reconciler.Update(both, onlyB, target, () => { });
+                H.Check(name + "_DroppedLoopStopped", visual.TryGetAnimationController("Scale") is null);
+                H.Check(name + "_RetainedLoopRunning", visual.TryGetAnimationController("Opacity") is not null);
+
+                reconciler.Update(onlyB, plain, target, () => { });
+                H.Check(name + "_RemovedLoopStopped", visual.TryGetAnimationController("Opacity") is null);
+            }
+            finally
+            {
+                visual?.StopAnimation("Scale");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // Rotation keyframes switch to opacity under an unchanged trigger, so their rotation loop
+        // keeps running until an animated .Rotation(90) replaces it. Removing the keyframes must
+        // not stop the modifier's rotation, which the unchanged modifier would never restart.
+        async Task RunReplacedChannelCase(string name)
+        {
+            var plain = Border(TextBlock(name));
+            var rotationLoop = plain.Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, rotation: 0f).At(1f, rotation: 360f));
+            static Element Fade(Element element) => element.Keyframes("kf", 1, kf => kf
+                .Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            var opacityLoop = Fade(plain);
+            var rotated = Border(TextBlock(name)).Rotation(90);
+            var rotatedLoop = Fade(rotated);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(rotationLoop, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                var keyframeRotation = visual.TryGetAnimationController("RotationAngle");
+                reconciler.Update(rotationLoop, opacityLoop, target, () => { });
+                AnimationScope.WithAnimation(Curve.Linear(60000), () =>
+                    reconciler.Update(opacityLoop, rotatedLoop, target, () => { }));
+                var modifierRotation = visual.TryGetAnimationController("RotationAngle");
+                H.Check(name + "_ModifierReplacedRotation", keyframeRotation is not null && modifierRotation is not null
+                    && !Equals(keyframeRotation, modifierRotation));
+
+                H.Check(name + "_SameControl", reconciler.Update(rotatedLoop, rotated, target, () => { }) is null);
+
+                H.Check(name + "_ModifierRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // An unchanged trigger skips playback, so switching a looping entry from scale to
+        // opacity leaves the scale loop running. Removing the keyframes must still stop it.
+        async Task RunSkippedPlaybackCase(string name)
+        {
+            var plain = Border(TextBlock(name));
+            var scaleLoop = plain.Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, scale: Vector3.One).At(1f, scale: new Vector3(1.5f, 1.5f, 1f)));
+            var opacityLoop = plain.Keyframes("kf", 1, kf => kf.Duration(5000).Loop()
+                .At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(scaleLoop, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                reconciler.Update(scaleLoop, opacityLoop, target, () => { });
+                H.Check(name + "_ScaleLoopStillRunning", visual.TryGetAnimationController("Scale") is not null);
+
+                H.Check(name + "_SameControl", reconciler.Update(opacityLoop, plain, target, () => { }) is null);
+
+                H.Check(name + "_ScaleLoopStopped", visual.TryGetAnimationController("Scale") is null);
+            }
+            finally
+            {
+                visual?.StopAnimation("Scale");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // A .Rotation() animation started by an earlier update keeps running when the
+        // opacity-only keyframes are removed and the modifier value is unchanged.
+        async Task RunRetainedRotationCase(string name)
+        {
+            var plain = Border(TextBlock(name)).Rotation(0);
+            var rotated = Border(TextBlock(name)).Rotation(90);
+            static Element Fade(Element element) => element.Keyframes("kf", 1, kf => kf
+                .Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f));
+            var mounted = Fade(plain);
+            var before = Fade(rotated);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(mounted, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                AnimationScope.WithAnimation(Curve.Linear(60000), () =>
+                    reconciler.Update(mounted, before, target, () => { }));
+                H.Check(name + "_RotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+                H.Check(name + "_KeyframesRunning", visual.TryGetAnimationController("Opacity") is not null);
+
+                H.Check(name + "_SameControl", reconciler.Update(before, rotated, target, () => { }) is null);
+
+                H.Check(name + "_KeyframesStopped", visual.TryGetAnimationController("Opacity") is null);
+                H.Check(name + "_RotationStillRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // Removing a Flyout's rotation keyframes in the update that adds rotation keyframes to
+        // its target must not stop the target's freshly started animation.
+        async Task RunFlyoutTargetCase(string name)
+        {
+            var menu = TextBlock("Menu");
+            var child = Border(TextBlock(name));
+            static Element Spin(Element element, string key) => element.Keyframes(key, 1, kf => kf
+                .Duration(5000).Loop().At(0f, rotation: 0f).At(1f, rotation: 360f));
+            var before = Spin(Flyout(child, menu), "outer");
+            var after = Flyout(Spin(child, "inner"), menu);
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                H.Check(name + "_OuterRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+
+                H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null);
+
+                H.Check(name + "_TargetRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        // Removes the keyframes from a retained control in an animated update. Rotation
+        // keyframes must stop. Opacity-only keyframes must not cancel the rotation a changed
+        // .Rotation() modifier starts in the same update.
+        async Task RunRemovalCase(string name, bool rotationKeyframes)
+        {
+            var id = name + "-target";
+            var before = Border(TextBlock(name))
+                .Keyframes("kf", 1, kf => rotationKeyframes
+                    ? kf.Duration(5000).Loop().At(0f, rotation: 0f).At(1f, rotation: 360f)
+                    : kf.Duration(5000).Loop().At(0f, opacity: 1f).At(1f, opacity: 0.5f))
+                .AutomationId(id);
+            var after = rotationKeyframes
+                ? Border(TextBlock(name)).AutomationId(id)
+                : Border(TextBlock(name)).Rotation(90).AutomationId(id);
+            var keyframeChannel = rotationKeyframes ? "RotationAngle" : "Opacity";
+            using var reconciler = new Reconciler();
+            var target = (FrameworkElement)reconciler.Mount(before, static () => { })!;
+            H.SetContent(target);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                visual = ElementCompositionPreview.GetElementVisual(target);
+                bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+                H.Check(name + "_NoTranslationProperty", !hasTranslation);
+                H.Check(name + "_KeyframesRunning", visual.TryGetAnimationController(keyframeChannel) is not null);
+                if (!rotationKeyframes)
+                    H.Check(name + "_NoRotationBefore", visual.TryGetAnimationController("RotationAngle") is null);
+
+                AnimationScope.WithAnimation(Curve.Linear(60000), () =>
+                    H.Check(name + "_SameControl", reconciler.Update(before, after, target, () => { }) is null));
+
+                H.Check(name + "_KeyframesStopped", visual.TryGetAnimationController(keyframeChannel) is null);
+                if (!rotationKeyframes)
+                    H.Check(name + "_ModifierRotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                visual?.StopAnimation("Opacity");
+                reconciler.UnmountChild(target);
+                H.SetContent(null);
+            }
+        }
+
+        async Task RunCase(string name, bool withTranslation)
+        {
+            var id = name + "-target";
+            using var reconciler = new Reconciler();
+            var panel = (StackPanel)reconciler.Mount(VStack(
+                Border(TextBlock(name))
+                    .Keyframes("spin", 1, kf => withTranslation
+                        ? kf.Duration(5000).Loop()
+                            .At(0f, rotation: 0f, translation: Vector3.Zero)
+                            .At(1f, rotation: 360f, translation: new Vector3(8, 0, 0))
+                        : kf.Duration(5000).Loop()
+                            .At(0f, rotation: 0f)
+                            .At(1f, rotation: 360f))
+                    .AutomationId(id)), static () => { })!;
+            H.SetContent(panel);
+            Visual? visual = null;
+            try
+            {
+                await Harness.Render();
+                var target = FindById(H, id);
+                H.Check(name + "_Mounted", target is not null);
+                if (target is null) return;
+                visual = ElementCompositionPreview.GetElementVisual(target);
+
+                bool hasTranslation = visual.Properties.TryGetVector3("Translation", out _) == CompositionGetValueStatus.Succeeded;
+                H.Check(name + "_TranslationProperty", hasTranslation == withTranslation, $"hasTranslation={hasTranslation}");
+                H.Check(name + "_RotationRunning", visual.TryGetAnimationController("RotationAngle") is not null);
+                if (withTranslation)
+                    H.Check(name + "_TranslationRunning", visual.TryGetAnimationController("Translation") is not null);
+
+                reconciler.UnmountChild(target);
+                panel.Children.Remove(target);
+
+                H.Check(name + "_RotationStopped", visual.TryGetAnimationController("RotationAngle") is null);
+                if (withTranslation)
+                    H.Check(name + "_TranslationStopped", visual.TryGetAnimationController("Translation") is null);
+            }
+            finally
+            {
+                visual?.StopAnimation("RotationAngle");
+                if (withTranslation) visual?.StopAnimation("Translation");
+                reconciler.UnmountChild(panel);
+                H.SetContent(null);
+            }
         }
     }
 }

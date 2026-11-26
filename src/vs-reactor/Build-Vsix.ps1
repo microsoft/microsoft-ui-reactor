@@ -54,13 +54,14 @@ if ($MSBuildPath) {
 } else {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) {
-        Write-Error "vswhere.exe was not found at '$vswhere'. Install Visual Studio 2022 or later with the 'Visual Studio extension development' workload."
+        Write-Error "vswhere.exe was not found at '$vswhere'. Install Visual Studio 2026 with the 'Visual Studio extension development' workload."
         exit 1
     }
 
-    $msbuildCandidates = & $vswhere -find 'MSBuild\**\Bin\MSBuild.exe' -latest -prerelease -products *
+    # The extension supports Visual Studio 2026 (18.x) only, so never build it with an older MSBuild.
+    $msbuildCandidates = & $vswhere -find 'MSBuild\**\Bin\MSBuild.exe' -latest -prerelease -products * -version '[18.0,'
     if ($LASTEXITCODE -ne 0 -or -not $msbuildCandidates) {
-        Write-Error "Desktop MSBuild was not found. Install Visual Studio 2022 or later with the 'Visual Studio extension development' workload."
+        Write-Error "Desktop MSBuild 18 was not found. Install Visual Studio 2026 with the 'Visual Studio extension development' workload."
         exit 1
     }
 
@@ -154,12 +155,12 @@ try {
     Write-Host "Using MSBuild: $msbuild"
     & $msbuild @arguments
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "VSIX build failed. If the log shows NU1301 against nuget.org, pass -NuGetSource <url> or -NuGetConfig <path> to restore through a reachable feed; otherwise ensure Visual Studio 2022 or later has the 'Visual Studio extension development' workload and VSSDK targets installed."
+        Write-Error "VSIX build failed. If the log shows NU1301 against nuget.org, pass -NuGetSource <url> or -NuGetConfig <path> to restore through a reachable feed; otherwise ensure Visual Studio 2026 has the 'Visual Studio extension development' workload and VSSDK targets installed."
         exit $LASTEXITCODE
     }
 
     if (-not (Test-Path -LiteralPath $vsix)) {
-        Write-Error "Expected VSIX was not produced at '$vsix'. Ensure Visual Studio 2022 or later has the 'Visual Studio extension development' workload and VSSDK targets installed."
+        Write-Error "Expected VSIX was not produced at '$vsix'. Ensure Visual Studio 2026 has the 'Visual Studio extension development' workload and VSSDK targets installed."
         exit 1
     }
 } finally {

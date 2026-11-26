@@ -2,7 +2,7 @@
 
 Builds the text of `skills/reactor.api.txt` (and its byte-identical copy under
 `plugins/reactor/skills/reactor-dsl/references/`) by **reflecting over the built
-`Reactor.dll` and `Reactor.Advanced.dll`** — `Assembly.GetExportedTypes()` /
+`Microsoft.UI.Reactor.dll` and `Microsoft.UI.Reactor.Advanced.dll`** — `Assembly.GetExportedTypes()` /
 `Type.GetMembers()` — and emitting a flat,
 alphabetized signatures index. It is a build-time-only class library; the apphost that runs it
 is the sibling `tools/Reactor.SignaturesGen`, and `ApiIndexGeneratorTests` drives the same
@@ -45,8 +45,8 @@ dotnet publish tools/Reactor.SignaturesGen -r win-x64 -c Release -p:ReactorApiAo
   `-p:PublishAot=true` as a global property. A global `PublishAot` leaks through Reactor's
   `ProjectReference` graph into the **netstandard2.0** analyzer/generator projects, which reject
   AOT with `NETSDK1207` before ILC even starts. Scoping it per-project sidesteps that.
-- The gate adds `<TrimmerRootAssembly Include="Reactor" />` and
-  `<TrimmerRootAssembly Include="Reactor.Advanced" />`. Because the generator reflects over
+- The gate adds `<TrimmerRootAssembly Include="Microsoft.UI.Reactor" />` and
+  `<TrimmerRootAssembly Include="Microsoft.UI.Reactor.Advanced" />`. Because the generator reflects over
   precisely the members the trimmer would prune, **both assemblies must be rooted** or their
   APIs can disappear from the native output. The original core-only NativeAOT proof produced
   a byte-identical index; when validating the widened two-assembly gate, compare the native

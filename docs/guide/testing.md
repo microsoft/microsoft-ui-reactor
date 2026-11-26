@@ -271,18 +271,18 @@ To add a self-test:
 1. Add a new fixture file under
    `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` returning the component
    under test wrapped in a small assertion harness.
-2. Register it in **two** places in
-   `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs` — the
-   `AllFixtures` list *and* the `Create()` switch. Miss the second and
-   `--list-fixtures` reports a name the run cannot produce, which shows up
-   as a confusing "missing fixture" failure rather than a compile error.
+2. Add one name-and-factory entry to the ordered `Registrations` table in
+   `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`. The
+   order determines fixture execution and shard assignment.
 3. The MSTest wrapper picks it up at discovery time via
    `--list-fixtures`; no code change needed on the test runner side.
 
-E2E fixtures have the same two-place split, in
-`tests/Reactor.AppTests.Host/FixtureRegistry.cs` (`AllFixtures` plus the
-`Build` switch). `--list-fixtures` is self-test-only, so nothing warns
-you about the E2E half.
+Register each E2E fixture in the ordered `Registrations` table in
+`tests/Reactor.AppTests.Host/FixtureRegistry.cs`. The table order determines
+the host navigator order.
+
+`--list-fixtures` lists only SelfTest fixtures for the current host tier.
+`FixtureRegistryConsistencyTests` in `Reactor.Tests` checks both tables for duplicate fixture names, and that an entry carries `SelfTestTier.Packaged` exactly when its name has the `Packaged_` prefix.
 
 Reach for a self-test when the unit layer can't see the answer — e.g.
 when the WinUI control's measured size affects the component's

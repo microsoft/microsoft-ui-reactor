@@ -967,10 +967,306 @@ internal class PerfTrace_RequestsRecordedOnlyWhileTraced(Harness h) : SelfTestFi
     }
 }
 
+/// <summary>
+/// Schema revision 3 (issue #1538): what a render achieved, recorded under winapp's own session
+/// (<c>Pass|Component</c> at level 4). A memo component reports a <c>ComponentSkip</c> (memo hit)
+/// when its parent re-renders with equal props and a <c>memoMiss</c> render when they changed; a
+/// render whose output reconciled to nothing reports <c>changes</c> 0 (inclusive of nested
+/// components); and the setState calls a component's effects make are its own <c>stateSets</c>
+/// (exclusive), with the root's effects reported on the <c>Effects</c> span.
+/// </summary>
+internal class PerfTrace_RenderOutcomes(Harness h) : SelfTestFixtureBase(h)
+{
+    private static readonly string[] Checks =
+    [
+        "PerfTrace_Outcome_MemoHit",
+        "PerfTrace_Outcome_MemoMiss",
+        "PerfTrace_Outcome_NoOpRender",
+        "PerfTrace_Outcome_ChangedRender",
+        "PerfTrace_Outcome_StateSets",
+        "PerfTrace_Outcome_RootEffectsStateSets",
+        "PerfTrace_Outcome_TallyClosed",
+        "PerfTrace_Outcome_MovesCounted",
+        "PerfTrace_Outcome_RemovalCounted",
+        "PerfTrace_Outcome_InsertCounted",
+        "PerfTrace_Outcome_RawItemsCounted",
+        "PerfTrace_Outcome_MemoFunctionGate",
+        "PerfTrace_Outcome_ReplaceCounted",
+        "PerfTrace_Outcome_ExitCounted",
+        "PerfTrace_Outcome_TreeNodeCounted",
+        "PerfTrace_Outcome_TreeChildCounted",
+        "PerfTrace_Outcome_MenuItemCounted",
+        "PerfTrace_Outcome_KeyedMemoReplaced",
+        "PerfTrace_Outcome_ItemElementsCounted",
+    ];
+
+    private const string RootName = "render in PerfTrace_RenderOutcomes.RunAsync";
+    private const string MemoName = "Memo in PerfTrace_RenderOutcomes.RunAsync";
+
+    public override async Task RunAsync()
+    {
+        Microsoft.UI.Reactor.Hosting.ReactorHost? host = null;
+        var run = await PerfTraceScenario.CaptureAsync(H, level: 4, ReactorPerfTrace.Keywords.Pass | ReactorPerfTrace.Keywords.Component,
+            async () =>
+            {
+                host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (tick, setTick) = ctx.UseState(0);
+                    var (label, setLabel) = ctx.UseState("a");
+                    var (mounted, setMounted) = ctx.UseState(false);
+                    var (keys, setKeys) = ctx.UseState(new[] { "a", "b", "c" });
+                    var (combo, setCombo) = ctx.UseState(new[] { "x", "y" });
+                    var (memoDep, setMemoDep) = ctx.UseState(0);
+                    var (replaced, setReplaced) = ctx.UseState(false);
+                    var (exitKeys, setExitKeys) = ctx.UseState(new[] { "e1", "e2" });
+                    var (tree, setTree) = ctx.UseState(new[] { "t1", "t2" });
+                    var (treeChild, setTreeChild) = ctx.UseState(false);
+                    var (menuLabel, setMenuLabel) = ctx.UseState("outcome menu item");
+                    var (memoKey, setMemoKey) = ctx.UseState("outcome-keyed");
+                    var (itemElements, setItemElements) = ctx.UseState<Element[]>([TextBlock("outcome item 1"), TextBlock("outcome item 2")]);
+                    // Two setState calls from the root's effects: one changes, one does not.
+                    ctx.UseEffect(() =>
+                    {
+                        if (mounted) return;
+                        setMounted(true);
+                        setMounted(true);
+                    }, mounted);
+                    // `tick` is never shown: a tick re-renders the root for nothing.
+                    return VStack(
+                        Button("outcome-tick", () => setTick(tick + 1)),
+                        Button("outcome-label", () => setLabel(label + "b")),
+                        // Keyed rows whose content never changes: a pass that only moves, removes
+                        // or inserts one isolates that edit's count.
+                        Button("outcome-move", () => setKeys(["c", "a", "b"])),
+                        Button("outcome-remove", () => setKeys(["c", "a"])),
+                        Button("outcome-insert", () => setKeys(["c", "a", "d"])),
+                        VStack(keys.Select(k => (Element)TextBlock("outcome key " + k).WithKey(k)).ToArray()),
+                        // Raw items: an edit or a new item changes what the host shows without a
+                        // control being mounted; an equal list in a new array changes nothing.
+                        Button("outcome-combo-edit", () => setCombo(["x", "z"])),
+                        Button("outcome-combo-grow", () => setCombo(["x", "z", "w"])),
+                        Button("outcome-combo-same", () => setCombo(["x", "z", "w"])),
+                        ComboBox(combo),
+                        Component<PerfTraceOutcomeMemoChild, string>(label),
+                        RenderEachTime(PerfTraceFunctions.Static),
+                        Component<PerfTraceOutcomeFanOut>(),
+                        // A Memo(...) function component: skipped while its dependency holds.
+                        Button("outcome-memo", () => setMemoDep(memoDep + 1)),
+                        Memo(_ => TextBlock("outcome memo " + memoDep), memoDep),
+                        // Re-created every render, yet nothing they show changes: a keyed Memo
+                        // whose key holds, and a handler closure capturing the current tick.
+                        Memo(memoKey, () => TextBlock("outcome keyed memo " + memoKey)),
+                        TextBlock("outcome tap").OnTapped((_, _) => setTick(tick + 1)),
+                        // An unkeyed slot whose control type changes: replaced in place (the old
+                        // control is unmounted, the new one mounted).
+                        Button("outcome-replace", () => setReplaced(true)),
+                        VStack(replaced
+                            ? Button("outcome swapped")
+                            : TextBlock("outcome swap me")),
+                        // A row removed with an exit animation: its unmount runs after the pass.
+                        Button("outcome-exit", () => setExitKeys(["e1"])),
+                        VStack(exitKeys.Select(k => (Element)TextBlock("outcome exit " + k)
+                            .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade).WithKey(k)).ToArray()),
+                        // A typed TreeView gaining a root node.
+                        Button("outcome-tree", () => setTree(["t1", "t2", "t3"])),
+                        // ... and then a child under a retained root (same root list).
+                        Button("outcome-tree-child", () => setTreeChild(true)),
+                        TreeView(tree, static t => t, t => treeChild && t == "t1" ? ["t1a"] : null,
+                            static t => TextBlock("outcome node " + t)).Height(120),
+                        // A menu item patched natively; its click closure is new every render.
+                        Button("outcome-menu", () => setMenuLabel("outcome menu item renamed")),
+                        MenuFlyout(TextBlock("outcome menu target"), MenuItem(menuLabel, () => setTick(tick + 1))),
+                        // A keyed Memo whose key changes: one control unmounted, one mounted.
+                        Button("outcome-memo-key", () => setMemoKey("outcome-keyed-2")),
+                        // ComboBox item elements: removing two unmounts two controls; an Empty()
+                        // item mounts nothing, so it changes nothing.
+                        Button("outcome-items-remove", () => setItemElements([])),
+                        Button("outcome-items-empty", () => setItemElements([Empty()])),
+                        ComboBox(itemElements, default, null));
+                });
+                await Harness.Render();
+                await Harness.Render();
+                await Harness.Render();
+                H.ClickButton("outcome-tick");
+                await Harness.Render();
+                H.ClickButton("outcome-label");
+                await Harness.Render();
+                foreach (var button in new[] { "outcome-move", "outcome-remove", "outcome-insert",
+                    "outcome-combo-edit", "outcome-combo-grow", "outcome-combo-same",
+                    "outcome-memo", "outcome-replace", "outcome-exit", "outcome-tree", "outcome-tree-child", "outcome-menu",
+                    "outcome-memo-key", "outcome-items-remove", "outcome-items-empty" })
+                {
+                    H.ClickButton(button);
+                    await Harness.Render();
+                }
+            },
+            () => host?.Dispose());
+        if (run is null)
+        {
+            foreach (var check in Checks) H.Skip(check, PerfTraceScenario.SkipReason);
+            return;
+        }
+
+        var events = run.Value.Events;
+        string Name(CapturedEtwEvent e) => e.Fields.TryGetValue("name", out var n) ? (string)n : "";
+        // Pair each ComponentRender Start with its Stop (same thread, properly nested).
+        var renders = new List<(CapturedEtwEvent Start, CapturedEtwEvent Stop)>();
+        var open = new Stack<CapturedEtwEvent>();
+        foreach (var e in events.Where(e => e.Name == "ComponentRender").OrderBy(e => e.Timestamp))
+        {
+            if (e.Opcode == 1) open.Push(e);
+            else if (open.Count > 0) renders.Add((open.Pop(), e));
+        }
+        string Describe((CapturedEtwEvent Start, CapturedEtwEvent Stop) r)
+            => $"{Name(r.Start)}:{r.Start.Fields["reason"]}:miss={r.Start.Fields["memoMiss"]}:changes={r.Stop.Fields["changes"]}:sets={r.Stop.Fields["ownStateSets"]}";
+        Console.WriteLine("# perf outcomes: " + string.Join(" | ", renders.OrderBy(r => r.Start.Timestamp).Select(Describe)));
+        var skips = events.Where(e => e.Name == "ComponentSkip").ToList();
+        Console.WriteLine("# perf outcomes: skips " + string.Join(",", skips.Select(e => $"{e.Fields["componentId"]}:{Name(e)}")));
+
+        List<(CapturedEtwEvent Start, CapturedEtwEvent Stop)> Of(string name)
+            => renders.Where(r => Name(r.Start) == name).OrderBy(r => r.Start.Timestamp).ToList();
+        var child = Of(nameof(PerfTraceOutcomeMemoChild));
+        var root = Of(RootName);
+        var func = Of("PerfTraceFunctions.Static");
+        var fanOut = Of(nameof(PerfTraceOutcomeFanOut));
+
+        // Memo hits: the child skipped (named and with its own id) on the passes its props held.
+        var childId = child.Count > 0 ? child[0].Start.Fields["componentId"] : null;
+        H.Check("PerfTrace_Outcome_MemoHit",
+            childId is not null && skips.Any(e => Name(e) == nameof(PerfTraceOutcomeMemoChild) && Equals(e.Fields["componentId"], childId))
+            && skips.Any(e => Name(e) == nameof(PerfTraceOutcomeFanOut)));
+
+        // Memo misses: the child's props render is one; its mount, the root's state renders and
+        // the gate-less function component's renders are not.
+        H.Check("PerfTrace_Outcome_MemoMiss",
+            child.Count == 2 && (string)child[0].Start.Fields["reason"] == "mount" && !(bool)child[0].Start.Fields["memoMiss"]
+            && (string)child[1].Start.Fields["reason"] == "props" && (bool)child[1].Start.Fields["memoMiss"]
+            && func.Count >= 3 && func.All(r => !(bool)r.Start.Fields["memoMiss"])
+            && root.Count >= 3 && root.All(r => !(bool)r.Start.Fields["memoMiss"]));
+
+        // The tick: the root and its function child rendered and changed nothing (no control was
+        // created, updated, removed or moved). It is the last root render that ended before the
+        // child's props render began.
+        var labelRender = child.Count == 2 ? child[1] : default;
+        var tickRoot = root.LastOrDefault(r => labelRender.Start is not null && r.Stop.Timestamp < labelRender.Start.Timestamp
+            && (string)r.Start.Fields["reason"] == "state");
+        var tickFunc = func.LastOrDefault(r => tickRoot.Start is not null && r.Start.Timestamp > tickRoot.Start.Timestamp
+            && r.Stop.Timestamp < tickRoot.Stop.Timestamp);
+        H.Check("PerfTrace_Outcome_NoOpRender",
+            tickRoot.Start is not null && (uint)tickRoot.Stop.Fields["changes"] == 0
+            && tickFunc.Start is not null && (uint)tickFunc.Stop.Fields["changes"] == 0);
+
+        // The label: the child updated its text, and the root's count includes it.
+        var labelRoot = root.LastOrDefault(r => labelRender.Start is not null && r.Start.Timestamp < labelRender.Start.Timestamp
+            && r.Stop.Timestamp > labelRender.Stop.Timestamp);
+        H.Check("PerfTrace_Outcome_ChangedRender",
+            labelRender.Start is not null && (uint)labelRender.Stop.Fields["changes"] >= 1
+            && labelRoot.Start is not null && (uint)labelRoot.Stop.Fields["changes"] >= (uint)labelRender.Stop.Fields["changes"]);
+
+        // The fan-out child's mount effects made three setState calls; they are its own, not the
+        // enclosing root's (whose own effects run after its span, on the Effects span).
+        H.Check("PerfTrace_Outcome_StateSets",
+            fanOut.Count >= 1 && (string)fanOut[0].Start.Fields["reason"] == "mount" && (uint)fanOut[0].Stop.Fields["ownStateSets"] == 3
+            && fanOut.Skip(1).All(r => (uint)r.Stop.Fields["ownStateSets"] == 0)
+            && root.Count > 0 && (uint)root[0].Stop.Fields["ownStateSets"] == 0);
+
+        var effectsStops = events.Where(e => e.Name == "Effects" && e.Opcode == 2).Select(e => (uint)e.Fields["ownStateSets"]).ToList();
+        Console.WriteLine("# perf outcomes: root effects stateSets " + string.Join(",", effectsStops));
+        H.Check("PerfTrace_Outcome_RootEffectsStateSets",
+            effectsStops.Count >= 2 && effectsStops[0] == 2 && effectsStops.Skip(1).All(s => s == 0));
+
+        H.Check("PerfTrace_Outcome_TallyClosed", ComponentPerfTally.OpenScopesForTests == 0);
+
+        // The last fifteen root renders each made one kind of edit and nothing else, so the root's
+        // (inclusive) count is exactly that edit's: the moves the pass's Reconcile Stop reports,
+        // one unmounted row, one mounted row, then one raw-items edit each for a changed and a
+        // grown ComboBox list and nothing for an equal list in a new array, the Memo's text, a
+        // replaced row (its unmount and the new control's mount), a row starting its exit
+        // animation, a TreeView root node built (its container is realized later, during layout), a child
+        // node built under a retained root, a menu item renamed in place, a keyed Memo's key change
+        // (its control unmounted and its replacement mounted, never counted twice), two ComboBox
+        // item elements removed, and an Empty() item that mounts nothing.
+        var edits = root.TakeLast(15).Select(r =>
+        {
+            var stop = events.FirstOrDefault(e => e.Name == "Reconcile" && e.Opcode == 2
+                && e.Timestamp > r.Start.Timestamp && e.Timestamp < r.Stop.Timestamp);
+            return (Changes: (uint)r.Stop.Fields["changes"],
+                Moved: stop is null ? uint.MaxValue : (uint)stop.Fields["moved"],
+                Removed: stop is null ? uint.MaxValue : (uint)stop.Fields["removed"],
+                Inserted: stop is null ? uint.MaxValue : (uint)stop.Fields["inserted"],
+                Replaced: stop is null ? uint.MaxValue : (uint)stop.Fields["replaced"]);
+        }).ToList();
+        Console.WriteLine("# perf outcomes: single-edit passes " + string.Join(" ", edits));
+        H.Check("PerfTrace_Outcome_MovesCounted",
+            edits.Count == 15 && edits[0].Moved is >= 1 and < uint.MaxValue && edits[0].Changes == edits[0].Moved);
+        H.Check("PerfTrace_Outcome_RemovalCounted",
+            edits.Count == 15 && edits[1].Removed == 1 && edits[1].Changes == 1);
+        H.Check("PerfTrace_Outcome_InsertCounted",
+            edits.Count == 15 && edits[2].Inserted == 1 && edits[2].Changes == 1);
+        H.Check("PerfTrace_Outcome_RawItemsCounted",
+            edits.Count == 15 && edits[3].Changes == 1 && edits[4].Changes == 1 && edits[5].Changes == 0);
+
+        // The Memo(...) gate: it skipped while its dependency held (the tick), then rendered on the
+        // dependency change as a memo miss that updated its text.
+        var memo = Of(MemoName);
+        var memoId = memo.Count > 0 ? memo[0].Start.Fields["componentId"] : null;
+        Console.WriteLine("# perf outcomes: memo renders " + string.Join(" | ", memo.Select(Describe)));
+        H.Check("PerfTrace_Outcome_MemoFunctionGate",
+            memo.Count == 2 && (string)memo[0].Start.Fields["reason"] == "mount" && !(bool)memo[0].Start.Fields["memoMiss"]
+            && (string)memo[1].Start.Fields["reason"] == "props" && (bool)memo[1].Start.Fields["memoMiss"]
+            && (uint)memo[1].Stop.Fields["changes"] == 1
+            && skips.Any(e => Name(e) == MemoName && Equals(e.Fields["componentId"], memoId))
+            && edits.Count == 15 && edits[6].Changes == 1);
+        H.Check("PerfTrace_Outcome_ReplaceCounted",
+            edits.Count == 15 && edits[7].Replaced == 1 && edits[7].Changes == 2);
+        H.Check("PerfTrace_Outcome_ExitCounted",
+            edits.Count == 15 && edits[8].Changes == 1);
+        H.Check("PerfTrace_Outcome_TreeNodeCounted",
+            edits.Count == 15 && edits[9].Changes == 1);
+        H.Check("PerfTrace_Outcome_TreeChildCounted",
+            edits.Count == 15 && edits[10].Changes == 1);
+        H.Check("PerfTrace_Outcome_MenuItemCounted",
+            edits.Count == 15 && edits[11].Changes == 1);
+        H.Check("PerfTrace_Outcome_KeyedMemoReplaced",
+            edits.Count == 15 && edits[12].Changes == 2);
+        H.Check("PerfTrace_Outcome_ItemElementsCounted",
+            edits.Count == 15 && edits[13].Changes == 2 && edits[14].Changes == 0);
+    }
+}
+
+/// <summary>A memoized child: re-renders only when its props change.</summary>
+internal sealed class PerfTraceOutcomeMemoChild : Component<string>
+{
+    public override Element Render() => TextBlock("outcome " + Props);
+}
+
+/// <summary>Sets three pieces of state from its mount effect, i.e. a setState fan-out (spec 023's PERF005).</summary>
+internal sealed class PerfTraceOutcomeFanOut : Component
+{
+    public override Element Render()
+    {
+        var (a, setA) = UseState(0);
+        var (b, setB) = UseState(0);
+        var (c, setC) = UseState(0);
+        UseEffect(() =>
+        {
+            if (a != 0) return;
+            setA(1);
+            setB(1);
+            setC(1);
+        }, a);
+        return TextBlock($"fan-out {a + b + c}");
+    }
+}
+
 internal static class PerfTraceFunctions
 {
     /// <summary>A function component written as a method group: its perf name is the method's.</summary>
     public static Element Badge(RenderContext ctx) => TextBlock("perf badge");
+
+    /// <summary>A function component whose output never changes.</summary>
+    public static Element Static(RenderContext ctx) => TextBlock("perf static");
 }
 
 internal sealed class PerfTraceControlRoot : Component

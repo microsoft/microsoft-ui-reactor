@@ -134,6 +134,47 @@ public class HookDelegateCachingTests
 
     // ── threadSafe path retained ─────────────────────────────────────────
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CachedSetters_UseLiveCallbacks_AndDetachWithoutNotifying(bool threadSafe)
+    {
+        var ctx = new RenderContext();
+        int oldRenders = 0, currentRenders = 0;
+        ctx.BeginRender(() => oldRenders++);
+        var (_, set) = ctx.UseState(1, threadSafe);
+        var (_, update) = ctx.UseReducer(2, threadSafe);
+        var (_, dispatch) = ctx.UseReducer<int, int>(static (s, a) => s + a, 3, threadSafe);
+
+        ctx.BeginRender(() => currentRenders++);
+        Assert.Same(set, ctx.UseState(1, threadSafe).Set);
+        Assert.Same(update, ctx.UseReducer(2, threadSafe).Update);
+        Assert.Same(dispatch,
+            ctx.UseReducer<int, int>(static (s, a) => s - a, 3, threadSafe).Dispatch);
+
+        set(1);
+        update(static v => v);
+        dispatch(0);
+        Assert.Equal(0, currentRenders);
+        set(5);
+        update(static v => v + 7);
+        dispatch(2);
+        Assert.Equal(0, oldRenders);
+        Assert.Equal(3, currentRenders);
+
+        ctx.BeginRender(() => currentRenders++);
+        Assert.Equal(5, ctx.UseState(1, threadSafe).Value);
+        Assert.Equal(9, ctx.UseReducer(2, threadSafe).Value);
+        Assert.Equal(1, ctx.UseReducer<int, int>(static (s, a) => s - a, 3, threadSafe).Value);
+
+        ctx.DetachFromHost();
+        set(10);
+        update(static v => v + 1);
+        dispatch(1);
+        Assert.Equal(0, oldRenders);
+        Assert.Equal(3, currentRenders);
+    }
+
     [Fact]
     public async global::System.Threading.Tasks.Task ThreadSafe_State_Still_Serializes_Concurrent_Setters()
     {

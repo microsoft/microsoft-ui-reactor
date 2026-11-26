@@ -175,7 +175,7 @@ author's responsibility (and a debug-build assert).
 > instance, it survives pool rent — and that is almost certainly a bug.
 > Per-control state lives on the **control**, either as an attached
 > state DP or as the typed event payload box
-> ([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
+> ([`ModifierEvents.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
 > both of which the pool reset contract clears. The handler instance is
 > a stateless interpreter.
 
@@ -567,8 +567,10 @@ wrappers supply this callback for public, writable `IList<object>`
 properties. Read-only and concrete native `ItemCollection` properties
 keep their existing sink. The framework supplies the WinRT exposure for
 its observable list with `GeneratedWinRTExposedExternalType`, including indirect
-Native AOT collection boundaries. This does not root a toolkit's XAML metadata;
-code-only Native AOT apps may also need explicit provider registration (see
+Native AOT collection boundaries. XAML metadata is separate: full generated wrappers
+statically register a unique publicly constructible provider from the control's
+assembly, so code-only Native AOT apps can use templated Toolkit controls without
+app-side roots. Custom or undiscoverable providers still need explicit registration (see
 [AOT support](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/aot-support.md)).
 
 ## Pool integration
@@ -627,7 +629,7 @@ the suppress counter on entry — every controlled prop in every built-in
 handler is echo-safe without the handler author having to think
 about it. Hand-authored trampolines (the ones that bypass
 `OnCustomEvent` for performance) follow the same shape; see
-`Reconciler.GetOrCreateControlEventPayload` for the per-control
+`ModifierEvents.GetOrCreateControlEventPayload` for the per-control
 payload box that anchors the trampoline for the control's lifetime.
 
 ## Element identity via the tag

@@ -81,8 +81,8 @@ geometry, `BitmapImage`, or **`AutomationPeer`-derived** type) — you get a `CO
 If a target needs one, it is NOT a unit target → drop it (note why) or move to a selftest.
 Internal seams are testable: `InternalsVisibleTo("Reactor.Tests")` is set in
 `src/Reactor/Reactor.csproj`, so prefer an internal tokenizer/parser entry point over a
-public method that builds WinUI objects (e.g. `PathDataParser.ParseTokens(pathData)`
-vs the public `Parse`). Before writing an E2E, check for an existing reflection selftest
+public method that builds WinUI objects (e.g. `BrushHelper.ParseColor(color)`, which
+returns a `Windows.UI.Color` value, vs the public `Parse`, which builds a `SolidColorBrush`). Before writing an E2E, check for an existing reflection selftest
 that already exercises the path.
 
 ### 3. Add narrowly-scoped tests
@@ -93,11 +93,11 @@ that already exercises the path.
   for fully-qualified `System` refs (the `Microsoft.UI.System` namespace shadows).
 - **Selftest fixture:** file under `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`,
   subclass `SelfTestFixtureBase`, use `H.CreateHost()`, `host.Mount(...)`,
-  `Harness.Render()` / `WaitFor(...)`, `H.FindControl<T>()`, `H.Check(...)`. **Register in
-  BOTH** `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs` `AllFixtures`
-  **and** its `Create()` switch.
-- **E2E fixture:** register in BOTH `AllFixtures` and the `Build` switch of
-  `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Use `Component<T>()` fixtures for
+  `Harness.Render()` / `WaitFor(...)`, `H.FindControl<T>()`, `H.Check(...)`. Add one
+  name-and-factory entry to the ordered `Registrations` table in
+  `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`.
+- **E2E fixture:** add one name-and-factory entry to the ordered `Registrations`
+  table in `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Use `Component<T>()` fixtures for
   stateful UI — raw `ctx.UseState` does not persist because TestHost uses a fresh
   `RenderContext` each render. Add `[E2eRetry(3)]`, drive real input through the native
   winapp verbs (`App.Click`, `App.SendKeys(..., viaSendInput: true)`, `App.Drag`), which
@@ -122,7 +122,7 @@ dotnet test tests/Reactor.AppTests -p:Platform=x64
 
 Always pass `-p:Platform=x64` (AnyCPU app/test builds fail with *"WindowsAppSDKSelfContained
 requires a supported Windows architecture"*) and `-p:SkipSignaturesGen=true` on
-`Reactor.Tests` to dodge the `CS2012 …\intermediatexaml\Reactor.dll` race. If the race
+`Reactor.Tests` to dodge the `CS2012 …\intermediatexaml\Microsoft.UI.Reactor.dll` race. If the race
 persists under parallel builds, escalate **on the `dotnet build` line only** — prebuild
 `src/Reactor` first, then add `-m:1 -nodereuse:false` (or set
 `$env:MSBUILDDISABLENODEREUSE='1'`) to the build — and keep running the suite through the

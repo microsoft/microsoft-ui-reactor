@@ -191,17 +191,17 @@ public static partial class SearchIndexGenerator
         foreach (var element in arrayInit.Expressions)
         {
             // Strict: every element of the `new ControlInfo[] { ... }` initializer must be a
-            // fully literal `new(title, desc, category, glyph, tag, ...)`. Throwing (rather
+            // fully literal `new(title, desc, category, tag, ...)`. Throwing (rather
             // than skipping) keeps the no-silent-drop guarantee if a future entry uses named
             // args, a constant, or an interpolated string the parser can't read.
-            if (ObjectCreationArgs(element) is not { } args || args.Count < 5)
+            if (ObjectCreationArgs(element) is not { } args || args.Count < 4)
                 throw new InvalidOperationException(
-                    "ControlRegistry entry is not a `new(title, desc, category, glyph, tag, ...)` with >=5 args: " + Truncate(element));
+                    "ControlRegistry entry is not a `new(title, desc, category, tag, ...)` with >=4 args: " + Truncate(element));
 
             var title = TryGetStringLiteral(args[0].Expression);
             var description = TryGetStringLiteral(args[1].Expression);
             var category = TryGetStringLiteral(args[2].Expression);
-            var tag = TryGetStringLiteral(args[4].Expression);
+            var tag = TryGetStringLiteral(args[3].Expression);
 
             if (title is null || description is null || category is null || string.IsNullOrEmpty(tag))
                 throw new InvalidOperationException(
@@ -318,7 +318,7 @@ public static partial class SearchIndexGenerator
             if (header is null || code is null) continue;
 
             var normalized = NormalizeCode(code);
-            if (!HasRealCode(normalized) || HasPlaceholder(normalized)) continue;
+            if (!SampleCode.IsComplete(normalized)) continue;
 
             // Headers are the 0.8-weighted BM25 field and the human label for a hit, so two
             // cards sharing one header would emit an ambiguous duplicate. Keep the first.
@@ -363,27 +363,6 @@ public static partial class SearchIndexGenerator
 
     static string NormalizeCode(string code) =>
         code.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
-
-    // A snippet qualifies as a real code sample only if it has at least one line that
-    // isn't blank or a pure `//` comment — so a guidance card whose "sourceCode" is only
-    // a descriptive comment (e.g. SpacingPage's first card) is passed over for the next.
-    static bool HasRealCode(string code) =>
-        code.Split('\n').Any(line =>
-        {
-            var t = line.Trim();
-            return t.Length > 0 && !t.StartsWith("//", StringComparison.Ordinal);
-        });
-
-    // Rejects a snippet that abbreviates required code with a placeholder — an args/element
-    // ellipsis ("x, ..." / "(...)" / "...)" / a lone "..." line) or an angle-bracket fill-in
-    // like <your-key>. Ellipses inside UI strings ("Type here...") are NOT matched, so those
-    // snippets still qualify. Enforces the REAL-CODE-ONLY invariant: the first *complete*
-    // card wins, and a control with no complete card needs an editorial sampleOverride.
-    [GeneratedRegex(@",\s*\.\.\.|\.\.\.\s*\)|\(\s*\.\.\.|^\s*\.\.\.\s*$|\.\.\./|<your", RegexOptions.Multiline)]
-    private static partial Regex PlaceholderRegex();
-
-    static bool HasPlaceholder(string code) => PlaceholderRegex().IsMatch(code);
-
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
 

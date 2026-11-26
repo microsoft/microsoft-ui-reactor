@@ -12,6 +12,9 @@ namespace Microsoft.UI.Reactor.Hosting.Messaging;
 /// show/hide).
 /// </summary>
 /// <remarks>
+/// <para>Adapted from WinUIEx (<c>Messaging.WindowMessageMonitor</c>,
+/// https://github.com/dotMorten/WinUIEx), MIT License, Copyright (c) 2021
+/// Morten Nielsen. See <c>ThirdPartyNoticeText.txt</c>.</para>
 /// <para>Threading: <c>WndProc</c> runs on the lifted-XAML message pump's
 /// UI thread. Subscribers' handlers run on that thread; do not marshal
 /// heavy work into the WndProc — return quickly so paint / input continue.</para>
@@ -48,6 +51,9 @@ internal sealed class WindowMessageMonitor : IDisposable
 
     /// <summary>WM_DISPLAYCHANGE — sent when the display layout or resolution changes.</summary>
     public const uint WM_DISPLAYCHANGE = 0x007E;
+
+    /// <summary>WM_ACTIVATEAPP — sent to every top-level window of a thread whose app gains or loses activation.</summary>
+    public const uint WM_ACTIVATEAPP = 0x001C;
 
     private readonly nint _hwnd;
     private GCHandle _selfHandle;

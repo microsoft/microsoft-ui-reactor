@@ -24,13 +24,18 @@ before push.
 
 ## Model selection
 
-Evidence refreshed **2026-11-05**. Keep model IDs and selection rationale here,
+Evidence refreshed **2026-11-24**. Keep model IDs and selection rationale here,
 not in individual prompt fragments. These are task-fit candidates, not validated
-per-dimension defaults. The [local pilot and five-repeat comparison](model-evaluation.md)
-favored GPT-6.1 Sol on one snapshot: mean known runtime defects found per review
-were 1.4 for Sol, 1.0 for Astra, 0.2 for Opus, and 0 for Sonnet, out of three.
-Sol also used fewer credits. Keep it as the correctness-review evaluation
-baseline; repeated samples of one PR do not establish repository-wide defaults.
+per-dimension defaults. The [2026-11-05 single-PR comparison](model-evaluation.md#2026-11-05-single-pr-comparison)
+favored GPT-6.1 Sol over Astra, Opus and Sonnet. The
+[2026-11-24 multi-PR comparison](model-evaluation.md#2026-11-24-multi-pr-comparison)
+then ran GPT-6.2 Sol and Gemini 4 Carbon over four pre-fix PR snapshots and an
+intended clean control, two reviews each. Both found 16 of 30 reference defect
+opportunities. Sol did it at about one-seventh the credits and one-twenty-fifth
+the wall time (`medium` effort, concurrent runs), while Carbon found defects
+Sol missed in three of the five snapshots, including a regression in the
+control. Ten reviews per model (eight on the labeled snapshots, two on the
+control) are still a small sample, not a repository-wide ranking.
 
 ### Runtime selection
 
@@ -62,13 +67,14 @@ baseline; repeated samples of one PR do not establish repository-wide defaults.
 
 | Workload | Candidate Copilot model ID | Use and limits |
 |----------|------------------------------|----------------|
-| **Measured correctness-review candidate / evaluation baseline** | `gpt-6.1-sol` | Best known-runtime-defect/cost result in the five-repeat case. Also a different-family candidate after a Claude first pass; cross-family verification and other dimensions remain unvalidated. |
-| **Deep-review challenger / Claude cross-check candidate** | `claude-opus-5.5` | Found a documentation gap Sol missed, but most reference runtime bugs escaped its reviews. Available for complex judgment and a permitted different-family check after OpenAI; not a blanket deep-review default. |
-| **Bounded-review candidate** | `claude-sonnet-5.5` | Candidate for docs/sample synchronization and straightforward inventories. No reference hits in this combined-review case; focused bounded tasks remain unmeasured. Do not infer correctness, security or AOT-review suitability from price or vendor positioning. |
-| **Measured comparator** | `gpt-6-astra` | Found one known runtime bug in each repeat at substantially higher recorded cost than Sol. This case does not justify preferring it as a new default. It is not a different-family check after Sol. |
+| **Measured correctness-review candidate / evaluation baseline** | `gpt-6.2-sol` | Found 16/30 reference defect opportunities across four PRs at about 33 credits and 70 s per review, with the same labels in both reviews of every case at the lowest measured cost. Replaces `gpt-6.1-sol` (same API price, released 2026-11-17), but the two were not compared head-to-head. Raised no supported findings on the intended clean control, which turned out to contain a real regression. Also a different-family candidate after a Claude or Gemini first pass. |
+| **Third-family cross-check candidate** | `gemini-4-carbon` | Matched Sol's 16/30 and found defects Sol missed on three of five snapshots, including the control's regression in both runs. It costs about 219 credits and 31 minutes of wall time per review at `medium` effort, so use it where a different family matters, not as a primary fan-out default. One of eleven runs (in calibration) ignored the JSON output contract. |
+| **Deep-review challenger / Claude cross-check candidate** | `claude-opus-5.5` | Found a documentation gap 6.1 Sol missed in the 2026-11-05 case, but most reference runtime bugs escaped its reviews. Not re-measured on 2026-11-24. Available for complex judgment and a permitted different-family check after OpenAI; not a blanket deep-review default. |
+| **Bounded-review candidate** | `claude-sonnet-5.5` | Candidate for docs/sample synchronization and straightforward inventories. No reference hits in the 2026-11-05 combined-review case; focused bounded tasks remain unmeasured. Do not infer correctness, security or AOT-review suitability from price or vendor positioning. |
+| **Unmeasured comparator** | `gpt-6.2-astra` | Successor to `gpt-6-astra`, which found one known bug per repeat on 2026-11-05 at several times Sol's cost. Not measured here. It is not a different-family check after Sol. |
 | **Mechanical workflows** | Inherit the configured model; no override | Running the committed perf script, reading CI state, and lifecycle bookkeeping do not need a frontier-model fan-out. Nontrivial fixes still warrant deep reasoning. |
 
-The [PR review dimension table](pr-review/SKILL.md#4-review-the-dimensions)
+The [PR review dimension table](pr-review/SKILL.md#4-fan-out-the-primary-dimensions)
 maps these workloads to each review lens as hypotheses. The other skills
 reference this same policy; none needs its own aging model list.
 
@@ -76,8 +82,12 @@ reference this same policy; none needs its own aging model list.
 
 Choose relative to the **actual first-pass reviewer or test author**, not merely
 the orchestrator. Opus and Sonnet are both Claude; changing between them, or
-between two GPT versions, is not family diversity. For direct reviews, the
-orchestrator is the first-pass reviewer.
+between two GPT versions, is not family diversity. When a cross-check model is
+yours to pick: after Claude reviewers prefer `gpt-6.2-sol`; after GPT
+reviewers choose a Claude or Gemini candidate. Reach for `gemini-4-carbon`
+when the reviewers already span Claude and GPT, or when the extra wall time
+and credits are acceptable for the change at hand. When the orchestrator does
+the first-pass work itself (pr-review never does), it is the first-pass reviewer.
 
 Track model provenance per finding and reviewed area. If first-pass reviewers
 used mixed families, a single second-pass model may not independently cover
@@ -101,7 +111,9 @@ These sources support a shortlist, not a universal ranking:
 | [Anthropic: Opus 5.5, 2026-09-22](https://www.anthropic.com/claude-opus-5-5) | Reports FrontierCode v1.1 at 54.4% with adaptive thinking at max effort, and Terminal-Bench 4.0 at 66.4% at xhigh. The evaluation includes production safeguards and fallback models. | Reactor/C#/WinUI review accuracy, or a head-to-head at our host's default effort. These are vendor-reported agentic evaluations. |
 | [Anthropic: Sonnet 5.5, 2026-09-28](https://www.anthropic.com/claude-sonnet-5-5) | Positions Sonnet for well-scoped work and Opus for complex judgment. Reports FrontierCode at 52.1% at xhigh versus 46.2% at max: maximum effort is not automatically best. | A reason to use the cheaper model for every security, correctness, or test-oracle decision. |
 | [OpenAI: GPT-6.1 Sol, 2026-09-29](https://openai.com/index/introducing-gpt-6-1-sol/) | Describes near-Astra agentic coding capability at one-fifth of Astra's standard input/output token prices. [GitHub's task comparison](https://docs.github.com/en/copilot/reference/ai-models/model-comparison) recommends it for complex coding. | A measured win over Opus on PR review, or the cost of a Copilot review run. API token prices are not Copilot credit measurements. |
-| [GitHub: supported models](https://docs.github.com/en/copilot/reference/ai-models/supported-models) | Lists supported options; availability varies by client, plan, and policy. | Access in the current session, or permission to override its configured model. |
+| [OpenAI: GPT-6.2 Astra and Sol, 2026-11-17](https://openai.com/index/introducing-gpt-6-2-astra-sol/) | Keeps GPT-6.1 Sol's API token prices. Reports 6.2 Sol within 0.5 points of 6.2 Astra on FrontierCode 2.0 at about one-fifth the cost (both at max), and 5.3 points above 6.1 Sol on GDPval v2. | A Reactor review win over 6.1 Sol. Our 2026-11-24 run measured 6.2 Sol without a 6.1 arm. |
+| [Google: choosing a Gemini model](https://aistudio.google.com/docs/choosing-a-model) | Positions Gemini 4 Carbon as the strongest, most deliberate reasoning tier (above Neon and Hydrogen), for multi-file debugging and security audits. | Review speed: Carbon was by far the slowest reviewer we measured. |
+| [GitHub: supported models](https://docs.github.com/en/copilot/reference/ai-models/supported-models) | Lists supported options; availability varies by client, plan, and policy. Claude Fable 5.2 is listed GA but needs separate enterprise enablement and was not exposed in the 2026-11-24 host. | Access in the current session, or permission to override its configured model. |
 
 Keep benchmark versions, harnesses, effort settings, safeguards, and budgets
 attached to scores. For example, [Vals' Terminal-Bench 4.0 methodology](https://www.vals-ai.com/benchmarks/terminal-bench-4)

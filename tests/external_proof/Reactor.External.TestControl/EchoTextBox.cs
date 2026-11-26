@@ -7,7 +7,7 @@ namespace Reactor.External.TestControl;
 /// Spec 062 §14 — a value-bearing external string control wrapped by a
 /// source-generated <c>[GenerateReactorWrapper]</c> +
 /// <c>[WrapControlled("Text", Deferred = true)]</c> record
-/// (<see cref="ExternalEchoTextBoxElement"/>), authored OUTSIDE Reactor.dll with
+/// (<see cref="ExternalEchoTextBoxElement"/>), authored OUTSIDE Microsoft.UI.Reactor.dll with
 /// NO <c>InternalsVisibleTo</c>.
 ///
 /// <para><c>Deferred = true</c> selects the <b>suppress-counter</b> echo channel —
@@ -18,7 +18,7 @@ namespace Reactor.External.TestControl;
 /// <b>public</b> <c>ReactorBinding.ShouldSuppressEcho</c> primitive. Before that
 /// primitive was public the generator emitted the <i>internal</i>
 /// <c>ChangeEchoSuppressor.ShouldSuppress</c>, and this assembly (no
-/// <c>InternalsVisibleTo</c> from Reactor.dll) would fail to compile with CS0122.
+/// <c>InternalsVisibleTo</c> from Microsoft.UI.Reactor.dll) would fail to compile with CS0122.
 /// The very fact that this project compiles is the stable-ABI proof for issue #163
 /// / spec 062 §14.</para>
 ///

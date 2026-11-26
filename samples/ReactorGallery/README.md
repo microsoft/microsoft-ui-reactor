@@ -105,6 +105,23 @@ branch (`GalleryProtocol.IsPackaged`), never a `#if`:
 which reports "unpackaged" by throwing — the normal case here, and not something worth
 a first-chance exception in every debugger session.
 
+## Editing sample snippets
+
+Keep each `SampleCard`'s displayed `sourceCode` consistent with its live sample.
+For a Private Use Area (PUA) icon in the string content of a text or button
+factory, include the icon font in both the live element chain and the displayed
+snippet.
+
+```csharp
+TextBlock("\uE930")
+    .FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets")
+```
+
+The headless `GallerySampleLintTests` checks these fonts in live `ControlPages`
+code and compile-time snippets. See the [PUA lint guide](../../TESTING.md#pua-glyph-fonts-in-gallery-samples)
+for its scope, limitations, and focused test command. After editing a snippet,
+regenerate the search index as described below.
+
 ## Search index
 
 `reactor-search-index.json` is generated from this app's source and consumed by the
@@ -117,6 +134,11 @@ dotnet run --project tools/Reactor.SearchIndex
 ```
 
 A `Reactor.Tests` gate byte-compares the committed file, so a stale index fails CI.
+`SearchIndexCoverageTests` also checks for cards that are missing from a regenerated
+index. Record deliberate omissions in the
+[coverage manifest](../../tests/Reactor.Tests/Tooling/SearchIndexCoverageTests.cs).
+Remove an omission entry when its card becomes a complete sample.
+
 Curate keywords and overrides in `tools/Reactor.SearchIndex/editorial.json`, never in
 the generated JSON.
 

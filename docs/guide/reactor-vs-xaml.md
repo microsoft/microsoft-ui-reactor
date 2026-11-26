@@ -96,24 +96,20 @@ live in a type-keyed `Attached` dictionary on the same record.
 private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
     el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
 
-// #165/#157 — bucket-level merge entry points for pure-layout / pure-visual
-// fluent modifiers. Routing through these avoids allocating a throwaway parent
-// ElementModifiers (and the bucket sub-record its init shim builds) on every
-// chained call: `.Margin().Width().Foreground()` merges the delta straight into
-// the Layout / Visual slot instead of constructing a temporary ElementModifiers
-// per step. Semantics are identical to Modify(el, new ElementModifiers { <field> }):
-// ElementModifiers.Merge copies every non-bucket field as `other.X ?? X` (i.e.
-// unchanged) when only a bucket is supplied, and merges the bucket with the same
-// `other ?? this` precedence used here.
-private static T ModifyLayout<T>(T el, LayoutModifiers delta) where T : Element
+// Callers copy only the fields they set, preserving the existing layout without
+// allocating a temporary delta. The parent and concrete element stay immutable.
+private static T WithLayout<T>(T el, LayoutModifiers layout) where T : Element
 {
     var mods = el.Modifiers;
-    if (mods is null)
-        return el with { Modifiers = new ElementModifiers { Layout = delta } };
-    var merged = mods.Layout is not null ? mods.Layout.Merge(delta) : delta;
-    return el with { Modifiers = mods with { Layout = merged } };
+    return el with
+    {
+        Modifiers = mods is not null
+            ? mods with { Layout = layout }
+            : new ElementModifiers { Layout = layout },
+    };
 }
 
+// Merge visual deltas directly into the bucket, without a temporary parent.
 private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
 {
     var mods = el.Modifiers;
@@ -259,9 +255,10 @@ public readonly record struct ThemeRef(string ResourceKey)
 
     /// <summary>
     /// Resolves this theme reference using the element's actual theme.
-    /// Walks the ThemeDictionaries in Application.Resources and MergedDictionaries
-    /// to find the brush matching the element's effective theme (which respects
-    /// per-element RequestedTheme overrides, not just the app-level theme).
+    /// The theme is the element's effective theme (which respects per-element
+    /// RequestedTheme overrides, not just the app-level theme). WinUI resolves the
+    /// key for that theme, as a <c>{ThemeResource}</c> reference on an element in that
+    /// theme would, instead of Reactor reading the theme dictionaries (issue #1534).
     /// </summary>
     internal static Brush? Resolve(string resourceKey, FrameworkElement fe)
     {
@@ -279,10 +276,14 @@ Reactor exposes the same WinUI theme dictionaries through
 `ThemeRef`, a readonly record struct holding a resource key. The
 static [`Theme`](theming-tokens.md) class names the most-used
 tokens (`Theme.Accent`, `Theme.CardBackground`, etc.); `Theme.Ref(key)`
-is the escape hatch for any other key. The reconciler walks
-`Application.Resources.ThemeDictionaries` exactly the way `{ThemeResource}`
-does, and re-resolves on `ActualThemeChanged` — so flipping the system
-theme updates every `Theme.Accent` brush without a re-render.
+is the escape hatch for any other key. Theme modifiers such as
+`.Background(Theme.Accent)` set the property through a `{ThemeResource}`
+reference. `.Resources(...)` overrides ask WinUI to resolve the key the
+same way for the element's theme, and `ThemeRef.Resolve(key, isDark)`
+does it for the theme you pass, so a dark subtree in a light app gets
+the dark brush. Reactor re-resolves on
+`ActualThemeChanged` — so flipping the system theme updates every
+`Theme.Accent` brush without a re-render.
 
 ## VisualStateManager → InteractionStates modifier
 

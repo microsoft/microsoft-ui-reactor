@@ -32,7 +32,7 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 - Windows App SDK 2.2 or newer — restored automatically from NuGet, no manual install required
   (the pinned floor lives in `WindowsAppSDKVersion` / `WindowsAppSDKWinUIVersion` in
   `Directory.Build.props`)
-- Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
+- Visual Studio 2026 or VS Code with C# Dev Kit
 
 > **Windows App SDK packages:** The right package is injected centrally by `Directory.Build.targets` based on each project's shape: framework-dependent projects — **libraries and apps alike**, including the shipped `Microsoft.UI.Reactor` — reference the lean `Microsoft.WindowsAppSDK.WinUI` sub-package plus `Microsoft.WindowsAppSDK.Runtime` (a library's dependencies become its consumers', and without Runtime the SDK silently builds a consumer app self-contained); **self-contained / MSIX** projects keep the full `Microsoft.WindowsAppSDK` metapackage (it bundles the runtime + DWriteCore redist). The metapackage's AI/ML/Widgets/DWrite slices are otherwise unused. Versions are pinned in `Directory.Build.props` (`WindowsAppSDKWinUIVersion` and `WindowsAppSDKVersion`) — update them there to change the version for every project at once.
 
@@ -81,7 +81,7 @@ Keep those as two steps, the way the `Restore` and `Build` steps of the `build-s
 
 ### From Visual Studio
 
-1. Open `Reactor.slnx` in Visual Studio 2022 (17.8+)
+1. Open `Reactor.slnx` in Visual Studio 2026
 2. Select the **x64** or **ARM64** platform from the toolbar
 3. Build the solution (Ctrl+Shift+B)
 
@@ -103,6 +103,11 @@ dotnet test  tests/Reactor.Tests -p:Platform=x64
 ## Running tests
 
 See [`TESTING.md`](TESTING.md) for the full guide — four suites (unit / selftest / packaged selftest / E2E), how to pick a tier, NativeAOT runs, and the code-coverage workflow.
+
+For timing-sensitive selftests, distinguish eventual completion from survival across
+a timer window. See [timer lifetime tests](TESTING.md#timer-lifetime-tests) for completion
+callbacks with bounded timeouts, controlled expiry schedules, and mutation checks
+that preserve the original assertion's meaning.
 
 Quick reference:
 
@@ -136,6 +141,9 @@ src/Reactor/                      Core framework library
     Reconciler.cs                 Tree diff orchestration
     Reconciler.Mount.cs           Mount dispatch and composition-primitive handlers
     Reconciler.Update.cs          Update dispatch and composition-primitive handlers
+    Reconciler.*.cs               One partial per concern (Modifiers, Keyframes, Unmount, ...)
+    ThemeBindingApplier.cs, ...   Internal static helpers the reconciler calls (theme bindings,
+                                  accessibility, modifier events, reference edges, gestures, drag-drop)
     V1Protocol/                  Control registry, handlers, descriptors, and child strategies
     ChildReconciler.cs            Keyed child list reconciliation
     ElementPool.cs                Control reuse pool

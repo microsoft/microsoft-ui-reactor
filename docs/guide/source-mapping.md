@@ -315,7 +315,7 @@ library can annotate its own forwarders and consumers get the benefit.
 `Element` declares `implicit operator Element(string)`, so `VStack("hi")` builds
 its child by calling `TextBlock` *inside Reactor's own assembly*. That call site
 cannot be intercepted — interceptors work on ordinary method calls, never on
-operators, and the operator body is already compiled into `Reactor.dll`.
+operators, and the operator body is already compiled into `Microsoft.UI.Reactor.dll`.
 
 Instead, the enclosing factory call stamps the converted argument as it passes
 it through, using **the argument expression's own line**:
