@@ -203,7 +203,7 @@ public sealed partial class Reconciler
         var current = GetMountedElement(control);
         CleanupElementStateForUnmount(control, current);
         // Reference edges belong to the control, even when it has no element tag.
-        TeardownReferenceEdges(control);
+        ReferenceEdgeWiring.TeardownReferenceEdges(control);
         for (var depth = 0; current is not null && depth < ReactorSourceMap.MaxDecoratorDepth; depth++)
         {
             current = ReactorSourceMap.DecoratorTarget(current);

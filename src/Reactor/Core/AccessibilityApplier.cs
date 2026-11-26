@@ -21,8 +21,8 @@ using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 
 namespace Microsoft.UI.Reactor.Core;
 
-// Reconciler partial: Default automation names and accessibility modifiers.
-public sealed partial class Reconciler
+// Default automation names and Tier 2/3 accessibility modifiers, applied by the reconciler.
+internal static class AccessibilityApplier
 {
     // WPF/WinUI auto-populate UIA Name from a control's string Content through the
     // automation peer, but AutomationProperties.GetName on the raw element only
@@ -34,14 +34,8 @@ public sealed partial class Reconciler
     // click { selector: "[name='+ 1']" } and a screen reader saying "+ 1" both work
     // without the author having to say so twice. Skips when the author already set
     // an AutomationName via modifier or setter — explicit always wins.
-    /// <summary>
-    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Mirrors a control's
-    /// caption into <c>AutomationProperties.Name</c> when the author has not set
-    /// one explicitly, so UIA clients that read the attached property directly
-    /// (not via the peer) still find the name. Provisional API;
-    /// see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
-    public static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
+    /// <inheritdoc cref="Reconciler.ApplyDefaultAutomationName(FrameworkElement, string)"/>
+    internal static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
     {
         if (fe is null) return;
         if (DefaultAutomationNameFromCaption(caption) is not { } trimmed) return;
@@ -68,14 +62,8 @@ public sealed partial class Reconciler
     // provenance, so the rule is: overwrite when the current value is empty or
     // equals the previous caption — any other value means the author intervened
     // (via modifier or setter) and we leave it alone.
-    /// <summary>
-    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Update-time pair
-    /// for <see cref="ApplyDefaultAutomationName"/>; overwrites the
-    /// automation Name only when it matches the previous caption (i.e. the
-    /// author hasn't intervened). Clears that default when the new content has no
-    /// caption. Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
-    public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
+    /// <inheritdoc cref="Reconciler.UpdateDefaultAutomationName(FrameworkElement, string, string)"/>
+    internal static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
         if (DefaultAutomationNameFromCaption(oldCaption) is null)
@@ -162,7 +150,7 @@ public sealed partial class Reconciler
     /// assignment would pin the default rather than hand the property back (issue #952).
     /// </para>
     /// </remarks>
-    private static void ApplyAccessibilityModifiers(FrameworkElement fe, AccessibilityModifiers? oldA, AccessibilityModifiers? a)
+    internal static void ApplyAccessibilityModifiers(FrameworkElement fe, AccessibilityModifiers? oldA, AccessibilityModifiers? a)
     {
         if (a is null && oldA is null) return;
 
@@ -235,7 +223,7 @@ public sealed partial class Reconciler
                 // and nothing to retire, and this is the common path — allocating and
                 // attaching a ReactorState here would cost one per element that ever
                 // resolves a LabeledBy synchronously.
-                if (TryGetReactorState(fe, out var resolvedState))
+                if (Reconciler.TryGetReactorState(fe, out var resolvedState))
                     resolvedState.PendingLabeledBy = null;
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, target);
             }
@@ -247,11 +235,11 @@ public sealed partial class Reconciler
                 // Loaded fires, the stale handler must no-op rather than stomp the
                 // reset arm below (issue #986).
                 var labelId = a.LabeledBy;
-                GetOrCreateReactorState(fe).PendingLabeledBy = labelId;
+                Reconciler.GetOrCreateReactorState(fe).PendingLabeledBy = labelId;
                 void OnLoaded(object sender, RoutedEventArgs _)
                 {
                     fe.Loaded -= OnLoaded;
-                    if (!TryGetReactorState(fe, out var pending) || pending.PendingLabeledBy != labelId)
+                    if (!Reconciler.TryGetReactorState(fe, out var pending) || pending.PendingLabeledBy != labelId)
                         return;
                     var deferred = FindByAutomationId(fe, labelId);
                     if (deferred is not null)
@@ -270,7 +258,7 @@ public sealed partial class Reconciler
         {
             // Cancel a still-parked deferred resolution before clearing, or it would
             // re-apply the dropped label the moment the element loads.
-            if (TryGetReactorState(fe, out var pendingState))
+            if (Reconciler.TryGetReactorState(fe, out var pendingState))
                 pendingState.PendingLabeledBy = null;
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LabeledByProperty);
         }

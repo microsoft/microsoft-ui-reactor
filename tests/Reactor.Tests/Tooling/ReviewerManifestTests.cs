@@ -221,7 +221,8 @@ public class ReviewerManifestTests
         path.Split('/').Any(segment => segment == "..");
 
     /// <summary>
-    /// Every <c>Reconciler</c> partial file is listed in at least one batch. The reconciler is
+    /// Every <c>Reconciler</c> partial file, and every static helper class split out of one
+    /// (<see cref="AnalyzerTests.ReconcilerSource.HelperFiles"/>), is listed in at least one batch. The reconciler is
     /// split into per-concern partials, and code moved into a new partial keeps passing
     /// <see cref="EveryManifestPathResolvesFromRepoRoot"/> (the old path still exists) while no
     /// agent reviews it any more.
@@ -240,6 +241,8 @@ public class ReviewerManifestTests
             .ToList();
 
         Assert.True(partials.Count >= 20, $"expected many Reconciler partials under src/Reactor, found {partials.Count}");
+
+        partials.AddRange(AnalyzerTests.ReconcilerSource.HelperFiles.Select(name => $"src/Reactor/Core/{name}"));
 
         var unlisted = partials.Where(p => !listed.Contains(p)).OrderBy(p => p, global::System.StringComparer.Ordinal).ToList();
 

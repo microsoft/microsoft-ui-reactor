@@ -840,8 +840,9 @@ against the public surface only).
 descriptor and the handler instance are registered once per host.
 Per-control state needs to live on the **control** — either on the
 attached state DP (use `Reconciler.SetElementTag` / `GetElementTag`)
-or on the typed event payload box (use
-`Reconciler.GetOrCreateControlEventPayload<TPayload>`). The pool
+or on the typed event payload box (declare it through the
+`HandCodedEvent<TPayload, …>` / `HandCodedControlled<TPayload, …>`
+descriptor builders, whose `slotIsNull` / `setSlot` pair manages the box). The pool
 reset contract clears both on `ReturnControl`; descriptor-level state
 survives pool rent and corrupts the next mount.
 

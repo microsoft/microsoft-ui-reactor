@@ -175,7 +175,7 @@ author's responsibility (and a debug-build assert).
 > instance, it survives pool rent — and that is almost certainly a bug.
 > Per-control state lives on the **control**, either as an attached
 > state DP or as the typed event payload box
-> ([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
+> ([`ModifierEvents.GetOrCreateControlEventPayload`](#echo-suppression-and-writesuppressed)),
 > both of which the pool reset contract clears. The handler instance is
 > a stateless interpreter.
 
@@ -629,7 +629,7 @@ the suppress counter on entry — every controlled prop in every built-in
 handler is echo-safe without the handler author having to think
 about it. Hand-authored trampolines (the ones that bypass
 `OnCustomEvent` for performance) follow the same shape; see
-`Reconciler.GetOrCreateControlEventPayload` for the per-control
+`ModifierEvents.GetOrCreateControlEventPayload` for the per-control
 payload box that anchors the trampoline for the control's lifetime.
 
 ## Element identity via the tag

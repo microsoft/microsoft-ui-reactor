@@ -403,7 +403,7 @@ public sealed partial class Reconciler
             && Diagnostics.ReactorSourcePublisher.IsEnabled
             && CallSiteChangedOnSkip(oldElement, newElement))
             PublishSourceOnSkip(control, newElement);
-        RefreshGestureDragStateOnSkip(control, oldElement.Modifiers, newElement.Modifiers);
+        GestureDispatch.RefreshGestureDragStateOnSkip(control, oldElement.Modifiers, newElement.Modifiers);
     }
 
     /// <summary>
@@ -830,7 +830,7 @@ public sealed partial class Reconciler
             return;
         if (state.DecoratorElement is not null) V1Protocol.OverlayLifecycle.ForgetFlyoutOwner(fe);
         ClearTrackedProducerRefs(fe);
-        TeardownReferenceEdges(fe);
+        ReferenceEdgeWiring.TeardownReferenceEdges(fe);
         // A detached component wrapper must stop answering for its ComponentRendered id
         // (both directions), like the unmount path does before pooling.
         if (state.ComponentDiagnosticId != 0)

@@ -36,7 +36,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 // is one a later reader would act on by deleting the arm. Measured, not read:
 //
 //   * returning a sentinel from the ToggleSwitchElement arm of
-//     Reconciler.ResolveCaptionForElement (which resolves
+//     AccessibilityApplier.ResolveCaptionForElement (which resolves
 //     `Header ?? OnContent ?? OffContent` and is mirrored into
 //     AutomationProperties.Name by ApplyDefaultAutomationName) propagates that
 //     sentinel to every switch below carrying no explicit AutomationName. So the
@@ -96,7 +96,7 @@ internal static class HeaderAutomationNameFixtures
     // only a fix if a ComboBox header reaches the UIA Name. The issue verified
     // that for ToggleSwitch but only assumed it for ComboBox, so it is measured
     // here rather than taken on trust. Nothing in Reactor mirrors a ComboBox
-    // header into AutomationProperties.Name — Reconciler.ResolveCaptionForElement
+    // header into AutomationProperties.Name — AccessibilityApplier.ResolveCaptionForElement
     // has no ComboBoxElement arm — so the name can only come from WinUI's own
     // ComboBoxAutomationPeer, which is exactly what is being relied on.
     //

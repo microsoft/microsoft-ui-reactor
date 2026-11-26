@@ -21,8 +21,8 @@ using ReactorSourceMap = Microsoft.UI.Reactor.Diagnostics.ReactorSourceMap;
 
 namespace Microsoft.UI.Reactor.Core;
 
-// Reconciler partial: Theme bindings (synthesized {ThemeResource} Styles), the style cache, and resource overrides.
-public sealed partial class Reconciler
+// Theme bindings (synthesized {ThemeResource} Styles), the style cache, and resource overrides.
+internal static class ThemeBindingApplier
 {
     // ── Style cache: avoids redundant XamlReader.Load() for identical theme binding sets ──
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _styleCache = new();
@@ -122,28 +122,8 @@ public sealed partial class Reconciler
     internal static bool HasThemeStyleMarkerForTests(FrameworkElement fe)
         => fe.GetValue(ReactorAppliedThemeStyleProperty) is Style;
 
-    /// <summary>
-    /// Applies <see cref="ThemeRef"/> bindings as a synthesized <c>{ThemeResource}</c>-driven
-    /// Style. Spec 047 §14 Phase 1 (1.3), promoted from private (per audit
-    /// existing-api-surface.md); provisional API, see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>WinUI handles theme-reactive resolution natively: the live <c>{ThemeResource}</c>
-    /// Style setter re-resolves on the control's effective-theme change, which tracks the
-    /// per-element/inherited <c>ActualTheme</c> (an ancestor <c>RequestedTheme</c> override
-    /// included), not just the app-level theme. This native self-heal is why a
-    /// ThemeBindings-only element is safe to structurally skip (#758; empirically verified in
-    /// <c>ThemeBindingsSkipSelfHealFixtures</c> across immediate and inherited ancestor
-    /// <c>RequestedTheme</c> toggles). Contrast a <c>ResourceOverrides.ThemeRef</c>, which
-    /// resolves to a CONCRETE brush at reconcile and does NOT self-heal (so it stays
-    /// theme-sensitive for the skip gate).</para>
-    /// <para>A Style already on the control is kept: the themed Style is built <c>BasedOn</c>
-    /// it, and calling this again re-wraps the same base rather than chaining another level.
-    /// When that base cannot be a <c>BasedOn</c> of the control's WinUI type (a Style whose
-    /// <c>TargetType</c> is an app subclass), the themed Style replaces it, as before Styles
-    /// were kept, and a warning is logged once. Failures are logged, never thrown.</para>
-    /// </remarks>
-    public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
+    /// <inheritdoc cref="Reconciler.ApplyThemeBindings(FrameworkElement, IReadOnlyDictionary{string, ThemeRef})"/>
+    internal static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
         // A Style the app put on the control (a .Set setter, .ApplyStyle, a named-style fluent
         // such as .AccentButton(), a typography factory such as Title(...)) is kept: the themed
@@ -589,44 +569,15 @@ public sealed partial class Reconciler
     internal static void RemoveManagedResourceKeys(FrameworkElement fe)
         => ApplyResourceOverrides(fe, null, null);
 
-    /// <summary>
-    /// Applies per-control resource overrides (lightweight styling) to a
-    /// <see cref="FrameworkElement"/>. Literal values are set directly;
-    /// <see cref="ThemeRef"/>-based values are resolved from
-    /// <c>Application.Current.Resources</c> using the element's own effective theme.
-    /// </summary>
-    /// <remarks>
-    /// Binary-compatible original 3-arg surface (Spec 047 §14 Phase 1 (1.3), promoted
-    /// from private per audit existing-api-surface.md). Delegates to the 4-arg overload
-    /// with <see cref="ElementTheme.Default"/>; the reconciler uses the 4-arg form to
-    /// pass an explicit ancestor-aware theme (needed at mount, before the control is
-    /// parented). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
-    /// </remarks>
-    public static void ApplyResourceOverrides(
+    /// <inheritdoc cref="Reconciler.ApplyResourceOverrides(FrameworkElement, Microsoft.UI.Reactor.Elements.ResourceOverrides, Microsoft.UI.Reactor.Elements.ResourceOverrides)"/>
+    internal static void ApplyResourceOverrides(
         FrameworkElement fe,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides)
         => ApplyResourceOverrides(fe, oldOverrides, newOverrides, ElementTheme.Default);
 
-    /// <summary>
-    /// Applies per-control resource overrides (lightweight styling), resolving
-    /// <see cref="ThemeRef"/>-backed values against an explicit
-    /// <paramref name="effectiveTheme"/>. Provisional API (Spec 047 §14 Phase 1);
-    /// see <c>REACTOR_V1_PREVIEW</c>.
-    /// </summary>
-    /// <param name="fe">The control whose <c>Resources</c> receive the overrides.</param>
-    /// <param name="oldOverrides">The previously-applied overrides, or null at mount.</param>
-    /// <param name="newOverrides">The overrides to apply, or null to clear managed keys.</param>
-    /// <param name="effectiveTheme">
-    /// The ancestor-aware effective theme threaded by the reconciler. When non-Default,
-    /// ThemeRef-backed overrides resolve their concrete brush against it via
-    /// <see cref="ThemeRef.Resolve(string, bool)"/> — necessary at mount, where the
-    /// element is not yet parented and so an ancestor <c>RequestedTheme</c> is
-    /// unreachable through <paramref name="fe"/>'s own visual-tree walk. Pass
-    /// <see cref="ElementTheme.Default"/> to fall back to fe-based resolution
-    /// (for example, callers of the 3-arg overload).
-    /// </param>
-    public static void ApplyResourceOverrides(
+    /// <inheritdoc cref="Reconciler.ApplyResourceOverrides(FrameworkElement, Microsoft.UI.Reactor.Elements.ResourceOverrides, Microsoft.UI.Reactor.Elements.ResourceOverrides, ElementTheme)"/>
+    internal static void ApplyResourceOverrides(
         FrameworkElement fe,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides,
@@ -639,8 +590,8 @@ public sealed partial class Reconciler
         // that never got state has nothing of ours to strip, so it skips creating one.
         HashSet<string> managed;
         if (newOverrides is not null)
-            managed = GetOrCreateReactorState(fe).ManagedResourceKeys ??= new HashSet<string>();
-        else if (TryGetReactorState(fe, out var existing) && existing.ManagedResourceKeys is { } keys)
+            managed = Reconciler.GetOrCreateReactorState(fe).ManagedResourceKeys ??= new HashSet<string>();
+        else if (Reconciler.TryGetReactorState(fe, out var existing) && existing.ManagedResourceKeys is { } keys)
             managed = keys;
         else
             return;

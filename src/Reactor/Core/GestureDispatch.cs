@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Microsoft.UI.Reactor.Core;
 
-public sealed partial class Reconciler
+internal static class GestureDispatch
 {
     /// <summary>
     /// Per-element gesture dispatch state. Mirrors <see cref="ModifierEventHandlerState"/>'s
@@ -99,15 +99,15 @@ public sealed partial class Reconciler
     ///
     /// <para><b>Presence transition</b> (a family is present on exactly one side — an
     /// ADD or a REMOVE-last): route to the full <see cref="ApplyGestureHandlers"/> /
-    /// <see cref="ApplyDragDropHandlers"/>. The config-only refresh below is NOT enough
-    /// here — an ADD has no <see cref="GestureState"/>/<see cref="DragDropState"/> yet
+    /// <see cref="DragDropDispatch.ApplyDragDropHandlers"/>. The config-only refresh below is NOT enough
+    /// here — an ADD has no <see cref="GestureState"/>/<see cref="DragDropDispatch.DragDropState"/> yet
     /// (so a <c>TryGetValue</c>-only path would no-op and the gesture/drag would never
     /// wire — silently dead), and a REMOVE must clear the platform flags
     /// (<c>ManipulationMode</c> / <c>CanDrag</c> / <c>AllowDrop</c>), which only the full
     /// handler does. A transition means the family was inactive on one side, so the full
     /// Apply is safe: there is no in-flight gesture of a not-yet/​no-longer-present family
     /// to re-arm (and a mid-drag source removal is preserved by the in-flight guard in
-    /// <see cref="ApplyDragDropHandlers"/> so its pending DropCompleted still fires).</para>
+    /// <see cref="DragDropDispatch.ApplyDragDropHandlers"/> so its pending DropCompleted still fires).</para>
     ///
     /// <para><b>Identity change</b> (a family is present on BOTH sides, only the captured
     /// closure changed): overwrite just the mutable config fields the stable trampolines
@@ -151,24 +151,7 @@ public sealed partial class Reconciler
         }
 
         // ── Drag-drop family (DragSource/DropTarget) ──
-        // Per-slot presence again: a DragSource removed while a DropTarget stays present
-        // (or vice-versa) is a transition, not an identity change. Routing it to the full
-        // handler is what makes ApplyDragDropHandlers' in-flight-drag guard reachable on a
-        // mid-drag source removal (the config-only arm would null state.Source directly,
-        // stranding the pending DropCompleted -> leak + suppressed OnEnd).
-        bool dragPresenceChanged =
-            (oldM?.DragSource is null) != (newM?.DragSource is null)
-            || (oldM?.DropTarget is null) != (newM?.DropTarget is null);
-        if (dragPresenceChanged)
-        {
-            ApplyDragDropHandlers(fe, oldM, newM ?? _emptyModifiers);
-        }
-        else if ((newM?.DragSource is not null || newM?.DropTarget is not null)
-                 && _dndStates.TryGetValue(fe, out var ds))
-        {
-            ds.Source = newM!.DragSource;
-            ds.Target = newM.DropTarget;
-        }
+        DragDropDispatch.RefreshDragDropStateOnSkip(fe, oldM, newM);
     }
 
     /// <summary>
@@ -220,7 +203,7 @@ public sealed partial class Reconciler
         return mode;
     }
 
-    private static void ApplyGestureHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    internal static void ApplyGestureHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         // Fast path
         if (m.Pan is null && m.Pinch is null && m.Rotate is null && m.LongPress is null

@@ -263,25 +263,25 @@ public sealed partial class Reconciler
         var a11y = m.Accessibility;
         var oldA11y = oldM?.Accessibility;
         if (a11y is not null || oldA11y is not null)
-            ApplyAccessibilityModifiers(fe, oldA11y, a11y);
+            AccessibilityApplier.ApplyAccessibilityModifiers(fe, oldA11y, a11y);
 
         ApplyTypographyModifiers(fe, oldM, m);
 
         // ── Declarative event handlers ────────────────────────────
         // Detach previous handler (if any) before attaching new one.
         // Handlers are stored in Tag via a wrapper so we can find them for detach.
-        ApplyEventHandlers(fe, oldM, m);
+        ModifierEvents.ApplyEventHandlers(fe, oldM, m);
 
         // Gesture recognizers (.OnPan / .OnPinch / .OnRotate)
-        ApplyGestureHandlers(fe, oldM, m);
+        GestureDispatch.ApplyGestureHandlers(fe, oldM, m);
 
         // Drag-and-drop (.OnDragStart / .OnDrop / .OnDragEnter / .OnDragOver / .OnDragLeave)
-        ApplyDragDropHandlers(fe, oldM, m);
+        DragDropDispatch.ApplyDragDropHandlers(fe, oldM, m);
 
         ApplyLifecycleCallbackModifiers(fe, oldM, m);
         ApplyRefModifier(fe, oldM, m);
 
-        ApplyModifierReferenceEdges(fe, oldM, m);
+        ReferenceEdgeWiring.ApplyModifierReferenceEdges(fe, oldM, m);
     }
 
     /// <summary>RequestedTheme.</summary>
@@ -853,7 +853,7 @@ public sealed partial class Reconciler
             // Record it before SetCurrent, whose CurrentChanged dispatch can throw.
             if (!ReferenceEquals(newRef.Current, fe)) TrackProducerRef(fe, newRef);
             newRef.SetCurrent(fe);
-            AssertTypedRefMatch(newRef, fe);
+            ReferenceEdgeWiring.AssertTypedRefMatch(newRef, fe);
         }
     }
 }
