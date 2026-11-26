@@ -2,7 +2,7 @@
 
 Text boxes, check boxes, combo boxes, sliders, pickers and other input controls.
 
-Each factory method returns an element record. Call them through `using static Microsoft.UI.Reactor.Factories;`.
+Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
 
 **Learn more:** [Controls](../../controls.md), [Forms and Input](../../forms.md)
 
@@ -14,7 +14,7 @@ Creates an auto-suggest element with async search.
 AutoSuggestElement<T> AutoSuggest<T>(T? selected, Action<T?>? onSelected = null, Func<string, CancellationToken, Task<IReadOnlyList<T>>>? search = null, Func<T, string>? displayText = null, string? placeholderText = null, int debounceMs = 300, Func<T, Element>? template = null)
 ```
 
-Declared in `AutoSuggestDsl`.
+Declared in `AutoSuggestDsl`. Call it through `using static Microsoft.UI.Reactor.Controls.AutoSuggestDsl;`.
 
 **Returns:** [`AutoSuggestElement<T>`](../elements/input.md#autosuggestelementt).
 
@@ -161,7 +161,7 @@ Creates a [`MaskedTextBoxElement`](../elements/input.md#maskedtextboxelement) â€
 MaskedTextBoxElement MaskedTextBox(string value, Action<string>? onChanged = null, string? mask = null, string? header = null, char placeholder = '_')
 ```
 
-Declared in `MaskedTextBoxDsl`.
+Declared in `MaskedTextBoxDsl`. Call it through `using static Microsoft.UI.Reactor.Controls.MaskedTextBoxDsl;`.
 
 **Returns:** [`MaskedTextBoxElement`](../elements/input.md#maskedtextboxelement).
 

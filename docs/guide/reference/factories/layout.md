@@ -2,7 +2,7 @@
 
 Panels, stacks, grids, scrolling and other containers.
 
-Each factory method returns an element record. Call them through `using static Microsoft.UI.Reactor.Factories;`.
+Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
 
 **Learn more:** [Layout](../../layout.md), [Flex Layout](../../flex-layout.md)
 

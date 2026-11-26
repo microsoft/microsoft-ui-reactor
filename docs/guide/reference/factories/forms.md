@@ -2,7 +2,7 @@
 
 Form fields, validation rules, validation visualizers and the property grid.
 
-Each factory method returns an element record. Call them through `using static Microsoft.UI.Reactor.Factories;`.
+Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
 
 **Learn more:** [Forms and Input](../../forms.md)
 
@@ -13,7 +13,7 @@ FormFieldElement FormField(FieldDescriptor field, object value, Action<object> o
 FormFieldElement FormField(Element content, string? label = null, bool required = false, string? description = null, string? fieldName = null, ShowWhen showWhen = ShowWhen.WhenTouched)
 ```
 
-Declared in `FormFieldDsl`.
+Declared in `FormFieldDsl`. Call it through `using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;`.
 
 | Overload | Description |
 | --- | --- |
@@ -45,7 +45,7 @@ Creates a cross-field validation rule. When the predicate returns false, the mes
 ValidationRuleElement ValidationRule(Func<bool> predicate, string message, string field, Severity severity = Severity.Error)
 ```
 
-Declared in `ValidationRuleDsl`.
+Declared in `ValidationRuleDsl`. Call it through `using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;`.
 
 **Returns:** [`ValidationRuleElement`](../elements/forms.md#validationruleelement).
 
@@ -66,7 +66,7 @@ Creates an async cross-field validation rule.
 ValidationRuleElement ValidationRuleAsync(Func<Task<bool>> asyncPredicate, string message, string field, Severity severity = Severity.Error)
 ```
 
-Declared in `ValidationRuleDsl`.
+Declared in `ValidationRuleDsl`. Call it through `using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;`.
 
 **Returns:** [`ValidationRuleElement`](../elements/forms.md#validationruleelement).
 
@@ -86,7 +86,7 @@ ValidationVisualizerElement ValidationVisualizer(Func<IReadOnlyList<ValidationMe
 ValidationVisualizerElement ValidationVisualizer(VisualizerStyle style, Element content, string? title = null, Severity? severityFilter = null, ShowWhen showWhen = ShowWhen.Always)
 ```
 
-Declared in `ValidationVisualizerDsl`.
+Declared in `ValidationVisualizerDsl`. Call it through `using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;`.
 
 | Overload | Description |
 | --- | --- |

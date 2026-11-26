@@ -12,6 +12,14 @@ Namespace: `Microsoft.UI.Reactor.Controls.Validation`.
 
 ## Methods
 
+### `GetValidation`
+
+Gets the ValidationAttached metadata from an element, if any.
+
+```csharp
+public static ValidationAttached? GetValidation<T>(this T el) where T : Element
+```
+
 ### `RunAsyncValidators`
 
 Runs all async validators attached to an element against a value.
@@ -43,6 +51,5 @@ public static IReadOnlyList<ValidationMessage> RunValidators(this ValidationAtta
 
 ## Modifiers
 
-- [`GetValidation`](../modifiers/validation.md#getvalidation)
 - [`Validate`](../modifiers/validation.md#validate)
 - [`ValidateAsync`](../modifiers/validation.md#validateasync)

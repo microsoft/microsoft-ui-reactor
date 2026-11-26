@@ -6,18 +6,6 @@ Modifiers are extension methods that return a changed copy of the element, so yo
 
 **Learn more:** [Forms and Input](../../forms.md)
 
-## `GetValidation`
-
-Gets the ValidationAttached metadata from an element, if any.
-
-```csharp
-ValidationAttached? GetValidation<T>(this T el) where T : Element
-```
-
-Declared in `ValidateExtensions`.
-
-**Applies to:** any element.
-
 ## `Immediate`
 
 Requests that the control commit its value on every keystroke instead of on blur. Has no effect on controls whose default already fires per-keystroke (TextBox, PasswordBox, AutoSuggestBox, etc.).

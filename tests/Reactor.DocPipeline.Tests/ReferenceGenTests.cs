@@ -118,6 +118,10 @@ overrides:
     <member name="M:Microsoft.UI.Reactor.Factories.VStack(Microsoft.UI.Reactor.Core.Element[])"><summary>Stacks children vertically.</summary></member>
     <member name="M:Microsoft.UI.Reactor.Factories.Picker"><summary>Creates a picker.</summary></member>
     <member name="M:Microsoft.UI.Reactor.Factories.Spacer"><summary>Creates empty space.</summary></member>
+    <member name="T:Microsoft.UI.Reactor.Core.ValidateExtensions"><summary>Validation helpers.</summary></member>
+    <member name="M:Microsoft.UI.Reactor.Core.ValidateExtensions.EvaluateAsync(Microsoft.UI.Reactor.Core.Element)"><summary>Runs the validators.</summary></member>
+    <member name="T:Microsoft.UI.Reactor.Core.RuleDsl"><summary>Rule factories.</summary></member>
+    <member name="M:Microsoft.UI.Reactor.Core.RuleDsl.Rule"><summary>Creates a rule.</summary></member>
     <member name="M:Microsoft.UI.Reactor.ElementExtensions.Margin``1(``0,System.Double)">
       <summary>Sets the outer margin. Works on a <see cref="T:Microsoft.UI.Reactor.Core.ButtonElement"/>, reads
       <see cref="M:Microsoft.UI.Reactor.Core.RenderContext.UseState``1(``0)"/>, and ignores <see cref="T:Microsoft.UI.Reactor.Core.Missing"/>.</summary>
@@ -260,6 +264,15 @@ overrides:
             new[] { P("element", "T", null, "this"), P("header", "string") }, "T",
             extends: new[] { button.DocId, stack.DocId }, typeParams: new[] { "T" });
 
+        // An element extension that can't be chained, and a factory outside `Factories`.
+        var validate = Type(CoreNs, "ValidateExtensions", ApiTypeKind.StaticClass, "public static class ValidateExtensions");
+        Add(validate, ApiMemberKind.Method, "M:Microsoft.UI.Reactor.Core.ValidateExtensions.EvaluateAsync(Microsoft.UI.Reactor.Core.Element)", "EvaluateAsync",
+            "public static Task EvaluateAsync(this Element element)", "EvaluateAsync(Element)",
+            new[] { P("element", "Element", ElementId, "this") }, "Task", extends: new[] { ElementId });
+        var ruleDsl = Type(CoreNs, "RuleDsl", ApiTypeKind.StaticClass, "public static class RuleDsl");
+        Add(ruleDsl, ApiMemberKind.Method, "M:Microsoft.UI.Reactor.Core.RuleDsl.Rule", "Rule",
+            "public static StackElement Rule()", "Rule()", returnType: "StackElement", returnDocId: stack.DocId, isStatic: true);
+
         var ctx = Type(CoreNs, "RenderContext", ApiTypeKind.Class, "public sealed class RenderContext");
         Add(ctx, ApiMemberKind.Method, "M:Microsoft.UI.Reactor.Core.RenderContext.UseState``1(``0)", "UseState",
             "public (T Value, Action<T> Set) UseState<T>(T initial)", "UseState<T>(T)",
@@ -301,7 +314,7 @@ overrides:
 
         var probe = Type("Microsoft.UI.Reactor.Experimental", "Probe", ApiTypeKind.Class, "public sealed class Probe");
 
-        var types = new List<ApiType> { element, button, stack, picker, factories, ext, ctx, component, app, options, mode, backdrop, probe };
+        var types = new List<ApiType> { element, button, stack, picker, factories, ext, validate, ruleDsl, ctx, component, app, options, mode, backdrop, probe };
         if (reverse)
         {
             types.Reverse();
@@ -526,6 +539,13 @@ overrides:
         // Overloads that use different types for the same parameter list both.
         Assert.Contains("| `content` | `string` or [`Element`](../elements/Element.md) | The text to show. |", buttons.Body);
         Assert.Contains("**Learn more:** [Layout](../../layout.md)", Body(r, "reference/factories/layout.md"));
+
+        // A factory on a `*Dsl` class isn't reachable through `using static Factories`,
+        // so its section names the import it needs. One on `Factories` doesn't.
+        var rule = r.LinksByDocId["M:Microsoft.UI.Reactor.Core.RuleDsl.Rule"].RelativePath;
+        Assert.StartsWith("reference/factories/", rule);
+        Assert.Contains("Declared in `RuleDsl`. Call it through `using static Microsoft.UI.Reactor.Core.RuleDsl;`.", Body(r, rule));
+        Assert.DoesNotContain("Call it through", buttons.Body);
     }
 
     /// <summary>
@@ -667,6 +687,10 @@ overrides:
         Assert.Equal("reference/modifiers/buttons.md", r.LinksByDocId["M:Microsoft.UI.Reactor.ElementExtensions.Label(Microsoft.UI.Reactor.Core.ButtonElement,System.String)"].RelativePath);
         Assert.Equal("reference/modifiers/shared-controls.md", r.LinksByDocId["M:Microsoft.UI.Reactor.ElementExtensions.Header``1(``0,System.String)"].RelativePath);
         Assert.Equal("reference/modifiers/index.md", r.LinksByDocId["T:Microsoft.UI.Reactor.ElementExtensions"].RelativePath);
+
+        // `Task EvaluateAsync(this Element)` extends an element but can't be chained,
+        // so it stays on its declaring type's page instead of a modifier page.
+        Assert.DoesNotContain("modifiers/", r.LinksByDocId["M:Microsoft.UI.Reactor.Core.ValidateExtensions.EvaluateAsync(Microsoft.UI.Reactor.Core.Element)"].RelativePath);
 
         Assert.Equal("Modifiers: Layout and spacing", Page(r, "reference/modifiers/layout-and-spacing.md").Title);
         Assert.Equal("Control modifiers: Buttons", Page(r, "reference/modifiers/buttons.md").Title);
