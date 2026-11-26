@@ -217,9 +217,16 @@ internal static class ScreenshotCapture
                             continue;
                         }
                         // Wait for the switch to actually render (the request only queues
-                        // it); a timeout is left to the post-capture check, which refuses a
-                        // switch that is still pending.
-                        await WaitForSwitchRendered(http, port, SwitchRenderTimeout);
+                        // it). Until it has, the window may still show the outgoing
+                        // component, so a switch that doesn't render in time is refused
+                        // without capturing: a later status read could already be clean.
+                        var switchRefusal = await WaitForSwitchRendered(http, port, SwitchRenderTimeout);
+                        if (switchRefusal is not null)
+                        {
+                            ReportCaptureFailure(screenshot.Id, switchRefusal);
+                            failed++;
+                            continue;
+                        }
                         // Let the switch, layout and any entrance transition settle. Same
                         // settle time the old frame-timer capture used.
                         await Task.Delay(1000);
@@ -586,28 +593,35 @@ internal static class ScreenshotCapture
     private static readonly TimeSpan SwitchRenderTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// Polls <c>/status</c> until the last component switch is no longer pending, or
-    /// <paramref name="timeout"/> passes. Never throws for a status problem: the
-    /// post-capture <see cref="CheckRenderError"/> refuses the frame in every such case.
+    /// Polls <c>/status</c> until the last component switch is no longer pending. Returns
+    /// <c>null</c> once it isn't, otherwise the <see cref="RenderErrorDiagnosticCode"/> failure
+    /// to report: the switch was still pending at <paramref name="timeout"/>, or the status
+    /// could not be read. The caller must not capture in that case.
     /// </summary>
-    internal static async Task WaitForSwitchRendered(HttpClient http, int port, TimeSpan timeout, TimeSpan? pollInterval = null)
+    internal static async Task<string?> WaitForSwitchRendered(HttpClient http, int port, TimeSpan timeout, TimeSpan? pollInterval = null)
     {
         var deadline = DateTime.UtcNow + timeout;
         var interval = pollInterval ?? TimeSpan.FromMilliseconds(100);
         while (true)
         {
             var remaining = deadline - DateTime.UtcNow;
-            if (remaining <= TimeSpan.Zero) return;
+            if (remaining <= TimeSpan.Zero)
+            {
+                return $"{RenderErrorDiagnosticCode}: the component switch did not render within " +
+                       $"{timeout.TotalSeconds:0.#} s, so the window may still show the previous component. " +
+                       "Nothing was captured.";
+            }
             try
             {
                 var renderError = await ReadRenderError(http, port, remaining < ComponentSwitchTimeout ? remaining : ComponentSwitchTimeout);
                 if (renderError is null || !renderError.StartsWith(PendingRenderErrorPrefix, StringComparison.Ordinal))
-                    return;
+                    return null;
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException
                                           or global::System.Text.Json.JsonException or TaskCanceledException)
             {
-                return;
+                return $"{RenderErrorDiagnosticCode}: could not check that the component switch rendered " +
+                       $"({ex.Message}). Nothing was captured.";
             }
             await Task.Delay(interval);
         }

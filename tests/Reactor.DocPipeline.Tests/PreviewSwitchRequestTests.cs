@@ -117,37 +117,61 @@ public class PreviewSwitchRequestTests
     }
 
     /// <summary>
-    /// Capture waits while the switch is pending and stops as soon as it is not, without
-    /// waiting out the timeout.
+    /// Capture waits while the switch is pending and goes ahead as soon as it is not,
+    /// without waiting out the timeout.
     /// </summary>
     [Fact]
     public async Task Capture_waits_for_a_pending_switch_to_render()
     {
-        const string pending = """{"renderError":"Pending: the component switch has not rendered yet."}""";
-        using var handler = new StubHandler(HttpStatusCode.OK, pending, pending, """{"renderError":null}""");
+        using var handler = new StubHandler(HttpStatusCode.OK, Pending, Pending, """{"renderError":null}""");
         using var http = new HttpClient(handler, disposeHandler: false);
 
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
-        await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(10));
+        var refusal = await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(10));
 
+        Assert.Null(refusal);
         Assert.Equal(3, handler.Requests);
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"waited {sw.Elapsed.TotalSeconds:F1}s for a switch that rendered");
     }
 
-    /// <summary>A switch that never renders is bounded by the timeout.</summary>
+    /// <summary>
+    /// A switch still pending at the timeout is refused before any capture, even when it
+    /// completes right after: the window may have shown the outgoing component, and a
+    /// post-capture status read would already be clean.
+    /// </summary>
     [Fact]
-    public async Task Capture_stops_waiting_for_a_switch_at_the_timeout()
+    public async Task A_switch_that_renders_after_the_timeout_is_refused_without_capturing()
     {
-        using var handler = new StubHandler(HttpStatusCode.OK, """{"renderError":"Pending: the component switch has not rendered yet."}""");
+        // Pending for the whole wait, clean from the first read after it.
+        var bodies = Enumerable.Repeat(Pending, 1000).Append("""{"renderError":null}""").ToArray();
+        using var handler = new StubHandler(HttpStatusCode.OK, bodies);
         using var http = new HttpClient(handler, disposeHandler: false);
 
         var sw = global::System.Diagnostics.Stopwatch.StartNew();
-        await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(10));
+        var refusal = await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(10));
 
-        Assert.True(handler.Requests > 1);
+        Assert.NotNull(refusal);
+        Assert.StartsWith(ScreenshotCapture.RenderErrorDiagnosticCode + ":", refusal);
+        Assert.Contains("did not render", refusal);
+        Assert.True(handler.Requests is > 1 and < 1000, $"{handler.Requests} status reads");
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), $"waited {sw.Elapsed.TotalSeconds:F1}s against a 0.3s timeout");
     }
 
+    /// <summary>A status that can't be read refuses the switch too.</summary>
+    [Fact]
+    public async Task A_switch_whose_status_cannot_be_read_is_refused()
+    {
+        using var handler = new StubHandler(HttpStatusCode.InternalServerError, "{}");
+        using var http = new HttpClient(handler, disposeHandler: false);
+
+        var refusal = await ScreenshotCapture.WaitForSwitchRendered(http, 4242, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(10));
+
+        Assert.NotNull(refusal);
+        Assert.StartsWith(ScreenshotCapture.RenderErrorDiagnosticCode + ":", refusal);
+        Assert.Equal(1, handler.Requests);
+    }
+
+    private const string Pending = """{"renderError":"Pending: the component switch has not rendered yet."}""";
     /// <summary>Answers <c>/status</c> with each body in turn, repeating the last.</summary>
     private sealed class StubHandler(HttpStatusCode status, params string[] bodies) : HttpMessageHandler
     {
