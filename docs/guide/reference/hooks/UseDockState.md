@@ -6,7 +6,7 @@ Returns the enclosing pane's current dock state (Docked / Floating / AutoHidden 
 public static DockPaneState UseDockState(this RenderContext ctx)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.
 
 **Learn more:** [Docking Windows](../../docking.md)
 

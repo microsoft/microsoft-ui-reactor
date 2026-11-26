@@ -14,7 +14,7 @@ Wires the active-content-changed handler. Passing `null` clears.
 DockManager ActiveContentChanged(this DockManager el, Action<DockActiveContentChangedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -32,7 +32,7 @@ Wires the content-docked handler. Passing `null` clears.
 DockManager ContentDocked(this DockManager el, Action<DockContentDockedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -50,7 +50,7 @@ Wires the cancellable content-docking handler. Passing `null` clears.
 DockManager ContentDocking(this DockManager el, Action<DockContentDockingEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -68,7 +68,7 @@ Wires the content-floated handler. Passing `null` clears.
 DockManager ContentFloated(this DockManager el, Action<DockContentFloatedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -86,7 +86,7 @@ Wires the cancellable content-floating (about-to-tear-out) handler. Passing `nul
 DockManager ContentFloating(this DockManager el, Action<DockContentFloatingEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -104,7 +104,7 @@ Wires the document-closed handler. Passing `null` clears.
 DockManager DocumentClosed(this DockManager el, Action<DockDocumentClosedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -122,7 +122,7 @@ Wires the cancellable document-closing handler. Passing `null` clears.
 DockManager DocumentClosing(this DockManager el, Action<DockDocumentClosingEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -140,7 +140,7 @@ Wires the drop-target confirm handler. Receives the confirmed target. Passing `n
 DockManager DropTargetConfirmed(this DockManager el, Action<DockTarget>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -158,7 +158,7 @@ Wires the drop-target hover handler. Receives the hovered target (null = none). 
 DockManager DropTargetHovered(this DockManager el, Action<DockTarget?>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -176,7 +176,7 @@ Wires the drop-targets-dismissed handler (overlay closed without a target). Pass
 DockManager DropTargetsDismissed(this DockManager el, Action? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -194,7 +194,7 @@ Wires the floating-window-closed handler. Passing `null` clears.
 DockManager FloatingWindowClosed(this DockManager el, Action<DockFloatingWindowClosedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -212,7 +212,7 @@ Wires the floating-window-created handler. Passing `null` clears.
 DockManager FloatingWindowCreated(this DockManager el, Action<DockFloatingWindowCreatedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -230,7 +230,7 @@ Wires the post-mutation layout-changed handler. Passing `null` clears.
 DockManager LayoutChanged(this DockManager el, Action<DockLayoutChangedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -248,7 +248,7 @@ Wires the cancellable layout-changing handler. Passing `null` clears.
 DockManager LayoutChanging(this DockManager el, Action<DockLayoutChangingEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -266,7 +266,7 @@ Wires the live (mid-drag) layout-changed handler. Passing `null` clears.
 DockManager LiveLayoutChanged(this DockManager el, Action<DockNode?>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -284,7 +284,7 @@ Wires the splitter-drag-completed handler. Passing `null` clears.
 DockManager SplitterDragCompleted(this DockManager el, Action? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -302,7 +302,7 @@ Wires the tool-window-closed handler. Passing `null` clears.
 DockManager ToolWindowClosed(this DockManager el, Action<DockToolWindowClosedEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -320,7 +320,7 @@ Wires the cancellable tool-window-closing handler. Passing `null` clears.
 DockManager ToolWindowClosing(this DockManager el, Action<DockToolWindowClosingEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -338,7 +338,7 @@ Wires the tool-window-hidden handler. Passing `null` clears.
 DockManager ToolWindowHidden(this DockManager el, Action<DockToolWindowHiddenEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 
@@ -356,7 +356,7 @@ Wires the cancellable tool-window-hiding handler. Passing `null` clears.
 DockManager ToolWindowHiding(this DockManager el, Action<DockToolWindowHidingEventArgs>? handler)
 ```
 
-Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `DockManagerEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Docking;`).
 
 **Applies to:** [`DockManager`](../elements/docking.md#dockmanager).
 

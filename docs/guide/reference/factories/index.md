@@ -2,7 +2,7 @@
 
 The DSL factory methods that create element records.
 
-Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`. A few factories live on other classes, such as `ValidationRuleDsl`; their sections name the `using static` they need.
+Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`. A few factories live on other classes, such as `ValidationRuleDsl`; their sections name the `using static` they need. The Data grid, Markdown and Win2D canvas factories come from the `Microsoft.UI.Reactor.Advanced` package and are on `Microsoft.UI.Reactor.Advanced.Factories`.
 
 **Learn more:** [Controls](../../controls.md), [Layout](../../layout.md), [Cheat Sheet](../../cheat-sheet.md)
 

@@ -23,7 +23,9 @@ public class ReferenceGenTests
     private const string HostingNs = "Microsoft.UI.Reactor.Hosting";
     private const string ElementId = "T:Microsoft.UI.Reactor.Core.Element";
 
-    internal static ReferenceMap Map() => ReferenceMap.Parse("""
+    internal static ReferenceMap Map() => ReferenceMap.Parse(MapYaml);
+
+    internal const string MapYaml = """
 element-base: "Microsoft.UI.Reactor.Core.Element"
 categories:
   - id: hooks
@@ -91,7 +93,7 @@ defaults:
 overrides:
   - cref: "T:Microsoft.UI.Reactor.Core.Element"
     category: elements
-""");
+""";
 
     internal const string Xml = """
 <?xml version="1.0"?>

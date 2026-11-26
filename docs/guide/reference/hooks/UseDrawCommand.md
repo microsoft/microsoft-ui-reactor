@@ -6,7 +6,7 @@ Memoizes a Win2D draw callback and rebuilds it only when `deps` change.
 public static Action<CanvasDrawingSession, CanvasDrawEventArgs> UseDrawCommand<TState>(this RenderContext ctx, TState state, Action<CanvasDrawingSession, CanvasDrawEventArgs, TState> draw, object[] deps)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseDrawCommandHook`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseDrawCommandHook`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Advanced.Win2D;`.
 
 **Learn more:** [Win2D canvas](../../win2d-canvas.md)
 

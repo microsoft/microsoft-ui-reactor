@@ -6,7 +6,7 @@ Returns identity info for the enclosing pane subtree. Throws [`InvalidOperationE
 public static DockPaneInfo UsePane(this RenderContext ctx)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.
 
 **Learn more:** [Docking Windows](../../docking.md)
 

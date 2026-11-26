@@ -6,7 +6,7 @@ Returns a wide snapshot of the dock layout — re-renders the consumer on any st
 public static DockLayoutSnapshot? UseDockLayout(this RenderContext ctx)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.
 
 **Learn more:** [Docking Windows](../../docking.md)
 

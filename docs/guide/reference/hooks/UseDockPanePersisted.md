@@ -6,7 +6,7 @@ Per-pane persisted state. Auto-prefixes the supplied key with `pane:<paneKey>:` 
 public static (T Value, Action<T> Set) UseDockPanePersisted<T>(this RenderContext ctx, string key, T initialValue)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.
 
 **Learn more:** [Docking Windows](../../docking.md)
 

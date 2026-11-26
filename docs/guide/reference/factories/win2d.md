@@ -2,7 +2,7 @@
 
 Win2D drawing surfaces, from the Microsoft.UI.Reactor.Advanced package.
 
-Each factory method returns an element record. Most are on `Factories`, so `using static Microsoft.UI.Reactor.Factories;` covers them. A factory declared on another class names the `using static` it needs.
+Each factory method returns an element record. These are on `Microsoft.UI.Reactor.Advanced.Factories` in the `Microsoft.UI.Reactor.Advanced` package, so add `using static Microsoft.UI.Reactor.Advanced.Factories;`.
 
 **Learn more:** [Win2D canvas](../../win2d-canvas.md)
 

@@ -379,7 +379,50 @@ internal sealed class ReferenceRenderer
     private string DeclaredOnLine(ApiMember m, PageWriter w)
     {
         var line = DeclaredOnText(m, w);
-        return PackageNote(m.Package) is { } package ? line + " " + package : line;
+        if (PackageNote(m.Package) is not { } package) return line;
+        // An extension method compiles only with its namespace imported.
+        return m.IsExtension
+            ? $"{line} {package} Add {DocMarkdown.CodeSpan($"using {m.DeclaringType.Namespace};")}."
+            : line + " " + package;
+    }
+
+    /// <summary>The packages the overloads a class contributes to a set come from.</summary>
+    private static IReadOnlyList<string> PackagesOf(IEnumerable<ApiMember> overloads, ApiType t) =>
+        overloads.Where(o => o.DeclaringType.DocId == t.DocId).Select(o => o.Package ?? CorePackage)
+            .Distinct(StringComparer.Ordinal).OrderBy(p => p, StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    /// " (package `X`)" after a declaring class whose overloads come from another
+    /// package (issue #1721), plus the <c>using</c> a modifier needs. A class split
+    /// across packages names only the overloads that are not core.
+    /// </summary>
+    private static string ClassPackageLabel(IEnumerable<ApiMember> overloads, ApiType t, bool factories)
+    {
+        var packages = PackagesOf(overloads, t);
+        var other = packages.Where(p => p != CorePackage).ToList();
+        if (other.Count == 0) return string.Empty;
+        var names = string.Join(", ", other.Select(DocMarkdown.CodeSpan));
+        var label = packages.Contains(CorePackage) ? $"some overloads in package {names}" : $"package {names}";
+        // Factories already name their `using static`.
+        if (!factories) label += $", {DocMarkdown.CodeSpan($"using {t.Namespace};")}";
+        return $" ({label})";
+    }
+
+    /// <summary>
+    /// The intro of a factory area page. When none of its factories are on the core
+    /// <c>Factories</c>, it names the class and package they are on instead.
+    /// </summary>
+    private static string FactoriesSentence(PlannedPage page)
+    {
+        var owners = page.Members.Select(m => m.DeclaringType).DistinctBy(t => t.DocId, StringComparer.Ordinal).ToList();
+        if (owners.Count != 1 || owners[0].DocId == ReferencePlanner.FactoriesDocId || owners[0].Name != "Factories")
+            return FactoriesKindSentence;
+        var owner = owners[0];
+        var packages = page.Members.Select(m => m.Package).Where(p => p is not null && p != CorePackage)
+            .Distinct(StringComparer.Ordinal).ToList();
+        var from = packages.Count == 1 ? $" in the {DocMarkdown.CodeSpan(packages[0]!)} package" : string.Empty;
+        return $"Each factory method returns an element record. These are on {DocMarkdown.CodeSpan(owner.Namespace + "." + owner.DisplayName)}{from}, " +
+            $"so add {DocMarkdown.CodeSpan($"using static {owner.Namespace}.{owner.DisplayName};")}.";
     }
 
     private string DeclaredOnText(ApiMember m, PageWriter w)
@@ -399,7 +442,7 @@ internal sealed class ReferenceRenderer
         var factories = page.Kind == PageKind.FactoryArea;
         w.H1(DocMarkdown.EscapeProse(page.Title));
         w.Add(factories ? page.Area?.Summary : ModifierAreaSummary(page));
-        w.Add(factories ? FactoriesKindSentence : ModifiersKindSentence);
+        w.Add(factories ? FactoriesSentence(page) : ModifiersKindSentence);
         w.Add(LearnMore(w));
 
         foreach (var group in page.Members.GroupBy(m => m.Name, StringComparer.Ordinal))
@@ -414,18 +457,16 @@ internal sealed class ReferenceRenderer
 
             var declaredIn = overloads.Select(o => o.DeclaringType)
                 .Where(t => t.DocId != ReferencePlanner.FactoriesDocId)
-                .DistinctBy(t => t.DocId, StringComparer.Ordinal).ToList();
+                .DistinctBy(t => t.DocId, StringComparer.Ordinal)
+                // Core classes first, so a core page doesn't open with another package.
+                .OrderBy(t => PackagesOf(overloads, t).Any(p => p != CorePackage) ? 1 : 0)
+                .ToList();
             var package = PackageNote(overloads);
             if (declaredIn.Count > 0)
             {
                 // Name the package beside each declaring class, since an overload
                 // set can mix core and Advanced overloads (`Set`, for example).
-                var names = string.Join(", ", declaredIn.Select(t =>
-                {
-                    var pkg = overloads.Where(o => o.DeclaringType.DocId == t.DocId).Select(o => o.Package)
-                        .FirstOrDefault(p => p is not null && p != CorePackage);
-                    return DocMarkdown.CodeSpan(t.Name) + (pkg is null ? string.Empty : $" (package {DocMarkdown.CodeSpan(pkg)})");
-                }));
+                var names = string.Join(", ", declaredIn.Select(t => DocMarkdown.CodeSpan(t.Name) + ClassPackageLabel(overloads, t, factories)));
                 // A factory outside `Factories` isn't reachable through its `using static`.
                 w.Add(factories
                     ? $"Declared in {names}. Call it through {string.Join(" or ", declaredIn.Select(t => DocMarkdown.CodeSpan($"using static {t.Namespace}.{t.DisplayName};")))}."
@@ -1318,9 +1359,9 @@ internal sealed class ReferenceRenderer
     private const string GuideRoot = "docs/guide/";
 
     /// <summary>
-    /// Doc comments link to guide pages by their repo path (<c>docs/guide/win2d-canvas.md#threading</c>),
-    /// which reads right on GitHub but not from a page under <c>docs/guide/reference</c>.
-    /// Such a link is made relative to <paramref name="page"/>; any other href is kept.
+    /// Some doc comments link to guide pages by their repo path (<c>docs/guide/win2d-canvas.md#threading</c>).
+    /// That path doesn't resolve from a page under <c>docs/guide/reference</c>, so such a link is
+    /// made relative to <paramref name="page"/>; any other href is kept.
     /// </summary>
     internal static string GuideHref(string page, string href)
     {

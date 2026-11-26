@@ -101,7 +101,7 @@ TemplatedGridViewElement<T> Set<T>(this TemplatedGridViewElement<T> el, Action<G
 TemplatedListViewElement<T> Set<T>(this TemplatedListViewElement<T> el, Action<ListView> configure)
 ```
 
-Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`), `ElementExtensions`.
+Declared in `ElementExtensions`, `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Win2D;`).
 
 | Overload | Description |
 | --- | --- |

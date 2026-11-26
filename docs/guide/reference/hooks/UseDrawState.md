@@ -6,7 +6,7 @@ Creates a stable mutable draw-state reference for Win2D callbacks.
 public static Ref<T> UseDrawState<T>(this RenderContext ctx, Func<T> init) where T : class
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseDrawStateHook`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseDrawStateHook`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Advanced.Win2D;`.
 
 **Learn more:** [Win2D canvas](../../win2d-canvas.md)
 

@@ -6,7 +6,7 @@ Returns the active pane's [`DockableContent.Key`](../docking/layout-model.md#key
 public static object? UseActivePaneKey(this RenderContext ctx)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.
 
 **Learn more:** [Docking Windows](../../docking.md)
 

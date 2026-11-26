@@ -13,7 +13,7 @@ Win2DAnimatedCanvasElement ClearColor(this Win2DAnimatedCanvasElement el, Color 
 Win2DCanvasElement ClearColor(this Win2DCanvasElement el, Color color)
 ```
 
-Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Win2D;`).
 
 | Overload | Description |
 | --- | --- |
@@ -36,7 +36,7 @@ Sets whether an animated Win2D canvas is paused.
 Win2DAnimatedCanvasElement Paused(this Win2DAnimatedCanvasElement el, bool paused = true)
 ```
 
-Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Win2D;`).
 
 **Applies to:** [`Win2DAnimatedCanvasElement`](../elements/win2d.md#win2danimatedcanvaselement).
 
@@ -54,7 +54,7 @@ Sets the target frame rate for an animated Win2D canvas.
 Win2DAnimatedCanvasElement TargetFps(this Win2DAnimatedCanvasElement el, double fps)
 ```
 
-Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Win2D;`).
 
 **Applies to:** [`Win2DAnimatedCanvasElement`](../elements/win2d.md#win2danimatedcanvaselement).
 
@@ -72,7 +72,7 @@ Win2DCanvasElement UseSharedDevice(this Win2DCanvasElement el, bool useSharedDev
 Win2DVirtualCanvasElement UseSharedDevice(this Win2DVirtualCanvasElement el, bool useSharedDevice = true)
 ```
 
-Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `Win2DCanvasModifiers` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Advanced.Win2D;`).
 
 | Overload | Description |
 | --- | --- |

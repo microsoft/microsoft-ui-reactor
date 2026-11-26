@@ -255,7 +255,7 @@ TemplatedGridViewElement<T> SelectionChanged<T>(this TemplatedGridViewElement<T>
 TemplatedListViewElement<T> SelectionChanged<T>(this TemplatedListViewElement<T> el, Action<IReadOnlyList<T>>? handler)
 ```
 
-Declared in `ElementExtensions`, `DataGridEventExtensions` (package `Microsoft.UI.Reactor.Advanced`).
+Declared in `ElementExtensions`, `DataGridEventExtensions` (package `Microsoft.UI.Reactor.Advanced`, `using Microsoft.UI.Reactor.Controls;`).
 
 | Overload | Description |
 | --- | --- |

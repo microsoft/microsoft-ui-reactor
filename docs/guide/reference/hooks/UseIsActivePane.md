@@ -6,7 +6,7 @@ Returns true when the \*enclosing pane\* is the host's currently-active pane. Re
 public static bool UseIsActivePane(this RenderContext ctx)
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `DockHooks`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Docking;`.
 
 **Learn more:** [Windows](../../windows.md), [Hooks](../../hooks.md)
 

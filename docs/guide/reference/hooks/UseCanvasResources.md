@@ -6,7 +6,7 @@ Creates resources for the current Win2D shared device, recreates them after `Can
 public static Ref<TResources?> UseCanvasResources<TResources>(this RenderContext ctx, Func<CanvasDevice, ValueTask<TResources>> create, Action<TResources>? dispose = null) where TResources : class
 ```
 
-An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseCanvasResourcesHook`. Package: `Microsoft.UI.Reactor.Advanced`.
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseCanvasResourcesHook`. Package: `Microsoft.UI.Reactor.Advanced`. Add `using Microsoft.UI.Reactor.Advanced.Win2D;`.
 
 **Learn more:** [Win2D canvas](../../win2d-canvas.md)
 
