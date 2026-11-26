@@ -719,6 +719,8 @@ public class ModifierUnsetClearValueTests
         "UIElement.IsTabStop",
         "FrameworkElement.RenderTransform",
         "FrameworkElement.FlowDirection",
+        // Issue #1717 — the one modifier-backed FrameworkElement DP the pool used to miss.
+        "FrameworkElement.RequestedTheme",
         // Issue #985 — the receiver-gated chain that mirrors ApplyModifiers' Padding /
         // CornerRadius / BorderThickness / BorderBrush / Background / IsEnabled writes.
         // Pinned per receiver, not per property: dropping only the Border or only the Panel
