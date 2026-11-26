@@ -23,8 +23,15 @@ internal static class ForegroundModifier
     };
 
     internal static UpdateAction PrepareUpdate(IV1HandlerEntry entry, UIElement control, Element previous, Element current,
-        Brush? oldModifier, Brush? modifier)
+        Brush? oldModifier, Brush? modifier, bool hasModifierParent)
     {
+        var interactionStatesRemoved = previous.InteractionStates is not null && current.InteractionStates is null;
+        // Restore the saved foreground before setters when the common brush is unchanged.
+        // A nested update on the same control can share the outer layer's interaction tracker.
+        if (!hasModifierParent && interactionStatesRemoved && modifier is not null && ReferenceEquals(oldModifier, modifier)
+            && control is FrameworkElement element && entry.OwnsControl(current))
+            Reconciler.RestoreInteractionForeground(element);
+
         // The built-in descriptor writes the element's explicit Foreground. A custom handler
         // for the same element and control types can decide to leave that declaration unapplied.
         if (control is not WinUI.RichTextBlock richText || previous is not RichTextBlockElement oldRichText
@@ -54,8 +61,6 @@ internal static class ForegroundModifier
             if (applied is not null)
             {
                 var stateOwnsForeground = Reconciler.TryReplaceInteractionForegroundRestoreValue(richText, applied, explicitForeground);
-                var interactionStatesRemoved =
-                    oldRichText.InteractionStates is not null && newRichText.InteractionStates is null;
 
                 var shouldRestoreImmediately = stateOwnsForeground
                     ? interactionStatesRemoved

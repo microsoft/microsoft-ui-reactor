@@ -6474,6 +6474,14 @@ public sealed partial class Reconciler : IDisposable
 
     private enum InteractionState { Normal, PointerOver, Pressed, Focused }
 
+    internal static void RestoreInteractionForeground(FrameworkElement element)
+    {
+        if (_interactionTrackers.TryGetValue(element, out var tracker)
+            && ForegroundModifier.GetProperty(element) is { } property)
+            ApplyInteractionBrush(element, property, stateBrush: null,
+                ref tracker.NormalForeground, ref tracker.ActiveForeground, ref tracker.ForegroundOverrideApplied);
+    }
+
     internal static bool TryReplaceInteractionForegroundRestoreValue(FrameworkElement element, Brush previous, Brush replacement)
     {
         // Leave the visible state brush in place while it still owns the local value.

@@ -358,7 +358,8 @@ public sealed partial class Reconciler
             var oldForeground = oldModifiers?.Foreground;
             var foreground = modifiers?.Foreground;
             if (oldForeground is not null || foreground is not null)
-                foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground);
+                foregroundUpdate = ForegroundModifier.PrepareUpdate(entry, control, oldEl, newEl, oldForeground, foreground,
+                    hasModifierParent: modifierParent is not null);
             var v1Result = entry.Update(oldEl, newEl, control, requestRerender, this);
             ownsControl = entry.OwnsControl(newEl);
             return ReferenceEquals(v1Result, control) ? null : v1Result;

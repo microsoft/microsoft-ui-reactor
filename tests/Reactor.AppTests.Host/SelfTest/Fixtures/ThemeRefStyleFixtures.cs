@@ -305,6 +305,75 @@ internal static class ThemeRefStyleFixtures
         }
     }
 
+    internal sealed class AnimatedIconInteractionStatesRemovedDuringHover(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var white = new SolidColorBrush(Microsoft.UI.Colors.White);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var withoutStates = AnimatedIcon(new WinUI.AnimatedVisuals.AnimatedBackVisualSource()).Foreground(white);
+            var initial = withoutStates.InteractionStates(s => s.PointerOver(foreground: green));
+            var icon = (WinUI.AnimatedIcon)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("AnimatedIconHoverRemoval_NormalWhiteApplied", ReferenceEquals(icon.Foreground, white));
+                Reconciler.SimulatePointerOverForTests(icon, isOver: true);
+                H.Check("AnimatedIconHoverRemoval_HoverGreenApplied", ReferenceEquals(icon.Foreground, green));
+
+                var replacement = reconciler.Update(initial, withoutStates, icon, static () => { });
+                H.Check("AnimatedIconHoverRemoval_SameIconRestoresWhiteImmediately",
+                    replacement is null && ReferenceEquals(icon.Foreground, white), $"foreground={ColorOf(icon.Foreground)}");
+
+                reconciler.Update(withoutStates, initial, icon, static () => { });
+                Reconciler.SimulatePointerOverForTests(icon, isOver: true);
+                H.Check("AnimatedIconHoverRemoval_GreenBeforeSetterUpdate", ReferenceEquals(icon.Foreground, green));
+
+                Brush? beforeSetter = null;
+                var withSetter = withoutStates.Set(control =>
+                {
+                    beforeSetter = control.Foreground;
+                    // A setter may intentionally keep the very brush the state wrote.
+                    control.Foreground = green;
+                });
+                replacement = reconciler.Update(initial, withSetter, icon, static () => { });
+                H.Check("AnimatedIconHoverRemoval_WhiteRestoredBeforeSetter", ReferenceEquals(beforeSetter, white),
+                    $"foreground={ColorOf(beforeSetter)}");
+                H.Check("AnimatedIconHoverRemoval_SameInstanceSetterBrushWins",
+                    replacement is null && ReferenceEquals(icon.Foreground, green));
+            }
+            finally { reconciler.UnmountChild(icon); }
+            return Task.CompletedTask;
+        }
+    }
+
+    internal sealed class FlyoutKeepsHoverForegroundWhenTargetDropsInteractionStates(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            using var reconciler = new Reconciler();
+            var white = new SolidColorBrush(Microsoft.UI.Colors.White);
+            var green = new SolidColorBrush(Microsoft.UI.Colors.Green);
+            var target = AnimatedIcon(new WinUI.AnimatedVisuals.AnimatedBackVisualSource()).Foreground(white);
+            var initial = Flyout(target.InteractionStates(s => s.PointerOver(opacity: 0.8f)), TextBlock("flyout"))
+                .InteractionStates(s => s.PointerOver(foreground: green));
+            var next = initial with { Target = target };
+            var icon = (WinUI.AnimatedIcon)reconciler.Mount(initial, static () => { })!;
+            try
+            {
+                H.Check("FlyoutHoverForeground_NormalWhiteApplied", ReferenceEquals(icon.Foreground, white));
+                Reconciler.SimulatePointerOverForTests(icon, isOver: true);
+                H.Check("FlyoutHoverForeground_OuterGreenApplied", ReferenceEquals(icon.Foreground, green));
+
+                var replacement = reconciler.Update(initial, next, icon, static () => { });
+                H.Check("FlyoutHoverForeground_TargetDropsStatesOuterStaysGreen",
+                    replacement is null && ReferenceEquals(icon.Foreground, green), $"foreground={ColorOf(icon.Foreground)}");
+            }
+            finally { reconciler.UnmountChild(icon); }
+            return Task.CompletedTask;
+        }
+    }
+
     internal sealed class DerivedIconThemeForeground(Harness h) : SelfTestFixtureBase(h)
     {
         public override Task RunAsync() => WithThemeKey(H, "TrsDerivedIcon", async host =>
