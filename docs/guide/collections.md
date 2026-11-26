@@ -1,4 +1,8 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Items Collections](https://learn.microsoft.com/en-us/windows/apps/design/controls/items-collections).
+
+# Collections
+
+When you need to render a list of data, Reactor provides three typed
+collection elements and a simple `ForEach` helper.
 
 Collections are the highest-leverage primitive in any non-trivial app —
 a contacts list, a feed, a settings tree, an editor's gutter. Microsoft.UI.Reactor (Reactor)
@@ -18,11 +22,10 @@ items or count-known-but-items-not-loaded scenarios, reach for
 match items across renders; that is the single most important thing to
 get right. Skim the comparison table first, then jump to your control.
 
-# Collections
+Each takes your data, a key selector, and a view builder function that
+returns an [element](components.md).
 
-When you need to render a list of data, Reactor provides three typed collection
-elements and a simple `ForEach` helper. Each takes your data, a key selector,
-and a view builder function that returns an [element](components.md).
+> **WinUI reference:** For the full property surface and design guidance, see [Items Collections](https://learn.microsoft.com/en-us/windows/apps/design/controls/items-collections).
 
 ## Sample Data
 

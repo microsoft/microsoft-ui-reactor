@@ -1,15 +1,19 @@
 # UseIsDarkTheme
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseIsDarkTheme`
+Convenience wrapper — returns `true` when the app-global color scheme is [`ColorScheme.Dark`](../theming/enums.md#values_1). Exactly `UseColorScheme() == ColorScheme.Dark`, so it inherits that hook's semantics: it does not observe per-element `RequestedTheme`.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public bool UseIsDarkTheme()
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Convenience wrapper — returns `true` when the app-global color
-scheme is `ColorScheme.Dark`. Exactly
-`UseColorScheme() == ColorScheme.Dark`, so it inherits that hook's
-semantics: it does not observe per-element `RequestedTheme`.
+**Learn more:** [Theming Tokens](../../theming-tokens.md), [Hooks](../../hooks.md)
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected bool UseIsDarkTheme()
+```

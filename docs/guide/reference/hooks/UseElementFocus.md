@@ -1,44 +1,22 @@
 # UseElementFocus
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(Microsoft.UI.Reactor.Core.Component,Microsoft.UI.Xaml.FocusState)`
+Creates (or retrieves) a component-scoped [`ElementRef`](../input/element-refs.md#elementref) and pairs it with a `RequestFocus` action. Bind the ref to an element via `.Ref(ref)`. Calling `RequestFocus` schedules [`FocusManager.Focus`](../input/FocusManager.md#focus) on the UI dispatcher; if the ref's target has not mounted yet the call is a no-op.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public static (ElementRef Ref, Action RequestFocus) UseElementFocus(this RenderContext ctx, FocusState state = (FocusState)3)
+```
 
-## Overloads
+An extension method on [`RenderContext`](../components/RenderContext.md), declared in `UseElementFocusExtensions`.
 
-- [`UseElementFocus(Component, FocusState)`](#useelementfocuscomponent-focusstate)
-- [`UseElementFocus(RenderContext, FocusState)`](#useelementfocusrendercontext-focusstate)
+**Learn more:** [Input and gestures](../../input-and-gestures.md), [Hooks](../../hooks.md)
 
-## `UseElementFocus(Component, FocusState)`
+## Parameters
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(Microsoft.UI.Reactor.Core.Component,Microsoft.UI.Xaml.FocusState)`
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `state` | `FocusState` | `(FocusState)3` |  |
 
-### Summary
-
-Component-extension overload of [UseElementFocus](UseElementFocus.md#useelementfocusrendercontext-focusstate) ([guide](../../hooks.md)).
-Equivalent to calling the `RenderContext`-extension form against
-`component.Context`; see that overload for the full contract.
-
-### Parameters
-
-- **component** — The component whose render context owns the hook slot.
-- **state** — The focus state used by the imperative request.
-
-## `UseElementFocus(RenderContext, FocusState)`
-
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Hooks.UseElementFocusExtensions.UseElementFocus(Microsoft.UI.Reactor.Core.RenderContext,Microsoft.UI.Xaml.FocusState)`
-
-### Summary
-
-Creates (or retrieves) a component-scoped `ElementRef` and pairs it
-with a `RequestFocus` action. Bind the ref to an element via `.Ref(ref)`.
-Calling `RequestFocus` schedules `Input.FocusManager.Focus` on the UI
-dispatcher; if the ref's target has not mounted yet the call is a no-op.
-
-### Examples
+## Example
 
 ```csharp
 var (inputRef, requestFocus) = ctx.UseElementFocus();
@@ -46,4 +24,10 @@ ctx.UseEffect(() => requestFocus(), Array.Empty<object>()); // focus on first re
 return TextBox(value, setValue).Ref(inputRef);
 ```
 
+## Use from a class component
 
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+public static (ElementRef Ref, Action RequestFocus) UseElementFocus(this Component component, FocusState state = (FocusState)3)
+```

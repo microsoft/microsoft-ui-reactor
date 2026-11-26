@@ -1,4 +1,10 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Input](https://learn.microsoft.com/en-us/windows/apps/design/input/).
+
+# Input and gestures
+
+Reactor's input surface is declarative: attach handlers via `.On*` modifiers and
+the reconciler wires WinUI events, auto-enables the matching flags (for example
+`IsDoubleTapEnabled`), and survives re-renders without re-subscribing the
+underlying WinUI event.
 
 Input flows from raw pointer and keyboard events through Microsoft.UI.Reactor (Reactor)'s
 modifier tower into your component's render logic, with gesture
@@ -19,16 +25,11 @@ is re-render-safe by design; the [focus-and-input-internals](focus-and-input-int
 page covers the dispatcher and trampoline mechanics for readers who
 want the implementation details.
 
-# Input and gestures
-
-Reactor's input surface is declarative: attach handlers via `.On*` modifiers and
-the reconciler wires WinUI events, auto-enables the matching flags (for example
-`IsDoubleTapEnabled`), and survives re-renders without re-subscribing the
-underlying WinUI event.
-
 This page covers the modifiers you'll reach for on most screens, the higher-level
 gesture recognizers for continuous input, and the imperative escape hatches —
 ref-based focus and access keys — that round out the commanding story.
+
+> **WinUI reference:** For the full property surface and design guidance, see [Input](https://learn.microsoft.com/en-us/windows/apps/design/input/).
 
 ## Reference
 

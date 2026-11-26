@@ -1,4 +1,10 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Xaml Islands](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/xaml-islands).
+
+# WinForms Interop
+
+Reactor components can run inside WinForms applications using XAML Islands.
+The `Reactor.Interop.WinForms` package provides `XamlIslandControl` — a
+standard WinForms control that hosts a Reactor component tree with full
+keyboard, accessibility, and theming support.
 
 `XamlIslandControl` is a single WinForms control that hosts a complete
 Microsoft.UI.Reactor (Reactor) [component](components.md) tree. The rest of the form stays
@@ -21,12 +27,7 @@ flow patterns, threading constraints, designer integration,
 keyboard and accessibility bridging, and the WPF sibling
 [`wpf-interop`](wpf-interop.md) for projects mixing all three.
 
-# WinForms Interop
-
-Reactor components can run inside WinForms applications using XAML Islands.
-The `Reactor.Interop.WinForms` package provides `XamlIslandControl` — a
-standard WinForms control that hosts a Reactor component tree with full
-keyboard, accessibility, and theming support.
+> **WinUI reference:** For the full property surface and design guidance, see [Xaml Islands](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/xaml-islands).
 
 ## Bootstrap
 

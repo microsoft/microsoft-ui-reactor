@@ -1,18 +1,19 @@
 
+# Getting Started with Reactor
+
+Install Reactor, scaffold a project, and grow it from hello world to a todo
+list and a calculator.
+
 A Microsoft.UI.Reactor (Reactor) app is a tree of [components](components.md) driven by
 [hooks](hooks.md), hosted in a WinUI window that the framework opens and
 manages for you. You write one C# file, call `ReactorApp.Run<T>`, and your
 component's `Render()` method returns the element tree that becomes the
 native control tree. State lives in `UseState` and friends; every setter
 invocation re-runs `Render()`; the reconciler diffs the new tree against
-the previous one and patches the WinUI controls in place. This page is
-the bootstrap walkthrough — installing the framework, scaffolding a
-project, and growing from hello-world to a todo list and a calculator.
-By the end you will have run code, seen a screenshot of each step, and
+the previous one and patches the WinUI controls in place. By the end of
+this page you will have run code, seen a screenshot of each step, and
 recognized the [layout](layout.md) primitives and [hooks](hooks.md) that
 the rest of the docset elaborates.
-
-# Getting Started with Reactor
 
 <!-- ai:lock -->
 > **Prerequisites:** .NET 10+ and the Windows App SDK.

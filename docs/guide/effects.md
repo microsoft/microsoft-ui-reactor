@@ -1,4 +1,10 @@
 
+# Effects and Lifecycle
+
+`UseEffect` runs side effects — code that reaches outside the component's
+render function. Timers, data fetching, subscriptions, and DOM manipulation
+all belong in effects, not in `Render()`.
+
 Effects are commit-phase side effects with dependency tracking. After Microsoft.UI.Reactor (Reactor)
 finishes [reconciling](reconciliation.md) the element tree and patching the
 WinUI controls for a render, it walks the effect queue for that render and
@@ -13,12 +19,6 @@ dependency array is the contract between you and the scheduler — every value
 the effect *reads* from state, props, or context belongs in it. Forget one
 and the effect captures a stale closure; allocate a new array or lambda each
 render and the effect re-runs forever because reference identity churns.
-
-# Effects and Lifecycle
-
-`UseEffect` runs side effects — code that reaches outside the
-[component's](components.md) render function. Timers, data fetching,
-subscriptions, and DOM manipulation all belong in effects, not in `Render()`.
 
 ## Reference
 

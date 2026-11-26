@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.Cli.Docs.Tests;
 /// <c>Publish docs</c> run produced (issue #1268).
 ///
 /// That script is the only thing in the pipeline that looks at the live site.
-/// Everything else — the strict build, the mike push, the Pages deployment —
+/// Everything else — the strict build, the gh-pages push, the Pages deployment —
 /// stayed green while a release was stranded, so a mistake in this one file is
 /// a mistake in the only signal that can catch the bug it exists for.
 ///

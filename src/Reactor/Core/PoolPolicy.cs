@@ -27,11 +27,15 @@ public sealed class PoolPolicy<TControl> where TControl : class
     public bool IsPoolable { get; init; } = true;
 
     /// <summary>
-    /// Optional extra reset action invoked AFTER the engine's default
-    /// contract clears (ControlEventState, ModifierEventHandlerState,
-    /// ReactorAttached.StateProperty Tag, Reactor-set DataContext).
-    /// Use for control-specific transient state the engine can't know
-    /// about (e.g. ScrollViewer.ChangeView animation queue).
+    /// Optional extra reset action, invoked last when the control is returned to
+    /// the pool, after the engine's default reset. That reset clears the element
+    /// pointer, the current modifier callbacks, echo-suppression and unmount
+    /// state, and the Reactor-set DataContext. It keeps the attached
+    /// ReactorState and its per-control ControlEventState, so event trampolines
+    /// subscribed once for the control's lifetime stay subscribed and dispatch
+    /// to the next element. Don't resubscribe native events here. Use it for
+    /// control-specific transient state the engine can't know about (e.g.
+    /// ScrollViewer.ChangeView animation queue).
     /// </summary>
     public Action<TControl>? Reset { get; init; }
 }

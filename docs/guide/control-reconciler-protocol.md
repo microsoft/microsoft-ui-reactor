@@ -1,4 +1,11 @@
 
+# The Control Reconciler Protocol
+
+This page documents the data path between the reconciler and the WinUI
+control it edits. It is for anyone extending Reactor with a new native
+control, or debugging why an existing element does not update the way it
+should.
+
 Microsoft.UI.Reactor (Reactor) draws the visible part of a frame by handing
 each immutable element record off to a per-control-type plug-in called a
 **handler**. The handler knows two things the [reconciler](reconciliation.md)
@@ -12,16 +19,11 @@ every control you add yourself dispatches through the same tight loop.
 Read this page before adding a new native control or before reaching for
 a debugger when an existing one mis-updates.
 
-# The Control Reconciler Protocol
-
-This page documents the data path between
-[`Reconciler.Reconcile`](reconciliation.md#reconcile-the-entry-point)
-and the WinUI control it edits. The audience is anyone extending
-Reactor with a new native control, or anyone debugging why an
-existing element does not update the way it should. The companion
-[Extending Reactor with Native Controls](extending-reactor-controls.md)
-walks through adding a control end-to-end; this page is the
-reference under that recipe.
+The path starts at
+[`Reconciler.Reconcile`](reconciliation.md#reconcile-the-entry-point). The
+companion [Extending Reactor with Native
+Controls](extending-reactor-controls.md) walks through adding a control
+end-to-end; this page is the reference under that recipe.
 
 ## Dispatch — one handler per element type
 

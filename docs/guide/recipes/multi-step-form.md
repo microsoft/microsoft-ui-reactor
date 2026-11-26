@@ -1,11 +1,11 @@
 
 # Recipe: Multi-Step Form
 
-A wizard form is a step-index [`UseState`](../hooks.md) plus a switch
-on which step renders. The field state lives in the same component as
-the step index, so moving forward and back never loses what the user
-typed — Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding component when the
-visible slot changes.
+A wizard form is a step-index `UseState` plus a switch on which step
+renders. The field state lives in the same component as the step
+index, so moving forward and back never loses what the user typed —
+Microsoft.UI.Reactor (Reactor) doesn't unmount the surrounding
+component when the visible slot changes.
 
 ## Primitives
 

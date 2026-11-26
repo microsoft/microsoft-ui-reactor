@@ -1,13 +1,25 @@
 # UseCollection
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseCollection``1(System.Collections.ObjectModel.ObservableCollection{``0})`
+Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset. Returns the collection as IReadOnlyList.
 
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
+```csharp
+public IReadOnlyList<T> UseCollection<T>(ObservableCollection<T> collection)
+```
 
-## Summary
+Declared on [`RenderContext`](../components/RenderContext.md).
 
-Subscribes to an ObservableCollection and re-renders on Add/Remove/Reset.
-Returns the collection as IReadOnlyList.
+**Learn more:** [Collections](../../collections.md), [Hooks](../../hooks.md)
 
+## Parameters
 
+| Name | Type | Description |
+| --- | --- | --- |
+| `collection` | `ObservableCollection<T>` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected IReadOnlyList<T> UseCollection<T>(ObservableCollection<T> collection)
+```

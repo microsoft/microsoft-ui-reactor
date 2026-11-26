@@ -1,12 +1,5 @@
 # UseNavigationLifecycle
 
-`method`  
-_cref_: `M:Microsoft.UI.Reactor.Core.RenderContext.UseNavigationLifecycle(System.Action{Microsoft.UI.Reactor.Navigation.NavigatingToContext},System.Action{Microsoft.UI.Reactor.Navigation.NavigatedToContext},System.Action{Microsoft.UI.Reactor.Navigation.NavigatingFromContext},System.Action{Microsoft.UI.Reactor.Navigation.NavigatedFromContext})`
-
-> **Learn more:** [Hooks](../../hooks.md), [Effects](../../effects.md)
-
-## Summary
-
 Registers lifecycle callbacks that fire during navigation events.
 
 - `onNavigatedTo` — fires after this page becomes active.
@@ -15,4 +8,27 @@ Registers lifecycle callbacks that fire during navigation events.
 
 Callbacks are always updated to the latest references on every render.
 
+```csharp
+public void UseNavigationLifecycle(Action<NavigatingToContext>? onNavigatingTo = null, Action<NavigatedToContext>? onNavigatedTo = null, Action<NavigatingFromContext>? onNavigatingFrom = null, Action<NavigatedFromContext>? onNavigatedFrom = null)
+```
 
+Declared on [`RenderContext`](../components/RenderContext.md).
+
+**Learn more:** [Navigation](../../navigation.md), [Hooks](../../hooks.md)
+
+## Parameters
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `onNavigatingTo` | `Action<NavigatingToContext>?` | `null` |  |
+| `onNavigatedTo` | `Action<NavigatedToContext>?` | `null` |  |
+| `onNavigatingFrom` | `Action<NavigatingFromContext>?` | `null` |  |
+| `onNavigatedFrom` | `Action<NavigatedFromContext>?` | `null` |  |
+
+## Use from a class component
+
+Class components can call the same hook directly. These overloads forward to the ones above:
+
+```csharp
+protected void UseNavigationLifecycle(Action<NavigatingToContext>? onNavigatingTo = null, Action<NavigatedToContext>? onNavigatedTo = null, Action<NavigatingFromContext>? onNavigatingFrom = null, Action<NavigatedFromContext>? onNavigatedFrom = null)
+```

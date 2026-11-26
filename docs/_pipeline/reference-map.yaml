@@ -1,35 +1,977 @@
-# Reference map for spec 041 §10.4.1 — XML-doc → MD reference generation.
+# Reference map for spec 041 §10.4: how the API reference is laid out.
 #
-# Maps each canonical cref (T:, M:, P:, F:, E: prefix) to (category,
-# guide-pages). Two ordered passes:
+# Phase 5.7 of `compile` reads Microsoft.UI.Reactor.dll and
+# Microsoft.UI.Reactor.xml and writes the pages under docs/guide/reference/.
+# This file decides where each public type and member goes.
 #
-#   1. overrides — exact cref match wins, then prefix match (most-specific
-#      prefix wins). Use this to pin individual members to a non-default
-#      category or to redirect a member to a specific conceptual page.
-#   2. defaults — namespace-prefix glob, most-specific wins. Catches
-#      everything not explicitly pinned.
+#   categories    One folder per category, each with a generated index.md.
+#                 `layout` picks the page shape:
+#                   types      one page per type (groups collect small types)
+#                   hooks      one page per Use* hook, plus type pages
+#                   elements   one page per area of element records
+#                   factories  one page per area of Factories methods
+#                   modifiers  one page per area of fluent modifiers
+#                 `groups` with `match` put several small types on one page.
+#                 `groups` with `hooks` only make sections on the hooks index.
+#   areas         Control areas shared by the elements, factories and
+#                 modifiers categories. `elements` match an element record
+#                 name without its `Element` suffix. `factories` match factory
+#                 methods that do not return an element of the area.
+#   modifier-areas
+#                 Areas for modifiers, matched by method name. A modifier no
+#                 area matches goes to the page of the control area it
+#                 extends, then to the area that has no `match` list.
+#   defaults      Type name globs to category (most specific wins). Member
+#                 globs only add guide pages ("Learn more" links).
+#   overrides     Checked before defaults. A `category` here also wins over
+#                 the "element records go to elements" rule.
 #
-# Unmatched members produce REACTOR_DOC_REGISTRY_W001 at build time and
-# fall through with no category/guide-pages.
+# Globs: `*` matches any run of characters. A glob is anchored at both ends
+# unless it starts or ends with `*`. Rules match the cref without its
+# `T:`/`M:` prefix. Use the category `excluded` to keep a type out.
+# Guide pages are template ids from docs/_pipeline/templates/.
+
+element-base: "Microsoft.UI.Reactor.Core.Element"
+
+categories:
+  - id: hooks
+    title: Hooks
+    layout: hooks
+    summary: "State, effects, context and the other hooks a component calls from Render."
+    intro: >-
+      Hooks are how Reactor components subscribe to state, schedule effects, and
+      reach into the framework's lifecycle from a function-shaped `Render` body.
+      Call them on the `RenderContext` (or from a `Component`), always in the same
+      order, and never inside a condition or a loop.
+    guide-pages: [hooks, effects, rules-of-reactor]
+    groups:
+      - id: state
+        title: State
+        summary: "Hooks that keep values between renders."
+        hooks: ["UseState*", "UseReducer", "UseRef", "UseCollection", "UseExternalStore", "UseObservable*", "UsePersisted"]
+      - id: effects-and-memo
+        title: Effects and memoization
+        summary: "Hooks that run side effects or cache values between renders."
+        hooks: ["UseEffect", "UseMemo*", "UseCallback"]
+      - id: context
+        title: Context
+        summary: "Hooks that read values provided higher in the tree."
+        hooks: ["UseContext", "UseIntl"]
+      - id: data
+        title: Data and commands
+        summary: "Hooks that load data, run mutations and expose commands."
+        hooks: ["UseResource", "UseInfiniteResource", "UseMutation", "UseDataSource", "UseCommand*"]
+      - id: forms
+        title: Forms and validation
+        summary: "Hooks that connect a component to a validation context."
+        hooks: ["Use*ValidationContext"]
+      - id: windows
+        title: Windows and display
+        summary: "Hooks that read or change the window, the display and the tray icon."
+        hooks: ["UseWindow*", "UseOpenWindow", "UseClosingGuard", "UseIsActive", "UseIsCovered", "UseDisplays", "UseDpi", "UseBreakpoint", "UseTrayIcon"]
+      - id: theme-and-accessibility
+        title: Theme and accessibility
+        summary: "Hooks that follow the system theme and accessibility settings."
+        hooks: ["UseColorScheme", "UseIsDarkTheme", "UseHighContrast*", "UseReducedMotion", "UseAnnounce"]
+      - id: focus
+        title: Focus and element refs
+        summary: "Hooks that move focus or reach a mounted control."
+        hooks: ["UseFocus*", "UseElementFocus", "UseElementRef"]
+      - id: navigation
+        title: Navigation
+        summary: "Hooks for page navigation and the system back button."
+        hooks: ["UseNavigation*", "UseSystemBackButton"]
+      - id: tools
+        title: Developer tools
+        summary: "Hooks for the Reactor developer tools."
+        hooks: ["UseDevtools"]
+      - id: hook-types
+        title: Hook results and options
+        summary: "Small types that hooks return or take as options."
+        match: ["AnnounceHandle", "FocusTrapHandle", "Mutation", "MutationOptions", "ResourceOptions", "IHookDispatcher"]
+      - id: pending
+        title: Pending
+        summary: "The Pending element that shows a fallback while resources below it load."
+        match: ["Pending*"]
+      - id: focus-helpers
+        title: Focus helpers
+        summary: "The focus manager and the modifiers that the UseFocus hooks work with."
+        match: ["Microsoft.UI.Reactor.Hooks.Focus*"]
+
+  - id: components
+    title: Components
+    summary: "Component base classes, the render context, refs, context and error types."
+    intro: >-
+      A component is a class whose `Render` method returns an element tree. These
+      types are the building blocks every component uses.
+    guide-pages: [components, thinking-in-reactor, context]
+    groups:
+      - id: render-errors
+        title: Render errors
+        summary: "Types that describe an error thrown while a component renders."
+        match: ["RenderError*", "HookOrderException"]
+
+  - id: elements
+    title: Elements
+    layout: elements
+    summary: "The immutable element records that describe each control."
+    intro: >-
+      Every control in Reactor is described by an element record. Factory methods
+      create them and modifiers return changed copies. The reconciler turns them
+      into real WinUI controls.
+    guide-pages: [controls, reconciliation]
+
+  - id: factories
+    title: Factories
+    layout: factories
+    summary: "The DSL factory methods that create element records."
+    intro: >-
+      Add `using static Microsoft.UI.Reactor.Factories;` and call these methods to
+      build an element tree, for example `VStack(TextBlock("Hello"), Button("OK", onClick))`.
+      A few factories live on other classes, such as `ValidationRuleDsl`; their sections
+      name the `using static` they need.
+    guide-pages: [controls, layout, cheat-sheet]
+
+  - id: modifiers
+    title: Modifiers
+    layout: modifiers
+    summary: "Fluent extension methods that change layout, appearance, input and behavior."
+    intro: >-
+      Modifiers are extension methods on element records. Each one returns a
+      changed copy of the element, so you can chain them:
+      `TextBlock("Hi").Margin(8).Bold()`.
+    guide-pages: [modifier-system, styling]
+
+  - id: hosting
+    title: Hosting and windows
+    summary: "Start the app, open windows and integrate with the Windows shell."
+    intro: >-
+      `ReactorApp` starts the app and opens its first window. The other types here
+      describe windows, the tray icon, the taskbar and the ways to host Reactor
+      inside an existing WinUI app.
+    guide-pages: [windows, windowing-advanced, desktop-integration]
+    groups:
+      - id: window-events
+        title: Window events
+        summary: "Event arguments raised by a Reactor window."
+        match: ["Window*EventArgs", "WindowCloseReason"]
+      - id: window-options
+        title: Window options
+        summary: "Enums that describe the style, size and position of a window."
+        match: ["WindowCornerStyle", "WindowEmbedStyle", "WindowLevel", "WindowResizeMode", "WindowSizeToContent",
+                "WindowStartPosition", "WindowState", "WindowStyle", "WindowTitleBar*", "WindowIconKind", "AspectRatioBasis",
+                "PresenterKind", "ShutdownPolicy"]
+      - id: taskbar
+        title: Taskbar and jump lists
+        summary: "Types for the taskbar button, its progress, overlay, thumbnail buttons and jump list."
+        match: ["Taskbar*", "JumpList*", "ThumbnailToolbarButton"]
+      - id: tray-icon
+        title: Tray icon
+        summary: "Types for an icon in the notification area."
+        match: ["ReactorTrayIcon", "TrayIconSpec"]
+      - id: displays
+        title: Displays
+        summary: "Information about the connected displays."
+        match: ["DisplayInfo", "ReactorDisplay"]
+      - id: launch
+        title: Launch and activation
+        summary: "How the app was started, and requests to embed it."
+        match: ["LaunchActivation", "LaunchKind", "EmbedRequest"]
+      - id: file-pickers
+        title: File pickers
+        summary: "Options for the open file, save file and folder pickers."
+        match: ["*PickerOptions", "FileTypeChoice"]
+      - id: persistence
+        title: Persistence
+        summary: "Stores and scopes that save window placement and persisted state."
+        match: ["Microsoft.UI.Reactor.Hosting.Persistence.*", "*PersistedScope", "IPersistedStateScope"]
+      - id: xaml-interop
+        title: XAML interop
+        summary: "Helpers for hosting Reactor inside an existing XAML app."
+        match: ["PageHelper", "XamlInterop"]
+
+  - id: theming
+    title: Theming
+    summary: "Theme tokens, theme resources, brushes and window backdrops."
+    guide-pages: [theming-tokens, styling]
+
+  - id: layout
+    title: Layout
+    summary: "The flex panel, grid sizes and the attached layout records."
+    guide-pages: [layout, flex-layout]
+    groups:
+      - id: attached
+        title: Attached layout properties
+        summary: "Records that hold the attached properties set by the layout modifiers."
+        match: ["CanvasAttached", "FlexAttached", "GridAttached", "RelativePanelAttached", "WrapGridAttached", "GridDefinition"]
+      - id: flex-enums
+        title: Flex enums
+        summary: "Enums that control the flex layout."
+        match: ["Flex*"]
+
+  - id: input
+    title: Input and commands
+    summary: "Commands, element refs, focus, drag and drop, and gestures."
+    guide-pages: [input-and-gestures, commanding]
+    groups:
+      - id: drag-and-drop
+        title: Drag and drop
+        summary: "Types for dragging data out of and dropping it onto elements."
+        match: ["Drag*", "DropTargetConfig"]
+      - id: gestures
+        title: Gestures
+        summary: "Gesture events and their options."
+        match: ["*Gesture", "*GestureConfig", "GesturePhase", "PanAxis"]
+      - id: element-refs
+        title: Element refs
+        summary: "Refs to mounted controls."
+        match: ["ElementRef", "TypedElementRef"]
+
+  - id: data
+    title: Data
+    summary: "Async values, resources, the query cache and data sources."
+    guide-pages: [data-system, async-resources]
+    groups:
+      - id: async-values
+        title: Async values
+        summary: "The value a resource hook returns while it loads, after it loads and after it fails."
+        match: ["AsyncValue", "LoadState"]
+      - id: query-cache
+        title: Query cache
+        summary: "The process-wide cache that resource hooks share."
+        match: ["QueryCache", "CacheEntry"]
+      - id: paging
+        title: Paging
+        summary: "Types for infinite and paged resources."
+        match: ["InfiniteResource*", "Page", "DataPage*", "CacheBlock", "BlockStatus"]
+      - id: descriptors
+        title: Sort and filter descriptors
+        summary: "Requests, sort, filter and field descriptors that data sources receive."
+        match: ["DataRequest", "SortDescriptor", "FilterDescriptor", "FieldDescriptor", "RowKey", "SortDirection", "FilterOperator"]
+      - id: column-attributes
+        title: Column attributes
+        summary: "Attributes that change how a property shows as a column."
+        match: ["Column*Attribute", "Not*Attribute", "PinPosition"]
+
+  - id: navigation
+    title: Navigation
+    summary: "Navigation state, routes, lifecycle contexts and page transitions."
+    guide-pages: [navigation]
+    groups:
+      - id: transitions
+        title: Navigation transitions
+        summary: "Transitions that play when the navigation host changes pages."
+        match: ["*Transition", "SlideDirection"]
+      - id: lifecycle
+        title: Navigation lifecycle
+        summary: "Contexts passed to the navigation lifecycle callbacks."
+        match: ["Navigat*Context"]
+      - id: diagnostics
+        title: Navigation diagnostics
+        summary: "Diagnostic events raised by the navigation system."
+        match: ["*DiagnosticEvent", "NavigationDiagnostics"]
+
+  - id: animation
+    title: Animation
+    summary: "Transitions, curves, keyframes, interaction states and scroll-linked animation."
+    guide-pages: [animation]
+    groups:
+      - id: transitions
+        title: Transitions
+        summary: "Enter and exit transitions for elements."
+        match: ["Microsoft.UI.Reactor.Animation.*Transition", "Edge"]
+      - id: curves
+        title: Curves and easing
+        summary: "Curves that shape the timing of an animation."
+        match: ["*Curve", "Easing"]
+      - id: keyframes
+        title: Keyframes
+        summary: "Types for keyframe animations."
+        match: ["Keyframe*"]
+      - id: interaction-states
+        title: Interaction states
+        summary: "Animations that follow pointer over, pressed and focus states."
+        match: ["InteractionState*"]
+      - id: scroll
+        title: Scroll-linked animation
+        summary: "Animations driven by the scroll position."
+        match: ["Scroll*"]
+      - id: implicit
+        title: Implicit and theme transitions
+        summary: "Transitions WinUI runs when a property or a child collection changes."
+        match: ["ImplicitTransitions", "ThemeTransitions", "LayoutAnimationConfig"]
+
+  - id: accessibility
+    title: Accessibility
+    summary: "The accessibility scanner, its diagnostics and semantic panels."
+    guide-pages: [accessibility]
+
+  - id: localization
+    title: Localization
+    summary: "Message keys, string resources, number and date formatting, and right-to-left helpers."
+    guide-pages: [localization]
+
+  - id: controls
+    title: Controls
+    summary: "Item data records and support types for the property grid, masked input and virtual lists."
+    guide-pages: [controls, collections]
+    groups:
+      - id: icons
+        title: Icon data
+        summary: "Records that describe an icon."
+        match: ["*IconData"]
+      - id: menu-items
+        title: Menu and command bar items
+        summary: "Records that describe menu, menu bar, command bar and keyboard accelerator items."
+        match: ["AppBar*", "Menu*Data", "MenuFlyoutItemBase", "*MenuFlyoutItemData", "KeyboardAcceleratorData"]
+      - id: navigation-items
+        title: Navigation items
+        summary: "Records that describe items of navigation controls."
+        match: ["BreadcrumbBarItemData", "NavigationViewItemData", "PivotItemData", "SelectorBarItemData", "TabViewItemData"]
+      - id: collection-items
+        title: Collection items
+        summary: "Records and enums for tree, swipe and items view content."
+        match: ["TreeViewNodeData", "SwipeItemData", "ItemsViewLayoutKind", "TemplatedControlKind"]
+      - id: rich-text
+        title: Rich text
+        summary: "Inline records for rich text blocks."
+        match: ["RichText*"]
+      - id: property-grid-attributes
+        title: Property grid attributes
+        summary: "Attributes that change how the property grid shows a property."
+        match: ["Property*Attribute"]
+      - id: property-grid-templates
+        title: Property grid templates
+        summary: "Delegates and metadata the property grid uses to build its rows."
+        match: ["*Template", "ArrayTypeMetadata", "TypeMetadata", "EditorTier", "Editors", "CellRenderers", "ReflectionTypeMetadataProvider", "TypeRegistry"]
+      - id: masked-input
+        title: Masked input
+        summary: "The mask engine and formatters behind MaskedTextBox."
+        match: ["Mask*", "*Formatter*", "FormatResult"]
+      - id: virtual-list
+        title: Virtual list
+        summary: "Support types for the virtual list."
+        match: ["VirtualList*", "SearchManager", "SearchState"]
+
+  - id: validation
+    title: Validation
+    summary: "Validators, validation contexts and error styling for forms."
+    guide-pages: [forms]
+    groups:
+      - id: attached
+        title: Attached validation state
+        summary: "Records that hold the validation state stored on an element."
+        match: ["*Attached"]
+
+  - id: diagnostics
+    title: Diagnostics
+    summary: "Tracing, source maps, component snapshots and developer tools hosting."
+    guide-pages: [diagnostics, devtools]
+    groups:
+      - id: snapshots
+        title: Diagnostic snapshots
+        summary: "Snapshots of the component tree that the diagnostics API returns."
+        match: ["Microsoft.UI.Reactor.Core.Diagnostics.*"]
+      - id: devtools
+        title: Developer tools hosting
+        summary: "Types the developer tools use to start inside an app."
+        match: ["Microsoft.UI.Reactor.Hosting.Devtools.*"]
+
+  - id: extensibility
+    title: Extensibility
+    summary: "The control protocol, control descriptors, the reconciler and element pooling."
+    intro: >-
+      Use these types to add your own controls to Reactor or to change how built-in
+      controls are created and updated.
+    guide-pages: [extending-reactor-controls, control-reconciler-protocol, element-pool]
+    groups:
+      - id: children-strategies
+        title: Children strategies
+        summary: "Records that tell the reconciler how a control holds its children."
+        match: ["ChildrenStrategy", "None", "Panel", "SingleContent", "NamedSlot*", "PreMountedItems", "ItemsHost*", "TabItemsHost",
+                "TemplatedItems*", "TreeChildren", "Imperative", "AttachedPropWriter"]
+      - id: lifecycle-contexts
+        title: Handler contexts
+        summary: "Contexts passed to an element handler when it mounts, updates or unmounts a control."
+        match: ["MountContext", "UpdateContext", "UnmountContext", "V1UnmountDisposition"]
+      - id: descriptor-delegates
+        title: Descriptor callbacks
+        summary: "Delegates and attributes used by control descriptors."
+        match: ["*Callback", "OneWayBridgedSetter", "NoClearValueAttribute"]
+
+  - id: excluded
+    title: Excluded
+
+areas:
+  - id: layout
+    title: Layout
+    summary: "Panels, stacks, grids, scrolling and other containers."
+    elements: ["Border", "Canvas", "Flex", "Grid", "RelativePanel", "Stack", "Viewbox", "WrapGrid", "ScrollView", "ScrollViewer",
+               "ParallaxView", "AnnotatedScrollBar", "Expander", "SplitView"]
+    factories: ["VStack", "HStack", "FlexRow", "FlexColumn", "UniformGrid", "InterspersedGrid", "Card", "Thick"]
+    guide-pages: [layout, flex-layout]
+  - id: text
+    title: Text
+    summary: "Text blocks, rich text and the typography factories."
+    elements: ["TextBlock", "RichTextBlock", "RichText*"]
+    factories: ["Body*", "Caption", "Display", "Heading", "SubHeading", "Subtitle", "Title*", "Paragraph", "Run", "Hyperlink", "InlineUI"]
+    guide-pages: [text-and-media]
+  - id: buttons
+    title: Buttons
+    summary: "Buttons, toggle buttons, split buttons and hyperlink buttons."
+    elements: ["Button", "DropDownButton", "HyperlinkButton", "RepeatButton", "SplitButton", "ToggleButton", "ToggleSplitButton"]
+    guide-pages: [controls, commanding]
+  - id: input
+    title: Input
+    summary: "Text boxes, check boxes, combo boxes, sliders, pickers and other input controls."
+    elements: ["TextBox", "PasswordBox", "NumberBox", "AutoSuggestBox", "AutoSuggest", "RichEditBox", "MaskedTextBox", "CheckBox",
+               "RadioButton", "RadioButtons", "ComboBox", "Slider", "ToggleSwitch", "RatingControl", "ColorPicker",
+               "CalendarDatePicker", "CalendarView", "DatePicker", "TimePicker"]
+    guide-pages: [controls, forms]
+  - id: collections
+    title: Collections
+    summary: "Lists, grids, trees, flip views and virtualized collections."
+    elements: ["ListView", "GridView", "ListBox", "FlipView", "TreeView", "ItemsRepeater", "ItemsView", "Templated*", "ItemContainer",
+               "Lazy*", "VirtualList", "SemanticZoom", "RefreshContainer", "SwipeControl"]
+    factories: ["TreeNode"]
+    guide-pages: [collections]
+  - id: navigation
+    title: Navigation
+    summary: "Navigation views, tabs, pivots, breadcrumbs and the title bar."
+    elements: ["NavigationView", "NavigationHost", "BreadcrumbBar", "Pivot", "SelectorBar", "TabView", "TitleBar", "Frame", "PipsPager"]
+    factories: ["Breadcrumb", "NavItem", "NavItemHeader", "PivotItem", "SelectorBarItem", "Tab"]
+    guide-pages: [navigation]
+  - id: menus-and-commands
+    title: Menus and commands
+    summary: "Menus, menu bars, command bars and keyboard accelerators."
+    elements: ["CommandBar", "CommandBarFlyout", "MenuBar", "MenuFlyout", "MenuFlyoutContent", "CommandHost", "AppBar*"]
+    factories: ["Accelerator", "AppBar*", "Menu", "MenuItem*", "MenuSeparator", "MenuSubItem", "RadioMenuItem", "ToggleMenuItem", "DevtoolsMenu"]
+    guide-pages: [commanding]
+  - id: dialogs-and-flyouts
+    title: Dialogs and flyouts
+    summary: "Content dialogs, flyouts, popups and teaching tips."
+    elements: ["ContentDialog", "ContentFlyout", "Flyout", "Popup", "TeachingTip"]
+    guide-pages: [dialogs-and-flyouts]
+  - id: media
+    title: Media and icons
+    summary: "Images, icons, animated visuals, media playback and person pictures."
+    elements: ["Image", "Icon", "AnimatedIcon", "AnimatedVisualPlayer", "MediaPlayerElement", "PersonPicture"]
+    factories: ["BitmapIcon", "FontIcon", "ImageIcon", "PathIcon", "SymbolIcon"]
+    guide-pages: [text-and-media]
+  - id: shapes
+    title: Shapes
+    summary: "Rectangles, ellipses, lines, paths and brushes."
+    elements: ["Rectangle", "Ellipse", "Line", "Path"]
+    factories: ["Path2D", "AcrylicBrush"]
+    guide-pages: [styling]
+  - id: status-and-info
+    title: Status and info
+    summary: "Info bars, badges and progress indicators."
+    elements: ["InfoBar", "InfoBadge", "Progress", "ProgressRing"]
+    guide-pages: [status-and-info]
+  - id: forms
+    title: Forms
+    summary: "Form fields, validation rules, validation visualizers and the property grid."
+    elements: ["FormField", "ValidationRule", "ValidationVisualizer", "PropertyGrid"]
+    guide-pages: [forms]
+  - id: composition
+    title: Composition
+    summary: "Components, memoization, error boundaries, conditionals and other structural elements."
+    elements: ["Component", "Memo", "KeyedMemo", "ErrorBoundary", "Empty", "Group", "Func", "Modified", "LocaleProvider", "Semantic"]
+    factories: ["If", "When", "ForEach", "Expr", "RenderEachTime", "Empty", "Group"]
+    guide-pages: [components, advanced]
+  - id: interop
+    title: Interop
+    summary: "Hosted XAML content, web views and maps."
+    elements: ["XamlHost", "XamlPage", "WebView2", "MapControl"]
+    guide-pages: [xaml-developers]
+
+modifier-areas:
+  - id: layout-and-spacing
+    title: Layout and spacing
+    summary: "Size, margin, padding, alignment and the attached layout properties."
+    match: ["Margin*", "Padding*", "FlexPadding", "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight", "Size",
+            "HAlign", "VAlign", "HorizontalAlignment", "VerticalAlignment", "HorizontalContentAlignment", "VerticalContentAlignment",
+            "Center", "CenterAt", "Grid", "Canvas", "Flex", "RelativePanel", "WrapGrid*", "Visible", "IsVisible"]
+    guide-pages: [layout, flex-layout]
+  - id: appearance
+    title: Appearance
+    summary: "Background, foreground, borders, corners, opacity, transforms, styles and theme."
+    match: ["Background", "Foreground", "BorderBrush", "BorderThickness", "BorderInlineStart", "CornerRadius", "Opacity", "WithBorder",
+            "Backdrop", "RequestedTheme", "ApplyStyle", "Resources", "Rotation", "Scale", "Translation", "CenterPoint"]
+    guide-pages: [styling, theming-tokens]
+  - id: typography
+    title: Typography
+    summary: "Fonts, text alignment, wrapping, trimming and other text formatting."
+    match: ["Font*", "CharacterSpacing", "LineHeight", "LineStackingStrategy", "TextDecorations", "TextAlignment",
+            "HorizontalTextAlignment", "TextWrapping", "TextTrimming", "TextIndent", "TextLineBounds", "TextReadingOrder",
+            "OpticalMarginAlignment", "Bold", "SemiBold", "MaxLines", "IsTextScaleFactorEnabled", "IsColorFontEnabled",
+            "UnderlineStyle", "Selectable", "IsTextSelectionEnabled", "SelectionHighlightColor", "FlowDirection", "Language"]
+    guide-pages: [text-and-media, styling]
+  - id: accessibility
+    title: Accessibility
+    summary: "Automation names, landmarks, live regions and other accessibility properties."
+    match: ["Accessibility*", "AutomationId", "AutomationName", "DescribedBy", "FlowsFrom", "FlowsTo", "FullDescription",
+            "HeadingLevel", "HelpText", "HierarchyLevel", "ItemStatus", "LabeledBy", "Landmark", "LiveRegion", "PositionInSet",
+            "Semantics"]
+    guide-pages: [accessibility]
+  - id: focus-and-keyboard
+    title: Focus and keyboard
+    summary: "Tab order, access keys, directional focus and focus traps."
+    match: ["AccessKey*", "OnAccessKeyDisplayRequested", "FocusMeta", "FocusTrap", "GetFocus", "IsTabStop", "TabIndex",
+            "TabNavigation", "XYFocus*", "SoundMode"]
+    guide-pages: [input-and-gestures, accessibility]
+  - id: input-and-events
+    title: Input and events
+    summary: "Pointer, keyboard, gesture and drag and drop events, and whether an element takes input."
+    match: ["OnPointer*", "OnKey*", "OnPreviewKey*", "OnCharacterReceived", "OnTapped", "OnDoubleTap*", "OnRightTapped",
+            "OnHolding", "OnLongPress", "OnPan", "OnPinch", "OnRotate", "OnDrag*", "OnDrop", "OnGotFocus", "OnLostFocus",
+            "Drag", "DraggableWhen", "IsDragRegion", "IsEnabled", "Disabled", "IsHitTestVisible"]
+    guide-pages: [input-and-gestures]
+  - id: lifecycle
+    title: Lifecycle and identity
+    summary: "Keys, refs, mount and unmount callbacks, size changes and context values."
+    match: ["WithKey", "Ref", "OnMount*", "OnUnmount*", "OnSizeChanged", "Provide"]
+    guide-pages: [components, context]
+  - id: animation
+    title: Animation
+    summary: "Transitions, keyframes, layout animations, interaction states and scroll-linked animation."
+    match: ["Animate", "ConnectedAnimation", "InteractionStates", "Keyframes", "*LayoutAnimation", "Stagger", "ScrollLinked",
+            "Transition", "*Transition", "*Transitions"]
+    guide-pages: [animation]
+  - id: tooltips-and-flyouts
+    title: Tooltips and flyouts
+    summary: "Tooltips, flyouts and context flyouts attached to any element."
+    match: ["ToolTip*", "WithToolTip", "WithFlyout", "WithContextFlyout"]
+    guide-pages: [dialogs-and-flyouts]
+  - id: validation
+    title: Validation
+    summary: "Validators, required fields and error styling."
+    match: ["Validate*", "Required", "ShowErrors", "WithErrorStyling", "OnError", "OnWarning", "GetValidation", "Immediate"]
+    guide-pages: [forms]
+  - id: native-properties
+    title: Native properties
+    summary: "The Set modifier, which changes the real WinUI control directly."
+    match: ["Set"]
+    guide-pages: [modifier-system, xaml-developers]
+  - id: shared-controls
+    title: Shared controls
+    summary: "Modifiers that several kinds of controls share, such as headers, placeholders and selection events."
+    guide-pages: [controls]
 
 defaults:
-  - match: "Microsoft.UI.Reactor.Core.RenderContext.Use*"
-    category: hooks
-    guide-pages: [hooks, effects]
+  # ── Hooks ──────────────────────────────────────────────────────────────
   - match: "Microsoft.UI.Reactor.Hooks.*"
     category: hooks
-    guide-pages: [hooks, effects]
-  - match: "Microsoft.UI.Reactor.Factories.*"
+    guide-pages: [hooks]
+  - match: "Microsoft.UI.Reactor.Core.RenderContext.Use*"
+    category: hooks
+    guide-pages: [hooks]
+  - match: "Microsoft.UI.Reactor.Core.Component*.Use*"
+    category: hooks
+    guide-pages: [hooks]
+
+  # ── Components ─────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Core.Component"
+    category: components
+    guide-pages: [components]
+  - match: "Microsoft.UI.Reactor.Core.Component`1"
+    category: components
+    guide-pages: [components]
+  - match: "Microsoft.UI.Reactor.Core.RenderContext"
+    category: components
+    guide-pages: [components, hooks]
+  - match: "Microsoft.UI.Reactor.Core.Context`1"
+    category: components
+    guide-pages: [context]
+  - match: "Microsoft.UI.Reactor.Core.ContextBase"
+    category: components
+    guide-pages: [context]
+  - match: "Microsoft.UI.Reactor.Core.ContextExtensions"
+    category: components
+    guide-pages: [context]
+  - match: "Microsoft.UI.Reactor.Core.AppContexts"
+    category: components
+    guide-pages: [context]
+  - match: "Microsoft.UI.Reactor.Core.Ref`1"
+    category: components
+    guide-pages: [hooks]
+  - match: "Microsoft.UI.Reactor.Core.Observable`1"
+    category: components
+    guide-pages: [reactivity-model]
+  - match: "Microsoft.UI.Reactor.Core.Callbacks`1"
+    category: components
+  - match: "Microsoft.UI.Reactor.Core.ElementFactory`1"
+    category: components
+  - match: "Microsoft.UI.Reactor.Core.IReactorKeyed"
+    category: components
+    guide-pages: [collections]
+  - match: "Microsoft.UI.Reactor.Core.SourceLocation"
+    category: components
+    guide-pages: [source-mapping]
+  - match: "Microsoft.UI.Reactor.Core.HookOrderException"
+    category: components
+    guide-pages: [rules-of-reactor]
+  - match: "Microsoft.UI.Reactor.Core.RenderError*"
+    category: components
+    guide-pages: [advanced]
+  - match: "Microsoft.UI.Reactor.Optional`1"
+    category: components
+
+  # ── Elements ───────────────────────────────────────────────────────────
+  # Element records are found by their base type; this rule only places
+  # the base record itself.
+  - match: "Microsoft.UI.Reactor.Core.Element"
+    category: elements
+    guide-pages: [reconciliation]
+
+  # ── Factories and modifiers ────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Factories"
     category: factories
-    guide-pages: [layout, forms, collections]
-  - match: "Microsoft.UI.Reactor.Charting.*"
-    category: charting
-    guide-pages: [charting]
+  - match: "Microsoft.UI.Reactor.*Dsl"
+    category: factories
+  - match: "Microsoft.UI.Reactor.ElementExtensions"
+    category: modifiers
+  - match: "Microsoft.UI.Reactor.CanvasExtensions"
+    category: modifiers
+  - match: "Microsoft.UI.Reactor.FlexExtensions"
+    category: modifiers
+  - match: "Microsoft.UI.Reactor.GridExtensions"
+    category: modifiers
+  - match: "Microsoft.UI.Reactor.RelativePanelExtensions"
+    category: modifiers
+  - match: "Microsoft.UI.Reactor.Core.ElementModifiers"
+    category: modifiers
+    guide-pages: [modifier-system]
+  - match: "Microsoft.UI.Reactor.Core.LayoutModifiers"
+    category: modifiers
+    guide-pages: [modifier-system]
+  - match: "Microsoft.UI.Reactor.Core.VisualModifiers"
+    category: modifiers
+    guide-pages: [modifier-system]
+  - match: "Microsoft.UI.Reactor.Core.AccessibilityModifiers"
+    category: modifiers
+    guide-pages: [modifier-system, accessibility]
+  - match: "Microsoft.UI.Reactor.Core.ElementExtras"
+    category: modifiers
+    guide-pages: [modifier-system]
+
+  # ── Hosting and windows ────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Hosting.*"
+    category: hosting
+    guide-pages: [xaml-developers]
+  - match: "Microsoft.UI.Reactor.Hosting.Persistence.*"
+    category: hosting
+    guide-pages: [persistence]
+  - match: "Microsoft.UI.Reactor.Reactor*"
+    category: hosting
+    guide-pages: [windows]
+  - match: "Microsoft.UI.Reactor.Window*"
+    category: hosting
+    guide-pages: [windows, windowing-advanced]
+  - match: "Microsoft.UI.Reactor.Taskbar*"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.JumpList*"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.ThumbnailToolbarButton"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.TrayIconSpec"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.Launch*"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.DisplayInfo"
+    category: hosting
+    guide-pages: [windowing-advanced]
+  - match: "Microsoft.UI.Reactor.EmbedRequest"
+    category: hosting
+    guide-pages: [windowing-advanced]
+  - match: "Microsoft.UI.Reactor.PresenterKind"
+    category: hosting
+  - match: "Microsoft.UI.Reactor.ShutdownPolicy"
+    category: hosting
+  - match: "Microsoft.UI.Reactor.AspectRatioBasis"
+    category: hosting
+  - match: "Microsoft.UI.Reactor.Core.*FilePickerOptions"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.Core.FolderPickerOptions"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.Core.FileTypeChoice"
+    category: hosting
+    guide-pages: [desktop-integration]
+  - match: "Microsoft.UI.Reactor.Core.*PersistedScope"
+    category: hosting
+    guide-pages: [persistence]
+  - match: "Microsoft.UI.Reactor.Core.IPersistedStateScope"
+    category: hosting
+    guide-pages: [persistence]
+
+  # ── Theming ────────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Core.Theme"
+    category: theming
+    guide-pages: [theming-tokens]
+  - match: "Microsoft.UI.Reactor.Core.ThemeRef"
+    category: theming
+    guide-pages: [theming-tokens]
+  - match: "Microsoft.UI.Reactor.Core.ColorScheme"
+    category: theming
+  - match: "Microsoft.UI.Reactor.Core.Backdrop*"
+    category: theming
+    guide-pages: [styling]
+  - match: "Microsoft.UI.Reactor.ThemeResource"
+    category: theming
+    guide-pages: [theming-tokens]
+  - match: "Microsoft.UI.Reactor.BrushHelper"
+    category: theming
+    guide-pages: [styling]
+  - match: "Microsoft.UI.Reactor.BackdropExtensions"
+    category: theming
+    guide-pages: [styling]
+  - match: "Microsoft.UI.Reactor.Elements.*"
+    category: theming
+    guide-pages: [styling]
+
+  # ── Layout ─────────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Layout.*"
+    category: layout
+    guide-pages: [flex-layout]
+  - match: "Microsoft.UI.Reactor.GridSize*"
+    category: layout
+    guide-pages: [layout]
+  - match: "Microsoft.UI.Reactor.Core.*Attached"
+    category: layout
+    guide-pages: [layout]
+  - match: "Microsoft.UI.Reactor.Core.GridDefinition"
+    category: layout
+    guide-pages: [layout]
+
+  # ── Input and commands ─────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Input.*"
+    category: input
+    guide-pages: [input-and-gestures]
+  - match: "Microsoft.UI.Reactor.Core.DragAttached"
+    category: input
+    guide-pages: [input-and-gestures]
+  - match: "Microsoft.UI.Reactor.Core.Command*"
+    category: input
+    guide-pages: [commanding]
+  - match: "Microsoft.UI.Reactor.Core.StandardCommand"
+    category: input
+    guide-pages: [commanding]
+  - match: "Microsoft.UI.Reactor.Core.FocusRevalidationService"
+    category: data
+    guide-pages: [async-resources]
+
+  # ── Data ───────────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Data.*"
+    category: data
+    guide-pages: [data-system]
+  - match: "Microsoft.UI.Reactor.Core.AsyncValue`1*"
+    category: data
+    guide-pages: [async-resources]
+  - match: "Microsoft.UI.Reactor.Core.LoadState*"
+    category: data
+    guide-pages: [async-resources]
+  - match: "Microsoft.UI.Reactor.Core.InfiniteResource*"
+    category: data
+    guide-pages: [async-resources]
+  - match: "Microsoft.UI.Reactor.Core.Page`2"
+    category: data
+    guide-pages: [async-resources]
+  - match: "Microsoft.UI.Reactor.Core.QueryCache"
+    category: data
+    guide-pages: [async-resources]
+  - match: "Microsoft.UI.Reactor.Core.CacheEntry`1"
+    category: data
+    guide-pages: [async-resources]
+
+  # ── Navigation ─────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Navigation.*"
+    category: navigation
+    guide-pages: [navigation]
+
+  # ── Animation ──────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Animation.*"
+    category: animation
+    guide-pages: [animation]
+  - match: "Microsoft.UI.Reactor.Core.Animation*"
+    category: animation
+    guide-pages: [animation]
+  - match: "Microsoft.UI.Reactor.Core.ImplicitTransitions"
+    category: animation
+    guide-pages: [animation]
+  - match: "Microsoft.UI.Reactor.Core.ThemeTransitions"
+    category: animation
+    guide-pages: [animation]
+  - match: "Microsoft.UI.Reactor.Core.LayoutAnimationConfig"
+    category: animation
+    guide-pages: [animation]
+
+  # ── Accessibility ──────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Accessibility.*"
+    category: accessibility
+    guide-pages: [accessibility]
+  - match: "Microsoft.UI.Reactor.Core.A11y*"
+    category: accessibility
+    guide-pages: [accessibility]
+  - match: "Microsoft.UI.Reactor.Core.AccessibilityScanner"
+    category: accessibility
+    guide-pages: [accessibility]
+  - match: "Microsoft.UI.Reactor.Core.SemanticDescription"
+    category: accessibility
+    guide-pages: [accessibility]
+
+  # ── Localization ───────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Localization.*"
+    category: localization
+    guide-pages: [localization]
+
+  # ── Controls ───────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Controls.*"
+    category: controls
+    guide-pages: [controls]
+  - match: "Microsoft.UI.Reactor.Core.*Data"
+    category: controls
+    guide-pages: [controls]
+  - match: "Microsoft.UI.Reactor.Core.*ItemBase"
+    category: controls
+    guide-pages: [commanding]
+  - match: "Microsoft.UI.Reactor.Core.RichText*"
+    category: controls
+    guide-pages: [text-and-media]
+  - match: "Microsoft.UI.Reactor.Core.ItemsViewLayoutKind"
+    category: controls
+    guide-pages: [collections]
+  - match: "Microsoft.UI.Reactor.Core.TemplatedControlKind"
+    category: controls
+    guide-pages: [collections]
+
+  # ── Validation ─────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Controls.Validation.*"
+    category: validation
+    guide-pages: [forms]
+
+  # ── Diagnostics ────────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Diagnostics.*"
+    category: diagnostics
+    guide-pages: [diagnostics]
+  - match: "Microsoft.UI.Reactor.Core.Diagnostics.*"
+    category: diagnostics
+    guide-pages: [diagnostics]
+  - match: "Microsoft.UI.Reactor.Hosting.Devtools.*"
+    category: diagnostics
+    guide-pages: [devtools]
+
+  # ── Extensibility ──────────────────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Core.V1Protocol.*"
+    category: extensibility
+    guide-pages: [extending-reactor-controls, control-reconciler-protocol]
+  - match: "Microsoft.UI.Reactor.Core.Reconciler"
+    category: extensibility
+    guide-pages: [reconciliation]
+  - match: "Microsoft.UI.Reactor.Core.ElementPool"
+    category: extensibility
+    guide-pages: [element-pool]
+  - match: "Microsoft.UI.Reactor.Core.PoolPolicy`1"
+    category: extensibility
+    guide-pages: [element-pool]
+  - match: "Microsoft.UI.Reactor.Core.ReactorBinding"
+    category: extensibility
+    guide-pages: [extending-reactor-controls]
+  - match: "Microsoft.UI.Reactor.Core.ReactorFeatureFlags"
+    category: extensibility
+  - match: "Microsoft.UI.Reactor.Core.PathDataParser"
+    category: extensibility
+
+  # ── Not part of the reference ──────────────────────────────────────────
+  - match: "Microsoft.UI.Reactor.Core.Internal.*"
+    category: excluded
+  - match: "Microsoft.UI.Reactor.Reactor_XamlTypeInfo.*"
+    category: excluded
 
 overrides:
-  - cref: "M:Microsoft.UI.Reactor.Factories.DataGrid``1"
-    guide-pages: [data-system]
-  - cref: "T:Microsoft.UI.Reactor.ErrorBoundary"
+  # Hook pages get "Learn more" links from the member rules below. An
+  # override replaces the default guide pages, so each one lists `hooks`.
+  - match: "*.UseState*"
+    guide-pages: [hooks]
+  - match: "*.UseReducer*"
+    guide-pages: [hooks]
+  - match: "*.UseEffect*"
+    guide-pages: [effects, effects-scheduling, hooks]
+  - match: "*.UseMemo*"
+    guide-pages: [hooks, performance]
+  - match: "*.UseCallback*"
+    guide-pages: [hooks, performance]
+  - match: "*.UseContext*"
+    guide-pages: [context, hooks]
+  - match: "*.UseResource*"
+    guide-pages: [async-resources, effects, hooks]
+  - match: "*.UseInfiniteResource*"
+    guide-pages: [async-resources, hooks]
+  - match: "*.UseMutation*"
+    guide-pages: [async-resources, hooks]
+  - match: "*.UseDataSource*"
+    guide-pages: [data-system, hooks]
+  - match: "*.UseCommand*"
+    guide-pages: [commanding, hooks]
+  - match: "*.UsePersisted*"
+    guide-pages: [persistence, hooks]
+  - match: "*.UseObservable*"
+    guide-pages: [reactivity-model, hooks]
+  - match: "*.UseExternalStore*"
+    guide-pages: [reactivity-model, hooks]
+  - match: "*.UseNavigation*"
+    guide-pages: [navigation, hooks]
+  - match: "*.UseSystemBackButton*"
+    guide-pages: [navigation, hooks]
+  - match: "*.UseFocus*"
+    guide-pages: [input-and-gestures, accessibility, hooks]
+  - match: "*.UseElementFocus*"
+    guide-pages: [input-and-gestures, hooks]
+  - match: "*.UseElementRef*"
+    guide-pages: [input-and-gestures, hooks]
+  - match: "*.UseAnnounce*"
+    guide-pages: [accessibility, hooks]
+  - match: "*.UseHighContrast*"
+    guide-pages: [accessibility, theming-tokens, hooks]
+  - match: "*.UseReducedMotion*"
+    guide-pages: [accessibility, animation, hooks]
+  - match: "*.UseColorScheme*"
+    guide-pages: [theming-tokens, hooks]
+  - match: "*.UseIsDarkTheme*"
+    guide-pages: [theming-tokens, hooks]
+  - match: "*.UseIntl*"
+    guide-pages: [localization, hooks]
+  - match: "*.UseWindow*"
+    guide-pages: [windows, windowing-advanced, hooks]
+  - match: "*.UseOpenWindow*"
+    guide-pages: [windows, hooks]
+  - match: "*.UseClosingGuard*"
+    guide-pages: [windows, hooks]
+  - match: "*.UseIsActive*"
+    guide-pages: [windows, hooks]
+  - match: "*.UseIsCovered*"
+    guide-pages: [windowing-advanced, hooks]
+  - match: "*.UseDisplays*"
+    guide-pages: [windowing-advanced, hooks]
+  - match: "*.UseDpi*"
+    guide-pages: [windowing-advanced, hooks]
+  - match: "*.UseBreakpoint*"
+    guide-pages: [layout, hooks]
+  - match: "*.UseTrayIcon*"
+    guide-pages: [desktop-integration, hooks]
+  - match: "*.UseDevtools*"
+    guide-pages: [devtools, hooks]
+  - match: "*.Use*ValidationContext*"
+    guide-pages: [forms, hooks]
+  - match: "*.UseCollection*"
+    guide-pages: [collections, hooks]
+
+  - cref: "T:Microsoft.UI.Reactor.Core.ErrorBoundaryElement"
     guide-pages: [advanced]
-  - match: "Microsoft.UI.Reactor.Factories.*Chart*"
-    guide-pages: [charting]

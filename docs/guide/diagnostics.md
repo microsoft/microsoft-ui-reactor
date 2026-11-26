@@ -1,4 +1,9 @@
 
+# Diagnostics
+
+This page is about reading Reactor's diagnostics from a real app — not about
+adding new events.
+
 When Microsoft.UI.Reactor (Reactor) swallows an exception, returns past an HRESULT, or
 otherwise chooses to continue rather than throw, the framework has
 historically dropped a `Debug.WriteLine` and moved on. That worked for
@@ -11,13 +16,10 @@ no consumer is listening), and the existing in-process devtools tool
 (`reactor.logs`) was extended so an MCP agent can read framework
 events in the same call that returns stdout / stderr / debug output.
 
-# Diagnostics
-
-This page is about reading Reactor's diagnostics from a real app —
-not about adding new events. The emission pipeline (keywords,
-IsEnabled gate, event-id allocation, EventPipe vs ETW transport split)
-lives in [perf-instrumentation.md](perf-instrumentation.md); start
-there if you are extending the provider.
+The emission pipeline (keywords, IsEnabled gate, event-id allocation,
+EventPipe vs ETW transport split) lives in
+[perf-instrumentation.md](perf-instrumentation.md); start there if you are
+extending the provider.
 
 ![Reactor diagnostics flow — a framework catch site delegates to DiagnosticLog, which emits to ReactorEventSource for the Release path and mirrors to Debug.WriteLine in Debug builds; four consumers read the event surface: env-var / dotnet-trace capture, Visual Studio Profiler, the in-process ReactorTrace.Subscribe helper, and the reactor.logs MCP tool](images/diagnostics/flow.svg)
 

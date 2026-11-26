@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Microsoft.UI.Reactor.Cli.Docs;
 
 /// <summary>
@@ -110,16 +112,42 @@ internal static class TemplateParser
         ExtractLockedSections(template);
         ExtractCaveatSections(template);
 
-        // Prepend winui-ref callout to the body so generated output carries it
-        // at the top of the page (front-matter is stripped from output).
+        // Front-matter is stripped from output, so the winui-ref link is
+        // carried as a callout in the body. It goes after the title, intro,
+        // and lead paragraph, just before the first section, so the page
+        // still opens with its title.
         if (!string.IsNullOrEmpty(template.WinUiRef))
         {
-            var callout = BuildWinUiRefCallout(template.WinUiRef);
-            template.Body = callout + "\n\n" + template.Body.TrimStart('\r', '\n');
+            template.Body = InsertBeforeFirstSection(template.Body, BuildWinUiRefCallout(template.WinUiRef));
         }
 
         return template;
     }
+
+    /// <summary>
+    /// Insert <paramref name="block"/> as its own paragraph just before the
+    /// first level-2 to level-6 heading outside fenced code. A body without
+    /// such a heading gets the block appended at the end.
+    /// </summary>
+    internal static string InsertBeforeFirstSection(string body, string block)
+    {
+        var newline = body.Contains("\r\n") ? "\r\n" : "\n";
+        var lines = body.Split('\n');
+        var fence = new MarkdownFence();
+        var offset = 0;
+        foreach (var raw in lines)
+        {
+            if (!fence.InCode(raw) && SectionHeading.IsMatch(raw.TrimEnd('\r')))
+            {
+                return body[..offset] + block + newline + newline + body[offset..];
+            }
+            offset += raw.Length + 1;
+        }
+
+        return body.TrimEnd('\r', '\n') + newline + newline + block + newline;
+    }
+
+    private static readonly Regex SectionHeading = new(@"^ {0,3}#{2,6}(\s|$)", RegexOptions.Compiled);
 
     /// <summary>
     /// Build the styled WinUI-reference blockquote. Host name is derived from

@@ -12,6 +12,14 @@ goal: |
 tier: comprehensive
 ---
 
+# Reactor for XAML Developers
+
+If you already know XAML, Reactor is not a different Windows UI stack. It still
+renders real WinUI controls. The shift is in **how** you describe the UI: instead
+of splitting a page across XAML, bindings, converters, and code-behind, you
+return the UI directly from C# and let Reactor keep the native control tree in
+sync.
+
 Microsoft.UI.Reactor (Reactor)'s render-from-state model has a clean 1:1 translation table to XAML
 that an experienced XAML developer can hold in their head. Where XAML
 describes *bindings* between view-model properties and control DPs and lets
@@ -25,14 +33,6 @@ specific Reactor shape, and the body below walks each one in order.
 Companion essay [`reactor-vs-xaml`](reactor-vs-xaml.md) covers the
 architectural *why* — read this page for the recipes, that one for the
 philosophy.
-
-# Reactor for XAML Developers
-
-If you already know XAML, Reactor is not a different Windows UI stack. It still
-renders real WinUI controls. The shift is in **how** you describe the UI: instead
-of splitting a page across XAML, bindings, converters, and code-behind, you
-return the UI directly from C# and let Reactor keep the native control tree in
-sync.
 
 ![From XAML page to Reactor component — mental-model shift](images/xaml-developers/mental-model-shift.svg)
 

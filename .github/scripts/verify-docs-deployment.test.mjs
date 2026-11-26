@@ -51,7 +51,7 @@ function unreachable() {
   return { ok: false, status: null, body: null, error: "getaddrinfo ENOTFOUND" };
 }
 
-// The real mike root stub: a script redirect, a noscript meta refresh, and a
+// The real root stub (docs/_website/scripts/publish.mjs): a script redirect, a noscript meta refresh, and a
 // human-visible link, all naming the same target.
 const ROOT_STUB = `<!DOCTYPE html><html><head>
   <noscript><meta http-equiv="refresh" content="1; url=latest/" /></noscript>
@@ -138,7 +138,7 @@ test("the expected site-root target follows latest, then main", () => {
   assert.equal(expectedRootTarget([{ version: "0.1.0", aliases: [] }]), null);
 });
 
-// The URL readers land on. mike writes it only via `set-default`, so no version
+// The URL readers land on. Only the publish script writes it, so no version
 // directory covers it and a stale root is invisible to every other check.
 test("a site root that 404s is stranded", () => {
   const verdict = verdictFor(healthy({ root: { probe: notFound() } }));

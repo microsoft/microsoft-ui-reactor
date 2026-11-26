@@ -178,30 +178,40 @@ After pushing the tag:
 
 ## Versioned documentation site
 
-<https://microsoft.github.io/microsoft-ui-reactor/> is versioned with
-[mike](https://github.com/jimporter/mike). Every published version is rendered once and
-kept as its own directory in the `gh-pages` branch, and the Pages artifact is that whole
-branch — so a version's pages stay byte-identical after it ships. Material's version
-selector in the site header reads the `versions.json` mike maintains at the site root.
+<https://microsoft.github.io/microsoft-ui-reactor/> is built with
+[Blume](https://www.npmjs.com/package/blume) from the `docs/_website` project, which reads
+the generated pages in `docs/guide`. Every published version is built once and kept as its
+own directory in the `gh-pages` branch, and the Pages artifact is that whole branch — so a
+version's pages stay byte-identical after it ships. `docs/_website/scripts/publish.mjs`
+writes each version and keeps the `versions.json` at the site root up to date; the version
+switcher in the site header lists what it held when that version was built.
+
+Versions published before the move to Blume are still the MkDocs sites they were. They are
+never rebuilt, and `versions.json` keeps the format their version selector reads, so they
+keep listing every newer version.
 
 Nothing about this is manual on the happy path. `.github/workflows/docs.yml` handles it:
 
 | Trigger | Result |
 | --- | --- |
 | Push to `main` touching the docs | Republishes the `main (development)` version |
-| Push of a `v*` tag | Publishes `<version>`, moves the `latest` alias to it, repoints the site root, and hands the deployment to a `main` run |
+| Push of a `v*` tag | Publishes `<version>`, rebuilds `latest/` from it, repoints the site root, and hands the deployment to a `main` run |
 
 A release commit triggers both, but only the `main` runs deploy — see
 [Why a release tag hands its deployment to main](#why-a-release-tag-hands-its-deployment-to-main).
 
 The site root redirects to whichever version holds the `latest` alias, so readers landing
-on the bare URL always get the newest release rather than unreleased `main`. Every version
-that does *not* hold `latest` renders the outdated-version banner defined in
-`docs/_overrides/main.html`.
+on the bare URL always get the newest release rather than unreleased `main`. `latest/` is a
+separate build of the same release, because Blume bakes its base path into every URL. Every
+other version shows a banner linking to the latest release; it is set in
+`docs/_website/blume.config.ts`.
 
 A tag only takes the `latest` alias if it is the highest tag by version sort. Re-cutting or
 backporting an older tag therefore publishes that version without dragging `latest`
 backwards.
+
+To preview the site locally, run `npm ci` once and then `npm run dev` in `docs/_website`
+(Node 22.23.4 or newer). `npm run site` and `npm run validate` are the strict checks CI runs.
 
 ### Which refs may deploy
 
@@ -344,24 +354,25 @@ What `verify` actually asserts, beyond the stamp: that the live `versions.json` 
 every version the artifact declared and puts `latest` where this run put it; that each
 version **this run published** serves its own `index.html` (not just the `latest` holder,
 which a backported tag deliberately does not move and a `main` push never touches); and
-that the site root — the URL readers land on, written only by `mike set-default` — responds
+that the site root — the URL readers land on, written only by the publish script — responds
 and still forwards to the expected default. The list of versions a run published is
-recorded by the publishing steps and cross-checked against mike's own `versions.json`
-before the artifact is uploaded, so the two cannot drift apart unnoticed.
+recorded by the publishing steps and cross-checked against the `versions.json` the publish
+script wrote before the artifact is uploaded, so the two cannot drift apart unnoticed.
 
 **The remedy, verified.** Dispatch `Publish docs` on `main`, and set **handoff_versions** to
 the release version (e.g. `0.1.0-preview.18`) so `verify` probes that directory too. The
 `publish` job assembles the artifact from the whole `gh-pages` branch, so a run on `main`
 re-serves every published version. With no `backfill_tags` the release step is skipped, and
-`mike set-default` runs only `if ! mike list latest` — `latest` already exists — so it
-**cannot drag `latest` backwards**. A plain dispatch on `main` is what restored preview.16,
-.17 and .18. Do not dispatch from a tag: that run would hand off to `main` anyway.
+publishing `main` never moves the `latest` alias — the site root keeps forwarding to the
+release that holds it — so it **cannot drag `latest` backwards**. A plain dispatch on `main`
+is what restored preview.16, .17 and .18. Do not dispatch from a tag: that run would hand
+off to `main` anyway.
 
 The gate's own oracle is `deploy-stamp.json` at the site root: `publish` writes it into the
 artifact with the run id that built it, and `verify` asserts the live copy matches. It is
 refreshed from the workflow on every deploy rather than committed to `gh-pages`, for the
 same reason `404.html` is — it describes a deployment, not a published version. Comparing
-`versions.json` alone would not do: `mike deploy main` republishes an existing version, so
+`versions.json` alone would not do: publishing `main` again republishes an existing version, so
 on a `main` push the version set is unchanged and the comparison would pass whether or not
 the deployment ever landed.
 
@@ -372,14 +383,17 @@ Before versioning, pages lived at unversioned paths such as
 exist — every page now sits under a version directory — so the publish workflow copies
 `docs/_site-root/404.html` to the published site root, where GitHub Pages serves it for
 unmatched paths. It forwards those legacy paths to the same page under `latest`, preserving
-any query string and anchor.
+any query string and anchor. When a Blume build holds `latest`, a page whose route changed in
+the move (`getting-started` is now `get-started/quickstart`) is served by a redirect page
+from `blume.config.ts`'s `redirects`. Astro writes those as meta-refresh pages, which drop the
+anchor, so `scripts/redirect-pages.mjs` adds a script that carries it over after every build.
 
 It deliberately does **not** forward a path that already starts with a published version or
 alias (`latest`, `main`, or anything beginning with a digit): those are genuine 404s inside a
 published version, and forwarding them would produce nonsense paths or a redirect loop. If
 version identifiers ever stop matching that shape, update the guard in that file.
 
-MkDocs never sees this file, so `mkdocs build --strict` cannot catch a mistake in it. Its
+Blume never sees this file, so the strict site build cannot catch a mistake in it. Its
 behaviour is covered by `docs/_site-root/404.redirect.test.js` instead — run it with
 `node docs/_site-root/404.redirect.test.js`, or let CI run it via `SiteRootRedirectTests` in
 `tests/Reactor.DocPipeline.Tests`.
@@ -391,11 +405,12 @@ list, e.g. `v0.1.0-preview.12 v0.1.0-preview.13`. Every tag is verified to exist
 anything is published — a typo or a missing leading `v` fails the run up front rather than
 halfway through — and each tag is then checked out and built in turn.
 
-Tags cut before versioning existed carry no version selector in their own `mkdocs.yml`, so
-the backfill layers the `mkdocs.yml` and `docs/_overrides/` from the ref you dispatch from
-over each tag checkout. That only holds while the tag's page set still satisfies the current
-`nav`; the workflow's `mkdocs build --strict` step fails loudly if a tag has drifted too far,
-rather than publishing a broken version.
+Each tag's `docs/guide` is built with the publish script and site config of the ref you
+dispatch from, since tags cut before the move to Blume have no `docs/_website`. These builds
+are lenient: a page in `nav.json` that the tag lacks is skipped with a warning, a page the tag
+has but `nav.json` does not know lands in a "More" group, and broken links do not fail the
+build, because the tag's links were checked when it shipped. Backfilling the newest tag also
+rebuilds `latest/`.
 
 ## If a release tag is wrong
 

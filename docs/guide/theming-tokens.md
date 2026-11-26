@@ -1,4 +1,8 @@
-> **WinUI reference:** For the full property surface and design guidance, see [Colors](https://learn.microsoft.com/en-us/windows/apps/design/style/colors).
+
+# Theming Tokens
+
+Reactor exposes 36 named theme tokens on the static `Theme` class plus a
+`Theme.Ref(string)` escape hatch for any XAML resource key.
 
 A Microsoft.UI.Reactor (Reactor) theme token is a name for a color that the system resolves at render
 time. The same token (`Theme.Accent`) emits a different `Brush`
@@ -13,14 +17,13 @@ a literal because "I'll just hardcode this one"; the
 [REACTOR_THEME_001](rules-of-reactor.md) analyzer catches that at
 build time so it cannot ship.
 
-# Theming Tokens
+Tokens resolve through WinUI's resource system (`XamlControlsResources` +
+the app's `ThemeDictionaries`), so the values they produce match the design
+system Microsoft ships in [WinUI Fluent
+colors](https://learn.microsoft.com/en-us/windows/apps/design/style/colors).
+[Styling](styling.md) shows how to apply them.
 
-Reactor exposes 36 named theme tokens on the static
-[`Theme`](styling.md) class plus a `Theme.Ref(string)` escape hatch
-for any XAML resource key. Tokens resolve through WinUI's resource
-system (`XamlControlsResources` + the app's `ThemeDictionaries`), so
-the values they produce match the design system Microsoft ships in
-[WinUI Fluent colors](https://learn.microsoft.com/en-us/windows/apps/design/style/colors).
+> **WinUI reference:** For the full property surface and design guidance, see [Colors](https://learn.microsoft.com/en-us/windows/apps/design/style/colors).
 
 ## Lead snippet
 
