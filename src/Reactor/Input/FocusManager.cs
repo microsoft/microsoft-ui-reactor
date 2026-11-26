@@ -269,8 +269,9 @@ public static class FocusManager
 
     /// <summary>
     /// Asynchronously focus the referenced element using WinUI's FocusManager.TryFocusAsync.
-    /// Prefer this when focus is requested from a non-UI thread or when the caller needs
-    /// confirmation that the focus change succeeded.
+    /// Use it when the caller needs confirmation that the focus change succeeded. Call it
+    /// on the target control's UI thread: it does not dispatch, so a background caller must
+    /// marshal to that thread first (for example through the control's DispatcherQueue).
     /// </summary>
     public static async global::System.Threading.Tasks.Task<bool> FocusAsync(ElementRef target, FocusState state = FocusState.Programmatic)
     {

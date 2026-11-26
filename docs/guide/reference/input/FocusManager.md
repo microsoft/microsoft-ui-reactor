@@ -29,7 +29,7 @@ public static bool Focus(ElementRef target, FocusState state = (FocusState)3)
 
 ### `FocusAsync`
 
-Asynchronously focus the referenced element using WinUI's FocusManager.TryFocusAsync. Prefer this when focus is requested from a non-UI thread or when the caller needs confirmation that the focus change succeeded.
+Asynchronously focus the referenced element using WinUI's FocusManager.TryFocusAsync. Use it when the caller needs confirmation that the focus change succeeded. Call it on the target control's UI thread: it does not dispatch, so a background caller must marshal to that thread first (for example through the control's DispatcherQueue).
 
 ```csharp
 public static Task<bool> FocusAsync(ElementRef target, FocusState state = (FocusState)3)
