@@ -33,13 +33,22 @@ internal static class ModifierEmitter
     /// <param name="Summary">Its doc summary.</param>
     /// <param name="First">The first <see cref="ModifierSchema.Slots"/> entry it writes.</param>
     /// <param name="Last">The last; every slot between them, in schema (apply) order, belongs to the helper.</param>
+    /// <param name="Wrapped">
+    /// Arms on two lines each, separated by blank lines, as the longer hand-written helpers lay
+    /// them out; otherwise each condition and its write share a line.
+    /// </param>
     /// <param name="SharedGate">
     /// Slots gated on one receiver type that share a single <c>if (fe is T Variable) { … }</c> block,
-    /// as the hand-written helper does. Declared, not inferred: today's other gated arms put the
-    /// type test in each arm's condition, and that shape is not emitted yet.
+    /// as the hand-written helper does.
     /// </param>
-    internal sealed record GeneratedHelper(string Name, string Summary, string First, string Last,
-        (string Variable, string[] Slots)? SharedGate = null);
+    /// <param name="InlineGates">
+    /// Slots gated on one receiver type whose arms carry the type test in each condition,
+    /// <c>… &amp;&amp; fe is T Set</c> and <c>… &amp;&amp; fe is T Clear</c> (issue #986). A gated slot must be
+    /// declared in exactly one of the two; the shape is never inferred.
+    /// </param>
+    internal sealed record GeneratedHelper(string Name, string Summary, string First, string Last, bool Wrapped = false,
+        (string Variable, string[] Slots)? SharedGate = null,
+        IReadOnlyDictionary<string, (string Set, string Clear)>? InlineGates = null);
 
     /// <summary>The helpers layer 3 generates (spec 067 §11 3a–3e), one family PR at a time.</summary>
     internal static readonly GeneratedHelper[] GeneratedHelpers =
@@ -47,13 +56,21 @@ internal static class ModifierEmitter
         new("ApplySizeAndAlignmentModifiers", "Width/Height, Min/Max sizes, and the (content) alignments.",
             First: "Width", Last: "VerticalContentAlignment",
             SharedGate: ("contentAlignmentControl", ["HorizontalContentAlignment", "VerticalContentAlignment"])),
+        new("ApplyAutomationAndFocusModifiers", "AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.",
+            First: "AutomationName", Last: "XYFocusKeyboardNavigation", Wrapped: true,
+            InlineGates: new Dictionary<string, (string Set, string Clear)>
+            {
+                ["ElementSoundMode"] = ("ctrl", "ctrlSnd"),
+                ["TabIndex"] = ("tabIdxCtrl", "tabIdxCtrl2"),
+            }),
     ];
 
     /// <summary>
-    /// Spec 067 §11 layer 3: the row A–B apply arms, in today's shape (§7). An ungated value-typed
-    /// slot is one set/unset pair on <c>fe</c>; a helper's declared <see cref="GeneratedHelper.SharedGate"/>
-    /// run shares one <c>if (fe is T x) { … }</c> block. Anything else (attached, reference-typed,
-    /// converted, a receiver chain, or a gated slot outside the shared block) throws, so a family
+    /// Spec 067 §11 layer 3: the row A, B and D apply arms, in today's shape (§7): an ungated
+    /// set/unset pair on <c>fe</c> (a property write, or an attached owner's <c>SetX</c>), a declared
+    /// <see cref="GeneratedHelper.SharedGate"/> run inside one <c>if (fe is T x) { … }</c> block, or a
+    /// declared <see cref="GeneratedHelper.InlineGates"/> arm. Anything else (converted, a receiver
+    /// chain, a reference-compared field, or a gated slot declared in neither) throws, so a family
     /// whose arms look different today gets its emitter support in its own PR instead of being
     /// silently reshaped.
     /// </summary>
@@ -77,30 +94,50 @@ internal static class ModifierEmitter
                 throw new InvalidOperationException($"{helper.Name}: First '{helper.First}' and Last '{helper.Last}' must name slots in ModifierSchema.Slots, in that order.");
             var slots = ModifierSchema.Slots.Skip(first).Take(last - first + 1).ToList();
             var shared = helper.SharedGate?.Slots ?? [];
+            var inline = helper.InlineGates ?? new Dictionary<string, (string Set, string Clear)>();
             foreach (var slot in slots)
             {
-                if (slot.Shape != ApplyShape.Simple || slot.AttachedOwner is not null)
-                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple slots are emitted so far. "
+                if (slot.Shape is not (ApplyShape.Simple or ApplyShape.Attached))
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple and Attached slots are emitted so far. "
                         + "Add its shape to EmitReconcilerModifiers in the PR that generates it, or end the helper's slot range before it.");
                 if (slot.ReceiversWith(ReceiverRole.Apply).ToList() is not [var receiver])
                     throw new InvalidOperationException($"{helper.Name}: {slot.Name} has a receiver chain, which is not emitted yet.");
-                if ((receiver.Type == ModifierSchema.FrameworkElement) == shared.Contains(slot.Name))
+                var declared = (shared.Contains(slot.Name) ? 1 : 0) + (inline.ContainsKey(slot.Name) ? 1 : 0);
+                if ((receiver.Type == ModifierSchema.FrameworkElement) != (declared == 0) || declared > 1)
                     throw new InvalidOperationException(receiver.Type == ModifierSchema.FrameworkElement
-                        ? $"{helper.Name}: {slot.Name} is ungated, so it cannot be in the SharedGate block."
-                        : $"{helper.Name}: {slot.Name} is gated on {receiver.SimpleType} but not in the helper's SharedGate block. "
-                            + "Its arm puts the type test in each condition today, and that shape is not emitted yet.");
+                        ? $"{helper.Name}: {slot.Name} is ungated, so it cannot be in SharedGate or InlineGates."
+                        : $"{helper.Name}: {slot.Name} is gated on {receiver.SimpleType}; declare its arm shape in exactly one of SharedGate or InlineGates.");
             }
+            foreach (var name in shared.Concat(inline.Keys))
+                if (!slots.Any(s => s.Name == name))
+                    throw new InvalidOperationException($"{helper.Name}: '{name}' is declared as gated but is not in the helper's slot range.");
 
             sb.Append("\n    /// <summary>").Append(helper.Summary).Append("</summary>\n");
             sb.Append("    private static void ").Append(helper.Name).Append("(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)\n    {\n");
             for (var i = 0; i < slots.Count;)
             {
-                var receiver = slots[i].ReceiversWith(ReceiverRole.Apply).Single();
+                if (i > 0 && helper.Wrapped) sb.Append('\n');
+                var slot = slots[i];
+                var receiver = slot.ReceiversWith(ReceiverRole.Apply).Single();
+                var (set, unset, value) = Guards(slot);
+                var indent = "        ";
+                var armSeparator = helper.Wrapped ? "\n" + indent + "    " : " ";
                 if (receiver.Type == ModifierSchema.FrameworkElement)
                 {
-                    var (set, unset, value) = Guards(slots[i]);
-                    sb.Append("        if (").Append(set).Append(") fe.").Append(receiver.Property).Append(" = ").Append(value).Append(";\n");
-                    sb.Append("        else if (").Append(unset).Append(") ").Append(Clear(receiver, "fe")).Append(";\n");
+                    sb.Append(indent).Append("if (").Append(set).Append(')').Append(armSeparator).Append(Write(slot, receiver, "fe", value)).Append(";\n");
+                    sb.Append(indent).Append("else if (").Append(unset).Append(')').Append(armSeparator).Append(Clear(receiver, receiver.DpOwner, "fe")).Append(";\n");
+                    i++;
+                    continue;
+                }
+                if (inline.TryGetValue(slot.Name, out var vars))
+                {
+                    var type = TypeRef(receiver.Type);
+                    sb.Append(indent).Append("// The reset arm re-tests the type under its own variable: reaching the else only proves the\n");
+                    sb.Append(indent).Append("// set condition was false, which a non-").Append(receiver.SimpleType).Append(" with the modifier set also satisfies (issue #986).\n");
+                    sb.Append(indent).Append("if (").Append(set).Append(" && fe is ").Append(type).Append(' ').Append(vars.Set).Append(')').Append(armSeparator)
+                        .Append(vars.Set).Append('.').Append(receiver.Property).Append(" = ").Append(value).Append(";\n");
+                    sb.Append(indent).Append("else if (").Append(unset).Append(" && fe is ").Append(type).Append(' ').Append(vars.Clear).Append(')').Append(armSeparator)
+                        .Append(Clear(receiver, receiver.Type, vars.Clear)).Append(";\n");
                     i++;
                     continue;
                 }
@@ -109,16 +146,16 @@ internal static class ModifierEmitter
                 if (run.Count != shared.Length || run.Any(s => s.ReceiversWith(ReceiverRole.Apply).Single().Type != receiver.Type))
                     throw new InvalidOperationException($"{helper.Name}: the SharedGate slots must be consecutive and gated on one receiver type.");
                 var variable = helper.SharedGate!.Value.Variable;
-                sb.Append("        if (fe is ").Append(TypeRef(receiver.Type)).Append(' ').Append(variable).Append(")\n        {\n");
+                sb.Append(indent).Append("if (fe is ").Append(TypeRef(receiver.Type)).Append(' ').Append(variable).Append(")\n").Append(indent).Append("{\n");
                 for (var j = 0; j < run.Count; j++)
                 {
                     var gated = run[j].ReceiversWith(ReceiverRole.Apply).Single();
-                    var (set, unset, value) = Guards(run[j]);
+                    var (gSet, gUnset, gValue) = Guards(run[j]);
                     if (j > 0) sb.Append('\n');
-                    sb.Append("            if (").Append(set).Append(")\n                ").Append(variable).Append('.').Append(gated.Property).Append(" = ").Append(value).Append(";\n");
-                    sb.Append("            else if (").Append(unset).Append(")\n                ").Append(Clear(gated, variable)).Append(";\n");
+                    sb.Append("            if (").Append(gSet).Append(")\n                ").Append(variable).Append('.').Append(gated.Property).Append(" = ").Append(gValue).Append(";\n");
+                    sb.Append("            else if (").Append(gUnset).Append(")\n                ").Append(Clear(gated, gated.Type, variable)).Append(";\n");
                 }
-                sb.Append("        }\n");
+                sb.Append(indent).Append("}\n");
                 i += run.Count;
             }
             sb.Append("    }\n");
@@ -127,24 +164,29 @@ internal static class ModifierEmitter
         return sb.ToString();
     }
 
-    // Value-typed slots the emitter knows; a reference-typed slot (string, FontFamily) throws until
-    // a family that needs it adds its guard shape.
+    // Reference-typed field types; the rest are value types read through Nullable<T>.
     private static readonly HashSet<string> ReferenceTypes = new(StringComparer.Ordinal) { "string", "Microsoft.UI.Xaml.Media.FontFamily" };
 
     // The changed / released guards and the value expression of a set/unset pair (spec 067 §6.6).
     private static (string Set, string Unset, string Value) Guards(ModifierSlot slot)
     {
         var x = slot.Name;
-        if (ReferenceTypes.Contains(slot.ClrType))
-            throw new InvalidOperationException($"{x}: {slot.ClrType} is a reference type, and reference-typed arms are not emitted yet.");
         if (slot.Write != WriteEquality.Value)
-            throw new InvalidOperationException($"{x}: {slot.ClrType} is a value type, so its slot must compare by value (WriteEquality.Value), not {slot.Write}.");
-        return ($"m.{x}.HasValue && m.{x} != oldM?.{x}", $"!m.{x}.HasValue && oldM?.{x}.HasValue == true", $"m.{x}.Value");
+            throw new InvalidOperationException($"{x}: compares by reference ({slot.Write}), and reference-compared arms are not emitted yet.");
+        return ReferenceTypes.Contains(slot.ClrType)
+            ? ($"m.{x} is not null && m.{x} != oldM?.{x}", $"m.{x} is null && oldM?.{x} is not null", $"m.{x}")
+            : ($"m.{x}.HasValue && m.{x} != oldM?.{x}", $"!m.{x}.HasValue && oldM?.{x}.HasValue == true", $"m.{x}.Value");
     }
 
-    private static string Clear(ModifierReceiver receiver, string target) =>
-        $"{target}.ClearValue({TypeRef(receiver.DpOwner)}.{receiver.Property}Property)";
+    private static string Write(ModifierSlot slot, ModifierReceiver receiver, string target, string value) =>
+        slot.AttachedOwner is { } owner
+            ? $"{TypeRef(owner)}.Set{receiver.Property}({target}, {value})"
+            : $"{target}.{receiver.Property} = {value}";
 
+    // An ungated arm clears the DP through its declaring type; a gated one through the receiver it
+    // tested (WinUI.Control.TabIndexProperty resolves to UIElement's), as the hand-written arms do.
+    private static string Clear(ModifierReceiver receiver, string owner, string target) =>
+        $"{target}.ClearValue({TypeRef(owner)}.{receiver.Property}Property)";
     // The names the hand-written reconciler uses, through the generated file's usings: a type
     // directly in Microsoft.UI.Xaml.Controls as WinUI.X, directly in Microsoft.UI.Xaml as X.
     private static string TypeRef(string fullName)
@@ -154,7 +196,7 @@ internal static class ModifierEmitter
         {
             "Microsoft.UI.Xaml.Controls" => "WinUI." + Simple(fullName),
             "Microsoft.UI.Xaml" => Simple(fullName),
-            _ => "global::" + fullName,
+            _ => fullName,
         };
     }
     private const string ControlsNamespace = "Microsoft.UI.Xaml.Controls.";

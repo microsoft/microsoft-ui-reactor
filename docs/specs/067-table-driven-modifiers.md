@@ -908,7 +908,13 @@ gated on one receiver type inside one `if (fe is T x)` block. Attached, referenc
 chained and inline-gated arms (`IsEnabled`'s `… && fe is Control c` form) throw until the family that
 needs them adds the shape. The generated method is token-identical to the hand-written one it
 replaced. For generated helpers the source gates read generated code, so the independent oracle is
-the frozen §10.2 matrix.
+the frozen §10.2 matrix. 3b generates `ApplyAutomationAndFocusModifiers`, which adds three declared
+shapes: attached setters (`AutomationProperties.SetName`, `TitleBar.SetIsDragRegion`), value-compared
+`string` arms, and `InlineGates` (`ElementSoundMode`, `TabIndex`: `… && fe is WinUI.Control x`, with
+the reset re-testing the type under its own variable, issue #986). A helper can also be `Wrapped`
+(arms on two lines, blank-line separated) to match its hand-written layout. Its output is
+token-identical to the removed method once comments are ignored; the emitter writes one fixed #986
+comment above each inline-gated arm in place of the hand-written prose.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run

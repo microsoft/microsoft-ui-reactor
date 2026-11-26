@@ -43,4 +43,62 @@ public sealed partial class Reconciler
                 contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
     }
+
+    /// <summary>AutomationName/Id, IsDragRegion, ElementSoundMode, and the Tier 1 accessibility and focus properties.</summary>
+    private static void ApplyAutomationAndFocusModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
+        if (m.AutomationName is not null && m.AutomationName != oldM?.AutomationName)
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, m.AutomationName);
+        else if (m.AutomationName is null && oldM?.AutomationName is not null)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);
+
+        if (m.AutomationId is not null && m.AutomationId != oldM?.AutomationId)
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(fe, m.AutomationId);
+        else if (m.AutomationId is null && oldM?.AutomationId is not null)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AutomationIdProperty);
+
+        if (m.IsDragRegion.HasValue && m.IsDragRegion != oldM?.IsDragRegion)
+            WinUI.TitleBar.SetIsDragRegion(fe, m.IsDragRegion.Value);
+        else if (!m.IsDragRegion.HasValue && oldM?.IsDragRegion.HasValue == true)
+            fe.ClearValue(WinUI.TitleBar.IsDragRegionProperty);
+
+        // The reset arm re-tests the type under its own variable: reaching the else only proves the
+        // set condition was false, which a non-Control with the modifier set also satisfies (issue #986).
+        if (m.ElementSoundMode.HasValue && m.ElementSoundMode != oldM?.ElementSoundMode && fe is WinUI.Control ctrl)
+            ctrl.ElementSoundMode = m.ElementSoundMode.Value;
+        else if (!m.ElementSoundMode.HasValue && oldM?.ElementSoundMode.HasValue == true && fe is WinUI.Control ctrlSnd)
+            ctrlSnd.ClearValue(WinUI.Control.ElementSoundModeProperty);
+
+        if (m.HeadingLevel.HasValue && m.HeadingLevel != oldM?.HeadingLevel)
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(fe, m.HeadingLevel.Value);
+        else if (!m.HeadingLevel.HasValue && oldM?.HeadingLevel.HasValue == true)
+            fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HeadingLevelProperty);
+
+        if (m.IsTabStop.HasValue && m.IsTabStop != oldM?.IsTabStop)
+            fe.IsTabStop = m.IsTabStop.Value;
+        else if (!m.IsTabStop.HasValue && oldM?.IsTabStop.HasValue == true)
+            fe.ClearValue(UIElement.IsTabStopProperty);
+
+        if (m.IsHitTestVisible.HasValue && m.IsHitTestVisible != oldM?.IsHitTestVisible)
+            fe.IsHitTestVisible = m.IsHitTestVisible.Value;
+        else if (!m.IsHitTestVisible.HasValue && oldM?.IsHitTestVisible.HasValue == true)
+            fe.ClearValue(UIElement.IsHitTestVisibleProperty);
+
+        // The reset arm re-tests the type under its own variable: reaching the else only proves the
+        // set condition was false, which a non-Control with the modifier set also satisfies (issue #986).
+        if (m.TabIndex.HasValue && m.TabIndex != oldM?.TabIndex && fe is WinUI.Control tabIdxCtrl)
+            tabIdxCtrl.TabIndex = m.TabIndex.Value;
+        else if (!m.TabIndex.HasValue && oldM?.TabIndex.HasValue == true && fe is WinUI.Control tabIdxCtrl2)
+            tabIdxCtrl2.ClearValue(WinUI.Control.TabIndexProperty);
+
+        if (m.AccessKey is not null && m.AccessKey != oldM?.AccessKey)
+            fe.AccessKey = m.AccessKey;
+        else if (m.AccessKey is null && oldM?.AccessKey is not null)
+            fe.ClearValue(UIElement.AccessKeyProperty);
+
+        if (m.XYFocusKeyboardNavigation.HasValue && m.XYFocusKeyboardNavigation != oldM?.XYFocusKeyboardNavigation)
+            fe.XYFocusKeyboardNavigation = m.XYFocusKeyboardNavigation.Value;
+        else if (!m.XYFocusKeyboardNavigation.HasValue && oldM?.XYFocusKeyboardNavigation.HasValue == true)
+            fe.ClearValue(UIElement.XYFocusKeyboardNavigationProperty);
+    }
 }
