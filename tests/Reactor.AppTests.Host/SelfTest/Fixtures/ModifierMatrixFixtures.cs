@@ -1,5 +1,7 @@
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest.ModifierMatrix;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
+using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -36,6 +38,42 @@ internal static class ModifierMatrixFixtures
             H.Check($"ModifierMatrix_{group}_HasCases", cases.Count > 0);
             foreach (var c in cases)
                 await RunCaseAsync(c);
+            foreach (var (_, slot, carrier, caption) in ModifierMatrixExpectations.CaptionedUnset.Where(u => u.Group == group))
+                await RunCaptionedUnsetAsync(slot, carrier, caption);
+        }
+
+        // §10.2 step 3's exception. No Style here: a Style-provided name stops the caption fallback.
+        private async Task RunCaptionedUnsetAsync(string slot, string carrierName, string caption)
+        {
+            var id = $"ModifierMatrix_{slot}_{carrierName}_Captioned";
+            var probe = ModifierProbes.All.Single(p => p.Slot == slot && p.ReceiverType.IsAssignableFrom(CarrierType(carrierName)));
+            var dp = probe.Dp();
+            var v1 = SampleValues(slot).V1;
+            FrameworkElement? mounted = null;
+            Action<int>? setPhase = null;
+            var bare = new ElementModifiers { OnMountAction = fe => mounted = fe };
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                setPhase = set;
+                return VStack(Carrier(carrierName) with { Modifiers = phase == 0 ? probe.With(bare, v1) : bare });
+            });
+            try
+            {
+                await Harness.Render();
+                H.Check(id + "_Set", mounted is not null && Same(mounted.ReadLocalValue(dp), ToDp(probe, v1)),
+                    Describe(mounted?.ReadLocalValue(dp)));
+                setPhase!(1);
+                await Harness.Render();
+                H.Check(id + "_UnsetFallsBackToCaption", mounted is not null && Same(mounted.ReadLocalValue(dp), caption),
+                    Describe(mounted?.ReadLocalValue(dp)));
+            }
+            finally
+            {
+                host.Dispose();
+            }
         }
 
         private async Task RunCaseAsync(MatrixCase c)
@@ -100,6 +138,9 @@ internal static class ModifierMatrixFixtures
                 //    CleanElement has touched it, so this is the pool reset itself.
                 setPhase!(3);
                 await Harness.Render();
+                // Load-bearing: if the unset → set write were skipped, the pool checks below would
+                // see the UnsetValue from step 3 and pass without CleanElement doing anything.
+                H.Check(id + "_SetAgain", Same(first.ReadLocalValue(dp), ToDp(probe, v1)), Describe(first.ReadLocalValue(dp)));
                 setPhase!(4);
                 await Harness.Render();
                 if (c.Pool != MatrixPool.NotPoolable)
@@ -119,9 +160,11 @@ internal static class ModifierMatrixFixtures
                 //    write the DP (Button's IsEnabled, a TextBlock's caption-derived name), so this
                 //    checks only that the previous renter's value did not reach the new one, except
                 //    where the matrix pins the leak.
+                mounted = null;
                 setPhase!(5);
                 await Harness.Render();
                 var second = mounted;
+                H.Check(id + "_Remounted", second is not null);
                 // Load-bearing: without instance reuse the rent check passes trivially.
                 H.Check(id + (c.Pool == MatrixPool.NotPoolable ? "_NotPooled" : "_PoolReusedInstance"),
                     ReferenceEquals(first, second) == (c.Pool != MatrixPool.NotPoolable));
@@ -141,6 +184,8 @@ internal static class ModifierMatrixFixtures
     {
         public override async Task RunAsync()
         {
+            ControlRegistry.Register<ContentPresenterCarrier, WinUI.ContentPresenter>(static () => new ContentPresenterCarrierHandler());
+
             // Every gated slot having a negative or a reason is checked headlessly
             // (ModifierMatrixSchemaAgreementTests).
             foreach (var n in ModifierMatrixExpectations.Negatives)
@@ -152,13 +197,17 @@ internal static class ModifierMatrixFixtures
                     !ModifierProbes.All.Any(p => p.Slot == n.Slot && p.ReceiverType.IsAssignableFrom(CarrierType(n.Carrier))));
 
                 FrameworkElement? mounted = null;
-                var mods = probe.With(new ElementModifiers { OnMountAction = fe => mounted = fe }, SampleValues(n.Slot).V1);
+                // Width rides along as the positive control: it reaches every FrameworkElement, so a
+                // carrier that ignored modifiers entirely could not pass the negative vacuously.
+                var mods = probe.With(new ElementModifiers { Width = 123, OnMountAction = fe => mounted = fe }, SampleValues(n.Slot).V1);
                 var host = H.CreateHost();
                 host.Mount(_ => VStack(Carrier(n.Carrier) with { Modifiers = mods }));
                 try
                 {
                     await Harness.Render();
                     H.Check(id + "_Mounted", mounted is not null && CarrierType(n.Carrier).IsInstanceOfType(mounted));
+                    H.Check(id + "_ModifiersReachCarrier", Equals(mounted?.ReadLocalValue(FrameworkElement.WidthProperty), 123.0),
+                        Describe(mounted?.ReadLocalValue(FrameworkElement.WidthProperty)));
                     H.Check(id + "_NoLocalValue", mounted?.ReadLocalValue(dp) == DependencyProperty.UnsetValue,
                         Describe(mounted?.ReadLocalValue(dp)));
                 }
@@ -175,9 +224,18 @@ internal static class ModifierMatrixFixtures
             "RichTextBlock.FontSizeProperty" => WinUI.RichTextBlock.FontSizeProperty,
             "RichTextBlock.FontWeightProperty" => WinUI.RichTextBlock.FontWeightProperty,
             "UIElement.TabIndexProperty" => UIElement.TabIndexProperty,
+            "ContentPresenter.CornerRadiusProperty" => WinUI.ContentPresenter.CornerRadiusProperty,
+            "ContentPresenter.HorizontalContentAlignmentProperty" => WinUI.ContentPresenter.HorizontalContentAlignmentProperty,
+            "ContentPresenter.VerticalContentAlignmentProperty" => WinUI.ContentPresenter.VerticalContentAlignmentProperty,
             _ => throw new InvalidOperationException($"No DP mapped for {name}."),
         };
     }
+
+    // Reactor mounts no bare ContentPresenter, so the negatives register a test-only carrier.
+    private sealed record ContentPresenterCarrier : Element;
+
+    private sealed class ContentPresenterCarrierHandler()
+        : DescriptorHandler<ContentPresenterCarrier, WinUI.ContentPresenter>(new ControlDescriptor<ContentPresenterCarrier, WinUI.ContentPresenter>());
 
     // ── Carriers ────────────────────────────────────────────────────────
 
@@ -190,6 +248,7 @@ internal static class ModifierMatrixFixtures
         "StackPanel" => VStack(),
         "RelativePanel" => RelativePanel(),
         "RichTextBlock" => RichTextBlock("matrix-carrier"),
+        "ContentPresenter" => new ContentPresenterCarrier(),
         _ => throw new InvalidOperationException($"No carrier named {name}."),
     };
 
@@ -202,6 +261,7 @@ internal static class ModifierMatrixFixtures
         "StackPanel" => typeof(WinUI.StackPanel),
         "RelativePanel" => typeof(WinUI.RelativePanel),
         "RichTextBlock" => typeof(WinUI.RichTextBlock),
+        "ContentPresenter" => typeof(WinUI.ContentPresenter),
         _ => throw new InvalidOperationException($"No carrier named {name}."),
     };
 
@@ -229,8 +289,9 @@ internal static class ModifierMatrixFixtures
         "MaxHeight" => (90.0, 92.0, 95.0),
         "HorizontalAlignment" => (HorizontalAlignment.Right, HorizontalAlignment.Left, HorizontalAlignment.Center),
         "VerticalAlignment" => (VerticalAlignment.Bottom, VerticalAlignment.Top, VerticalAlignment.Center),
-        "HorizontalContentAlignment" => (HorizontalAlignment.Right, HorizontalAlignment.Left, HorizontalAlignment.Center),
-        "VerticalContentAlignment" => (VerticalAlignment.Bottom, VerticalAlignment.Top, VerticalAlignment.Center),
+        // Button's theme style already centres its content, so the Style uses Stretch.
+        "HorizontalContentAlignment" => (HorizontalAlignment.Right, HorizontalAlignment.Left, HorizontalAlignment.Stretch),
+        "VerticalContentAlignment" => (VerticalAlignment.Bottom, VerticalAlignment.Top, VerticalAlignment.Stretch),
         "IsVisible" => (false, true, false),
         "ToolTipPlacement" => (PlacementMode.Bottom, PlacementMode.Left, PlacementMode.Right),
         "IsEnabled" => (false, true, false),

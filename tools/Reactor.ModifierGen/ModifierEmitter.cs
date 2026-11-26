@@ -5,8 +5,9 @@ namespace Microsoft.UI.Reactor.ModifierGen;
 
 /// <summary>
 /// Spec 067 §4.3: turns <see cref="ModifierSchema"/> into checked-in C#. Each output is a
-/// repo-relative path and its full text with <c>\n</c> line endings; <c>Program</c> writes them and
-/// <c>ModifierGenFreshnessTests</c> (Reactor.Tests) byte-compares them with the checked-in files.
+/// repo-relative path and its full text with <c>\n</c> line endings. <c>Program</c> writes them, and
+/// <c>ModifierMatrixSchemaAgreementTests.Generated_Files_Are_Fresh</c> (Reactor.Tests) compares them
+/// with the checked-in files, ignoring line endings.
 /// </summary>
 internal static class ModifierEmitter
 {

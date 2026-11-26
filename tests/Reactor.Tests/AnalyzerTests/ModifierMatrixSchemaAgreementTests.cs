@@ -47,7 +47,38 @@ public class ModifierMatrixSchemaAgreementTests
 
         Assert.True(probes.Count > 40, $"Only {probes.Count} probes: the slot filter is broken.");
         Assert.Equal(cases.Count, cases.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(probes, cases);
+        Assert.True(probes.SequenceEqual(cases, StringComparer.Ordinal),
+            "Schema probes and ModifierMatrixExpectations.Cases disagree."
+            + $"\n  in the schema, missing from Cases: {string.Join("; ", probes.Except(cases, StringComparer.Ordinal))}"
+            + $"\n  in Cases, not in the schema: {string.Join("; ", cases.Except(probes, StringComparer.Ordinal))}");
+    }
+
+    [Fact]
+    public void Every_Hand_Coded_Slot_Is_Excluded_With_A_Reason()
+    {
+        var handCoded = ModifierSchema.Slots.Where(s => s.Shape == ApplyShape.HandCoded).Select(s => s.Name)
+            .OrderBy(s => s, StringComparer.Ordinal).ToList();
+        var excluded = ModifierMatrixExpectations.Excluded.Select(e => e.Slot).OrderBy(s => s, StringComparer.Ordinal).ToList();
+
+        Assert.Contains("Foreground", handCoded);   // positive control: the #1687 slot
+        Assert.All(ModifierMatrixExpectations.Excluded, e => Assert.False(string.IsNullOrWhiteSpace(e.Reason)));
+        Assert.True(handCoded.SequenceEqual(excluded, StringComparer.Ordinal),
+            "Hand-coded schema slots and ModifierMatrixExpectations.Excluded disagree."
+            + $"\n  hand-coded, not excluded: {string.Join(", ", handCoded.Except(excluded))}"
+            + $"\n  excluded, not hand-coded: {string.Join(", ", excluded.Except(handCoded))}");
+    }
+
+    [Fact]
+    public void Captioned_Unset_Cases_Are_Matrix_Slots_On_Receivers()
+    {
+        Assert.NotEmpty(ModifierMatrixExpectations.CaptionedUnset);
+        foreach (var (group, slot, carrier, caption) in ModifierMatrixExpectations.CaptionedUnset)
+        {
+            Assert.Contains(ModifierEmitter.MatrixSlots(), s => s.Name == slot);
+            Assert.Contains(ModifierMatrixExpectations.Cases, c => c.Group == group);
+            Assert.Contains(ApplyReceivers(slot), r => r.IsAssignableFrom(Carrier(carrier)));
+            Assert.False(string.IsNullOrEmpty(caption));
+        }
     }
 
     [Fact]
@@ -76,13 +107,18 @@ public class ModifierMatrixSchemaAgreementTests
         var gated = ModifierEmitter.MatrixSlots()
             .Where(s => s.ReceiversWith(ReceiverRole.Apply).Any(r => r.Type != ModifierSchema.FrameworkElement))
             .Select(s => s.Name)
-            .OrderBy(s => s, StringComparer.Ordinal);
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
         var negatives = ModifierMatrixExpectations.Negatives.Select(n => n.Slot).ToHashSet(StringComparer.Ordinal);
         var reasons = ModifierMatrixExpectations.NoNegative.Select(n => n.Slot).ToHashSet(StringComparer.Ordinal);
 
         Assert.Empty(negatives.Intersect(reasons));
         Assert.All(ModifierMatrixExpectations.NoNegative, n => Assert.False(string.IsNullOrWhiteSpace(n.Reason)));
-        Assert.Equal(gated, negatives.Union(reasons).OrderBy(s => s, StringComparer.Ordinal));
+        var accounted = negatives.Union(reasons).OrderBy(s => s, StringComparer.Ordinal).ToList();
+        Assert.True(gated.SequenceEqual(accounted, StringComparer.Ordinal),
+            "Every gated slot needs a ModifierMatrixExpectations.Negatives entry or a NoNegative reason."
+            + $"\n  gated, unaccounted: {string.Join(", ", gated.Except(accounted))}"
+            + $"\n  accounted, not gated: {string.Join(", ", accounted.Except(gated))}");
     }
 
     [Fact]

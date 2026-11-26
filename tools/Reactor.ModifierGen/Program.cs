@@ -1,6 +1,11 @@
 using Microsoft.UI.Reactor.ModifierGen;
 
 // Regenerates every file ModifierEmitter owns. `--check` reports stale files without writing.
+if (args.Any(a => a != "--check"))
+{
+    Console.Error.WriteLine($"unknown option '{args.First(a => a != "--check")}'. Usage: dotnet run --project tools/Reactor.ModifierGen [-- --check]");
+    return 2;
+}
 var check = args.Contains("--check");
 var root = FindRepoRoot(Directory.GetCurrentDirectory())
     ?? FindRepoRoot(AppContext.BaseDirectory)
@@ -17,7 +22,7 @@ foreach (var (relativePath, content) in ModifierEmitter.EmitAll())
     stale++;
     if (check)
     {
-        Console.Error.WriteLine($"stale: {relativePath}");
+        Console.Error.WriteLine($"stale: {relativePath} (run: dotnet run --project tools/Reactor.ModifierGen)");
         continue;
     }
     Directory.CreateDirectory(Path.GetDirectoryName(path)!);

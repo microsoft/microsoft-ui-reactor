@@ -855,7 +855,13 @@ path, slot order matches the frozen apply order, composition flags, fluent names
 `tools/Reactor.ModifierGen`, which emits the typed probe table
 (`tests/Reactor.AppTests.Host/SelfTest/ModifierMatrix/ModifierProbes.Generated.cs`), and the
 §10.2 matrix selftests `ModifierMatrix_*`, which run the probes against the hand-written frozen
-`ModifierMatrixExpectations`. The pool step reads the carrier while it sits in the pool (that is
+`ModifierMatrixExpectations`. Unset `AutomationName` runs twice: on a captionless Border it
+releases the local value, and on a captioned TextBlock with no Style it falls back to the caption
+(§10.2 step 3's exception; a Style-provided name would stop that fallback). The negatives use a
+test-only `ContentPresenter` carrier for `CornerRadius` and both content alignments, with
+`Width` as a positive control that modifiers reach the carrier at all. Hand-coded slots
+(composition, brushes including `Foreground` since #1687, tooltips, flyouts, `LabeledBy`) are
+listed in `Excluded` with a reason. The pool step reads the carrier while it sits in the pool (that is
 `CleanElement` alone) and then checks only that a bare renter of the same instance does not get
 the previous value, because a renter's own mount can write the DP (Button's `IsEnabled`, a
 TextBlock's caption-derived name). On TextBlock the descriptor's `ClearValueOnUnset` (#522) also
@@ -864,7 +870,8 @@ TextBlock inheriting an ancestor's size, never reaches a `TextBlockElement` rent
 reset with this in view.
 `ModifierMatrixSchemaAgreementTests` checks headlessly that the probes and the matrix list the
 same (slot, receiver, DP) set, that carriers are receivers and negatives are not, that every gated
-slot has a negative or a recorded reason, and that the generated file is fresh.
+slot has a negative or a recorded reason, that every hand-coded slot is excluded with a reason, and
+that the generated file is fresh.
 
 After layer 3, the `AGENTS.md:343` field note changes from "touches every seam" to "add a schema
 row, add the bucket property and its root shim, add the fluent overload, run

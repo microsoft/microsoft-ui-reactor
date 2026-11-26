@@ -73,7 +73,7 @@ internal static class ModifierMatrixExpectations
 
         // ── Automation and focus: FrameworkElement receivers ──
         new("Automation", "ToolTipPlacement", "FrameworkElement", "TextBlock", "ToolTipService.PlacementProperty", MatrixPool.ClearValue),
-        new("Automation", "AutomationName", "FrameworkElement", "TextBlock", "AutomationProperties.NameProperty", MatrixPool.ClearValue),
+        new("Automation", "AutomationName", "FrameworkElement", "Border", "AutomationProperties.NameProperty", MatrixPool.ClearValue),
         new("Automation", "AutomationId", "FrameworkElement", "TextBlock", "AutomationProperties.AutomationIdProperty", MatrixPool.ClearValue),
         new("Automation", "IsDragRegion", "FrameworkElement", "TextBlock", "TitleBar.IsDragRegionProperty", MatrixPool.ClearValue),
         new("Automation", "HeadingLevel", "FrameworkElement", "TextBlock", "AutomationProperties.HeadingLevelProperty", MatrixPool.ClearValue),
@@ -104,15 +104,49 @@ internal static class ModifierMatrixExpectations
         new("FontWeight", "RichTextBlock", "RichTextBlock.FontWeightProperty"),
         // WinUI declares TabIndex on UIElement, but the write is Control-gated.
         new("TabIndex", "TextBlock", "UIElement.TabIndexProperty"),
+        // ContentPresenter declares all three but is neither a Control nor a CornerRadius box
+        // receiver. Reactor mounts none bare, so the fixture registers a test-only carrier.
+        new("CornerRadius", "ContentPresenter", "ContentPresenter.CornerRadiusProperty"),
+        new("HorizontalContentAlignment", "ContentPresenter", "ContentPresenter.HorizontalContentAlignmentProperty"),
+        new("VerticalContentAlignment", "ContentPresenter", "ContentPresenter.VerticalContentAlignmentProperty"),
     ];
 
     /// <summary>Gated slots with no qualifying non-receiver control, and why.</summary>
     internal static readonly (string Slot, string Reason)[] NoNegative =
     [
-        ("HorizontalContentAlignment", "Only Control and ContentPresenter declare it, and Reactor mounts no bare ContentPresenter."),
-        ("VerticalContentAlignment", "Only Control and ContentPresenter declare it, and Reactor mounts no bare ContentPresenter."),
         ("IsEnabled", "WinUI declares IsEnabled on Control only."),
         ("ElementSoundMode", "WinUI declares ElementSoundMode on Control only."),
-        ("CornerRadius", "Every other declarer Reactor mounts is a receiver; ContentPresenter is not mounted bare."),
+    ];
+
+    /// <summary>
+    /// §10.2 step 3's exception: on a captioned control, unset <c>AutomationName</c> falls back to
+    /// the caption-derived name instead of releasing the local value. Run with no Style, since a
+    /// Style-provided name stops the fallback from writing.
+    /// </summary>
+    internal static readonly (string Group, string Slot, string Carrier, string Caption)[] CaptionedUnset =
+    [
+        ("Automation", "AutomationName", "TextBlock", "matrix-carrier"),
+    ];
+
+    /// <summary>
+    /// Hand-coded property slots the matrix leaves out, and why. Pinned so a slot that changes
+    /// shape (into or out of rows A–D) shows in review instead of silently leaving the matrix.
+    /// </summary>
+    internal static readonly (string Slot, string Reason)[] Excluded =
+    [
+        ("Opacity", "Composition: owned by the visual handoff and keyframe paths (spec 066), covered by the ModifierTransform_* and keyframe opacity selftests."),
+        ("Scale", "Composition facade, covered by the ModifierTransform_* selftests."),
+        ("Rotation", "Composition facade, covered by the ModifierTransform_* selftests."),
+        ("Translation", "Composition facade, covered by the ModifierTransform_* selftests."),
+        ("TransformOrigin", "Composition facade, covered by the ModifierTransform_* selftests."),
+        ("CenterPoint", "Composition facade, covered by the ModifierTransform_* selftests."),
+        ("RichToolTip", "Element-valued: mounts a subtree, no single DP value to compare."),
+        ("ToolTip", "Shares the tooltip path with RichToolTip (ToolTipService.ToolTip), covered by the ModifierEvent_Tooltip* selftests."),
+        ("AttachedFlyout", "Element-valued: mounts a flyout subtree."),
+        ("ContextFlyout", "Element-valued: mounts a flyout subtree."),
+        ("BorderBrush", "Brush family: theme bindings and the Border composite, covered by ModifierFieldContract_BrushAndFont and the ThemeRefStyle_* selftests."),
+        ("Background", "Brush family: theme bindings, covered by ModifierFieldContract_BrushAndFont and the ThemeRefStyle_* selftests."),
+        ("Foreground", "Brush family, hand-coded in ForegroundModifier.Apply since #1687 (interaction states, RichTextBlock fallback), covered by ModifierFieldContract_BrushAndFont and the ThemeRefStyle_* and Issue522_* selftests."),
+        ("LabeledBy", "Resolves a reference to another element, not a value."),
     ];
 }
