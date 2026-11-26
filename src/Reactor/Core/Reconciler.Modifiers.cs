@@ -271,6 +271,9 @@ public sealed partial class Reconciler
         // arms to the helper for its family, or add a new `Apply…Modifier(s)(fe, oldM, m, …)`
         // helper at the point in the sequence where its writes belong. The source gates in
         // Reactor.Tests scan every helper with that name and signature (ReconcilerSource.ApplyModifiersFamily).
+        // A helper listed in ModifierEmitter.GeneratedHelpers (spec 067 layer 3) lives in
+        // Reconciler.Modifiers.Generated.cs: add the field's ModifierSchema slot and run
+        // tools/Reactor.ModifierGen instead of editing it.
         ApplyRequestedThemeModifier(fe, oldM, m);
         ApplyMarginModifiers(fe, oldM, m, ownsControl);
         ApplyPaddingModifiers(fe, oldM, m, ownsControl);

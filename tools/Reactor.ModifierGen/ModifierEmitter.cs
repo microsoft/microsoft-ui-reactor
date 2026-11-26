@@ -28,22 +28,34 @@ internal static class ModifierEmitter
         (ReconcilerModifiersPath, EmitReconcilerModifiers()),
     ];
 
-    /// <summary>
-    /// The <c>ApplyModifiers</c> family helpers layer 3 generates whole (spec 067 §11 3a–3e), each
-    /// from the schema slots of the listed families, in schema (apply) order. A helper keeps its
-    /// name and its call site in <c>ApplyModifiers</c>, so the apply order does not move.
-    /// </summary>
-    internal static readonly (string Name, string Summary, ModifierFamily[] Families)[] GeneratedHelpers =
+    /// <summary>One <c>ApplyModifiers</c> family helper layer 3 generates whole.</summary>
+    /// <param name="Name">The helper's name. It keeps its call site in <c>ApplyModifiers</c>, so the apply order does not move.</param>
+    /// <param name="Summary">Its doc summary.</param>
+    /// <param name="First">The first <see cref="ModifierSchema.Slots"/> entry it writes.</param>
+    /// <param name="Last">The last; every slot between them, in schema (apply) order, belongs to the helper.</param>
+    /// <param name="SharedGate">
+    /// Slots gated on one receiver type that share a single <c>if (fe is T Variable) { … }</c> block,
+    /// as the hand-written helper does. Declared, not inferred: today's other gated arms put the
+    /// type test in each arm's condition, and that shape is not emitted yet.
+    /// </param>
+    internal sealed record GeneratedHelper(string Name, string Summary, string First, string Last,
+        (string Variable, string[] Slots)? SharedGate = null);
+
+    /// <summary>The helpers layer 3 generates (spec 067 §11 3a–3e), one family PR at a time.</summary>
+    internal static readonly GeneratedHelper[] GeneratedHelpers =
     [
-        ("ApplySizeAndAlignmentModifiers", "Width/Height, Min/Max sizes, and the (content) alignments.",
-            [ModifierFamily.Size, ModifierFamily.Alignment]),
+        new("ApplySizeAndAlignmentModifiers", "Width/Height, Min/Max sizes, and the (content) alignments.",
+            First: "Width", Last: "VerticalContentAlignment",
+            SharedGate: ("contentAlignmentControl", ["HorizontalContentAlignment", "VerticalContentAlignment"])),
     ];
 
     /// <summary>
-    /// Spec 067 §11 layer 3: the row A–D apply arms, in today's shape (§7). An ungated arm is one
-    /// set/unset pair on <c>fe</c>; consecutive slots whose only receiver is the same gated type
-    /// share one <c>if (fe is T x) { … }</c> block. Any other shape throws, so a family whose arms
-    /// look different today is moved with its own emitter support, not silently reshaped.
+    /// Spec 067 §11 layer 3: the row A–B apply arms, in today's shape (§7). An ungated value-typed
+    /// slot is one set/unset pair on <c>fe</c>; a helper's declared <see cref="GeneratedHelper.SharedGate"/>
+    /// run shares one <c>if (fe is T x) { … }</c> block. Anything else (attached, reference-typed,
+    /// converted, a receiver chain, or a gated slot outside the shared block) throws, so a family
+    /// whose arms look different today gets its emitter support in its own PR instead of being
+    /// silently reshaped.
     /// </summary>
     internal static string EmitReconcilerModifiers()
     {
@@ -57,43 +69,54 @@ internal static class ModifierEmitter
         sb.Append("using WinUI = Microsoft.UI.Xaml.Controls;\n\n");
         sb.Append("namespace Microsoft.UI.Reactor.Core;\n\n");
         sb.Append("public sealed partial class Reconciler\n{");
-        foreach (var (name, summary, families) in GeneratedHelpers)
+        foreach (var helper in GeneratedHelpers)
         {
-            var slots = ModifierSchema.Slots.Where(s => families.Contains(s.Family)).ToList();
-            var first = Array.IndexOf(ModifierSchema.Slots, slots[0]);
-            if (slots.Where((s, i) => ModifierSchema.Slots[first + i] != s).Any())
-                throw new InvalidOperationException($"{name}: its slots must be contiguous in ModifierSchema.Slots, or the helper would reorder the apply sequence.");
+            var first = Array.FindIndex(ModifierSchema.Slots, s => s.Name == helper.First);
+            var last = Array.FindIndex(ModifierSchema.Slots, s => s.Name == helper.Last);
+            if (first < 0 || last < first)
+                throw new InvalidOperationException($"{helper.Name}: First '{helper.First}' and Last '{helper.Last}' must name slots in ModifierSchema.Slots, in that order.");
+            var slots = ModifierSchema.Slots.Skip(first).Take(last - first + 1).ToList();
+            var shared = helper.SharedGate?.Slots ?? [];
             foreach (var slot in slots)
-                if (slot.Shape is not (ApplyShape.Simple or ApplyShape.Attached))
-                    throw new InvalidOperationException($"{name}: {slot.Name} is {slot.Shape}; this emitter writes rows A, B and D only.");
+            {
+                if (slot.Shape != ApplyShape.Simple || slot.AttachedOwner is not null)
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} is {slot.Shape}, and only Simple slots are emitted so far. "
+                        + "Add its shape to EmitReconcilerModifiers in the PR that generates it, or end the helper's slot range before it.");
+                if (slot.ReceiversWith(ReceiverRole.Apply).ToList() is not [var receiver])
+                    throw new InvalidOperationException($"{helper.Name}: {slot.Name} has a receiver chain, which is not emitted yet.");
+                if ((receiver.Type == ModifierSchema.FrameworkElement) == shared.Contains(slot.Name))
+                    throw new InvalidOperationException(receiver.Type == ModifierSchema.FrameworkElement
+                        ? $"{helper.Name}: {slot.Name} is ungated, so it cannot be in the SharedGate block."
+                        : $"{helper.Name}: {slot.Name} is gated on {receiver.SimpleType} but not in the helper's SharedGate block. "
+                            + "Its arm puts the type test in each condition today, and that shape is not emitted yet.");
+            }
 
-            sb.Append("\n    /// <summary>").Append(summary).Append("</summary>\n");
-            sb.Append("    private static void ").Append(name).Append("(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)\n    {\n");
+            sb.Append("\n    /// <summary>").Append(helper.Summary).Append("</summary>\n");
+            sb.Append("    private static void ").Append(helper.Name).Append("(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)\n    {\n");
             for (var i = 0; i < slots.Count;)
             {
-                var receivers = slots[i].ReceiversWith(ReceiverRole.Apply).ToList();
-                if (receivers is [{ Type: ModifierSchema.FrameworkElement } feReceiver])
+                var receiver = slots[i].ReceiversWith(ReceiverRole.Apply).Single();
+                if (receiver.Type == ModifierSchema.FrameworkElement)
                 {
                     var (set, unset, value) = Guards(slots[i]);
-                    sb.Append("        if (").Append(set).Append(") ").Append(Write(slots[i], feReceiver, "fe", value)).Append(";\n");
-                    sb.Append("        else if (").Append(unset).Append(") ").Append(Clear(slots[i], feReceiver, "fe")).Append(";\n");
+                    sb.Append("        if (").Append(set).Append(") fe.").Append(receiver.Property).Append(" = ").Append(value).Append(";\n");
+                    sb.Append("        else if (").Append(unset).Append(") ").Append(Clear(receiver, "fe")).Append(";\n");
                     i++;
                     continue;
                 }
-                if (receivers is not [var gated])
-                    throw new InvalidOperationException($"{name}: {slots[i].Name} has a receiver chain; the chain shape is not emitted yet.");
 
-                // A run of slots gated on the same single receiver shares one type test.
-                var run = slots.Skip(i).TakeWhile(s => s.ReceiversWith(ReceiverRole.Apply).ToList() is [var r] && r.Type == gated.Type).ToList();
-                var variable = Camel(CommonSuffix(run.Select(s => s.Name).ToList())) + Simple(gated.Type);
-                sb.Append("        if (fe is ").Append(TypeRef(gated.Type)).Append(' ').Append(variable).Append(")\n        {\n");
+                var run = slots.Skip(i).TakeWhile(s => shared.Contains(s.Name)).ToList();
+                if (run.Count != shared.Length || run.Any(s => s.ReceiversWith(ReceiverRole.Apply).Single().Type != receiver.Type))
+                    throw new InvalidOperationException($"{helper.Name}: the SharedGate slots must be consecutive and gated on one receiver type.");
+                var variable = helper.SharedGate!.Value.Variable;
+                sb.Append("        if (fe is ").Append(TypeRef(receiver.Type)).Append(' ').Append(variable).Append(")\n        {\n");
                 for (var j = 0; j < run.Count; j++)
                 {
-                    var receiver = run[j].ReceiversWith(ReceiverRole.Apply).Single();
+                    var gated = run[j].ReceiversWith(ReceiverRole.Apply).Single();
                     var (set, unset, value) = Guards(run[j]);
                     if (j > 0) sb.Append('\n');
-                    sb.Append("            if (").Append(set).Append(")\n                ").Append(Write(run[j], receiver, variable, value)).Append(";\n");
-                    sb.Append("            else if (").Append(unset).Append(")\n                ").Append(Clear(run[j], receiver, variable)).Append(";\n");
+                    sb.Append("            if (").Append(set).Append(")\n                ").Append(variable).Append('.').Append(gated.Property).Append(" = ").Append(value).Append(";\n");
+                    sb.Append("            else if (").Append(unset).Append(")\n                ").Append(Clear(gated, variable)).Append(";\n");
                 }
                 sb.Append("        }\n");
                 i += run.Count;
@@ -104,51 +127,36 @@ internal static class ModifierEmitter
         return sb.ToString();
     }
 
+    // Value-typed slots the emitter knows; a reference-typed slot (string, FontFamily) throws until
+    // a family that needs it adds its guard shape.
     private static readonly HashSet<string> ReferenceTypes = new(StringComparer.Ordinal) { "string", "Microsoft.UI.Xaml.Media.FontFamily" };
 
     // The changed / released guards and the value expression of a set/unset pair (spec 067 §6.6).
     private static (string Set, string Unset, string Value) Guards(ModifierSlot slot)
     {
         var x = slot.Name;
-        if (!ReferenceTypes.Contains(slot.ClrType))
-        {
-            if (slot.Write != WriteEquality.Value) throw new InvalidOperationException($"{x}: a value-typed field compares by value.");
-            return ($"m.{x}.HasValue && m.{x} != oldM?.{x}", $"!m.{x}.HasValue && oldM?.{x}.HasValue == true", $"m.{x}.Value");
-        }
-        var changed = slot.Write == WriteEquality.Reference ? $"!ReferenceEquals(m.{x}, oldM?.{x})" : $"m.{x} != oldM?.{x}";
-        return ($"m.{x} is not null && {changed}", $"m.{x} is null && oldM?.{x} is not null", $"m.{x}");
+        if (ReferenceTypes.Contains(slot.ClrType))
+            throw new InvalidOperationException($"{x}: {slot.ClrType} is a reference type, and reference-typed arms are not emitted yet.");
+        if (slot.Write != WriteEquality.Value)
+            throw new InvalidOperationException($"{x}: {slot.ClrType} is a value type, so its slot must compare by value (WriteEquality.Value), not {slot.Write}.");
+        return ($"m.{x}.HasValue && m.{x} != oldM?.{x}", $"!m.{x}.HasValue && oldM?.{x}.HasValue == true", $"m.{x}.Value");
     }
 
-    private static string Write(ModifierSlot slot, ModifierReceiver receiver, string target, string value) =>
-        slot.AttachedOwner is { } owner
-            ? $"{TypeRef(owner)}.Set{receiver.Property}({target}, {value})"
-            : $"{target}.{receiver.Property} = {value}";
-
-    private static string Clear(ModifierSlot slot, ModifierReceiver receiver, string target) =>
+    private static string Clear(ModifierReceiver receiver, string target) =>
         $"{target}.ClearValue({TypeRef(receiver.DpOwner)}.{receiver.Property}Property)";
 
-    // The names the hand-written reconciler uses, through the generated file's usings.
-    private static string TypeRef(string fullName) =>
-        fullName.StartsWith("Microsoft.UI.Xaml.Controls.", StringComparison.Ordinal) ? "WinUI." + Simple(fullName)
-        : fullName.StartsWith("Microsoft.UI.Xaml.", StringComparison.Ordinal) && fullName.LastIndexOf('.') == "Microsoft.UI.Xaml".Length ? Simple(fullName)
-        : "global::" + fullName;
-
-    private static string Camel(string name) => char.ToLowerInvariant(name[0]) + name[1..];
-
-    // The longest PascalCase-word suffix every name shares ("ContentAlignment"), or the first name.
-    private static string CommonSuffix(List<string> names)
+    // The names the hand-written reconciler uses, through the generated file's usings: a type
+    // directly in Microsoft.UI.Xaml.Controls as WinUI.X, directly in Microsoft.UI.Xaml as X.
+    private static string TypeRef(string fullName)
     {
-        var suffix = names[0];
-        foreach (var name in names.Skip(1))
+        var ns = fullName[..fullName.LastIndexOf('.')];
+        return ns switch
         {
-            var n = 0;
-            while (n < suffix.Length && n < name.Length && suffix[^(n + 1)] == name[^(n + 1)]) n++;
-            suffix = suffix[^n..];
-        }
-        var word = suffix.IndexOf(suffix.FirstOrDefault(char.IsUpper));
-        return word < 0 || suffix.Length == 0 ? names[0] : suffix[word..];
+            "Microsoft.UI.Xaml.Controls" => "WinUI." + Simple(fullName),
+            "Microsoft.UI.Xaml" => Simple(fullName),
+            _ => "global::" + fullName,
+        };
     }
-
     private const string ControlsNamespace = "Microsoft.UI.Xaml.Controls.";
 
     /// <summary>

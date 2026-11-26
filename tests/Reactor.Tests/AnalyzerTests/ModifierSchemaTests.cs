@@ -14,7 +14,9 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 /// <summary>
 /// Spec 067 §10.1, layer 1: the invariants <c>ModifierSchema</c> keeps about itself, each checked
 /// against an independent source (reflection over the records and WinUI, or a Roslyn read of the
-/// hand-written reconciler) rather than against another copy of the schema.
+/// reconciler) rather than against another copy of the schema. For the helpers listed in
+/// <c>ModifierEmitter.GeneratedHelpers</c> (spec 067 layer 3) the Roslyn read sees generated code, so
+/// the independent receiver and unset oracle there is the frozen §10.2 <c>ModifierMatrix_*</c> selftest.
 /// </summary>
 /// <remarks>
 /// Completeness, skip equality and merge are checked by <see cref="ModifierFieldContractTests"/>,
